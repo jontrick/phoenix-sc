@@ -697,6 +697,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       <div id="timer-label">REST</div>
     </div>
   </div>
+  <div id="timer-afap-list" style="display:none;width:100%;max-width:360px;overflow-y:auto"></div>
   <div id="timer-next-wrap" style="display:none;text-align:center;margin-bottom:8px">
     <div id="timer-next-label" style="font-size:9px;color:var(--text3);font-family:monospace;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:3px">NEXT UP</div>
     <div id="timer-next-name" style="font-family:Georgia,serif;font-size:15px;color:var(--text2)"></div>
@@ -784,8 +785,11 @@ function timerShow(opts){
   } else if(T.mode === 'countup'){
     T.elapsed = 0;
     T.startTime = Date.now();
+    T.afapDone = {};
     document.getElementById('timer-label').textContent = opts.label || 'TIME';
     timerUpdate(0);
+    var _al=document.getElementById('timer-afap-list');
+    if(_al){_al.innerHTML='';if(T.exercises&&T.exercises.length){_al.style.display='block';T.exercises.forEach(function(ex,i){var row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border)';var tick=document.createElement('button');tick.style.cssText='flex-shrink:0;width:28px;height:28px;border-radius:6px;border:2px solid var(--border2);background:transparent;color:#fff;font-size:14px;cursor:pointer';tick.onclick=(function(idx){return function(){T.afapDone[idx]=true;this.style.background='var(--green)';this.style.borderColor='var(--green)';this.textContent='\u2713';var n=document.getElementById('afap-name-'+idx);if(n)n.style.opacity='0.4';var allDone=T.exercises.every(function(_,j){return T.afapDone[j];});if(allDone){clearInterval(T.interval);timerAfapFinish();}};})(i);var nameDiv=document.createElement('div');nameDiv.id='afap-name-'+i;nameDiv.style.cssText='flex:1;font-family:Georgia,serif;font-size:15px;color:var(--text)';nameDiv.textContent=ex.name;var metaDiv=document.createElement('div');metaDiv.style.cssText='font-size:10px;color:var(--text3);font-family:monospace;text-align:right';metaDiv.textContent=(ex.reps||'')+' '+ex.load;row.appendChild(tick);row.appendChild(nameDiv);row.appendChild(metaDiv);_al.appendChild(row);});}else{_al.style.display='none';}}
     timerStart();
   } else {
     document.getElementById('timer-label').textContent = opts.label || 'REST';
@@ -815,6 +819,7 @@ function timerSetRest(secs, btn){
 function timerStart(){
   if(T.interval) clearInterval(T.interval);
   T.running = true;
+  if('wakeLock' in navigator){navigator.wakeLock.request('screen').then(function(wl){T.wakeLock=wl;}).catch(function(){});}
   T.paused = false;
   if(T.mode === 'countup'){
     T.startTime = Date.now() - (T.elapsed * 1000);
@@ -862,6 +867,7 @@ function timerSkip(){
 function timerHide(){
   var ov = document.getElementById('timer-overlay');
   ov.classList.remove('active');
+  if(T.wakeLock){try{T.wakeLock.release();}catch(e){}T.wakeLock=null;}
 }
 
 function timerUpdate(val){
@@ -930,6 +936,14 @@ function timerDone(){
   }
 }
 
+function timerAfapFinish(){
+  var m=Math.floor(T.elapsed/60),s=T.elapsed%60;
+  var result=m+':'+(s<10?'0':'')+s;
+  try{navigator.vibrate([200,100,300]);}catch(e){}
+  if(T.amrapKey){var lk=T.amrapKey.split('|')[0];if(!S.logs[lk])S.logs[lk]={};S.logs[lk].result=result;S.logs[lk].elapsed=T.elapsed;S.logs[lk].date=new Date().toISOString();sv('logs',S.logs);}
+  document.getElementById('timer-overlay').classList.remove('active');
+  if(T.onDone) T.onDone(result);
+}
 function timerAmrapDone(){
   var reps = document.getElementById('timer-amrap-reps-inp').value;
   if(T.amrapKey && reps){
@@ -1890,7 +1904,7 @@ var TAB_ICONS = {
 function renderTabbar() {
   var tb = document.getElementById('tabbar');
   tb.innerHTML = '';
-  [['plan','Plan'],['week','Session'],['history','History'],['charts','Charts'],['profile','Profile']].forEach(function(pair){
+  [['plan','Plan v23'],['week','Session'],['history','History'],['charts','Charts'],['profile','Profile']].forEach(function(pair){
     var k=pair[0], lbl=pair[1];
     var btn = el('button',{'class':'tab-btn'+(S.tab===k?' active':'')});
     btn.innerHTML = '<div class="tab-icon">'+TAB_ICONS[k]+'</div><div class="tab-label">'+lbl+'</div>';

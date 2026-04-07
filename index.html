@@ -2385,53 +2385,63 @@ function renderWeek() {
     ];
   }
 
+  // DE exercises as per-set boxes like accessories
   var logKeySat='w'+S.curWeek;
-  var deWrap=el('div',{style:'overflow-x:hidden'});
-  var deTbl=el('table',{'class':'ex-table'});
-  var deThead=el('thead');var deHr=el('tr');
-  ['Exercise','Sets','Reps','Load','Log'].forEach(function(t,i){
-    var th=el('th',{'class':i>0?'r':''});th.textContent=t;deHr.appendChild(th);
+  var deAccWrap=el('div',{style:'margin-bottom:6px'});
+
+  deExs.forEach(function(ex,exIdx){
+    var exName=ex[0], exSets=parseInt(ex[1])||4, exReps=ex[2], exLoad=ex[3], exNote=ex[4]||'';
+    var savedDE=(S.logs[logKeySat]&&S.logs[logKeySat].de&&S.logs[logKeySat].de[exIdx])||{};
+    var card=el('div',{style:'margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)'});
+    var hdr=el('div',{style:'display:flex;align-items:flex-start;gap:8px;margin-bottom:8px'});
+    var nameWrap=el('div',{style:'flex:1'});
+    var nm=el('div',{'class':'ex-name'});nm.textContent=exName;nameWrap.appendChild(nm);
+    var meta=el('div',{style:'font-size:9px;color:var(--text3);font-family:monospace;margin-top:2px'});
+    meta.textContent=exSets+' sets \u00d7 '+exReps+(exNote?' \u00b7 '+exNote:'');
+    nameWrap.appendChild(meta);hdr.appendChild(nameWrap);
+    var kbadge=el('span',{style:'font-size:11px;color:var(--orange);font-family:monospace;font-weight:700;flex-shrink:0'});
+    kbadge.textContent=exLoad;hdr.appendChild(kbadge);
+    card.appendChild(hdr);
+    var setsRow=el('div',{style:'display:flex;gap:5px;flex-wrap:wrap'});
+    for(var s=0;s<exSets;s++){
+      var savedSet=(savedDE['s'+s])||{kg:'',reps:''};
+      var setBox=el('div',{style:'display:flex;flex-direction:column;align-items:center;gap:2px'});
+      var sLbl=el('div',{style:'font-size:8px;color:var(--text3);font-family:monospace;letter-spacing:0.08em;text-transform:uppercase'});
+      sLbl.textContent='S'+(s+1);setBox.appendChild(sLbl);
+      var kgI=el('input',{type:'number',inputmode:'decimal',placeholder:'',
+        style:'width:44px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:5px 3px;font-family:monospace;font-size:12px;color:var(--gold);text-align:center;outline:none;-webkit-appearance:none;'+(savedSet.kg?'border-color:rgba(196,154,60,0.35);background:rgba(196,154,60,0.08)':'')});
+      kgI.value=savedSet.kg||'';
+      var kLbl=el('div',{style:'font-size:7px;color:var(--text3);font-family:monospace'});
+      kLbl.textContent=exLoad==='BW'?'done':'kg';
+      var rpI=el('input',{type:'number',inputmode:'numeric',placeholder:'',
+        style:'width:44px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:5px 3px;font-family:monospace;font-size:12px;color:var(--orange);text-align:center;outline:none;-webkit-appearance:none;'+(savedSet.reps?'border-color:rgba(232,98,42,0.35);background:rgba(232,98,42,0.06)':'')});
+      rpI.value=savedSet.reps||'';
+      var rLbl=el('div',{style:'font-size:7px;color:var(--text3);font-family:monospace'});
+      rLbl.textContent='reps';
+      setBox.appendChild(kgI);setBox.appendChild(kLbl);
+      setBox.appendChild(rpI);setBox.appendChild(rLbl);
+      (function(lk,eIdx,si,kInp,rInp,exN){
+        function saveDE(){
+          if(!S.logs[lk])S.logs[lk]={};
+          if(!S.logs[lk].de)S.logs[lk].de={};
+          if(!S.logs[lk].de[eIdx])S.logs[lk].de[eIdx]={};
+          S.logs[lk].de[eIdx]['s'+si]={kg:kInp.value,reps:rInp.value};
+          sv('logs',S.logs);
+          kInp.style.borderColor=kInp.value?'rgba(196,154,60,0.35)':'var(--border)';
+          kInp.style.background=kInp.value?'rgba(196,154,60,0.08)':'var(--bg3)';
+          rInp.style.borderColor=rInp.value?'rgba(232,98,42,0.35)':'var(--border)';
+          rInp.style.background=rInp.value?'rgba(232,98,42,0.06)':'var(--bg3)';
+          if(kInp.value&&rInp.value) startRestTimer('90s','REST \u00b7 '+exN.split(' ')[0]);
+        }
+        kInp.addEventListener('change',saveDE);rInp.addEventListener('change',saveDE);
+      })(logKeySat,exIdx,s,kgI,rpI,exName);
+      setsRow.appendChild(setBox);
+    }
+    card.appendChild(setsRow);
+    deAccWrap.appendChild(card);
   });
-  deThead.appendChild(deHr);deTbl.appendChild(deThead);
-  var deTbody=el('tbody');
-  deExs.forEach(function(ex,i){
-    var le=(S.logs[logKeySat]&&S.logs[logKeySat].sat&&S.logs[logKeySat].sat[i])||'';
-    var tr=el('tr');
-    var ntd=el('td');
-    var nn=el('div',{'class':'ex-name'});nn.textContent=ex[0];ntd.appendChild(nn);
-    if(ex[4]){var sub=el('div',{style:'font-size:9px;color:var(--text3);font-family:monospace;margin-top:1px'});sub.textContent=ex[4];ntd.appendChild(sub);}
-    tr.appendChild(ntd);
-    [ex[1],ex[2]].forEach(function(v){var td=el('td',{'class':'r'});td.textContent=v;tr.appendChild(td);});
-    var ktd=el('td',{'class':'kg r'});ktd.textContent=ex[3];tr.appendChild(ktd);
-    var logTd=el('td',{'class':'r'});
-    var li=el('input',{'class':'log-inp'+(le?' hit':''),'type':'text','inputmode':'decimal','placeholder':'',style:'width:44px'});
-    li.value=le;
-    (function(idx,inp){inp.addEventListener('change',function(){
-      if(!S.logs[logKeySat])S.logs[logKeySat]={};
-      if(!S.logs[logKeySat].sat)S.logs[logKeySat].sat={};
-      S.logs[logKeySat].sat[idx]=inp.value;sv('logs',S.logs);
-      inp.value?inp.classList.add('hit'):inp.classList.remove('hit');
-    });})(i,li);
-    logTd.appendChild(li);tr.appendChild(logTd);
-    deTbody.appendChild(tr);
-  });
-  deTbl.appendChild(deTbody);deWrap.appendChild(deTbl);
-  // Load chips
-  var deChips=el('div',{style:'display:flex;gap:6px;flex-wrap:wrap;margin-top:10px'});
-  var chipD=w.deType==='SQ'?
-    [{l:'Box Squat',v:r5(sq*(w.deSqPct||0.5))+'kg',p:Math.round((w.deSqPct||0.5)*100)+'% SQ'},
-     {l:'Speed Bench',v:r5(bn*(w.deBnPct||0.5))+'kg',p:Math.round((w.deBnPct||0.5)*100)+'% BN'}]:
-    [{l:'Speed DL',v:r5(dl*(w.deDlPct||0.5))+'kg',p:Math.round((w.deDlPct||0.5)*100)+'% DL'},
-     {l:'Speed Bench',v:r5(bn*(w.deBnPct||0.5))+'kg',p:Math.round((w.deBnPct||0.5)*100)+'% BN'}];
-  chipD.forEach(function(c){
-    var chip=el('div',{style:'background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;text-align:center'});
-    chip.innerHTML='<div style="font-size:8px;color:var(--text3);font-family:monospace">'+c.l+'</div>'+
-      '<div style="font-size:14px;font-weight:700;color:var(--orange);font-family:monospace">'+c.v+'</div>'+
-      '<div style="font-size:8px;color:var(--text3);font-family:monospace">'+c.p+'</div>';
-    deChips.appendChild(chip);
-  });
-  satBlock.appendChild(deWrap);satBlock.appendChild(deChips);
-  inn.appendChild(satBlock);
+  satBlock.appendChild(deAccWrap);
+    inn.appendChild(satBlock);
 
   // ── FRI PM: Walk + Sauna ─────────────────────────────────────────────
   var friPmBlock = makeSessionBlock('wsb-fripm','Friday PM \u00b7 Recovery',

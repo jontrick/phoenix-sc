@@ -1175,20 +1175,16 @@ function smRenderExercise(body,footer){
   var ex=SM.exercises[SM.exIdx]; if(!ex) return;
   var roundEl=document.createElement('div');
   roundEl.style.cssText='text-align:center';
-  roundEl.innerHTML='<div class="sm-rounds">'+SM.round+'</div>'+
-    '<div class="sm-rounds-lbl">round'+(SM.round===1?'':'s')+' completed</div>';
+  roundEl.innerHTML='<div class="sm-rounds">'+SM.round+'</div>'+'<div class="sm-rounds-lbl">round'+(SM.round===1?'':'s')+' completed</div>';
   body.appendChild(roundEl);
   var card=document.createElement('div'); card.className='sm-ex-card';
   card.innerHTML='<div class="sm-ex-round">ROUND '+SM.round+
-    (SM.mode==='amrap'?' \u00b7 AMRAP':' \u00b7 AFAP')+'</div>'+
-    '<div class="sm-ex-name">'+ex.name+'</div>'+
-    '<div class="sm-ex-meta">'+(ex.reps?ex.reps+' REPS':'')+' \u00b7 '+ex.load+'</div>';
+    (SM.mode==='amrap'?' \u00b7 AMRAP':' \u00b7 AFAP')+'</div>'+'<div class="sm-ex-name">'+ex.name+'</div>'+'<div class="sm-ex-meta">'+(ex.reps?ex.reps+' REPS':'')+' \u00b7 '+ex.load+'</div>';
   body.appendChild(card);
   var nextEx=SM.exercises[(SM.exIdx+1)%SM.exercises.length];
   if(nextEx&&nextEx!==ex){
     var nxt=document.createElement('div'); nxt.className='sm-next-preview';
-    nxt.innerHTML='<div class="sm-next-lbl">NEXT UP</div>'+
-      '<div class="sm-next-name">'+nextEx.name+' \u00b7 '+(nextEx.reps||'')+' '+nextEx.load+'</div>';
+    nxt.innerHTML='<div class="sm-next-lbl">NEXT UP</div>'+'<div class="sm-next-name">'+nextEx.name+' \u00b7 '+(nextEx.reps||'')+' '+nextEx.load+'</div>';
     body.appendChild(nxt);
   }
   var doneBtn=document.createElement('button');
@@ -1220,12 +1216,7 @@ function smAmrapDone(){
   body.innerHTML=''; footer.innerHTML='';
   try{navigator.vibrate([300,100,300,100,500]);}catch(e){}
   var prompt=document.createElement('div'); prompt.className='sm-amrap-prompt';
-  prompt.innerHTML='<div class="sm-amrap-h">Time\'s Up!</div>'+
-    '<div class="sm-rounds" style="margin-bottom:4px">'+SM.round+'</div>'+
-    '<div class="sm-rounds-lbl" style="margin-bottom:16px">rounds completed</div>'+
-    '<div class="sm-amrap-p">Reps in final exercise?</div>'+
-    '<input class="sm-amrap-inp" type="number" inputmode="numeric" id="sm-amrap-reps" placeholder="0">'+
-    '<button class="sm-tick sm-tick-done" style="width:100%" onclick="smAmrapSave()">Save & Finish</button>';
+  prompt.innerHTML='<div class="sm-amrap-h">Time\'s Up!</div>'+'<div class="sm-rounds" style="margin-bottom:4px">'+SM.round+'</div>'+'<div class="sm-rounds-lbl" style="margin-bottom:16px">rounds completed</div>'+'<div class="sm-amrap-p">Reps in final exercise?</div>'+'<input class="sm-amrap-inp" type="number" inputmode="numeric" id="sm-amrap-reps" placeholder="0">'+'<button class="sm-tick sm-tick-done" style="width:100%" onclick="smAmrapSave()">Save & Finish</button>';
   body.appendChild(prompt);
   setTimeout(function(){ var el=document.getElementById('sm-amrap-reps'); if(el) el.focus(); },100);
 }
@@ -1265,9 +1256,7 @@ function smRenderSet(body,footer){
   if(SM.restRunning){
     var restCard=document.createElement('div'); restCard.className='sm-set-card';
     var rs=SM.restRemaining; var rm2=Math.floor(rs/60),rs2=rs%60;
-    restCard.innerHTML='<div class="sm-set-num">REST \u2014 '+(rm2>0?rm2+'m ':'')+rs2+'s remaining</div>'+
-      '<div class="sm-set-name" style="font-size:16px">Next: '+setData.name+'</div>'+
-      '<div class="sm-set-target">'+setData.target+(setData.adjKg?' \u00b7 ~'+setData.adjKg+'kg':'')+'</div>';
+    restCard.innerHTML='<div class="sm-set-num">REST \u2014 '+(rm2>0?rm2+'m ':'')+rs2+'s remaining</div>'+'<div class="sm-set-name" style="font-size:16px">Next: '+setData.name+'</div>'+'<div class="sm-set-target">'+setData.target+(setData.adjKg?' \u00b7 ~'+setData.adjKg+'kg':'')+'</div>';
     body.appendChild(restCard);
     var addBtn=document.createElement('button');
     addBtn.className='sm-tick sm-tick-fail';
@@ -1282,9 +1271,7 @@ function smRenderSet(body,footer){
   var card=document.createElement('div'); card.className='sm-set-card';
   var adjKey='w'+S.curWeek+'_'+setData.sk+'_'+setData.exIdx;
   var adjKg=S.adjs[adjKey]||setData.adjKg||'';
-  card.innerHTML='<div class="sm-set-num">'+setData.name+' \u00b7 SET '+(setData.setIdx+1)+' / '+totalSets+'</div>'+
-    '<div class="sm-set-name">'+setData.name+'</div>'+
-    '<div class="sm-set-target">'+setData.target+(adjKg?' \u00b7 '+adjKg+'kg':'')+'</div>';
+  card.innerHTML='<div class="sm-set-num">'+setData.name+' \u00b7 SET '+(setData.setIdx+1)+' / '+totalSets+'</div>'+'<div class="sm-set-name">'+setData.name+'</div>'+'<div class="sm-set-target">'+setData.target+(adjKg?' \u00b7 '+adjKg+'kg':'')+'</div>';
   var inpRow=document.createElement('div'); inpRow.className='sm-set-inputs';
   var kgWrap=document.createElement('div'); kgWrap.className='sm-set-inp-wrap';
   var kgInp=document.createElement('input');
@@ -1331,11 +1318,8 @@ function smRenderMeSet(body,footer){
   if(SM.restRunning){
     var restCard=document.createElement('div'); restCard.className='sm-me-card';
     var rs=SM.restRemaining; var rm2=Math.floor(rs/60),rs2=rs%60;
-    restCard.innerHTML='<div class="sm-me-pct">REST</div>'+
-      '<div class="sm-me-kg" style="font-size:36px;color:var(--gold)">'+(rm2>0?rm2+':':'')+
-      (rs2<10?'0':'')+rs2+'</div>'+
-      '<div class="sm-me-kg-lbl">Next: SET '+(SM.setIdx+1)+' \u00b7 '+setData.pct+'% \u00b7 '+setData.kg+'kg</div>'+
-      '<div class="sm-me-target">'+setData.target+' rep target</div>';
+    restCard.innerHTML='<div class="sm-me-pct">REST</div>'+'<div class="sm-me-kg" style="font-size:36px;color:var(--gold)">'+(rm2>0?rm2+':':'')+
+      (rs2<10?'0':'')+rs2+'</div>'+'<div class="sm-me-kg-lbl">Next: SET '+(SM.setIdx+1)+' \u00b7 '+setData.pct+'% \u00b7 '+setData.kg+'kg</div>'+'<div class="sm-me-target">'+setData.target+' rep target</div>';
     var restRow=document.createElement('div');
     restRow.style.cssText='display:flex;gap:8px;width:100%;max-width:360px';
     [[180,'3m'],[240,'4m'],[300,'5m'],[360,'6m']].forEach(function(p){
@@ -1352,10 +1336,7 @@ function smRenderMeSet(body,footer){
   }
   var card=document.createElement('div'); card.className='sm-me-card';
   var isLast=SM.setIdx===SM.sets.length-1;
-  card.innerHTML='<div class="sm-me-pct">SET '+(SM.setIdx+1)+' OF '+SM.sets.length+' \u00b7 '+setData.pct+'%</div>'+
-    '<div class="sm-me-kg">'+setData.kg+'<span style="font-size:20px">kg</span></div>'+
-    '<div class="sm-me-kg-lbl">'+(isLast?'RM ATTEMPT':'TARGET LOAD')+'</div>'+
-    '<div class="sm-me-target">'+setData.target+' rep'+(setData.target!==1?'s':'')+' target</div>';
+  card.innerHTML='<div class="sm-me-pct">SET '+(SM.setIdx+1)+' OF '+SM.sets.length+' \u00b7 '+setData.pct+'%</div>'+'<div class="sm-me-kg">'+setData.kg+'<span style="font-size:20px">kg</span></div>'+'<div class="sm-me-kg-lbl">'+(isLast?'RM ATTEMPT':'TARGET LOAD')+'</div>'+'<div class="sm-me-target">'+setData.target+' rep'+(setData.target!==1?'s':'')+' target</div>';
   var btns=document.createElement('div'); btns.className='sm-me-btns';
   var gotBtn=document.createElement('button'); gotBtn.className='sm-me-btn-got';
   gotBtn.textContent='\u2713  Got it';
@@ -1370,11 +1351,7 @@ function smRenderMeSet(body,footer){
   var missBtn=document.createElement('button'); missBtn.className='sm-me-btn-miss';
   missBtn.textContent='\u2717';
   missBtn.onclick=function(){
-    card.innerHTML='<div class="sm-me-pct">SET '+(SM.setIdx+1)+' \u00b7 WHAT DID YOU HIT?</div>'+
-      '<div class="sm-set-inputs" style="justify-content:center;margin:12px 0">'+
-        '<div class="sm-set-inp-wrap"><input class="sm-set-inp" id="sm-me-kg-inp" type="number" inputmode="decimal" placeholder="kg" style="width:80px"><div class="sm-set-inp-lbl">KG HIT</div></div>'+
-        '<div class="sm-set-inp-wrap"><input class="sm-set-inp" id="sm-me-reps-inp" type="number" inputmode="numeric" placeholder="reps" style="width:80px;color:var(--orange)"><div class="sm-set-inp-lbl">REPS HIT</div></div>'+
-      '</div>';
+    card.innerHTML='<div class="sm-me-pct">SET '+(SM.setIdx+1)+' \u00b7 WHAT DID YOU HIT?</div>'+'<div class="sm-set-inputs" style="justify-content:center;margin:12px 0">'+'<div class="sm-set-inp-wrap"><input class="sm-set-inp" id="sm-me-kg-inp" type="number" inputmode="decimal" placeholder="kg" style="width:80px"><div class="sm-set-inp-lbl">KG HIT</div></div>'+'<div class="sm-set-inp-wrap"><input class="sm-set-inp" id="sm-me-reps-inp" type="number" inputmode="numeric" placeholder="reps" style="width:80px;color:var(--orange)"><div class="sm-set-inp-lbl">REPS HIT</div></div>'+'</div>';
     var saveMissBtn=document.createElement('button'); saveMissBtn.className='sm-me-btn-got';
     saveMissBtn.textContent='Log & Continue';
     saveMissBtn.onclick=function(){
@@ -1403,10 +1380,7 @@ function smMeAdvance(){
 
 function smSetsComplete(body,footer){
   clearInterval(SM.interval);
-  body.innerHTML='<div style="text-align:center;padding:20px">'+
-    '<div class="sm-rounds" style="color:var(--green)">\u2713</div>'+
-    '<div style="font-family:Georgia,serif;font-size:20px;color:var(--text);margin:8px 0">All Sets Done!</div>'+
-    '<div style="font-size:11px;color:var(--text3);font-family:monospace;letter-spacing:0.08em">Session logged.</div></div>';
+  body.innerHTML='<div style="text-align:center;padding:20px">'+'<div class="sm-rounds" style="color:var(--green)">\u2713</div>'+'<div style="font-family:Georgia,serif;font-size:20px;color:var(--text);margin:8px 0">All Sets Done!</div>'+'<div style="font-size:11px;color:var(--text3);font-family:monospace;letter-spacing:0.08em">Session logged.</div></div>';
   var doneBtn=document.createElement('button');
   doneBtn.className='sm-tick sm-tick-done'; doneBtn.style.flex='1';
   doneBtn.textContent='Finish Session';
@@ -1777,31 +1751,18 @@ var PLAN=[
 
 // ═══ EXERCISE DATABASE ════════════════════════════════════════════════════════
 var EXDB = {
-  pull: ['Chest-supported row','Cable row','Meadows row','Seal row','T-bar row','Pendlay row',
-    '1-arm DB row','Barbell row','Machine row','Chest-supported T-bar row','Inverted row',
-    'Lat pulldown','Straight-arm pulldown','Seated cable row'],
-  bicep: ['Hammer curl','Incline DB curl','Zottman curl','Cable curl','Barbell curl',
-    'Preacher curl','Spider curl','Concentration curl','EZ-bar curl'],
-  rear_delt: ['Face pull','Band pull-apart','Rear delt fly','Cable rear delt','Rope face pull',
-    'Chest-supported rear fly','DB rear delt','Prone Y-raise','Prone T-raise'],
-  hip_hinge: ['Romanian deadlift','Stiff-leg deadlift','Good morning','Cable pull-through',
-    'DB RDL','Trap bar RDL','Single-leg RDL','Kettlebell swing'],
-  quad: ['Leg press','Hack squat','Belt squat','Goblet squat','DB split squat',
-    'Leg extension','Step-up','Bulgarian split squat','Walking lunge','Reverse lunge'],
-  hamstring: ['Lying leg curl','Seated leg curl','Nordic curl','Swiss ball curl',
-    'GHR','Nordic curl eccentric','Cable leg curl','Leg curl machine'],
-  glute: ['Barbell hip thrust','Single-leg hip thrust','Cable pull-through',
-    'DB hip thrust','Frog pump','Banded hip thrust'],
-  back_ext: ['Back extension','Reverse hyper','45-deg back raise','GHR','Good morning',
-    'Weighted back ext','Hyperextension'],
-  push: ['DB incline press','BB incline press','Smith incline','Cable fly','Pec deck',
-    'DB flat press','Cable crossover','Low cable fly','Machine chest press'],
-  tricep: ['Dips','Close-grip bench','Skull crusher','Tricep pushdown','Overhead ext',
-    'Neutral grip dips','JM press','Cable overhead ext','Diamond push-up'],
-  row_upper: ['Pendlay row','Barbell row','Cable row','DB row','Machine row',
-    'Chest-supported row','Kroc row','Renegade row'],
-  core: ['Pallof press','Cable anti-rotation','Half-kneeling chop','Band Pallof press',
-    'Hanging knee raise','Ab rollout','Dead bug','Bird dog','Plank','Side plank']
+  pull: ['Chest-supported row','Cable row','Meadows row','Seal row','T-bar row','Pendlay row','1-arm DB row','Barbell row','Machine row','Chest-supported T-bar row','Inverted row','Lat pulldown','Straight-arm pulldown','Seated cable row'],
+  bicep: ['Hammer curl','Incline DB curl','Zottman curl','Cable curl','Barbell curl','Preacher curl','Spider curl','Concentration curl','EZ-bar curl'],
+  rear_delt: ['Face pull','Band pull-apart','Rear delt fly','Cable rear delt','Rope face pull','Chest-supported rear fly','DB rear delt','Prone Y-raise','Prone T-raise'],
+  hip_hinge: ['Romanian deadlift','Stiff-leg deadlift','Good morning','Cable pull-through','DB RDL','Trap bar RDL','Single-leg RDL','Kettlebell swing'],
+  quad: ['Leg press','Hack squat','Belt squat','Goblet squat','DB split squat','Leg extension','Step-up','Bulgarian split squat','Walking lunge','Reverse lunge'],
+  hamstring: ['Lying leg curl','Seated leg curl','Nordic curl','Swiss ball curl','GHR','Nordic curl eccentric','Cable leg curl','Leg curl machine'],
+  glute: ['Barbell hip thrust','Single-leg hip thrust','Cable pull-through','DB hip thrust','Frog pump','Banded hip thrust'],
+  back_ext: ['Back extension','Reverse hyper','45-deg back raise','GHR','Good morning','Weighted back ext','Hyperextension'],
+  push: ['DB incline press','BB incline press','Smith incline','Cable fly','Pec deck','DB flat press','Cable crossover','Low cable fly','Machine chest press'],
+  tricep: ['Dips','Close-grip bench','Skull crusher','Tricep pushdown','Overhead ext','Neutral grip dips','JM press','Cable overhead ext','Diamond push-up'],
+  row_upper: ['Pendlay row','Barbell row','Cable row','DB row','Machine row','Chest-supported row','Kroc row','Renegade row'],
+  core: ['Pallof press','Cable anti-rotation','Half-kneeling chop','Band Pallof press','Hanging knee raise','Ab rollout','Dead bug','Bird dog','Plank','Side plank']
 };
 // Map session slot to DB key
 var SLOT_DB = {
@@ -2015,12 +1976,7 @@ function renderPlan() {
 
   // Progress card
   var pc = el('div',{'class':'card'});
-  pc.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">'+
-    '<div><div style="font-family:Georgia,serif;font-size:24px;color:var(--text)">'+a.name+'</div>'+
-    '<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace;margin-top:2px">PHASE 2 · 13 WEEKS</div></div>'+
-    '<div style="text-align:right"><div style="font-family:Georgia,serif;font-size:30px;color:var(--orange);line-height:1">'+done+'<span style="font-size:16px;color:var(--text3)">/13</span></div>'+
-    '<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace">COMPLETE</div></div></div>'+
-    '<div class="prog-track"><div class="prog-fill" style="width:'+Math.round(done/13*100)+'%"></div></div>';
+  pc.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">'+'<div><div style="font-family:Georgia,serif;font-size:24px;color:var(--text)">'+a.name+'</div>'+'<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace;margin-top:2px">PHASE 2 · 13 WEEKS</div></div>'+'<div style="text-align:right"><div style="font-family:Georgia,serif;font-size:30px;color:var(--orange);line-height:1">'+done+'<span style="font-size:16px;color:var(--text3)">/13</span></div>'+'<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace">COMPLETE</div></div></div>'+'<div class="prog-track"><div class="prog-fill" style="width:'+Math.round(done/13*100)+'%"></div></div>';
   inn.appendChild(pc);
 
   [{b:1,l:'Block 1 — Foundation',ws:[1,2,3,4,5]},{b:2,l:'Block 2 — Development',ws:[6,7,8,9]},{b:3,l:'Block 3 — Intensification',ws:[10,11,12,13]}].forEach(function(blk){
@@ -2036,8 +1992,7 @@ function renderPlan() {
       var cls='wtile'+(isCur?' cur':'')+(isDone?' done':'')+(w.type==='DELOAD'?' deload':'');
       var tile=el('div',{'class':cls});
       var typeCls={DL:'bdl',SQ:'bsq',DELOAD:'bdl2',DL:'bdl'}[w.type]||'bde';
-      tile.innerHTML='<div class="wt-n">WK '+wn+'</div>'+
-        '<div class="wt-lift">'+(w.mePull.indexOf('Wide')>=0||w.mePull.indexOf('WG')>=0?'WG Chin':w.mePull.indexOf('Narrow')>=0||w.mePull.indexOf('NG')>=0?'NG Chin':w.mePull.split(' ').slice(0,2).join(' '))+'<br>'+w.meLower.split('/')[0].split('(')[0].trim()+'<br>'+w.mePress+'</div>'+
+      tile.innerHTML='<div class="wt-n">WK '+wn+'</div>'+'<div class="wt-lift">'+(w.mePull.indexOf('Wide')>=0||w.mePull.indexOf('WG')>=0?'WG Chin':w.mePull.indexOf('Narrow')>=0||w.mePull.indexOf('NG')>=0?'NG Chin':w.mePull.split(' ').slice(0,2).join(' '))+'<br>'+w.meLower.split('/')[0].split('(')[0].trim()+'<br>'+w.mePress+'</div>'+
         
         (isDone?'<div class="wt-done">&#10003;</div>':'');
       (function(weekNum){ tile.addEventListener('click', function(){ S.curWeek=weekNum; S.tab='week'; S.weekTab='mon'; renderAll(); }); })(wn);
@@ -2081,9 +2036,7 @@ function renderWeek() {
 
   // ── PRINT HEADER (hidden on screen, shown on print) ─────────────────
   var pHdr = el('div', {'class':'week-print-header no-print', style:'display:none'});
-  pHdr.innerHTML = '<img src="'+LOGO_URL+'" style="width:28px;height:28px;object-fit:contain;margin-right:8px">'+
-    '<div><b style="font-size:15px;font-family:Georgia,serif">Phoenix S&C \u2014 Week '+w.w+' / Block '+w.b+'</b>'+
-    '<span style="font-size:8px;color:#666;font-family:monospace;margin-left:10px;text-transform:uppercase">'+
+  pHdr.innerHTML = '<img src="'+LOGO_URL+'" style="width:28px;height:28px;object-fit:contain;margin-right:8px">'+'<div><b style="font-size:15px;font-family:Georgia,serif">Phoenix S&C \u2014 Week '+w.w+' / Block '+w.b+'</b>'+'<span style="font-size:8px;color:#666;font-family:monospace;margin-left:10px;text-transform:uppercase">'+
     w.type+' \u00b7 '+w.meLower+' \u00b7 '+a.name+'</span></div>';
   inn.appendChild(pHdr);
 
@@ -2154,9 +2107,7 @@ function renderWeek() {
     bwBox.innerHTML='BW baseline: <b style="color:var(--text)">'+pullBW+' reps</b>';
     monBlock.appendChild(bwBox);
   }
-  chinBox.innerHTML='<span style="font-size:12px;color:var(--gold)">&#9650;</span>'+
-      '<span style="font-size:11px;color:var(--gold)">Set 2 target: <b>'+prevChinSet3kg+'kg</b></span>'+
-      '<span style="font-size:9px;color:var(--text3);margin-left:auto">from last session set 3</span>';
+  chinBox.innerHTML='<span style="font-size:12px;color:var(--gold)">&#9650;</span>'+'<span style="font-size:11px;color:var(--gold)">Set 2 target: <b>'+prevChinSet3kg+'kg</b></span>'+'<span style="font-size:9px;color:var(--text3);margin-left:auto">from last session set 3</span>';
     monBlock.appendChild(chinBox);
   }
   // Set boxes
@@ -2303,8 +2254,7 @@ function renderWeek() {
   var wedCoreN = S.coreSession||1;
   var logKeyCo = 'core_s'+wedCoreN+'_w'+S.curWeek;
   var coreData = CORE_SESSIONS[wedCoreN-1];
-  var wedBlock = makeSessionBlock('wsb-wed','Wednesday AM · Core + Walk',
-    'Core Session '+wedCoreN, 'Bodyweight · 20-30 min walk first', 'var(--green)', false);
+  var wedBlock = makeSessionBlock('wsb-wed','Wednesday AM · Core + Walk','Core Session '+wedCoreN, 'Bodyweight · 20-30 min walk first', 'var(--green)', false);
   // Session selector 1/2/3/4
   var cSelRow=el('div',{style:'display:flex;gap:6px;margin-bottom:10px'});
   [1,2,3,4].forEach(function(n){
@@ -2362,8 +2312,7 @@ function renderWeek() {
   inn.appendChild(wedBlock);
 
   // ── THU: ME PRESS ────────────────────────────────────────────────────
-  var thuBlock = makeSessionBlock('wsb-thu','Thursday AM \u00b7 ME Upper',w.mePress,
-    'Press \u00b7 3-5 min rest \u00b7 sets 9-10 = near max', 'var(--orange)', true);
+  var thuBlock = makeSessionBlock('wsb-thu','Thursday AM \u00b7 ME Upper',w.mePress,'Press \u00b7 3-5 min rest \u00b7 sets 9-10 = near max', 'var(--orange)', true);
   thuBlock.appendChild(makeMeTable(w.pressPct,w.pressReps||[5,5,5,3,3,3,3,1,1,1],bn,'press'));
 
   
@@ -2396,8 +2345,7 @@ function renderWeek() {
   friResInp.addEventListener('input',function(){S._cfDraft['fri_'+friCf.name]=friResInp.value;});
   if(prevFriCF.result){
     var friPb=el('div',{style:'text-align:right;flex-shrink:0'});
-    friPb.innerHTML='<div style="font-size:8px;color:var(--gold);font-family:monospace;text-transform:uppercase">To beat</div>'+
-      '<div style="font-size:14px;font-weight:700;color:var(--gold);font-family:monospace">'+prevFriCF.result+'</div>';
+    friPb.innerHTML='<div style="font-size:8px;color:var(--gold);font-family:monospace;text-transform:uppercase">To beat</div>'+'<div style="font-size:14px;font-weight:700;color:var(--gold);font-family:monospace">'+prevFriCF.result+'</div>';
     friResRow.appendChild(friPb);
   }
   friResRow.appendChild(friResInp);
@@ -2466,12 +2414,10 @@ function renderWeek() {
   inn.appendChild(friBlock);
 
     // ── SAT AM: DE TOTAL (alternating SQ/DL, 3-week wave) ──────────────────
-  var satBlock = makeSessionBlock('wsb-sat','Saturday AM \u00b7 DE Total + Lake Walk',
-    'Dynamic Effort', w.de+' \u00b7 Max bar speed \u00b7 90s rest', 'var(--green)', false);
+  var satBlock = makeSessionBlock('wsb-sat','Saturday AM \u00b7 DE Total + Lake Walk','Dynamic Effort', w.de+' \u00b7 Max bar speed \u00b7 90s rest', 'var(--green)', false);
 
   // DE week type badge
-  var deTypeLbl=el('div',{style:'display:inline-block;font-size:9px;font-weight:700;'+
-    'letter-spacing:0.05em;color:'+(w.deType==='SQ'?'var(--blue)':'var(--orange)')+';'+'background:'+(w.deType==='SQ'?'rgba(122,143,168,0.12)':'rgba(232,98,42,0.1)')+';'+'border:1px solid '+(w.deType==='SQ'?'rgba(122,143,168,0.3)':'rgba(232,98,42,0.3)')+';'+'border-radius:3px;padding:2px 8px;font-family:monospace;margin-bottom:12px'});
+  var deTypeLbl=el('div',{style:'display:inline-block;font-size:9px;font-weight:700;'+'letter-spacing:0.05em;color:'+(w.deType==='SQ'?'var(--blue)':'var(--orange)')+';'+'background:'+(w.deType==='SQ'?'rgba(122,143,168,0.12)':'rgba(232,98,42,0.1)')+';'+'border:1px solid '+(w.deType==='SQ'?'rgba(122,143,168,0.3)':'rgba(232,98,42,0.3)')+';'+'border-radius:3px;padding:2px 8px;font-family:monospace;margin-bottom:12px'});
   deTypeLbl.textContent=w.deType==='SQ'?'DE SQUAT WEEK \u00b7 '+Math.round((w.deSqPct||0.5)*100)+'% SQ':'DE DEADLIFT WEEK \u00b7 '+Math.round((w.deDlPct||0.5)*100)+'% DL';
   satBlock.appendChild(deTypeLbl);
 
@@ -2558,8 +2504,7 @@ function renderWeek() {
     inn.appendChild(satBlock);
 
   // ── FRI PM: Walk + Sauna ─────────────────────────────────────────────
-  var friPmBlock = makeSessionBlock('wsb-fripm','Friday PM \u00b7 Recovery',
-    'Walk + Sauna', 'Active recovery \u00b7 no logging required', 'var(--green)', false);
+  var friPmBlock = makeSessionBlock('wsb-fripm','Friday PM \u00b7 Recovery','Walk + Sauna', 'Active recovery \u00b7 no logging required', 'var(--green)', false);
   var friPmNote = el('div',{style:'font-size:13px;color:var(--text2);font-family:Georgia,serif;line-height:1.6;margin-bottom:6px'});
   friPmNote.textContent = '20-30 min walk \u00b7 Sauna session. Mark complete below.';
   friPmBlock.appendChild(friPmNote);
@@ -2610,8 +2555,7 @@ function renderWeek() {
   satResInp.addEventListener('input',function(){S._cfDraft['sat_'+satCf.name]=satResInp.value;});
   if(prevSatCF.result){
     var satPb=el('div',{style:'text-align:right;flex-shrink:0'});
-    satPb.innerHTML='<div style="font-size:8px;color:var(--gold);font-family:monospace;text-transform:uppercase">To beat</div>'+
-      '<div style="font-size:14px;font-weight:700;color:var(--gold);font-family:monospace">'+prevSatCF.result+'</div>';
+    satPb.innerHTML='<div style="font-size:8px;color:var(--gold);font-family:monospace;text-transform:uppercase">To beat</div>'+'<div style="font-size:14px;font-weight:700;color:var(--gold);font-family:monospace">'+prevSatCF.result+'</div>';
     satResRow.appendChild(satPb);
   }
   satResRow.appendChild(satResInp);
@@ -2633,8 +2577,7 @@ function renderWeek() {
   var sunCoreN = lv('sunCoreSession_w'+S.curWeek, 3);
   var sun3Key = 'core_sun'+sunCoreN+'_w'+S.curWeek;
   var sun3Data = CORE_SESSIONS[sunCoreN-1];
-  var sunBlock = makeSessionBlock('wsb-sun','Sunday AM \u00b7 Lake Walk + Core',
-    'Core Session '+sunCoreN, 'Lake walk first \u00b7 then bodyweight core', 'var(--blue)', false);
+  var sunBlock = makeSessionBlock('wsb-sun','Sunday AM \u00b7 Lake Walk + Core','Core Session '+sunCoreN, 'Lake walk first \u00b7 then bodyweight core', 'var(--blue)', false);
   var sunCSel=el('div',{style:'display:flex;gap:5px;margin-bottom:8px'});
   [1,2,3,4].forEach(function(n){
     var b=el('button',{style:'flex:1;padding:7px 4px;border-radius:5px;font-size:13px;font-weight:700;font-family:Georgia,serif;cursor:pointer;border:1px solid '+(sunCoreN===n?'var(--blue)':'var(--border2)')+';background:'+(sunCoreN===n?'var(--blue)':'var(--bg3)')+';color:'+(sunCoreN===n?'#fff':'var(--text2)')});
@@ -2685,8 +2628,7 @@ function renderWeek() {
   var jerry=CF_SESSIONS.find(function(c){return c.name==='Jerry';})||CF_SESSIONS[7];
   var jerryKey='cf_sun_jerry_w'+S.curWeek;
   var prevJerry=S.logs[jerryKey]||{};
-  var sunPmBlock=makeSessionBlock('wsb-sunpm','Sunday PM · CrossFit',
-    'Jerry','Run 800m · Row 2000m · Run 800m · AFAP','var(--blue)',false);
+  var sunPmBlock=makeSessionBlock('wsb-sunpm','Sunday PM · CrossFit','Jerry','Run 800m · Row 2000m · Run 800m · AFAP','var(--blue)',false);
   var jerryDesc=el('div',{style:'font-family:Georgia,serif;font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.5'});
   jerryDesc.textContent='800m run \u00b7 2000m row \u00b7 800m run \u00b7 AFAP';
   sunPmBlock.appendChild(jerryDesc);
@@ -2698,8 +2640,7 @@ function renderWeek() {
   jerryInp.addEventListener('input',function(){S._cfDraft['jerry']=jerryInp.value;});
   if(prevJerry.result){
     var jerryPb=el('div',{style:'text-align:right;flex-shrink:0'});
-    jerryPb.innerHTML='<div style="font-size:8px;color:var(--gold);font-family:monospace;text-transform:uppercase">To beat</div>'+
-      '<div style="font-size:14px;font-weight:700;color:var(--gold);font-family:monospace">'+prevJerry.result+'</div>';
+    jerryPb.innerHTML='<div style="font-size:8px;color:var(--gold);font-family:monospace;text-transform:uppercase">To beat</div>'+'<div style="font-size:14px;font-weight:700;color:var(--gold);font-family:monospace">'+prevJerry.result+'</div>';
     jerryRow.appendChild(jerryPb);
   }
   jerryRow.appendChild(jerryInp);
@@ -2739,15 +2680,7 @@ function renderWeek() {
 function renderDeload(w,dl,sq,bn) {
   var inn=document.getElementById('main-inner');
   var d=el('div',{'class':'deload-info'});
-  d.innerHTML='<div class="card-title">Deload Week</div>'+
-    '<div style="font-family:Georgia,serif;font-size:16px;color:var(--text2);line-height:1.7;margin-bottom:14px">Full recovery. All lifts at 50-60%. 2 sets only. Skip DE. Arrive fresh for next block.</div>'+
-    '<div class="slabel">Targets</div>'+
-    '<div class="chips">'+
-      '<div class="chip"><div class="chip-pct">DL</div><div class="chip-kg">'+r5(dl*.55)+'kg</div></div>'+
-      '<div class="chip"><div class="chip-pct">SQ</div><div class="chip-kg">'+r5(sq*.55)+'kg</div></div>'+
-      '<div class="chip"><div class="chip-pct">BENCH</div><div class="chip-kg">'+r5(bn*.55)+'kg</div></div>'+
-    '</div>'+
-    '<div style="font-size:10px;color:var(--text3);font-family:\'Courier New\',monospace">2x5 each · no rep records · no DE</div>';
+  d.innerHTML='<div class="card-title">Deload Week</div>'+'<div style="font-family:Georgia,serif;font-size:16px;color:var(--text2);line-height:1.7;margin-bottom:14px">Full recovery. All lifts at 50-60%. 2 sets only. Skip DE. Arrive fresh for next block.</div>'+'<div class="slabel">Targets</div>'+'<div class="chips">'+'<div class="chip"><div class="chip-pct">DL</div><div class="chip-kg">'+r5(dl*.55)+'kg</div></div>'+'<div class="chip"><div class="chip-pct">SQ</div><div class="chip-kg">'+r5(sq*.55)+'kg</div></div>'+'<div class="chip"><div class="chip-pct">BENCH</div><div class="chip-kg">'+r5(bn*.55)+'kg</div></div>'+'</div>'+'<div style="font-size:10px;color:var(--text3);font-family:\'Courier New\',monospace">2x5 each · no rep records · no DE</div>';
   inn.appendChild(d);
   var cb=el('button',{'class':'btn-complete'+(S.logs['w'+S.curWeek]&&S.logs['w'+S.curWeek].done?' done':'')});
   cb.textContent=S.logs['w'+S.curWeek]&&S.logs['w'+S.curWeek].done?'&#10003; Week Logged':'Mark Week Complete';
@@ -2875,8 +2808,7 @@ function makeExTable(sessionKey, exercises) {
     // ▶ Start guided sets button for THIS exercise
     (function(exName,numSets,restStr,sk2,exI,adjK){
       var startBtn=el('button',{'class':'btn-ghost no-print',
-        style:'width:100%;margin-top:8px;padding:9px 14px;font-size:10.5px;'+
-        'letter-spacing:1.5px;border-color:rgba(255,255,255,0.12);color:var(--text3)'});
+        style:'width:100%;margin-top:8px;padding:9px 14px;font-size:10.5px;'+'letter-spacing:1.5px;border-color:rgba(255,255,255,0.12);color:var(--text3)'});
       startBtn.textContent='▶  Start '+exName.split('/')[0].trim()+' · '+numSets+' sets';
       startBtn.addEventListener('click',function(){
         var sets=[];
@@ -2932,11 +2864,8 @@ function makeMeTable(pcts, meReps, rm, sessionKey) {
   var wrap=el('div',{'class':'me-scroll'});
   // Show recommendation if we have progression data
   if(showSuggestion){
-    var suggBox=el('div',{style:'display:flex;align-items:center;gap:8px;padding:8px 12px;'+'background:rgba(196,154,60,0.1);border:1px solid rgba(196,154,60,0.25);border-radius:6px;'+
-      'margin-bottom:8px;font-family:monospace'});
-    suggBox.innerHTML='<span style="font-size:11px;color:var(--gold);font-weight:700">&#9650;</span>'+
-      '<span style="font-size:11px;color:var(--gold)">Suggested top set: <b>'+suggestedRM+'kg</b></span>'+
-      '<span style="font-size:9px;color:var(--text3);margin-left:auto">based on last session</span>';
+    var suggBox=el('div',{style:'display:flex;align-items:center;gap:8px;padding:8px 12px;'+'background:rgba(196,154,60,0.1);border:1px solid rgba(196,154,60,0.25);border-radius:6px;'+'margin-bottom:8px;font-family:monospace'});
+    suggBox.innerHTML='<span style="font-size:11px;color:var(--gold);font-weight:700">&#9650;</span>'+'<span style="font-size:11px;color:var(--gold)">Suggested top set: <b>'+suggestedRM+'kg</b></span>'+'<span style="font-size:9px;color:var(--text3);margin-left:auto">based on last session</span>';
     var suggWrap=document.createElement('div');
     suggWrap.appendChild(suggBox);
     wrap.appendChild(suggWrap);
@@ -3106,9 +3035,7 @@ function renderTue(w,dl,sq) {
   inn.appendChild(lbl);
   inn.appendChild(makeExTable('lower',w.accLower));
   var de=el('div',{'class':'de-box'});
-  de.innerHTML='<div class="slabel" style="margin-bottom:5px">DE Slot</div>'+
-    '<div style="font-size:15px;font-weight:700;letter-spacing:1px;color:var(--orange);text-transform:uppercase">'+w.de+'</div>'+
-    '<div style="font-size:9px;color:var(--text3);margin-top:4px;font-family:\'Courier New\',monospace;letter-spacing:0.08em">MAX INTENT · 2 MIN REST · FULL RESET EACH REP</div>';
+  de.innerHTML='<div class="slabel" style="margin-bottom:5px">DE Slot</div>'+'<div style="font-size:15px;font-weight:700;letter-spacing:1px;color:var(--orange);text-transform:uppercase">'+w.de+'</div>'+'<div style="font-size:9px;color:var(--text3);margin-top:4px;font-family:\'Courier New\',monospace;letter-spacing:0.08em">MAX INTENT · 2 MIN REST · FULL RESET EACH REP</div>';
   inn.appendChild(de);
 }
 
@@ -3368,28 +3295,11 @@ function renderProfile() {
   var done=PLAN.filter(function(_,i){return S.logs['w'+(i+1)]&&S.logs['w'+(i+1)].done;}).length;
 
   var pc=el('div',{'class':'card hi'});
-  pc.innerHTML='<div style="text-align:center;margin-bottom:14px">'+
-    '<div style="font-family:Georgia,serif;font-size:28px;color:var(--text)">'+a.name+'</div>'+
-    '<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace;margin-top:2px;letter-spacing:0.1em">PHOENIX COMBINE 2026 · PHASE 2</div></div>'+
-    '<div class="stat-grid">'+
-      '<div class="stat-card"><div class="stat-val">'+a.dlRM+'kg</div><div class="stat-lbl">Deadlift 1RM</div></div>'+
-      '<div class="stat-card"><div class="stat-val">'+a.sqRM+'kg</div><div class="stat-lbl">Squat 1RM</div></div>'+
-      '<div class="stat-card"><div class="stat-val">'+a.benchRM+'kg</div><div class="stat-lbl">Bench 1RM</div></div>'+
-      '<div class="stat-card"><div class="stat-val">'+a.pullMax+'</div><div class="stat-lbl">Pull-up Max</div></div>'+
-    '</div>';
+  pc.innerHTML='<div style="text-align:center;margin-bottom:14px">'+'<div style="font-family:Georgia,serif;font-size:28px;color:var(--text)">'+a.name+'</div>'+'<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace;margin-top:2px;letter-spacing:0.1em">PHOENIX COMBINE 2026 · PHASE 2</div></div>'+'<div class="stat-grid">'+'<div class="stat-card"><div class="stat-val">'+a.dlRM+'kg</div><div class="stat-lbl">Deadlift 1RM</div></div>'+'<div class="stat-card"><div class="stat-val">'+a.sqRM+'kg</div><div class="stat-lbl">Squat 1RM</div></div>'+'<div class="stat-card"><div class="stat-val">'+a.benchRM+'kg</div><div class="stat-lbl">Bench 1RM</div></div>'+'<div class="stat-card"><div class="stat-val">'+a.pullMax+'</div><div class="stat-lbl">Pull-up Max</div></div>'+'</div>';
   inn.appendChild(pc);
 
   var sc=el('div',{'class':'card'});
-  sc.innerHTML='<div class="slabel" style="margin-bottom:10px">Programme Status</div>'+
-    '<div style="display:flex;justify-content:space-between;margin-bottom:8px">'+
-      '<span style="color:var(--text2)">Weeks complete</span>'+
-      '<span style="font-family:\'Courier New\',monospace;color:var(--orange)">'+done+' / 13</span>'+
-    '</div>'+
-    '<div class="prog-track"><div class="prog-fill" style="width:'+Math.round(done/13*100)+'%"></div></div>'+
-    '<div style="display:flex;justify-content:space-between;margin-top:12px">'+
-      '<span style="color:var(--text2)">Current week</span>'+
-      '<span style="font-family:\'Courier New\',monospace;color:var(--text)">'+S.curWeek+'</span>'+
-    '</div>';
+  sc.innerHTML='<div class="slabel" style="margin-bottom:10px">Programme Status</div>'+'<div style="display:flex;justify-content:space-between;margin-bottom:8px">'+'<span style="color:var(--text2)">Weeks complete</span>'+'<span style="font-family:\'Courier New\',monospace;color:var(--orange)">'+done+' / 13</span>'+'</div>'+'<div class="prog-track"><div class="prog-fill" style="width:'+Math.round(done/13*100)+'%"></div></div>'+'<div style="display:flex;justify-content:space-between;margin-top:12px">'+'<span style="color:var(--text2)">Current week</span>'+'<span style="font-family:\'Courier New\',monospace;color:var(--text)">'+S.curWeek+'</span>'+'</div>';
   inn.appendChild(sc);
 
   var eb=el('button',{'class':'btn-ghost'});eb.textContent='Edit 1RMs & Profile';
@@ -3488,25 +3398,17 @@ function renderHistory() {
       var nextKg=parseFloat(bestKg)+2.5;
       nextNote='Next target: '+nextKg+'kg';
     }
-    row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
-      '<div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">Wk '+w.w+' · '+w.meLower+'</div>'+
-      '<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace">'+date+'</div></div>'+
-      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">'+
+    row.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+'<div style="font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px">Wk '+w.w+' · '+w.meLower+'</div>'+'<div style="font-size:9px;color:var(--text3);font-family:\'Courier New\',monospace">'+date+'</div></div>'+'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">'+
         
         '<span class="badge bde">Block '+w.b+'</span>'+
-        (bestKg?'<span class="badge bpu">Top: '+bestKg+'kg x'+(bestReps||'?')+'</span>':'')+
-      '</div>'+
+        (bestKg?'<span class="badge bpu">Top: '+bestKg+'kg x'+(bestReps||'?')+'</span>':'')+'</div>'+
       (nextNote?'<div style="font-size:10px;color:var(--gold);font-family:\'Courier New\',monospace;margin-top:2px">'+nextNote+'</div>':'');
     (function(weekNum){ row.addEventListener('click',function(){ S.curWeek=weekNum; S.tab='week'; S.weekTab='tue'; renderAll(); }); })(w.w);
     inn.appendChild(row);
   });
   // Smart progression note
   var progNote=el('div',{style:'margin-top:16px;padding:12px;background:var(--bg3);border-radius:8px;border:1px solid rgba(196,154,60,0.2)'});
-  progNote.innerHTML='<div style="font-size:9px;color:var(--gold);font-family:\'Courier New\',monospace;letter-spacing:0.1em;margin-bottom:6px">AUTO-PROGRESSION LOGIC</div>'+
-    '<div style="font-size:13px;color:var(--text2);font-family:Georgia,serif;line-height:1.7">'+
-    'Each completed session logs your top set. When you revisit a week type, the target load auto-adjusts +2.5kg from your last logged top set. '+
-    'If you missed reps on the top set, the next session holds the same load.'+
-    '</div>';
+  progNote.innerHTML='<div style="font-size:9px;color:var(--gold);font-family:\'Courier New\',monospace;letter-spacing:0.1em;margin-bottom:6px">AUTO-PROGRESSION LOGIC</div>'+'<div style="font-size:13px;color:var(--text2);font-family:Georgia,serif;line-height:1.7">'+'Each completed session logs your top set. When you revisit a week type, the target load auto-adjusts +2.5kg from your last logged top set. '+'If you missed reps on the top set, the next session holds the same load.'+'</div>';
   inn.appendChild(progNote);
 }
 
@@ -3601,22 +3503,7 @@ function showPhoneModal() {
   slot.innerHTML='';
   var ov=el('div',{'class':'modal-bg'});
   var sh=el('div',{'class':'modal-sheet'});
-  sh.innerHTML='<div class="modal-pill"></div>'+
-    '<div class="modal-title">Get App on iPhone</div>'+
-    '<div style="font-family:Georgia,serif;font-size:15px;color:var(--text2);line-height:1.9;margin-bottom:20px">'+
-    '<b style="color:var(--orange);font-size:13px;font-family:monospace;letter-spacing:0.1em">OPTION 1 — AIRDROP (easiest)</b><br>'+
-    '1. On your Mac → Finder → Downloads<br>'+
-    '2. Right-click the .html file → Share → AirDrop<br>'+
-    '3. Select your iPhone<br>'+
-    '4. On iPhone: Accept → opens in Safari<br>'+
-    '5. Tap ‹ <b>Share icon</b> › (box + arrow at bottom of Safari)<br>'+
-    '6. Scroll down → tap <b>“Add to Home Screen”</b><br>'+
-    '7. Tap <b>Add</b> — done! Opens as full-screen app<br><br>'+
-    '<b style="color:var(--gold);font-size:13px;font-family:monospace;letter-spacing:0.1em">NOTE</b><br>'+
-    'On iPhone the <b>Share</b> button is at the <b>bottom</b> of Safari (the square with an arrow pointing up). If you don’t see “Add to Home Screen” scroll down in the share sheet.<br><br>'+
-    '<b style="color:var(--orange);font-size:13px;font-family:monospace;letter-spacing:0.1em">DATA BACKUP</b><br>'+
-    'Use <b>Export Data</b> in Profile to save your logs. Import on new device to restore.'+
-    '</div>';
+  sh.innerHTML='<div class="modal-pill"></div>'+'<div class="modal-title">Get App on iPhone</div>'+'<div style="font-family:Georgia,serif;font-size:15px;color:var(--text2);line-height:1.9;margin-bottom:20px">'+'<b style="color:var(--orange);font-size:13px;font-family:monospace;letter-spacing:0.1em">OPTION 1 — AIRDROP (easiest)</b><br>'+'1. On your Mac → Finder → Downloads<br>'+'2. Right-click the .html file → Share → AirDrop<br>'+'3. Select your iPhone<br>'+'4. On iPhone: Accept → opens in Safari<br>'+'5. Tap ‹ <b>Share icon</b> › (box + arrow at bottom of Safari)<br>'+'6. Scroll down → tap <b>“Add to Home Screen”</b><br>'+'7. Tap <b>Add</b> — done! Opens as full-screen app<br><br>'+'<b style="color:var(--gold);font-size:13px;font-family:monospace;letter-spacing:0.1em">NOTE</b><br>'+'On iPhone the <b>Share</b> button is at the <b>bottom</b> of Safari (the square with an arrow pointing up). If you don’t see “Add to Home Screen” scroll down in the share sheet.<br><br>'+'<b style="color:var(--orange);font-size:13px;font-family:monospace;letter-spacing:0.1em">DATA BACKUP</b><br>'+'Use <b>Export Data</b> in Profile to save your logs. Import on new device to restore.'+'</div>';
   var cl=el('button',{'class':'modal-btn-ok',style:'width:100%'});cl.textContent='Got It';
   cl.addEventListener('click',function(){slot.innerHTML='';});sh.appendChild(cl);
   ov.addEventListener('click',function(e){if(e.target===ov)slot.innerHTML='';});
@@ -3734,8 +3621,7 @@ function renderCoreSessions() {
   var prevLog=S.logs[logKey];
   if(prevLog&&prevLog.date){
     var prevBox=el('div',{style:'background:rgba(196,154,60,0.08);border:1px solid rgba(196,154,60,0.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center'});
-    prevBox.innerHTML='<span style="font-size:9px;color:var(--gold);font-family:monospace;letter-spacing:0.1em;text-transform:uppercase">Last done</span>'+
-      '<span style="font-size:11px;color:var(--text2);font-family:monospace">'+new Date(prevLog.date).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+'</span>';
+    prevBox.innerHTML='<span style="font-size:9px;color:var(--gold);font-family:monospace;letter-spacing:0.1em;text-transform:uppercase">Last done</span>'+'<span style="font-size:11px;color:var(--text2);font-family:monospace">'+new Date(prevLog.date).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+'</span>';
     inn.appendChild(prevBox);
   }
 
@@ -3810,8 +3696,7 @@ function renderCFSessions() {
     var prev=S.logs[logKey];
     var isActive=S.cfSession===idx;
     var tile=el('div',{style:'background:var(--bg2);border:1px solid '+(isActive?'var(--orange)':'var(--border)')+';border-radius:8px;padding:11px 10px;cursor:pointer;position:relative'});
-    tile.innerHTML='<div style="font-family:Georgia,serif;font-size:15px;color:'+(isActive?'var(--orange)':'var(--text)')+';margin-bottom:3px">'+cf.name+'</div>'+
-      '<div style="font-size:9px;color:var(--text3);font-family:monospace">'+cf.format+'</div>'+
+    tile.innerHTML='<div style="font-family:Georgia,serif;font-size:15px;color:'+(isActive?'var(--orange)':'var(--text)')+';margin-bottom:3px">'+cf.name+'</div>'+'<div style="font-size:9px;color:var(--text3);font-family:monospace">'+cf.format+'</div>'+
       (prev&&prev.result?'<div style="font-size:9px;color:var(--gold);font-family:monospace;margin-top:4px">PB: '+prev.result+'</div>':'');
     (function(i){tile.addEventListener('click',function(){S.cfSession=i;renderConditioning();});})(idx);
     grid.appendChild(tile);
@@ -3836,8 +3721,7 @@ function renderCFSessions() {
   hdr.appendChild(nm);
   if(prev.result){
     var pb=el('div',{style:'text-align:right'});
-    pb.innerHTML='<div style="font-size:9px;color:var(--gold);font-family:monospace;text-transform:uppercase;letter-spacing:0.1em">To beat</div>'+
-      '<div style="font-size:18px;font-weight:700;color:var(--gold);font-family:monospace">'+prev.result+'</div>'+
+    pb.innerHTML='<div style="font-size:9px;color:var(--gold);font-family:monospace;text-transform:uppercase;letter-spacing:0.1em">To beat</div>'+'<div style="font-size:18px;font-weight:700;color:var(--gold);font-family:monospace">'+prev.result+'</div>'+
       (prev.date?'<div style="font-size:9px;color:var(--text3);font-family:monospace">'+new Date(prev.date).toLocaleDateString('en-AU',{day:'numeric',month:'short'})+'</div>':'');
     hdr.appendChild(pb);
   }

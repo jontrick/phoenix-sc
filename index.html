@@ -732,6 +732,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 var LOGO_URL=document.getElementById('phoenix-logo-data')?document.getElementById('phoenix-logo-data').src:'';
 
 
+// iOS-safe event binding
+function onVal(el,fn){el.addEventListener('change',fn);el.addEventListener('blur',fn);}
+
 // ═══ TIMER ENGINE ═══════════════════════════════════════════════════════════
 var T = {
   interval: null,      // setInterval handle
@@ -2101,7 +2104,7 @@ function renderWeek() {
     var sv2=chinSaved2[i]||{};
     var inp=el('input',{type:'number',inputmode:'decimal',placeholder:'',style:'width:100%;background:var(--bg3);border:1px solid '+(sv2.kg?'rgba(196,154,60,0.4)':'var(--border)')+';border-radius:4px;padding:6px 2px;font-family:monospace;font-size:15px;color:#e8b84b;text-align:center;outline:none;-webkit-appearance:none'});
     inp.value=sv2.kg||'';
-    (function(idx,el2){el2.addEventListener('change',function(){
+    (function(idx,el2){onVal(el2,function(){
       if(!S.logs[chinLogKey2])S.logs[chinLogKey2]={};
       if(!S.logs[chinLogKey2]['pull_chin'])S.logs[chinLogKey2]['pull_chin']={};
       if(!S.logs[chinLogKey2]['pull_chin'][idx])S.logs[chinLogKey2]['pull_chin'][idx]={};
@@ -2118,7 +2121,7 @@ function renderWeek() {
     var sv2=chinSaved2[i]||{};
     var inp=el('input',{type:'number',inputmode:'numeric',placeholder:'',style:'width:100%;background:var(--bg3);border:1px solid '+(sv2.reps?'rgba(232,98,42,0.4)':'var(--border)')+';border-radius:4px;padding:6px 2px;font-family:monospace;font-size:15px;color:#ff7a3d;text-align:center;outline:none;-webkit-appearance:none'});
     inp.value=sv2.reps||'';
-    (function(idx,ri){ri.addEventListener('change',function(){
+    (function(idx,ri){onVal(ri,function(){
       if(!S.logs[chinLogKey2])S.logs[chinLogKey2]={};
       if(!S.logs[chinLogKey2]['pull_chin'])S.logs[chinLogKey2]['pull_chin']={};
       if(!S.logs[chinLogKey2]['pull_chin'][idx])S.logs[chinLogKey2]['pull_chin'][idx]={};
@@ -2861,7 +2864,7 @@ function makeMeTable(pcts, meReps, rm, sessionKey) {
     inp.value=savedSets['s'+i+'_kg']||'';
     if(inp.value) inp.style.borderColor='rgba(196,154,60,0.4)';
     (function(idx,el){
-      el.addEventListener('change',function(){
+      onVal(el,function(){
         if(!S.logs[logKey])S.logs[logKey]={};
         if(!S.logs[logKey][sessionKey+'_me'])S.logs[logKey][sessionKey+'_me']={};
         S.logs[logKey][sessionKey+'_me']['s'+idx+'_kg']=el.value;
@@ -2883,7 +2886,7 @@ function makeMeTable(pcts, meReps, rm, sessionKey) {
     inp.value=savedSets['s'+i+'_reps']||'';
     if(inp.value) inp.style.borderColor='rgba(196,154,60,0.4)';
     (function(idx,el){
-      el.addEventListener('change',function(){
+      onVal(el,function(){
         if(!S.logs[logKey])S.logs[logKey]={};
         if(!S.logs[logKey][sessionKey+'_me'])S.logs[logKey][sessionKey+'_me']={};
         S.logs[logKey][sessionKey+'_me']['s'+idx+'_reps']=el.value;

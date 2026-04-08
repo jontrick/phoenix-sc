@@ -682,7 +682,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <div class="sm-footer" id="sm-footer"></div>
 </div>
 
-<div id="timer-overlay" style="display:none">
+<div id="timer-overlay">
   <div id="timer-exercise-card" style="display:none;cursor:pointer" onclick="timerExDone()">
     <div id="timer-exercise-name"></div>
     <div id="timer-exercise-meta"></div>
@@ -805,7 +805,7 @@ function timerShow(opts){
     timerStart();
   }
 
-  ov.style.display='flex';
+  ov.classList.add('active');
   T.vibrate(50);
 }
 
@@ -870,7 +870,7 @@ function timerSkip(){
 
 function timerHide(){
   var ov = document.getElementById('timer-overlay');
-  ov.style.display='none';
+  ov.classList.remove('active');
   if(T.wakeLock){try{T.wakeLock.release();}catch(e){}T.wakeLock=null;}
 }
 

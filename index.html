@@ -310,14 +310,12 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #timer-overlay{
   position:fixed;inset:0;z-index:500;
   background:var(--bg);
-  display:flex;flex-direction:column;
+  display:none;flex-direction:column;
   align-items:center;justify-content:flex-start;
   padding:calc(var(--safe-top)+16px) 24px 0;
-  transform:translateY(100%);
-  transition:transform 0.35s cubic-bezier(.4,0,0,1);
   overflow-y:auto;
 }
-#timer-overlay.active{transform:translateY(0) !important}
+
 .timer-ring{
   position:relative;width:220px;height:220px;margin-bottom:20px;flex-shrink:0
 }
@@ -868,9 +866,7 @@ function timerShow(opts){
     timerStart();
   }
 
-  ov.classList.add('active');
-  ov.style.setProperty('transform','translateY(0)','important');
-  ov.style.transform = 'translateY(0)';
+  ov.style.display = 'flex';
   T.vibrate(50);
 }
 
@@ -938,7 +934,7 @@ function timerSkip(){
 
 function timerHide(){
   var ov = document.getElementById('timer-overlay');
-  ov.classList.remove('active');
+  ov.style.display = 'none';
   if(T.wakeLock){try{T.wakeLock.release();}catch(e){}T.wakeLock=null;}
 }
 

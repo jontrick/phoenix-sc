@@ -882,7 +882,11 @@ function timerSetRest(secs, btn){
   document.getElementById('timer-label').textContent = 'REST';
   timerUpdate(secs);
   timerStart();
+  timerUpdate(secs);
+  timerStart();
   timerUpdate(T.remaining);
+  timerStart();
+  timerUpdate(secs);
   timerStart();
 }
 
@@ -2220,6 +2224,7 @@ function renderWeek() {
       if(!S.logs[chinLogKey2]['pull_chin'][idx])S.logs[chinLogKey2]['pull_chin'][idx]={};
       S.logs[chinLogKey2]['pull_chin'][idx].reps=ri.value;sv('logs',S.logs);
       ri.style.borderColor=ri.value?'rgba(232,98,42,0.4)':'var(--border)';
+      if(ri.value){var kgV=S.logs[chinLogKey2]['pull_chin'][idx]&&S.logs[chinLogKey2]['pull_chin'][idx].kg;if(kgV){var nI=null;if(idx+1<chinSets.length){var nc=chinSets[idx+1];nI={name:'Set '+(idx+2),kg:nc.added===0?'BW':'+'+nc.added+'kg',reps:nc.reps,target:nc.reps+' rep target'};}timerShow({mode:'rest-prompt',seconds:240,label:'SET '+(idx+1)+' REST',nextInfo:nI});}}
       if(ri.value){
         var kgV=S.logs[chinLogKey2]['pull_chin'][idx]&&S.logs[chinLogKey2]['pull_chin'][idx].kg;
         if(kgV){var nI=null;if(idx+1<chinSets.length){var nc=chinSets[idx+1];nI={name:'Set '+(idx+2),kg:nc.added===0?'BW':'+'+nc.added+'kg',reps:nc.reps,target:nc.reps+' rep'+(nc.reps!=='1'?'s':'')+' target'};}timerShow({mode:'rest-prompt',seconds:240,label:'SET '+(idx+1)+' REST',nextInfo:nI});}

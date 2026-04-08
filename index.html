@@ -2078,51 +2078,58 @@ function renderWeek() {
   // Set boxes
   var chinLogKey='w'+S.curWeek;
   var chinSavedSets=S.logs[chinLogKey]&&S.logs[chinLogKey]['pull_chin']||{};
-  var chinGrid=el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px'});
-  chinSets.forEach(function(cs,idx){
-    var saved=chinSavedSets[idx]||{kg:'',reps:''};
-    var setCard=el('div',{style:'background:var(--bg3);border:1px solid var(--border);'+
-      'border-radius:8px;padding:10px 8px;min-width:80px;flex:1;text-align:center'});
-    var slbl=el('div',{style:'font-size:9px;font-weight:700;color:var(--text3);font-family:monospace;letter-spacing:0.08em;margin-bottom:2px'});
-    slbl.textContent=cs.label;setCard.appendChild(slbl);
-    var skg=el('div',{style:'font-size:13px;color:var(--gold);font-family:monospace;font-weight:700;margin-bottom:2px'});
-    skg.textContent=cs.added===0?'BW':'+'+cs.added+'kg';setCard.appendChild(skg);
-    var srep=el('div',{style:'font-size:10px;color:var(--text2);font-family:monospace;margin-bottom:8px'});
-    srep.textContent=cs.reps+' rep'+(cs.reps==='1'?'':'s')+' target';setCard.appendChild(srep);
-    // Hit kg input
-    var kgI=el('input',{type:'number',inputmode:'decimal',placeholder:'',
-      style:'width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:4px;'+
-      'padding:5px 4px;font-family:monospace;font-size:12px;color:var(--gold);text-align:center;'+
-      'outline:none;-webkit-appearance:none;display:block;margin-bottom:2px;box-sizing:border-box;'+
-      (saved.kg?'border-color:rgba(196,154,60,0.4);background:rgba(196,154,60,0.07)':'')});
-    kgI.value=saved.kg||'';
-    var kgLbl=el('div',{style:'font-size:9px;color:var(--text2);font-family:monospace;font-weight:600;margin-bottom:4px'});
-    kgLbl.textContent='kg added';setCard.appendChild(kgI);setCard.appendChild(kgLbl);
-    // Hit reps input
-    var rpI=el('input',{type:'number',inputmode:'numeric',placeholder:'',
-      style:'width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:4px;'+
-      'padding:5px 4px;font-family:monospace;font-size:12px;color:var(--orange);text-align:center;'+
-      'outline:none;-webkit-appearance:none;display:block;margin-bottom:2px;box-sizing:border-box;'+
-      (saved.reps?'border-color:rgba(232,98,42,0.4);background:rgba(232,98,42,0.06)':'')});
-    rpI.value=saved.reps||'';
-    var rpLbl=el('div',{style:'font-size:9px;color:var(--text2);font-family:monospace;font-weight:600'});
-    rpLbl.textContent='reps hit';setCard.appendChild(rpI);setCard.appendChild(rpLbl);
-    (function(i,ki,ri){
-      function saveChin(){
-        if(!S.logs[chinLogKey])S.logs[chinLogKey]={};
-        if(!S.logs[chinLogKey]['pull_chin'])S.logs[chinLogKey]['pull_chin']={};
-        S.logs[chinLogKey]['pull_chin'][i]={kg:ki.value,reps:ri.value};
-        sv('logs',S.logs);
-        ki.style.borderColor=ki.value?'rgba(196,154,60,0.4)':'var(--border)';
-        ki.style.background=ki.value?'rgba(196,154,60,0.07)':'var(--bg2)';
-        ri.style.borderColor=ri.value?'rgba(232,98,42,0.4)':'var(--border)';
-        ri.style.background=ri.value?'rgba(232,98,42,0.06)':'var(--bg2)';
-      }
-      ki.addEventListener('change',saveChin);ri.addEventListener('change',saveChin);
-    })(idx,kgI,rpI);
-    chinGrid.appendChild(setCard);
+  var chinLogKey2='w'+S.curWeek;
+  var chinSaved2=(S.logs[chinLogKey2]&&S.logs[chinLogKey2]['pull_chin'])||{};
+  var chinTbl=el('div',{style:'margin-bottom:8px'});
+  var cHR=el('div',{style:'display:flex;gap:2px;margin-bottom:4px'});
+  cHR.appendChild(el('div',{style:'width:58px;flex-shrink:0'}));
+  chinSets.forEach(function(cs,i){var th=el('div',{style:'flex:1;text-align:center;font-size:9px;font-weight:700;color:var(--text);font-family:monospace;text-transform:uppercase;min-width:44px'});th.textContent='SET '+(i+1);cHR.appendChild(th);});
+  chinTbl.appendChild(cHR);
+  var cKR=el('div',{style:'display:flex;gap:2px;margin-bottom:2px;padding:3px 2px;background:rgba(232,98,42,0.06);border-radius:4px'});
+  var cKL=el('div',{style:'width:58px;font-size:9px;font-weight:700;color:var(--text);font-family:monospace;flex-shrink:0;display:flex;align-items:center'});cKL.textContent='kg add';cKR.appendChild(cKL);
+  chinSets.forEach(function(cs){var td=el('div',{style:'flex:1;text-align:center;font-weight:700;color:var(--orange);font-size:13px;font-family:monospace;min-width:44px'});td.textContent=cs.added===0?'BW':'+'+cs.added+'kg';cKR.appendChild(td);});
+  chinTbl.appendChild(cKR);
+  var cTR=el('div',{style:'display:flex;gap:2px;margin-bottom:6px'});
+  var cTL=el('div',{style:'width:58px;font-size:9px;font-weight:700;color:var(--text2);font-family:monospace;flex-shrink:0;display:flex;align-items:center'});cTL.textContent='Target';cTR.appendChild(cTL);
+  chinSets.forEach(function(cs){var td=el('div',{style:'flex:1;text-align:center;color:var(--text);font-size:11px;font-weight:600;font-family:monospace;min-width:44px'});td.textContent=cs.reps;cTR.appendChild(td);});
+  chinTbl.appendChild(cTR);
+  chinTbl.appendChild(el('div',{style:'height:1px;background:var(--border2);margin-bottom:6px'}));
+  var cHKR=el('div',{style:'display:flex;gap:2px;margin-bottom:3px'});
+  var cHKL=el('div',{style:'width:58px;font-size:9px;font-weight:700;color:var(--gold);font-family:monospace;flex-shrink:0;display:flex;align-items:center'});cHKL.textContent='Hit kg';cHKR.appendChild(cHKL);
+  chinSets.forEach(function(cs,i){
+    var td=el('div',{style:'flex:1;padding:2px;min-width:44px'});
+    var sv2=chinSaved2[i]||{};
+    var inp=el('input',{type:'number',inputmode:'decimal',placeholder:'',style:'width:100%;background:var(--bg3);border:1px solid '+(sv2.kg?'rgba(196,154,60,0.4)':'var(--border)')+';border-radius:4px;padding:6px 2px;font-family:monospace;font-size:15px;color:#e8b84b;text-align:center;outline:none;-webkit-appearance:none'});
+    inp.value=sv2.kg||'';
+    (function(idx,el2){el2.addEventListener('change',function(){
+      if(!S.logs[chinLogKey2])S.logs[chinLogKey2]={};
+      if(!S.logs[chinLogKey2]['pull_chin'])S.logs[chinLogKey2]['pull_chin']={};
+      if(!S.logs[chinLogKey2]['pull_chin'][idx])S.logs[chinLogKey2]['pull_chin'][idx]={};
+      S.logs[chinLogKey2]['pull_chin'][idx].kg=el2.value;sv('logs',S.logs);
+      el2.style.borderColor=el2.value?'rgba(196,154,60,0.4)':'var(--border)';
+    });})(i,inp);
+    td.appendChild(inp);cHKR.appendChild(td);
   });
-  monBlock.appendChild(chinGrid);
+  chinTbl.appendChild(cHKR);
+  var cHRR=el('div',{style:'display:flex;gap:2px'});
+  var cHRL=el('div',{style:'width:58px;font-size:9px;font-weight:700;color:var(--orange);font-family:monospace;flex-shrink:0;display:flex;align-items:center'});cHRL.textContent='Hit reps';cHRR.appendChild(cHRL);
+  chinSets.forEach(function(cs,i){
+    var td=el('div',{style:'flex:1;padding:2px;min-width:44px'});
+    var sv2=chinSaved2[i]||{};
+    var inp=el('input',{type:'number',inputmode:'numeric',placeholder:'',style:'width:100%;background:var(--bg3);border:1px solid '+(sv2.reps?'rgba(232,98,42,0.4)':'var(--border)')+';border-radius:4px;padding:6px 2px;font-family:monospace;font-size:15px;color:#ff7a3d;text-align:center;outline:none;-webkit-appearance:none'});
+    inp.value=sv2.reps||'';
+    (function(idx,ri){ri.addEventListener('change',function(){
+      if(!S.logs[chinLogKey2])S.logs[chinLogKey2]={};
+      if(!S.logs[chinLogKey2]['pull_chin'])S.logs[chinLogKey2]['pull_chin']={};
+      if(!S.logs[chinLogKey2]['pull_chin'][idx])S.logs[chinLogKey2]['pull_chin'][idx]={};
+      S.logs[chinLogKey2]['pull_chin'][idx].reps=ri.value;sv('logs',S.logs);
+      ri.style.borderColor=ri.value?'rgba(232,98,42,0.4)':'var(--border)';
+      if(ri.value){var kgV=S.logs[chinLogKey2]['pull_chin'][idx]&&S.logs[chinLogKey2]['pull_chin'][idx].kg;if(kgV){var nI=null;if(idx+1<chinSets.length){var nc=chinSets[idx+1];nI={name:'Set '+(idx+2),kg:nc.added===0?'BW':'+'+nc.added+'kg',reps:nc.reps,target:nc.reps+' rep target'};}timerShow({mode:'rest-prompt',seconds:240,label:'SET '+(idx+1)+' REST',nextInfo:nI});}}
+    });})(i,inp);
+    td.appendChild(inp);cHRR.appendChild(td);
+  });
+  chinTbl.appendChild(cHRR);
+  monBlock.appendChild(chinTbl);
   // Session mode button for Mon pull
 
   // Per-exercise guided buttons

@@ -1779,10 +1779,12 @@ document.getElementById('btn-phone').addEventListener('click', function() {
 
 // If already have athlete, skip setup
 document.addEventListener('DOMContentLoaded', function() {
-  if (S.athlete) {
-    document.getElementById('setup-screen').style.display = 'none';
-    document.getElementById('main-app').classList.add('visible');
-    renderAll();
+  if (S.athlete && S.athlete.name) {
+    var ss = document.getElementById('setup-screen');
+    var ma = document.getElementById('main-app');
+    if(ss) ss.style.display = 'none';
+    if(ma){ ma.style.display='flex'; ma.style.flexDirection='column'; ma.classList.add('visible'); }
+    try{ renderAll(); } catch(e){ console.error(e); }
   }
 });
 

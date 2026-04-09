@@ -805,6 +805,12 @@ function timerShow(opts){
     timerStart();
   }
 
+  // Back button
+  var backBtn2=document.createElement('button');
+  backBtn2.style.cssText='position:absolute;top:calc(var(--safe-top,0px) + 12px);left:16px;background:transparent;border:none;color:var(--text2);font-size:14px;font-family:monospace;cursor:pointer;z-index:20;padding:8px 12px';
+  backBtn2.textContent='\u2190 Back';
+  backBtn2.onclick=function(){clearInterval(T.interval);T.running=false;if(T.wakeLock){try{T.wakeLock.release();}catch(e){}}ov.classList.remove('active');var al3=document.getElementById('timer-afap-list');if(al3){al3.style.display='none';al3.innerHTML='';}};
+  ov.appendChild(backBtn2);
   ov.classList.add('active');
   T.vibrate(50);
 }
@@ -1946,8 +1952,8 @@ function showKarenTimer(logKey,pbStr,onDone){
   var counterWrap=document.createElement('div');
   counterWrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px';
   var repLabel=document.createElement('div');
-  repLabel.style.cssText='font-size:9px;color:var(--text2);font-family:monospace;letter-spacing:0.1em;text-transform:uppercase';
-  repLabel.textContent='WALL BALLS';
+  repLabel.style.cssText='font-size:14px;color:var(--text);font-family:monospace;letter-spacing:0.08em;text-transform:uppercase;font-weight:700';
+  repLabel.textContent='150 WALL BALLS';
   counterWrap.appendChild(repLabel);
   var drumOuter=document.createElement('div');
   drumOuter.style.cssText='width:180px;height:100px;overflow:hidden;border-radius:12px;background:var(--bg2);border:1px solid var(--border2);position:relative;cursor:pointer;-webkit-user-select:none;user-select:none';
@@ -1996,7 +2002,7 @@ function showKarenTimer(logKey,pbStr,onDone){
   drumOuter.addEventListener('click',function(){setDrum(currentRep+1);});
   counterWrap.appendChild(drumOuter);
   var repCount=document.createElement('div');
-  repCount.style.cssText='font-size:11px;color:var(--text2);font-family:monospace;margin-top:4px';
+  repCount.style.cssText='font-size:18px;color:var(--text);font-family:monospace;font-weight:700;margin-top:8px;letter-spacing:0.05em';
   setInterval(function(){repCount.textContent=currentRep+' / 150';},100);
   counterWrap.appendChild(repCount);
   al2.appendChild(counterWrap);
@@ -2012,8 +2018,20 @@ function showKarenTimer(logKey,pbStr,onDone){
     try{navigator.wakeLock.request('screen').then(function(wl){T.wakeLock=wl;}).catch(function(){});}catch(ex){}
   };
   startOverlay.appendChild(startBtn2);
-  ov.style.position='relative';
+  
   ov.appendChild(startOverlay);
+  // Back button
+  var backBtn=document.createElement('button');
+  backBtn.style.cssText='position:absolute;top:calc(var(--safe-top,0px) + 12px);left:16px;background:transparent;border:none;color:var(--text2);font-size:14px;font-family:monospace;cursor:pointer;z-index:20;padding:8px 12px';
+  backBtn.textContent='\u2190 Back';
+  backBtn.onclick=function(){clearInterval(T.interval);T.running=false;if(T.wakeLock){try{T.wakeLock.release();}catch(e){}}ov.classList.remove('active');var al3=document.getElementById('timer-afap-list');if(al3){al3.style.display='none';al3.innerHTML='';}};
+  ov.appendChild(backBtn);
+  // Back button
+  var backBtn2=document.createElement('button');
+  backBtn2.style.cssText='position:absolute;top:calc(var(--safe-top,0px) + 12px);left:16px;background:transparent;border:none;color:var(--text2);font-size:14px;font-family:monospace;cursor:pointer;z-index:20;padding:8px 12px';
+  backBtn2.textContent='\u2190 Back';
+  backBtn2.onclick=function(){clearInterval(T.interval);T.running=false;if(T.wakeLock){try{T.wakeLock.release();}catch(e){}}ov.classList.remove('active');var al3=document.getElementById('timer-afap-list');if(al3){al3.style.display='none';al3.innerHTML='';}};
+  ov.appendChild(backBtn2);
   ov.classList.add('active');
   T.vibrate(50);
 }
@@ -2084,8 +2102,14 @@ function showTickTimer(logKey,title,items,onDone){
     try{navigator.wakeLock.request('screen').then(function(wl){T.wakeLock=wl;}).catch(function(){});}catch(ex){}
   };
   startOverlay.appendChild(startBtn2);
-  ov.style.position='relative';
+  
   ov.appendChild(startOverlay);
+  // Back button
+  var backBtn2=document.createElement('button');
+  backBtn2.style.cssText='position:absolute;top:calc(var(--safe-top,0px) + 12px);left:16px;background:transparent;border:none;color:var(--text2);font-size:14px;font-family:monospace;cursor:pointer;z-index:20;padding:8px 12px';
+  backBtn2.textContent='\u2190 Back';
+  backBtn2.onclick=function(){clearInterval(T.interval);T.running=false;if(T.wakeLock){try{T.wakeLock.release();}catch(e){}}ov.classList.remove('active');var al3=document.getElementById('timer-afap-list');if(al3){al3.style.display='none';al3.innerHTML='';}};
+  ov.appendChild(backBtn2);
   ov.classList.add('active');
   T.vibrate(50);
 }

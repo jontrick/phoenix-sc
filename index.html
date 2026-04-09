@@ -1780,11 +1780,11 @@ document.getElementById('btn-phone').addEventListener('click', function() {
 // If already have athlete, skip setup
 document.addEventListener('DOMContentLoaded', function() {
   if (S.athlete && S.athlete.name) {
-    var ss = document.getElementById('setup-screen');
-    var ma = document.getElementById('main-app');
-    if(ss) ss.style.display = 'none';
-    if(ma){ ma.style.display='flex'; ma.style.flexDirection='column'; ma.classList.add('visible'); }
-    try{ renderAll(); } catch(e){ console.error(e); }
+    var ss=document.getElementById('setup-screen');
+    var ma=document.getElementById('main-app');
+    if(ss) ss.style.display='none';
+    if(ma){ma.style.display='flex';ma.style.flexDirection='column';ma.classList.add('visible');}
+    try{renderAll();}catch(e){console.error(e);}
   }
 });
 
@@ -1920,10 +1920,8 @@ function renderPlan() {
 }
 
 // ═══ WEEK ════════════════════════════════════════════════════════════════════
-
-function showKarenTimer(logKey, pbStr, onDone){
-  var ov = document.getElementById('timer-overlay');
-  // Reset overlay
+function showKarenTimer(logKey,pbStr,onDone){
+  var ov=document.getElementById('timer-overlay');
   document.getElementById('timer-exercise-card').style.display='none';
   var tnw=document.getElementById('timer-next-wrap');if(tnw)tnw.style.display='none';
   document.getElementById('timer-rest-prompt').style.display='none';
@@ -1932,132 +1930,96 @@ function showKarenTimer(logKey, pbStr, onDone){
   var al=document.getElementById('timer-afap-list');if(al){al.style.display='none';al.innerHTML='';}
   document.getElementById('timer-btns').style.display='flex';
   document.getElementById('timer-pause-btn').textContent='Pause';
-
-  // Set up countup mode
-  T.mode='countup'; T.elapsed=0; T.startTime=Date.now(); T.running=false; T.paused=false;
-  T.amrapKey=logKey; T.onDone=onDone;
+  T.mode='countup';T.elapsed=0;T.startTime=Date.now();T.running=false;T.paused=false;
+  T.amrapKey=logKey;T.onDone=onDone;
   document.getElementById('timer-label').textContent='KAREN';
   var ring=document.getElementById('timer-ring-fill');
   ring.className='timer-ring-fill orange';
   ring.style.strokeDashoffset='0';
   timerUpdate(0);
-
-  // Build Karen UI below ring - PB + scroll counter
   var al2=document.getElementById('timer-afap-list');
-  al2.innerHTML='';
-  al2.style.display='block';
-
-  // PB display
+  al2.innerHTML='';al2.style.display='block';
   var pbDiv=document.createElement('div');
   pbDiv.style.cssText='text-align:center;font-size:11px;color:var(--text2);font-family:monospace;letter-spacing:0.08em;margin-bottom:12px';
   pbDiv.textContent=pbStr;
   al2.appendChild(pbDiv);
-
-  // Scroll counter - iPhone-style drum roller going up only
   var counterWrap=document.createElement('div');
   counterWrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px';
-
   var repLabel=document.createElement('div');
   repLabel.style.cssText='font-size:9px;color:var(--text2);font-family:monospace;letter-spacing:0.1em;text-transform:uppercase';
   repLabel.textContent='WALL BALLS';
   counterWrap.appendChild(repLabel);
-
-  // The drum roller
   var drumOuter=document.createElement('div');
   drumOuter.style.cssText='width:180px;height:100px;overflow:hidden;border-radius:12px;background:var(--bg2);border:1px solid var(--border2);position:relative;cursor:pointer;-webkit-user-select:none;user-select:none';
-
-  // Selection highlight
   var highlight=document.createElement('div');
   highlight.style.cssText='position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:44px;background:rgba(232,98,42,0.15);border-top:1px solid var(--orange);border-bottom:1px solid var(--orange);pointer-events:none;z-index:2';
   drumOuter.appendChild(highlight);
-
   var drumInner=document.createElement('div');
   drumInner.style.cssText='display:flex;flex-direction:column;align-items:center;transition:transform 0.15s ease-out;will-change:transform';
-
   var ITEM_H=44;
   var currentRep=0;
   var maxRep=150;
-
-  // Build items 0-150
-  for(var i=0;i<=maxRep+2;i++){
+  for(var i2=0;i2<=maxRep+2;i2++){
     var item=document.createElement('div');
     item.style.cssText='height:'+ITEM_H+'px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:32px;font-weight:700;color:var(--text);width:180px;flex-shrink:0';
-    item.textContent=i<=maxRep?String(i):'';
+    item.textContent=i2<=maxRep?String(i2):'';
     drumInner.appendChild(item);
   }
   drumOuter.appendChild(drumInner);
-
   function setDrum(val){
     currentRep=Math.max(0,Math.min(maxRep,val));
-    // Center the selected item: offset = -(currentRep * ITEM_H) + (drumOuter.height/2 - ITEM_H/2)
-    var offset = -currentRep*ITEM_H + (50-ITEM_H/2);
+    var offset=-currentRep*ITEM_H+(50-ITEM_H/2);
     drumInner.style.transform='translateY('+offset+'px)';
     if(currentRep===maxRep){
-      // Stop clock and save
-      clearInterval(T.interval); T.running=false;
-      var m=Math.floor(T.elapsed/60),s=T.elapsed%60;
-      var result=m+':'+(s<10?'0':'')+s;
-      try{navigator.vibrate([200,100,300,100,500]);}catch(e){}
+      clearInterval(T.interval);T.running=false;
+      var m2=Math.floor(T.elapsed/60),s2=T.elapsed%60;
+      var result=m2+':'+(s2<10?'0':'')+s2;
+      try{navigator.vibrate([200,100,300,100,500]);}catch(ex){}
       if(onDone) onDone(result);
       ov.classList.remove('active');
     }
   }
   setDrum(0);
-
-  // Touch handling - swipe up to increase
-  var touchStartY=0, touchStartRep=0;
+  var touchStartY=0,touchStartRep=0;
   drumOuter.addEventListener('touchstart',function(e){
-    touchStartY=e.touches[0].clientY;
-    touchStartRep=currentRep;
-    drumInner.style.transition='none';
-    e.preventDefault();
+    touchStartY=e.touches[0].clientY;touchStartRep=currentRep;
+    drumInner.style.transition='none';e.preventDefault();
   },{passive:false});
   drumOuter.addEventListener('touchmove',function(e){
-    var dy=touchStartY-e.touches[0].clientY; // positive = swipe up = increase
+    var dy=touchStartY-e.touches[0].clientY;
     var delta=Math.round(dy/ITEM_H);
-    setDrum(touchStartRep+delta);
-    e.preventDefault();
+    setDrum(touchStartRep+delta);e.preventDefault();
   },{passive:false});
   drumOuter.addEventListener('touchend',function(e){
-    drumInner.style.transition='transform 0.15s ease-out';
-    e.preventDefault();
+    drumInner.style.transition='transform 0.15s ease-out';e.preventDefault();
   },{passive:false});
-  // Desktop click for testing
-  drumOuter.addEventListener('click',function(){ setDrum(currentRep+1); });
-
+  drumOuter.addEventListener('click',function(){setDrum(currentRep+1);});
   counterWrap.appendChild(drumOuter);
-
   var repCount=document.createElement('div');
   repCount.style.cssText='font-size:11px;color:var(--text2);font-family:monospace;margin-top:4px';
-  setInterval(function(){ repCount.textContent=currentRep+' / 150'; },100);
+  setInterval(function(){repCount.textContent=currentRep+' / 150';},100);
   counterWrap.appendChild(repCount);
-
   al2.appendChild(counterWrap);
-
-  // Start button overlay - tap to start clock
   var startOverlay=document.createElement('div');
-  startOverlay.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10;border-radius:0';
+  startOverlay.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10';
   var startBtn2=document.createElement('button');
   startBtn2.style.cssText='padding:20px 48px;background:var(--orange);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:700;letter-spacing:2px;cursor:pointer';
   startBtn2.textContent='START';
   startBtn2.onclick=function(){
     startOverlay.remove();
-    T.startTime=Date.now(); T.elapsed=0;
+    T.startTime=Date.now();T.elapsed=0;
     timerStart();
-    try{navigator.wakeLock.request('screen').then(function(wl){T.wakeLock=wl;}).catch(function(){});}catch(e){}
+    try{navigator.wakeLock.request('screen').then(function(wl){T.wakeLock=wl;}).catch(function(){});}catch(ex){}
   };
   startOverlay.appendChild(startBtn2);
   ov.style.position='relative';
   ov.appendChild(startOverlay);
-
   ov.classList.add('active');
   T.vibrate(50);
 }
 
-
-function showTickTimer(logKey, title, items, onDone){
-  // Generic tick-list timer for Fran, Jerry etc
-  var ov = document.getElementById('timer-overlay');
+function showTickTimer(logKey,title,items,onDone){
+  var ov=document.getElementById('timer-overlay');
   document.getElementById('timer-exercise-card').style.display='none';
   var tnw=document.getElementById('timer-next-wrap');if(tnw)tnw.style.display='none';
   document.getElementById('timer-rest-prompt').style.display='none';
@@ -2066,47 +2028,40 @@ function showTickTimer(logKey, title, items, onDone){
   var al=document.getElementById('timer-afap-list');if(al){al.style.display='none';al.innerHTML='';}
   document.getElementById('timer-btns').style.display='flex';
   document.getElementById('timer-pause-btn').textContent='Pause';
-
-  T.mode='countup'; T.elapsed=0; T.startTime=Date.now(); T.running=false; T.paused=false;
-  T.amrapKey=logKey; T.onDone=onDone;
+  T.mode='countup';T.elapsed=0;T.startTime=Date.now();T.running=false;T.paused=false;
+  T.amrapKey=logKey;T.onDone=onDone;
   document.getElementById('timer-label').textContent=title;
   var ring=document.getElementById('timer-ring-fill');
   ring.className='timer-ring-fill green';
   ring.style.strokeDashoffset='0';
   timerUpdate(0);
-
   var al2=document.getElementById('timer-afap-list');
-  al2.innerHTML=''; al2.style.display='block';
-
+  al2.innerHTML='';al2.style.display='block';
   var ticked={};
   items.forEach(function(item,i){
     var row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border)';
     var tick=document.createElement('button');
     tick.style.cssText='flex-shrink:0;width:32px;height:32px;border-radius:8px;border:2px solid var(--border2);background:transparent;color:#fff;font-size:16px;cursor:pointer';
-    tick.disabled = i > 0; // only first item enabled initially
-    tick.style.opacity = i > 0 ? '0.3' : '1';
+    tick.disabled=(i>0);
+    tick.style.opacity=(i>0)?'0.3':'1';
+    tick.id='tick-btn-'+i;
     tick.onclick=(function(idx){return function(){
       ticked[idx]=true;
-      this.style.background='var(--green)';this.style.borderColor='var(--green)';this.textContent='\u2713';
-      this.disabled=true; this.style.opacity='1';
-      var nameEl=document.getElementById('tick-name-'+idx);
-      if(nameEl) nameEl.style.opacity='0.4';
-      // Enable next
-      var nextBtn=document.getElementById('tick-btn-'+(idx+1));
-      if(nextBtn){nextBtn.disabled=false;nextBtn.style.opacity='1';}
-      // Check if all done
+      this.style.background='var(--green)';this.style.borderColor='var(--green)';this.textContent='✓';
+      this.disabled=true;this.style.opacity='1';
+      var nm=document.getElementById('tick-name-'+idx);if(nm)nm.style.opacity='0.4';
+      var nb=document.getElementById('tick-btn-'+(idx+1));if(nb){nb.disabled=false;nb.style.opacity='1';}
       var allDone=items.every(function(_,j){return ticked[j];});
       if(allDone){
         clearInterval(T.interval);T.running=false;
-        var m=Math.floor(T.elapsed/60),s=T.elapsed%60;
-        var result=m+':'+(s<10?'0':'')+s;
-        try{navigator.vibrate([200,100,300,100,500]);}catch(e){}
+        var m2=Math.floor(T.elapsed/60),s2=T.elapsed%60;
+        var result=m2+':'+(s2<10?'0':'')+s2;
+        try{navigator.vibrate([200,100,300,100,500]);}catch(ex){}
         if(onDone) onDone(result);
         ov.classList.remove('active');
       }
     };})(i);
-    tick.id='tick-btn-'+i;
     var nameDiv=document.createElement('div');
     nameDiv.id='tick-name-'+i;
     nameDiv.style.cssText='flex:1;font-family:Georgia,serif;font-size:16px;color:var(--text)';
@@ -2117,8 +2072,6 @@ function showTickTimer(logKey, title, items, onDone){
     row.appendChild(tick);row.appendChild(nameDiv);row.appendChild(loadDiv);
     al2.appendChild(row);
   });
-
-  // Start overlay
   var startOverlay=document.createElement('div');
   startOverlay.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10';
   var startBtn2=document.createElement('button');
@@ -2126,14 +2079,13 @@ function showTickTimer(logKey, title, items, onDone){
   startBtn2.textContent='START';
   startBtn2.onclick=function(){
     startOverlay.remove();
-    T.startTime=Date.now(); T.elapsed=0;
+    T.startTime=Date.now();T.elapsed=0;
     timerStart();
-    try{navigator.wakeLock.request('screen').then(function(wl){T.wakeLock=wl;}).catch(function(){});}catch(e){}
+    try{navigator.wakeLock.request('screen').then(function(wl){T.wakeLock=wl;}).catch(function(){});}catch(ex){}
   };
   startOverlay.appendChild(startBtn2);
   ov.style.position='relative';
   ov.appendChild(startOverlay);
-
   ov.classList.add('active');
   T.vibrate(50);
 }
@@ -2411,27 +2363,14 @@ function renderWeek() {
     friCf.name+' + Core 2',
     friCf.format+(friCf.cap?' · '+friCf.cap:'')+(friCf.venue?' · '+friCf.venue:''), 'var(--green)', false);
 
-  // Karen - start button + timer
-  var karenPB = prevFriCF.result || null;
-  if(karenPB){
-    var karenPBDiv=el('div',{style:'text-align:center;font-size:11px;color:var(--text2);font-family:monospace;letter-spacing:0.08em;margin-bottom:6px'});
-    karenPBDiv.textContent='PB: '+karenPB;
-    friBlock.appendChild(karenPBDiv);
-  }
+  // Karen start button
+  var karenPB=prevFriCF.result||null;
+  if(karenPB){var kpb=el('div',{style:'text-align:center;font-size:11px;color:var(--text2);font-family:monospace;margin-bottom:6px'});kpb.textContent='PB: '+karenPB;friBlock.appendChild(kpb);}
   var karenBtn=el('button',{style:'width:100%;padding:14px;background:var(--orange);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-bottom:8px'});
-  karenBtn.textContent='\u25b6  START KAREN';
-  karenBtn.onclick=function(){
-    showKarenTimer(friCfKey, karenPB?'PB: '+karenPB:'No PB yet', function(result){
-      if(!S.logs[friCfKey])S.logs[friCfKey]={};
-      S.logs[friCfKey].result=result; sv('logs',S.logs); renderWeek();
-    });
-  };
+  karenBtn.textContent='▶  START KAREN';
+  karenBtn.onclick=function(){showKarenTimer(friCfKey,karenPB?'PB: '+karenPB:'No PB yet',function(r){if(!S.logs[friCfKey])S.logs[friCfKey]={};S.logs[friCfKey].result=r;sv('logs',S.logs);renderWeek();});};
   friBlock.appendChild(karenBtn);
-  if(prevFriCF.result){
-    var karenDoneDiv=el('div',{style:'text-align:center;font-size:14px;color:var(--green);font-family:monospace;font-weight:700;margin-bottom:8px'});
-    karenDoneDiv.textContent='\u2713 '+prevFriCF.result;
-    friBlock.appendChild(karenDoneDiv);
-  }
+  if(prevFriCF.result){var kdone=el('div',{style:'text-align:center;font-size:14px;color:var(--green);font-family:monospace;font-weight:700;margin-bottom:8px'});kdone.textContent='✓ '+prevFriCF.result;friBlock.appendChild(kdone);}
 
   // Timer start button
 
@@ -2627,37 +2566,18 @@ function renderWeek() {
   var satCfSum=el('div',{style:'font-family:Georgia,serif;font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.5'});
   satCfSum.textContent=satCf.exercises.map(function(e){return e.reps+' '+e.name+' ('+e.load+')';}).join(' \u00b7 ');
   satPmBlock.appendChild(satCfSum);
-  var satCfPB = prevSatCF.result||null;
-  if(satCfPB){
-    var satPBDiv=el('div',{style:'text-align:center;font-size:11px;color:var(--text2);font-family:monospace;margin-bottom:6px'});
-    satPBDiv.textContent='PB: '+satCfPB; satPmBlock.appendChild(satPBDiv);
-  }
+  var satCfPB=prevSatCF.result||null;
+  if(satCfPB){var spb=el('div',{style:'text-align:center;font-size:11px;color:var(--text2);font-family:monospace;margin-bottom:6px'});spb.textContent='PB: '+satCfPB;satPmBlock.appendChild(spb);}
   var satCfBtn=el('button',{style:'width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-bottom:8px'});
-  satCfBtn.textContent='\u25b6  START '+satCf.name.toUpperCase();
-  satCfBtn.onclick=(function(cf,key,prev){return function(){
+  satCfBtn.textContent='▶  START '+satCf.name.toUpperCase();
+  (function(cf,key){satCfBtn.onclick=function(){
     var items;
-    if(cf.name==='Fran'){
-      items=[
-        {reps:21,name:'Thrusters',load:'43kg'},
-        {reps:21,name:'Pull-ups',load:'BW'},
-        {reps:15,name:'Thrusters',load:'43kg'},
-        {reps:15,name:'Pull-ups',load:'BW'},
-        {reps:9,name:'Thrusters',load:'43kg'},
-        {reps:9,name:'Pull-ups',load:'BW'}
-      ];
-    } else {
-      items=cf.exercises.map(function(e){return {reps:e.reps,name:e.name,load:e.load};});
-    }
-    showTickTimer(key, cf.name, items, function(result){
-      if(!S.logs[key])S.logs[key]={};
-      S.logs[key].result=result; sv('logs',S.logs); renderWeek();
-    });
-  };})(satCf, satCfKey, prevSatCF);
+    if(cf.name==='Fran'){items=[{reps:21,name:'Thrusters',load:'43kg'},{reps:21,name:'Pull-ups',load:'BW'},{reps:15,name:'Thrusters',load:'43kg'},{reps:15,name:'Pull-ups',load:'BW'},{reps:9,name:'Thrusters',load:'43kg'},{reps:9,name:'Pull-ups',load:'BW'}];}
+    else{items=cf.exercises.map(function(e){return {reps:e.reps,name:e.name,load:e.load};});}
+    showTickTimer(key,cf.name,items,function(r){if(!S.logs[key])S.logs[key]={};S.logs[key].result=r;sv('logs',S.logs);renderWeek();});
+  };})(satCf,satCfKey);
   satPmBlock.appendChild(satCfBtn);
-  if(prevSatCF.result){
-    var satDoneDiv=el('div',{style:'text-align:center;font-size:14px;color:var(--green);font-family:monospace;font-weight:700;margin-bottom:8px'});
-    satDoneDiv.textContent='\u2713 '+prevSatCF.result; satPmBlock.appendChild(satDoneDiv);
-  }
+  if(prevSatCF.result){var sdone=el('div',{style:'text-align:center;font-size:14px;color:var(--green);font-family:monospace;font-weight:700;margin-bottom:8px'});sdone.textContent='✓ '+prevSatCF.result;satPmBlock.appendChild(sdone);}
 
   // ── SUN AM: Core Session 3 + Lake Walk ────────────────────────────────
   var sunCoreN = lv('sunCoreSession_w'+S.curWeek, 3);
@@ -2715,29 +2635,13 @@ function renderWeek() {
   var jerryKey='cf_sun_jerry_w'+S.curWeek;
   var prevJerry=S.logs[jerryKey]||{};
   var sunPmBlock=makeSessionBlock('wsb-sunpm','Sunday PM · CrossFit','Jerry','Run 800m · Row 2000m · Run 800m · AFAP','var(--blue)',false);
-  var var jerryPB=prevJerry.result||null;
-  if(jerryPB){
-    var jerryPBDiv=el('div',{style:'text-align:center;font-size:11px;color:var(--text2);font-family:monospace;margin-bottom:6px'});
-    jerryPBDiv.textContent='PB: '+jerryPB; sunPmBlock.appendChild(jerryPBDiv);
-  }
+  var jerryPB=prevJerry.result||null;
+  if(jerryPB){var jpb=el('div',{style:'text-align:center;font-size:11px;color:var(--text2);font-family:monospace;margin-bottom:6px'});jpb.textContent='PB: '+jerryPB;sunPmBlock.appendChild(jpb);}
   var jerryBtn=el('button',{style:'width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-bottom:8px'});
-  jerryBtn.textContent='\u25b6  START JERRY';
-  jerryBtn.onclick=function(){
-    var jerryItems=[
-      {reps:'1.6km',name:'Run',load:''},
-      {reps:'2km',name:'Row',load:''},
-      {reps:'1.6km',name:'Run',load:''}
-    ];
-    showTickTimer(jerryKey,'Jerry',jerryItems,function(result){
-      if(!S.logs[jerryKey])S.logs[jerryKey]={};
-      S.logs[jerryKey].result=result; sv('logs',S.logs); renderWeek();
-    });
-  };
+  jerryBtn.textContent='▶  START JERRY';
+  jerryBtn.onclick=function(){showTickTimer(jerryKey,'Jerry',[{reps:'1.6km',name:'Run',load:''},{reps:'2km',name:'Row',load:''},{reps:'1.6km',name:'Run',load:''}],function(r){if(!S.logs[jerryKey])S.logs[jerryKey]={};S.logs[jerryKey].result=r;sv('logs',S.logs);renderWeek();});};
   sunPmBlock.appendChild(jerryBtn);
-  if(prevJerry.result){
-    var jerryDoneDiv=el('div',{style:'text-align:center;font-size:14px;color:var(--blue);font-family:monospace;font-weight:700;margin-bottom:8px'});
-    jerryDoneDiv.textContent='\u2713 '+prevJerry.result; sunPmBlock.appendChild(jerryDoneDiv);
-  }
+  if(prevJerry.result){var jdone=el('div',{style:'text-align:center;font-size:14px;color:var(--blue);font-family:monospace;font-weight:700;margin-bottom:8px'});jdone.textContent='✓ '+prevJerry.result;sunPmBlock.appendChild(jdone);}
 
   // ── Complete week button ─────────────────────────────────────────────
   var logKey='w'+S.curWeek;

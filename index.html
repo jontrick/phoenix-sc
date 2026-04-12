@@ -519,7 +519,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 </div>
 
 <script>
-// ══════ DATA ══════
+// ====== DATA ======
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
 const CORE_SESSIONS = [
@@ -553,26 +553,26 @@ const CF_SAT = ['Base','Cindy','Danny','Fran'];
 
 function isDeload(w){return w===5||w===10||w===15;}
 function getPhase(w){
-  if(w<=4) return 'Block 1 — Accumulation';
+  if(w<=4) return 'Block 1 - Accumulation';
   if(w===5) return 'Deload Week';
-  if(w<=9) return 'Block 2 — Intensification';
+  if(w<=9) return 'Block 2 - Intensification';
   if(w===10) return 'Deload Week';
-  if(w<=14) return 'Block 3 — Realisation';
+  if(w<=14) return 'Block 3 - Realisation';
   return 'Deload Week';
 }
 function getMELower(w){
   const dl=isDeload(w);
   const ex=((w-1)%2===0)?'Back Squat':'Deadlift';
-  return {type:'lifting',name:'ME Lower',category:'lifting',detail:dl?'Deload — '+ex+' variant':ex+' variant + accessories'};
+  return {type:'lifting',name:'ME Lower',category:'lifting',detail:dl?'Deload - '+ex+' variant':ex+' variant + accessories'};
 }
 function getDETotal(w){
   const dl=isDeload(w);
   const ex=((w-1)%2===0)?'Deadlift':'Back Squat';
-  return {type:'lifting',name:'DE Total',category:'de',detail:dl?'Deload — '+ex+' DE':ex+' DE · Jumps · Bench · Sled'};
+  return {type:'lifting',name:'DE Total',category:'de',detail:dl?'Deload - '+ex+' DE':ex+' DE \u00B7 Jumps \u00B7 Bench \u00B7 Sled'};
 }
 function getCoreSession(w){
   const n=((w-1)%4)+1;
-  return {type:'core',name:'Core '+n,category:'core',detail:'20 min AMRAP — pick session below',coreNum:n,selectable:true};
+  return {type:'core',name:'Core '+n,category:'core',detail:'20 min AMRAP - pick session below',coreNum:n,selectable:true};
 }
 function getSatCF(w){
   const name=CF_SAT[((w-1)%4)];
@@ -583,17 +583,17 @@ const REST={type:'rest',name:'Rest',category:'rest'};
 function buildWeek(w){
   const dl=isDeload(w);
   return [
-    {am:{type:'lifting',name:'ME Upper Pull',category:'lifting',detail:dl?'Deload pull session':'Pull Ups · Weighted Dips · Back/Arms · Delts'},pm:REST},
+    {am:{type:'lifting',name:'ME Upper Pull',category:'lifting',detail:dl?'Deload pull session':'Pull Ups / Weighted Dips / Back-Arms / Delts'},pm:REST},
     {am:getMELower(w),pm:REST},
     {am:getCoreSession(w),pm:REST},
-    {am:{type:'lifting',name:'ME Upper Press',category:'lifting',detail:dl?'Deload press session':'Bench · DB Press · Supersets · Shrugs'},pm:REST},
-    {am:{type:'conditioning',name:'Karen + Core',category:'conditioning',detail:'CrossFit Karen · Core AMRAP',hasCore:true},pm:REST},
+    {am:{type:'lifting',name:'ME Upper Press',category:'lifting',detail:dl?'Deload press session':'Bench / DB Press / Supersets / Shrugs'},pm:REST},
+    {am:{type:'conditioning',name:'Karen + Core',category:'conditioning',detail:'CrossFit Karen + Core AMRAP',hasCore:true},pm:REST},
     {am:getDETotal(w),pm:getSatCF(w)},
-    {am:{type:'conditioning',name:'Jerry',category:'conditioning',detail:'Row 2k · Run 1 mile · Row 2k'},pm:getCoreSession(w)},
+    {am:{type:'conditioning',name:'Jerry',category:'conditioning',detail:'Row 2k / Run 1 mile / Row 2k'},pm:getCoreSession(w)},
   ];
 }
 
-// ══════ STATE ══════
+// ====== STATE ======
 var athlete=null, viewWeek=1;
 
 function loadState(){try{var a=localStorage.getItem('phoenix_v2');if(a)athlete=JSON.parse(a);}catch(e){}}
@@ -606,7 +606,7 @@ function progWeek(){
   return Math.max(1,Math.min(15,w));
 }
 
-// ══════ NAVIGATION ══════
+// ====== NAVIGATION ======
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.getElementById(id).classList.add('active');
@@ -622,7 +622,7 @@ function navTo(tab){
   if(tab==='athlete') renderAthlete();
 }
 
-// ══════ ONBOARDING ══════
+// ====== ONBOARDING ======
 var obStep=1;
 function updateOB(){
   for(var i=1;i<=3;i++) document.getElementById('step-'+i).classList.toggle('active',i===obStep);
@@ -684,7 +684,7 @@ function resetApp(){
   }
 }
 
-// ══════ TODAY ══════
+// ====== TODAY ======
 function renderToday(){
   if(!athlete) return;
   var w=progWeek();
@@ -694,7 +694,7 @@ function renderToday(){
   var day=sched[dayIdx];
   document.getElementById('t-dayname').textContent=DAYS[dayIdx];
   document.getElementById('t-datestr').textContent=now.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
-  document.getElementById('t-weekbadge').textContent='Week '+w+(isDeload(w)?' — Deload':'');
+  document.getElementById('t-weekbadge').textContent='Week '+w+(isDeload(w)?' - Deload':'');
   var container=document.getElementById('t-tiles');
   container.innerHTML='';
   [{label:'AM',s:day.am},{label:'PM',s:day.pm}].forEach(function(slot){
@@ -702,22 +702,33 @@ function renderToday(){
   });
 }
 
+function getSessionId(s){
+  if(!s||s.category==='rest') return null;
+  var n=s.name||'';
+  if(n==='ME Upper Pull') return 'me-upper-pull';
+  return 'coming-soon';
+}
 function makeTile(timeLabel,s){
   var div=document.createElement('div');
   div.className='session-tile '+(s.category||'rest');
   var isRest=s.category==='rest';
-  div.innerHTML='<div class="tile-left"><div class="tile-time-label">'+timeLabel+' &middot; '+s.category.toUpperCase()+'</div><div class="tile-name">'+s.name+'</div>'+(s.detail&&!isRest?'<div class="tile-detail">'+s.detail+'</div>':'')+'</div>'+(isRest?'<div class="rest-label">—</div>':'<div class="tile-arrow">&#8250;</div>');
+  div.innerHTML='<div class="tile-left"><div class="tile-time-label">'+timeLabel+' &middot; '+s.category.toUpperCase()+'</div><div class="tile-name">'+s.name+'</div>'+(s.detail&&!isRest?'<div class="tile-detail">'+s.detail+'</div>':'')+'</div>'+(isRest?'<div class="rest-label">-</div>':'<div class="tile-arrow">&#8250;</div>');
   if(!isRest){
-    if(s.selectable||s.hasCore){
+    var sid=getSessionId(s);
+    if(s.selectable||s.hasCore||s.coreNum){
       div.addEventListener('click',function(){openCoreModal();});
-    } else {
+    } else if(sid==='me-upper-pull'){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
+    } else {
+      div.addEventListener('click',function(){
+        alert(s.name+' session coming soon!');
+      });
     }
   }
   return div;
 }
 
-// ══════ CORE MODAL ══════
+// ====== CORE MODAL ======
 function openCoreModal(){
   var container=document.getElementById('core-options-container');
   container.innerHTML='';
@@ -738,7 +749,7 @@ function openCoreModal(){
 }
 function closeCoreModal(){document.getElementById('core-modal').classList.remove('active');}
 
-// ══════ PROGRAMME ══════
+// ====== PROGRAMME ======
 function renderProgramme(){
   if(!athlete) return;
   renderProgStatsWidget();
@@ -749,12 +760,12 @@ function renderProgramme(){
 function renderProgStatsWidget(){
   if(!athlete) return;
   var items=[
-    {label:'Bench',value:(athlete.b1rm||'—'),unit:'kg'},
-    {label:'Squat',value:(athlete.sq||'—'),unit:'kg'},
-    {label:'Deadlift',value:(athlete.dl||'—'),unit:'kg'},
-    {label:'Pull Up',value:(athlete.p1rm||'—'),unit:'kg+'},
-    {label:'BW',value:(athlete.bw||'—'),unit:'kg'},
-    {label:'@100 Reps',value:(athlete.b100||'—'),unit:'reps'}
+    {label:'Bench',value:(athlete.b1rm||'-'),unit:'kg'},
+    {label:'Squat',value:(athlete.sq||'-'),unit:'kg'},
+    {label:'Deadlift',value:(athlete.dl||'-'),unit:'kg'},
+    {label:'Pull Up',value:(athlete.p1rm||'-'),unit:'kg+'},
+    {label:'BW',value:(athlete.bw||'-'),unit:'kg'},
+    {label:'@100 Reps',value:(athlete.b100||'-'),unit:'reps'}
   ];
   var g=document.getElementById('prog-stats-grid');
   g.innerHTML='';
@@ -778,39 +789,52 @@ function renderWeekSched(w){
 }
 function renderSlot(t,s){
   var isRest=s.category==='rest';
-  return '<div class="slot-row'+(isRest?' rest-slot':'')+'"><div class="slot-time">'+t+'</div><div class="slot-dot '+s.category+'"></div><div class="slot-content">'+(isRest?'':'<div class="slot-type">'+s.category+'</div>')+'<div class="slot-name">'+s.name+'</div>'+(s.detail&&!isRest?'<div class="slot-detail">'+s.detail+'</div>':'')+'</div>'+(isRest?'':'<div class="slot-arrow">&#8250;</div>')+'</div>';
+  var sid=getSessionId(s);
+  var div=document.createElement('div');
+  div.className='slot-row'+(isRest?' rest-slot':'');
+  div.innerHTML='<div class="slot-time">'+t+'</div><div class="slot-dot '+s.category+'"></div><div class="slot-content">'+(isRest?'':'<div class="slot-type">'+s.category+'</div>')+'<div class="slot-name">'+s.name+'</div>'+(s.detail&&!isRest?'<div class="slot-detail">'+s.detail+'</div>':'')+'</div>'+(isRest?'':'<div class="slot-arrow">&#8250;</div>');
+  if(!isRest){
+    if(s.selectable||s.hasCore||s.coreNum){
+      div.addEventListener('click',function(){openCoreModal();});
+    } else if(sid==='me-upper-pull'){
+      div.addEventListener('click',function(){openSession('me-upper-pull');});
+    } else {
+      div.addEventListener('click',function(){alert(s.name+' - coming soon!');});
+    }
+  }
+  return div.outerHTML;
 }
 
-// ══════ STATS ══════
+// ====== STATS ======
 function renderStats(){
   if(!athlete) return;
-  document.getElementById('s-name').textContent=athlete.name||'—';
-  document.getElementById('s-bw').innerHTML=(athlete.bw||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('s-tage').innerHTML=(athlete.tage||'—')+'<span class="stat-card-unit">yrs</span>';
-  document.getElementById('s-b1rm').innerHTML=(athlete.b1rm||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('s-b100').innerHTML=(athlete.b100||'—')+'<span class="stat-card-unit">reps</span>';
-  document.getElementById('s-p1rm').innerHTML=(athlete.p1rm||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('s-pbw').innerHTML=(athlete.pbw||'—')+'<span class="stat-card-unit">reps</span>';
-  document.getElementById('s-sq').innerHTML=(athlete.sq||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('s-dl').innerHTML=(athlete.dl||'—')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('s-name').textContent=athlete.name||'-';
+  document.getElementById('s-bw').innerHTML=(athlete.bw||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('s-tage').innerHTML=(athlete.tage||'-')+'<span class="stat-card-unit">yrs</span>';
+  document.getElementById('s-b1rm').innerHTML=(athlete.b1rm||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('s-b100').innerHTML=(athlete.b100||'-')+'<span class="stat-card-unit">reps</span>';
+  document.getElementById('s-p1rm').innerHTML=(athlete.p1rm||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('s-pbw').innerHTML=(athlete.pbw||'-')+'<span class="stat-card-unit">reps</span>';
+  document.getElementById('s-sq').innerHTML=(athlete.sq||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('s-dl').innerHTML=(athlete.dl||'-')+'<span class="stat-card-unit">kg</span>';
 }
 
-// ══════ ATHLETE ══════
+// ====== ATHLETE ======
 function renderAthlete(){
   if(!athlete) return;
-  document.getElementById('a-name').textContent=athlete.name||'—';
-  document.getElementById('a-bw').innerHTML=(athlete.bw||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('a-tage').innerHTML=(athlete.tage||'—')+'<span class="stat-card-unit">yrs</span>';
-  document.getElementById('a-b1rm').innerHTML=(athlete.b1rm||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('a-b100').innerHTML=(athlete.b100||'—')+'<span class="stat-card-unit">reps</span>';
-  document.getElementById('a-p1rm').innerHTML=(athlete.p1rm||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('a-pbw').innerHTML=(athlete.pbw||'—')+'<span class="stat-card-unit">reps</span>';
-  document.getElementById('a-sq').innerHTML=(athlete.sq||'—')+'<span class="stat-card-unit">kg</span>';
-  document.getElementById('a-dl').innerHTML=(athlete.dl||'—')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('a-name').textContent=athlete.name||'-';
+  document.getElementById('a-bw').innerHTML=(athlete.bw||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('a-tage').innerHTML=(athlete.tage||'-')+'<span class="stat-card-unit">yrs</span>';
+  document.getElementById('a-b1rm').innerHTML=(athlete.b1rm||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('a-b100').innerHTML=(athlete.b100||'-')+'<span class="stat-card-unit">reps</span>';
+  document.getElementById('a-p1rm').innerHTML=(athlete.p1rm||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('a-pbw').innerHTML=(athlete.pbw||'-')+'<span class="stat-card-unit">reps</span>';
+  document.getElementById('a-sq').innerHTML=(athlete.sq||'-')+'<span class="stat-card-unit">kg</span>';
+  document.getElementById('a-dl').innerHTML=(athlete.dl||'-')+'<span class="stat-card-unit">kg</span>';
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-// ══════ INIT ══════
+// ====== INIT ======
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
 loadState();
 if(athlete){
@@ -828,13 +852,13 @@ if(athlete){
   });
 }
 
-// ══════ SESSION DATA ══════
+// ====== SESSION DATA ======
 var ROW_OPTIONS=['Seated Cable Row (Overhand)','Seated Cable Row (Neutral Grip)','Bent Over Barbell Row','Bent Over DB Row','Single Arm DB Row','Chest Supported DB Row','Inverted Row (BW)','Meadows Row','Cable Face Pull','Seal Row'];
 var DELT_OPTIONS=['DB Lateral Raise','DB Front Raise','Cable Lateral Raise','Bent Over Rear Delt Fly','Cable Rear Delt Fly','Incline Rear Delt Fly'];
 var SHRUG_OPTIONS=['DB Shrugs (2 sec hold)','Barbell Shrugs','Cable Shrugs','Trap Bar Shrugs'];
 var CURL_OPTIONS=['Hammer Curls','Barbell Curls','Incline DB Curls','Cable Curls','EZ Bar Curls','Zottman Curls','Preacher Curls'];
 var ME_PULL_STRUCTURE=[
-  {id:'chins',label:'Exercise 1',name:'Wide Grip Chin Ups',scheme:'ME Ramp — 7 sets',fixed:true,restOptions:[2,3,4,5,6],defaultRest:3,sets:[
+  {id:'chins',label:'Exercise 1',name:'Wide Grip Chin Ups',scheme:'ME Ramp - 7 sets',fixed:true,restOptions:[2,3,4,5,6],defaultRest:3,sets:[
     {label:'Set 1',kg:'Band Assisted',reps:5,kgFixed:true},
     {label:'Set 2',kg:'BW',reps:3,kgFixed:true},
     {label:'Set 3',kg:'+5',reps:3,kgFixed:false},
@@ -843,22 +867,22 @@ var ME_PULL_STRUCTURE=[
     {label:'Set 6',kg:'+12.5',reps:1,kgFixed:false},
     {label:'Set 7 (Optional)',kg:'',reps:'',kgFixed:false,optional:true}
   ]},
-  {id:'dips',label:'Exercise 2',name:'Weighted Tricep Dips',scheme:'4 x 6 — 2 min rest',fixed:true,autoRest:120,sets:[
+  {id:'dips',label:'Exercise 2',name:'Weighted Tricep Dips',scheme:'4 x 6 - 2 min rest',fixed:true,autoRest:120,sets:[
     {label:'Set 1',kg:'',reps:6},{label:'Set 2',kg:'',reps:6},{label:'Set 3',kg:'',reps:6},{label:'Set 4',kg:'',reps:6}
   ]},
-  {id:'row1',label:'Row Block 1',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'row',autoRest:90,sets:[
+  {id:'row1',label:'Row Block 1',name:null,scheme:'3 x 10-12 - 90 sec rest',selectable:true,options:'row',autoRest:90,sets:[
     {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
   ]},
-  {id:'row2',label:'Row Block 2',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'row',autoRest:90,sets:[
+  {id:'row2',label:'Row Block 2',name:null,scheme:'3 x 10-12 - 90 sec rest',selectable:true,options:'row',autoRest:90,sets:[
     {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
   ]},
-  {id:'shrug',label:'Superset A',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'shrug',autoRest:90,sets:[
+  {id:'shrug',label:'Superset A',name:null,scheme:'3 x 10-12 - 90 sec rest',selectable:true,options:'shrug',autoRest:90,sets:[
     {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
   ]},
-  {id:'delt',label:'Superset B',name:null,scheme:'3 x 10-12 — no rest (superset)',selectable:true,options:'delt',autoRest:0,sets:[
+  {id:'delt',label:'Superset B',name:null,scheme:'3 x 10-12 - no rest (superset)',selectable:true,options:'delt',autoRest:0,sets:[
     {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
   ]},
-  {id:'curl',label:'Exercise 6',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'curl',autoRest:90,sets:[
+  {id:'curl',label:'Exercise 6',name:null,scheme:'3 x 10-12 - 90 sec rest',selectable:true,options:'curl',autoRest:90,sets:[
     {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
   ]}
 ];
@@ -912,7 +936,7 @@ function openSession(sessionId){
   var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
   notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? Any modifications..."></textarea>';
   body.appendChild(notesBlock);
-  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session ✓';
+  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session \u2713';
   finBtn.addEventListener('click',function(){if(confirm('Mark session as complete?')){navTo('today');}});
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
@@ -923,7 +947,7 @@ function renderExBlock(ex){
   var nameDisplay=ex.name||'Select exercise';
   var html='<div class="ex-block-header"><div><div class="ex-num">'+ex.label+'</div><div class="ex-name" id="exname-'+ex.id+'">'+nameDisplay+'</div><div class="ex-scheme">'+ex.scheme+'</div></div></div>';
   if(ex.selectable){
-    html+='<button class="ex-select-btn'+(ex.name?' selected':'')+'" id="selbtn-'+ex.id+'">'+(ex.name?'✓ '+ex.name:'+ Tap to select exercise')+'</button>';
+    html+='<button class="ex-select-btn'+(ex.name?' selected':'')+'" id="selbtn-'+ex.id+'">'+(ex.name?'\u2713 '+ex.name:'+ Tap to select exercise')+'</button>';
   }
   if(ex.restOptions){
     html+='<div class="rest-selector"><span class="rest-selector-label">Rest</span><div class="rest-opts" id="rest-opts-'+ex.id+'">';
@@ -977,7 +1001,7 @@ function pickExercise(exId,optionsKey){
     var nameEl=document.getElementById('exname-'+exId);
     var btnEl=document.getElementById('selbtn-'+exId);
     if(nameEl)nameEl.textContent=chosen;
-    if(btnEl){btnEl.textContent='✓ '+chosen;btnEl.classList.add('selected');}
+    if(btnEl){btnEl.textContent='\u2713 '+chosen;btnEl.classList.add('selected');}
     ME_PULL_STRUCTURE.forEach(function(ex){if(ex.id===exId)ex.name=chosen;});
   });
 }

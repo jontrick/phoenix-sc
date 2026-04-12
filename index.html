@@ -177,6 +177,73 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
 @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+
+/* ══ SESSION SCREEN ══ */
+#screen-session{background:var(--bg);}
+.session-body{flex:1;padding:0 0 80px;overflow-y:auto;}
+.session-hero{background:linear-gradient(135deg,var(--bg3) 0%,#161616 100%);border-bottom:1px solid var(--border);padding:20px;position:relative;overflow:hidden;}
+.session-hero::before{content:"";position:absolute;top:0;right:0;width:180px;height:100%;background:radial-gradient(ellipse at right,rgba(200,150,62,0.08),transparent 70%);}
+.sh-tag{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;}
+.sh-name{font-family:var(--font-d);font-size:32px;font-weight:900;color:var(--text);text-transform:uppercase;line-height:1.1;}
+.sh-detail{font-size:13px;color:var(--text2);margin-top:4px;}
+.sh-notes{font-size:12px;color:var(--text3);margin-top:6px;font-style:italic;}
+
+/* BLOCK */
+.ex-block{border-bottom:1px solid var(--border);padding:20px;}
+.ex-block-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
+.ex-num{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:3px;color:var(--text3);text-transform:uppercase;}
+.ex-name{font-family:var(--font-d);font-size:22px;font-weight:700;color:var(--text);text-transform:uppercase;line-height:1.1;margin-top:2px;}
+.ex-scheme{font-family:var(--font-d);font-size:13px;color:var(--text2);margin-top:2px;}
+.ex-select-btn{background:var(--bg3);border:1px dashed var(--border2);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:10px 16px;border-radius:var(--radius);cursor:pointer;width:100%;text-align:left;margin-bottom:14px;transition:all 0.2s;}
+.ex-select-btn:active{border-color:var(--gold);color:var(--gold);}
+.ex-select-btn.selected{border-style:solid;border-color:var(--border2);color:var(--text);}
+
+/* REST SELECTOR */
+.rest-selector{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+.rest-selector-label{font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;white-space:nowrap;}
+.rest-opts{display:flex;gap:6px;}
+.rest-opt{background:var(--bg3);border:1px solid var(--border);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:600;padding:7px 12px;border-radius:var(--radius);cursor:pointer;transition:all 0.2s;}
+.rest-opt.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
+
+/* SET ROWS */
+.set-row{display:grid;grid-template-columns:32px 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;}
+.set-num{font-family:var(--font-d);font-size:13px;font-weight:600;color:var(--text3);text-align:center;}
+.set-input{background:var(--bg3);border:1px solid var(--border);color:var(--gold);font-family:var(--font-d);font-size:22px;font-weight:900;padding:10px 12px;border-radius:var(--radius);outline:none;text-align:center;width:100%;-webkit-appearance:none;transition:border-color 0.2s;}
+.set-input:focus{border-color:var(--gold);}
+.set-input.reps{color:var(--orange);}
+.set-input-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;text-align:center;margin-top:2px;}
+.set-done-btn{width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text3);font-size:18px;transition:all 0.2s;flex-shrink:0;align-self:center;}
+.set-done-btn.done{background:var(--green-dim);border-color:var(--green);color:#5cb85c;}
+.set-col{display:flex;flex-direction:column;}
+.set-header-row{display:grid;grid-template-columns:32px 1fr 1fr auto;gap:8px;margin-bottom:6px;}
+.set-col-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;text-align:center;}
+
+/* REST TIMER OVERLAY */
+.rest-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:600;display:none;flex-direction:column;align-items:center;justify-content:center;}
+.rest-overlay.active{display:flex;}
+.rest-timer-label{font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:4px;color:var(--text2);text-transform:uppercase;margin-bottom:12px;}
+.rest-timer-display{font-family:var(--font-d);font-size:96px;font-weight:900;color:var(--gold);line-height:1;margin-bottom:8px;}
+.rest-timer-next{font-family:var(--font-d);font-size:14px;color:var(--text2);letter-spacing:2px;text-transform:uppercase;margin-bottom:40px;}
+.rest-timer-bar-wrap{width:280px;height:4px;background:var(--border);border-radius:2px;margin-bottom:40px;}
+.rest-timer-bar{height:100%;background:var(--gold);border-radius:2px;transition:width 1s linear;}
+.rest-skip-btn{background:transparent;border:1px solid var(--border2);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:3px;text-transform:uppercase;padding:14px 40px;cursor:pointer;border-radius:var(--radius);}
+.rest-skip-btn:active{border-color:var(--gold);color:var(--gold);}
+
+/* EXERCISE PICKER MODAL */
+.ex-picker-list{max-height:60vh;overflow-y:auto;}
+.ex-picker-item{padding:16px;border-bottom:1px solid var(--border);cursor:pointer;font-family:var(--font-d);font-size:18px;font-weight:600;color:var(--text);text-transform:uppercase;transition:background 0.15s;}
+.ex-picker-item:active{background:var(--gold-dim);color:var(--gold);}
+
+/* ADD SET BTN */
+.add-set-btn{background:transparent;border:1px dashed var(--border2);color:var(--text3);font-family:var(--font-d);font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:10px;border-radius:var(--radius);width:100%;cursor:pointer;margin-top:6px;transition:all 0.2s;}
+.add-set-btn:active{border-color:var(--gold);color:var(--gold);}
+
+/* NOTES */
+.session-notes-block{padding:20px;}
+.session-notes-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--font-b);font-size:14px;padding:12px 16px;border-radius:var(--radius);outline:none;resize:none;line-height:1.5;}
+.session-notes-input:focus{border-color:var(--gold);}
+.finish-btn{margin:0 20px 20px;background:var(--gold);color:#000;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:3px;text-transform:uppercase;padding:18px;border:none;cursor:pointer;border-radius:var(--radius);width:calc(100% - 40px);}
+
 </style>
 </head>
 <body>
@@ -644,7 +711,7 @@ function makeTile(timeLabel,s){
     if(s.selectable||s.hasCore){
       div.addEventListener('click',function(){openCoreModal();});
     } else {
-      div.addEventListener('click',function(){alert('Session detail coming in next update!');});
+      div.addEventListener('click',function(){openSession('me-upper-pull');});
     }
   }
   return div;
@@ -742,6 +809,7 @@ function renderAthlete(){
   document.getElementById('a-dl').innerHTML=(athlete.dl||'—')+'<span class="stat-card-unit">kg</span>';
 }
 
+document.addEventListener("DOMContentLoaded", function() {
 // ══════ INIT ══════
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
 loadState();
@@ -759,6 +827,194 @@ if(athlete){
     obStep=1;updateOB();showScreen('screen-onboard');
   });
 }
-</script>
+
+// ══════ SESSION DATA ══════
+var ROW_OPTIONS=['Seated Cable Row (Overhand)','Seated Cable Row (Neutral Grip)','Bent Over Barbell Row','Bent Over DB Row','Single Arm DB Row','Chest Supported DB Row','Inverted Row (BW)','Meadows Row','Cable Face Pull','Seal Row'];
+var DELT_OPTIONS=['DB Lateral Raise','DB Front Raise','Cable Lateral Raise','Bent Over Rear Delt Fly','Cable Rear Delt Fly','Incline Rear Delt Fly'];
+var SHRUG_OPTIONS=['DB Shrugs (2 sec hold)','Barbell Shrugs','Cable Shrugs','Trap Bar Shrugs'];
+var CURL_OPTIONS=['Hammer Curls','Barbell Curls','Incline DB Curls','Cable Curls','EZ Bar Curls','Zottman Curls','Preacher Curls'];
+var ME_PULL_STRUCTURE=[
+  {id:'chins',label:'Exercise 1',name:'Wide Grip Chin Ups',scheme:'ME Ramp — 7 sets',fixed:true,restOptions:[2,3,4,5,6],defaultRest:3,sets:[
+    {label:'Set 1',kg:'Band Assisted',reps:5,kgFixed:true},
+    {label:'Set 2',kg:'BW',reps:3,kgFixed:true},
+    {label:'Set 3',kg:'+5',reps:3,kgFixed:false},
+    {label:'Set 4',kg:'+7.5',reps:1,kgFixed:false},
+    {label:'Set 5',kg:'+10',reps:1,kgFixed:false},
+    {label:'Set 6',kg:'+12.5',reps:1,kgFixed:false},
+    {label:'Set 7 (Optional)',kg:'',reps:'',kgFixed:false,optional:true}
+  ]},
+  {id:'dips',label:'Exercise 2',name:'Weighted Tricep Dips',scheme:'4 x 6 — 2 min rest',fixed:true,autoRest:120,sets:[
+    {label:'Set 1',kg:'',reps:6},{label:'Set 2',kg:'',reps:6},{label:'Set 3',kg:'',reps:6},{label:'Set 4',kg:'',reps:6}
+  ]},
+  {id:'row1',label:'Row Block 1',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'row',autoRest:90,sets:[
+    {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
+  ]},
+  {id:'row2',label:'Row Block 2',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'row',autoRest:90,sets:[
+    {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
+  ]},
+  {id:'shrug',label:'Superset A',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'shrug',autoRest:90,sets:[
+    {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
+  ]},
+  {id:'delt',label:'Superset B',name:null,scheme:'3 x 10-12 — no rest (superset)',selectable:true,options:'delt',autoRest:0,sets:[
+    {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
+  ]},
+  {id:'curl',label:'Exercise 6',name:null,scheme:'3 x 10-12 — 90 sec rest',selectable:true,options:'curl',autoRest:90,sets:[
+    {label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}
+  ]}
+];
+var chinRestSecs=180;
+var exPickerCallback=null;
+var rtInterval=null;
+var rtTotal=0;
+var rtRemaining=0;
+
+function startRestTimer(secs,nextLabel){
+  rtTotal=secs;rtRemaining=secs;updateRTDisplay();
+  document.getElementById('rt-next').textContent=nextLabel||'Next set';
+  document.getElementById('rest-overlay').classList.add('active');
+  if(rtInterval)clearInterval(rtInterval);
+  rtInterval=setInterval(function(){
+    rtRemaining--;updateRTDisplay();
+    if(rtRemaining<=0){clearInterval(rtInterval);document.getElementById('rest-overlay').classList.remove('active');}
+  },1000);
+}
+function updateRTDisplay(){
+  var m=Math.floor(rtRemaining/60),s=rtRemaining%60;
+  document.getElementById('rt-display').textContent=m+':'+(s<10?'0':'')+s;
+  document.getElementById('rt-bar').style.width=(rtTotal>0?(rtRemaining/rtTotal*100):0)+'%';
+}
+document.addEventListener('DOMContentLoaded',function(){
+  var rtSkip=document.getElementById('rt-skip');
+  if(rtSkip)rtSkip.addEventListener('click',function(){
+    if(rtInterval)clearInterval(rtInterval);
+    document.getElementById('rest-overlay').classList.remove('active');
+  });
+});
+function openExPicker(exId,title,optionsKey,callback){
+  exPickerCallback=callback;
+  document.getElementById('ex-picker-title').textContent=title;
+  var list=document.getElementById('ex-picker-list');list.innerHTML='';
+  var opts=optionsKey==='row'?ROW_OPTIONS:optionsKey==='delt'?DELT_OPTIONS:optionsKey==='shrug'?SHRUG_OPTIONS:CURL_OPTIONS;
+  opts.forEach(function(opt){
+    var div=document.createElement('div');div.className='ex-picker-item';div.textContent=opt;
+    div.addEventListener('click',function(){closeExPicker();if(callback)callback(opt);});
+    list.appendChild(div);
+  });
+  document.getElementById('ex-picker-modal').classList.add('active');
+}
+function closeExPicker(){document.getElementById('ex-picker-modal').classList.remove('active');}
+function openSession(sessionId){
+  var body=document.getElementById('session-body-content');body.innerHTML='';
+  var hero=document.createElement('div');hero.className='session-hero';
+  hero.innerHTML='<div class="sh-tag">Monday AM &middot; Lifting</div><div class="sh-name">ME Upper Pull</div><div class="sh-detail">Wide Grip Chins &middot; Dips &middot; Rows &middot; Shoulders &middot; Arms</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
+  body.appendChild(hero);
+  ME_PULL_STRUCTURE.forEach(function(ex){body.appendChild(renderExBlock(ex));});
+  var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
+  notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? Any modifications..."></textarea>';
+  body.appendChild(notesBlock);
+  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session ✓';
+  finBtn.addEventListener('click',function(){if(confirm('Mark session as complete?')){navTo('today');}});
+  body.appendChild(finBtn);
+  document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  showScreen('screen-session');
+}
+function renderExBlock(ex){
+  var block=document.createElement('div');block.className='ex-block';block.id='block-'+ex.id;
+  var nameDisplay=ex.name||'Select exercise';
+  var html='<div class="ex-block-header"><div><div class="ex-num">'+ex.label+'</div><div class="ex-name" id="exname-'+ex.id+'">'+nameDisplay+'</div><div class="ex-scheme">'+ex.scheme+'</div></div></div>';
+  if(ex.selectable){
+    html+='<button class="ex-select-btn'+(ex.name?' selected':'')+'" id="selbtn-'+ex.id+'">'+(ex.name?'✓ '+ex.name:'+ Tap to select exercise')+'</button>';
+  }
+  if(ex.restOptions){
+    html+='<div class="rest-selector"><span class="rest-selector-label">Rest</span><div class="rest-opts" id="rest-opts-'+ex.id+'">';
+    ex.restOptions.forEach(function(r){html+='<div class="rest-opt'+(r===ex.defaultRest?' active':'')+'" data-mins="'+r+'" data-exid="'+ex.id+'">'+r+'m</div>';});
+    html+='</div></div>';
+  }
+  html+='<div class="set-header-row"><div></div><div class="set-col-label">kg / load</div><div class="set-col-label">reps</div><div></div></div>';
+  html+='<div id="sets-'+ex.id+'">';
+  ex.sets.forEach(function(set,idx){html+=renderSetRow(ex,set,idx);});
+  html+='</div>';
+  block.innerHTML=html;
+  setTimeout(function(){
+    if(ex.selectable){
+      var btn=document.getElementById('selbtn-'+ex.id);
+      if(btn)btn.addEventListener('click',function(){pickExercise(ex.id,ex.options);});
+    }
+    if(ex.restOptions){
+      var opts=document.querySelectorAll('#rest-opts-'+ex.id+' .rest-opt');
+      opts.forEach(function(o){o.addEventListener('click',function(){chinRestSecs=parseInt(this.getAttribute('data-mins'))*60;opts.forEach(function(x){x.classList.remove('active');});o.classList.add('active');});});
+    }
+    ex.sets.forEach(function(set,idx){
+      var btn=document.getElementById('done-'+ex.id+'-'+idx);
+      if(btn)btn.addEventListener('click',function(){onSetDone(ex,idx);});
+    });
+  },0);
+  return block;
+}
+function renderSetRow(ex,set,idx){
+  var kgVal=set.kg!==undefined?set.kg:'';
+  var repsVal=set.reps!==undefined?set.reps:'';
+  var kgReadonly=set.kgFixed?' readonly style="opacity:0.6;color:var(--text2)"':'';
+  return '<div class="set-row" id="setrow-'+ex.id+'-'+idx+'">'+
+    '<div class="set-num">'+(idx+1)+'</div>'+
+    '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+kgVal+'" placeholder="kg"'+kgReadonly+' inputmode="decimal"><div class="set-input-label">kg / load</div></div>'+
+    '<div class="set-col"><input type="number" class="set-input reps" id="reps-'+ex.id+'-'+idx+'" value="'+repsVal+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
+    '<button class="set-done-btn" id="done-'+ex.id+'-'+idx+'">&#10003;</button>'+
+    '</div>';
+}
+function onSetDone(ex,idx){
+  var btn=document.getElementById('done-'+ex.id+'-'+idx);
+  if(!btn)return;
+  btn.classList.add('done');
+  var restSecs=ex.restOptions?chinRestSecs:(ex.autoRest||0);
+  var nextIdx=idx+1;
+  var nextLabel=nextIdx<ex.sets.length?'Set '+(nextIdx+1):'Move to next exercise';
+  if(restSecs>0)startRestTimer(restSecs,nextLabel);
+}
+function pickExercise(exId,optionsKey){
+  var titleMap={row:'Select Row Exercise',delt:'Select Delt Exercise',shrug:'Select Shrug Exercise',curl:'Select Curl / Arm Exercise'};
+  openExPicker(exId,titleMap[optionsKey]||'Select Exercise',optionsKey,function(chosen){
+    var nameEl=document.getElementById('exname-'+exId);
+    var btnEl=document.getElementById('selbtn-'+exId);
+    if(nameEl)nameEl.textContent=chosen;
+    if(btnEl){btnEl.textContent='✓ '+chosen;btnEl.classList.add('selected');}
+    ME_PULL_STRUCTURE.forEach(function(ex){if(ex.id===exId)ex.name=chosen;});
+  });
+}
+
+
+});</script>
+
+<!-- SESSION SCREEN -->
+<div id="screen-session" class="screen">
+<div class="app-header">
+  <div class="icon-btn" id="session-back-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+  <div class="header-logo">PHOENIX <span>PLAN</span></div>
+  <div style="width:36px"></div>
+</div>
+<div class="session-body" id="session-body-content"></div>
+</div>
+
+<!-- REST TIMER OVERLAY -->
+<div class="rest-overlay" id="rest-overlay">
+  <div class="rest-timer-label">Rest</div>
+  <div class="rest-timer-display" id="rt-display">3:00</div>
+  <div class="rest-timer-next" id="rt-next">Next set</div>
+  <div class="rest-timer-bar-wrap"><div class="rest-timer-bar" id="rt-bar" style="width:100%"></div></div>
+  <button class="rest-skip-btn" id="rt-skip">Skip Rest</button>
+</div>
+
+<!-- EXERCISE PICKER MODAL -->
+<div class="modal-overlay" id="ex-picker-modal">
+<div class="modal-sheet">
+  <div class="modal-title">Select Exercise</div>
+  <div class="modal-subtitle" id="ex-picker-title">Choose</div>
+  <div class="ex-picker-list" id="ex-picker-list"></div>
+  <button class="modal-close" onclick="closeExPicker()">Cancel</button>
+</div>
+</div>
+
 </body>
 </html>

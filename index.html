@@ -833,26 +833,6 @@ function renderAthlete(){
   document.getElementById('a-dl').innerHTML=(athlete.dl||'-')+'<span class="stat-card-unit">kg</span>';
 }
 
-document.addEventListener("DOMContentLoaded", function() {
-// ====== INIT ======
-document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
-loadState();
-if(athlete){
-  document.getElementById('splash-continue-btn').style.display='block';
-  document.getElementById('splash-start-btn').textContent='New Programme';
-  document.getElementById('splash-continue-btn').addEventListener('click',function(){
-    viewWeek=progWeek();renderToday();navTo('today');
-  });
-  document.getElementById('splash-start-btn').addEventListener('click',function(){
-    obStep=1;updateOB();showScreen('screen-onboard');
-  });
-} else {
-  document.getElementById('splash-start-btn').addEventListener('click',function(){
-    obStep=1;updateOB();showScreen('screen-onboard');
-  });
-}
-
-// ====== SESSION DATA ======
 var ROW_OPTIONS=['Seated Cable Row (Overhand)','Seated Cable Row (Neutral Grip)','Bent Over Barbell Row','Bent Over DB Row','Single Arm DB Row','Chest Supported DB Row','Inverted Row (BW)','Meadows Row','Cable Face Pull','Seal Row'];
 var DELT_OPTIONS=['DB Lateral Raise','DB Front Raise','Cable Lateral Raise','Bent Over Rear Delt Fly','Cable Rear Delt Fly','Incline Rear Delt Fly'];
 var SHRUG_OPTIONS=['DB Shrugs (2 sec hold)','Barbell Shrugs','Cable Shrugs','Trap Bar Shrugs'];
@@ -1007,7 +987,30 @@ function pickExercise(exId,optionsKey){
 }
 
 
-});</script>
+
+
+document.addEventListener("DOMContentLoaded", function() {
+// ====== INIT ======
+document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
+loadState();
+if(athlete){
+  document.getElementById('splash-continue-btn').style.display='block';
+  document.getElementById('splash-start-btn').textContent='New Programme';
+  document.getElementById('splash-continue-btn').addEventListener('click',function(){
+    viewWeek=progWeek();renderToday();navTo('today');
+  });
+  document.getElementById('splash-start-btn').addEventListener('click',function(){
+    obStep=1;updateOB();showScreen('screen-onboard');
+  });
+} else {
+  document.getElementById('splash-start-btn').addEventListener('click',function(){
+    obStep=1;updateOB();showScreen('screen-onboard');
+  });
+}
+
+// ====== SESSION DATA ======
+
+});;</script>
 
 <!-- SESSION SCREEN -->
 <div id="screen-session" class="screen">

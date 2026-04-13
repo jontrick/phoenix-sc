@@ -706,6 +706,7 @@ function getSessionId(s){
   if(!s||s.category==='rest') return null;
   var n=s.name||'';
   if(n==='ME Upper Pull') return 'me-upper-pull';
+  if(n==='ME Lower') return 'me-lower-sq';
   return 'coming-soon';
 }
 function makeTile(timeLabel,s){
@@ -719,6 +720,10 @@ function makeTile(timeLabel,s){
       div.addEventListener('click',function(){openCoreModal();});
     } else if(sid==='me-upper-pull'){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
+    } else if(sid==='me-lower-sq'){
+      div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='me-lower-sq'){
+      div.addEventListener('click',function(){openLowerSqSession();});
     } else {
       div.addEventListener('click',function(){
         alert(s.name+' session coming soon!');
@@ -798,6 +803,10 @@ function renderSlot(t,s){
       div.addEventListener('click',function(){openCoreModal();});
     } else if(sid==='me-upper-pull'){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
+    } else if(sid==='me-lower-sq'){
+      div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='me-lower-sq'){
+      div.addEventListener('click',function(){openLowerSqSession();});
     } else {
       div.addEventListener('click',function(){alert(s.name+' - coming soon!');});
     }
@@ -898,7 +907,7 @@ function openExPicker(exId,title,optionsKey,callback){
   exPickerCallback=callback;
   document.getElementById('ex-picker-title').textContent=title;
   var list=document.getElementById('ex-picker-list');list.innerHTML='';
-  var opts=optionsKey==='row'?ROW_OPTIONS:optionsKey==='delt'?DELT_OPTIONS:optionsKey==='shrug'?SHRUG_OPTIONS:CURL_OPTIONS;
+  var opts=optionsKey==='row'?ROW_OPTIONS:optionsKey==='delt'?DELT_OPTIONS:optionsKey==='shrug'?SHRUG_OPTIONS:optionsKey==='legcurl'?LEGCURL_OPTIONS:optionsKey==='backhip'?BACKHIP_OPTIONS:optionsKey==='unilateral'?UNILATERAL_OPTIONS:optionsKey==='de_lower'?DE_LOWER_OPTIONS:CURL_OPTIONS;
   opts.forEach(function(opt){
     var div=document.createElement('div');div.className='ex-picker-item';div.textContent=opt;
     div.addEventListener('click',function(){closeExPicker();if(callback)callback(opt);});
@@ -908,6 +917,7 @@ function openExPicker(exId,title,optionsKey,callback){
 }
 function closeExPicker(){document.getElementById('ex-picker-modal').classList.remove('active');}
 function openSession(sessionId){
+  if(sessionId==='me-lower-sq'){openLowerSqSession();return;}
   var body=document.getElementById('session-body-content');body.innerHTML='';
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">Monday AM &middot; Lifting</div><div class="sh-name">ME Upper Pull</div><div class="sh-detail">Wide Grip Chins &middot; Dips &middot; Rows &middot; Shoulders &middot; Arms</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
@@ -976,7 +986,7 @@ function onSetDone(ex,idx){
   if(restSecs>0)startRestTimer(restSecs,nextLabel);
 }
 function pickExercise(exId,optionsKey){
-  var titleMap={row:'Select Row Exercise',delt:'Select Delt Exercise',shrug:'Select Shrug Exercise',curl:'Select Curl / Arm Exercise'};
+  var titleMap={row:'Select Row Exercise',delt:'Select Delt Exercise',shrug:'Select Shrug Exercise',curl:'Select Curl / Arm Exercise',legcurl:'Select Leg Curl Exercise',backhip:'Select Back / Hip Exercise',unilateral:'Select Unilateral Exercise',de_lower:'Select DE Finisher'};
   openExPicker(exId,titleMap[optionsKey]||'Select Exercise',optionsKey,function(chosen){
     var nameEl=document.getElementById('exname-'+exId);
     var btnEl=document.getElementById('selbtn-'+exId);
@@ -988,6 +998,125 @@ function pickExercise(exId,optionsKey){
 
 
 
+
+
+// ====== ME LOWER SQUAT SESSION ======
+var LEGCURL_OPTIONS=['Lying Leg Curl','Seated Leg Curl','Nordic Curl','Swiss Ball Leg Curl','Cable Leg Curl'];
+var BACKHIP_OPTIONS=['Reverse Hyper','45-Deg Back Extension','GHR','Good Morning','Weighted Back Ext'];
+var UNILATERAL_OPTIONS=['Bulgarian Split Squat','Walking Lunge','Reverse Lunge','Step Up','DB Split Squat'];
+var DE_LOWER_OPTIONS=['Box Jumps x 5','Broad Jumps x 5','Sled Push x 20m','Farmer Carry x 30m','Trap Bar Jump x 5'];
+
+function calcSqLoad(pct) {
+  if(!athlete||!athlete.sq) return pct+'% 1RM';
+  return Math.round(athlete.sq * pct / 2.5) * 2.5 + 'kg';
+}
+
+var ME_LOWER_SQ_STRUCTURE = [
+  {
+    id:'squat',
+    label:'Exercise 1',
+    name:'Back Squat',
+    scheme:'ME Ramp - work to daily max',
+    fixed:true,
+    restOptions:[3,4,5,6],
+    defaultRest:4,
+    sets:[
+      {label:'Set 1',kg:'50%',reps:5,kgFixed:false},
+      {label:'Set 2',kg:'60%',reps:3,kgFixed:false},
+      {label:'Set 3',kg:'70%',reps:2,kgFixed:false},
+      {label:'Set 4',kg:'80%',reps:1,kgFixed:false},
+      {label:'Set 5',kg:'87.5%',reps:1,kgFixed:false},
+      {label:'Set 6',kg:'92.5%+',reps:1,kgFixed:false},
+      {label:'Set 7 (Optional)',kg:'',reps:'',kgFixed:false,optional:true}
+    ]
+  },
+  {
+    id:'pausesq',
+    label:'Exercise 2',
+    name:'Pause Squat',
+    scheme:'3 x 3-5 @ ~60% - 2 min rest',
+    fixed:true,
+    autoRest:120,
+    sets:[
+      {label:'Set 1',kg:'60%',reps:4,kgFixed:false},
+      {label:'Set 2',kg:'60%',reps:4,kgFixed:false},
+      {label:'Set 3',kg:'60%',reps:4,kgFixed:false}
+    ]
+  },
+  {
+    id:'unilateral',
+    label:'Exercise 3',
+    name:null,
+    scheme:'3 x 8-10 ea - 90 sec rest',
+    selectable:true,
+    options:'unilateral',
+    autoRest:90,
+    sets:[
+      {label:'Set 1',kg:'',reps:''},
+      {label:'Set 2',kg:'',reps:''},
+      {label:'Set 3',kg:'',reps:''}
+    ]
+  },
+  {
+    id:'legcurl',
+    label:'Exercise 4',
+    name:null,
+    scheme:'3 x 10-12 - 90 sec rest',
+    selectable:true,
+    options:'legcurl',
+    autoRest:90,
+    sets:[
+      {label:'Set 1',kg:'',reps:''},
+      {label:'Set 2',kg:'',reps:''},
+      {label:'Set 3',kg:'',reps:''}
+    ]
+  },
+  {
+    id:'backhip',
+    label:'Exercise 5',
+    name:null,
+    scheme:'3 x 12-15 - 90 sec rest',
+    selectable:true,
+    options:'backhip',
+    autoRest:90,
+    sets:[
+      {label:'Set 1',kg:'',reps:''},
+      {label:'Set 2',kg:'',reps:''},
+      {label:'Set 3',kg:'',reps:''}
+    ]
+  },
+  {
+    id:'de_lower',
+    label:'DE Finisher',
+    name:null,
+    scheme:'4-6 sets - max intent - tap to select',
+    selectable:true,
+    options:'de_lower',
+    autoRest:120,
+    sets:[
+      {label:'Set 1',kg:'',reps:''},
+      {label:'Set 2',kg:'',reps:''},
+      {label:'Set 3',kg:'',reps:''},
+      {label:'Set 4',kg:'',reps:''}
+    ]
+  }
+];
+
+function openLowerSqSession() {
+  var body=document.getElementById('session-body-content');body.innerHTML='';
+  var hero=document.createElement('div');hero.className='session-hero';
+  hero.innerHTML='<div class="sh-tag">Tuesday AM - Lifting</div><div class="sh-name">ME Lower</div><div class="sh-detail">Back Squat / Pause Squat / Unilateral / Hamstrings / DE</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
+  body.appendChild(hero);
+  ME_LOWER_SQ_STRUCTURE.forEach(function(ex){body.appendChild(renderExBlock(ex));});
+  var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
+  notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? PBs? Modifications..."></textarea>';
+  body.appendChild(notesBlock);
+  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session';
+  finBtn.addEventListener('click',function(){if(confirm('Mark session as complete?')){navTo('today');}});
+  body.appendChild(finBtn);
+  document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  showScreen('screen-session');
+}
 
 document.addEventListener("DOMContentLoaded", function() {
 // ====== INIT ======

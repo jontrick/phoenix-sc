@@ -486,6 +486,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
   </div>
   <button class="edit-btn" onclick="editProfile()">✎ Edit Profile</button>
+  <button class="edit-btn" onclick="exportAllData()" style="margin-top:8px;color:#6a9fd8;border-color:#2a5fa8">&#8659; Export All Data (Backup)</button>
   <button class="danger-btn" onclick="resetApp()">Reset App Data</button>
 </div>
 <div class="bottom-nav">
@@ -596,8 +597,18 @@ function buildWeek(w){
 // ====== STATE ======
 var athlete=null, viewWeek=1;
 
-function loadState(){try{var a=localStorage.getItem('phoenix_v2');if(a)athlete=JSON.parse(a);}catch(e){}}
-function saveAthlete(d){athlete=d;localStorage.setItem('phoenix_v2',JSON.stringify(d));}
+function loadState(){
+  try{
+    // Try new key first, fall back to old key for migration
+    var a=localStorage.getItem('phoenix_athlete')||localStorage.getItem('phoenix_v2');
+    if(a){
+      athlete=JSON.parse(a);
+      // Migrate to new key if needed
+      localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+    }
+  }catch(e){}
+}
+function saveAthlete(d){athlete=d;localStorage.setItem('phoenix_athlete',JSON.stringify(d));}
 
 function progWeek(){
   if(!athlete||!athlete.startDate) return 1;
@@ -679,15 +690,21 @@ function editProfile(){
   obStep=1;updateOB();showScreen('screen-onboard');
 }
 function resetApp(){
-  if(confirm('Reset all data? Cannot be undone.')){
-    localStorage.removeItem('phoenix_v2');athlete=null;location.reload();
+  if(confirm('Reset all data? This cannot be undone.')){
+    localStorage.removeItem('phoenix_athlete');
+    localStorage.removeItem('phoenix_v2');
+    localStorage.removeItem('phoenix_session_logs');
+    localStorage.removeItem('phoenix_core_logs');
+    athlete=null;location.reload();
   }
 }
 
 // ====== TODAY ======
+var currentProgWeek=1;
 function renderToday(){
   if(!athlete) return;
   var w=progWeek();
+  currentProgWeek=w;
   var now=new Date();
   var dayIdx=(now.getDay()+6)%7;
   var sched=buildWeek(w);
@@ -1180,7 +1197,12 @@ function openLowerSqSession() {
   notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? PBs? Modifications..."></textarea>';
   body.appendChild(notesBlock);
   var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session';
-  finBtn.addEventListener('click',function(){if(confirm('Mark session as complete?')){navTo('today');}});
+  finBtn.addEventListener('click',function(){
+    if(confirm('Mark session as complete?')){
+      logLiftSession(sessionId);
+      navTo('today');
+    }
+  });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
   showScreen('screen-session');
@@ -1562,6 +1584,54 @@ function logCoreSession(){
   });
   localStorage.setItem('phoenix_core_logs',JSON.stringify(logs));
   navTo('today');
+}
+
+
+// ====== SESSION LOGGING ======
+function logLiftSession(sessionId){
+  var sets={};
+  var structure=sessionId==='me-lower-sq'?ME_LOWER_SQ_STRUCTURE:ME_PULL_STRUCTURE;
+  structure.forEach(function(ex){
+    sets[ex.id]=[];
+    ex.sets.forEach(function(set,idx){
+      var kgEl=document.getElementById('kg-'+ex.id+'-'+idx);
+      var rpEl=document.getElementById('reps-'+ex.id+'-'+idx);
+      sets[ex.id].push({
+        kg:kgEl?kgEl.value:'',
+        reps:rpEl?rpEl.value:''
+      });
+    });
+  });
+  var notesEl=document.getElementById('session-notes-field');
+  var entry={
+    date:new Date().toISOString(),
+    sessionId:sessionId,
+    week:currentProgWeek||1,
+    notes:notesEl?notesEl.value:'',
+    sets:sets
+  };
+  var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+  logs.push(entry);
+  localStorage.setItem('phoenix_session_logs',JSON.stringify(logs));
+}
+
+function getSessionLogs(sessionId){
+  var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+  return sessionId?logs.filter(function(l){return l.sessionId===sessionId;}):logs;
+}
+
+function exportAllData(){
+  var data={
+    athlete:athlete,
+    sessionLogs:JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]'),
+    coreLogs:JSON.parse(localStorage.getItem('phoenix_core_logs')||'[]'),
+    exportDate:new Date().toISOString()
+  };
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='phoenix_backup_'+new Date().toISOString().split('T')[0]+'.json';
+  a.click();URL.revokeObjectURL(url);
 }
 
 document.addEventListener("DOMContentLoaded", function() {

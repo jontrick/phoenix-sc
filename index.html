@@ -707,6 +707,8 @@ function getSessionId(s){
   var n=s.name||'';
   if(n==='ME Upper Pull') return 'me-upper-pull';
   if(n==='ME Lower') return 'me-lower-sq';
+  if(n.indexOf('Core')===0) return 'core';
+  if(n==='Karen + Core') return 'core';
   return 'coming-soon';
 }
 function makeTile(timeLabel,s){
@@ -722,8 +724,12 @@ function makeTile(timeLabel,s){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
     } else if(sid==='me-lower-sq'){
       div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='core'){
+      div.addEventListener('click',function(){openCoreModal();});
     } else if(sid==='me-lower-sq'){
       div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='core'){
+      div.addEventListener('click',function(){openCoreModal();});
     } else {
       div.addEventListener('click',function(){
         alert(s.name+' session coming soon!');
@@ -745,8 +751,7 @@ function openCoreModal(){
     }).join('');
     div.innerHTML='<div class="core-option-header"><div class="core-option-name">Core '+c.num+'</div><div class="core-option-badge">20 min AMRAP</div></div>'+rows;
     div.addEventListener('click',function(){
-      closeCoreModal();
-      alert('Core '+c.num+' selected! Full session view coming next update.');
+      openCoreSessionFromPicker(c.num);
     });
     container.appendChild(div);
   });
@@ -805,8 +810,12 @@ function renderSlot(t,s){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
     } else if(sid==='me-lower-sq'){
       div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='core'){
+      div.addEventListener('click',function(){openCoreModal();});
     } else if(sid==='me-lower-sq'){
       div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='core'){
+      div.addEventListener('click',function(){openCoreModal();});
     } else {
       div.addEventListener('click',function(){alert(s.name+' - coming soon!');});
     }
@@ -977,7 +986,7 @@ function renderExBlock(ex){
     ex.restOptions.forEach(function(r){html+='<div class="rest-opt'+(r===ex.defaultRest?' active':'')+'" data-mins="'+r+'" data-exid="'+ex.id+'">'+r+'m</div>';});
     html+='</div></div>';
   }
-  html+='<div class="set-header-row"><div></div><div class="set-col-label">kg / load</div><div class="set-col-label">reps</div><div></div></div>';
+  html+='<div class="set-header-row"><div></div><div class="set-col-label">reps</div><div class="set-col-label">kg</div><div></div></div>';
   html+='<div id="sets-'+ex.id+'">';
   ex.sets.forEach(function(set,idx){html+=renderSetRow(ex,set,idx);});
   html+='</div>';
@@ -1004,11 +1013,12 @@ function renderSetRow(ex,set,idx){
   var kgReadonly=set.kgFixed?' readonly style="opacity:0.6;color:var(--text2)"':'';
   return '<div class="set-row" id="setrow-'+ex.id+'-'+idx+'">'+
     '<div class="set-num">'+(idx+1)+'</div>'+
-    '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+kgVal+'" placeholder="kg"'+kgReadonly+' inputmode="decimal"><div class="set-input-label">kg / load</div></div>'+
     '<div class="set-col"><input type="number" class="set-input reps" id="reps-'+ex.id+'-'+idx+'" value="'+repsVal+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
+    '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+kgVal+'" placeholder="kg"'+kgReadonly+' inputmode="decimal"><div class="set-input-label">kg</div></div>'+
     '<button class="set-done-btn" id="done-'+ex.id+'-'+idx+'">&#10003;</button>'+
     '</div>';
 }
+
 function onSetDone(ex,idx){
   var btn=document.getElementById('done-'+ex.id+'-'+idx);
   if(!btn)return;
@@ -1163,10 +1173,17 @@ function openLowerSqSession() {
 
 function calcLoad(pct,rm){
   if(!rm||rm===0) return pct;
-  var num=parseFloat(pct);
+  var clean=String(pct).replace(/%/g,'').replace(/kg.*/g,'').trim();
+  var num=parseFloat(clean);
   if(isNaN(num)) return pct;
   var kg=Math.round((rm*(num/100))/2.5)*2.5;
-  return kg+'kg ('+pct+'%)';
+  return kg+'kg';
+}
+
+function calcPct(pct){
+  var num=parseFloat(pct);
+  if(isNaN(num)) return pct;
+  return num+'%';
 }
 function populateSqLoads(){
   if(!athlete||!athlete.sq) return;
@@ -1174,14 +1191,19 @@ function populateSqLoads(){
   if(!rm) return;
   ME_LOWER_SQ_STRUCTURE[0].sets.forEach(function(set,idx){
     var kgEl=document.getElementById('kg-squat-'+idx);
+    var pctEl=document.getElementById('pct-squat-'+idx);
     if(kgEl&&set.kg&&set.kg.indexOf('%')>-1){
       kgEl.value=calcLoad(set.kg,rm);
+      if(pctEl) pctEl.value=parseFloat(set.kg)+'%';
     }
   });
-  // Pause squat
   ME_LOWER_SQ_STRUCTURE[1].sets.forEach(function(set,idx){
     var kgEl=document.getElementById('kg-pausesq-'+idx);
-    if(kgEl&&set.kg){kgEl.value=calcLoad(set.kg,rm);}
+    var pctEl=document.getElementById('pct-pausesq-'+idx);
+    if(kgEl&&set.kg){
+      kgEl.value=calcLoad(set.kg,rm);
+      if(pctEl) pctEl.value=parseFloat(set.kg)+'%';
+    }
   });
 }
 function populatePullLoads(){
@@ -1203,6 +1225,318 @@ function adjustRest(newSecs){
   rtEndTime=Date.now()+(newSecs*1000);
   rtTotal=newSecs;
   updateRTDisplay();
+}
+
+
+// ====== CORE SESSION ======
+var CORE_TIMER_DURATION = 20 * 60; // 20 min
+var coreTimerInterval = null;
+var coreTimerEnd = 0;
+
+function openCoreSession(coreNum) {
+  coreNum = coreNum || 1;
+  var coreData = CORE_SESSIONS[coreNum-1];
+  var body = document.getElementById('session-body-content');
+  body.innerHTML = '';
+
+  // Hero
+  var hero = document.createElement('div');
+  hero.className = 'session-hero';
+  hero.innerHTML = '<div class="sh-tag">Core Session - 20 min AMRAP</div>' +
+    '<div class="sh-name">Core ' + coreNum + '</div>' +
+    '<div class="sh-detail">Complete as many rounds as possible</div>';
+  body.appendChild(hero);
+
+  // Timer block
+  var timerBlock = document.createElement('div');
+  timerBlock.style.cssText = 'padding:24px 20px;text-align:center;border-bottom:1px solid var(--border)';
+  timerBlock.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:8px">AMRAP Timer</div>' +
+    '<div id="core-timer-display" style="font-family:var(--font-d);font-size:80px;font-weight:900;color:var(--text);line-height:1">20:00</div>' +
+    '<div style="display:flex;gap:10px;margin-top:16px;">' +
+    '<button onclick="startCoreTimer()" style="flex:1;background:var(--gold);color:#000;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px;border:none;border-radius:4px;cursor:pointer;">Start</button>' +
+    '<button onclick="stopCoreTimer()" style="flex:1;background:var(--bg3);color:var(--text2);font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px;border:1px solid var(--border2);border-radius:4px;cursor:pointer;">Reset</button>' +
+    '</div>';
+  body.appendChild(timerBlock);
+
+  // Core picker button
+  var pickerBtn = document.createElement('div');
+  pickerBtn.style.cssText = 'padding:12px 20px;border-bottom:1px solid var(--border)';
+  pickerBtn.innerHTML = '<button onclick="openCoreModal()" style="width:100%;background:var(--bg3);border:1px dashed var(--border2);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:12px;border-radius:4px;cursor:pointer;">Switch Core Session</button>';
+  body.appendChild(pickerBtn);
+
+  // Exercise cards
+  var exSection = document.createElement('div');
+  exSection.style.cssText = 'padding:20px';
+  exSection.innerHTML = '<div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:12px;">Exercises<span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
+
+  coreData.exercises.forEach(function(ex, i) {
+    var card = document.createElement('div');
+    card.style.cssText = 'background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;';
+    card.innerHTML =
+      '<div>' +
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Exercise ' + (i+1) + '</div>' +
+        '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text);text-transform:uppercase">' + ex.name + '</div>' +
+      '</div>' +
+      '<div style="text-align:right">' +
+        '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold)">' + ex.reps + '</div>' +
+        '<div style="font-family:var(--font-d);font-size:12px;color:var(--text2)">' + ex.load + '</div>' +
+      '</div>';
+    exSection.appendChild(card);
+  });
+  body.appendChild(exSection);
+
+  // Round counter
+  var roundBlock = document.createElement('div');
+  roundBlock.style.cssText = 'padding:0 20px 20px';
+  roundBlock.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:12px;">Rounds<span style="flex:1;height:1px;background:var(--border);display:block"></span></div>' +
+    '<div style="display:flex;align-items:center;justify-content:center;gap:20px">' +
+    '<button onclick="adjustRounds(-1)" style="width:52px;height:52px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:24px;cursor:pointer;">-</button>' +
+    '<div id="round-count" style="font-family:var(--font-d);font-size:64px;font-weight:900;color:var(--text);min-width:80px;text-align:center">0</div>' +
+    '<button onclick="adjustRounds(1)" style="width:52px;height:52px;background:var(--gold);border:none;border-radius:4px;color:#000;font-size:24px;cursor:pointer;">+</button>' +
+    '</div>';
+  body.appendChild(roundBlock);
+
+  // Notes + finish
+  var notesBlock = document.createElement('div');
+  notesBlock.className = 'session-notes-block';
+  notesBlock.innerHTML = '<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" rows="3" placeholder="Rounds completed, how it felt..."></textarea>';
+  body.appendChild(notesBlock);
+
+  var finBtn = document.createElement('button');
+  finBtn.className = 'finish-btn';
+  finBtn.textContent = 'Complete Session';
+  finBtn.addEventListener('click', function(){if(confirm('Mark session as complete?')){stopCoreTimer();navTo('today');}});
+  body.appendChild(finBtn);
+
+  document.getElementById('session-back-btn').onclick = function(){stopCoreTimer();navTo('today');};
+  showScreen('screen-session');
+}
+
+function startCoreTimer(){
+  coreTimerEnd = Date.now() + (CORE_TIMER_DURATION * 1000);
+  requestWakeLock();
+  if(coreTimerInterval) clearInterval(coreTimerInterval);
+  coreTimerInterval = setInterval(updateCoreTimer, 500);
+}
+
+function stopCoreTimer(){
+  if(coreTimerInterval) clearInterval(coreTimerInterval);
+  coreTimerEnd = 0;
+  releaseWakeLock();
+  var el = document.getElementById('core-timer-display');
+  if(el) el.textContent = '20:00';
+}
+
+function updateCoreTimer(){
+  var el = document.getElementById('core-timer-display');
+  if(!el) return;
+  var remaining = Math.max(0, Math.ceil((coreTimerEnd - Date.now())/1000));
+  var m = Math.floor(remaining/60), s = remaining%60;
+  el.textContent = m+':'+(s<10?'0':'')+s;
+  if(remaining<=0){
+    clearInterval(coreTimerInterval);
+    releaseWakeLock();
+    el.textContent = 'DONE!';
+  }
+}
+
+var roundCount = 0;
+function adjustRounds(n){
+  roundCount = Math.max(0, roundCount+n);
+  var el = document.getElementById('round-count');
+  if(el) el.textContent = roundCount;
+}
+
+
+// ====== CORE SESSION ======
+var coreTimerInterval=null;
+var coreSecsLeft=0;
+var coreExIdx=0;
+var coreRepIdx=0;
+var coreSession=null;
+var coreLog=[];
+var corePrepInterval=null;
+
+function openCoreSessionFromPicker(coreNum){
+  closeCoreModal();
+  coreSession=CORE_SESSIONS[coreNum-1];
+  coreLog=[];
+  coreExIdx=0;
+  coreRepIdx=0;
+  startCorePrepCountdown();
+}
+
+function startCorePrepCountdown(){
+  var body=document.getElementById('session-body-content');body.innerHTML='';
+  showScreen('screen-session');
+  document.getElementById('session-back-btn').onclick=function(){
+    if(coreTimerInterval)clearInterval(coreTimerInterval);
+    if(corePrepInterval)clearInterval(corePrepInterval);
+    navTo('today');
+  };
+
+  body.innerHTML=
+    '<div class="session-hero"><div class="sh-tag">Core Session</div>'+
+    '<div class="sh-name">Core '+coreSession.num+'</div>'+
+    '<div class="sh-detail">20 min AMRAP</div></div>'+
+    '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 20px;">'+
+    '<div style="font-family:var(--font-d);font-size:14px;letter-spacing:4px;color:var(--text2);text-transform:uppercase;margin-bottom:16px;">Get Ready</div>'+
+    '<div id="prep-count" style="font-family:var(--font-d);font-size:120px;font-weight:900;color:var(--gold);line-height:1;">5</div>'+
+    '</div>';
+
+  var prepSecs=5;
+  if(corePrepInterval)clearInterval(corePrepInterval);
+  corePrepInterval=setInterval(function(){
+    prepSecs--;
+    var el=document.getElementById('prep-count');
+    if(el) el.textContent=prepSecs;
+    if(prepSecs<=0){
+      clearInterval(corePrepInterval);
+      startCoreAMRAP();
+    }
+  },1000);
+}
+
+function startCoreAMRAP(){
+  coreSecsLeft=20*60;
+  requestWakeLock();
+  renderCoreScreen();
+  if(coreTimerInterval)clearInterval(coreTimerInterval);
+  coreTimerInterval=setInterval(function(){
+    coreSecsLeft--;
+    var el=document.getElementById('core-timer');
+    if(el){
+      var m=Math.floor(coreSecsLeft/60),s=coreSecsLeft%60;
+      el.textContent=m+':'+(s<10?'0':'')+s;
+    }
+    if(coreSecsLeft<=0){
+      clearInterval(coreTimerInterval);
+      releaseWakeLock();
+      showCoreEndPrompt();
+    }
+  },1000);
+}
+
+function getCoreExercises(){
+  // flatten: cycle through all 4 exercises in order
+  return coreSession.exercises;
+}
+
+function renderCoreScreen(){
+  var body=document.getElementById('session-body-content');
+  var exs=getCoreExercises();
+  var cur=exs[coreExIdx%exs.length];
+  var nxt=exs[(coreExIdx+1)%exs.length];
+  var m=Math.floor(coreSecsLeft/60),s=coreSecsLeft%60;
+
+  body.innerHTML=
+    '<div class="session-hero" style="padding:16px 20px;">'+
+    '<div class="sh-tag">Core '+coreSession.num+' - 20 min AMRAP</div>'+
+    '<div id="core-timer" style="font-family:var(--font-d);font-size:64px;font-weight:900;color:var(--gold);line-height:1;">'+
+    m+':'+(s<10?'0':'')+s+'</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+Math.ceil(coreExIdx/exs.length)+' rounds+ completed</div>'+
+    '</div>'+
+
+    // Current exercise tile
+    '<div style="padding:16px 20px;">'+
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:8px;">Now</div>'+
+    '<div id="core-cur-tile" class="core-ex-tile" style="background:var(--bg3);border:1px solid var(--gold);border-radius:4px;padding:20px;margin-bottom:12px;position:relative;overflow:hidden;cursor:grab;user-select:none;">'+
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Swipe left to complete</div>'+
+    '<div style="font-family:var(--font-d);font-size:28px;font-weight:700;color:var(--text);text-transform:uppercase;">'+cur.name+'</div>'+
+    '<div style="font-family:var(--font-d);font-size:22px;font-weight:600;color:var(--gold);margin-top:6px;">'+cur.reps+' <span style="color:var(--text2);font-size:16px;">'+cur.load+'</span></div>'+
+    '</div>'+
+
+    // Next exercise tile  
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--text2);text-transform:uppercase;margin-bottom:8px;">Next</div>'+
+    '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:16px;opacity:0.6;">'+
+    '<div style="font-family:var(--font-d);font-size:22px;font-weight:700;color:var(--text);text-transform:uppercase;">'+nxt.name+'</div>'+
+    '<div style="font-family:var(--font-d);font-size:18px;color:var(--text2);margin-top:4px;">'+nxt.reps+' '+nxt.load+'</div>'+
+    '</div>'+
+    '</div>';
+
+  // Wire up swipe
+  setTimeout(function(){
+    var tile=document.getElementById('core-cur-tile');
+    if(tile) setupSwipe(tile, function(){ completeCoreEx(); });
+  },0);
+}
+
+function setupSwipe(el, onSwipeLeft){
+  var startX=0, isDragging=false;
+  el.addEventListener('touchstart',function(e){
+    startX=e.touches[0].clientX;isDragging=true;
+  },{passive:true});
+  el.addEventListener('touchmove',function(e){
+    if(!isDragging)return;
+    var dx=e.touches[0].clientX-startX;
+    if(dx<0) el.style.transform='translateX('+dx+'px)';
+  },{passive:true});
+  el.addEventListener('touchend',function(e){
+    isDragging=false;
+    var dx=e.changedTouches[0].clientX-startX;
+    if(dx<-80){
+      el.style.transition='transform 0.3s ease';
+      el.style.transform='translateX(-110%)';
+      setTimeout(onSwipeLeft,300);
+    } else {
+      el.style.transition='transform 0.2s ease';
+      el.style.transform='translateX(0)';
+    }
+  },{passive:true});
+}
+
+function completeCoreEx(){
+  var exs=getCoreExercises();
+  var cur=exs[coreExIdx%exs.length];
+  // Log this completion
+  coreLog.push({ex:cur.name,reps:cur.reps,load:cur.load,time:coreSecsLeft});
+  coreExIdx++;
+  renderCoreScreen();
+}
+
+function showCoreEndPrompt(){
+  var exs=getCoreExercises();
+  var cur=exs[coreExIdx%exs.length];
+  var fullRounds=Math.floor(coreExIdx/exs.length);
+  var partialEx=coreExIdx%exs.length;
+
+  var body=document.getElementById('session-body-content');
+  body.innerHTML=
+    '<div class="session-hero">'+
+    '<div class="sh-tag">Time Up!</div>'+
+    '<div class="sh-name">Core '+coreSession.num+'</div>'+
+    '<div class="sh-detail">'+fullRounds+' full rounds + '+partialEx+' exercises</div>'+
+    '</div>'+
+    '<div style="padding:24px 20px;">'+
+    '<div style="font-family:var(--font-d);font-size:16px;color:var(--text);margin-bottom:20px;">How many reps did you complete on <span style="color:var(--gold);">'+cur.name+'</span> before time ran out?</div>'+
+    '<input type="number" id="final-reps-input" class="field-input" placeholder="0" inputmode="numeric" style="margin-bottom:20px;">'+
+    '<button class="finish-btn" onclick="logCoreSession()">Save Session</button>'+
+    '</div>';
+}
+
+function logCoreSession(){
+  var finalReps=parseInt(document.getElementById('final-reps-input').value)||0;
+  var exs=getCoreExercises();
+  var fullRounds=Math.floor(coreExIdx/exs.length);
+  var totalReps=coreLog.reduce(function(sum,e){
+    var r=parseInt(String(e.reps).replace(/[^0-9]/g,''))||0;
+    return sum+r;
+  },0)+finalReps;
+
+  // Save to localStorage
+  var logs=JSON.parse(localStorage.getItem('phoenix_core_logs')||'[]');
+  logs.push({
+    date:new Date().toISOString(),
+    coreNum:coreSession.num,
+    fullRounds:fullRounds,
+    totalReps:totalReps,
+    finalPartialReps:finalReps,
+    log:coreLog
+  });
+  localStorage.setItem('phoenix_core_logs',JSON.stringify(logs));
+  navTo('today');
 }
 
 document.addEventListener("DOMContentLoaded", function() {

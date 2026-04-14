@@ -881,20 +881,52 @@ var rtInterval=null;
 var rtTotal=0;
 var rtRemaining=0;
 
-function startRestTimer(secs,nextLabel){
-  rtTotal=secs;rtRemaining=secs;updateRTDisplay();
+var rtEndTime=0;
+var wakeLock=null;
+
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock=await navigator.wakeLock.request('screen');
+    }
+  }catch(e){}
+}
+function releaseWakeLock(){
+  if(wakeLock){wakeLock.release();wakeLock=null;}
+}
+
+function startRestTimer(secs,nextLabel,nextKg,nextReps){
+  rtTotal=secs;
+  rtEndTime=Date.now()+(secs*1000);
   document.getElementById('rt-next').textContent=nextLabel||'Next set';
+  // Show next set kg/reps if provided
+  var nextInfo=document.getElementById('rt-next-info');
+  if(nextInfo){
+    if(nextKg||nextReps){
+      nextInfo.textContent=(nextKg?nextKg:'')+(nextKg&&nextReps?' x ':'')+(nextReps?nextReps+' reps':'');
+      nextInfo.style.display='block';
+    } else {
+      nextInfo.style.display='none';
+    }
+  }
+  // Show rest selector in overlay
+  var overlayRest=document.getElementById('rt-rest-selector');
+  if(overlayRest){overlayRest.style.display='flex';}
   document.getElementById('rest-overlay').classList.add('active');
+  requestWakeLock();
   if(rtInterval)clearInterval(rtInterval);
-  rtInterval=setInterval(function(){
-    rtRemaining--;updateRTDisplay();
-    if(rtRemaining<=0){clearInterval(rtInterval);document.getElementById('rest-overlay').classList.remove('active');}
-  },1000);
+  rtInterval=setInterval(updateRTDisplay,500);
 }
 function updateRTDisplay(){
-  var m=Math.floor(rtRemaining/60),s=rtRemaining%60;
+  var remaining=Math.max(0,Math.ceil((rtEndTime-Date.now())/1000));
+  var m=Math.floor(remaining/60),s=remaining%60;
   document.getElementById('rt-display').textContent=m+':'+(s<10?'0':'')+s;
-  document.getElementById('rt-bar').style.width=(rtTotal>0?(rtRemaining/rtTotal*100):0)+'%';
+  document.getElementById('rt-bar').style.width=(rtTotal>0?(remaining/rtTotal*100):0)+'%';
+  if(remaining<=0){
+    clearInterval(rtInterval);
+    document.getElementById('rest-overlay').classList.remove('active');
+    releaseWakeLock();
+  }
 }
 document.addEventListener('DOMContentLoaded',function(){
   var rtSkip=document.getElementById('rt-skip');
@@ -923,6 +955,7 @@ function openSession(sessionId){
   hero.innerHTML='<div class="sh-tag">Monday AM &middot; Lifting</div><div class="sh-name">ME Upper Pull</div><div class="sh-detail">Wide Grip Chins &middot; Dips &middot; Rows &middot; Shoulders &middot; Arms</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
   body.appendChild(hero);
   ME_PULL_STRUCTURE.forEach(function(ex){body.appendChild(renderExBlock(ex));});
+  setTimeout(populatePullLoads,50);
   var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
   notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? Any modifications..."></textarea>';
   body.appendChild(notesBlock);
@@ -983,7 +1016,15 @@ function onSetDone(ex,idx){
   var restSecs=ex.restOptions?chinRestSecs:(ex.autoRest||0);
   var nextIdx=idx+1;
   var nextLabel=nextIdx<ex.sets.length?'Set '+(nextIdx+1):'Move to next exercise';
-  if(restSecs>0)startRestTimer(restSecs,nextLabel);
+  // Get next set info for overlay display
+  var nextKg='',nextReps='';
+  if(nextIdx<ex.sets.length){
+    var nkEl=document.getElementById('kg-'+ex.id+'-'+nextIdx);
+    var nrEl=document.getElementById('reps-'+ex.id+'-'+nextIdx);
+    if(nkEl)nextKg=nkEl.value||nkEl.getAttribute('value')||'';
+    if(nrEl)nextReps=nrEl.value||nrEl.getAttribute('value')||'';
+  }
+  if(restSecs>0)startRestTimer(restSecs,nextLabel,nextKg,nextReps);
 }
 function pickExercise(exId,optionsKey){
   var titleMap={row:'Select Row Exercise',delt:'Select Delt Exercise',shrug:'Select Shrug Exercise',curl:'Select Curl / Arm Exercise',legcurl:'Select Leg Curl Exercise',backhip:'Select Back / Hip Exercise',unilateral:'Select Unilateral Exercise',de_lower:'Select DE Finisher'};
@@ -1108,6 +1149,7 @@ function openLowerSqSession() {
   hero.innerHTML='<div class="sh-tag">Tuesday AM - Lifting</div><div class="sh-name">ME Lower</div><div class="sh-detail">Back Squat / Pause Squat / Unilateral / Hamstrings / DE</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
   body.appendChild(hero);
   ME_LOWER_SQ_STRUCTURE.forEach(function(ex){body.appendChild(renderExBlock(ex));});
+  setTimeout(populateSqLoads,50);
   var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
   notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? PBs? Modifications..."></textarea>';
   body.appendChild(notesBlock);
@@ -1116,6 +1158,51 @@ function openLowerSqSession() {
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
   showScreen('screen-session');
+}
+
+
+function calcLoad(pct,rm){
+  if(!rm||rm===0) return pct;
+  var num=parseFloat(pct);
+  if(isNaN(num)) return pct;
+  var kg=Math.round((rm*(num/100))/2.5)*2.5;
+  return kg+'kg ('+pct+'%)';
+}
+function populateSqLoads(){
+  if(!athlete||!athlete.sq) return;
+  var rm=parseFloat(athlete.sq);
+  if(!rm) return;
+  ME_LOWER_SQ_STRUCTURE[0].sets.forEach(function(set,idx){
+    var kgEl=document.getElementById('kg-squat-'+idx);
+    if(kgEl&&set.kg&&set.kg.indexOf('%')>-1){
+      kgEl.value=calcLoad(set.kg,rm);
+    }
+  });
+  // Pause squat
+  ME_LOWER_SQ_STRUCTURE[1].sets.forEach(function(set,idx){
+    var kgEl=document.getElementById('kg-pausesq-'+idx);
+    if(kgEl&&set.kg){kgEl.value=calcLoad(set.kg,rm);}
+  });
+}
+function populatePullLoads(){
+  if(!athlete||!athlete.p1rm) return;
+  var rm=parseFloat(athlete.p1rm);
+  if(!rm) return;
+  // Chin sets 3+ have added weight
+  ['3','4','5','6'].forEach(function(setNum,i){
+    var kgEl=document.getElementById('kg-chins-'+(i+2));
+    if(kgEl){
+      var base=[5,7.5,10,12.5][i];
+      kgEl.value='+'+base+'kg';
+    }
+  });
+}
+
+
+function adjustRest(newSecs){
+  rtEndTime=Date.now()+(newSecs*1000);
+  rtTotal=newSecs;
+  updateRTDisplay();
 }
 
 document.addEventListener("DOMContentLoaded", function() {
@@ -1158,7 +1245,18 @@ if(athlete){
   <div class="rest-timer-label">Rest</div>
   <div class="rest-timer-display" id="rt-display">3:00</div>
   <div class="rest-timer-next" id="rt-next">Next set</div>
+  <div id="rt-next-info" style="font-family:var(--font-d);font-size:28px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:8px;display:none"></div>
   <div class="rest-timer-bar-wrap"><div class="rest-timer-bar" id="rt-bar" style="width:100%"></div></div>
+  <div id="rt-rest-selector" style="display:none;align-items:center;gap:8px;margin-bottom:24px;">
+    <span style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase">Adjust Rest</span>
+    <div style="display:flex;gap:6px;" id="rt-rest-opts">
+      <div class="rest-opt" onclick="adjustRest(120)">2m</div>
+      <div class="rest-opt" onclick="adjustRest(180)">3m</div>
+      <div class="rest-opt" onclick="adjustRest(240)">4m</div>
+      <div class="rest-opt" onclick="adjustRest(300)">5m</div>
+      <div class="rest-opt" onclick="adjustRest(360)">6m</div>
+    </div>
+  </div>
   <button class="rest-skip-btn" id="rt-skip">Skip Rest</button>
 </div>
 

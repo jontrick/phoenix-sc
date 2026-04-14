@@ -788,13 +788,21 @@ function renderWeekSched(w){
   document.getElementById('wk-num').innerHTML='Week '+w+(dl?' <span class="deload-badge">Deload</span>':'');
   document.getElementById('wk-phase').textContent=getPhase(w);
   var sched=buildWeek(w);
-  var c=document.getElementById('week-sched');
-  c.innerHTML='';
+  var container=document.getElementById('week-sched');
+  container.innerHTML='';
   sched.forEach(function(day,i){
     var block=document.createElement('div');
     block.className='day-block';
-    block.innerHTML='<div class="day-header"><div class="day-name">'+DAYS[i]+'</div></div><div class="day-slots">'+renderSlot('AM',day.am)+renderSlot('PM',day.pm)+'</div>';
-    c.appendChild(block);
+    var header=document.createElement('div');
+    header.className='day-header';
+    header.innerHTML='<div class="day-name">'+DAYS[i]+'</div>';
+    var slots=document.createElement('div');
+    slots.className='day-slots';
+    slots.appendChild(renderSlot('AM',day.am));
+    slots.appendChild(renderSlot('PM',day.pm));
+    block.appendChild(header);
+    block.appendChild(slots);
+    container.appendChild(block);
   });
 }
 function renderSlot(t,s){
@@ -810,20 +818,13 @@ function renderSlot(t,s){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
     } else if(sid==='me-lower-sq'){
       div.addEventListener('click',function(){openLowerSqSession();});
-    } else if(sid==='core'){
-      div.addEventListener('click',function(){openCoreModal();});
-    } else if(sid==='me-lower-sq'){
-      div.addEventListener('click',function(){openLowerSqSession();});
-    } else if(sid==='core'){
-      div.addEventListener('click',function(){openCoreModal();});
     } else {
       div.addEventListener('click',function(){alert(s.name+' - coming soon!');});
     }
   }
-  return div.outerHTML;
+  return div;
 }
 
-// ====== STATS ======
 function renderStats(){
   if(!athlete) return;
   document.getElementById('s-name').textContent=athlete.name||'-';
@@ -1011,10 +1012,25 @@ function renderSetRow(ex,set,idx){
   var kgVal=set.kg!==undefined?set.kg:'';
   var repsVal=set.reps!==undefined?set.reps:'';
   var kgReadonly=set.kgFixed?' readonly style="opacity:0.6;color:var(--text2)"':'';
-  return '<div class="set-row" id="setrow-'+ex.id+'-'+idx+'">'+
+  // Detect if this set has a % reference
+  var rawKg=String(kgVal);
+  var hasPct=rawKg.indexOf('%')>-1;
+  var pctVal='';
+  if(hasPct){
+    // Extract just the number% e.g. "50%" from "50%" or "70kg" after populate
+    var m=rawKg.match(/([\d.]+)%/);
+    pctVal=m?m[1]+'%':'';
+    // kg field will be populated by populateLoads - show placeholder if empty
+  }
+  var pctBox=hasPct?
+    '<div class="set-col" style="max-width:60px"><input type="text" class="set-input" id="pct-'+ex.id+'-'+idx+'" value="'+pctVal+'" placeholder="%" readonly style="opacity:0.55;color:var(--text2);font-size:15px;text-align:center"><div class="set-input-label">%</div></div>':
+    '';
+  var gridCols=hasPct?'28px 60px 1fr 1fr auto':'28px 1fr 1fr auto';
+  return '<div class="set-row" id="setrow-'+ex.id+'-'+idx+'" style="grid-template-columns:'+gridCols+'">'+
     '<div class="set-num">'+(idx+1)+'</div>'+
+    pctBox+
+    '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+(hasPct?'':kgVal)+'" placeholder="kg"'+kgReadonly+' inputmode="decimal"><div class="set-input-label">kg</div></div>'+
     '<div class="set-col"><input type="number" class="set-input reps" id="reps-'+ex.id+'-'+idx+'" value="'+repsVal+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
-    '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+kgVal+'" placeholder="kg"'+kgReadonly+' inputmode="decimal"><div class="set-input-label">kg</div></div>'+
     '<button class="set-done-btn" id="done-'+ex.id+'-'+idx+'">&#10003;</button>'+
     '</div>';
 }
@@ -1192,20 +1208,29 @@ function populateSqLoads(){
   ME_LOWER_SQ_STRUCTURE[0].sets.forEach(function(set,idx){
     var kgEl=document.getElementById('kg-squat-'+idx);
     var pctEl=document.getElementById('pct-squat-'+idx);
-    if(kgEl&&set.kg&&set.kg.indexOf('%')>-1){
-      kgEl.value=calcLoad(set.kg,rm);
-      if(pctEl) pctEl.value=parseFloat(set.kg)+'%';
+    if(set.kg&&String(set.kg).indexOf('%')>-1){
+      var clean=String(set.kg).replace(/%/g,'').replace(/[+]/g,'').trim();
+      var num=parseFloat(clean);
+      if(!isNaN(num)&&kgEl){
+        var kg=Math.round((rm*(num/100))/2.5)*2.5;
+        kgEl.value=kg+'kg';
+      }
+      if(pctEl) pctEl.value=set.kg;
     }
   });
   ME_LOWER_SQ_STRUCTURE[1].sets.forEach(function(set,idx){
     var kgEl=document.getElementById('kg-pausesq-'+idx);
-    var pctEl=document.getElementById('pct-pausesq-'+idx);
-    if(kgEl&&set.kg){
-      kgEl.value=calcLoad(set.kg,rm);
-      if(pctEl) pctEl.value=parseFloat(set.kg)+'%';
+    if(set.kg&&String(set.kg).indexOf('%')>-1){
+      var clean=String(set.kg).replace(/%/g,'').trim();
+      var num=parseFloat(clean);
+      if(!isNaN(num)&&kgEl){
+        var kg=Math.round((rm*(num/100))/2.5)*2.5;
+        kgEl.value=kg+'kg';
+      }
     }
   });
 }
+
 function populatePullLoads(){
   if(!athlete||!athlete.p1rm) return;
   var rm=parseFloat(athlete.p1rm);

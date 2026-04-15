@@ -1232,7 +1232,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.2.0';
+var APP_VERSION='3.2.1';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -1375,23 +1375,22 @@ document.getElementById('ob-back').addEventListener('click',function(){
 function finishOB(){
   var name=document.getElementById('f-name').value||'';
   if(!name.trim()){alert('Please enter your name to continue.');return;}
+  var g=function(id){var el=document.getElementById(id);return el?el.value:'';};
   var d={
     name:name,
-    bw:parseFloat(document.getElementById('f-bw').value)||0,
-    startDate:document.getElementById('f-start').value||new Date().toISOString().split('T')[0],
-    b1rm:parseFloat(document.getElementById('f-b1rm').value)||0,
-    b100:parseFloat(document.getElementById('f-b100').value)||0,
-    p1rm:parseFloat(document.getElementById('f-p1rm').value)||0,
-    pbw:parseFloat(document.getElementById('f-pbw').value)||0,
-    sq:parseFloat(document.getElementById('f-sq').value)||0,
-    dl:parseFloat(document.getElementById('f-dl').value)||0,
-    row500:document.getElementById('f-row500').value||'',
-    mile:document.getElementById('f-mile').value||'',
-    plank:parseFloat(document.getElementById('f-plank').value)||0,
-    broadjump:parseFloat(document.getElementById('f-broadjump').value)||0,
-    ohsq:document.getElementById('f-ohsq').value||''
+    bw:parseFloat(g('f-bw'))||0,
+    startDate:g('f-start')||new Date().toISOString().split('T')[0],
+    b1rm:parseFloat(g('f-b1rm'))||0,
+    b100:parseFloat(g('f-b100'))||0,
+    p1rm:parseFloat(g('f-p1rm'))||0,
+    pbw:parseFloat(g('f-pbw'))||0,
+    sq:parseFloat(g('f-sq'))||0,
+    dl:parseFloat(g('f-dl'))||0,
+    row500:g('f-row500'),
+    mile:g('f-mile'),
+    plank:parseFloat(g('f-plank'))||0,
+    ohsq:g('f-ohsq')
   };
-  // Merge with any existing questionnaire data
   if(athlete) d=Object.assign({},athlete,d);
   saveAthlete(d);
   viewWeek=progWeek();
@@ -1400,21 +1399,20 @@ function finishOB(){
 }
 function editProfile(){
   if(athlete){
-    document.getElementById('f-name').value=athlete.name||'';
-    document.getElementById('f-bw').value=athlete.bw||'';
-    document.getElementById('f-start').value=athlete.startDate||'';
-    document.getElementById('f-b1rm').value=athlete.b1rm||'';
-    document.getElementById('f-b100').value=athlete.b100||'';
-    document.getElementById('f-p1rm').value=athlete.p1rm||'';
-    document.getElementById('f-pbw').value=athlete.pbw||'';
-    document.getElementById('f-sq').value=athlete.sq||'';
-    document.getElementById('f-dl').value=athlete.dl||'';
-    document.getElementById('f-row500').value=athlete.row500||'';
-    document.getElementById('f-mile').value=athlete.mile||'';
-    document.getElementById('f-plank').value=athlete.plank||'';
-    document.getElementById('f-broadjump').value=athlete.broadjump||'';
-    var ohsq=document.getElementById('f-ohsq');
-    if(ohsq) ohsq.value=athlete.ohsq||'';
+    var s=function(id,val){var el=document.getElementById(id);if(el) el.value=val||'';};
+    s('f-name',athlete.name);
+    s('f-bw',athlete.bw);
+    s('f-start',athlete.startDate);
+    s('f-b1rm',athlete.b1rm);
+    s('f-b100',athlete.b100);
+    s('f-p1rm',athlete.p1rm);
+    s('f-pbw',athlete.pbw);
+    s('f-sq',athlete.sq);
+    s('f-dl',athlete.dl);
+    s('f-row500',athlete.row500);
+    s('f-mile',athlete.mile);
+    s('f-plank',athlete.plank);
+    s('f-ohsq',athlete.ohsq);
   }
   obStep=1;updateOB();showScreen('screen-onboard');
 }

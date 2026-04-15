@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>PROJECT PHOENIX PLAN</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -94,6 +95,47 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .feedback-type-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
 .feedback-type-btn{padding:8px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;cursor:pointer;font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;}
 .feedback-type-btn.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
+
+/* SIDEBAR */
+.sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;opacity:0;pointer-events:none;transition:opacity 0.25s;}
+.sidebar-overlay.active{opacity:1;pointer-events:all;}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:280px;background:var(--bg2);border-right:1px solid var(--border2);z-index:301;transform:translateX(-100%);transition:transform 0.25s ease;overflow-y:auto;padding-bottom:40px;}
+.sidebar.active{transform:translateX(0);}
+.sidebar-header{padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.sidebar-logo{font-family:var(--font-d);font-size:18px;font-weight:900;letter-spacing:2px;text-transform:uppercase;}
+.sidebar-logo span{color:var(--gold);}
+.sidebar-close{width:32px;height:32px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:16px;}
+.sidebar-section{padding:16px 20px 8px;}
+.sidebar-section-label{font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;}
+.sidebar-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:all 0.15s;}
+.sidebar-item:last-child{border-bottom:none;}
+.sidebar-item:active{opacity:0.7;}
+.sidebar-item-icon{width:36px;height:36px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;}
+.sidebar-item-icon.gold{background:var(--gold-dim);border:1px solid var(--gold);}
+.sidebar-item-icon.blue{background:var(--blue-dim);border:1px solid var(--blue);}
+.sidebar-item-icon.orange{background:var(--orange-dim);border:1px solid var(--orange);}
+.sidebar-item-icon.green{background:var(--green-dim);border:1px solid var(--green);}
+.sidebar-item-icon.purple{background:var(--purple-dim);border:1px solid var(--purple);}
+.sidebar-item-text{font-family:var(--font-d);font-size:16px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text);}
+.sidebar-item-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.hamburger-btn{width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;}
+.hamburger-btn span{display:block;width:16px;height:1.5px;background:var(--text2);}
+
+/* GPS WALK TRACKER */
+.walk-tracker-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+#walk-map{flex:1;min-height:300px;background:var(--bg3);}
+.walk-tracker-panel{background:var(--bg);border-top:1px solid var(--border);padding:16px 20px;padding-bottom:max(16px,env(safe-area-inset-bottom));}
+.walk-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.walk-live-stat{text-align:center;}
+.walk-live-num{font-family:var(--font-d);font-size:28px;font-weight:900;color:var(--text);line-height:1;}
+.walk-live-unit{font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-top:2px;}
+.walk-controls{display:flex;gap:10px;}
+.walk-ctrl-btn{flex:1;padding:14px;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;cursor:pointer;transition:all 0.2s;}
+.walk-ctrl-btn.start{background:var(--gold);color:#000;}
+.walk-ctrl-btn.pause{background:var(--orange);color:#fff;}
+.walk-ctrl-btn.stop{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);}
+.walk-weight-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.walk-weight-row label{font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;white-space:nowrap;}
 
 /* SPLASH */
 #screen-splash{align-items:center;justify-content:center;background:var(--bg);position:relative;overflow:hidden;}
@@ -394,36 +436,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 <!-- TODAY SCREEN -->
 <div id="screen-today" class="screen">
 <div class="app-header">
+  <div class="hamburger-btn" onclick="openSidebar()">
+    <span></span><span></span><span></span>
+  </div>
   <div class="header-logo">PHOENIX <span>PLAN</span></div>
-  <div class="icon-btn" onclick="showScreen('screen-athlete')">
+  <div class="icon-btn" onclick="navTo('athlete')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
   </div>
 </div>
 <div class="today-body">
   <div class="today-hero">
-    <div class="today-tag">Today</div>
+    <div class="today-tag" id="today-greeting-tag">Today</div>
     <div class="today-dayname" id="t-dayname">Monday</div>
     <div class="today-datestr" id="t-datestr"></div>
     <div class="today-week-badge" id="t-weekbadge">Week 1</div>
   </div>
   <div class="session-tiles" id="t-tiles"></div>
-  <div style="padding:0 20px 12px;">
-    <div style="font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;">Quick log</div>
-    <div style="display:flex;gap:10px;">
-      <div onclick="openWalkLog()" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;cursor:pointer;text-align:center;">
-        <div style="font-size:18px;margin-bottom:4px;">&#128694;</div>
-        <div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Log Walk</div>
-      </div>
-      <div onclick="openTBBSSession()" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;cursor:pointer;text-align:center;">
-        <div style="font-size:18px;margin-bottom:4px;">&#127947;</div>
-        <div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Basic Split</div>
-      </div>
-      <div onclick="openFoundationQ()" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:12px;cursor:pointer;text-align:center;">
-        <div style="font-size:18px;margin-bottom:4px;">&#9889;</div>
-        <div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">My Profile</div>
-      </div>
-    </div>
-  </div>
   <div style="padding:0 20px 80px;">
     <div onclick="navTo('coming')" style="background:linear-gradient(135deg,var(--gold-dim),transparent);border:1px solid var(--gold);border-radius:var(--radius);padding:14px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
       <div>
@@ -871,73 +899,56 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 </div>
 </div>
 
-<!-- WALK LOG SCREEN -->
+<!-- WALK TRACKER SCREEN -->
 <div id="screen-walk" class="screen">
 <div class="app-header">
-  <div class="icon-btn" onclick="navTo('today')">
+  <div class="icon-btn" id="walk-back-btn">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
   </div>
-  <div class="header-logo">PHOENIX <span>PLAN</span></div>
-  <div style="width:36px"></div>
+  <div class="header-logo">PHOENIX <span>WALK</span></div>
+  <div id="walk-streak-badge" style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);display:none">&#128293; <span id="walk-streak-hdr">0</span></div>
 </div>
-<div class="walk-log-body">
-  <div class="today-hero" style="margin-bottom:20px;">
-    <div class="today-tag">Daily Walk</div>
-    <div class="today-dayname" id="walk-dayname">Today</div>
-    <div class="today-datestr" id="walk-datestr"></div>
-  </div>
-
-  <div id="walk-streak-banner" style="display:none" class="streak-banner">
-    <div class="streak-fire">&#128293;</div>
-    <div>
-      <div class="streak-num" id="walk-streak-num">0</div>
-      <div class="streak-label">Day streak</div>
+<div class="walk-tracker-body">
+  <div id="walk-map"></div>
+  <div class="walk-tracker-panel">
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button id="mode-walk-btn" class="walk-ctrl-btn start" onclick="setWalkMode('walk')" style="flex:1;padding:10px;font-size:13px;">Walk</button>
+      <button id="mode-run-btn" class="walk-ctrl-btn start" onclick="setWalkMode('run')" style="flex:1;padding:10px;font-size:13px;background:var(--bg3);color:var(--text2);border:1px solid var(--border2);">Run</button>
     </div>
-    <div style="margin-left:auto;font-size:12px;color:var(--text2);text-align:right;line-height:1.5" id="walk-streak-msg"></div>
-  </div>
-
-  <div class="section-hdr">Log your walk</div>
-
-  <div class="walk-stat-row">
-    <div class="walk-stat-card">
-      <div class="walk-stat-label">Distance</div>
-      <input type="number" id="walk-distance" class="field-input" placeholder="0.0" inputmode="decimal" step="0.1" style="background:transparent;border:none;text-align:center;font-family:var(--font-d);font-size:36px;font-weight:900;padding:0;width:100%;">
-      <div class="walk-stat-unit">km</div>
+    <div class="walk-weight-row">
+      <label>Weight</label>
+      <input type="number" id="walk-weight" class="field-input" placeholder="0" inputmode="decimal" step="0.5" style="width:70px;padding:8px 10px;font-size:16px;text-align:center;">
+      <span style="font-family:var(--font-d);font-size:12px;color:var(--text3);">KG</span>
+      <div style="flex:1"></div>
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-right:6px;">Feel</div>
+      <select id="walk-feel-select" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--font-d);font-size:13px;padding:6px 8px;border-radius:var(--radius);">
+        <option value="1">1 - Rough</option>
+        <option value="2">2 - Hard</option>
+        <option value="3" selected>3 - OK</option>
+        <option value="4">4 - Good</option>
+        <option value="5">5 - Strong</option>
+      </select>
     </div>
-    <div class="walk-stat-card">
-      <div class="walk-stat-label">Duration</div>
-      <input type="number" id="walk-duration" class="field-input" placeholder="0" inputmode="numeric" style="background:transparent;border:none;text-align:center;font-family:var(--font-d);font-size:36px;font-weight:900;padding:0;width:100%;">
-      <div class="walk-stat-unit">min</div>
+    <div class="walk-stats-row">
+      <div class="walk-live-stat">
+        <div class="walk-live-num" id="wt-distance">0.00</div>
+        <div class="walk-live-unit">km</div>
+      </div>
+      <div class="walk-live-stat">
+        <div class="walk-live-num" id="wt-time">0:00</div>
+        <div class="walk-live-unit">time</div>
+      </div>
+      <div class="walk-live-stat">
+        <div class="walk-live-num" id="wt-pace">--:--</div>
+        <div class="walk-live-unit">min/km</div>
+      </div>
     </div>
-  </div>
-
-  <div class="walk-stat-row">
-    <div class="walk-stat-card">
-      <div class="walk-stat-label">Weight carried</div>
-      <input type="number" id="walk-weight" class="field-input" placeholder="0" inputmode="decimal" step="0.5" style="background:transparent;border:none;text-align:center;font-family:var(--font-d);font-size:36px;font-weight:900;padding:0;width:100%;">
-      <div class="walk-stat-unit">kg vest / pack</div>
-    </div>
-    <div class="walk-stat-card">
-      <div class="walk-stat-label">Steps (optional)</div>
-      <input type="number" id="walk-steps" class="field-input" placeholder="0" inputmode="numeric" style="background:transparent;border:none;text-align:center;font-family:var(--font-d);font-size:36px;font-weight:900;padding:0;width:100%;">
-      <div class="walk-stat-unit">steps</div>
+    <div class="walk-controls">
+      <button id="wt-start-btn" class="walk-ctrl-btn start" onclick="walkStart()">Start Walk</button>
+      <button id="wt-pause-btn" class="walk-ctrl-btn pause" onclick="walkPause()" style="display:none">Pause</button>
+      <button id="wt-stop-btn" class="walk-ctrl-btn stop" onclick="walkStop()">Save &amp; Exit</button>
     </div>
   </div>
-
-  <div class="section-hdr" style="margin-top:4px;">How did it feel?</div>
-  <div class="feel-row" id="walk-feel-row">
-    <div class="feel-btn" data-val="1" onclick="selectFeel(this)"><div class="feel-btn-num">1</div><div class="feel-btn-label">Rough</div></div>
-    <div class="feel-btn" data-val="2" onclick="selectFeel(this)"><div class="feel-btn-num">2</div><div class="feel-btn-label">Hard</div></div>
-    <div class="feel-btn" data-val="3" onclick="selectFeel(this)"><div class="feel-btn-num">3</div><div class="feel-btn-label">OK</div></div>
-    <div class="feel-btn" data-val="4" onclick="selectFeel(this)"><div class="feel-btn-num">4</div><div class="feel-btn-label">Good</div></div>
-    <div class="feel-btn" data-val="5" onclick="selectFeel(this)"><div class="feel-btn-num">5</div><div class="feel-btn-label">Strong</div></div>
-  </div>
-
-  <div class="section-hdr">Notes (optional)</div>
-  <textarea class="q-text-input" id="walk-notes" placeholder="Route, weather, how the body felt..." style="margin-bottom:20px;"></textarea>
-
-  <button class="btn-primary" style="max-width:100%;margin-bottom:12px;" onclick="logWalk()">Log Walk</button>
-  <button class="btn-secondary" style="max-width:100%;" onclick="navTo('today')">Cancel</button>
 </div>
 </div>
 
@@ -1042,6 +1053,66 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 </div>
 </div>
 
+<!-- SIDEBAR -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">PHOENIX <span>PLAN</span></div>
+    <div class="sidebar-close" onclick="closeSidebar()">&#10005;</div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Train</div>
+    <div class="sidebar-item" onclick="closeSidebar();openWalkLog()">
+      <div class="sidebar-item-icon gold" style="font-size:18px;">&#128694;</div>
+      <div><div class="sidebar-item-text">Log Walk</div><div class="sidebar-item-sub">GPS tracking + distance + pace</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();openTBBSSession()">
+      <div class="sidebar-item-icon gold" style="font-size:18px;">&#127947;</div>
+      <div><div class="sidebar-item-text">Basic Split</div><div class="sidebar-item-sub">Foundation total body session</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();openCoreModal()">
+      <div class="sidebar-item-icon blue" style="font-size:18px;">&#11035;</div>
+      <div><div class="sidebar-item-text">Core Session</div><div class="sidebar-item-sub">20 min AMRAP</div></div>
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Mind &amp; Recovery</div>
+    <div class="sidebar-item" onclick="closeSidebar();alert('Meditation and sleep sounds coming soon.')">
+      <div class="sidebar-item-icon purple" style="font-size:18px;">&#129504;</div>
+      <div><div class="sidebar-item-text">Meditation</div><div class="sidebar-item-sub">Timed + guided + sleep sounds</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();alert('Daily journal coming soon.')">
+      <div class="sidebar-item-icon blue" style="font-size:18px;">&#128221;</div>
+      <div><div class="sidebar-item-text">Journal</div><div class="sidebar-item-sub">Daily check-in + free write</div></div>
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">My Phoenix</div>
+    <div class="sidebar-item" onclick="closeSidebar();openFoundationQ()">
+      <div class="sidebar-item-icon orange" style="font-size:18px;">&#9889;</div>
+      <div><div class="sidebar-item-text">My Profile</div><div class="sidebar-item-sub">Goals, injuries, programme path</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();navTo('coming')">
+      <div class="sidebar-item-icon gold" style="font-size:18px;">&#128293;</div>
+      <div><div class="sidebar-item-text">What's Coming</div><div class="sidebar-item-sub">This is just the beginning</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();showScreen('screen-feedback')">
+      <div class="sidebar-item-icon green" style="font-size:18px;">&#128172;</div>
+      <div><div class="sidebar-item-text">Feedback</div><div class="sidebar-item-sub">Help shape Phoenix</div></div>
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Walk streak</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 0;">
+      <div style="font-size:28px;">&#128293;</div>
+      <div>
+        <div style="font-family:var(--font-d);font-size:32px;font-weight:900;color:var(--gold);line-height:1;" id="sidebar-streak">0</div>
+        <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Day streak</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- CORE PICKER MODAL -->
 <div class="modal-overlay" id="core-modal">
 <div class="modal-sheet">
@@ -1054,7 +1125,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.0.0';
+var APP_VERSION='3.1.0';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -1258,6 +1329,7 @@ function renderToday(){
   document.getElementById('t-dayname').textContent=DAYS[dayIdx];
   document.getElementById('t-datestr').textContent=now.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
   document.getElementById('t-weekbadge').textContent='Week '+w+(isDeload(w)?' - Deload':'');
+  personaliseToday();
   var container=document.getElementById('t-tiles');
   container.innerHTML='';
   [{label:'AM',s:day.am},{label:'PM',s:day.pm}].forEach(function(slot){
@@ -2741,19 +2813,25 @@ var fqStep=1,fqTotalSteps=8;
 var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:''};
 
 function selectQ(key,el){
-  var container=el.parentElement;
-  container.querySelectorAll('.q-option').forEach(function(o){o.classList.remove('selected');o.querySelector('.q-check').textContent='';});
+  var container=el.closest('.q-options');
+  container.querySelectorAll('.q-option').forEach(function(o){
+    o.classList.remove('selected');
+    o.querySelector('.q-check').textContent='';
+  });
   el.classList.add('selected');
   el.querySelector('.q-check').textContent='✓';
   fqAnswers[key]=el.getAttribute('data-val');
 }
 function selectQMulti(key,el){
   if(key==='injury'&&el.getAttribute('data-val')==='none'){
-    el.parentElement.querySelectorAll('.q-option').forEach(function(o){o.classList.remove('selected');o.querySelector('.q-check').textContent='';});
+    el.closest('.q-options').querySelectorAll('.q-option').forEach(function(o){
+      o.classList.remove('selected');o.querySelector('.q-check').textContent='';
+    });
     el.classList.add('selected');el.querySelector('.q-check').textContent='✓';
     fqAnswers[key]=[];return;
   }
-  var none=el.parentElement.querySelector('[data-val="none"]');
+  // Clear "none" option if selecting something specific
+  var none=el.closest('.q-options').querySelector('[data-val="none"]');
   if(none){none.classList.remove('selected');none.querySelector('.q-check').textContent='';}
   el.classList.toggle('selected');
   var checked=el.classList.contains('selected');
@@ -2848,12 +2926,8 @@ function acceptWaiver(){
     var updated=Object.assign({},athlete,{waiverAccepted:new Date().toISOString()});
     saveAthlete(updated);
   }
-  // Check if they already have onboarding data, if not send to onboarding
-  if(!athlete||!athlete.name){
-    obStep=1;updateOB();showScreen('screen-onboard');
-  } else {
-    viewWeek=progWeek();renderToday();navTo('today');
-  }
+  // Always go to onboarding to capture strength measures
+  obStep=1;updateOB();showScreen('screen-onboard');
 }
 
 function openFoundationQ(){
@@ -2863,73 +2937,221 @@ function openFoundationQ(){
   showScreen('screen-foundation-q');
 }
 
-// ====== WALK LOGGING ======
-var selectedFeel=3;
+// ====== SIDEBAR ======
+function openSidebar(){
+  var streak=getWalkStreak();
+  var el=document.getElementById('sidebar-streak');
+  if(el) el.textContent=streak;
+  document.getElementById('sidebar').classList.add('active');
+  document.getElementById('sidebar-overlay').classList.add('active');
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('active');
+  document.getElementById('sidebar-overlay').classList.remove('active');
+}
+
+// ====== FIRST NAME PERSONALISATION ======
+function getFirstName(){
+  if(!athlete||!athlete.name) return null;
+  return athlete.name.split(' ')[0];
+}
+function personaliseToday(){
+  var name=getFirstName();
+  if(!name) return;
+  var tag=document.getElementById('today-greeting-tag');
+  if(tag) tag.textContent='Welcome back, '+name;
+}
+
+// ====== GPS WALK / RUN TRACKER ======
+var walkMap=null,walkMarker=null,walkPath=null;
+var walkTracking=false,walkPaused=false,walkMode='walk';
+var walkCoords=[],walkStartTime=0,walkPauseTime=0,walkTotalPause=0;
+var walkWatchId=null,walkTimerInterval=null,walkLeafletLoaded=false;
 
 function openWalkLog(){
-  var now=new Date();
-  document.getElementById('walk-dayname').textContent=now.toLocaleDateString('en-AU',{weekday:'long'});
-  document.getElementById('walk-datestr').textContent=now.toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'});
-  // Show streak
-  var streak=getWalkStreak();
-  var banner=document.getElementById('walk-streak-banner');
-  if(streak>0){
-    banner.style.display='flex';
-    document.getElementById('walk-streak-num').textContent=streak;
-    var msgs=['Keep it going!','Consistency is everything.','You\'re building something.','The habit is forming.','This is who you are now.'];
-    document.getElementById('walk-streak-msg').textContent=msgs[Math.min(Math.floor(streak/7),msgs.length-1)];
-  } else {
-    banner.style.display='none';
-  }
-  // Reset feel
-  selectedFeel=3;
-  document.querySelectorAll('.feel-btn').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-val')==='3');});
   showScreen('screen-walk');
+  var streak=getWalkStreak();
+  var badge=document.getElementById('walk-streak-badge');
+  var hdr=document.getElementById('walk-streak-hdr');
+  if(badge&&hdr){badge.style.display=streak>0?'block':'none';if(streak>0) hdr.textContent=streak+'d';}
+  // Reset UI
+  walkMode='walk';
+  updateWalkModeUI();
+  document.getElementById('wt-start-btn').style.display='block';
+  document.getElementById('wt-pause-btn').style.display='none';
+  document.getElementById('wt-distance').textContent='0.00';
+  document.getElementById('wt-time').textContent='0:00';
+  document.getElementById('wt-pace').textContent='--:--';
+  // Load Leaflet
+  if(!walkLeafletLoaded){
+    var script=document.createElement('script');
+    script.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js';
+    script.onload=function(){walkLeafletLoaded=true;setTimeout(initWalkMap,150);};
+    document.head.appendChild(script);
+  } else {
+    setTimeout(initWalkMap,150);
+  }
+  document.getElementById('walk-back-btn').onclick=function(){
+    if(walkTracking){if(!confirm('Stop and exit? Walk will not be saved.')) return;}
+    walkCleanup();navTo('today');
+  };
 }
 
-function selectFeel(el){
-  document.querySelectorAll('.feel-btn').forEach(function(b){b.classList.remove('active');});
-  el.classList.add('active');
-  selectedFeel=parseInt(el.getAttribute('data-val'));
+function setWalkMode(mode){
+  walkMode=mode;
+  updateWalkModeUI();
 }
 
-function logWalk(){
-  var dist=parseFloat(document.getElementById('walk-distance').value)||0;
-  var dur=parseInt(document.getElementById('walk-duration').value)||0;
+function updateWalkModeUI(){
+  var walkBtn=document.getElementById('mode-walk-btn');
+  var runBtn=document.getElementById('mode-run-btn');
+  var startBtn=document.getElementById('wt-start-btn');
+  if(walkBtn) walkBtn.classList.toggle('active',walkMode==='walk');
+  if(runBtn) runBtn.classList.toggle('active',walkMode==='run');
+  if(startBtn){
+    startBtn.textContent=walkMode==='run'?'Start Run':'Start Walk';
+    startBtn.style.background=walkMode==='run'?'var(--orange)':'var(--gold)';
+    startBtn.style.color=walkMode==='run'?'#fff':'#000';
+  }
+  if(walkPath) walkPath.setStyle({color:walkMode==='run'?'#e05c2a':'#c8963e'});
+}
+
+function initWalkMap(){
+  if(walkMap){walkMap.invalidateSize();return;}
+  var mapEl=document.getElementById('walk-map');
+  if(!mapEl||!window.L) return;
+  walkMap=L.map('walk-map',{zoomControl:true,attributionControl:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(walkMap);
+  walkPath=L.polyline([],{color:'#c8963e',weight:4,opacity:0.85}).addTo(walkMap);
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(function(pos){
+      walkMap.setView([pos.coords.latitude,pos.coords.longitude],16);
+      walkMarker=L.circleMarker([pos.coords.latitude,pos.coords.longitude],
+        {radius:9,fillColor:'#c8963e',color:'#fff',weight:2,fillOpacity:1}).addTo(walkMap);
+    },function(){walkMap.setView([-27.47,153.02],14);});
+  } else {walkMap.setView([-27.47,153.02],14);}
+}
+
+function walkStart(){
+  if(walkTracking) return;
+  walkTracking=true;walkPaused=false;
+  walkCoords=[];walkStartTime=Date.now();walkTotalPause=0;
+  document.getElementById('wt-start-btn').style.display='none';
+  document.getElementById('wt-pause-btn').style.display='block';
+  document.getElementById('wt-pause-btn').style.background=walkMode==='run'?'var(--orange)':'var(--gold)';
+  if(navigator.geolocation){
+    walkWatchId=navigator.geolocation.watchPosition(function(pos){
+      if(walkPaused) return;
+      var lat=pos.coords.latitude,lng=pos.coords.longitude;
+      walkCoords.push([lat,lng]);
+      if(walkPath) walkPath.setLatLngs(walkCoords);
+      if(walkMarker) walkMarker.setLatLng([lat,lng]);
+      else if(walkMap){
+        var col=walkMode==='run'?'#e05c2a':'#c8963e';
+        walkMarker=L.circleMarker([lat,lng],{radius:9,fillColor:col,color:'#fff',weight:2,fillOpacity:1}).addTo(walkMap);
+      }
+      if(walkMap) walkMap.panTo([lat,lng]);
+      updateWalkStats();
+    },{enableHighAccuracy:true,maximumAge:2000,timeout:10000});
+  }
+  walkTimerInterval=setInterval(updateWalkTimer,1000);
+  requestWakeLock();
+}
+
+function walkPause(){
+  if(!walkPaused){
+    walkPaused=true;walkPauseTime=Date.now();
+    document.getElementById('wt-pause-btn').textContent='Resume';
+  } else {
+    walkPaused=false;walkTotalPause+=Date.now()-walkPauseTime;
+    document.getElementById('wt-pause-btn').textContent='Pause';
+  }
+}
+
+function walkStop(){
+  var dist=calcWalkDistance();
+  var elapsed=walkTracking?Math.floor((Date.now()-walkStartTime-walkTotalPause)/1000):0;
+  var feel=parseInt(document.getElementById('walk-feel-select').value)||3;
   var weight=parseFloat(document.getElementById('walk-weight').value)||0;
-  var steps=parseInt(document.getElementById('walk-steps').value)||0;
-  var notes=document.getElementById('walk-notes').value||'';
-  if(!dist&&!dur){alert('Please enter at least distance or duration.');return;}
+  walkCleanup();
+  if(elapsed<10&&dist<0.01){navTo('today');return;}
   var entry={
     date:new Date().toISOString(),
-    distance:dist,duration:dur,weight:weight,steps:steps,feel:selectedFeel,notes:notes
+    mode:walkMode,
+    distance:Math.round(dist*100)/100,
+    duration:Math.round(elapsed/60),
+    durationSecs:elapsed,
+    weight:weight,feel:feel
   };
   var logs=JSON.parse(localStorage.getItem('phoenix_walk_logs')||'[]');
   logs.push(entry);
   localStorage.setItem('phoenix_walk_logs',JSON.stringify(logs));
-  // Check for free trial unlock
   checkFreeTrialUnlock();
   var streak=getWalkStreak();
-  var msg='Walk logged!';
-  if(streak===3) msg='3 day streak! Keep going.';
-  if(streak===7) msg='7 day streak! You\'re building a habit.';
-  if(streak===14) msg='14 days straight. Remarkable.';
-  if(streak===30) msg='30 day streak. You\'re a different person now.';
+  var name=getFirstName();
+  var activity=walkMode==='run'?'Run':'Walk';
+  var msg=activity+' saved! '+Math.round(dist*100)/100+'km';
+  if(elapsed>0) msg+=' in '+Math.round(elapsed/60)+'min';
+  if(name&&streak===1) msg='\nGreat start, '+name+'!';
+  if(streak===3) msg+='\n3 day streak!';
+  if(streak===7) msg+='\n7 days straight!';
+  if(streak===30) msg+='\n30 days. You changed.';
   alert(msg);
   navTo('today');
+}
+
+function walkCleanup(){
+  walkTracking=false;walkPaused=false;
+  if(walkWatchId!==null){navigator.geolocation.clearWatch(walkWatchId);walkWatchId=null;}
+  if(walkTimerInterval){clearInterval(walkTimerInterval);walkTimerInterval=null;}
+  releaseWakeLock();
+  walkCoords=[];
+  if(walkPath) walkPath.setLatLngs([]);
+}
+
+function calcWalkDistance(){
+  if(walkCoords.length<2) return 0;
+  var d=0;
+  for(var i=1;i<walkCoords.length;i++)
+    d+=haversine(walkCoords[i-1][0],walkCoords[i-1][1],walkCoords[i][0],walkCoords[i][1]);
+  return d;
+}
+function haversine(lat1,lon1,lat2,lon2){
+  var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+
+    Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function updateWalkTimer(){
+  if(!walkTracking||walkPaused) return;
+  var elapsed=Math.floor((Date.now()-walkStartTime-walkTotalPause)/1000);
+  var m=Math.floor(elapsed/60),s=elapsed%60;
+  var el=document.getElementById('wt-time');
+  if(el) el.textContent=m+':'+(s<10?'0':'')+s;
+}
+function updateWalkStats(){
+  var dist=calcWalkDistance();
+  var el=document.getElementById('wt-distance');
+  if(el) el.textContent=dist.toFixed(2);
+  if(dist>0.05){
+    var elapsed=(Date.now()-walkStartTime-walkTotalPause)/1000/60;
+    var pace=elapsed/dist;
+    var pm=Math.floor(pace),ps=Math.round((pace-pm)*60);
+    var pel=document.getElementById('wt-pace');
+    if(pel) pel.textContent=pm+':'+(ps<10?'0':'')+ps;
+  }
 }
 
 function getWalkStreak(){
   var logs=JSON.parse(localStorage.getItem('phoenix_walk_logs')||'[]');
   if(!logs.length) return 0;
   var today=new Date();today.setHours(0,0,0,0);
-  var streak=0;
-  var checkDate=new Date(today);
+  var streak=0,checkDate=new Date(today);
   for(var i=0;i<365;i++){
     var dateStr=checkDate.toISOString().split('T')[0];
-    var found=logs.some(function(l){return l.date.split('T')[0]===dateStr;});
-    if(found){streak++;checkDate.setDate(checkDate.getDate()-1);}
-    else break;
+    if(logs.some(function(l){return l.date.split('T')[0]===dateStr;})){
+      streak++;checkDate.setDate(checkDate.getDate()-1);
+    } else break;
   }
   return streak;
 }
@@ -3205,17 +3427,26 @@ document.addEventListener("DOMContentLoaded", function() {
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
 loadState();
 if(athlete){
+  // Returning user — show continue button
   document.getElementById('splash-continue-btn').style.display='block';
   document.getElementById('splash-start-btn').textContent='New Programme';
   document.getElementById('splash-continue-btn').addEventListener('click',function(){
     viewWeek=progWeek();renderToday();navTo('today');
   });
   document.getElementById('splash-start-btn').addEventListener('click',function(){
-    obStep=1;updateOB();showScreen('screen-onboard');
+    // Reset and restart from questionnaire
+    if(confirm('Start a new programme? This will reset your current progress.')){
+      localStorage.removeItem('phoenix_athlete');
+      localStorage.removeItem('phoenix_session_logs');
+      localStorage.removeItem('phoenix_core_logs');
+      localStorage.removeItem('phoenix_walk_logs');
+      athlete=null;location.reload();
+    }
   });
 } else {
+  // New user — go straight to Foundation questionnaire
   document.getElementById('splash-start-btn').addEventListener('click',function(){
-    obStep=1;updateOB();showScreen('screen-onboard');
+    openFoundationQ();
   });
 }
 

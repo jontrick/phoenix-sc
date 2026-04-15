@@ -520,6 +520,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 </div>
 
 <script>
+// ====== VERSION / CACHE BUST ======
+var APP_VERSION='2.5.0';
+(function(){
+  var stored=localStorage.getItem('phoenix_app_version');
+  if(stored!==APP_VERSION){
+    localStorage.setItem('phoenix_app_version',APP_VERSION);
+    // Preserve user data keys, just flag version update
+  }
+})();
+
 // ====== DATA ======
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
@@ -724,8 +734,15 @@ function getSessionId(s){
   var n=s.name||'';
   if(n==='ME Upper Pull') return 'me-upper-pull';
   if(n==='ME Lower') return 'me-lower-sq';
+  if(n==='ME Upper Press') return 'me-upper-press';
+  if(n==='Karen + Core') return 'karen-core';
+  if(n==='DE Total') return 'de-total';
+  if(n==='Base') return 'cf-base';
+  if(n==='Cindy') return 'cf-cindy';
+  if(n==='Danny') return 'cf-danny';
+  if(n==='Fran') return 'cf-fran';
+  if(n==='Jerry') return 'cf-jerry';
   if(n.indexOf('Core')===0) return 'core';
-  if(n==='Karen + Core') return 'core';
   return 'coming-soon';
 }
 function makeTile(timeLabel,s){
@@ -741,16 +758,18 @@ function makeTile(timeLabel,s){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
     } else if(sid==='me-lower-sq'){
       div.addEventListener('click',function(){openLowerSqSession();});
-    } else if(sid==='core'){
-      div.addEventListener('click',function(){openCoreModal();});
-    } else if(sid==='me-lower-sq'){
-      div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='me-upper-press'){
+      div.addEventListener('click',function(){openPressSession();});
+    } else if(sid==='karen-core'){
+      div.addEventListener('click',function(){openKarenSession();});
+    } else if(sid==='de-total'){
+      div.addEventListener('click',function(){openDESession();});
+    } else if(sid==='cf-base'||sid==='cf-cindy'||sid==='cf-danny'||sid==='cf-fran'||sid==='cf-jerry'){
+      div.addEventListener('click',function(){openCFSession(s.name);});
     } else if(sid==='core'){
       div.addEventListener('click',function(){openCoreModal();});
     } else {
-      div.addEventListener('click',function(){
-        alert(s.name+' session coming soon!');
-      });
+      div.addEventListener('click',function(){alert(s.name+' session coming soon!');});
     }
   }
   return div;
@@ -835,6 +854,16 @@ function renderSlot(t,s){
       div.addEventListener('click',function(){openSession('me-upper-pull');});
     } else if(sid==='me-lower-sq'){
       div.addEventListener('click',function(){openLowerSqSession();});
+    } else if(sid==='me-upper-press'){
+      div.addEventListener('click',function(){openPressSession();});
+    } else if(sid==='karen-core'){
+      div.addEventListener('click',function(){openKarenSession();});
+    } else if(sid==='de-total'){
+      div.addEventListener('click',function(){openDESession();});
+    } else if(sid==='cf-base'||sid==='cf-cindy'||sid==='cf-danny'||sid==='cf-fran'||sid==='cf-jerry'){
+      div.addEventListener('click',function(){openCFSession(s.name);});
+    } else if(sid==='core'){
+      div.addEventListener('click',function(){openCoreModal();});
     } else {
       div.addEventListener('click',function(){alert(s.name+' - coming soon!');});
     }
@@ -1586,6 +1615,580 @@ function logCoreSession(){
   navTo('today');
 }
 
+
+// ====== ME UPPER PRESS SESSION ======
+var BENCH_VARIANTS=['Standard Bench Press','High Pin Bench Press','Close Grip Bench Press','Low Pin Bench Press','Decline Bench Press','DB Floor Press (Neutral Grip)'];
+var AUX_PRESS_OPTIONS=['DB Flat Press','DB Incline Press','DB Floor Press','DB Decline Press'];
+var SHRUG_OPTIONS2=['DB Shrugs (2 sec hold)','Barbell Shrugs','Trap Bar Shrugs','Cable Shrugs'];
+var SS1_A_OPTIONS=['Neutral Grip Lat Pulldown','Wide Lat Pulldown','Seated Cable Row','Chest Supported Row'];
+var SS1_B_OPTIONS=['Standing DB Shoulder Press','Seated DB Shoulder Press','Seated BB Shoulder Press','Arnold Press'];
+var SS2_A_OPTIONS=['DB Bent Over Row','Single Arm DB Row','Meadows Row','Cable Row'];
+var SS2_B_OPTIONS=['Cable Face Pull (Rope)','Rear Delt Fly','Band Pull Apart','Cable Rear Delt'];
+var SHOULDER_FINISH_A=['Plate Front Raise','DB Front Raise','Cable Front Raise'];
+var SHOULDER_FINISH_B=['DB Lateral Raise','Cable Lateral Raise','Bent Over Rear Delt Fly'];
+
+// Bench ramp — 7 sets, condensed
+var ME_PRESS_RAMP=[
+  {label:'Set 1',kg:'50%',reps:5},
+  {label:'Set 2',kg:'62.5%',reps:3},
+  {label:'Set 3',kg:'75%',reps:3},
+  {label:'Set 4',kg:'82.5%',reps:1},
+  {label:'Set 5',kg:'90%',reps:1},
+  {label:'Set 6',kg:'97.5%',reps:1},
+  {label:'Set 7 (Optional PR)',kg:'',reps:'',optional:true}
+];
+
+function getAuxPressScheme(week){
+  // 2-week blocks: wks 1-2=10, wks 3-4=8, wks 5-6=6, then repeat
+  var cycle=((week-1)%6);
+  if(cycle<2) return {reps:10,label:'3 x 10 - 90 sec rest'};
+  if(cycle<4) return {reps:8,label:'3 x 8 - 90 sec rest'};
+  return {reps:6,label:'3 x 6 - 90 sec rest'};
+}
+
+function getLastPressAuxKg(){
+  var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+  var presslogs=logs.filter(function(l){return l.sessionId==='me-upper-press';});
+  if(!presslogs.length) return null;
+  var last=presslogs[presslogs.length-1];
+  if(last.sets&&last.sets['auxpress']){
+    var sets=last.sets['auxpress'];
+    var lastKg=sets[sets.length-1]&&sets[sets.length-1].kg;
+    if(lastKg&&parseFloat(lastKg)>0){
+      return Math.round((parseFloat(lastKg)+2.5)*2)/2; // +2.5kg if all reps hit
+    }
+  }
+  return null;
+}
+
+function openPressSession(){
+  var w=currentProgWeek||progWeek();
+  var auxScheme=getAuxPressScheme(w);
+  var suggestedKg=getLastPressAuxKg();
+  var auxSets=[];
+  for(var i=0;i<3;i++){
+    auxSets.push({label:'Set '+(i+1),kg:suggestedKg?suggestedKg+'kg':'',reps:auxScheme.reps});
+  }
+
+  var ME_PRESS_STRUCTURE=[
+    {id:'bench',label:'Exercise 1 - Max Effort',name:null,scheme:'ME Ramp - 7 sets - work to daily max',
+     selectable:true,options:'bench_variant',
+     restOptions:[3,4,5,6],defaultRest:4,
+     sets:ME_PRESS_RAMP.map(function(s){return Object.assign({},s);})},
+    {id:'auxpress',label:'Exercise 2 - Aux DB Press',name:null,
+     scheme:auxScheme.label+(suggestedKg?' - suggested: '+suggestedKg+'kg':''),
+     selectable:true,options:'aux_press',autoRest:90,sets:auxSets},
+    {id:'shrug2',label:'Exercise 3 - Shrugs',name:null,scheme:'4 x 8 - 90 sec rest',
+     selectable:true,options:'shrug2',autoRest:90,
+     sets:[{label:'Set 1',kg:'',reps:8},{label:'Set 2',kg:'',reps:8},{label:'Set 3',kg:'',reps:8},{label:'Set 4',kg:'',reps:8}]},
+    {id:'ss1a',label:'Superset 1A',name:null,scheme:'3 x 10-12 - no rest (pair with 1B)',
+     selectable:true,options:'ss1a',autoRest:0,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
+    {id:'ss1b',label:'Superset 1B',name:null,scheme:'3 x 10-12 - 90 sec after each pair',
+     selectable:true,options:'ss1b',autoRest:90,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
+    {id:'ss2a',label:'Superset 2A',name:null,scheme:'3 x 10-12 - no rest (pair with 2B)',
+     selectable:true,options:'ss2a',autoRest:0,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
+    {id:'ss2b',label:'Superset 2B',name:null,scheme:'3 x 10-12 - 90 sec after each pair',
+     selectable:true,options:'ss2b',autoRest:90,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
+    {id:'shoulderA',label:'Shoulder Finish A',name:null,scheme:'4 x 10 - no rest (pair with B)',
+     selectable:true,options:'shoulder_a',autoRest:0,
+     sets:[{label:'Set 1',kg:'',reps:10},{label:'Set 2',kg:'',reps:10},{label:'Set 3',kg:'',reps:10},{label:'Set 4',kg:'',reps:10}]},
+    {id:'shoulderB',label:'Shoulder Finish B',name:null,scheme:'4 x 10 - 60 sec after each pair',
+     selectable:true,options:'shoulder_b',autoRest:60,
+     sets:[{label:'Set 1',kg:'',reps:10},{label:'Set 2',kg:'',reps:10},{label:'Set 3',kg:'',reps:10},{label:'Set 4',kg:'',reps:10}]}
+  ];
+
+  // Extend openExPicker to handle new option keys
+  var origPick=pickExercise;
+  window.pickPressExercise=function(exId,optKey){
+    var titleMap={
+      bench_variant:'Select Bench Variant',aux_press:'Select Aux Press',
+      shrug2:'Select Shrug',ss1a:'Superset 1A - Pull',ss1b:'Superset 1B - Press',
+      ss2a:'Superset 2A - Row',ss2b:'Superset 2B - Pull',
+      shoulder_a:'Shoulder Finish A',shoulder_b:'Shoulder Finish B'
+    };
+    var optsMap={
+      bench_variant:BENCH_VARIANTS,aux_press:AUX_PRESS_OPTIONS,
+      shrug2:SHRUG_OPTIONS2,ss1a:SS1_A_OPTIONS,ss1b:SS1_B_OPTIONS,
+      ss2a:SS2_A_OPTIONS,ss2b:SS2_B_OPTIONS,
+      shoulder_a:SHOULDER_FINISH_A,shoulder_b:SHOULDER_FINISH_B
+    };
+    var opts=optsMap[optKey]||[];
+    exPickerCallback=function(chosen){
+      var nameEl=document.getElementById('exname-'+exId);
+      var btnEl=document.getElementById('selbtn-'+exId);
+      if(nameEl)nameEl.textContent=chosen;
+      if(btnEl){btnEl.textContent='\u2713 '+chosen;btnEl.classList.add('selected');}
+      ME_PRESS_STRUCTURE.forEach(function(ex){if(ex.id===exId)ex.name=chosen;});
+    };
+    document.getElementById('ex-picker-title').textContent=titleMap[optKey]||'Select';
+    var list=document.getElementById('ex-picker-list');list.innerHTML='';
+    opts.forEach(function(opt){
+      var div=document.createElement('div');div.className='ex-picker-item';div.textContent=opt;
+      div.addEventListener('click',function(){closeExPicker();if(exPickerCallback)exPickerCallback(opt);});
+      list.appendChild(div);
+    });
+    document.getElementById('ex-picker-modal').classList.add('active');
+  };
+
+  var body=document.getElementById('session-body-content');body.innerHTML='';
+  var hero=document.createElement('div');hero.className='session-hero';
+  hero.innerHTML='<div class="sh-tag">Thursday AM - Lifting</div><div class="sh-name">ME Upper Press</div><div class="sh-detail">Bench Max / Aux Press / Shrugs / Supersets / Shoulders</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
+  body.appendChild(hero);
+
+  ME_PRESS_STRUCTURE.forEach(function(ex){
+    var block=renderExBlock(ex);
+    // Override select button click for press-specific options
+    setTimeout(function(){
+      var btn=document.getElementById('selbtn-'+ex.id);
+      if(btn){
+        btn.onclick=null;
+        btn.addEventListener('click',function(){window.pickPressExercise(ex.id,ex.options);});
+      }
+    },10);
+    body.appendChild(block);
+  });
+
+  setTimeout(function(){populatePressLoads(ME_PRESS_STRUCTURE);},50);
+
+  var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
+  notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did the bench feel? PBs? Modifications..."></textarea>';
+  body.appendChild(notesBlock);
+  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session';
+  finBtn.addEventListener('click',function(){
+    if(confirm('Mark session as complete?')){
+      logGenericSession('me-upper-press',ME_PRESS_STRUCTURE);
+      navTo('today');
+    }
+  });
+  body.appendChild(finBtn);
+  document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  showScreen('screen-session');
+}
+
+function populatePressLoads(structure){
+  if(!athlete||!athlete.b1rm) return;
+  var rm=parseFloat(athlete.b1rm);
+  if(!rm) return;
+  var benchEx=structure[0];
+  benchEx.sets.forEach(function(set,idx){
+    var kgEl=document.getElementById('kg-bench-'+idx);
+    var pctEl=document.getElementById('pct-bench-'+idx);
+    if(set.kg&&String(set.kg).indexOf('%')>-1){
+      var clean=String(set.kg).replace(/%/g,'').replace(/[+]/g,'').trim();
+      var num=parseFloat(clean);
+      if(!isNaN(num)&&kgEl){
+        var kg=Math.round((rm*(num/100))/2.5)*2.5;
+        kgEl.value=kg+'kg';
+      }
+      if(pctEl) pctEl.value=set.kg;
+    }
+  });
+}
+
+// ====== KAREN + CORE SESSION ======
+function openKarenSession(){
+  var body=document.getElementById('session-body-content');body.innerHTML='';
+  var hero=document.createElement('div');hero.className='session-hero';
+  hero.innerHTML='<div class="sh-tag">Friday AM - Conditioning</div><div class="sh-name">Karen + Core</div><div class="sh-detail">150 Wall Balls @ 9kg AFAP, then Core AMRAP</div>';
+  body.appendChild(hero);
+
+  // Karen timer block
+  var karenBlock=document.createElement('div');
+  karenBlock.style.cssText='padding:24px 20px;border-bottom:1px solid var(--border);text-align:center';
+  karenBlock.innerHTML=
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;color:var(--orange);text-transform:uppercase;margin-bottom:4px">Karen - AFAP</div>'+
+    '<div style="font-family:var(--font-d);font-size:48px;font-weight:900;color:var(--text);line-height:1;margin-bottom:4px">150</div>'+
+    '<div style="font-family:var(--font-d);font-size:18px;color:var(--text2);margin-bottom:16px">Wall Balls @ 9kg</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:12px">'+
+      '<button id="karen-start-btn" style="flex:1;background:var(--orange);color:#fff;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px;border:none;border-radius:4px;cursor:pointer;">Start Timer</button>'+
+      '<button id="karen-reset-btn" style="flex:0 0 80px;background:var(--bg3);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:14px;border:1px solid var(--border2);border-radius:4px;cursor:pointer;">Reset</button>'+
+    '</div>'+
+    '<div id="karen-timer-display" style="font-family:var(--font-d);font-size:72px;font-weight:900;color:var(--gold);line-height:1">0:00</div>'+
+    '<div style="margin-top:12px">'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Reps completed</div>'+
+      '<input type="number" id="karen-reps-input" class="field-input" placeholder="150" inputmode="numeric" style="text-align:center;font-size:28px;font-weight:700;">'+
+    '</div>'+
+    '<div id="karen-pb-note" style="font-size:13px;color:var(--text3);margin-top:8px"></div>';
+  body.appendChild(karenBlock);
+
+  // Show previous Karen time if logged
+  var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+  var karenLogs=logs.filter(function(l){return l.sessionId==='karen-core';});
+  if(karenLogs.length){
+    var lastKaren=karenLogs[karenLogs.length-1];
+    if(lastKaren.karenTime){
+      var pbNote=document.getElementById('karen-pb-note');
+      if(pbNote) pbNote.textContent='Last time: '+lastKaren.karenTime;
+    }
+  }
+
+  // Karen timer logic
+  var karenInterval=null,karenStart=0,karenRunning=false;
+  setTimeout(function(){
+    var startBtn=document.getElementById('karen-start-btn');
+    var resetBtn=document.getElementById('karen-reset-btn');
+    var display=document.getElementById('karen-timer-display');
+    if(startBtn) startBtn.addEventListener('click',function(){
+      if(!karenRunning){
+        karenStart=Date.now();
+        karenRunning=true;
+        startBtn.textContent='Stop';
+        startBtn.style.background='var(--red)';
+        requestWakeLock();
+        karenInterval=setInterval(function(){
+          var elapsed=Math.floor((Date.now()-karenStart)/1000);
+          var m=Math.floor(elapsed/60),s=elapsed%60;
+          if(display) display.textContent=m+':'+(s<10?'0':'')+s;
+        },500);
+      } else {
+        clearInterval(karenInterval);karenRunning=false;
+        startBtn.textContent='Start Timer';
+        startBtn.style.background='var(--orange)';
+        releaseWakeLock();
+      }
+    });
+    if(resetBtn) resetBtn.addEventListener('click',function(){
+      clearInterval(karenInterval);karenRunning=false;karenStart=0;
+      if(display) display.textContent='0:00';
+      if(startBtn){startBtn.textContent='Start Timer';startBtn.style.background='var(--orange)';}
+    });
+  },0);
+
+  // Core section
+  var coreSection=document.createElement('div');
+  coreSection.style.cssText='padding:20px';
+  coreSection.innerHTML=
+    '<div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--blue);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:12px;">Core Session<span style="flex:1;height:1px;background:var(--border);display:block"></span></div>'+
+    '<button onclick="openCoreModal()" style="width:100%;background:var(--bg3);border:1px dashed var(--border2);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:14px;border-radius:4px;cursor:pointer;">Select + Start Core Session</button>';
+  body.appendChild(coreSection);
+
+  var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
+  notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="Karen time, rounds on core, how it felt..."></textarea>';
+  body.appendChild(notesBlock);
+
+  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session';
+  finBtn.addEventListener('click',function(){
+    if(confirm('Mark session as complete?')){
+      var timerEl=document.getElementById('karen-timer-display');
+      var repsEl=document.getElementById('karen-reps-input');
+      var notesEl=document.getElementById('session-notes-field');
+      var logs2=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+      logs2.push({
+        date:new Date().toISOString(),sessionId:'karen-core',week:currentProgWeek||1,
+        karenTime:timerEl?timerEl.textContent:'',
+        karenReps:repsEl?repsEl.value:'150',
+        notes:notesEl?notesEl.value:''
+      });
+      localStorage.setItem('phoenix_session_logs',JSON.stringify(logs2));
+      clearInterval(karenInterval);releaseWakeLock();
+      navTo('today');
+    }
+  });
+  body.appendChild(finBtn);
+  document.getElementById('session-back-btn').onclick=function(){clearInterval(karenInterval);releaseWakeLock();navTo('today');};
+  showScreen('screen-session');
+}
+
+// ====== DE TOTAL SESSION ======
+var DE_SQUAT_OPTIONS=['50% Box Squat x 2','50% Box Squat + Bands x 2','60% Box Squat x 2','55% Speed Squat x 2','Speed High Bar Squat x 2'];
+var DE_DEAD_OPTIONS=['50% Speed Deadlift x 1','50% Speed Deadlift + Bands x 1','60% Speed Deadlift x 2','Trap Bar Jumps x 3','Speed Pull x 1'];
+var DE_JUMP_OPTIONS=['Box Jump 39" x 1','Box Jump 33" x 3','Broad Jump BW x 3','Trap Bar Jump x 3','Depth Jump x 3'];
+var DE_SLED_OPTIONS=['Sled Push Medium x 1 length','Sled Push Heavy x 1 length','Sled Drag x 1 length','Farmers Carry x 2 lengths','Sled Row x 1 length'];
+var UPPER_DE_OPTIONS=['50% Speed Bench x 3','60% Speed Bench x 3','45% Speed Bench + Bands x 3','50% Speed BB Row x 3','60% Speed BB Row x 3'];
+
+function openDESession(){
+  var w=currentProgWeek||progWeek();
+  var meLower=getMELower(w);
+  var isSquatWeek=meLower.detail&&meLower.detail.indexOf('Squat')>-1;
+  // DE is opposite to ME Lower
+  var dePrimary=isSquatWeek?'Deadlift':'Squat';
+
+  var DE_STRUCTURE=[
+    {id:'de_sq',label:'DE Lower 1 - '+dePrimary+' Focus',name:null,
+     scheme:'8 sets x 2 reps @ 50-60% - max intent - 45 sec rest',
+     selectable:true,options:'de_sq',autoRest:45,
+     sets:(function(){var s=[];for(var i=0;i<8;i++)s.push({label:'Set '+(i+1),kg:'',reps:2});return s;})()},
+    {id:'de_dead2',label:'DE Lower 2',name:null,
+     scheme:'6 sets x 1 rep @ 50% - max intent - 45 sec rest',
+     selectable:true,options:'de_dead',autoRest:45,
+     sets:(function(){var s=[];for(var i=0;i<6;i++)s.push({label:'Set '+(i+1),kg:'',reps:1});return s;})()},
+    {id:'de_jump',label:'Jumps',name:null,scheme:'4 sets - max height/distance - 90 sec rest',
+     selectable:true,options:'de_jump',autoRest:90,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''},{label:'Set 4',kg:'',reps:''}]},
+    {id:'de_sled',label:'Sled / Carry',name:null,scheme:'4 sets - 2 min rest',
+     selectable:true,options:'de_sled',autoRest:120,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''},{label:'Set 4',kg:'',reps:''}]},
+    {id:'de_upper1',label:'Upper DE 1 - Speed Bench',name:null,scheme:'6 sets x 3 @ 50-60% - 45 sec rest',
+     selectable:true,options:'upper_de',autoRest:45,
+     sets:(function(){var s=[];for(var i=0;i<6;i++)s.push({label:'Set '+(i+1),kg:'',reps:3});return s;})()},
+    {id:'de_upper2',label:'Upper DE 2 - Speed Row',name:null,scheme:'6 sets x 3 - 45 sec rest',
+     selectable:true,options:'upper_de',autoRest:45,
+     sets:(function(){var s=[];for(var i=0;i<6;i++)s.push({label:'Set '+(i+1),kg:'',reps:3});return s;})()},
+    {id:'de_dips',label:'Finisher - Dips',name:'Bodyweight Dips',scheme:'6 x BW - 60 sec rest',fixed:true,autoRest:60,
+     sets:[{label:'Set 1',kg:'BW',reps:6,kgFixed:true},{label:'Set 2',kg:'BW',reps:6,kgFixed:true},{label:'Set 3',kg:'BW',reps:6,kgFixed:true},
+           {label:'Set 4',kg:'BW',reps:6,kgFixed:true},{label:'Set 5',kg:'BW',reps:6,kgFixed:true},{label:'Set 6',kg:'BW',reps:6,kgFixed:true}]}
+  ];
+
+  // Extend picker for DE options
+  window.pickDEExercise=function(exId,optKey){
+    var titleMap={de_sq:'Select DE Lower ('+dePrimary+')',de_dead:'Select DE Lower 2',de_jump:'Select Jump',de_sled:'Select Sled / Carry',upper_de:'Select Upper DE'};
+    var optsMap={de_sq:isSquatWeek?DE_SQUAT_OPTIONS:DE_DEAD_OPTIONS,de_dead:isSquatWeek?DE_DEAD_OPTIONS:DE_SQUAT_OPTIONS,de_jump:DE_JUMP_OPTIONS,de_sled:DE_SLED_OPTIONS,upper_de:UPPER_DE_OPTIONS};
+    var opts=optsMap[optKey]||[];
+    exPickerCallback=function(chosen){
+      var nameEl=document.getElementById('exname-'+exId);
+      var btnEl=document.getElementById('selbtn-'+exId);
+      if(nameEl)nameEl.textContent=chosen;
+      if(btnEl){btnEl.textContent='\u2713 '+chosen;btnEl.classList.add('selected');}
+      DE_STRUCTURE.forEach(function(ex){if(ex.id===exId)ex.name=chosen;});
+    };
+    document.getElementById('ex-picker-title').textContent=titleMap[optKey]||'Select';
+    var list=document.getElementById('ex-picker-list');list.innerHTML='';
+    opts.forEach(function(opt){
+      var div=document.createElement('div');div.className='ex-picker-item';div.textContent=opt;
+      div.addEventListener('click',function(){closeExPicker();if(exPickerCallback)exPickerCallback(opt);});
+      list.appendChild(div);
+    });
+    document.getElementById('ex-picker-modal').classList.add('active');
+  };
+
+  var body=document.getElementById('session-body-content');body.innerHTML='';
+  var hero=document.createElement('div');hero.className='session-hero';
+  hero.innerHTML='<div class="sh-tag">Saturday AM - Dynamic Effort</div><div class="sh-name">DE Total</div><div class="sh-detail">DE '+dePrimary+' / Jumps / Sled / Speed Bench / Speed Row / Dips</div>';
+  body.appendChild(hero);
+
+  DE_STRUCTURE.forEach(function(ex){
+    var block=renderExBlock(ex);
+    setTimeout(function(){
+      var btn=document.getElementById('selbtn-'+ex.id);
+      if(btn&&ex.options){
+        btn.onclick=null;
+        btn.addEventListener('click',function(){window.pickDEExercise(ex.id,ex.options);});
+      }
+    },10);
+    body.appendChild(block);
+  });
+
+  setTimeout(function(){populateDELoads(DE_STRUCTURE,dePrimary);},50);
+
+  var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
+  notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="Speed felt good? Sled weight? Any modifications..."></textarea>';
+  body.appendChild(notesBlock);
+  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session';
+  finBtn.addEventListener('click',function(){
+    if(confirm('Mark session as complete?')){logGenericSession('de-total',DE_STRUCTURE);navTo('today');}
+  });
+  body.appendChild(finBtn);
+  document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  showScreen('screen-session');
+}
+
+function populateDELoads(structure,primary){
+  if(!athlete) return;
+  var sqRm=parseFloat(athlete.sq)||0;
+  var dlRm=parseFloat(athlete.dl)||0;
+  var bRm=parseFloat(athlete.b1rm)||0;
+  // DE Squat/DL @ 50%
+  ['de_sq','de_dead2'].forEach(function(exId,i){
+    var rm=(primary==='Squat'&&i===0)||(primary==='Deadlift'&&i===1)?sqRm:dlRm;
+    if(!rm) return;
+    var kg=Math.round((rm*0.5)/2.5)*2.5;
+    structure.forEach(function(ex){
+      if(ex.id===exId){
+        ex.sets.forEach(function(set,idx){
+          var el=document.getElementById('kg-'+exId+'-'+idx);
+          if(el&&!el.value) el.value=kg+'kg';
+        });
+      }
+    });
+  });
+  // Speed Bench @ 50%
+  if(bRm){
+    var bkg=Math.round((bRm*0.5)/2.5)*2.5;
+    ['de_upper1','de_upper2'].forEach(function(exId){
+      structure.forEach(function(ex){
+        if(ex.id===exId){
+          ex.sets.forEach(function(set,idx){
+            var el=document.getElementById('kg-'+exId+'-'+idx);
+            if(el&&!el.value) el.value=bkg+'kg';
+          });
+        }
+      });
+    });
+  }
+}
+
+// ====== CROSSFIT SESSIONS ======
+var CF_SESSIONS={
+  'Base':{format:'AFAP',timeCap:0,description:'Row 500 / Air Squat 40 / Sit Up 30 / Push Up 20 / Pull Up 10',
+    exercises:[{name:'Row',reps:'500m'},{name:'Air Squat',reps:'40'},{name:'Sit Up',reps:'30'},{name:'Push Up',reps:'20'},{name:'Pull Up',reps:'10'}]},
+  'Cindy':{format:'AMRAP 20',timeCap:20*60,description:'5 Pull Ups / 10 Push Ups / 15 Air Squats',
+    exercises:[{name:'Pull Up',reps:'5 BW'},{name:'Push Up',reps:'10 BW'},{name:'Air Squat',reps:'15 BW'}]},
+  'Danny':{format:'AMRAP 20',timeCap:20*60,description:'30 Box Jumps 24" / 20 Push Press 52.5kg / 30 Pull Ups',
+    exercises:[{name:'Box Jumps',reps:'30 @ 24"'},{name:'Push Press',reps:'20 @ 52.5kg'},{name:'Pull Up',reps:'30 BW'}]},
+  'Fran':{format:'AFAP',timeCap:0,description:'21-15-9: Thrusters 42.5kg / Pull Ups',
+    exercises:[{name:'Thrusters 42.5kg',reps:'21 / 15 / 9'},{name:'Pull Up',reps:'21 / 15 / 9 BW'}]},
+  'Jerry':{format:'AFAP',timeCap:0,description:'Run 1.6km / Row 2km / Run 1.6km',
+    exercises:[{name:'Run',reps:'1600m'},{name:'Row',reps:'2000m'},{name:'Run',reps:'1600m'}]}
+};
+
+var cfTimerInterval=null,cfTimerEnd=0,cfTimerStart=0,cfRunning=false;
+
+function openCFSession(name){
+  var cf=CF_SESSIONS[name];
+  if(!cf) return;
+  var isAMRAP=cf.format.indexOf('AMRAP')>-1;
+
+  var body=document.getElementById('session-body-content');body.innerHTML='';
+  var hero=document.createElement('div');hero.className='session-hero';
+  hero.innerHTML='<div class="sh-tag">CrossFit - '+cf.format+'</div><div class="sh-name">'+name+'</div><div class="sh-detail">'+cf.description+'</div>';
+  body.appendChild(hero);
+
+  // Show previous time/score
+  var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+  var prevLogs=logs.filter(function(l){return l.sessionId==='cf-'+name.toLowerCase();});
+  if(prevLogs.length){
+    var prev=prevLogs[prevLogs.length-1];
+    var prevBlock=document.createElement('div');
+    prevBlock.style.cssText='padding:8px 20px;';
+    prevBlock.innerHTML='<div style="font-family:var(--font-d);font-size:12px;color:var(--text3);letter-spacing:2px;text-transform:uppercase">Previous: <span style="color:var(--gold)">'+( prev.time||prev.rounds||'-')+'</span></div>';
+    body.appendChild(prevBlock);
+  }
+
+  // Timer block
+  var timerBlock=document.createElement('div');
+  timerBlock.style.cssText='padding:24px 20px;border-bottom:1px solid var(--border);text-align:center';
+  var timerColor=isAMRAP?'var(--orange)':'var(--gold)';
+  timerBlock.innerHTML=
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;color:'+timerColor+';text-transform:uppercase;margin-bottom:8px">'+cf.format+'</div>'+
+    '<div id="cf-timer-display" style="font-family:var(--font-d);font-size:80px;font-weight:900;color:var(--text);line-height:1">'+(isAMRAP?'20:00':'0:00')+'</div>'+
+    '<div style="display:flex;gap:8px;margin-top:16px">'+
+      '<button id="cf-start-btn" style="flex:1;background:'+timerColor+';color:'+(isAMRAP?'#fff':'#000')+';font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px;border:none;border-radius:4px;cursor:pointer;">Start</button>'+
+      '<button id="cf-reset-btn" style="flex:0 0 80px;background:var(--bg3);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:14px;border:1px solid var(--border2);border-radius:4px;cursor:pointer;">Reset</button>'+
+    '</div>';
+  body.appendChild(timerBlock);
+
+  // Exercises
+  var exSection=document.createElement('div');
+  exSection.style.cssText='padding:20px';
+  exSection.innerHTML='<div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:12px;">Exercises<span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
+  cf.exercises.forEach(function(ex){
+    var card=document.createElement('div');
+    card.style.cssText='background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between';
+    card.innerHTML='<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);text-transform:uppercase">'+ex.name+'</div>'+
+      '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--gold)">'+ex.reps+'</div>';
+    exSection.appendChild(card);
+  });
+  body.appendChild(exSection);
+
+  // Score input
+  var scoreBlock=document.createElement('div');
+  scoreBlock.style.cssText='padding:0 20px 20px';
+  if(isAMRAP){
+    scoreBlock.innerHTML='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Rounds + reps completed</div>'+
+      '<div style="display:flex;gap:10px"><input type="number" id="cf-rounds" class="field-input" placeholder="Rounds" inputmode="numeric" style="text-align:center;font-size:24px;font-weight:700">'+
+      '<input type="number" id="cf-reps" class="field-input" placeholder="Reps" inputmode="numeric" style="text-align:center;font-size:24px;font-weight:700"></div>';
+  }
+  body.appendChild(scoreBlock);
+
+  // Timer logic
+  setTimeout(function(){
+    var startBtn=document.getElementById('cf-start-btn');
+    var resetBtn=document.getElementById('cf-reset-btn');
+    var display=document.getElementById('cf-timer-display');
+    if(startBtn) startBtn.addEventListener('click',function(){
+      if(!cfRunning){
+        cfRunning=true;
+        startBtn.textContent='Stop';
+        startBtn.style.opacity='0.7';
+        requestWakeLock();
+        if(isAMRAP){
+          cfTimerEnd=Date.now()+(cf.timeCap*1000);
+          cfTimerInterval=setInterval(function(){
+            var rem=Math.max(0,Math.ceil((cfTimerEnd-Date.now())/1000));
+            var m=Math.floor(rem/60),s=rem%60;
+            if(display) display.textContent=m+':'+(s<10?'0':'')+s;
+            if(rem<=0){clearInterval(cfTimerInterval);cfRunning=false;releaseWakeLock();if(display)display.textContent='TIME!';}
+          },500);
+        } else {
+          cfTimerStart=Date.now();
+          cfTimerInterval=setInterval(function(){
+            var el=Math.floor((Date.now()-cfTimerStart)/1000);
+            var m=Math.floor(el/60),s=el%60;
+            if(display) display.textContent=m+':'+(s<10?'0':'')+s;
+          },500);
+        }
+      } else {
+        clearInterval(cfTimerInterval);cfRunning=false;
+        startBtn.textContent='Start';startBtn.style.opacity='1';
+        releaseWakeLock();
+      }
+    });
+    if(resetBtn) resetBtn.addEventListener('click',function(){
+      clearInterval(cfTimerInterval);cfRunning=false;
+      if(display) display.textContent=isAMRAP?'20:00':'0:00';
+      if(startBtn){startBtn.textContent='Start';startBtn.style.opacity='1';}
+      releaseWakeLock();
+    });
+  },0);
+
+  var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
+  notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="Time, score, how it felt, scaling used..."></textarea>';
+  body.appendChild(notesBlock);
+
+  var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session';
+  finBtn.addEventListener('click',function(){
+    if(confirm('Mark session as complete?')){
+      clearInterval(cfTimerInterval);cfRunning=false;releaseWakeLock();
+      var display2=document.getElementById('cf-timer-display');
+      var roundsEl=document.getElementById('cf-rounds');
+      var repsEl=document.getElementById('cf-reps');
+      var notesEl=document.getElementById('session-notes-field');
+      var entry={
+        date:new Date().toISOString(),
+        sessionId:'cf-'+name.toLowerCase(),
+        week:currentProgWeek||1,
+        time:display2?display2.textContent:'',
+        rounds:roundsEl?roundsEl.value:'',
+        reps:repsEl?repsEl.value:'',
+        notes:notesEl?notesEl.value:''
+      };
+      var logs2=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+      logs2.push(entry);
+      localStorage.setItem('phoenix_session_logs',JSON.stringify(logs2));
+      navTo('today');
+    }
+  });
+  body.appendChild(finBtn);
+  document.getElementById('session-back-btn').onclick=function(){clearInterval(cfTimerInterval);cfRunning=false;releaseWakeLock();navTo('today');};
+  showScreen('screen-session');
+}
+
+// ====== GENERIC SESSION LOGGER ======
+function logGenericSession(sessionId,structure){
+  var sets={};
+  structure.forEach(function(ex){
+    sets[ex.id]=[];
+    ex.sets.forEach(function(set,idx){
+      var kgEl=document.getElementById('kg-'+ex.id+'-'+idx);
+      var rpEl=document.getElementById('reps-'+ex.id+'-'+idx);
+      var allReps=true;
+      if(rpEl&&kgEl){
+        var repVal=parseInt(rpEl.value);
+        if(repVal<(set.reps||0)) allReps=false;
+      }
+      sets[ex.id].push({kg:kgEl?kgEl.value:'',reps:rpEl?rpEl.value:'',hitTarget:allReps});
+    });
+  });
+  var notesEl=document.getElementById('session-notes-field');
+  var entry={date:new Date().toISOString(),sessionId:sessionId,week:currentProgWeek||1,notes:notesEl?notesEl.value:'',sets:sets};
+  var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+  logs.push(entry);
+  localStorage.setItem('phoenix_session_logs',JSON.stringify(logs));
+}
 
 // ====== SESSION LOGGING ======
 function logLiftSession(sessionId){

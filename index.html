@@ -123,7 +123,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 /* GPS WALK TRACKER */
 .walk-tracker-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-#walk-map{flex:1;min-height:300px;background:var(--bg3);}
+#walk-map{flex:1;min-height:260px;height:calc(100vh - 280px);background:var(--bg3);}
 .walk-tracker-panel{background:var(--bg);border-top:1px solid var(--border);padding:16px 20px;padding-bottom:max(16px,env(safe-area-inset-bottom));}
 .walk-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
 .walk-live-stat{text-align:center;}
@@ -1232,7 +1232,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.2.1';
+var APP_VERSION='3.2.2';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3138,45 +3138,76 @@ function updateWalkModeUI(){
 }
 
 function initWalkMap(){
-  if(walkMap){walkMap.invalidateSize();return;}
   var mapEl=document.getElementById('walk-map');
   if(!mapEl||!window.L) return;
+  // If map exists just invalidate size and recentre
+  if(walkMap){
+    walkMap.invalidateSize();
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(function(pos){
+        walkMap.setView([pos.coords.latitude,pos.coords.longitude],16);
+        if(walkMarker) walkMarker.setLatLng([pos.coords.latitude,pos.coords.longitude]);
+        else walkMarker=L.circleMarker([pos.coords.latitude,pos.coords.longitude],
+          {radius:9,fillColor:'#c8963e',color:'#fff',weight:2,fillOpacity:1}).addTo(walkMap);
+      },function(){});
+    }
+    return;
+  }
+  // First init
   walkMap=L.map('walk-map',{zoomControl:true,attributionControl:false});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(walkMap);
   walkPath=L.polyline([],{color:'#c8963e',weight:4,opacity:0.85}).addTo(walkMap);
+  // Start with Brisbane then update when GPS comes in
+  walkMap.setView([-27.47,153.02],13);
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(function(pos){
-      walkMap.setView([pos.coords.latitude,pos.coords.longitude],16);
-      walkMarker=L.circleMarker([pos.coords.latitude,pos.coords.longitude],
+      var lat=pos.coords.latitude,lng=pos.coords.longitude;
+      walkMap.setView([lat,lng],16);
+      if(walkMarker) walkMarker.setLatLng([lat,lng]);
+      else walkMarker=L.circleMarker([lat,lng],
         {radius:9,fillColor:'#c8963e',color:'#fff',weight:2,fillOpacity:1}).addTo(walkMap);
-    },function(){walkMap.setView([-27.47,153.02],14);});
-  } else {walkMap.setView([-27.47,153.02],14);}
+    },function(err){
+      // Permission denied or unavailable — stay on default view
+      console.log('GPS unavailable:',err.message);
+    },{timeout:8000,maximumAge:30000});
+  }
 }
 
 function walkStart(){
   if(walkTracking) return;
   walkTracking=true;walkPaused=false;
   walkCoords=[];walkStartTime=Date.now();walkTotalPause=0;
-  document.getElementById('wt-start-btn').style.display='none';
-  document.getElementById('wt-pause-btn').style.display='block';
-  document.getElementById('wt-pause-btn').style.background=walkMode==='run'?'var(--orange)':'var(--gold)';
+  var sb=document.getElementById('wt-start-btn');
+  var pb=document.getElementById('wt-pause-btn');
+  if(sb) sb.style.display='none';
+  if(pb){
+    pb.style.display='block';
+    pb.style.background=walkMode==='run'?'var(--orange)':'var(--gold)';
+    pb.style.color='#fff';
+    pb.textContent='Pause';
+  }
+  // Timer always starts immediately — doesn't wait for GPS
+  walkTimerInterval=setInterval(updateWalkTimer,1000);
+  requestWakeLock();
+  // GPS tracking — starts if available
   if(navigator.geolocation){
     walkWatchId=navigator.geolocation.watchPosition(function(pos){
-      if(walkPaused) return;
+      if(!walkTracking||walkPaused) return;
       var lat=pos.coords.latitude,lng=pos.coords.longitude;
       walkCoords.push([lat,lng]);
       if(walkPath) walkPath.setLatLngs(walkCoords);
       if(walkMarker) walkMarker.setLatLng([lat,lng]);
-      else if(walkMap){
+      else if(walkMap&&window.L){
         var col=walkMode==='run'?'#e05c2a':'#c8963e';
         walkMarker=L.circleMarker([lat,lng],{radius:9,fillColor:col,color:'#fff',weight:2,fillOpacity:1}).addTo(walkMap);
       }
       if(walkMap) walkMap.panTo([lat,lng]);
       updateWalkStats();
-    },{enableHighAccuracy:true,maximumAge:2000,timeout:10000});
+    },function(err){
+      // GPS error — timer keeps going, just no route line
+      console.log('GPS watch error:',err.message);
+    },{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
   }
-  walkTimerInterval=setInterval(updateWalkTimer,1000);
-  requestWakeLock();
 }
 
 function walkPause(){
@@ -3228,6 +3259,9 @@ function walkCleanup(){
   releaseWakeLock();
   walkCoords=[];
   if(walkPath) walkPath.setLatLngs([]);
+  if(walkMarker&&walkMap){walkMap.removeLayer(walkMarker);walkMarker=null;}
+  // Destroy map so it reinits fresh on next visit
+  if(walkMap){walkMap.remove();walkMap=null;walkPath=null;}
 }
 
 function calcWalkDistance(){

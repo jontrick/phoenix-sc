@@ -516,6 +516,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .ad-slot-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;}
 .ad-remove-btn{display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;text-align:center;padding:6px;cursor:pointer;border-top:1px solid var(--border);}
 
+/* DAY SELECTOR */
+.fq-day-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.fq-day-row:last-child{border-bottom:none;}
+.fq-day-check{display:flex;align-items:center;gap:12px;cursor:pointer;flex:1;}
+.fq-day-tick{width:22px;height:22px;border-radius:4px;border:1px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+.fq-day-tick.active{background:var(--gold);border-color:var(--gold);}
+.fq-day-tick.active::after{content:'✓';color:#000;font-size:13px;font-weight:700;}
+.fq-day-label{font-family:var(--font-d);font-size:16px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text);}
+.fq-ampm{display:flex;gap:6px;}
+.fq-ampm-btn{padding:6px 12px;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer;border:1px solid var(--border2);color:var(--text3);transition:all 0.2s;}
+.fq-ampm-btn.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
+
 /* ADD SET BTN */
 .add-set-btn{background:transparent;border:1px dashed var(--border2);color:var(--text3);font-family:var(--font-d);font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:10px;border-radius:var(--radius);width:100%;cursor:pointer;margin-top:6px;transition:all 0.2s;}
 .add-set-btn:active{border-color:var(--gold);color:var(--gold);}
@@ -913,9 +925,69 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </label>
   </div>
 
-  <!-- Step 2: Background -->
+  <!-- Step 2: Personal details — moved here so app feels personal immediately -->
   <div class="q-step" id="fq-step-2">
     <div class="q-tag">About you</div>
+    <div class="q-title">Let's get<br>personal</div>
+    <div class="q-sub" style="margin-bottom:20px;">This personalises everything — your programme, your experience, your community.</div>
+    <div class="field-group"><label class="field-label">Your Name</label><input type="text" class="field-input" id="fq-name" placeholder="First name" autocomplete="off"></div>
+    <div class="field-row">
+      <div class="field-group">
+        <label class="field-label">Date of Birth</label>
+        <input type="date" class="field-input" id="fq-dob">
+        <div class="field-hint">Used to personalise programme as you age</div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Bodyweight</label>
+        <input type="number" class="field-input" id="fq-bw" placeholder="85" inputmode="decimal">
+        <div class="field-hint">kg</div>
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Country</label>
+      <select class="field-input" id="fq-country">
+        <option value="">Select country</option>
+        <option value="AU">Australia</option>
+        <option value="NZ">New Zealand</option>
+        <option value="GB">United Kingdom</option>
+        <option value="US">United States</option>
+        <option value="CA">Canada</option>
+        <option value="IE">Ireland</option>
+        <option value="ZA">South Africa</option>
+        <option value="SG">Singapore</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Sex</label>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <div id="fq-sex-male" onclick="fqSelectSex('male')" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Male</div>
+        <div id="fq-sex-female" onclick="fqSelectSex('female')" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Female</div>
+      </div>
+      <div class="field-hint">Used to personalise programming</div>
+    </div>
+    <div id="fq-cycle-section" style="display:none;">
+      <div class="field-group">
+        <label class="field-label">Cycle-synced training</label>
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.7;">Training synced to your cycle can improve results. Follicular phase — push harder. Luteal phase — moderate and recover. Optional, change anytime.</div>
+        <div style="display:flex;gap:10px;">
+          <div id="fq-cycle-yes" onclick="fqSelectCycle('yes')" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Yes, sync it</div>
+          <div id="fq-cycle-no" onclick="fqSelectCycle('no')" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">No thanks</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Theme picker inline -->
+    <div class="field-group" style="margin-top:4px;">
+      <label class="field-label">App Theme</label>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Pick your look — change anytime from the menu.</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;" id="fq-skin-grid"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Training background -->
+  <div class="q-step" id="fq-step-3">
+    <div class="q-tag">Your history</div>
     <div class="q-title">Your training background</div>
     <div class="q-sub">Be honest — the app adapts to where you actually are, not where you want to be.</div>
     <div class="q-options" id="fq-background-opts">
@@ -938,8 +1010,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
   </div>
 
-  <!-- Step 3: Time away -->
-  <div class="q-step" id="fq-step-3">
+  <!-- Step 4: Time away -->
+  <div class="q-step" id="fq-step-4">
     <div class="q-tag">Your journey</div>
     <div class="q-title">Time away from training</div>
     <div class="q-sub">If you've had a break, how long has it been?</div>
@@ -967,8 +1039,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
   </div>
 
-  <!-- Step 4: Goals -->
-  <div class="q-step" id="fq-step-4">
+  <!-- Step 5: Goals -->
+  <div class="q-step" id="fq-step-5">
     <div class="q-tag">Your goals</div>
     <div class="q-title">What do you want?</div>
     <div class="q-multi-hint">Select all that apply</div>
@@ -997,7 +1069,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
 
   <!-- Step 5: Equipment -->
-  <div class="q-step" id="fq-step-5">
+  <div class="q-step" id="fq-step-6">
     <div class="q-tag">Your setup</div>
     <div class="q-title">What do you have access to?</div>
     <div class="q-options" id="fq-equip-opts">
@@ -1021,7 +1093,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
 
   <!-- Step 6: Days available -->
-  <div class="q-step" id="fq-step-6">
+  <div class="q-step" id="fq-step-7">
     <div class="q-tag">Your schedule</div>
     <div class="q-title">Days available per week</div>
     <div class="q-sub">How many days can you realistically commit to training?</div>
@@ -1050,7 +1122,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
 
   <!-- Step 7: Injuries -->
-  <div class="q-step" id="fq-step-7">
+  <div class="q-step" id="fq-step-8">
     <div class="q-tag">Your body</div>
     <div class="q-title">Any injuries or limitations?</div>
     <div class="q-sub">The app will suggest alternatives throughout. You can update this any time in your profile.</div>
@@ -1082,16 +1154,82 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
   </div>
 
-  <!-- Step 8: Profile result -->
-  <div class="q-step" id="fq-step-8">
+  <!-- Step 9: Profile result + path choice + day selector -->
+  <div class="q-step" id="fq-step-9">
     <div class="q-tag">Your Phoenix profile</div>
     <div class="q-title">Here's your path</div>
-    <div id="fq-profile-result"></div>
-    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:16px;margin-bottom:16px;">
-      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;">Your 6-month journey</div>
-      <div id="fq-journey-map"></div>
+    <div id="fq-profile-result" style="margin-bottom:16px;"></div>
+
+    <!-- Path choice cards -->
+    <div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:10px;">Choose your approach</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <div id="path-phoenix-card" onclick="fqSelectPath('phoenix')" style="background:var(--bg3);border:2px solid var(--gold);border-radius:var(--radius);padding:16px;cursor:pointer;text-align:center;transition:all 0.2s;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#c8963e" stroke-width="2" width="24" height="24" style="margin-bottom:8px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <div style="font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Phoenix Plan</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.5;">Follow the proven programme. Auto-built for you.</div>
+      </div>
+      <div id="path-own-card" onclick="fqSelectPath('own')" style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:16px;cursor:pointer;text-align:center;transition:all 0.2s;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24" style="margin-bottom:8px;color:var(--text2);"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <div style="font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);margin-bottom:4px;">Build My Own</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.5;">Design your own programme from scratch.</div>
+      </div>
     </div>
-    <div style="font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:16px;">You can always adjust your programme path from your profile settings. This is a recommendation, not a lock.</div>
+
+    <!-- Day / time selector -->
+    <div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:10px;">Training days &amp; times</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Tick your training days and pick AM or PM for each. You can change these anytime in settings.</div>
+    <div id="fq-day-selector">
+      <div class="fq-day-row" id="fq-day-mon">
+        <div class="fq-day-check" onclick="fqToggleDay('mon')"><div class="fq-day-tick" id="fq-tick-mon"></div><div class="fq-day-label">Monday</div></div>
+        <div class="fq-ampm" id="fq-ampm-mon" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-mon" onclick="fqSetAmPm('mon','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-mon" onclick="fqSetAmPm('mon','pm')">PM</div>
+        </div>
+      </div>
+      <div class="fq-day-row" id="fq-day-tue">
+        <div class="fq-day-check" onclick="fqToggleDay('tue')"><div class="fq-day-tick" id="fq-tick-tue"></div><div class="fq-day-label">Tuesday</div></div>
+        <div class="fq-ampm" id="fq-ampm-tue" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-tue" onclick="fqSetAmPm('tue','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-tue" onclick="fqSetAmPm('tue','pm')">PM</div>
+        </div>
+      </div>
+      <div class="fq-day-row" id="fq-day-wed">
+        <div class="fq-day-check" onclick="fqToggleDay('wed')"><div class="fq-day-tick" id="fq-tick-wed"></div><div class="fq-day-label">Wednesday</div></div>
+        <div class="fq-ampm" id="fq-ampm-wed" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-wed" onclick="fqSetAmPm('wed','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-wed" onclick="fqSetAmPm('wed','pm')">PM</div>
+        </div>
+      </div>
+      <div class="fq-day-row" id="fq-day-thu">
+        <div class="fq-day-check" onclick="fqToggleDay('thu')"><div class="fq-day-tick" id="fq-tick-thu"></div><div class="fq-day-label">Thursday</div></div>
+        <div class="fq-ampm" id="fq-ampm-thu" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-thu" onclick="fqSetAmPm('thu','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-thu" onclick="fqSetAmPm('thu','pm')">PM</div>
+        </div>
+      </div>
+      <div class="fq-day-row" id="fq-day-fri">
+        <div class="fq-day-check" onclick="fqToggleDay('fri')"><div class="fq-day-tick" id="fq-tick-fri"></div><div class="fq-day-label">Friday</div></div>
+        <div class="fq-ampm" id="fq-ampm-fri" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-fri" onclick="fqSetAmPm('fri','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-fri" onclick="fqSetAmPm('fri','pm')">PM</div>
+        </div>
+      </div>
+      <div class="fq-day-row" id="fq-day-sat">
+        <div class="fq-day-check" onclick="fqToggleDay('sat')"><div class="fq-day-tick" id="fq-tick-sat"></div><div class="fq-day-label">Saturday</div></div>
+        <div class="fq-ampm" id="fq-ampm-sat" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-sat" onclick="fqSetAmPm('sat','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-sat" onclick="fqSetAmPm('sat','pm')">PM</div>
+        </div>
+      </div>
+      <div class="fq-day-row" id="fq-day-sun">
+        <div class="fq-day-check" onclick="fqToggleDay('sun')"><div class="fq-day-tick" id="fq-tick-sun"></div><div class="fq-day-label">Sunday</div></div>
+        <div class="fq-ampm" id="fq-ampm-sun" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-sun" onclick="fqSetAmPm('sun','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-sun" onclick="fqSetAmPm('sun','pm')">PM</div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:12px;">Rest days will show a nudge on your Today screen — walk, core, or full rest. Your call.</div>
   </div>
 
 </div>
@@ -1608,7 +1746,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.6.0';
+var APP_VERSION='3.7.0';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -1856,9 +1994,25 @@ function renderToday(){
   personaliseToday();
   var container=document.getElementById('t-tiles');
   container.innerHTML='';
+  var allRest=day.am.category==='rest'&&day.pm.category==='rest';
   [{label:'AM',s:day.am},{label:'PM',s:day.pm}].forEach(function(slot){
     container.appendChild(makeTile(slot.label,slot.s));
   });
+  // Rest day nudge card
+  if(allRest){
+    var nudge=document.createElement('div');
+    nudge.style.cssText='background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--blue);border-radius:var(--radius);padding:16px;margin-top:4px;';
+    nudge.innerHTML=
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;color:var(--blue);text-transform:uppercase;margin-bottom:6px;">Rest day</div>'+
+      '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);margin-bottom:8px;">Fancy a walk?</div>'+
+      '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px;">Recovery is part of the programme. A walk, some core work, or full rest — your call.</div>'+
+      '<div style="display:flex;gap:8px;">'+
+        '<div onclick="openWalkLog()" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);padding:10px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Walk / Run</div>'+
+        '<div onclick="openCoreModal()" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);padding:10px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Core</div>'+
+        '<div style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);padding:10px;text-align:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">Full Rest</div>'+
+      '</div>';
+    container.appendChild(nudge);
+  }
 }
 
 function getSessionId(s){
@@ -3329,8 +3483,110 @@ function logGenericSession(sessionId,structure){
 }
 
 // ====== FOUNDATION QUESTIONNAIRE ======
-var fqStep=1,fqTotalSteps=8;
-var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:''};
+var fqStep=1,fqTotalSteps=9;
+var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{},sex:'',cycleSync:false};
+var fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
+var fqAmPm={mon:'am',tue:'am',wed:'am',thu:'am',fri:'am',sat:'am',sun:'am'};
+
+function fqSelectSex(sex){
+  fqAnswers.sex=sex;
+  var male=document.getElementById('fq-sex-male');
+  var female=document.getElementById('fq-sex-female');
+  var active='border-color:var(--gold);background:var(--gold-dim);color:var(--gold);';
+  var inactive='border:1px solid var(--border2);background:var(--bg3);color:var(--text2);';
+  if(male) male.setAttribute('style',male.getAttribute('style').replace(/border[^;]*;/,'')+';'+(sex==='male'?active:inactive));
+  if(female) female.setAttribute('style',female.getAttribute('style').replace(/border[^;]*;/,'')+';'+(sex==='female'?active:inactive));
+  var cs=document.getElementById('fq-cycle-section');
+  if(cs) cs.style.display=sex==='female'?'block':'none';
+}
+
+function fqSelectCycle(val){
+  fqAnswers.cycleSync=val==='yes';
+  var yes=document.getElementById('fq-cycle-yes');
+  var no=document.getElementById('fq-cycle-no');
+  if(yes) yes.style.cssText+=(val==='yes'?';border-color:var(--gold);background:var(--gold-dim);color:var(--gold)':';border:1px solid var(--border2);background:var(--bg3);color:var(--text2)');
+  if(no) no.style.cssText+=(val==='no'?';border-color:var(--gold);background:var(--gold-dim);color:var(--gold)':';border:1px solid var(--border2);background:var(--bg3);color:var(--text2)');
+}
+
+function fqSelectPath(path){
+  fqAnswers.path=path;
+  var pc=document.getElementById('path-phoenix-card');
+  var oc=document.getElementById('path-own-card');
+  if(pc) pc.style.border=path==='phoenix'?'2px solid var(--gold)':'1px solid var(--border2)';
+  if(oc) oc.style.border=path==='own'?'2px solid var(--gold)':'1px solid var(--border2)';
+}
+
+function fqToggleDay(day){
+  fqDayState[day]=!fqDayState[day];
+  var tick=document.getElementById('fq-tick-'+day);
+  var ampm=document.getElementById('fq-ampm-'+day);
+  if(tick) tick.classList.toggle('active',fqDayState[day]);
+  if(ampm) ampm.style.display=fqDayState[day]?'flex':'none';
+}
+
+function fqSetAmPm(day,val){
+  fqAmPm[day]=val;
+  var am=document.getElementById('fq-am-'+day);
+  var pm=document.getElementById('fq-pm-'+day);
+  if(am) am.classList.toggle('active',val==='am');
+  if(pm) pm.classList.toggle('active',val==='pm');
+}
+
+function renderFQSkinGrid(){
+  var grid=document.getElementById('fq-skin-grid');
+  if(!grid||typeof SKIN_META==='undefined') return;
+  grid.innerHTML='';
+  FREE_SKINS.forEach(function(skin){
+    var m=SKIN_META[skin];
+    var div=document.createElement('div');
+    div.style.cssText='border-radius:var(--radius);overflow:hidden;cursor:pointer;border:2px solid '+(skin===currentSkin?'var(--gold)':'transparent')+';transition:border-color 0.2s;';
+    div.id='fq-swatch-'+skin;
+    div.innerHTML='<div style="height:40px;background:'+m.bg+';display:flex;flex-direction:column;justify-content:flex-end;padding:4px;"><div style="width:8px;height:8px;border-radius:50%;background:'+m.dot+';"></div></div>'+
+      '<div style="background:'+m.label+';color:'+m.labelText+';font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px;text-align:center;">'+m.name+'</div>';
+    div.addEventListener('click',function(){
+      applySkin(skin);
+      FREE_SKINS.forEach(function(s){
+        var sw=document.getElementById('fq-swatch-'+s);
+        if(sw) sw.style.borderColor=s===skin?'var(--gold)':'transparent';
+      });
+    });
+    grid.appendChild(div);
+  });
+}
+
+function fqNext(){
+  // Step 1 — disclaimer
+  if(fqStep===1){
+    var d=document.getElementById('fq-disclaimer-check');
+    var a=document.getElementById('fq-age-check');
+    if(!d.checked||!a.checked){alert('Please confirm both checkboxes to continue.');return;}
+  }
+  // Step 2 — personal details
+  if(fqStep===2){
+    var name=document.getElementById('fq-name').value||'';
+    if(!name.trim()){alert('Please enter your name to continue.');return;}
+    // Save personal details to fqAnswers
+    fqAnswers.name=name;
+    fqAnswers.dob=document.getElementById('fq-dob').value||'';
+    fqAnswers.bw=parseFloat(document.getElementById('fq-bw').value)||0;
+    fqAnswers.country=document.getElementById('fq-country').value||'';
+    // Render skin grid on step 2 open — also render now in case they come back
+    renderFQSkinGrid();
+  }
+  // Step 8 — injuries
+  if(fqStep===8){fqAnswers.injuryNotes=document.getElementById('fq-injury-notes').value||'';}
+  // Step 9 — final, save day selections then complete
+  if(fqStep===9){
+    fqAnswers.trainingDays=Object.assign({},fqDayState);
+    fqAnswers.amPm=Object.assign({},fqAmPm);
+    completeFQ();return;
+  }
+  // Build profile just before step 9
+  if(fqStep===8){buildFQProfile();}
+  fqStep++;
+  updateFQStep();
+  if(fqStep===2) setTimeout(renderFQSkinGrid,100);
+}
 
 function selectQ(key,el){
   var container=el.closest('.q-options');
@@ -3362,18 +3618,7 @@ function selectQMulti(key,el){
   else{fqAnswers[key]=fqAnswers[key].filter(function(v){return v!==val;});}
 }
 
-function fqNext(){
-  if(fqStep===1){
-    var d=document.getElementById('fq-disclaimer-check');
-    var a=document.getElementById('fq-age-check');
-    if(!d.checked||!a.checked){alert('Please confirm both checkboxes to continue.');return;}
-  }
-  if(fqStep===7){fqAnswers.injuryNotes=document.getElementById('fq-injury-notes').value||'';}
-  if(fqStep===8){completeFQ();return;}
-  if(fqStep===fqTotalSteps-1){buildFQProfile();}
-  fqStep++;
-  updateFQStep();
-}
+
 function fqBack(){
   if(fqStep>1){fqStep--;updateFQStep();}
 }
@@ -3384,7 +3629,7 @@ function updateFQStep(){
   }
   document.getElementById('fq-progress').style.width=(fqStep/fqTotalSteps*100)+'%';
   document.getElementById('fq-back-btn').style.display=fqStep>1?'block':'none';
-  document.getElementById('fq-next-btn').textContent=fqStep===fqTotalSteps?'View my plan \u2192':'Next \u2192';
+  document.getElementById('fq-next-btn').textContent=fqStep===fqTotalSteps?'Build my plan \u2192':'Next \u2192';
 }
 
 function getUserProfile(){
@@ -3419,9 +3664,14 @@ function buildFQProfile(){
 
 function completeFQ(){
   var p=getUserProfile();
-  // Save profile data
   var existing=athlete||{};
   var updated=Object.assign({},existing,{
+    name:fqAnswers.name||existing.name||'',
+    dob:fqAnswers.dob||existing.dob||'',
+    bw:fqAnswers.bw||existing.bw||0,
+    country:fqAnswers.country||existing.country||'',
+    sex:fqAnswers.sex||existing.sex||'',
+    cycleSync:fqAnswers.cycleSync,
     fqBackground:fqAnswers.background,
     fqAway:fqAnswers.away,
     fqGoals:fqAnswers.goals,
@@ -3429,12 +3679,14 @@ function completeFQ(){
     fqDays:fqAnswers.days,
     fqInjury:fqAnswers.injury,
     fqInjuryNotes:fqAnswers.injuryNotes,
+    fqPath:fqAnswers.path,
+    fqTrainingDays:fqAnswers.trainingDays,
+    fqAmPm:fqAnswers.amPm,
     fqProfile:p.name,
     fqBlock:p.block,
     fqCompleted:new Date().toISOString()
   });
   saveAthlete(updated);
-  // Show full waiver before first session
   showScreen('screen-waiver');
 }
 
@@ -3452,7 +3704,9 @@ function acceptWaiver(){
 
 function openFoundationQ(){
   fqStep=1;
-  fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:''};
+  fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{},sex:'',cycleSync:false};
+  fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
+  fqAmPm={mon:'am',tue:'am',wed:'am',thu:'am',fri:'am',sat:'am',sun:'am'};
   updateFQStep();
   showScreen('screen-foundation-q');
 }

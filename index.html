@@ -6,7 +6,7 @@
 <title>PROJECT PHOENIX PLAN</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500;600&family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0a0a0a;--bg2:#111111;--bg3:#1a1a1a;--bg4:#222222;
@@ -177,6 +177,15 @@ body.skin-summer{
   --gold:#f06040;--gold2:#f88060;--gold-dim:rgba(240,96,64,0.15);
   --accent:var(--gold);--accent2:var(--gold2);--accent-dim:var(--gold-dim);
 }
+
+/* ====== FONTS ====== */
+body.font-bold{--font-d:"Bebas Neue",sans-serif;--font-b:"Inter",sans-serif;}
+body.font-sharp{--font-d:"Oswald",sans-serif;--font-b:"DM Sans",sans-serif;}
+.font-swatch{border-radius:var(--radius);background:var(--bg3);border:2px solid transparent;padding:12px;cursor:pointer;text-align:center;transition:all 0.2s;}
+.font-swatch.active{border-color:var(--gold);}
+.font-swatch-d{font-size:22px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text);line-height:1;margin-bottom:4px;}
+.font-swatch-b{font-size:12px;color:var(--text2);}
+.font-swatch-name{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-top:6px;font-family:var(--font-d);}
 
 /* Skin picker */
 .skin-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:4px 0 16px;}
@@ -1526,6 +1535,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   <div style="font-size:11px;color:var(--text3);line-height:1.7;text-align:center;padding:8px 0;">
     The Phoenix emblem changes colour to match your skin. One-off payment — no subscriptions. Ever.
   </div>
+
+  <!-- Font picker -->
+  <div class="section-hdr" style="margin-top:20px;margin-bottom:10px;">Typography</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Choose your font combination. Changes the feel of the whole app.</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;">
+    <div class="font-swatch active" id="font-swatch-phoenix" onclick="applyFont('phoenix')">
+      <div class="font-swatch-d" style="font-family:'Barlow Condensed',sans-serif;">PHOENIX</div>
+      <div class="font-swatch-b" style="font-family:'Barlow',sans-serif;">Strong + clean</div>
+      <div class="font-swatch-name" style="font-family:'Barlow Condensed',sans-serif;">Phoenix</div>
+    </div>
+    <div class="font-swatch" id="font-swatch-bold" onclick="applyFont('bold')">
+      <div class="font-swatch-d" style="font-family:'Bebas Neue',sans-serif;">BOLD</div>
+      <div class="font-swatch-b" style="font-family:'Inter',sans-serif;">Heavy impact</div>
+      <div class="font-swatch-name" style="font-family:'Bebas Neue',sans-serif;">Bold</div>
+    </div>
+    <div class="font-swatch" id="font-swatch-sharp" onclick="applyFont('sharp')">
+      <div class="font-swatch-d" style="font-family:'Oswald',sans-serif;">SHARP</div>
+      <div class="font-swatch-b" style="font-family:'DM Sans',sans-serif;">Refined edge</div>
+      <div class="font-swatch-name" style="font-family:'Oswald',sans-serif;">Sharp</div>
+    </div>
+  </div>
 </div>
 </div>
 
@@ -1602,6 +1632,93 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
 
   </div>
+</div>
+</div>
+
+<!-- GOAL SETTING SCREEN -->
+<div id="screen-goals" class="screen">
+<div class="app-header">
+  <div class="icon-btn" onclick="navTo('today')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+  <div class="header-logo">PHOENIX <span>GOALS</span></div>
+  <div style="width:36px"></div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 20px 100px;">
+  <div class="today-tag">Goal Setting</div>
+  <div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;margin-bottom:6px;line-height:1.1;">What are you<br>training for?</div>
+  <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:24px;">Set your targets. The app tracks your progress against them. Update these any time.</div>
+
+  <!-- Strength goals -->
+  <div class="section-hdr" style="margin-bottom:12px;">Strength targets</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+    <div class="field-group">
+      <label class="field-label">Bench Press 1RM</label>
+      <input type="number" class="field-input" id="goal-bench" placeholder="e.g. 140" inputmode="decimal">
+      <div class="field-hint">kg target</div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Back Squat 1RM</label>
+      <input type="number" class="field-input" id="goal-squat" placeholder="e.g. 180" inputmode="decimal">
+      <div class="field-hint">kg target</div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Deadlift 1RM</label>
+      <input type="number" class="field-input" id="goal-deadlift" placeholder="e.g. 220" inputmode="decimal">
+      <div class="field-hint">kg target</div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Pull Up max reps</label>
+      <input type="number" class="field-input" id="goal-pullups" placeholder="e.g. 20" inputmode="decimal">
+      <div class="field-hint">reps BW</div>
+    </div>
+  </div>
+
+  <!-- Body composition -->
+  <div class="section-hdr" style="margin-bottom:12px;">Body composition</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+    <div class="field-group">
+      <label class="field-label">Target bodyweight</label>
+      <input type="number" class="field-input" id="goal-bw" placeholder="e.g. 90" inputmode="decimal">
+      <div class="field-hint">kg</div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Target body fat</label>
+      <input type="number" class="field-input" id="goal-bf" placeholder="e.g. 12" inputmode="decimal">
+      <div class="field-hint">% (optional)</div>
+    </div>
+  </div>
+
+  <!-- Conditioning goals -->
+  <div class="section-hdr" style="margin-bottom:12px;">Conditioning targets</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+    <div class="field-group">
+      <label class="field-label">500m Row</label>
+      <input type="text" class="field-input" id="goal-row" placeholder="e.g. 1:45" inputmode="text">
+      <div class="field-hint">mm:ss target</div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">1 Mile Run</label>
+      <input type="text" class="field-input" id="goal-mile" placeholder="e.g. 7:00" inputmode="text">
+      <div class="field-hint">mm:ss target</div>
+    </div>
+  </div>
+
+  <!-- Free text goal -->
+  <div class="section-hdr" style="margin-bottom:12px;">Your why</div>
+  <div class="field-group" style="margin-bottom:20px;">
+    <label class="field-label">What does coming back mean to you?</label>
+    <textarea class="session-notes-input" id="goal-why" placeholder="Write it down. The reason you started. The thing that gets you out of bed. No one else reads this." rows="4" style="resize:none;"></textarea>
+  </div>
+
+  <!-- Target date -->
+  <div class="field-group" style="margin-bottom:24px;">
+    <label class="field-label">Target date</label>
+    <input type="date" class="field-input" id="goal-date">
+    <div class="field-hint">When do you want to hit these numbers?</div>
+  </div>
+
+  <button class="btn-primary" style="max-width:100%;" onclick="saveGoals()">Save Goals</button>
 </div>
 </div>
 
@@ -1723,6 +1840,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">My Phoenix</div>
+    <div class="sidebar-item" onclick="closeSidebar();showScreen('screen-goals');loadGoals()">
+      <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+      <div><div class="sidebar-item-text">My Goals</div><div class="sidebar-item-sub">Set your targets. Track progress.</div></div>
+    </div>
     <div class="sidebar-item" onclick="closeSidebar();showScreen('screen-themes')">
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg></div>
       <div><div class="sidebar-item-text">Themes</div><div class="sidebar-item-sub">Choose your skin</div></div>
@@ -1768,7 +1889,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.7.7';
+var APP_VERSION='3.7.8';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -1879,7 +2000,7 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
-  if(id==='screen-themes') renderThemesScreen();
+  if(id==='screen-themes'){renderThemesScreen();updateFontSwatches();}
 }
 function navTo(tab){
   var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk'};
@@ -3539,7 +3660,10 @@ function fqValidateStep(){
     case 5: valid=fqAnswers.goals&&fqAnswers.goals.length>0; break;
     case 6: valid=!!fqAnswers.equip; break;
     case 7: valid=!!fqAnswers.days; break;
-    case 8: valid=true; break; // injuries optional
+    case 8:
+      var injSelected=document.querySelector('#fq-injury-opts .q-option.selected');
+      valid=!!injSelected;
+      break;
     case 9: valid=true; break; // path + days optional
     default: valid=true;
   }
@@ -3798,6 +3922,68 @@ function openFoundationQ(){
   fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
   updateFQStep();
   showScreen('screen-foundation-q');
+}
+
+// ====== GOAL SETTING ======
+function saveGoals(){
+  var goals={
+    bench:parseFloat(document.getElementById('goal-bench').value)||0,
+    squat:parseFloat(document.getElementById('goal-squat').value)||0,
+    deadlift:parseFloat(document.getElementById('goal-deadlift').value)||0,
+    pullups:parseFloat(document.getElementById('goal-pullups').value)||0,
+    bw:parseFloat(document.getElementById('goal-bw').value)||0,
+    bf:parseFloat(document.getElementById('goal-bf').value)||0,
+    row:document.getElementById('goal-row').value||'',
+    mile:document.getElementById('goal-mile').value||'',
+    why:document.getElementById('goal-why').value||'',
+    date:document.getElementById('goal-date').value||'',
+    saved:new Date().toISOString()
+  };
+  localStorage.setItem('phoenix_goals',JSON.stringify(goals));
+  if(athlete){
+    saveAthlete(Object.assign({},athlete,{goals:goals}));
+  }
+  alert('Goals saved. Now go get them.');
+  navTo('today');
+}
+
+function loadGoals(){
+  var g=JSON.parse(localStorage.getItem('phoenix_goals')||'{}');
+  var s=function(id,val){var el=document.getElementById(id);if(el&&val) el.value=val;};
+  s('goal-bench',g.bench||'');
+  s('goal-squat',g.squat||'');
+  s('goal-deadlift',g.deadlift||'');
+  s('goal-pullups',g.pullups||'');
+  s('goal-bw',g.bw||'');
+  s('goal-bf',g.bf||'');
+  s('goal-row',g.row||'');
+  s('goal-mile',g.mile||'');
+  s('goal-why',g.why||'');
+  s('goal-date',g.date||'');
+}
+
+// ====== FONTS ======
+var currentFont='phoenix';
+var FONTS=['phoenix','bold','sharp'];
+
+function applyFont(font){
+  FONTS.forEach(function(f){document.body.classList.remove('font-'+f);});
+  if(font!=='phoenix') document.body.classList.add('font-'+font);
+  currentFont=font;
+  localStorage.setItem('phoenix_font',font);
+  updateFontSwatches();
+}
+
+function updateFontSwatches(){
+  FONTS.forEach(function(f){
+    var sw=document.getElementById('font-swatch-'+f);
+    if(sw) sw.classList.toggle('active',f===currentFont);
+  });
+}
+
+function loadFont(){
+  var saved=localStorage.getItem('phoenix_font')||'phoenix';
+  applyFont(saved);
 }
 
 // ====== SKINS ======
@@ -4553,6 +4739,7 @@ document.addEventListener("DOMContentLoaded", function() {
 // ====== INIT ======
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
 loadSkin();
+loadFont();
 loadState();
 if(athlete){
   // Returning user — show continue button

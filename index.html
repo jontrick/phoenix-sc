@@ -529,7 +529,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .ad-slot-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;}
 .ad-remove-btn{display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;text-align:center;padding:6px;cursor:pointer;border-top:1px solid var(--border);}
 
-/* SHIMMER */
+/* BODY DIAGRAM */
+.body-zone{cursor:pointer;transition:fill 0.15s;}
+.body-zone:hover{fill:rgba(200,150,62,0.15);}
+.body-zone.active{fill:rgba(200,150,62,0.35);stroke:var(--gold);stroke-width:1.5px;}
+.injury-tag{background:var(--gold-dim);border:1px solid var(--gold);border-radius:20px;padding:4px 10px;font-family:var(--font-d);font-size:11px;font-weight:600;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:4px;}
+.injury-tag-remove{font-size:14px;line-height:1;}
 @keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(200%);}}
 .shimmer-card{position:relative;overflow:hidden;}
 .shimmer-card::after{content:'';position:absolute;top:0;left:0;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(200,150,62,0.18),transparent);animation:shimmer 2.8s infinite ease-in-out;pointer-events:none;}
@@ -1205,33 +1210,90 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   <!-- Step 7: Injuries -->
   <div class="q-step" id="fq-step-8">
     <div class="q-tag">Your body</div>
-    <div class="q-title">Any injuries or limitations?</div>
-    <div class="q-sub">The app will suggest alternatives throughout. You can update this any time in your profile.</div>
-    <div class="q-multi-hint">Select any that apply (optional)</div>
-    <div class="q-options" id="fq-injury-opts">
-      <div class="q-option" data-val="shoulder" onclick="selectQMulti('injury',this)">
-        <div><div class="q-option-text">Shoulder</div></div><div class="q-check"></div>
+    <div class="q-title">Any injuries<br>or limitations?</div>
+    <div class="q-sub">Tap any area that's affecting your training. The app adjusts accordingly. Or confirm you're all good below.</div>
+
+    <!-- Body diagram -->
+    <div style="display:flex;gap:12px;justify-content:center;margin-bottom:16px;">
+
+      <!-- Front view -->
+      <div style="flex:1;text-align:center;">
+        <div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;">Front</div>
+        <svg viewBox="0 0 100 220" style="width:100%;max-width:130px;" id="body-front">
+          <!-- Body outline -->
+          <ellipse cx="50" cy="18" rx="12" ry="14" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="32" y="32" width="36" height="50" rx="4" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="14" y="34" width="16" height="42" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="70" y="34" width="16" height="42" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="34" y="82" width="15" height="55" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="51" y="82" width="15" height="55" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="34" y="135" width="15" height="45" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="51" y="135" width="15" height="45" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <!-- Hit zones — front -->
+          <ellipse cx="50" cy="18" rx="12" ry="14" fill="transparent" class="body-zone" data-zone="neck" onclick="bodyZoneTap('neck','Neck / Cervical spine')"/>
+          <ellipse cx="22" cy="38" rx="10" ry="10" fill="transparent" class="body-zone" data-zone="l-shoulder" onclick="bodyZoneTap('l-shoulder','Left shoulder')"/>
+          <ellipse cx="78" cy="38" rx="10" ry="10" fill="transparent" class="body-zone" data-zone="r-shoulder" onclick="bodyZoneTap('r-shoulder','Right shoulder')"/>
+          <rect x="18" y="55" width="12" height="16" rx="4" fill="transparent" class="body-zone" data-zone="l-elbow" onclick="bodyZoneTap('l-elbow','Left elbow / wrist')"/>
+          <rect x="70" y="55" width="12" height="16" rx="4" fill="transparent" class="body-zone" data-zone="r-elbow" onclick="bodyZoneTap('r-elbow','Right elbow / wrist')"/>
+          <rect x="34" y="34" width="32" height="22" rx="4" fill="transparent" class="body-zone" data-zone="chest" onclick="bodyZoneTap('chest','Chest / sternum')"/>
+          <rect x="34" y="56" width="32" height="24" rx="4" fill="transparent" class="body-zone" data-zone="core" onclick="bodyZoneTap('core','Abdominal / core')"/>
+          <rect x="34" y="82" width="32" height="22" rx="4" fill="transparent" class="body-zone" data-zone="hip" onclick="bodyZoneTap('hip','Hip / groin')"/>
+          <rect x="34" y="120" width="14" height="22" rx="4" fill="transparent" class="body-zone" data-zone="l-knee" onclick="bodyZoneTap('l-knee','Left knee')"/>
+          <rect x="52" y="120" width="14" height="22" rx="4" fill="transparent" class="body-zone" data-zone="r-knee" onclick="bodyZoneTap('r-knee','Right knee')"/>
+          <rect x="34" y="160" width="14" height="18" rx="4" fill="transparent" class="body-zone" data-zone="l-ankle" onclick="bodyZoneTap('l-ankle','Left ankle / foot')"/>
+          <rect x="52" y="160" width="14" height="18" rx="4" fill="transparent" class="body-zone" data-zone="r-ankle" onclick="bodyZoneTap('r-ankle','Right ankle / foot')"/>
+        </svg>
       </div>
-      <div class="q-option" data-val="knee" onclick="selectQMulti('injury',this)">
-        <div><div class="q-option-text">Knee</div></div><div class="q-check"></div>
+
+      <!-- Back view -->
+      <div style="flex:1;text-align:center;">
+        <div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;">Back</div>
+        <svg viewBox="0 0 100 220" style="width:100%;max-width:130px;" id="body-back">
+          <!-- Body outline (mirrored) -->
+          <ellipse cx="50" cy="18" rx="12" ry="14" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="32" y="32" width="36" height="50" rx="4" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="14" y="34" width="16" height="42" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="70" y="34" width="16" height="42" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="34" y="82" width="15" height="55" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="51" y="82" width="15" height="55" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="34" y="135" width="15" height="45" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <rect x="51" y="135" width="15" height="45" rx="5" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
+          <!-- Hit zones — back -->
+          <rect x="34" y="34" width="32" height="20" rx="4" fill="transparent" class="body-zone" data-zone="upper-back" onclick="bodyZoneTap('upper-back','Upper back / traps')"/>
+          <rect x="34" y="54" width="32" height="20" rx="4" fill="transparent" class="body-zone" data-zone="mid-back" onclick="bodyZoneTap('mid-back','Mid back / lats')"/>
+          <rect x="34" y="68" width="32" height="18" rx="4" fill="transparent" class="body-zone" data-zone="lower-back" onclick="bodyZoneTap('lower-back','Lower back / lumbar')"/>
+          <rect x="34" y="82" width="32" height="22" rx="4" fill="transparent" class="body-zone" data-zone="glute" onclick="bodyZoneTap('glute','Glutes / piriformis')"/>
+          <rect x="34" y="112" width="14" height="24" rx="4" fill="transparent" class="body-zone" data-zone="l-hamstring" onclick="bodyZoneTap('l-hamstring','Left hamstring')"/>
+          <rect x="52" y="112" width="14" height="24" rx="4" fill="transparent" class="body-zone" data-zone="r-hamstring" onclick="bodyZoneTap('r-hamstring','Right hamstring')"/>
+          <rect x="34" y="150" width="14" height="20" rx="4" fill="transparent" class="body-zone" data-zone="l-calf" onclick="bodyZoneTap('l-calf','Left calf / achilles')"/>
+          <rect x="52" y="150" width="14" height="20" rx="4" fill="transparent" class="body-zone" data-zone="r-calf" onclick="bodyZoneTap('r-calf','Right calf / achilles')"/>
+        </svg>
       </div>
-      <div class="q-option" data-val="lowerback" onclick="selectQMulti('injury',this)">
-        <div><div class="q-option-text">Lower back</div></div><div class="q-check"></div>
-      </div>
-      <div class="q-option" data-val="hip" onclick="selectQMulti('injury',this)">
-        <div><div class="q-option-text">Hip</div></div><div class="q-check"></div>
-      </div>
-      <div class="q-option" data-val="wrist" onclick="selectQMulti('injury',this)">
-        <div><div class="q-option-text">Wrist / Elbow</div></div><div class="q-check"></div>
-      </div>
-      <div class="q-option" data-val="none" onclick="selectQ('injury',this)">
-        <div><div class="q-option-text">No injuries</div><div class="q-option-sub">All good</div></div>
+    </div>
+
+    <!-- Selected zones display -->
+    <div id="injury-zones-display" style="min-height:32px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+
+    <!-- No injuries button -->
+    <div id="fq-injury-opts" style="margin-bottom:8px;">
+      <div class="q-option" data-val="none" onclick="selectNoInjury(this)" style="border-left:3px solid var(--green);">
+        <div><div class="q-option-text">No injuries</div><div class="q-option-sub">All good — ready to train</div></div>
         <div class="q-check"></div>
       </div>
     </div>
-    <div style="margin-top:12px">
-      <div class="field-label">Anything else we should know?</div>
-      <textarea class="q-text-input" id="fq-injury-notes" placeholder="E.g. recent surgery, chronic condition, movement restrictions..."></textarea>
+    <div style="font-size:11px;color:var(--text3);line-height:1.6;">Tap areas on the diagram OR confirm no injuries to continue.</div>
+
+    <!-- Note popup -->
+    <div id="injury-popup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:800;align-items:flex-end;justify-content:center;">
+      <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:12px 12px 0 0;padding:20px;width:100%;max-width:480px;">
+        <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;">Injury note</div>
+        <div id="injury-popup-title" style="font-family:var(--font-d);font-size:20px;font-weight:700;text-transform:uppercase;margin-bottom:12px;color:var(--text);"></div>
+        <textarea id="injury-popup-note" class="q-text-input" placeholder="Describe the injury — how long, severity, what movements affect it..." rows="3" style="resize:none;margin-bottom:12px;"></textarea>
+        <div style="display:flex;gap:10px;">
+          <button class="btn-primary" style="flex:1;padding:14px;" onclick="saveInjuryNote()">Save</button>
+          <button class="btn-secondary" style="flex:1;padding:14px;margin:0;" onclick="cancelInjuryNote()">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1889,7 +1951,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.7.8';
+var APP_VERSION='3.7.9';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3662,7 +3724,7 @@ function fqValidateStep(){
     case 7: valid=!!fqAnswers.days; break;
     case 8:
       var injSelected=document.querySelector('#fq-injury-opts .q-option.selected');
-      valid=!!injSelected;
+      valid=!!injSelected||Object.keys(injuryZones).length>0;
       break;
     case 9: valid=true; break; // path + days optional
     default: valid=true;
@@ -3782,8 +3844,10 @@ function fqNext(){
     fqAnswers.country=document.getElementById('fq-country').value||'';
     renderFQSkinGrid();
   }
-  // Step 8 — injuries
-  if(fqStep===8){fqAnswers.injuryNotes=document.getElementById('fq-injury-notes').value||'';}
+  if(fqStep===8){
+    fqAnswers.injuryZones=Object.assign({},injuryZones);
+    fqAnswers.injuryNotes=''; // diagram replaces text input
+  }
   // Step 9 — final, save day selections then complete
   if(fqStep===9){
     fqAnswers.trainingDays=Object.assign({},fqDayState);
@@ -3920,8 +3984,79 @@ function openFoundationQ(){
   fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{},sex:'',cycleSync:false};
   fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
   fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
+  injuryZones={};
   updateFQStep();
   showScreen('screen-foundation-q');
+}
+
+// ====== BODY DIAGRAM ======
+var injuryZones={};
+var currentZone=null;
+
+function bodyZoneTap(zone,label){
+  // Clear no-injuries if selecting a zone
+  var noneOpt=document.querySelector('#fq-injury-opts .q-option');
+  if(noneOpt) noneOpt.classList.remove('selected');
+  fqAnswers.injury=fqAnswers.injury||[];
+  if(injuryZones[zone]){
+    // Already selected — remove
+    delete injuryZones[zone];
+    document.querySelectorAll('[data-zone="'+zone+'"]').forEach(function(el){el.classList.remove('active');});
+    fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.zone!==zone;});
+    updateInjuryDisplay();
+    fqValidateStep();
+    return;
+  }
+  // Open note popup
+  currentZone={zone:zone,label:label};
+  document.getElementById('injury-popup-title').textContent=label;
+  document.getElementById('injury-popup-note').value='';
+  document.getElementById('injury-popup').style.display='flex';
+}
+
+function saveInjuryNote(){
+  if(!currentZone) return;
+  var note=document.getElementById('injury-popup-note').value||'';
+  injuryZones[currentZone.zone]={label:currentZone.label,note:note};
+  // Highlight zone
+  document.querySelectorAll('[data-zone="'+currentZone.zone+'"]').forEach(function(el){el.classList.add('active');});
+  if(!fqAnswers.injury) fqAnswers.injury=[];
+  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.zone!==currentZone.zone;});
+  fqAnswers.injury.push({zone:currentZone.zone,label:currentZone.label,note:note});
+  document.getElementById('injury-popup').style.display='none';
+  currentZone=null;
+  updateInjuryDisplay();
+  fqValidateStep();
+}
+
+function cancelInjuryNote(){
+  document.getElementById('injury-popup').style.display='none';
+  currentZone=null;
+}
+
+function updateInjuryDisplay(){
+  var display=document.getElementById('injury-zones-display');
+  if(!display) return;
+  display.innerHTML='';
+  Object.keys(injuryZones).forEach(function(zone){
+    var tag=document.createElement('div');
+    tag.className='injury-tag';
+    tag.innerHTML=injuryZones[zone].label+' <span class="injury-tag-remove" onclick="bodyZoneTap(\''+zone+'\',\''+injuryZones[zone].label+'\')">×</span>';
+    display.appendChild(tag);
+  });
+}
+
+function selectNoInjury(el){
+  // Clear all zones
+  injuryZones={};
+  fqAnswers.injury=[];
+  document.querySelectorAll('.body-zone').forEach(function(z){z.classList.remove('active');});
+  updateInjuryDisplay();
+  // Select the no-injury option
+  el.classList.add('selected');
+  el.querySelector('.q-check').textContent='✓';
+  fqAnswers.injuryNone=true;
+  fqValidateStep();
 }
 
 // ====== GOAL SETTING ======

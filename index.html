@@ -928,7 +928,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 <!-- FOUNDATION QUESTIONNAIRE SCREEN -->
 <div id="screen-foundation-q" class="screen">
 <div class="app-header">
-  <div class="icon-btn" onclick="navTo('today')">
+  <div class="icon-btn" onclick="fqBack()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
   </div>
   <div class="header-logo">PHOENIX <span>PLAN</span></div>
@@ -2043,7 +2043,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.8.3';
+var APP_VERSION='3.8.4';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3998,6 +3998,7 @@ function selectQMulti(key,el){
 
 function fqBack(){
   if(fqStep>1){fqStep--;updateFQStep();}
+  else{showScreen('screen-splash');}
 }
 function updateFQStep(){
   for(var i=1;i<=fqTotalSteps;i++){

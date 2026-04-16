@@ -520,6 +520,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .ad-slot-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;}
 .ad-remove-btn{display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;text-align:center;padding:6px;cursor:pointer;border-top:1px solid var(--border);}
 
+/* SHIMMER */
+@keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(200%);}}
+.shimmer-card{position:relative;overflow:hidden;}
+.shimmer-card::after{content:'';position:absolute;top:0;left:0;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(200,150,62,0.18),transparent);animation:shimmer 2.8s infinite ease-in-out;pointer-events:none;}
+
 /* DAY SELECTOR */
 .fq-num-btn{flex:1;padding:12px 4px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text2);transition:all 0.2s;}
 .fq-num-btn.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
@@ -700,12 +705,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
   <div id="ad-today-remove" class="ad-remove-btn" onclick="navTo('coming')">Remove ads forever — unlock Phoenix</div>
   <div style="padding:0 20px 80px;">
-    <div onclick="navTo('coming')" style="background:linear-gradient(135deg,var(--gold-dim),transparent);border:1px solid var(--gold);border-radius:var(--radius);padding:14px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
-      <div>
-        <div style="font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:3px;">This is just the beginning</div>
-        <div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);text-transform:uppercase;">See what's coming &#8250;</div>
-      </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="#c8963e" stroke-width="2" width="22" height="22"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <div onclick="navTo('coming')" class="shimmer-card" style="background:linear-gradient(135deg,rgba(200,150,62,0.22) 0%,rgba(200,150,62,0.06) 60%,transparent 100%);border:1px solid var(--gold);border-radius:var(--radius);padding:16px 18px;cursor:pointer;">
+      <div style="font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:5px;">This is just the beginning</div>
+      <div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);text-transform:uppercase;letter-spacing:1px;">See what's coming &#8250;</div>
     </div>
   </div>
 </div>
@@ -1245,61 +1247,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
       </div>
     </div>
 
-    <!-- Day / time selector -->
-    <div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:10px;">Training days &amp; times</div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Tick your training days and pick AM or PM for each. You can change these anytime in settings.</div>
-    <div id="fq-day-selector">
-      <div class="fq-day-row" id="fq-day-mon">
-        <div class="fq-day-check" onclick="fqToggleDay('mon')"><div class="fq-day-tick" id="fq-tick-mon"></div><div class="fq-day-label">Monday</div></div>
-        <div class="fq-ampm" id="fq-ampm-mon" style="display:none;">
-          <div class="fq-ampm-btn active" id="fq-am-mon" onclick="fqSetAmPm('mon','am')">AM</div>
-          <div class="fq-ampm-btn" id="fq-pm-mon" onclick="fqSetAmPm('mon','pm')">PM</div>
-        </div>
-      </div>
-      <div class="fq-day-row" id="fq-day-tue">
-        <div class="fq-day-check" onclick="fqToggleDay('tue')"><div class="fq-day-tick" id="fq-tick-tue"></div><div class="fq-day-label">Tuesday</div></div>
-        <div class="fq-ampm" id="fq-ampm-tue" style="display:none;">
-          <div class="fq-ampm-btn active" id="fq-am-tue" onclick="fqSetAmPm('tue','am')">AM</div>
-          <div class="fq-ampm-btn" id="fq-pm-tue" onclick="fqSetAmPm('tue','pm')">PM</div>
-        </div>
-      </div>
-      <div class="fq-day-row" id="fq-day-wed">
-        <div class="fq-day-check" onclick="fqToggleDay('wed')"><div class="fq-day-tick" id="fq-tick-wed"></div><div class="fq-day-label">Wednesday</div></div>
-        <div class="fq-ampm" id="fq-ampm-wed" style="display:none;">
-          <div class="fq-ampm-btn active" id="fq-am-wed" onclick="fqSetAmPm('wed','am')">AM</div>
-          <div class="fq-ampm-btn" id="fq-pm-wed" onclick="fqSetAmPm('wed','pm')">PM</div>
-        </div>
-      </div>
-      <div class="fq-day-row" id="fq-day-thu">
-        <div class="fq-day-check" onclick="fqToggleDay('thu')"><div class="fq-day-tick" id="fq-tick-thu"></div><div class="fq-day-label">Thursday</div></div>
-        <div class="fq-ampm" id="fq-ampm-thu" style="display:none;">
-          <div class="fq-ampm-btn active" id="fq-am-thu" onclick="fqSetAmPm('thu','am')">AM</div>
-          <div class="fq-ampm-btn" id="fq-pm-thu" onclick="fqSetAmPm('thu','pm')">PM</div>
-        </div>
-      </div>
-      <div class="fq-day-row" id="fq-day-fri">
-        <div class="fq-day-check" onclick="fqToggleDay('fri')"><div class="fq-day-tick" id="fq-tick-fri"></div><div class="fq-day-label">Friday</div></div>
-        <div class="fq-ampm" id="fq-ampm-fri" style="display:none;">
-          <div class="fq-ampm-btn active" id="fq-am-fri" onclick="fqSetAmPm('fri','am')">AM</div>
-          <div class="fq-ampm-btn" id="fq-pm-fri" onclick="fqSetAmPm('fri','pm')">PM</div>
-        </div>
-      </div>
-      <div class="fq-day-row" id="fq-day-sat">
-        <div class="fq-day-check" onclick="fqToggleDay('sat')"><div class="fq-day-tick" id="fq-tick-sat"></div><div class="fq-day-label">Saturday</div></div>
-        <div class="fq-ampm" id="fq-ampm-sat" style="display:none;">
-          <div class="fq-ampm-btn active" id="fq-am-sat" onclick="fqSetAmPm('sat','am')">AM</div>
-          <div class="fq-ampm-btn" id="fq-pm-sat" onclick="fqSetAmPm('sat','pm')">PM</div>
-        </div>
-      </div>
-      <div class="fq-day-row" id="fq-day-sun">
-        <div class="fq-day-check" onclick="fqToggleDay('sun')"><div class="fq-day-tick" id="fq-tick-sun"></div><div class="fq-day-label">Sunday</div></div>
-        <div class="fq-ampm" id="fq-ampm-sun" style="display:none;">
-          <div class="fq-ampm-btn active" id="fq-am-sun" onclick="fqSetAmPm('sun','am')">AM</div>
-          <div class="fq-ampm-btn" id="fq-pm-sun" onclick="fqSetAmPm('sun','pm')">PM</div>
-        </div>
-      </div>
-    </div>
-    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:12px;">Rest days will show a nudge on your Today screen — walk, core, or full rest. Your call.</div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:4px;">You can always change your path from settings. Day and time scheduling coming soon.</div>
   </div>
 
 </div>
@@ -1820,7 +1768,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.7.4';
+var APP_VERSION='3.7.6';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){

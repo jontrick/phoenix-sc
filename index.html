@@ -386,6 +386,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     <div class="step-desc">Just the basics. Your bodyweight drives load calculations throughout the programme.</div>
     <div class="field-group"><label class="field-label">Your Name</label><input type="text" class="field-input" id="f-name" placeholder="First name" autocomplete="off"></div>
     <div class="field-group"><label class="field-label">Bodyweight</label><input type="number" class="field-input" id="f-bw" placeholder="85" inputmode="decimal"><div class="field-hint">kg — update this as you progress</div></div>
+    <div class="field-group">
+      <label class="field-label">Sex</label>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <div id="sex-male" onclick="selectSex('male')" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Male</div>
+        <div id="sex-female" onclick="selectSex('female')" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Female</div>
+      </div>
+      <div class="field-hint">Used to personalise programming and community comparisons</div>
+    </div>
+    <div id="cycle-section" style="display:none;">
+      <div class="field-group">
+        <label class="field-label">Cycle-synced training</label>
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.7;">Research shows training intensity synced to your menstrual cycle can improve results. Follicular phase — push harder. Luteal phase — moderate and recover. This is optional and can be changed anytime.</div>
+        <div style="display:flex;gap:10px;">
+          <div id="cycle-yes" onclick="selectCycle('yes')" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Yes, sync it</div>
+          <div id="cycle-no" onclick="selectCycle('no')" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">No thanks</div>
+        </div>
+      </div>
+    </div>
     <div class="field-group"><label class="field-label">Programme Start Date</label><input type="date" class="field-input" id="f-start"></div>
   </div>
   <div class="onboard-step" id="step-2">
@@ -1232,7 +1250,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.2.2';
+var APP_VERSION='3.3.0';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -1359,6 +1377,28 @@ function navTo(tab){
 
 // ====== ONBOARDING ======
 var obStep=1;
+var selectedSex='',selectedCycle='';
+function selectSex(sex){
+  selectedSex=sex;
+  var male=document.getElementById('sex-male');
+  var female=document.getElementById('sex-female');
+  var active='border-color:var(--gold);background:var(--gold-dim);color:var(--gold)';
+  var inactive='border:1px solid var(--border2);background:var(--bg3);color:var(--text2)';
+  if(male) male.style.cssText=male.style.cssText.replace(/border[^;]+;/,'')+';'+(sex==='male'?active:inactive);
+  if(female) female.style.cssText=female.style.cssText.replace(/border[^;]+;/,'')+';'+(sex==='female'?active:inactive);
+  // Show cycle section for female
+  var cs=document.getElementById('cycle-section');
+  if(cs) cs.style.display=sex==='female'?'block':'none';
+}
+function selectCycle(val){
+  selectedCycle=val;
+  var yes=document.getElementById('cycle-yes');
+  var no=document.getElementById('cycle-no');
+  var active='border-color:var(--gold);background:var(--gold-dim);color:var(--gold)';
+  var inactive='border:1px solid var(--border2);background:var(--bg3);color:var(--text2)';
+  if(yes) yes.style.cssText=yes.style.cssText+';'+(val==='yes'?active:inactive);
+  if(no) no.style.cssText=no.style.cssText+';'+(val==='no'?active:inactive);
+}
 function updateOB(){
   for(var i=1;i<=3;i++) document.getElementById('step-'+i).classList.toggle('active',i===obStep);
   document.getElementById('ob-progress').style.width=(obStep/3*100)+'%';
@@ -1378,6 +1418,8 @@ function finishOB(){
   var g=function(id){var el=document.getElementById(id);return el?el.value:'';};
   var d={
     name:name,
+    sex:selectedSex||'',
+    cycleSync:selectedCycle==='yes',
     bw:parseFloat(g('f-bw'))||0,
     startDate:g('f-start')||new Date().toISOString().split('T')[0],
     b1rm:parseFloat(g('f-b1rm'))||0,
@@ -1413,6 +1455,15 @@ function editProfile(){
     s('f-mile',athlete.mile);
     s('f-plank',athlete.plank);
     s('f-ohsq',athlete.ohsq);
+    // Restore sex/cycle selections
+    if(athlete.sex){
+      selectedSex=athlete.sex;
+      setTimeout(function(){selectSex(athlete.sex);},50);
+    }
+    if(athlete.cycleSync){
+      selectedCycle='yes';
+      setTimeout(function(){selectCycle('yes');},50);
+    }
   }
   obStep=1;updateOB();showScreen('screen-onboard');
 }
@@ -2408,6 +2459,9 @@ function openPressSession(){
     auxSets.push({label:'Set '+(i+1),kg:suggestedKg?suggestedKg+'kg':'',reps:auxScheme.reps});
   }
 
+  var BACK_EXERCISE_OPTIONS=['Seated Cable Row (Neutral Grip)','Bent Over Barbell Row','Single Arm DB Row','Chest Supported DB Row','Meadows Row','Seated Cable Row (Overhand)','Inverted Row (BW)'];
+  var ANTERIOR_DELT_OPTIONS=['DB Front Raise','Plate Front Raise','Cable Front Raise','Barbell Front Raise','Incline DB Front Raise'];
+
   var ME_PRESS_STRUCTURE=[
     {id:'bench',label:'Exercise 1 - Max Effort',name:null,scheme:'ME Ramp - 7 sets - work to daily max',
      selectable:true,options:'bench_variant',
@@ -2419,40 +2473,23 @@ function openPressSession(){
     {id:'shrug2',label:'Exercise 3 - Shrugs',name:null,scheme:'4 x 8 - 90 sec rest',
      selectable:true,options:'shrug2',autoRest:90,
      sets:[{label:'Set 1',kg:'',reps:8},{label:'Set 2',kg:'',reps:8},{label:'Set 3',kg:'',reps:8},{label:'Set 4',kg:'',reps:8}]},
-    {id:'ss1a',label:'Superset 1A',name:null,scheme:'3 x 10-12 - no rest (pair with 1B)',
-     selectable:true,options:'ss1a',autoRest:0,
-     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
-    {id:'ss1b',label:'Superset 1B',name:null,scheme:'3 x 10-12 - 90 sec after each pair',
-     selectable:true,options:'ss1b',autoRest:90,
-     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
-    {id:'ss2a',label:'Superset 2A',name:null,scheme:'3 x 10-12 - no rest (pair with 2B)',
-     selectable:true,options:'ss2a',autoRest:0,
-     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
-    {id:'ss2b',label:'Superset 2B',name:null,scheme:'3 x 10-12 - 90 sec after each pair',
-     selectable:true,options:'ss2b',autoRest:90,
-     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''}]},
-    {id:'shoulderA',label:'Shoulder Finish A',name:null,scheme:'4 x 10 - no rest (pair with B)',
-     selectable:true,options:'shoulder_a',autoRest:0,
-     sets:[{label:'Set 1',kg:'',reps:10},{label:'Set 2',kg:'',reps:10},{label:'Set 3',kg:'',reps:10},{label:'Set 4',kg:'',reps:10}]},
-    {id:'shoulderB',label:'Shoulder Finish B',name:null,scheme:'4 x 10 - 60 sec after each pair',
-     selectable:true,options:'shoulder_b',autoRest:60,
-     sets:[{label:'Set 1',kg:'',reps:10},{label:'Set 2',kg:'',reps:10},{label:'Set 3',kg:'',reps:10},{label:'Set 4',kg:'',reps:10}]}
+    {id:'backex',label:'Exercise 4 - Back',name:null,scheme:'4 x 10-12 - 90 sec rest',
+     selectable:true,options:'back_ex',autoRest:90,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''},{label:'Set 4',kg:'',reps:''}]},
+    {id:'antdelt',label:'Exercise 5 - Anterior Delt',name:null,scheme:'4 x 10-12 - 90 sec rest',
+     selectable:true,options:'ant_delt',autoRest:90,
+     sets:[{label:'Set 1',kg:'',reps:''},{label:'Set 2',kg:'',reps:''},{label:'Set 3',kg:'',reps:''},{label:'Set 4',kg:'',reps:''}]}
   ];
 
-  // Extend openExPicker to handle new option keys
-  var origPick=pickExercise;
+  // Extend openExPicker to handle press-specific options
   window.pickPressExercise=function(exId,optKey){
     var titleMap={
       bench_variant:'Select Bench Variant',aux_press:'Select Aux Press',
-      shrug2:'Select Shrug',ss1a:'Superset 1A - Pull',ss1b:'Superset 1B - Press',
-      ss2a:'Superset 2A - Row',ss2b:'Superset 2B - Pull',
-      shoulder_a:'Shoulder Finish A',shoulder_b:'Shoulder Finish B'
+      shrug2:'Select Shrug',back_ex:'Select Back Exercise',ant_delt:'Select Anterior Delt Exercise'
     };
     var optsMap={
       bench_variant:BENCH_VARIANTS,aux_press:AUX_PRESS_OPTIONS,
-      shrug2:SHRUG_OPTIONS2,ss1a:SS1_A_OPTIONS,ss1b:SS1_B_OPTIONS,
-      ss2a:SS2_A_OPTIONS,ss2b:SS2_B_OPTIONS,
-      shoulder_a:SHOULDER_FINISH_A,shoulder_b:SHOULDER_FINISH_B
+      shrug2:SHRUG_OPTIONS2,back_ex:BACK_EXERCISE_OPTIONS,ant_delt:ANTERIOR_DELT_OPTIONS
     };
     var opts=optsMap[optKey]||[];
     exPickerCallback=function(chosen){
@@ -2474,7 +2511,7 @@ function openPressSession(){
 
   var body=document.getElementById('session-body-content');body.innerHTML='';
   var hero=document.createElement('div');hero.className='session-hero';
-  hero.innerHTML='<div class="sh-tag">Thursday AM - Lifting</div><div class="sh-name">ME Upper Press</div><div class="sh-detail">Bench Max / Aux Press / Shrugs / Supersets / Shoulders</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
+  hero.innerHTML='<div class="sh-tag">Thursday AM - Lifting</div><div class="sh-name">ME Upper Press</div><div class="sh-detail">Bench Max / Aux Press / Shrugs / Back / Anterior Delt</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
   body.appendChild(hero);
 
   ME_PRESS_STRUCTURE.forEach(function(ex){
@@ -3158,7 +3195,7 @@ function initWalkMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(walkMap);
   walkPath=L.polyline([],{color:'#c8963e',weight:4,opacity:0.85}).addTo(walkMap);
   // Start with Brisbane then update when GPS comes in
-  walkMap.setView([-27.47,153.02],13);
+  walkMap.setView([-27.47,153.02],16);
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(function(pos){
       var lat=pos.coords.latitude,lng=pos.coords.longitude;

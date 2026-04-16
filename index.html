@@ -1746,7 +1746,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.7.0';
+var APP_VERSION='3.7.1';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3643,22 +3643,23 @@ function getUserProfile(){
 function buildFQProfile(){
   var p=getUserProfile();
   var resultEl=document.getElementById('fq-profile-result');
-  resultEl.innerHTML='<div class="profile-result">'+
+  if(!resultEl) return;
+  var isFoundation=p.block==='foundation'||p.block==='foundation_short';
+  var weeks=p.block==='foundation_short'?6:10;
+  var journey=
+    '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">'+
+    (isFoundation?'<div style="display:flex;gap:10px;align-items:center;"><div style="width:8px;height:8px;border-radius:50%;background:var(--gold);flex-shrink:0"></div><div style="font-size:12px;color:var(--text2)">Months 1-2: Foundation Block ('+weeks+' weeks)</div></div>':'')+
+    '<div style="display:flex;gap:10px;align-items:center;"><div style="width:8px;height:8px;border-radius:50%;background:var(--orange);flex-shrink:0"></div><div style="font-size:12px;color:var(--text2)">'+(isFoundation?'Months 3-4':'Months 1-2')+': Phoenix Programme — Phase 1 + 2</div></div>'+
+    '<div style="display:flex;gap:10px;align-items:center;"><div style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0"></div><div style="font-size:12px;color:var(--text2)">'+(isFoundation?'Months 5-6':'Months 3-4')+': Phoenix Programme — Phase 3 + Combine</div></div>'+
+    '</div>';
+  resultEl.innerHTML=
+    '<div class="profile-result">'+
     '<div class="profile-result-label">Your profile</div>'+
     '<div class="profile-result-name">'+p.name+'</div>'+
     '<div class="profile-result-desc">'+p.desc+'</div>'+
-    (p.badge?'<div style="margin-top:10px;font-size:12px;color:var(--gold);">You qualify for the <strong>'+p.badge+'</strong> badge when you complete your Foundation block.</div>':'')+
+    (p.badge?'<div style="margin-top:8px;font-size:12px;color:var(--gold);">You qualify for the <strong>'+p.badge+'</strong> badge when you complete your Foundation block.</div>':'')+
     '<div class="profile-result-route">'+p.route+'</div>'+
-    '</div>';
-
-  var journeyEl=document.getElementById('fq-journey-map');
-  var isFoundation=p.block==='foundation'||p.block==='foundation_short';
-  var weeks=p.block==='foundation_short'?6:10;
-  journeyEl.innerHTML=
-    '<div style="display:flex;flex-direction:column;gap:8px;">'+
-    (isFoundation?'<div style="display:flex;gap:10px;align-items:center;"><div style="width:10px;height:10px;border-radius:50%;background:var(--gold);flex-shrink:0"></div><div style="font-size:13px;color:var(--text)">Months 1-2: Foundation Block ('+weeks+' weeks)</div></div>':'')+
-    '<div style="display:flex;gap:10px;align-items:center;"><div style="width:10px;height:10px;border-radius:50%;background:var(--orange);flex-shrink:0"></div><div style="font-size:13px;color:var(--text)">'+(isFoundation?'Months 3-4':'Months 1-2')+': Phoenix Programme — Phase 1 + 2</div></div>'+
-    '<div style="display:flex;gap:10px;align-items:center;"><div style="width:10px;height:10px;border-radius:50%;background:var(--red);flex-shrink:0"></div><div style="font-size:13px;color:var(--text)">'+(isFoundation?'Months 5-6':'Months 3-4')+': Phoenix Programme — Phase 3 + Combine test</div></div>'+
+    journey+
     '</div>';
 }
 

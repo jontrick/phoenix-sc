@@ -1746,7 +1746,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.7.1';
+var APP_VERSION='3.7.2';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -1897,10 +1897,17 @@ function selectCycle(val){
   if(no) no.style.cssText=no.style.cssText+';'+(val==='no'?active:inactive);
 }
 function updateOB(){
-  for(var i=1;i<=3;i++) document.getElementById('step-'+i).classList.toggle('active',i===obStep);
-  document.getElementById('ob-progress').style.width=(obStep/3*100)+'%';
-  document.getElementById('ob-step-lbl').textContent=obStep+' / 3';
-  document.getElementById('ob-back').style.display=obStep>1?'block':'none';
+  for(var i=1;i<=3;i++){
+    var el=document.getElementById('step-'+i);
+    if(el) el.classList.toggle('active',i===obStep);
+  }
+  // When entering from waiver (step 2 first), show 1/2 and 2/2
+  var startStep=2; // details now captured in questionnaire
+  var visibleStep=obStep-startStep+1;
+  var totalVisible=3-startStep+1;
+  document.getElementById('ob-progress').style.width=(visibleStep/totalVisible*100)+'%';
+  document.getElementById('ob-step-lbl').textContent=visibleStep+' / '+totalVisible;
+  document.getElementById('ob-back').style.display=obStep>startStep?'block':'none';
   document.getElementById('ob-next').textContent=obStep===3?'Begin Programme':'Next \u2192';
 }
 document.getElementById('ob-next').addEventListener('click',function(){
@@ -1910,13 +1917,9 @@ document.getElementById('ob-back').addEventListener('click',function(){
   if(obStep>1){obStep--;updateOB();}
 });
 function finishOB(){
-  var name=document.getElementById('f-name').value||'';
-  if(!name.trim()){alert('Please enter your name to continue.');return;}
   var g=function(id){var el=document.getElementById(id);return el?el.value:'';};
   var d={
-    name:name,
-    age:parseInt(g('f-age'))||0,
-    country:g('f-country'),
+    name:athlete&&athlete.name?athlete.name:(g('f-name')||''),
     sex:selectedSex||'',
     cycleSync:selectedCycle==='yes',
     bw:parseFloat(g('f-bw'))||0,
@@ -3699,8 +3702,8 @@ function acceptWaiver(){
     var updated=Object.assign({},athlete,{waiverAccepted:new Date().toISOString()});
     saveAthlete(updated);
   }
-  // Always go to onboarding to capture strength measures
-  obStep=1;updateOB();showScreen('screen-onboard');
+  // Skip details step (already captured in questionnaire) — go straight to strength numbers
+  obStep=2;updateOB();showScreen('screen-onboard');
 }
 
 function openFoundationQ(){

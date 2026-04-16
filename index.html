@@ -521,6 +521,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .ad-remove-btn{display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;text-align:center;padding:6px;cursor:pointer;border-top:1px solid var(--border);}
 
 /* DAY SELECTOR */
+.fq-num-btn{flex:1;padding:12px 4px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text2);transition:all 0.2s;}
+.fq-num-btn.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
 .fq-day-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
 .fq-day-row:last-child{border-bottom:none;}
 .fq-day-check{display:flex;align-items:center;gap:12px;cursor:pointer;flex:1;}
@@ -938,18 +940,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     <div class="field-row">
       <div class="field-group">
         <label class="field-label">Date of Birth</label>
-        <input type="date" class="field-input" id="fq-dob">
+        <input type="date" class="field-input" id="fq-dob" onchange="fqValidateStep()">
         <div class="field-hint">Used to personalise programme as you age</div>
       </div>
       <div class="field-group">
         <label class="field-label">Bodyweight</label>
-        <input type="number" class="field-input" id="fq-bw" placeholder="85" inputmode="decimal">
+        <input type="number" class="field-input" id="fq-bw" placeholder="85" inputmode="decimal" oninput="fqValidateStep()">
         <div class="field-hint">kg</div>
       </div>
     </div>
     <div class="field-group">
       <label class="field-label">Country</label>
-      <select class="field-input" id="fq-country">
+      <select class="field-input" id="fq-country" onchange="fqValidateStep()">
         <option value="">Select country</option>
         <option value="AU">Australia</option>
         <option value="NZ">New Zealand</option>
@@ -1096,32 +1098,96 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
   </div>
 
-  <!-- Step 6: Days available -->
+  <!-- Step 7: Days + times combined -->
   <div class="q-step" id="fq-step-7">
     <div class="q-tag">Your schedule</div>
-    <div class="q-title">Days available per week</div>
-    <div class="q-sub">How many days can you realistically commit to training?</div>
-    <div class="q-options" id="fq-days-opts">
-      <div class="q-option" data-val="2" onclick="selectQ('days',this)">
-        <div><div class="q-option-text">2 days</div><div class="q-option-sub">Minimal but consistent</div></div>
-        <div class="q-check"></div>
+    <div class="q-title">Training days</div>
+    <div class="q-sub">How many days per week? Then pick which days and when.</div>
+
+    <!-- Number of days selector -->
+    <div style="display:flex;gap:8px;margin-bottom:20px;">
+      <div class="fq-num-btn" onclick="fqSetDayCount(2)">2</div>
+      <div class="fq-num-btn" onclick="fqSetDayCount(3)">3</div>
+      <div class="fq-num-btn" onclick="fqSetDayCount(4)">4</div>
+      <div class="fq-num-btn" onclick="fqSetDayCount(5)">5</div>
+      <div class="fq-num-btn" onclick="fqSetDayCount(6)">6</div>
+      <div class="fq-num-btn" onclick="fqSetDayCount(7)">7</div>
+    </div>
+
+    <!-- Day rows — revealed after number selected -->
+    <div id="fq-day-rows" style="display:none;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Tap a day to add it. Toggle AM, PM, or both.</div>
+      <div id="fq-day-mon" class="fq-day-row">
+        <div class="fq-day-check" onclick="fqToggleDay('mon')">
+          <div class="fq-day-tick" id="fq-tick-mon"></div>
+          <div class="fq-day-label">Monday</div>
+        </div>
+        <div class="fq-ampm" id="fq-ampm-mon" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-mon" onclick="fqToggleAmPm('mon','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-mon" onclick="fqToggleAmPm('mon','pm')">PM</div>
+        </div>
       </div>
-      <div class="q-option" data-val="3" onclick="selectQ('days',this)">
-        <div><div class="q-option-text">3 days</div><div class="q-option-sub">Solid foundation</div></div>
-        <div class="q-check"></div>
+      <div id="fq-day-tue" class="fq-day-row">
+        <div class="fq-day-check" onclick="fqToggleDay('tue')">
+          <div class="fq-day-tick" id="fq-tick-tue"></div>
+          <div class="fq-day-label">Tuesday</div>
+        </div>
+        <div class="fq-ampm" id="fq-ampm-tue" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-tue" onclick="fqToggleAmPm('tue','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-tue" onclick="fqToggleAmPm('tue','pm')">PM</div>
+        </div>
       </div>
-      <div class="q-option" data-val="4" onclick="selectQ('days',this)">
-        <div><div class="q-option-text">4 days</div><div class="q-option-sub">Good volume</div></div>
-        <div class="q-check"></div>
+      <div id="fq-day-wed" class="fq-day-row">
+        <div class="fq-day-check" onclick="fqToggleDay('wed')">
+          <div class="fq-day-tick" id="fq-tick-wed"></div>
+          <div class="fq-day-label">Wednesday</div>
+        </div>
+        <div class="fq-ampm" id="fq-ampm-wed" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-wed" onclick="fqToggleAmPm('wed','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-wed" onclick="fqToggleAmPm('wed','pm')">PM</div>
+        </div>
       </div>
-      <div class="q-option" data-val="5" onclick="selectQ('days',this)">
-        <div><div class="q-option-text">5 days</div><div class="q-option-sub">High commitment</div></div>
-        <div class="q-check"></div>
+      <div id="fq-day-thu" class="fq-day-row">
+        <div class="fq-day-check" onclick="fqToggleDay('thu')">
+          <div class="fq-day-tick" id="fq-tick-thu"></div>
+          <div class="fq-day-label">Thursday</div>
+        </div>
+        <div class="fq-ampm" id="fq-ampm-thu" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-thu" onclick="fqToggleAmPm('thu','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-thu" onclick="fqToggleAmPm('thu','pm')">PM</div>
+        </div>
       </div>
-      <div class="q-option" data-val="6" onclick="selectQ('days',this)">
-        <div><div class="q-option-text">6+ days</div><div class="q-option-sub">All in</div></div>
-        <div class="q-check"></div>
+      <div id="fq-day-fri" class="fq-day-row">
+        <div class="fq-day-check" onclick="fqToggleDay('fri')">
+          <div class="fq-day-tick" id="fq-tick-fri"></div>
+          <div class="fq-day-label">Friday</div>
+        </div>
+        <div class="fq-ampm" id="fq-ampm-fri" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-fri" onclick="fqToggleAmPm('fri','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-fri" onclick="fqToggleAmPm('fri','pm')">PM</div>
+        </div>
       </div>
+      <div id="fq-day-sat" class="fq-day-row">
+        <div class="fq-day-check" onclick="fqToggleDay('sat')">
+          <div class="fq-day-tick" id="fq-tick-sat"></div>
+          <div class="fq-day-label">Saturday</div>
+        </div>
+        <div class="fq-ampm" id="fq-ampm-sat" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-sat" onclick="fqToggleAmPm('sat','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-sat" onclick="fqToggleAmPm('sat','pm')">PM</div>
+        </div>
+      </div>
+      <div id="fq-day-sun" class="fq-day-row">
+        <div class="fq-day-check" onclick="fqToggleDay('sun')">
+          <div class="fq-day-tick" id="fq-tick-sun"></div>
+          <div class="fq-day-label">Sunday</div>
+        </div>
+        <div class="fq-ampm" id="fq-ampm-sun" style="display:none;">
+          <div class="fq-ampm-btn active" id="fq-am-sun" onclick="fqToggleAmPm('sun','am')">AM</div>
+          <div class="fq-ampm-btn" id="fq-pm-sun" onclick="fqToggleAmPm('sun','pm')">PM</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6;">Tap AM or PM to toggle each on or off. Both can be active for double session days.</div>
     </div>
   </div>
 
@@ -1754,7 +1820,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.7.3';
+var APP_VERSION='3.7.4';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3497,7 +3563,7 @@ function logGenericSession(sessionId,structure){
 var fqStep=1,fqTotalSteps=9;
 var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{},sex:'',cycleSync:false};
 var fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
-var fqAmPm={mon:'am',tue:'am',wed:'am',thu:'am',fri:'am',sat:'am',sun:'am'};
+var fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
 
 function fqValidateStep(){
   var btn=document.getElementById('fq-next-btn');
@@ -3511,7 +3577,14 @@ function fqValidateStep(){
       break;
     case 2:
       var n=document.getElementById('fq-name');
-      valid=n&&n.value.trim().length>0;
+      var dob=document.getElementById('fq-dob');
+      var bw=document.getElementById('fq-bw');
+      var country=document.getElementById('fq-country');
+      valid=n&&n.value.trim().length>0
+        &&dob&&dob.value.length>0
+        &&bw&&parseFloat(bw.value)>0
+        &&country&&country.value.length>0
+        &&fqAnswers.sex.length>0;
       break;
     case 3: valid=!!fqAnswers.background; break;
     case 4: valid=!!fqAnswers.away; break;
@@ -3536,6 +3609,7 @@ function fqSelectSex(sex){
   if(female) female.setAttribute('style',female.getAttribute('style').replace(/border[^;]*;/,'')+';'+(sex==='female'?active:inactive));
   var cs=document.getElementById('fq-cycle-section');
   if(cs) cs.style.display=sex==='female'?'block':'none';
+  fqValidateStep();
 }
 
 function fqSelectCycle(val){
@@ -3554,20 +3628,47 @@ function fqSelectPath(path){
   if(oc) oc.style.border=path==='own'?'2px solid var(--gold)':'1px solid var(--border2)';
 }
 
+function fqSetDayCount(n){
+  fqAnswers.days=n;
+  // Highlight selected number button
+  document.querySelectorAll('.fq-num-btn').forEach(function(b){
+    b.classList.toggle('active',parseInt(b.textContent)===n||
+      (n===7&&b.textContent==='7'));
+  });
+  // Show day rows
+  var rows=document.getElementById('fq-day-rows');
+  if(rows) rows.style.display='block';
+  fqValidateStep();
+}
+
 function fqToggleDay(day){
   fqDayState[day]=!fqDayState[day];
   var tick=document.getElementById('fq-tick-'+day);
   var ampm=document.getElementById('fq-ampm-'+day);
   if(tick) tick.classList.toggle('active',fqDayState[day]);
   if(ampm) ampm.style.display=fqDayState[day]?'flex':'none';
+  // Default to AM on first enable
+  if(fqDayState[day]){
+    fqAmPm[day]={am:true,pm:false};
+    updateAmPmUI(day);
+  }
 }
 
-function fqSetAmPm(day,val){
-  fqAmPm[day]=val;
+function fqToggleAmPm(day,slot){
+  // Toggle independently — both can be on
+  if(!fqAmPm[day]) fqAmPm[day]={am:false,pm:false};
+  fqAmPm[day][slot]=!fqAmPm[day][slot];
+  // Ensure at least one is always on
+  if(!fqAmPm[day].am&&!fqAmPm[day].pm) fqAmPm[day][slot]=true;
+  updateAmPmUI(day);
+}
+
+function updateAmPmUI(day){
   var am=document.getElementById('fq-am-'+day);
   var pm=document.getElementById('fq-pm-'+day);
-  if(am) am.classList.toggle('active',val==='am');
-  if(pm) pm.classList.toggle('active',val==='pm');
+  var state=fqAmPm[day]||{am:true,pm:false};
+  if(am) am.classList.toggle('active',!!state.am);
+  if(pm) pm.classList.toggle('active',!!state.pm);
 }
 
 function renderFQSkinGrid(){
@@ -3599,16 +3700,14 @@ function fqNext(){
     var a=document.getElementById('fq-age-check');
     if(!d.checked||!a.checked){alert('Please confirm both checkboxes to continue.');return;}
   }
-  // Step 2 — personal details
+  // Step 2 — personal details — only name required, button handles validation
   if(fqStep===2){
     var name=document.getElementById('fq-name').value||'';
-    if(!name.trim()){alert('Please enter your name to continue.');return;}
-    // Save personal details to fqAnswers
+    if(!name.trim()) return; // button should be disabled but safety check
     fqAnswers.name=name;
     fqAnswers.dob=document.getElementById('fq-dob').value||'';
     fqAnswers.bw=parseFloat(document.getElementById('fq-bw').value)||0;
     fqAnswers.country=document.getElementById('fq-country').value||'';
-    // Render skin grid on step 2 open — also render now in case they come back
     renderFQSkinGrid();
   }
   // Step 8 — injuries
@@ -3748,7 +3847,7 @@ function openFoundationQ(){
   fqStep=1;
   fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{},sex:'',cycleSync:false};
   fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
-  fqAmPm={mon:'am',tue:'am',wed:'am',thu:'am',fri:'am',sat:'am',sun:'am'};
+  fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
   updateFQStep();
   showScreen('screen-foundation-q');
 }

@@ -539,6 +539,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .shimmer-card{position:relative;overflow:hidden;}
 .shimmer-card::after{content:'';position:absolute;top:0;left:0;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(200,150,62,0.18),transparent);animation:shimmer 2.8s infinite ease-in-out;pointer-events:none;}
 
+/* PAR-Q */
+.parq-row{padding:14px 0;border-bottom:1px solid var(--border);}
+.parq-row:last-child{border-bottom:none;}
+.parq-q{font-size:14px;color:var(--text);line-height:1.6;margin-bottom:10px;}
+.parq-btns{display:flex;gap:8px;}
+.parq-btn{flex:1;padding:10px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;}
+.parq-btn.yes-active{background:rgba(192,57,43,0.15);border-color:var(--red);color:var(--red);}
+.parq-btn.no-active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
+
 /* DAY SELECTOR */
 .fq-num-btn{flex:1;padding:12px 4px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text2);transition:all 0.2s;}
 .fq-num-btn.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
@@ -1207,8 +1216,63 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
   </div>
 
-  <!-- Step 7: Injuries -->
+  <!-- Step 8: PAR-Q health screening -->
   <div class="q-step" id="fq-step-8">
+    <div class="q-tag">Health screening</div>
+    <div class="q-title">PAR-Q</div>
+    <div class="q-sub">Please answer honestly. This is for your safety. If you answer YES to any question, we'll ask you to consult your GP before starting.</div>
+
+    <div id="parq-questions">
+      <div class="parq-row" id="parq-1">
+        <div class="parq-q">Has a doctor ever said you have a heart condition or that you should only exercise under medical supervision?</div>
+        <div class="parq-btns">
+          <div class="parq-btn" id="parq-1-yes" onclick="parqAnswer(1,'yes')">Yes</div>
+          <div class="parq-btn" id="parq-1-no" onclick="parqAnswer(1,'no')">No</div>
+        </div>
+      </div>
+      <div class="parq-row" id="parq-2">
+        <div class="parq-q">Do you feel pain in your chest when you do physical activity?</div>
+        <div class="parq-btns">
+          <div class="parq-btn" id="parq-2-yes" onclick="parqAnswer(2,'yes')">Yes</div>
+          <div class="parq-btn" id="parq-2-no" onclick="parqAnswer(2,'no')">No</div>
+        </div>
+      </div>
+      <div class="parq-row" id="parq-3">
+        <div class="parq-q">In the past month, have you had chest pain when you were not doing physical activity?</div>
+        <div class="parq-btns">
+          <div class="parq-btn" id="parq-3-yes" onclick="parqAnswer(3,'yes')">Yes</div>
+          <div class="parq-btn" id="parq-3-no" onclick="parqAnswer(3,'no')">No</div>
+        </div>
+      </div>
+      <div class="parq-row" id="parq-4">
+        <div class="parq-q">Do you lose your balance due to dizziness, or do you ever lose consciousness?</div>
+        <div class="parq-btns">
+          <div class="parq-btn" id="parq-4-yes" onclick="parqAnswer(4,'yes')">Yes</div>
+          <div class="parq-btn" id="parq-4-no" onclick="parqAnswer(4,'no')">No</div>
+        </div>
+      </div>
+      <div class="parq-row" id="parq-5">
+        <div class="parq-q">Do you have a bone or joint problem that could be made worse by exercise?</div>
+        <div class="parq-btns">
+          <div class="parq-btn" id="parq-5-yes" onclick="parqAnswer(5,'yes')">Yes</div>
+          <div class="parq-btn" id="parq-5-no" onclick="parqAnswer(5,'no')">No</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Warning shown if any YES -->
+    <div id="parq-warning" style="display:none;background:rgba(192,57,43,0.12);border:1px solid var(--red);border-radius:var(--radius);padding:14px;margin-top:16px;">
+      <div style="font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--red);margin-bottom:8px;">Please consult your GP</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:12px;">Based on your answers, we strongly recommend consulting your doctor before starting this programme. Exercise with a pre-existing condition carries real risk.</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+        <input type="checkbox" id="parq-acknowledge" onchange="fqValidateStep()" style="margin-top:3px;flex-shrink:0;">
+        <span style="font-size:12px;color:var(--text2);line-height:1.6;">I understand the risk and acknowledge that I am proceeding at my own discretion. I accept full responsibility for my participation.</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Step 9: Injuries -->
+  <div class="q-step" id="fq-step-9">
     <div class="q-tag">Your body</div>
     <div class="q-title">Any injuries<br>or limitations?</div>
     <div class="q-sub">Tap any area that's affecting your training. The app adjusts accordingly. Or confirm you're all good below.</div>
@@ -1326,7 +1390,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
 
   <!-- Step 9: Profile result + path choice + day selector -->
-  <div class="q-step" id="fq-step-9">
+  <div class="q-step" id="fq-step-10">
     <div class="q-tag">Your Phoenix profile</div>
     <div class="q-title">Here's your path</div>
     <div id="fq-profile-result" style="margin-bottom:16px;"></div>
@@ -1979,7 +2043,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.8.1';
+var APP_VERSION='3.8.2';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3719,7 +3783,7 @@ function logGenericSession(sessionId,structure){
 }
 
 // ====== FOUNDATION QUESTIONNAIRE ======
-var fqStep=1,fqTotalSteps=9;
+var fqStep=1,fqTotalSteps=10;
 var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{},sex:'',cycleSync:false};
 var fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
 var fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
@@ -3751,8 +3815,14 @@ function fqValidateStep(){
     case 6: valid=!!fqAnswers.equip; break;
     case 7: valid=!!fqAnswers.days; break;
     case 8:
-      var injSelected=document.querySelector('#fq-injury-opts .q-option.selected');
-      valid=!!injSelected||Object.keys(injuryZones).length>0;
+      var allAnswered=parqAllAnswered();
+      var anyYes=Object.values(parqAnswers).some(function(a){return a==='yes';});
+      var ack=document.getElementById('parq-acknowledge');
+      valid=allAnswered&&(!anyYes||(ack&&ack.checked));
+      break;
+    case 9:
+      var injSel=document.querySelector('#fq-injury-opts .q-option.selected');
+      valid=!!injSel||Object.keys(injuryZones).length>0;
       break;
     case 9: valid=true; break; // path + days optional
     default: valid=true;
@@ -3873,17 +3943,21 @@ function fqNext(){
     renderFQSkinGrid();
   }
   if(fqStep===8){
+    fqAnswers.parq=Object.assign({},parqAnswers);
+    fqAnswers.parqClear=Object.values(parqAnswers).every(function(a){return a==='no';});
+  }
+  if(fqStep===9){
     fqAnswers.injuryZones=Object.assign({},injuryZones);
-    fqAnswers.injuryNotes=''; // diagram replaces text input
+    fqAnswers.injuryNotes='';
   }
   // Step 9 — final, save day selections then complete
-  if(fqStep===9){
+  if(fqStep===10){
     fqAnswers.trainingDays=Object.assign({},fqDayState);
     fqAnswers.amPm=Object.assign({},fqAmPm);
     completeFQ();return;
   }
-  // Build profile just before step 9
-  if(fqStep===8){buildFQProfile();}
+  // Build profile just before step 10
+  if(fqStep===9){buildFQProfile();}
   fqStep++;
   updateFQStep();
   if(fqStep===2) setTimeout(renderFQSkinGrid,100);
@@ -4013,8 +4087,44 @@ function openFoundationQ(){
   fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
   fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
   injuryZones={};
+  parqClear();
   updateFQStep();
   showScreen('screen-foundation-q');
+}
+
+// ====== PAR-Q ======
+var parqAnswers={1:null,2:null,3:null,4:null,5:null};
+
+function parqAnswer(q,val){
+  parqAnswers[q]=val;
+  // Update button styles
+  var yBtn=document.getElementById('parq-'+q+'-yes');
+  var nBtn=document.getElementById('parq-'+q+'-no');
+  if(yBtn) yBtn.className='parq-btn'+(val==='yes'?' yes-active':'');
+  if(nBtn) nBtn.className='parq-btn'+(val==='no'?' no-active':'');
+  // Check if any YES
+  var anyYes=Object.values(parqAnswers).some(function(a){return a==='yes';});
+  var warning=document.getElementById('parq-warning');
+  if(warning) warning.style.display=anyYes?'block':'none';
+  fqValidateStep();
+}
+
+function parqAllAnswered(){
+  return Object.values(parqAnswers).every(function(a){return a!==null;});
+}
+
+function parqClear(){
+  parqAnswers={1:null,2:null,3:null,4:null,5:null};
+  for(var i=1;i<=5;i++){
+    var y=document.getElementById('parq-'+i+'-yes');
+    var n=document.getElementById('parq-'+i+'-no');
+    if(y) y.className='parq-btn';
+    if(n) n.className='parq-btn';
+  }
+  var w=document.getElementById('parq-warning');
+  if(w) w.style.display='none';
+  var ack=document.getElementById('parq-acknowledge');
+  if(ack) ack.checked=false;
 }
 
 // ====== BODY DIAGRAM ======

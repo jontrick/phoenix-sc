@@ -313,6 +313,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .splash-sub{font-family:var(--font-d);font-size:22px;font-weight:300;letter-spacing:8px;color:var(--gold);text-transform:uppercase;margin-bottom:48px;}
 .btn-primary{display:inline-block;background:var(--gold);color:#000;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:3px;text-transform:uppercase;padding:16px 48px;border:none;cursor:pointer;transition:all 0.2s;width:100%;max-width:320px;}
 .btn-primary:active{opacity:0.85;}
+.btn-primary:disabled,.btn-primary.disabled{opacity:0.35;cursor:not-allowed;}
 .btn-secondary{display:inline-block;background:transparent;color:var(--text2);font-family:var(--font-d);font-size:14px;font-weight:600;letter-spacing:3px;text-transform:uppercase;padding:14px 48px;border:1px solid var(--border2);cursor:pointer;transition:all 0.2s;width:100%;max-width:320px;margin-top:12px;}
 
 /* HEADER */
@@ -320,6 +321,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .header-logo{font-family:var(--font-d);font-size:20px;font-weight:900;letter-spacing:2px;color:var(--text);}
 .header-logo span{color:var(--gold);}
 .icon-btn{width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all 0.2s;}
+.icon-btn svg{width:20px;height:20px;display:block;stroke:var(--text2);}
+.icon-btn:active{border-color:var(--gold);color:var(--gold);}
+.icon-btn:active svg{stroke:var(--gold);}
 
 /* ONBOARDING */
 .progress-bar{height:2px;background:var(--border);}
@@ -699,7 +703,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
         <div style="font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:3px;">This is just the beginning</div>
         <div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);text-transform:uppercase;">See what's coming &#8250;</div>
       </div>
-      <div style="font-size:22px;">&#128293;</div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="#c8963e" stroke-width="2" width="22" height="22"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
     </div>
   </div>
 </div>
@@ -916,11 +920,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
       You will have the opportunity to review our full waiver before your first session.
     </div>
     <label class="disclaimer-check">
-      <input type="checkbox" id="fq-disclaimer-check">
+      <input type="checkbox" id="fq-disclaimer-check" onchange="fqValidateStep()">
       <div class="disclaimer-check-text">I understand that this programme involves physical exercise and I accept responsibility for my participation. I will seek medical advice if I have any concerns about my health.</div>
     </label>
     <label class="disclaimer-check">
-      <input type="checkbox" id="fq-age-check">
+      <input type="checkbox" id="fq-age-check" onchange="fqValidateStep()">
       <div class="disclaimer-check-text">I confirm that I am 16 years of age or older.</div>
     </label>
   </div>
@@ -930,7 +934,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     <div class="q-tag">About you</div>
     <div class="q-title">Let's get<br>personal</div>
     <div class="q-sub" style="margin-bottom:20px;">This personalises everything — your programme, your experience, your community.</div>
-    <div class="field-group"><label class="field-label">Your Name</label><input type="text" class="field-input" id="fq-name" placeholder="First name" autocomplete="off"></div>
+    <div class="field-group"><label class="field-label">Your Name</label><input type="text" class="field-input" id="fq-name" placeholder="First name" autocomplete="off" oninput="fqValidateStep()"></div>
     <div class="field-row">
       <div class="field-group">
         <label class="field-label">Date of Birth</label>
@@ -1351,10 +1355,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   <div style="width:36px"></div>
 </div>
 <div class="coming-soon-body">
-  <div style="margin-bottom:24px;">
-    <div class="today-tag">What's coming</div>
-    <div style="font-family:var(--font-d);font-size:36px;font-weight:900;text-transform:uppercase;line-height:1.1;margin-bottom:8px;">This is just<br>the beginning</div>
-    <div style="font-size:14px;color:var(--text2);line-height:1.7;">Phoenix is growing. You're part of something that's going to be much bigger than an app. Here's where we're taking this.</div>
+
+  <!-- Hero — gold gradient, no emoji -->
+  <div style="position:relative;overflow:hidden;margin:-0px;padding:32px 20px 28px;margin-bottom:24px;background:linear-gradient(135deg,#0a0a0a 0%,#1a1200 50%,#0a0a0a 100%);border-bottom:1px solid var(--border);">
+    <div style="position:absolute;inset:0;background:linear-gradient(135deg,transparent 0%,rgba(200,150,62,0.12) 50%,transparent 100%);pointer-events:none;"></div>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);"></div>
+    <div style="font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:5px;color:var(--gold);text-transform:uppercase;margin-bottom:10px;">What's coming</div>
+    <div style="font-family:var(--font-d);font-size:42px;font-weight:900;text-transform:uppercase;line-height:1;margin-bottom:12px;background:linear-gradient(135deg,var(--text) 0%,var(--gold) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">This is just<br>the beginning</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.7;">Phoenix is growing. You're part of something that's going to be much bigger than an app.</div>
   </div>
 
   <div class="coming-card">
@@ -1746,7 +1754,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.7.2';
+var APP_VERSION='3.7.3';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3491,6 +3499,33 @@ var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[]
 var fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
 var fqAmPm={mon:'am',tue:'am',wed:'am',thu:'am',fri:'am',sat:'am',sun:'am'};
 
+function fqValidateStep(){
+  var btn=document.getElementById('fq-next-btn');
+  if(!btn) return;
+  var valid=false;
+  switch(fqStep){
+    case 1:
+      var d=document.getElementById('fq-disclaimer-check');
+      var a=document.getElementById('fq-age-check');
+      valid=d&&a&&d.checked&&a.checked;
+      break;
+    case 2:
+      var n=document.getElementById('fq-name');
+      valid=n&&n.value.trim().length>0;
+      break;
+    case 3: valid=!!fqAnswers.background; break;
+    case 4: valid=!!fqAnswers.away; break;
+    case 5: valid=fqAnswers.goals&&fqAnswers.goals.length>0; break;
+    case 6: valid=!!fqAnswers.equip; break;
+    case 7: valid=!!fqAnswers.days; break;
+    case 8: valid=true; break; // injuries optional
+    case 9: valid=true; break; // path + days optional
+    default: valid=true;
+  }
+  btn.disabled=!valid;
+  btn.classList.toggle('disabled',!valid);
+}
+
 function fqSelectSex(sex){
   fqAnswers.sex=sex;
   var male=document.getElementById('fq-sex-male');
@@ -3600,6 +3635,7 @@ function selectQ(key,el){
   el.classList.add('selected');
   el.querySelector('.q-check').textContent='✓';
   fqAnswers[key]=el.getAttribute('data-val');
+  fqValidateStep();
 }
 function selectQMulti(key,el){
   if(key==='injury'&&el.getAttribute('data-val')==='none'){
@@ -3619,6 +3655,7 @@ function selectQMulti(key,el){
   if(!fqAnswers[key]) fqAnswers[key]=[];
   if(checked){if(fqAnswers[key].indexOf(val)<0)fqAnswers[key].push(val);}
   else{fqAnswers[key]=fqAnswers[key].filter(function(v){return v!==val;});}
+  fqValidateStep();
 }
 
 
@@ -3633,6 +3670,7 @@ function updateFQStep(){
   document.getElementById('fq-progress').style.width=(fqStep/fqTotalSteps*100)+'%';
   document.getElementById('fq-back-btn').style.display=fqStep>1?'block':'none';
   document.getElementById('fq-next-btn').textContent=fqStep===fqTotalSteps?'Build my plan \u2192':'Next \u2192';
+  fqValidateStep();
 }
 
 function getUserProfile(){

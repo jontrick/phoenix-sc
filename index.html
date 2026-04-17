@@ -539,6 +539,31 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .shimmer-card{position:relative;overflow:hidden;}
 .shimmer-card::after{content:'';position:absolute;top:0;left:0;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(200,150,62,0.18),transparent);animation:shimmer 2.8s infinite ease-in-out;pointer-events:none;}
 
+/* WARM-UP BLOCKS */
+.wu-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;}
+.wu-block-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);}
+.wu-block-tag{font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);}
+.wu-block-title{font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);margin:2px 0;}
+.wu-skip{font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);}
+.wu-body{padding:14px 16px;}
+.wu-cardio-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.wu-cardio-opt{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 6px;text-align:center;cursor:pointer;transition:all 0.15s;}
+.wu-cardio-opt.active{background:var(--gold-dim);border-color:var(--gold);}
+.wu-cardio-opt-name{font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);}
+.wu-cardio-opt.active .wu-cardio-opt-name{color:var(--gold);}
+.wu-timer-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.wu-timer-display{font-family:var(--font-d);font-size:36px;font-weight:900;color:var(--gold);letter-spacing:2px;flex:1;}
+.wu-timer-btns{display:flex;gap:8px;}
+.wu-ex-row{padding:10px 0;border-bottom:1px solid var(--border);}
+.wu-ex-row:last-child{border-bottom:none;}
+.wu-ex-name{font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;color:var(--text);margin-bottom:2px;}
+.wu-ex-scheme{font-size:12px;color:var(--gold);font-weight:600;margin-bottom:3px;}
+.wu-ex-cue{font-size:12px;color:var(--text2);line-height:1.5;}
+.wu-done-btn{margin-top:12px;width:100%;padding:12px;background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);cursor:pointer;}
+.wu-block.completed .wu-body{display:none;}
+.wu-block.completed .wu-block-header{border-bottom:none;opacity:0.5;}
+.wu-completed-tag{font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;}
+
 /* PAR-Q */
 .parq-row{padding:14px 0;border-bottom:1px solid var(--border);}
 .parq-row:last-child{border-bottom:none;}
@@ -1513,6 +1538,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
       <button id="wt-pause-btn" class="walk-ctrl-btn pause" onclick="walkPause()" style="display:none">Pause</button>
       <button id="wt-stop-btn" class="walk-ctrl-btn stop" onclick="walkStop()">Save &amp; Exit</button>
     </div>
+    <div style="margin:10px 20px 0;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:flex-start;gap:8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2" width="14" height="14" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div style="font-size:11px;color:var(--text3);line-height:1.6;">GPS not working? Make sure you're using Chrome or Safari — links opened inside Messenger, Instagram or WhatsApp block location access.</div>
+    </div>
     <div id="ad-walk" style="margin-top:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:8px;text-align:center;min-height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
       <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Advertisement</div>
       <!-- AdSense slot: walk-session -->
@@ -2043,7 +2072,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.8.4';
+var APP_VERSION='3.8.6';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -2611,11 +2640,15 @@ function openExPicker(exId,title,optionsKey,callback){
 }
 function closeExPicker(){document.getElementById('ex-picker-modal').classList.remove('active');}
 function openSession(sessionId){
+  // Reset warm-up state
+  clearInterval(wuTimerInterval);
+  wuTimerSecs=0;wuTimerRunning=false;wuSelectedCardio='row';
   if(sessionId==='me-lower-sq'){openLowerSqSession();return;}
   var body=document.getElementById('session-body-content');body.innerHTML='';
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">Monday AM &middot; Lifting</div><div class="sh-name">ME Upper Pull</div><div class="sh-detail">Wide Grip Chins &middot; Dips &middot; Rows &middot; Shoulders &middot; Arms</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
   body.appendChild(hero);
+  buildWarmupBlocks('upper-pull',body);
   ME_PULL_STRUCTURE.forEach(function(ex){body.appendChild(renderExBlock(ex));});
   setTimeout(populatePullLoads,50);
   var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
@@ -2822,10 +2855,12 @@ var ME_LOWER_SQ_STRUCTURE = [
 ];
 
 function openLowerSqSession() {
+  clearInterval(wuTimerInterval);wuTimerSecs=0;wuTimerRunning=false;wuSelectedCardio='row';
   var body=document.getElementById('session-body-content');body.innerHTML='';
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">Tuesday AM - Lifting</div><div class="sh-name">ME Lower</div><div class="sh-detail">Back Squat / Pause Squat / Unilateral / Hamstrings / DE</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
   body.appendChild(hero);
+  buildWarmupBlocks('lower-sq',body);
   ME_LOWER_SQ_STRUCTURE.forEach(function(ex){body.appendChild(renderExBlock(ex));});
   setTimeout(populateSqLoads,50);
   var notesBlock=document.createElement('div');notesBlock.className='session-notes-block';
@@ -2916,6 +2951,7 @@ var coreTimerInterval = null;
 var coreTimerEnd = 0;
 
 function openCoreSession(coreNum) {
+  clearInterval(wuTimerInterval);wuTimerSecs=0;wuTimerRunning=false;wuSelectedCardio='row';
   coreNum = coreNum || 1;
   var coreData = CORE_SESSIONS[coreNum-1];
   var body = document.getElementById('session-body-content');
@@ -2928,6 +2964,7 @@ function openCoreSession(coreNum) {
     '<div class="sh-name">Core ' + coreNum + '</div>' +
     '<div class="sh-detail">Complete as many rounds as possible</div>';
   body.appendChild(hero);
+  buildWarmupBlocks('core',body);
 
   // Timer block
   var timerBlock = document.createElement('div');
@@ -3058,8 +3095,9 @@ function startCorePrepCountdown(){
     if(corePrepInterval)clearInterval(corePrepInterval);
     navTo('today');
   };
-
-  body.innerHTML=
+  buildWarmupBlocks('core',body);
+  var heroEl=document.createElement('div');
+  heroEl.innerHTML=
     '<div class="session-hero"><div class="sh-tag">Core Session</div>'+
     '<div class="sh-name">Core '+coreSession.num+'</div>'+
     '<div class="sh-detail">20 min AMRAP</div></div>'+
@@ -3067,6 +3105,7 @@ function startCorePrepCountdown(){
     '<div style="font-family:var(--font-d);font-size:14px;letter-spacing:4px;color:var(--text2);text-transform:uppercase;margin-bottom:16px;">Get Ready</div>'+
     '<div id="prep-count" style="font-family:var(--font-d);font-size:120px;font-weight:900;color:var(--gold);line-height:1;">5</div>'+
     '</div>';
+  body.appendChild(heroEl);
 
   var prepSecs=5;
   if(corePrepInterval)clearInterval(corePrepInterval);
@@ -3268,6 +3307,7 @@ function getLastPressAuxKg(){
 }
 
 function openPressSession(){
+  clearInterval(wuTimerInterval);wuTimerSecs=0;wuTimerRunning=false;wuSelectedCardio='row';
   var w=currentProgWeek||progWeek();
   var auxScheme=getAuxPressScheme(w);
   var suggestedKg=getLastPressAuxKg();
@@ -3330,6 +3370,7 @@ function openPressSession(){
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">Thursday AM - Lifting</div><div class="sh-name">ME Upper Press</div><div class="sh-detail">Bench Max / Aux Press / Shrugs / Back / Anterior Delt</div>'+(athlete&&athlete.notes?'<div class="sh-notes">Note: '+athlete.notes+'</div>':'');
   body.appendChild(hero);
+  buildWarmupBlocks('upper-press',body);
 
   ME_PRESS_STRUCTURE.forEach(function(ex){
     var block=renderExBlock(ex);
@@ -3383,10 +3424,12 @@ function populatePressLoads(structure){
 
 // ====== KAREN + CORE SESSION ======
 function openKarenSession(){
+  clearInterval(wuTimerInterval);wuTimerSecs=0;wuTimerRunning=false;wuSelectedCardio='row';
   var body=document.getElementById('session-body-content');body.innerHTML='';
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">Friday AM - Conditioning</div><div class="sh-name">Karen + Core</div><div class="sh-detail">150 Wall Balls @ 9kg AFAP, then Core AMRAP</div>';
   body.appendChild(hero);
+  buildWarmupBlocks('crossfit',body);
 
   // Karen timer block
   var karenBlock=document.createElement('div');
@@ -3493,6 +3536,7 @@ var DE_SLED_OPTIONS=['Sled Push Medium x 1 length','Sled Push Heavy x 1 length',
 var UPPER_DE_OPTIONS=['50% Speed Bench x 3','60% Speed Bench x 3','45% Speed Bench + Bands x 3','50% Speed BB Row x 3','60% Speed BB Row x 3'];
 
 function openDESession(){
+  clearInterval(wuTimerInterval);wuTimerSecs=0;wuTimerRunning=false;wuSelectedCardio='row';
   var w=currentProgWeek||progWeek();
   var meLower=getMELower(w);
   var isSquatWeek=meLower.detail&&meLower.detail.indexOf('Squat')>-1;
@@ -3551,6 +3595,7 @@ function openDESession(){
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">Saturday AM - Dynamic Effort</div><div class="sh-name">DE Total</div><div class="sh-detail">DE '+dePrimary+' / Jumps / Sled / Speed Bench / Speed Row / Dips</div>';
   body.appendChild(hero);
+  buildWarmupBlocks('de-total',body);
 
   DE_STRUCTURE.forEach(function(ex){
     var block=renderExBlock(ex);
@@ -3630,6 +3675,7 @@ var CF_SESSIONS={
 var cfTimerInterval=null,cfTimerEnd=0,cfTimerStart=0,cfRunning=false;
 
 function openCFSession(name){
+  clearInterval(wuTimerInterval);wuTimerSecs=0;wuTimerRunning=false;wuSelectedCardio='row';
   var cf=CF_SESSIONS[name];
   if(!cf) return;
   var isAMRAP=cf.format.indexOf('AMRAP')>-1;
@@ -3638,6 +3684,7 @@ function openCFSession(name){
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">CrossFit - '+cf.format+'</div><div class="sh-name">'+name+'</div><div class="sh-detail">'+cf.description+'</div>';
   body.appendChild(hero);
+  buildWarmupBlocks('crossfit',body);
 
   // Show previous time/score
   var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
@@ -4091,6 +4138,193 @@ function openFoundationQ(){
   parqClear();
   updateFQStep();
   showScreen('screen-foundation-q');
+}
+
+// ====== WARM-UP SYSTEM ======
+var wuTimerInterval=null;
+var wuTimerSecs=0;
+var wuTimerRunning=false;
+var wuSelectedCardio='row';
+
+var WU_CARDIO_OPTS=[
+  {id:'treadmill',name:'Treadmill',icon:'🏃'},
+  {id:'row',name:'Rower',icon:'🚣'},
+  {id:'bike',name:'Bike',icon:'🚴'},
+  {id:'ski',name:'Ski Erg',icon:'⛷️'},
+  {id:'jumprope',name:'Jump Rope',icon:'🪢'},
+  {id:'walk',name:'Walk',icon:'🚶'}
+];
+
+// Session-specific dynamic warm-up exercises
+var WU_DYNAMIC={
+  'upper-pull':[
+    {name:'Band Pull-Aparts',scheme:'3 × 15 reps',cue:'Arms straight, squeeze shoulder blades together at the end of every rep. Slow and controlled.'},
+    {name:'Shoulder Circles',scheme:'2 × 10 each direction',cue:'Full range, arms relaxed. Forward then backward. Feel the joint opening up.'},
+    {name:'Thoracic Rotations',scheme:'2 × 8 each side',cue:'Seated or in quadruped. Rotate through the upper back, not the lower back.'},
+    {name:'Dead Hang',scheme:'2 × 20–30 sec',cue:'Passive hang from the bar. Let the lats stretch and decompress the shoulder joint.'},
+    {name:'Scapular Pull-Ups',scheme:'2 × 8 reps',cue:'Arms straight, depress and retract the scaps only. No elbow bend. Activates the lats before loading.'}
+  ],
+  'upper-press':[
+    {name:'Band Pull-Aparts',scheme:'3 × 15 reps',cue:'Counterbalance for pressing. Keep elbows locked, pull to chest height.'},
+    {name:'Wall Slides',scheme:'2 × 10 reps',cue:'Back flat against wall, arms slide overhead. Feel the serratus and lower traps engage.'},
+    {name:'Shoulder CARs',scheme:'2 × 5 each arm',cue:'Controlled articular rotations. Full shoulder circle with intent and tension throughout.'},
+    {name:'Incline DB Press — Feeder Sets',scheme:'2 × 10 @ light weight',cue:'Take bench press motion through range before loading. Not a workout — just warming the pattern.'},
+    {name:'Face Pulls',scheme:'2 × 15 reps',cue:'High angle, elbows flared. Pull to the forehead, external rotate at the end. Protects the rotator cuff.'}
+  ],
+  'lower-sq':[
+    {name:'Hip Circles',scheme:'2 × 10 each direction',cue:'Standing, hands on hips. Big circles. Open the hip joint before loading.'},
+    {name:'Bodyweight Squat',scheme:'2 × 10 reps',cue:'Slow descent, pause at bottom. Find your stance. No weight — just moving through range.'},
+    {name:'Glute Bridges',scheme:'2 × 15 reps',cue:'Feet flat, drive hips up, squeeze hard at top. Wakes the posterior chain before squatting.'},
+    {name:'Leg Swings',scheme:'2 × 10 each leg — front/back + side/side',cue:'Hold a wall for balance. Loose and relaxed. Dynamic hip flexor and adductor prep.'},
+    {name:'Goblet Squat',scheme:'2 × 8 @ light weight',cue:'Counterbalance helps you sit tall. Elbows inside knees at bottom. Perfect rehearsal for the squat pattern.'}
+  ],
+  'de-total':[
+    {name:'Hip Circles',scheme:'2 × 10 each direction',cue:'Hip joint prep before dynamic effort work. Keep the spine neutral throughout.'},
+    {name:'Leg Swings',scheme:'2 × 10 each leg',cue:'Front/back and lateral. Loose hamstrings and hip flexors for explosive work.'},
+    {name:'Banded Good Mornings',scheme:'2 × 12 reps',cue:'Band around neck and hands, hinge from hips. Wakes the hamstrings and lower back pattern.'},
+    {name:'Box Jump — Sub-max',scheme:'3 × 3 reps',cue:'Not for height — for activation. Land soft, step down. CNS primer before DE work.'},
+    {name:'Hang Power Clean — Bar Only',scheme:'3 × 5 reps',cue:'Bar weight only. Perfect pull pattern, fast elbows, soft landing. Rehearse the movement before loading.'}
+  ],
+  'core':[
+    {name:'Cat-Cow',scheme:'2 × 10 reps',cue:'Slow and deliberate. Exhale to flex, inhale to extend. Mobilises the lumbar spine before loading.'},
+    {name:'Dead Bug',scheme:'2 × 8 each side',cue:'Lower back pressed flat. Opposite arm and leg lower slowly. Do not let the lumbar lift.'},
+    {name:'Hip 90-90 Stretch',scheme:'2 × 30 sec each side',cue:'Both hips at 90 degrees. Sit tall, breathe into the hip. Hip flexor and external rotator prep.'}
+  ],
+  'crossfit':[
+    {name:'World\'s Greatest Stretch',scheme:'2 × 5 each side',cue:'Lunge forward, elbow to floor, then rotate and reach overhead. Full body in one movement.'},
+    {name:'Inchworm',scheme:'2 × 5 reps',cue:'Hands to floor, walk out to plank, walk back. Hamstrings, shoulders, and core all in one.'},
+    {name:'Air Squat',scheme:'2 × 10 reps',cue:'Warm the pattern at bodyweight. Depth, knee tracking, upright torso.'},
+    {name:'Shoulder Tap Plank',scheme:'2 × 10 each side',cue:'Core braced, minimal rotation. Sets up midline stability for the WOD.'}
+  ],
+  'default':[
+    {name:'World\'s Greatest Stretch',scheme:'2 × 5 each side',cue:'Full body mobilisation. Lunge, elbow to floor, rotate and reach.'},
+    {name:'Hip Circles',scheme:'2 × 10 each direction',cue:'Standing. Big deliberate circles. Open the hip joint.'},
+    {name:'Arm Circles',scheme:'2 × 10 each direction',cue:'Full range. Forward then backward. Shoulder joint prep.'},
+    {name:'Bodyweight Squat',scheme:'2 × 10 reps',cue:'Slow controlled descent. Find your stance before adding load.'}
+  ]
+};
+
+function buildWarmupBlocks(sessionType,container){
+  // Block 1: Pulse raiser
+  var pr=document.createElement('div');
+  pr.className='wu-block';
+  pr.id='wu-pulse-raiser';
+  pr.innerHTML=
+    '<div class="wu-block-header">'+
+      '<div>'+
+        '<div class="wu-block-tag">Block 1 — Warm-Up</div>'+
+        '<div class="wu-block-title">Pulse Raiser</div>'+
+      '</div>'+
+      '<div class="wu-skip" onclick="skipWuBlock(\'wu-pulse-raiser\')">Skip</div>'+
+    '</div>'+
+    '<div class="wu-body">'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;">5–10 minutes easy cardio. Get the heart rate up, joints moving, blood flowing.</div>'+
+      '<div class="wu-cardio-grid" id="wu-cardio-grid"></div>'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Timer</div>'+
+      '<div class="wu-timer-row">'+
+        '<div class="wu-timer-display" id="wu-timer-display">0:00</div>'+
+        '<div class="wu-timer-btns">'+
+          '<button class="btn-primary" style="padding:10px 16px;font-size:13px;" id="wu-timer-start" onclick="wuTimerToggle()">Start</button>'+
+          '<button class="btn-secondary" style="padding:10px 14px;font-size:13px;margin:0;" onclick="wuTimerReset()">Reset</button>'+
+        '</div>'+
+      '</div>'+
+      '<button class="wu-done-btn" onclick="completeWuBlock(\'wu-pulse-raiser\')">Pulse Raiser Done ✓</button>'+
+    '</div>';
+  container.appendChild(pr);
+
+  // Populate cardio options
+  setTimeout(function(){
+    var grid=document.getElementById('wu-cardio-grid');
+    if(!grid) return;
+    WU_CARDIO_OPTS.forEach(function(opt){
+      var d=document.createElement('div');
+      d.className='wu-cardio-opt'+(opt.id===wuSelectedCardio?' active':'');
+      d.id='wu-cardio-'+opt.id;
+      d.innerHTML='<div style="font-size:20px;margin-bottom:4px;">'+opt.icon+'</div><div class="wu-cardio-opt-name">'+opt.name+'</div>';
+      d.onclick=function(){
+        wuSelectedCardio=opt.id;
+        document.querySelectorAll('.wu-cardio-opt').forEach(function(x){x.classList.remove('active');});
+        d.classList.add('active');
+      };
+      grid.appendChild(d);
+    });
+  },0);
+
+  // Block 2: Dynamic warm-up
+  var exList=WU_DYNAMIC[sessionType]||WU_DYNAMIC['default'];
+  var dw=document.createElement('div');
+  dw.className='wu-block';
+  dw.id='wu-dynamic';
+  var exHtml=exList.map(function(ex){
+    return '<div class="wu-ex-row">'+
+      '<div class="wu-ex-name">'+ex.name+'</div>'+
+      '<div class="wu-ex-scheme">'+ex.scheme+'</div>'+
+      '<div class="wu-ex-cue">'+ex.cue+'</div>'+
+    '</div>';
+  }).join('');
+  dw.innerHTML=
+    '<div class="wu-block-header">'+
+      '<div>'+
+        '<div class="wu-block-tag">Block 2 — Warm-Up</div>'+
+        '<div class="wu-block-title">Dynamic Prep</div>'+
+      '</div>'+
+      '<div class="wu-skip" onclick="skipWuBlock(\'wu-dynamic\')">Skip</div>'+
+    '</div>'+
+    '<div class="wu-body">'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;">Movement prep specific to today\'s session. Work through each in order.</div>'+
+      exHtml+
+      '<button class="wu-done-btn" onclick="completeWuBlock(\'wu-dynamic\')">Dynamic Prep Done ✓</button>'+
+    '</div>';
+  container.appendChild(dw);
+}
+
+function wuTimerToggle(){
+  if(wuTimerRunning){
+    clearInterval(wuTimerInterval);
+    wuTimerRunning=false;
+    var btn=document.getElementById('wu-timer-start');
+    if(btn) btn.textContent='Resume';
+  } else {
+    wuTimerRunning=true;
+    var btn=document.getElementById('wu-timer-start');
+    if(btn) btn.textContent='Pause';
+    wuTimerInterval=setInterval(function(){
+      wuTimerSecs++;
+      var m=Math.floor(wuTimerSecs/60);
+      var s=wuTimerSecs%60;
+      var el=document.getElementById('wu-timer-display');
+      if(el) el.textContent=m+':'+(s<10?'0':'')+s;
+    },1000);
+  }
+}
+
+function wuTimerReset(){
+  clearInterval(wuTimerInterval);
+  wuTimerRunning=false;
+  wuTimerSecs=0;
+  var el=document.getElementById('wu-timer-display');
+  if(el) el.textContent='0:00';
+  var btn=document.getElementById('wu-timer-start');
+  if(btn) btn.textContent='Start';
+}
+
+function completeWuBlock(id){
+  var block=document.getElementById(id);
+  if(!block) return;
+  block.classList.add('completed');
+  // Replace header right side with done tag
+  var skip=block.querySelector('.wu-skip');
+  if(skip) skip.outerHTML='<div class="wu-completed-tag">✓ Done</div>';
+  if(id==='wu-pulse-raiser'){clearInterval(wuTimerInterval);wuTimerRunning=false;}
+}
+
+function skipWuBlock(id){
+  var block=document.getElementById(id);
+  if(!block) return;
+  block.classList.add('completed');
+  var skip=block.querySelector('.wu-skip');
+  if(skip) skip.outerHTML='<div class="wu-completed-tag" style="color:var(--text3);">Skipped</div>';
+  if(id==='wu-pulse-raiser'){clearInterval(wuTimerInterval);wuTimerRunning=false;}
 }
 
 // ====== PAR-Q ======
@@ -4861,6 +5095,7 @@ function openTBBSSession(){
   var hero=document.createElement('div');hero.className='session-hero';
   hero.innerHTML='<div class="sh-tag">Foundation - Total Body</div><div class="sh-name">Basic Split</div><div class="sh-detail">'+scheme.label+' - full body</div>';
   body.appendChild(hero);
+  buildWarmupBlocks('default',body);
 
   // Coaching tip banner
   var tip=document.createElement('div');

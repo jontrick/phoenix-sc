@@ -564,6 +564,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .wu-block.completed .wu-block-header{border-bottom:none;opacity:0.5;}
 .wu-completed-tag{font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;}
 
+/* BAND COLOURS */
+.band-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.band-row:last-child{border-bottom:none;}
+.band-level-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+.band-level-name{font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text);flex:1;}
+.band-level-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.band-colour-input{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:8px 10px;font-size:13px;color:var(--text);width:120px;text-align:center;}
+.band-colour-input:focus{border-color:var(--gold);outline:none;}
+.band-profile-card{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);margin-bottom:8px;}
+.band-profile-swatch{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,0.15);flex-shrink:0;}
+.band-inline{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:2px 8px 2px 4px;font-size:11px;color:var(--text2);}
+.band-inline-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
 /* PAR-Q */
 .parq-row{padding:14px 0;border-bottom:1px solid var(--border);}
 .parq-row:last-child{border-bottom:none;}
@@ -927,6 +940,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
   <button class="edit-btn" onclick="editProfile()">✎ Edit Profile</button>
   <button class="edit-btn" onclick="showScreen('screen-themes')" style="margin-top:8px;color:var(--gold);border-color:var(--gold);">App Theme</button>
+
+  <!-- Band Setup -->
+  <div style="margin-top:28px;margin-bottom:28px;">
+    <div class="section-hdr">My Resistance Bands</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Every brand uses different colours for different tensions. Tell us your colours once — the app uses them throughout.</div>
+    <div id="band-profile-display"></div>
+    <button class="edit-btn" onclick="openBandSetup()" id="band-setup-btn" style="margin-top:10px;color:var(--gold);border-color:var(--gold);">⊕ Set Up My Bands</button>
+  </div>
   <button class="edit-btn" onclick="exportAllData()" style="margin-top:8px;color:#6a9fd8;border-color:#2a5fa8">&#8659; Export All Data (Backup)</button>
   <button class="danger-btn" onclick="resetApp()">Reset App Data</button>
 </div>
@@ -1400,8 +1421,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
     </div>
     <div style="font-size:11px;color:var(--text3);line-height:1.6;">Tap areas on the diagram OR confirm no injuries to continue.</div>
 
-    <!-- Note popup -->
-    <div id="injury-popup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:800;align-items:flex-end;justify-content:center;">
+<!-- Band Setup Modal -->
+<div id="band-setup-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:900;align-items:flex-end;justify-content:center;">
+  <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:12px 12px 0 0;padding:20px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;">
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;">Equipment</div>
+    <div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:6px;">My Bands</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Enter the colour of your band at each resistance level. Leave blank if you don't have that level.</div>
+
+    <div id="band-setup-rows"></div>
+
+    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin:14px 0;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);border-left:3px solid var(--gold);">
+      Not sure what tension your bands are? A quick test — if you can do 20+ reps of pull-aparts easily, that's Light. Struggle past 12, that's Heavy.
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:4px;">
+      <button class="btn-primary" style="flex:1;padding:14px;" onclick="saveBandSetup()">Save Bands</button>
+      <button class="btn-secondary" style="flex:1;padding:14px;margin:0;" onclick="closeBandSetup()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Injury popup --> style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:800;align-items:flex-end;justify-content:center;">
       <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:12px 12px 0 0;padding:20px;width:100%;max-width:480px;">
         <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;">Injury note</div>
         <div id="injury-popup-title" style="font-family:var(--font-d);font-size:20px;font-weight:700;text-transform:uppercase;margin-bottom:12px;color:var(--text);"></div>
@@ -2072,7 +2112,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.8.6';
+var APP_VERSION='3.8.7';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -2523,6 +2563,7 @@ function renderAthlete(){
   var name=getFirstName()||athlete.name||'Your';
   var hdr=document.getElementById('athlete-section-hdr');
   if(hdr) hdr.textContent=name+"'s Profile";
+  renderBandProfileDisplay();
   document.getElementById('a-name').textContent=athlete.name||'-';
   document.getElementById('a-bw').innerHTML=(athlete.bw||'-')+'<span class="stat-card-unit">kg</span>';
   document.getElementById('a-b1rm').innerHTML=(athlete.b1rm||'-')+'<span class="stat-card-unit">kg</span>';
@@ -4140,6 +4181,96 @@ function openFoundationQ(){
   showScreen('screen-foundation-q');
 }
 
+// ====== BAND SYSTEM ======
+var BAND_LEVELS=[
+  {id:'light',    name:'Light',    sub:'Easy warm-up, pull-aparts, activation',  dot:'#f5c842'},
+  {id:'moderate', name:'Moderate', sub:'Working resistance, rows, curls, press',  dot:'#e05c2a'},
+  {id:'heavy',    name:'Heavy',    sub:'Assistance / loaded movements',           dot:'#2a5fa8'},
+  {id:'xheavy',  name:'X-Heavy',  sub:'Pull-up assistance, heavy rows',          dot:'#6c3d8f'}
+];
+
+var bandProfile={light:'',moderate:'',heavy:'',xheavy:''};
+
+function loadBandProfile(){
+  var saved=localStorage.getItem('phoenix_bands');
+  if(saved) bandProfile=JSON.parse(saved);
+  renderBandProfileDisplay();
+}
+
+function saveBandSetup(){
+  BAND_LEVELS.forEach(function(lv){
+    var inp=document.getElementById('band-inp-'+lv.id);
+    if(inp) bandProfile[lv.id]=inp.value.trim();
+  });
+  localStorage.setItem('phoenix_bands',JSON.stringify(bandProfile));
+  closeBandSetup();
+  renderBandProfileDisplay();
+}
+
+function openBandSetup(){
+  var rows=document.getElementById('band-setup-rows');
+  if(!rows) return;
+  rows.innerHTML='';
+  BAND_LEVELS.forEach(function(lv){
+    var row=document.createElement('div');
+    row.className='band-row';
+    row.innerHTML=
+      '<div class="band-level-dot" style="background:'+lv.dot+'"></div>'+
+      '<div style="flex:1;">'+
+        '<div class="band-level-name">'+lv.name+'</div>'+
+        '<div class="band-level-sub">'+lv.sub+'</div>'+
+      '</div>'+
+      '<input class="band-colour-input" id="band-inp-'+lv.id+'" '+
+        'placeholder="e.g. Yellow" '+
+        'value="'+(bandProfile[lv.id]||'')+'">';
+    rows.appendChild(row);
+  });
+  document.getElementById('band-setup-modal').style.display='flex';
+}
+
+function closeBandSetup(){
+  document.getElementById('band-setup-modal').style.display='none';
+}
+
+function renderBandProfileDisplay(){
+  var el=document.getElementById('band-profile-display');
+  if(!el) return;
+  var hasAny=BAND_LEVELS.some(function(lv){return bandProfile[lv.id];});
+  if(!hasAny){
+    el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:10px 0;">No bands set up yet. Tap below to add your colours.</div>';
+    var btn=document.getElementById('band-setup-btn');
+    if(btn) btn.textContent='⊕ Set Up My Bands';
+    return;
+  }
+  var html='';
+  BAND_LEVELS.forEach(function(lv){
+    if(!bandProfile[lv.id]) return;
+    html+='<div class="band-profile-card">'+
+      '<div class="band-profile-swatch" style="background:'+lv.dot+'"></div>'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text);">'+lv.name+'</div>'+
+        '<div style="font-size:12px;color:var(--gold);">'+bandProfile[lv.id]+'</div>'+
+      '</div>'+
+    '</div>';
+  });
+  el.innerHTML=html;
+  var btn=document.getElementById('band-setup-btn');
+  if(btn) btn.textContent='✎ Edit My Bands';
+}
+
+// Returns an inline band badge for use in session warm-up blocks
+// level = 'light' | 'moderate' | 'heavy' | 'xheavy'
+function bandBadge(level){
+  var lv=BAND_LEVELS.find(function(l){return l.id===level;});
+  if(!lv) return '';
+  var colour=bandProfile[level];
+  var label=colour?lv.name+' ('+colour+')':lv.name;
+  return '<span class="band-inline">'+
+    '<span class="band-inline-dot" style="background:'+lv.dot+'"></span>'+
+    label+
+  '</span>';
+}
+
 // ====== WARM-UP SYSTEM ======
 var wuTimerInterval=null;
 var wuTimerSecs=0;
@@ -4251,7 +4382,18 @@ function buildWarmupBlocks(sessionType,container){
   },0);
 
   // Block 2: Dynamic warm-up
-  var exList=WU_DYNAMIC[sessionType]||WU_DYNAMIC['default'];
+  var exList=(WU_DYNAMIC[sessionType]||WU_DYNAMIC['default']).map(function(ex){
+    // Inject band badge for band exercises
+    var name=ex.name;
+    var scheme=ex.scheme;
+    if(/band/i.test(name)){
+      scheme=bandBadge('light')+' &nbsp;'+scheme;
+    }
+    if(/banded/i.test(name)){
+      scheme=bandBadge('moderate')+' &nbsp;'+scheme;
+    }
+    return {name:name,scheme:scheme,cue:ex.cue};
+  });
   var dw=document.createElement('div');
   dw.className='wu-block';
   dw.id='wu-dynamic';
@@ -5261,6 +5403,7 @@ document.addEventListener("DOMContentLoaded", function() {
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
 loadSkin();
 loadFont();
+loadBandProfile();
 loadState();
 if(athlete){
   // Returning user — show continue button

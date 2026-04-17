@@ -564,6 +564,23 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .wu-block.completed .wu-block-header{border-bottom:none;opacity:0.5;}
 .wu-completed-tag{font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;}
 
+/* DEV NOTES */
+.devnote-tag-btn{padding:6px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;transition:all 0.15s;}
+.devnote-tag-btn.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
+.devnote-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;position:relative;}
+.devnote-card.done{opacity:0.45;}
+.devnote-card-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 8px;border-radius:10px;margin-bottom:6px;}
+.devnote-card-tag.bug{background:rgba(192,57,43,0.15);color:var(--red);}
+.devnote-card-tag.idea{background:rgba(200,150,62,0.15);color:var(--gold);}
+.devnote-card-tag.content{background:rgba(58,125,68,0.15);color:var(--green);}
+.devnote-card-tag.ux{background:rgba(108,61,143,0.15);color:var(--purple);}
+.devnote-card-text{font-size:13px;color:var(--text);line-height:1.6;margin-bottom:8px;}
+.devnote-card-meta{font-size:11px;color:var(--text3);}
+.devnote-card-actions{display:flex;gap:8px;margin-top:8px;}
+.devnote-action{font-size:11px;font-family:var(--font-d);letter-spacing:1px;text-transform:uppercase;cursor:pointer;padding:4px 10px;border-radius:var(--radius);border:1px solid var(--border2);color:var(--text3);}
+.devnote-action.done-btn{border-color:var(--green);color:var(--green);}
+.devnote-action.del-btn{border-color:var(--red);color:var(--red);}
+
 /* BAND COLOURS */
 .band-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
 .band-row:last-child{border-bottom:none;}
@@ -1667,7 +1684,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   <div class="header-logo">PHOENIX <span>PLAN</span></div>
   <div style="width:36px"></div>
 </div>
-<div class="feedback-body">
+
+<!-- Tab bar -->
+<div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg2);">
+  <div id="tab-feedback" onclick="switchFeedbackTab('feedback')" style="flex:1;padding:14px;text-align:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);border-bottom:2px solid var(--gold);cursor:pointer;">Feedback</div>
+  <div id="tab-devnotes" onclick="switchFeedbackTab('devnotes')" style="flex:1;padding:14px;text-align:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);border-bottom:2px solid transparent;cursor:pointer;">Dev Notes</div>
+</div>
+
+<!-- Feedback tab -->
+<div id="feedback-tab-content" class="feedback-body">
   <div class="today-tag">We're listening</div>
   <div style="font-family:var(--font-d);font-size:32px;font-weight:900;text-transform:uppercase;margin-bottom:8px;">Send feedback</div>
   <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Every piece of feedback shapes what Phoenix becomes. Bug, idea, complaint, praise — we want it all.</div>
@@ -1693,6 +1718,28 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
   </div>
 
   <button class="btn-primary" style="max-width:100%;margin-bottom:12px;" onclick="submitFeedback()">Send feedback</button>
+</div>
+
+<!-- Dev Notes tab -->
+<div id="devnotes-tab-content" class="feedback-body" style="display:none;">
+  <div class="today-tag">Developer</div>
+  <div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;margin-bottom:6px;">Dev Notes</div>
+  <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;">Private build log. Bugs, ideas and things to fix. Only visible to you.</div>
+
+  <!-- Add note -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px;">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div class="devnote-tag-btn active" data-tag="bug" onclick="selectDevTag(this)">🐛 Bug</div>
+      <div class="devnote-tag-btn" data-tag="idea" onclick="selectDevTag(this)">💡 Idea</div>
+      <div class="devnote-tag-btn" data-tag="content" onclick="selectDevTag(this)">✏️ Content</div>
+      <div class="devnote-tag-btn" data-tag="ux" onclick="selectDevTag(this)">🎨 UX</div>
+    </div>
+    <textarea class="q-text-input" id="devnote-input" placeholder="What did you find? Be specific — screen name, what happened, what you expected..." style="min-height:80px;margin-bottom:10px;resize:none;"></textarea>
+    <button class="btn-primary" style="max-width:100%;padding:12px;" onclick="addDevNote()">Add Note</button>
+  </div>
+
+  <!-- Notes list -->
+  <div id="devnotes-list"></div>
 </div>
 </div>
 
@@ -2112,7 +2159,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.8.7';
+var APP_VERSION='3.8.8';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -4179,6 +4226,87 @@ function openFoundationQ(){
   parqClear();
   updateFQStep();
   showScreen('screen-foundation-q');
+}
+
+// ====== DEV NOTES ======
+var devNotes=[];
+var devNoteTag='bug';
+
+function loadDevNotes(){
+  devNotes=JSON.parse(localStorage.getItem('phoenix_devnotes')||'[]');
+}
+
+function saveDevNotes(){
+  localStorage.setItem('phoenix_devnotes',JSON.stringify(devNotes));
+}
+
+function selectDevTag(el){
+  devNoteTag=el.getAttribute('data-tag');
+  document.querySelectorAll('.devnote-tag-btn').forEach(function(b){b.classList.remove('active');});
+  el.classList.add('active');
+}
+
+function addDevNote(){
+  var inp=document.getElementById('devnote-input');
+  if(!inp||!inp.value.trim()) return;
+  var note={
+    id:Date.now(),
+    tag:devNoteTag,
+    text:inp.value.trim(),
+    date:new Date().toLocaleDateString('en-AU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),
+    done:false
+  };
+  devNotes.unshift(note);
+  saveDevNotes();
+  inp.value='';
+  renderDevNotes();
+}
+
+function toggleDevNoteDone(id){
+  devNotes=devNotes.map(function(n){return n.id===id?Object.assign({},n,{done:!n.done}):n;});
+  saveDevNotes();
+  renderDevNotes();
+}
+
+function deleteDevNote(id){
+  devNotes=devNotes.filter(function(n){return n.id!==id;});
+  saveDevNotes();
+  renderDevNotes();
+}
+
+function renderDevNotes(){
+  var list=document.getElementById('devnotes-list');
+  if(!list) return;
+  if(!devNotes.length){
+    list.innerHTML='<div style="text-align:center;padding:30px 0;font-size:13px;color:var(--text3);">No notes yet. Add your first one above.</div>';
+    return;
+  }
+  var tagEmoji={bug:'🐛',idea:'💡',content:'✏️',ux:'🎨'};
+  var tagLabel={bug:'Bug',idea:'Idea',content:'Content',ux:'UX'};
+  list.innerHTML=devNotes.map(function(n){
+    return '<div class="devnote-card'+(n.done?' done':'')+'" id="dncard-'+n.id+'">'+
+      '<span class="devnote-card-tag '+n.tag+'">'+(tagEmoji[n.tag]||'')+'&nbsp;'+(tagLabel[n.tag]||n.tag)+'</span>'+
+      '<div class="devnote-card-text">'+escHtml(n.text)+'</div>'+
+      '<div class="devnote-card-meta">'+n.date+'</div>'+
+      '<div class="devnote-card-actions">'+
+        '<div class="devnote-action done-btn" onclick="toggleDevNoteDone('+n.id+')">'+(n.done?'↩ Reopen':'✓ Done')+'</div>'+
+        '<div class="devnote-action del-btn" onclick="deleteDevNote('+n.id+')">✕ Delete</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function escHtml(str){
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function switchFeedbackTab(tab){
+  var isFeedback=tab==='feedback';
+  document.getElementById('feedback-tab-content').style.display=isFeedback?'block':'none';
+  document.getElementById('devnotes-tab-content').style.display=isFeedback?'none':'block';
+  document.getElementById('tab-feedback').style.cssText='flex:1;padding:14px;text-align:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;'+(isFeedback?'color:var(--gold);border-bottom:2px solid var(--gold);':'color:var(--text3);border-bottom:2px solid transparent;');
+  document.getElementById('tab-devnotes').style.cssText='flex:1;padding:14px;text-align:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;'+(isFeedback?'color:var(--text3);border-bottom:2px solid transparent;':'color:var(--gold);border-bottom:2px solid var(--gold);');
+  if(!isFeedback){loadDevNotes();renderDevNotes();}
 }
 
 // ====== BAND SYSTEM ======

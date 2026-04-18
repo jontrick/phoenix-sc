@@ -635,7 +635,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 <div id="screen-splash" class="screen active">
 <div class="splash-bg"></div>
 <div class="splash-content">
-  <div class="phoenix-emblem"><svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 480 480" width="100%" height="100%"><g transform="translate(0.000000,480.000000) scale(0.100000,-0.100000)"
+  <div class="phoenix-emblem" onclick="emblemTap()"><svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 480 480" width="100%" height="100%"><g transform="translate(0.000000,480.000000) scale(0.100000,-0.100000)"
 fill="currentColor">
 <path d="M2960 4655 c0 -20 180 -325 220 -372 5 -7 10 -15 10 -17 0 -7 69
 -121 116 -193 19 -28 34 -54 34 -57 0 -3 15 -27 34 -53 18 -27 53 -82 77 -123
@@ -1199,7 +1199,23 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div class="splash-sub">Plan</div>
   <button class="btn-primary" id="splash-start-btn">Begin Programme</button><br>
   <button class="btn-secondary" id="splash-continue-btn" style="display:none">Continue Training</button>
+  <div id="splash-tier-badge" style="margin-top:16px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
 </div>
+</div>
+
+<!-- ACCESS CODE MODAL -->
+<div id="access-code-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:360px;">
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Access Code</div>
+    <div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;">Unlock Phoenix</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:20px;">Enter your beta or reward code below.</div>
+    <input id="access-code-input" type="text" placeholder="PHOENIXXXX" autocomplete="off" autocapitalize="characters" style="width:100%;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;letter-spacing:3px;text-align:center;text-transform:uppercase;margin-bottom:10px;" onkeydown="if(event.key==='Enter')submitAccessCode()">
+    <div id="access-code-msg" style="font-size:12px;min-height:18px;margin-bottom:14px;text-align:center;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-primary" style="flex:1;padding:14px;" onclick="submitAccessCode()">Unlock</button>
+      <button class="btn-secondary" style="flex:1;padding:14px;margin:0;" onclick="closeAccessCodeModal()">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <!-- ONBOARDING -->
@@ -2704,7 +2720,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.9.6';
+var APP_VERSION='3.9.7';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -6073,6 +6089,170 @@ function exportAllData(){
   a.click();URL.revokeObjectURL(url);
 }
 
+// ====== ACCESS + TIER SYSTEM ======
+
+var BETA_CODES = {
+  'PHOENIX001':'beta_lifetime','PHOENIX002':'beta_lifetime','PHOENIX003':'beta_lifetime',
+  'PHOENIX004':'beta_lifetime','PHOENIX005':'beta_lifetime','PHOENIX006':'beta_lifetime',
+  'PHOENIX007':'beta_lifetime','PHOENIX008':'beta_lifetime','PHOENIX009':'beta_lifetime',
+  'PHOENIX010':'beta_lifetime','PHOENIX011':'beta_lifetime','PHOENIX012':'beta_lifetime',
+  'PHOENIX013':'beta_lifetime','PHOENIX014':'beta_lifetime','PHOENIX015':'beta_lifetime',
+  'PHOENIX016':'beta_lifetime','PHOENIX017':'beta_lifetime','PHOENIX018':'beta_lifetime',
+  'PHOENIX019':'beta_lifetime','PHOENIX020':'beta_lifetime','PHOENIX021':'beta_lifetime',
+  'PHOENIX022':'beta_lifetime','PHOENIX023':'beta_lifetime','PHOENIX024':'beta_lifetime',
+  'PHOENIX025':'beta_lifetime','PHOENIX026':'beta_lifetime','PHOENIX027':'beta_lifetime',
+  'PHOENIX028':'beta_lifetime','PHOENIX029':'beta_lifetime','PHOENIX030':'beta_lifetime',
+  'PHOENIX031':'beta_lifetime','PHOENIX032':'beta_lifetime','PHOENIX033':'beta_lifetime',
+  'PHOENIX034':'beta_lifetime','PHOENIX035':'beta_lifetime','PHOENIX036':'beta_lifetime',
+  'PHOENIX037':'beta_lifetime','PHOENIX038':'beta_lifetime','PHOENIX039':'beta_lifetime',
+  'PHOENIX040':'beta_lifetime','PHOENIX041':'beta_lifetime','PHOENIX042':'beta_lifetime',
+  'PHOENIX043':'beta_lifetime','PHOENIX044':'beta_lifetime','PHOENIX045':'beta_lifetime',
+  'PHOENIX046':'beta_lifetime','PHOENIX047':'beta_lifetime','PHOENIX048':'beta_lifetime',
+  'PHOENIX049':'beta_lifetime','PHOENIX050':'beta_lifetime',
+  'PHOENIXJON':'beta_lifetime'  // slot 51 — yours
+};
+
+var REWARD_CODES = {};
+// Format: 'REWARDXXX': { tier:'pro', duration_days:30, label:'1 Month Pro' }
+// Add reward codes here as the rewards system grows
+
+function getTierData(){
+  return {
+    tier: localStorage.getItem('phoenix_user_tier')||'ember',
+    source: localStorage.getItem('phoenix_tier_source')||'free',
+    beta: localStorage.getItem('phoenix_beta_user')==='true',
+    reward_expiry: localStorage.getItem('phoenix_reward_expiry')||null,
+    ignite_purchase: localStorage.getItem('phoenix_ignite_purchase')==='true',
+    pro_trial_used: localStorage.getItem('phoenix_pro_trial_used')==='true',
+    pro_trial_expiry: localStorage.getItem('phoenix_pro_trial_expiry')||null
+  };
+}
+
+function hasProAccess(){
+  var d=getTierData();
+  if(d.beta) return true;
+  if(d.source==='beta_lifetime') return true;
+  if(d.tier==='pro'&&d.source==='subscription') return true;
+  if(d.reward_expiry&&new Date()<new Date(d.reward_expiry)) return true;
+  if(d.pro_trial_expiry&&new Date()<new Date(d.pro_trial_expiry)) return true;
+  return false;
+}
+
+function hasIgniteAccess(){
+  var d=getTierData();
+  if(hasProAccess()) return true;
+  if(d.ignite_purchase) return true;
+  return false;
+}
+
+function hasRisingAccess(){
+  var d=getTierData();
+  if(hasProAccess()||hasIgniteAccess()) return true;
+  if(d.tier==='rising') return true;
+  return false;
+}
+
+function getTierLabel(){
+  if(hasProAccess()){
+    var d=getTierData();
+    if(d.beta||d.source==='beta_lifetime') return 'Phoenix Pro — Beta Lifetime';
+    if(d.source==='reward') return 'Phoenix Pro — Reward';
+    if(d.pro_trial_expiry&&new Date()<new Date(d.pro_trial_expiry)) return 'Phoenix Pro — Trial';
+    return 'Phoenix Pro';
+  }
+  if(hasIgniteAccess()) return 'Ignite';
+  if(hasRisingAccess()) return 'Rising';
+  return 'Ember';
+}
+
+function activateCode(code){
+  var c=code.trim().toUpperCase();
+  // Check beta codes
+  if(BETA_CODES[c]){
+    localStorage.setItem('phoenix_user_tier','pro');
+    localStorage.setItem('phoenix_tier_source','beta_lifetime');
+    localStorage.setItem('phoenix_beta_user','true');
+    localStorage.setItem('phoenix_access_code_used',c);
+    return {success:true, type:'beta_lifetime', label:'Beta Lifetime Pro unlocked'};
+  }
+  // Check reward codes
+  if(REWARD_CODES[c]){
+    var r=REWARD_CODES[c];
+    var expiry=new Date();
+    expiry.setDate(expiry.getDate()+(r.duration_days||30));
+    localStorage.setItem('phoenix_user_tier','pro');
+    localStorage.setItem('phoenix_tier_source','reward');
+    localStorage.setItem('phoenix_reward_expiry',expiry.toISOString());
+    localStorage.setItem('phoenix_reward_label',r.label||'Reward Pro');
+    localStorage.setItem('phoenix_access_code_used',c);
+    return {success:true, type:'reward', label:r.label+' unlocked', expiry:expiry};
+  }
+  return {success:false};
+}
+
+function activateIgniteProTrial(){
+  var d=getTierData();
+  if(d.ignite_purchase&&!d.pro_trial_used){
+    var expiry=new Date();
+    expiry.setDate(expiry.getDate()+30);
+    localStorage.setItem('phoenix_user_tier','pro');
+    localStorage.setItem('phoenix_pro_trial_used','true');
+    localStorage.setItem('phoenix_pro_trial_expiry',expiry.toISOString());
+    return true;
+  }
+  return false;
+}
+
+function getBetaSlotsRemaining(){
+  var used=parseInt(localStorage.getItem('phoenix_beta_slots_used')||'0');
+  return Math.max(0,51-used);
+}
+
+function showAccessCodeModal(){
+  var modal=document.getElementById('access-code-modal');
+  if(modal) modal.style.display='flex';
+}
+
+function closeAccessCodeModal(){
+  var modal=document.getElementById('access-code-modal');
+  if(modal) modal.style.display='none';
+}
+
+function submitAccessCode(){
+  var input=document.getElementById('access-code-input');
+  if(!input) return;
+  var result=activateCode(input.value);
+  var msg=document.getElementById('access-code-msg');
+  if(result.success){
+    if(msg){
+      msg.style.color='var(--green)';
+      msg.textContent=result.label+(result.expiry?' — expires '+result.expiry.toLocaleDateString('en-AU'):'');
+    }
+    setTimeout(function(){
+      closeAccessCodeModal();
+      location.reload();
+    },1800);
+  } else {
+    if(msg){
+      msg.style.color='var(--orange)';
+      msg.textContent='Code not recognised. Check and try again.';
+    }
+    input.value='';
+  }
+}
+
+// Secret emblem tap to open code entry (5 taps within 3 seconds)
+var emblemTaps=0,emblemTimer=null;
+function emblemTap(){
+  emblemTaps++;
+  if(emblemTimer) clearTimeout(emblemTimer);
+  emblemTimer=setTimeout(function(){emblemTaps=0;},3000);
+  if(emblemTaps>=5){
+    emblemTaps=0;
+    showAccessCodeModal();
+  }
+}
+
 document.addEventListener("DOMContentLoaded", function() {
 // ====== INIT ======
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
@@ -6080,6 +6260,17 @@ loadSkin();
 loadFont();
 loadBandProfile();
 loadState();
+
+// Render tier badge on splash
+var tierBadge=document.getElementById('splash-tier-badge');
+if(tierBadge){
+  var tLabel=getTierLabel();
+  tierBadge.textContent=tLabel;
+  if(tLabel.includes('Beta')) tierBadge.style.color='var(--gold)';
+  else if(tLabel.includes('Pro')) tierBadge.style.color='var(--gold)';
+  else if(tLabel.includes('Ignite')) tierBadge.style.color='var(--text2)';
+  else tierBadge.style.color='var(--text3)';
+}
 if(athlete){
   // Returning user — show continue button
   document.getElementById('splash-continue-btn').style.display='block';

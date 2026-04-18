@@ -228,7 +228,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .profile-result-name{font-family:var(--font-d);font-size:36px;font-weight:900;color:var(--text);text-transform:uppercase;margin-bottom:4px;}
 .profile-result-desc{font-size:13px;color:var(--text2);line-height:1.6;}
 .profile-result-route{display:inline-block;margin-top:10px;background:var(--gold-dim);border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:6px 14px;border-radius:2px;}
-.q-nav{position:fixed;bottom:0;left:0;right:0;padding:16px 20px;background:var(--bg);border-top:1px solid var(--border);display:flex;gap:12px;z-index:100;}
+.q-nav{position:fixed;bottom:0;left:0;right:0;padding:16px 20px;background:var(--bg);border-top:1px solid var(--border);display:none;gap:12px;z-index:100;}
 
 /* WALK LOG */
 .walk-log-body{flex:1;padding:20px 20px 100px;overflow-y:auto;}
@@ -2146,7 +2146,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.9.0';
+var APP_VERSION='3.9.1';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -2257,6 +2257,8 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
+  var qnav=document.querySelector('.q-nav');
+  if(qnav) qnav.style.display=id==='screen-foundation-q'?'flex':'none';
   if(id==='screen-themes'){renderThemesScreen();updateFontSwatches();}
 }
 function navTo(tab){

@@ -5037,13 +5037,9 @@ async function generateProgramme(trigger, checkIn){
   var msgTimer = cycleLoadingMessages();
   try {
     var profileMsg = buildAthleteProfile(trigger, checkIn);
-    var response = await fetch('https://api.anthropic.com/v1/messages', {
+    var response = await fetch('https://phoenix-coach.jon-d87.workers.dev', {
       method: 'POST',
-      headers: {
-  'Content-Type': 'application/json',
-  'x-api-key': 'YOUR-NEW-KEY',
-  'anthropic-version': '2023-06-01'
-},
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 3000,

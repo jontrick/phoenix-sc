@@ -6,7 +6,7 @@
 <title>PROJECT PHOENIX PLAN</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500;600&family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500;600&family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=Rock+Salt&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0a0a0a;--bg2:#111111;--bg3:#1a1a1a;--bg4:#222222;
@@ -314,7 +314,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 /* SPLASH */
 #screen-splash{align-items:center;justify-content:center;background:var(--bg);position:relative;overflow:hidden;}
 .splash-bg{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 30%,rgba(200,150,62,0.08) 0%,transparent 70%),radial-gradient(ellipse 60% 40% at 80% 80%,rgba(224,92,42,0.05) 0%,transparent 60%);}
-.splash-content{position:relative;text-align:center;padding:40px 24px;animation:fadeUp 0.8s ease both;}
+.splash-video-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.18;pointer-events:none;z-index:0;}
+.splash-video-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,var(--bg) 0%,transparent 30%,transparent 70%,var(--bg) 100%);z-index:1;pointer-events:none;}
+.splash-content{position:relative;text-align:center;padding:40px 24px;animation:fadeUp 0.8s ease both;z-index:2;}
+.splash-signoff{position:absolute;bottom:12px;left:0;right:0;display:flex;justify-content:center;z-index:2;animation:fadeUp 1.2s ease both;color:var(--gold);}
+.splash-signoff svg{width:220px;height:auto;display:block;}
+.splash-tier-wrap{display:none;}
 .phoenix-emblem{width:130px;height:130px;margin:0 auto 28px;color:var(--gold);}
 .phoenix-emblem svg{width:100%;height:100%;display:block;}
 .splash-title{font-family:var(--font-d);font-size:14px;font-weight:300;letter-spacing:6px;color:var(--text2);text-transform:uppercase;margin-bottom:6px;}
@@ -634,6 +639,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 <!-- SPLASH -->
 <div id="screen-splash" class="screen active">
 <div class="splash-bg"></div>
+<!-- Video background — replace src with your actual video URL when ready -->
+<video class="splash-video-bg" id="splash-video" autoplay muted loop playsinline poster="">
+  <source src="" type="video/mp4">
+</video>
+<div class="splash-video-overlay"></div>
 <div class="splash-content">
   <div class="phoenix-emblem" onclick="emblemTap()"><svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 480 480" width="100%" height="100%"><g transform="translate(0.000000,480.000000) scale(0.100000,-0.100000)"
 fill="currentColor">
@@ -1197,10 +1207,73 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div class="splash-title">Project</div>
   <div class="splash-name">Phoenix</div>
   <div class="splash-sub">Plan</div>
-  <button class="btn-primary" id="splash-start-btn">Begin Programme</button><br>
-  <button class="btn-secondary" id="splash-continue-btn" style="display:none">Continue Training</button>
-  <div id="splash-tier-badge" style="margin-top:16px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
+  <button class="btn-primary" id="splash-start-btn" style="display:none">Begin Programme</button>
+  <button class="btn-secondary" id="splash-continue-btn" style="display:none;margin-top:0;">Continue Training</button>
+  <div id="splash-tier-badge" style="margin-top:14px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
+
 </div>
+
+<!-- Sign-off — Let's Rise bottom of splash -->
+<div class="splash-signoff"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="100%" style="overflow:visible;display:block;">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Rock+Salt&display=swap');
+    .rs-text { font-family: 'Rock Salt', cursive; }
+  </style>
+
+  <!-- Ink splatter dots — scattered around text -->
+  <g transform="translate(10,75) scale(0.062,-0.038)" fill="currentColor" opacity="0.5">
+    <path d="M1056 677 c3 -10 9 -15 12 -12 3 3 0 11 -7 18 -10 9 -11 8 -5 -6z"/>
+    <path d="M3710 1275 c7 -9 15 -13 17 -11 7 7 -7 26 -19 26 -6 0 -6 -6 2 -15z"/>
+    <path d="M2910 440 c0 -5 5 -10 11 -10 5 0 7 5 4 10 -3 6 -8 10 -11 10 -2 0
+-4 -4 -4 -10z"/>
+    <path d="M377 1663 c6 -15 29 -18 37 -4 3 5 -5 11 -18 13 -17 4 -23 1 -19 -9z"/>
+    <path d="M750 980 c0 -5 5 -10 10 -10 6 0 10 5 10 10 0 6 -4 10 -10 10 -5 0
+-10 -4 -10 -10z"/>
+    <path d="M3615 70 c-3 -5 -1 -10 4 -10 6 0 11 5 11 10 0 6 -2 10 -4 10 -3 0
+-8 -4 -11 -10z"/>
+    <path d="M780 1600 c20 -13 33 -13 25 0 -3 6 -14 10 -23 10 -15 0 -15 -2 -2
+-10z"/>
+    <path d="M2510 521 c0 -5 5 -13 10 -16 6 -3 10 -2 10 4 0 5 -4 13 -10 16 -5 3
+-10 2 -10 -4z"/>
+    <path d="M997 1393 c-10 -9 -9 -33 1 -33 4 0 8 9 9 20 2 21 0 24 -10 13z"/>
+    <path d="M4115 200 c-3 -5 -1 -10 4 -10 6 0 11 5 11 10 0 6 -2 10 -4 10 -3 0
+-8 -4 -11 -10z"/>
+    <path d="M390 1064 c0 -8 5 -12 10 -9 6 3 10 10 10 16 0 5 -4 9 -10 9 -5 0
+-10 -7 -10 -16z"/>
+    <path d="M455 1699 c-9 -14 -2 -20 14 -10 8 6 9 11 3 15 -6 3 -14 1 -17 -5z"/>
+    <path d="M130 1600 c0 -5 5 -10 11 -10 5 0 7 5 4 10 -3 6 -8 10 -11 10 -2 0
+-4 -4 -4 -10z"/>
+    <path d="M90 330 c8 -5 20 -10 25 -10 6 0 3 5 -5 10 -8 5 -19 10 -25 10 -5 0
+-3 -5 5 -10z"/>
+    <path d="M3869 393 c-13 -16 -12 -17 4 -4 16 13 21 21 13 21 -2 0 -10 -8 -17
+-17z"/>
+    <path d="M1055 1160 c3 -5 8 -10 11 -10 2 0 4 5 4 10 0 6 -5 10 -11 10 -5 0
+-7 -4 -4 -10z"/>
+    <path d="M1110 966 c0 -2 7 -7 16 -10 8 -3 12 -2 9 4 -6 10 -25 14 -25 6z"/>
+    <path d="M386 1598 c3 -4 9 -8 15 -8 5 0 9 4 9 8 0 5 -7 9 -15 9 -8 0 -12 -4
+-9 -9z"/>
+  </g>
+
+  <!-- LET'S RISE.... text -->
+  <text class="rs-text" x="160" y="44"
+    text-anchor="middle"
+    font-size="22"
+    fill="currentColor"
+    letter-spacing="2">LET'S RISE....</text>
+
+  <!-- Single stroke underline — slightly rough, not perfectly straight -->
+  <path d="M30 56 Q80 59 160 57 Q240 55 290 58"
+    stroke="currentColor"
+    stroke-width="1.5"
+    fill="none"
+    stroke-linecap="round"/>
+
+</svg></div>
+<!-- Tier badge bottom -->
+<div class="splash-tier-wrap">
+  <div id="splash-tier-badge" style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
+</div>
+
 </div>
 
 <!-- ACCESS CODE MODAL -->
@@ -2720,7 +2793,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.9.9';
+var APP_VERSION='4.0.7';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -6351,31 +6424,32 @@ loadState();
 var tierBadge=document.getElementById('splash-tier-badge');
 if(tierBadge){
   var tLabel=getTierLabel();
-  tierBadge.textContent=tLabel;
-  if(tLabel.includes('Beta')) tierBadge.style.color='var(--gold)';
-  else if(tLabel.includes('Pro')) tierBadge.style.color='var(--gold)';
+  var tLabel=getTierLabel();
+  // Format tier badge copy
+  var tierCopy='';
+  if(tLabel.includes('Beta')) tierCopy='Beta — Lifetime Pro';
+  else if(tLabel.includes('Pro')) tierCopy='Phoenix Pro';
+  else if(tLabel.includes('Ignite')) tierCopy='Ignite';
+  else if(tLabel.includes('Rising')) tierCopy='Rising';
+  else tierCopy='Ember — Free';
+  tierBadge.textContent=tierCopy;
+  if(tLabel.includes('Beta')||tLabel.includes('Pro')) tierBadge.style.color='var(--gold)';
   else if(tLabel.includes('Ignite')) tierBadge.style.color='var(--text2)';
+  else if(tLabel.includes('Rising')) tierBadge.style.color='var(--text2)';
   else tierBadge.style.color='var(--text3)';
 }
 if(athlete){
-  // Returning user — show continue button
+  // Returning user — Continue Training only
+  // New programme accessible from inside the app via sidebar
   document.getElementById('splash-continue-btn').style.display='block';
-  document.getElementById('splash-start-btn').textContent='New Programme';
+  document.getElementById('splash-start-btn').style.display='none';
   document.getElementById('splash-continue-btn').addEventListener('click',function(){
     viewWeek=progWeek();renderToday();navTo('today');
   });
-  document.getElementById('splash-start-btn').addEventListener('click',function(){
-    // Reset and restart from questionnaire
-    if(confirm('Start a new programme? This will reset your current progress.')){
-      localStorage.removeItem('phoenix_athlete');
-      localStorage.removeItem('phoenix_session_logs');
-      localStorage.removeItem('phoenix_core_logs');
-      localStorage.removeItem('phoenix_walk_logs');
-      athlete=null;location.reload();
-    }
-  });
 } else {
-  // New user — go straight to Foundation questionnaire
+  // New user — Begin Programme
+  document.getElementById('splash-start-btn').style.display='block';
+  document.getElementById('splash-continue-btn').style.display='none';
   document.getElementById('splash-start-btn').addEventListener('click',function(){
     openFoundationQ();
   });

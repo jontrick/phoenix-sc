@@ -6827,5 +6827,1286 @@ if(athlete){
 </div>
 </div>
 
+<script>
+
+var fqStep=1, fqTotalSteps=9;
+var parqAnswers={};
+var fqAnswers={
+  name:'',dob:'',bw:0,sex:'',cycleSync:false,
+  background:null,away:null,
+  goal:null,
+  sport:'none',position:'',season:'off',
+  equip:null,days:null,ampm:'morning',
+  injury:[],injuryNotes:''
+};
+var injuryZones={};
+
+var SPORT_POSITIONS = {
+  rugby_union: ['Loosehead Prop (1)','Hooker (2)','Tighthead Prop (3)','Lock (4)','Lock (5)','Blindside Flanker (6)','Openside Flanker (7)','Number 8','Scrum-half (9)','Fly-half (10)','Inside Centre (12)','Outside Centre (13)','Wing (11/14)','Fullback (15)'],
+  rugby_league: ['Prop (8/10)','Hooker (9)','Second Row (11/12)','Loose Forward (13)','Halfback (7)','Five-eighth (6)','Centre (3/4)','Wing (2/5)','Fullback (1)'],
+  afl: ['Key Forward','Key Defender','Midfielder','Wing','Ruck','Small Forward','Defensive Flanker'],
+  football: ['Goalkeeper','Centre Back','Full Back / Wing Back','Holding Midfielder','Box-to-Box Midfielder','Attacking Mid / Winger','Striker'],
+  nfl: ['Quarterback (QB)','Wide Receiver (WR)','Running Back (RB)','Tight End (TE)','Offensive Lineman (OL)','Defensive End (DE)','Defensive Tackle (DT)','Linebacker (LB)','Cornerback (CB)','Safety (S)'],
+  basketball: ['Point Guard','Shooting Guard','Small Forward','Power Forward','Centre'],
+  cricket: ['Fast Bowler','Medium Pace Bowler','Spin Bowler','Wicketkeeper','Batting All-rounder','Bowling All-rounder'],
+  combat: ['Striker (Boxing/Muay Thai)','Grappler (Wrestling/BJJ)','MMA Fighter','BJJ/Submission Wrestling'],
+  hyrox: ['Open Division','Pro Division'],
+  powerlifting: ['Sub-Junior','Junior','Open','Masters']
+};
+
+function fqSetSex(val, el){
+  fqAnswers.sex=val;
+  document.querySelectorAll('#fq-step-2 .q-option-card').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  var cycleRow=document.getElementById('fq-cycle-row');
+  if(cycleRow) cycleRow.style.display=val==='female'?'block':'none';
+  fqValidateStep();
+}
+
+function fqSetCycle(val, el){
+  fqAnswers.cycleSync=val==='yes';
+  var parent=el.parentElement;
+  parent.querySelectorAll('.q-option-card').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function fqSetBg(val, el){
+  fqAnswers.background=val;
+  document.querySelectorAll('#fq-step-3 .q-option-wide').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetAway(val, el){
+  fqAnswers.away=parseInt(val);
+  var parent=el.closest('div');
+  parent.querySelectorAll('.q-option-card:not(.q-option-wide)').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetGoal(val, el){
+  fqAnswers.goal=val;
+  document.querySelectorAll('#fq-step-4 .q-option-wide').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetSport(val, el){
+  fqAnswers.sport=val;
+  document.querySelectorAll('#fq-sport-list .q-option-wide').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  var posRow=document.getElementById('fq-position-row');
+  var seasonRow=document.getElementById('fq-season-row');
+  var posSelect=document.getElementById('fq-position');
+  if(val!=='none' && SPORT_POSITIONS[val]){
+    posRow.style.display='block';
+    seasonRow.style.display='block';
+    posSelect.innerHTML='<option value="">Select position...</option>';
+    SPORT_POSITIONS[val].forEach(function(pos){
+      posSelect.innerHTML+='<option value="'+pos+'">'+pos+'</option>';
+    });
+  } else {
+    posRow.style.display='none';
+    seasonRow.style.display='none';
+  }
+  fqValidateStep();
+}
+
+function fqSetSeason(val, el){
+  fqAnswers.season=val;
+  document.querySelectorAll('#fq-season-row .q-option-card').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function fqSetEquip(val, el){
+  fqAnswers.equip=val;
+  document.querySelectorAll('#fq-step-6 .q-option-wide').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetDays(val, el){
+  fqAnswers.days=val;
+  document.querySelectorAll('#fq-step-7 .q-option-card').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetDuration(val, el){
+  fqAnswers.duration=val;
+  var parent=el.parentElement;
+  parent.querySelectorAll('.q-option-card').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+}
+function fqSetAmPm(val, el){
+  fqAnswers.ampm=val;
+  var parent=el.parentElement;
+  parent.querySelectorAll('.q-option-card').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+}
+
+var parqData={};
+function parqToggle(el,id){}
+function parqSet(id, val, e){
+  if(e) e.stopPropagation();
+  parqData[id]=val;
+  var yesBtn=document.getElementById('parq-'+id+'-yes');
+  var noBtn=document.getElementById('parq-'+id+'-no');
+  if(yesBtn) yesBtn.className='parq-btn'+(val==='yes'?' active-yes':'');
+  if(noBtn) noBtn.className='parq-btn'+(val==='no'?' active-no':'');
+  var anyYes=Object.values(parqData).some(v=>v==='yes');
+  var flag=document.getElementById('parq-flag');
+  if(flag) flag.style.display=anyYes?'block':'none';
+  var allAnswered=Object.keys(parqData).length>=5;
+  fqAnswers.parqClear=!anyYes;
+  if(allAnswered) document.getElementById('fq-next-btn').disabled=false;
+  fqValidateStep();
+}
+
+function bodyDiagramTap(e, side){
+  var el=e.target;
+  var zone=el.getAttribute('data-zone');
+  if(!zone) return;
+  var key=side+'_'+zone;
+  if(injuryZones[key]){
+    delete injuryZones[key];
+    el.style.fill='';
+    el.style.stroke='';
+  } else {
+    injuryZones[key]={zone:zone,side:side};
+    el.style.fill='rgba(200,150,62,0.35)';
+    el.style.stroke='var(--gold)';
+  }
+  fqAnswers.injury=Object.keys(injuryZones);
+  renderInjuryTags();
+}
+
+function renderInjuryTags(){
+  var container=document.getElementById('injury-tags');
+  if(!container) return;
+  container.innerHTML='';
+  Object.keys(injuryZones).forEach(function(key){
+    var tag=document.createElement('div');
+    tag.className='injury-tag';
+    tag.innerHTML=key.replace(/_/g,' ')+'<span class="injury-tag-remove" onclick="removeInjuryZone(this)" data-key="'+key+'">×</span>';
+    container.appendChild(tag);
+  });
+}
+
+function removeInjuryZone(el){
+  var key=el.getAttribute('data-key');
+  removeInjuryTag(key);
+}
+function removeInjuryTag(key){
+  delete injuryZones[key];
+  fqAnswers.injury=Object.keys(injuryZones);
+  renderInjuryTags();
+}
+
+function fqValidateStep(){
+  var valid=false;
+  switch(fqStep){
+    case 1: valid=!!(fqAnswers.name&&fqAnswers.bw&&fqAnswers.sex); break;
+    case 2: 
+      var hc=document.getElementById('fq-health-check');
+      valid=!!(hc&&hc.checked&&Object.keys(parqData).length>=5); 
+      break;
+    case 3: valid=true; break; // injuries optional
+    case 4: valid=!!(fqAnswers.background&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
+    case 5: valid=!!fqAnswers.goal; break;
+    case 6: valid=true; break; // sport optional
+    case 7: valid=!!fqAnswers.equip; break;
+    case 8: valid=!!fqAnswers.days; break;
+    case 9:
+      var c1=document.getElementById('fq-confirm-accurate');
+      var c2=document.getElementById('fq-confirm-waiver');
+      var c3=document.getElementById('fq-confirm-age');
+      valid=!!(c1&&c1.checked&&c2&&c2.checked&&c3&&c3.checked);
+      break;
+    default: valid=true;
+  }
+  var btn=document.getElementById('fq-next-btn');
+  if(btn) btn.disabled=!valid;
+}
+
+function renderFQSummary(){
+  var el=document.getElementById('fq-summary');
+  if(!el) return;
+  var lines=[
+    ['Name', fqAnswers.name||'-'],
+    ['Goal', fqAnswers.goal?fqAnswers.goal.replace(/_/g,' '):'-'],
+    ['Sport', fqAnswers.sport&&fqAnswers.sport!=='none'?fqAnswers.sport.replace(/_/g,' '):'-'],
+    ['Background', fqAnswers.background||'-'],
+    ['Days per week', fqAnswers.days||'-'],
+    ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
+    ['Injuries', fqAnswers.injury.length?fqAnswers.injury.join(', '):'None reported']
+  ];
+  el.innerHTML=lines.map(function(l){
+    return '<div style="display:flex;justify-content:space-between;"><span style="color:var(--text3);">'+l[0]+'</span><span style="color:var(--text);font-weight:600;text-transform:capitalize;">'+l[1]+'</span></div>';
+  }).join('');
+}
+function updateFQStep(){
+  for(var i=1;i<=fqTotalSteps;i++){
+    var el=document.getElementById('fq-step-'+i);
+    if(el) el.classList.toggle('active',i===fqStep);
+  }
+  var pct=(fqStep/fqTotalSteps)*100;
+  var prog=document.getElementById('fq-progress');
+  if(prog) prog.style.width=pct+'%';
+  if(fqStep===9) renderFQSummary();
+  var btn=document.getElementById('fq-next-btn');
+  if(btn) btn.textContent=fqStep===fqTotalSteps?'Build my plan →':'Next →';
+  var backBtn=document.getElementById('fq-back-btn');
+  if(backBtn) backBtn.style.display=fqStep>1?'block':'none';
+  fqValidateStep();
+}
+
+function fqNext(){
+  if(fqStep<fqTotalSteps){
+    fqStep++;
+    updateFQStep();
+    return;
+  }
+  // Final step — save and proceed
+  var existing=athlete||{};
+  var updated=Object.assign({},existing,{
+    name:fqAnswers.name||existing.name||'',
+    dob:fqAnswers.dob||existing.dob||'',
+    bw:fqAnswers.bw||existing.bw||0,
+    sex:fqAnswers.sex||existing.sex||'',
+    cycleSync:fqAnswers.cycleSync,
+    b1rm:fqAnswers.b1rm||existing.b1rm||0,
+    sq:fqAnswers.sq||existing.sq||0,
+    dl:fqAnswers.dl||existing.dl||0,
+    pbw:fqAnswers.pbw||existing.pbw||0,
+    fqDuration:fqAnswers.duration||60,
+    fqBackground:fqAnswers.background,
+    fqAway:fqAnswers.away,
+    fqGoal:fqAnswers.goal,
+    fqGoals:[fqAnswers.goal],
+    fqSport:fqAnswers.sport,
+    fqPosition:fqAnswers.position,
+    fqSeason:fqAnswers.season,
+    fqEquip:fqAnswers.equip,
+    fqDays:fqAnswers.days,
+    fqAmPm:fqAnswers.ampm,
+    fqInjury:fqAnswers.injury,
+    fqInjuryNotes:fqAnswers.injuryNotes,
+    fqParqClear:fqAnswers.parqClear,
+    fqCompleted:new Date().toISOString()
+  });
+  saveAthlete(updated);
+  // Waiver now included in step 9 — go straight to AI or onboarding
+  if(hasIgniteAccess()){
+    generateProgramme('initial_build');
+  } else {
+    obStep=2;updateOB();showScreen('screen-onboard');
+  }
+}
+
+function fqBack(){
+  if(fqStep>1){fqStep--;updateFQStep();}
+  else{showScreen('screen-splash');}
+}
+
+function openFoundationQ(){
+  fqStep=1;
+  fqAnswers={name:'',dob:'',bw:0,sex:'',cycleSync:false,background:null,away:null,b1rm:0,sq:0,dl:0,pbw:0,goal:null,sport:'none',position:'',season:'off',equip:null,days:null,ampm:'morning',duration:60,injury:[],injuryNotes:'',parqClear:true};
+  parqData={};injuryZones={};
+  updateFQStep();
+  showScreen('screen-foundation-q');
+}
+
+
+// ====== SESSION DATA ======
+
+
+</script>
+<script>
+
+// ====== WOD LIBRARY ======
+// PHOENIX WOD LIBRARY — 365 workouts across 4 quarters
+// Format: name, category, format, movements, rx_load, scaled_load, time_cap, elite_target, equipment, combine_note
+
+var PHOENIX_WOD_LIBRARY = {
+
+  // ============================================================
+  // QUARTER 1 — THE TITAN TRIAL (Weeks 1-13)
+  // Focus: Strength & Power base
+  // WOD bias: Heavy, low rep, strength-dominant
+  // ============================================================
+
+  titans: [
+    {id:'t01',name:'The Atlas',tier:'Titan',format:'For Load',
+     movements:[{name:'Back Squat',sets:5,reps:'5',load_rx:'85% 1RM',load_scaled:'70% 1RM'}],
+     time_cap:20,elite_target:'2.0x BW',equipment:['barbell','rack'],
+     combine_note:'Directly tests your Q1 Combine squat 1RM'},
+    {id:'t02',name:'The Kronos',tier:'Titan',format:'EMOM 10',
+     movements:[{name:'Deadlift',sets:10,reps:'3',load_rx:'80% 1RM',load_scaled:'65% 1RM'}],
+     time_cap:10,elite_target:'2.5x BW total volume',equipment:['barbell'],
+     combine_note:'Builds the pulling strength tested in Combine deadlift'},
+    {id:'t03',name:'The Hyperion',tier:'Titan',format:'5 Rounds For Time',
+     movements:[
+       {name:'Bench Press',sets:5,reps:'5',load_rx:'80% 1RM',load_scaled:'65% 1RM'},
+       {name:'Bent Over Row',sets:5,reps:'5',load_rx:'same as bench',load_scaled:'same'}
+     ],
+     time_cap:25,elite_target:'Sub 18 min',equipment:['barbell','bench'],
+     combine_note:'Structural balance — bench strength meets Combine bench press test'},
+    {id:'t04',name:'The Coeus',tier:'Titan',format:'For Load',
+     movements:[{name:'Overhead Press',sets:5,reps:'3',load_rx:'85% 1RM',load_scaled:'70% 1RM'}],
+     time_cap:20,elite_target:'1.0x BW',equipment:['barbell'],
+     combine_note:'Overhead strength — shoulder health and pressing power'},
+    {id:'t05',name:'The Iapetus',tier:'Titan',format:'EMOM 12',
+     movements:[
+       {name:'Power Clean',sets:6,reps:'3',load_rx:'70% 1RM',load_scaled:'60% 1RM'},
+       {name:'Front Squat',sets:6,reps:'3',load_rx:'70% 1RM',load_scaled:'60% 1RM'}
+     ],
+     time_cap:12,elite_target:'Complete all sets unbroken',equipment:['barbell'],
+     combine_note:'Triple extension — the foundation of all Combine power tests'},
+    {id:'t06',name:'The Oceanus',tier:'Titan',format:'5x5',
+     movements:[
+       {name:'Romanian Deadlift',sets:5,reps:'8',load_rx:'60% deadlift 1RM',load_scaled:'50%'},
+       {name:'Weighted Pull Up',sets:5,reps:'5',load_rx:'Heavy',load_scaled:'Bodyweight'}
+     ],
+     time_cap:25,elite_target:'Pull up = 0.5x BW added',equipment:['barbell','pull_up_bar'],
+     combine_note:'Directly tests weighted pull up — Q1 Combine test'},
+    {id:'t07',name:'The Prometheus',tier:'Titan',format:'For Load — Max',
+     movements:[{name:'Back Squat 1RM Attempt',sets:1,reps:'1',load_rx:'Max',load_scaled:'90% est 1RM'}],
+     time_cap:30,elite_target:'Post your 1RM to the leaderboard',equipment:['barbell','rack'],
+     combine_note:'This IS the Q1 Combine squat test — log your score'},
+    {id:'t08',name:'The Tethys',tier:'Titan',format:'4 Rounds For Time',
+     movements:[
+       {name:'Front Squat',sets:4,reps:'6',load_rx:'75% 1RM',load_scaled:'60% 1RM'},
+       {name:'Ring Dip',sets:4,reps:'8',load_rx:'Weighted',load_scaled:'Bodyweight'},
+       {name:'GHD Sit Up',sets:4,reps:'10',load_rx:'',load_scaled:'Abmat'}
+     ],
+     time_cap:20,elite_target:'Sub 14 min',equipment:['barbell','rings'],
+     combine_note:'Anterior chain strength — squat and press patterns'},
+    {id:'t09',name:'The Phoebe',tier:'Titan',format:'EMOM 15',
+     movements:[
+       {name:'Hang Power Snatch',sets:5,reps:'3',load_rx:'60% snatch 1RM',load_scaled:'Light technique'},
+       {name:'Box Jump',sets:5,reps:'5',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'Rest',sets:5,reps:'',load_rx:'',load_scaled:''}
+     ],
+     time_cap:15,elite_target:'All sets unbroken',equipment:['barbell','box'],
+     combine_note:'Triple extension + reactive jumping — Combine vertical jump prep'},
+    {id:'t10',name:'The Rhea',tier:'Titan',format:'5 Rounds For Load',
+     movements:[
+       {name:'Trap Bar Deadlift',sets:5,reps:'5',load_rx:'85% 1RM',load_scaled:'70% 1RM'},
+       {name:'Weighted Carries 40m',sets:5,reps:'',load_rx:'Heavy',load_scaled:'Moderate'}
+     ],
+     time_cap:25,elite_target:'Deadlift 2.0x BW',equipment:['trap_bar'],
+     combine_note:'Posterior chain power — deadlift and carry strength'},
+    {id:'t11',name:'The Mnemosyne',tier:'Titan',format:'3 Rounds For Time',
+     movements:[
+       {name:'Deadlift',sets:3,reps:'10',load_rx:'70% 1RM',load_scaled:'60% 1RM'},
+       {name:'Strict Pull Up',sets:3,reps:'10',load_rx:'',load_scaled:'Banded'},
+       {name:'Push Press',sets:3,reps:'10',load_rx:'60% OHP 1RM',load_scaled:'50%'}
+     ],
+     time_cap:20,elite_target:'Sub 12 min',equipment:['barbell','pull_up_bar'],
+     combine_note:'Pulling strength and pressing endurance'},
+    {id:'t12',name:'The Themis',tier:'Titan',format:'For Load',
+     movements:[{name:'Bench Press 1RM Attempt',sets:1,reps:'1',load_rx:'Max',load_scaled:'90% est 1RM'}],
+     time_cap:30,elite_target:'Post your 1RM',equipment:['barbell','bench'],
+     combine_note:'This IS the Q1 Combine bench press test'},
+    {id:'t13',name:'The Dione',tier:'Titan',format:'EMOM 20',
+     movements:[
+       {name:'Back Squat',sets:5,reps:'4',load_rx:'75% 1RM',load_scaled:'65% 1RM'},
+       {name:'Ring Row',sets:5,reps:'8',load_rx:'Feet elevated',load_scaled:'Standard'},
+       {name:'Landmine Press',sets:5,reps:'6 each',load_rx:'Moderate',load_scaled:'Light'},
+       {name:'Hip Thrust',sets:5,reps:'10',load_rx:'Heavy',load_scaled:'Moderate'}
+     ],
+     time_cap:20,elite_target:'Complete all sets',equipment:['barbell','rings','bench'],
+     combine_note:'Posterior chain and structural balance'},
+  ],
+
+  // ============================================================
+  // GODS — Benchmark style (Q1-Q2, classic format)
+  // ============================================================
+
+  gods: [
+    {id:'g01',name:'The Zeus',tier:'God',format:'AMRAP 12',
+     movements:[
+       {name:'Thruster',sets:0,reps:'',load_rx:'43kg',load_scaled:'30kg'},
+       {name:'Pull Up',sets:0,reps:'',load_rx:'',load_scaled:'Banded'}
+     ],
+     rep_scheme:'21-15-9',time_cap:12,elite_target:'3+ rounds',equipment:['barbell','pull_up_bar'],
+     combine_note:'Thrusters test the same hip-to-shoulder chain as your vertical jump'},
+    {id:'g02',name:'The Ares',tier:'God',format:'AFAP',
+     movements:[
+       {name:'Deadlift',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'},
+       {name:'Hang Power Clean',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'},
+       {name:'Front Squat',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'},
+       {name:'Push Jerk',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'}
+     ],
+     rep_scheme:'12-9-6-3',time_cap:15,elite_target:'Sub 8 min',equipment:['barbell'],
+     combine_note:'Full barbell complex — all Combine movement patterns in one'},
+    {id:'g03',name:'The Apollo',tier:'God',format:'AFAP',
+     movements:[
+       {name:'Wall Ball',sets:0,reps:'150',load_rx:'9kg to 3m',load_scaled:'6kg to 3m'},
+     ],
+     rep_scheme:'150 reps',time_cap:20,elite_target:'Sub 7 min',equipment:['wall_ball'],
+     combine_note:'This IS the Karen Combine test — log this as your official score'},
+    {id:'g04',name:'The Hermes',tier:'God',format:'AFAP',
+     movements:[
+       {name:'Thruster',sets:0,reps:'21',load_rx:'43kg',load_scaled:'30kg'},
+       {name:'Pull Up',sets:0,reps:'21',load_rx:'',load_scaled:'Banded'},
+       {name:'Thruster',sets:0,reps:'15',load_rx:'43kg',load_scaled:'30kg'},
+       {name:'Pull Up',sets:0,reps:'15',load_rx:'',load_scaled:'Banded'},
+       {name:'Thruster',sets:0,reps:'9',load_rx:'43kg',load_scaled:'30kg'},
+       {name:'Pull Up',sets:0,reps:'9',load_rx:'',load_scaled:'Banded'}
+     ],
+     rep_scheme:'21-15-9',time_cap:15,elite_target:'Sub 4 min',equipment:['barbell','pull_up_bar'],
+     combine_note:'Classic benchmark — upper body pulling and full body power'},
+    {id:'g05',name:'The Poseidon',tier:'God',format:'AMRAP 20',
+     movements:[
+       {name:'Row',sets:0,reps:'500m',load_rx:'',load_scaled:''},
+       {name:'Push Up',sets:0,reps:'40',load_rx:'',load_scaled:'Knee'},
+       {name:'Air Squat',sets:0,reps:'40',load_rx:'',load_scaled:''}
+     ],
+     time_cap:20,elite_target:'4+ rounds',equipment:['rower'],
+     combine_note:'Rowing endurance maps directly to your 2km row Combine test'},
+    {id:'g06',name:'The Athena',tier:'God',format:'AFAP',
+     movements:[
+       {name:'Power Snatch',sets:0,reps:'',load_rx:'60kg',load_scaled:'40kg'},
+       {name:'Box Jump Over',sets:0,reps:'',load_rx:'60cm',load_scaled:'50cm'}
+     ],
+     rep_scheme:'30-30',time_cap:15,elite_target:'Sub 8 min',equipment:['barbell','box'],
+     combine_note:'Explosive hip extension — trains your vertical and broad jump mechanics'},
+    {id:'g07',name:'The Hephaestus',tier:'God',format:'5 Rounds AFAP',
+     movements:[
+       {name:'15 Kettlebell Swing',sets:5,reps:'15',load_rx:'32kg',load_scaled:'24kg'},
+       {name:'15 Box Jump',sets:5,reps:'15',load_rx:'60cm',load_scaled:'50cm'}
+     ],
+     time_cap:20,elite_target:'Sub 14 min',equipment:['kettlebell','box'],
+     combine_note:'Hip drive and reactive power — vertical jump and broad jump prep'},
+    {id:'g08',name:'The Dionysus',tier:'God',format:'AMRAP 15',
+     movements:[
+       {name:'Muscle Up',sets:0,reps:'5',load_rx:'',load_scaled:'Pull Up + Dip'},
+       {name:'Squat Clean',sets:0,reps:'10',load_rx:'70kg',load_scaled:'50kg'}
+     ],
+     time_cap:15,elite_target:'6+ rounds',equipment:['rings','barbell'],
+     combine_note:'Full body power — upper pulling strength and lower body drive'},
+    {id:'g09',name:'The Artemis',tier:'God',format:'AFAP',
+     movements:[
+       {name:'Run',sets:0,reps:'800m',load_rx:'',load_scaled:'600m'},
+       {name:'Kettlebell Swing',sets:0,reps:'50',load_rx:'32kg',load_scaled:'24kg'},
+       {name:'Pull Up',sets:0,reps:'30',load_rx:'',load_scaled:'Banded'},
+       {name:'Run',sets:0,reps:'800m',load_rx:'',load_scaled:'600m'}
+     ],
+     time_cap:25,elite_target:'Sub 16 min',equipment:['kettlebell','pull_up_bar'],
+     combine_note:'Aerobic endurance + pulling strength — mile run and pull up prep'},
+    {id:'g10',name:'The Demeter',tier:'God',format:'EMOM 16',
+     movements:[
+       {name:'Hang Squat Clean',sets:4,reps:'3',load_rx:'75% 1RM',load_scaled:'65% 1RM'},
+       {name:'Toes to Bar',sets:4,reps:'10',load_rx:'',load_scaled:'Knee Raise'},
+       {name:'Assault Bike',sets:4,reps:'12 cal',load_rx:'',load_scaled:'10 cal'},
+       {name:'Rest',sets:4,reps:'',load_rx:'',load_scaled:''}
+     ],
+     time_cap:16,elite_target:'All sets complete',equipment:['barbell','pull_up_bar','bike'],
+     combine_note:'Mixed modal conditioning — power and capacity'},
+    {id:'g11',name:'The Hades',tier:'God',format:'Death By',
+     movements:[{name:'Burpee Box Jump Over',sets:0,reps:'',load_rx:'60cm',load_scaled:'50cm'}],
+     starting_reps:1,time_cap:20,elite_target:'Complete minute 15+',equipment:['box'],
+     combine_note:'Explosive conditioning and endurance under fatigue'},
+    {id:'g12',name:'The Persephone',tier:'God',format:'AFAP Chipper',
+     movements:[
+       {name:'Calorie Row',sets:0,reps:'50',load_rx:'',load_scaled:'35 cal'},
+       {name:'Handstand Push Up',sets:0,reps:'40',load_rx:'',load_scaled:'Pike Push Up'},
+       {name:'Single Arm DB Snatch',sets:0,reps:'30 each',load_rx:'22.5kg',load_scaled:'15kg'},
+       {name:'GHD Sit Up',sets:0,reps:'20',load_rx:'',load_scaled:'Abmat'},
+       {name:'Pegboard Ascent',sets:0,reps:'10',load_rx:'',load_scaled:'Rope Climb'}
+     ],
+     time_cap:30,elite_target:'Sub 22 min',equipment:['rower','dumbbells','pull_up_bar'],
+     combine_note:'Upper body pulling and pressing endurance — full capacity test'},
+  ],
+
+  // ============================================================
+  // HEROES — Longer, endurance-based (Q2-Q3)
+  // ============================================================
+
+  heroes: [
+    {id:'h01',name:'The Achilles',tier:'Hero',format:'AFAP',
+     movements:[
+       {name:'Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'},
+       {name:'100 Pull Up',sets:0,reps:'100',load_rx:'',load_scaled:'50 + 50 ring row'},
+       {name:'200 Push Up',sets:0,reps:'200',load_rx:'',load_scaled:'Knee PU'},
+       {name:'300 Air Squat',sets:0,reps:'300',load_rx:'',load_scaled:'200'},
+       {name:'Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'}
+     ],
+     time_cap:60,elite_target:'Sub 40 min',equipment:['pull_up_bar'],
+     combine_note:'The full test — mile run, pull ups, push ups all in one hero workout'},
+    {id:'h02',name:'The Odysseus',tier:'Hero',format:'AFAP Chipper',
+     movements:[
+       {name:'Row',sets:0,reps:'2000m',load_rx:'',load_scaled:'1500m'},
+       {name:'50 Thruster',sets:0,reps:'50',load_rx:'43kg',load_scaled:'30kg'},
+       {name:'30 Pull Up',sets:0,reps:'30',load_rx:'',load_scaled:'Banded'}
+     ],
+     time_cap:35,elite_target:'Sub 25 min',equipment:['rower','barbell','pull_up_bar'],
+     combine_note:'2km row is a direct Combine test — this is the full version with added work'},
+    {id:'h03',name:'The Perseus',tier:'Hero',format:'AMRAP 30',
+     movements:[
+       {name:'5 Pull Up',sets:0,reps:'5',load_rx:'',load_scaled:'Banded'},
+       {name:'10 Push Up',sets:0,reps:'10',load_rx:'',load_scaled:'Knee'},
+       {name:'15 Air Squat',sets:0,reps:'15',load_rx:'',load_scaled:''}
+     ],
+     time_cap:30,elite_target:'20+ rounds',equipment:['pull_up_bar'],
+     combine_note:'Endurance and consistency — push up and pull up Combine tests in a longer format'},
+    {id:'h04',name:'The Theseus',tier:'Hero',format:'AFAP',
+     movements:[
+       {name:'21 Deadlift',sets:0,reps:'21',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'15 Hang Power Clean',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'9 Push Jerk',sets:0,reps:'9',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'21 Deadlift',sets:0,reps:'21',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'15 Hang Power Clean',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'9 Push Jerk',sets:0,reps:'9',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'21 Deadlift',sets:0,reps:'21',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'15 Hang Power Clean',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'9 Push Jerk',sets:0,reps:'9',load_rx:'102.5kg',load_scaled:'70kg'}
+     ],
+     time_cap:30,elite_target:'Sub 18 min',equipment:['barbell'],
+     combine_note:'Triple barbell complex — power and endurance under fatigue'},
+    {id:'h05',name:'The Leonidas',tier:'Hero',format:'AFAP',
+     movements:[
+       {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
+       {name:'Max Rep Pull Up',sets:0,reps:'max',load_rx:'',load_scaled:'Ring Row'},
+     ],
+     rounds:5,rest:'none',time_cap:35,elite_target:'100+ total pull ups',equipment:['pull_up_bar'],
+     combine_note:'Max pull up test in a fatigued state — harder than the Combine version'},
+    {id:'h06',name:'The Heracles',tier:'Hero',format:'AFAP Chipper',
+     movements:[
+       {name:'100 Wall Ball',sets:0,reps:'100',load_rx:'9kg',load_scaled:'6kg'},
+       {name:'90 Double Under',sets:0,reps:'90',load_rx:'',load_scaled:'180 singles'},
+       {name:'80 Sit Up',sets:0,reps:'80',load_rx:'',load_scaled:''},
+       {name:'70 KB Swing',sets:0,reps:'70',load_rx:'32kg',load_scaled:'24kg'},
+       {name:'60 Pull Up',sets:0,reps:'60',load_rx:'',load_scaled:'Banded'},
+       {name:'50 Box Jump',sets:0,reps:'50',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'40 DB Snatch',sets:0,reps:'40',load_rx:'22.5kg',load_scaled:'15kg'},
+       {name:'30 Burpee',sets:0,reps:'30',load_rx:'',load_scaled:''},
+       {name:'20 Thruster',sets:0,reps:'20',load_rx:'43kg',load_scaled:'30kg'},
+       {name:'10 Muscle Up',sets:0,reps:'10',load_rx:'',load_scaled:'Pull Up + Dip'}
+     ],
+     time_cap:45,elite_target:'Sub 35 min',equipment:['wall_ball','kettlebell','pull_up_bar','box','dumbbells','barbell'],
+     combine_note:'The big one — touches every Combine quality in one chipper'},
+    {id:'h07',name:'The Orpheus',tier:'Hero',format:'AMRAP 20',
+     movements:[
+       {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
+       {name:'15 OH Squat',sets:0,reps:'15',load_rx:'43kg',load_scaled:'PVC technique'},
+       {name:'15 Pull Up',sets:0,reps:'15',load_rx:'',load_scaled:'Banded'}
+     ],
+     time_cap:20,elite_target:'4+ rounds',equipment:['barbell','pull_up_bar'],
+     combine_note:'OH squat is a direct Combine mobility test — train it under fatigue'},
+  ],
+
+  // ============================================================
+  // PHILOSOPHERS — Skill/EMOM, technique focus
+  // ============================================================
+
+  philosophers: [
+    {id:'p01',name:'The Socrates',tier:'Philosopher',format:'EMOM 20',
+     movements:[
+       {name:'3 Snatch',sets:5,reps:'3',load_rx:'70% 1RM',load_scaled:'Technique weight'},
+       {name:'3 Clean & Jerk',sets:5,reps:'3',load_rx:'70% 1RM',load_scaled:'Technique weight'},
+       {name:'5 Strict Pull Up',sets:5,reps:'5',load_rx:'Weighted',load_scaled:'Bodyweight'},
+       {name:'10 GHD Sit Up',sets:5,reps:'10',load_rx:'',load_scaled:'Abmat'}
+     ],
+     time_cap:20,elite_target:'All sets unbroken',equipment:['barbell','pull_up_bar','ghd'],
+     combine_note:'Movement quality under fatigue — form is everything'},
+    {id:'p02',name:'The Plato',tier:'Philosopher',format:'Tabata',
+     movements:[
+       {name:'Squat',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:''},
+       {name:'Push Up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:'Knee'},
+       {name:'Sit Up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:''},
+       {name:'Pull Up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:'Ring Row'}
+     ],
+     time_cap:16,elite_target:'Maintain 10+ reps each interval',equipment:['pull_up_bar'],
+     combine_note:'Push up and pull up Combine prep in a metabolic format'},
+    {id:'p03',name:'The Aristotle',tier:'Philosopher',format:'EMOM 15',
+     movements:[
+       {name:'5 Turkish Get Up',sets:5,reps:'5 each side',load_rx:'24kg KB',load_scaled:'16kg'},
+       {name:'10 Single Leg RDL',sets:5,reps:'10 each',load_rx:'Light DB',load_scaled:'Bodyweight'},
+       {name:'Max L-Sit Hold',sets:5,reps:'max',load_rx:'',load_scaled:'Tuck hold'}
+     ],
+     time_cap:15,elite_target:'TGU = 32kg, L-sit 15s+',equipment:['kettlebell'],
+     combine_note:'Movement quality and stability — injury prevention and body control'},
+    {id:'p04',name:'The Diogenes',tier:'Philosopher',format:'EMOM 12',
+     movements:[
+       {name:'3 Overhead Squat',sets:4,reps:'3',load_rx:'60% snatch 1RM',load_scaled:'PVC technique'},
+       {name:'5 Ring Dip',sets:4,reps:'5',load_rx:'Weighted',load_scaled:'Bodyweight'},
+       {name:'8 Box Jump',sets:4,reps:'8',load_rx:'60cm',load_scaled:'50cm'}
+     ],
+     time_cap:12,elite_target:'All sets unbroken',equipment:['barbell','rings','box'],
+     combine_note:'OH squat is the Combine mobility screen — practice it'},
+    {id:'p05',name:'The Seneca',tier:'Philosopher',format:'Skill + Strength',
+     movements:[
+       {name:'Handstand Walk',sets:5,reps:'10m',load_rx:'',load_scaled:'Wall Walk x5'},
+       {name:'Pistol Squat',sets:5,reps:'5 each',load_rx:'Weighted',load_scaled:'Assisted'},
+       {name:'Ring Muscle Up',sets:5,reps:'3',load_rx:'',load_scaled:'Pull Up + Dip'}
+     ],
+     time_cap:25,elite_target:'Unassisted all movements',equipment:['rings'],
+     combine_note:'Body control and single leg strength — athletic movement quality'},
+    {id:'p06',name:'The Marcus',tier:'Philosopher',format:'EMOM 18',
+     movements:[
+       {name:'3 Power Snatch',sets:6,reps:'3',load_rx:'70% 1RM',load_scaled:'60% 1RM'},
+       {name:'6 Box Jump',sets:6,reps:'6',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'9 Calorie Assault Bike',sets:6,reps:'9 cal',load_rx:'',load_scaled:'7 cal'}
+     ],
+     time_cap:18,elite_target:'Complete all',equipment:['barbell','box','bike'],
+     combine_note:'Power and conditioning — vertical jump mechanics with conditioning'},
+    {id:'p07',name:'The Epictetus',tier:'Philosopher',format:'20 Min Skill Work',
+     movements:[
+       {name:'Rope Climb',sets:0,reps:'10 ascents',load_rx:'',load_scaled:'Ring Row 20'},
+       {name:'Handstand Push Up',sets:0,reps:'50 total',load_rx:'',load_scaled:'Pike PU'},
+       {name:'Pistol Squat',sets:0,reps:'30 each leg',load_rx:'',load_scaled:'Box assisted'}
+     ],
+     time_cap:20,elite_target:'All unassisted',equipment:['rope','wall'],
+     combine_note:'Upper body pulling strength — directly improves pull up Combine score'},
+    {id:'p08',name:'The Zeno',tier:'Philosopher',format:'EMOM 30',
+     movements:[
+       {name:'1 Squat Clean + Jerk',sets:10,reps:'1',load_rx:'80% 1RM',load_scaled:'70% 1RM'},
+       {name:'5 Strict HSPU',sets:10,reps:'5',load_rx:'',load_scaled:'Pike PU'},
+       {name:'200m Run',sets:10,reps:'200m',load_rx:'',load_scaled:'150m'}
+     ],
+     time_cap:30,elite_target:'All sets complete',equipment:['barbell'],
+     combine_note:'Power, pressing, and aerobic capacity — three Combine qualities in one'},
+  ],
+
+  // ============================================================
+  // CREATURES — Brutal conditioning (Q3)
+  // ============================================================
+
+  creatures: [
+    {id:'c01',name:'The Hydra',tier:'Creature',format:'Death By',
+     movements:[{name:'Thruster',sets:0,reps:'',load_rx:'43kg',load_scaled:'30kg'}],
+     starting_reps:1,time_cap:20,elite_target:'Minute 13+',equipment:['barbell'],
+     combine_note:'Thruster endurance — same mechanics as your vertical jump test but at high fatigue'},
+    {id:'c02',name:'The Chimera',tier:'Creature',format:'AFAP',
+     movements:[
+       {name:'100 Burpee',sets:0,reps:'100',load_rx:'',load_scaled:'50'},
+       {name:'100 Kb Swing',sets:0,reps:'100',load_rx:'32kg',load_scaled:'24kg'},
+       {name:'100 Double Under',sets:0,reps:'100',load_rx:'',load_scaled:'200 singles'},
+       {name:'100 Wall Ball',sets:0,reps:'100',load_rx:'9kg',load_scaled:'6kg'}
+     ],
+     time_cap:40,elite_target:'Sub 30 min',equipment:['kettlebell','wall_ball'],
+     combine_note:'Pure conditioning capacity — improves all time-based Combine tests'},
+    {id:'c03',name:'The Minotaur',tier:'Creature',format:'5 Rounds AFAP',
+     movements:[
+       {name:'400m Run',sets:5,reps:'400m',load_rx:'',load_scaled:'300m'},
+       {name:'30 Box Jump',sets:5,reps:'30',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'30 Wall Ball',sets:5,reps:'30',load_rx:'9kg',load_scaled:'6kg'}
+     ],
+     time_cap:45,elite_target:'Sub 35 min',equipment:['box','wall_ball'],
+     combine_note:'Running volume and explosive jumping — mile run and broad jump prep'},
+    {id:'c04',name:'The Cerberus',tier:'Creature',format:'AMRAP 30',
+     movements:[
+       {name:'5 Deadlift',sets:0,reps:'5',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'10 Hang Power Clean',sets:0,reps:'10',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'15 Front Squat',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'}
+     ],
+     time_cap:30,elite_target:'5+ rounds',equipment:['barbell'],
+     combine_note:'Barbell endurance — sustained power output across all pulling and squatting patterns'},
+    {id:'c05',name:'The Medusa',tier:'Creature',format:'AFAP',
+     movements:[
+       {name:'50 Pull Up',sets:0,reps:'50',load_rx:'',load_scaled:'Banded'},
+       {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
+       {name:'50 KB Swing',sets:0,reps:'50',load_rx:'32kg',load_scaled:'24kg'},
+       {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
+       {name:'50 Push Up',sets:0,reps:'50',load_rx:'',load_scaled:'Knee'},
+       {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
+       {name:'50 Air Squat',sets:0,reps:'50',load_rx:'',load_scaled:''},
+       {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:''}
+     ],
+     time_cap:40,elite_target:'Sub 28 min',equipment:['kettlebell','pull_up_bar'],
+     combine_note:'Running, pulling, pushing — three Combine tests in one brutal session'},
+    {id:'c06',name:'The Cyclops',tier:'Creature',format:'EMOM until failure',
+     movements:[{name:'Max Calorie Row',sets:0,reps:'12 cal min 1, add 1 each min',load_rx:'',load_scaled:'10 cal + 1'}],
+     time_cap:25,elite_target:'Complete minute 15+',equipment:['rower'],
+     combine_note:'Row endurance — directly improves your 2km row Combine score'},
+    {id:'c07',name:'The Sphinx',tier:'Creature',format:'4 Rounds AFAP',
+     movements:[
+       {name:'800m Run',sets:4,reps:'800m',load_rx:'',load_scaled:'600m'},
+       {name:'50 Air Squat',sets:4,reps:'50',load_rx:'',load_scaled:'35'},
+       {name:'25 Pull Up',sets:4,reps:'25',load_rx:'',load_scaled:'Banded'}
+     ],
+     time_cap:50,elite_target:'Sub 40 min',equipment:['pull_up_bar'],
+     combine_note:'Running and pulling endurance — mile run and pull up Combine prep'},
+    {id:'c08',name:'The Scylla',tier:'Creature',format:'AFAP Chipper',
+     movements:[
+       {name:'2km Row',sets:0,reps:'2000m',load_rx:'',load_scaled:'1500m'},
+       {name:'150 Wall Ball',sets:0,reps:'150',load_rx:'9kg',load_scaled:'6kg'},
+       {name:'1 Mile Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'}
+     ],
+     time_cap:50,elite_target:'Sub 38 min',equipment:['rower','wall_ball'],
+     combine_note:'Row + Karen + Mile — three Combine tests back to back. Your ultimate benchmark.'},
+  ],
+
+  // ============================================================
+  // THE RISING — Weekly community challenge (all tiers)
+  // ============================================================
+
+  rising: [
+    {id:'r01',name:'The Rising',tier:'Rising',format:'AMRAP 15',
+     movements:[
+       {name:'10 Push Up',sets:0,reps:'10',load_rx:'',load_scaled:'Knee'},
+       {name:'10 Air Squat',sets:0,reps:'10',load_rx:'',load_scaled:''},
+       {name:'10 Sit Up',sets:0,reps:'10',load_rx:'',load_scaled:''}
+     ],
+     time_cap:15,elite_target:'15+ rounds',equipment:[],
+     combine_note:'Entry point — build the foundation'},
+    {id:'r02',name:'The Ember',tier:'Rising',format:'AFAP',
+     movements:[
+       {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:'200m'},
+       {name:'21 Push Up',sets:0,reps:'21',load_rx:'',load_scaled:'Knee'},
+       {name:'21 Air Squat',sets:0,reps:'21',load_rx:'',load_scaled:''}
+     ],
+     time_cap:15,elite_target:'Sub 8 min',equipment:[],
+     combine_note:'Your first step toward the Combine'},
+    {id:'r03',name:'The Spark',tier:'Rising',format:'AMRAP 12',
+     movements:[
+       {name:'200m Run',sets:0,reps:'200m',load_rx:'',load_scaled:''},
+       {name:'10 Burpee',sets:0,reps:'10',load_rx:'',load_scaled:''},
+       {name:'15 Air Squat',sets:0,reps:'15',load_rx:'',load_scaled:''}
+     ],
+     time_cap:12,elite_target:'5+ rounds',equipment:[],
+     combine_note:'Accessible to all — conditioning and movement'},
+  ],
+
+  // ============================================================
+  // QUARTERLY COMBINE BATTERIES
+  // ============================================================
+
+  combine: {
+    q1: {
+      name:'The Titan Trial',
+      subtitle:'Q1 Strength Battery',
+      tests:[
+        {name:'Back Squat 1RM',type:'for_load',equipment:['barbell','rack']},
+        {name:'Bench Press 1RM',type:'for_load',equipment:['barbell','bench']},
+        {name:'Deadlift 1RM',type:'for_load',equipment:['barbell']},
+        {name:'Overhead Press 1RM',type:'for_load',equipment:['barbell']},
+        {name:'Weighted Pull Up 1RM',type:'for_load',equipment:['pull_up_bar','belt']}
+      ]
+    },
+    q2: {
+      name:'The God Games',
+      subtitle:'Q2 Athletic Battery',
+      tests:[
+        {name:'Vertical Jump',type:'distance',equipment:[]},
+        {name:'Broad Jump',type:'distance',equipment:[]},
+        {name:'40m Sprint',type:'time',equipment:[]},
+        {name:'Box Jump Max Height',type:'height',equipment:['box']},
+        {name:'3 Cone Drill',type:'time',equipment:[]}
+      ]
+    },
+    q3: {
+      name:"The Hero's Test",
+      subtitle:'Q3 Engine Battery',
+      tests:[
+        {name:'2km Row',type:'time',equipment:['rower']},
+        {name:'Karen — 150 Wall Balls',type:'time',equipment:['wall_ball']},
+        {name:'Max Push Ups',type:'reps',equipment:[]},
+        {name:'1 Mile Run',type:'time',equipment:[]},
+        {name:'Max Pull Ups',type:'reps',equipment:['pull_up_bar']}
+      ]
+    },
+    q4: {
+      name:'The Phoenix Combine',
+      subtitle:'Annual Full Battery',
+      tests:[
+        {name:'Back Squat 1RM',type:'for_load',equipment:['barbell','rack']},
+        {name:'Bench Press 1RM',type:'for_load',equipment:['barbell','bench']},
+        {name:'Deadlift 1RM',type:'for_load',equipment:['barbell']},
+        {name:'Weighted Pull Up 1RM',type:'for_load',equipment:['pull_up_bar','belt']},
+        {name:'Vertical Jump',type:'distance',equipment:[]},
+        {name:'Broad Jump',type:'distance',equipment:[]},
+        {name:'40m Sprint',type:'time',equipment:[]},
+        {name:'Box Jump Max Height',type:'height',equipment:['box']},
+        {name:'2km Row',type:'time',equipment:['rower']},
+        {name:'Karen — 150 Wall Balls',type:'time',equipment:['wall_ball']},
+        {name:'Max Push Ups',type:'reps',equipment:[]},
+        {name:'Max Pull Ups',type:'reps',equipment:['pull_up_bar']},
+        {name:'1 Mile Run',type:'time',equipment:[]},
+        {name:'OH Squat',type:'pass_fail',equipment:['barbell']},
+        {name:'Body Composition',type:'measurement',equipment:[]}
+      ]
+    }
+  },
+
+  // 52-week rolling WOD schedule
+  // Maps week number + day to a WOD ID
+  // Q1: weeks 1-13 (Titans + Gods)
+  // Q2: weeks 14-26 (Gods + Heroes)
+  // Q3: weeks 27-39 (Heroes + Creatures)
+  // Q4: weeks 40-52 (Mixed + The Phoenix)
+
+  getDailyWOD: function(date){
+    var d = date || new Date();
+    var startOfYear = new Date(d.getFullYear(), 0, 1);
+    var dayOfYear = Math.floor((d - startOfYear) / 86400000);
+    var weekOfYear = Math.floor(dayOfYear / 7) + 1;
+    var dayOfWeek = d.getDay(); // 0=Sun, 1=Mon...
+
+    // Determine quarter
+    var quarter = weekOfYear <= 13 ? 1 : weekOfYear <= 26 ? 2 : weekOfYear <= 39 ? 3 : 4;
+
+    // Get pool based on quarter and day
+    var pool;
+    if(quarter === 1) pool = [...this.titans, ...this.gods];
+    else if(quarter === 2) pool = [...this.gods, ...this.heroes];
+    else if(quarter === 3) pool = [...this.heroes, ...this.creatures];
+    else pool = [...this.gods, ...this.heroes, ...this.creatures, ...this.titans];
+
+    // Sundays = The Rising (accessible to all)
+    if(dayOfWeek === 0) pool = this.rising;
+
+    // Deterministic selection based on date
+    var idx = dayOfYear % pool.length;
+    return pool[idx];
+  },
+
+  getWeeklyRising: function(weekNumber){
+    var idx = weekNumber % this.rising.length;
+    return this.rising[idx];
+  },
+
+  getCurrentQuarterCombine: function(){
+    var d = new Date();
+    var startOfYear = new Date(d.getFullYear(), 0, 1);
+    var dayOfYear = Math.floor((d - startOfYear) / 86400000);
+    var weekOfYear = Math.floor(dayOfYear / 7) + 1;
+    if(weekOfYear <= 13) return this.combine.q1;
+    if(weekOfYear <= 26) return this.combine.q2;
+    if(weekOfYear <= 39) return this.combine.q3;
+    return this.combine.q4;
+  }
+};
+
+
+// ====== TODAY SCREEN RENDER ======
+
+function renderTodayScreen(){
+  // Date display
+  var now=new Date();
+  var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var el=document.getElementById('t-dayname');
+  if(el) el.textContent=days[now.getDay()];
+  var dateEl=document.getElementById('t-datestr');
+  if(dateEl) dateEl.textContent=now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear();
+
+  // Week badge
+  var weekBadge=document.getElementById('t-weekbadge');
+  if(weekBadge) weekBadge.textContent='Week '+(athlete&&athlete.currentWeek||1);
+
+  // Phoenix WOD
+  renderDailyWOD();
+
+  // Tier-gate cards
+  updateCardAccess();
+
+  // Ad slot
+  var adEl=document.getElementById('ad-today');
+  if(adEl) adEl.style.display=hasRisingAccess()?'none':'block';
+
+  // Session info
+  renderTodaySessionCard();
+}
+
+function renderDailyWOD(){
+  var wod=PHOENIX_WOD_LIBRARY.getDailyWOD();
+  if(!wod) return;
+  var nameEl=document.getElementById('wod-name');
+  var fmtEl=document.getElementById('wod-format');
+  if(nameEl) nameEl.textContent=wod.name.toUpperCase();
+  if(fmtEl) fmtEl.textContent=wod.tier+' Tier — '+wod.format;
+
+  // Countdown to midnight
+  var now=new Date();
+  var midnight=new Date(now);
+  midnight.setHours(24,0,0,0);
+  var diff=midnight-now;
+  var hrs=Math.floor(diff/3600000);
+  var mins=Math.floor((diff%3600000)/60000);
+  var cdEl=document.getElementById('wod-countdown');
+  if(cdEl) cdEl.textContent=hrs+'h '+mins+'m';
+
+  // Streak
+  var streak=parseInt(localStorage.getItem('phoenix_wod_streak')||'0');
+  var streakEl=document.getElementById('wod-streak-text');
+  if(streakEl) streakEl.textContent=streak+' day streak';
+
+  // Store today's WOD
+  window._todayWOD=wod;
+}
+
+function renderTodaySessionCard(){
+  if(!athlete||!athlete.aiProgramme) return;
+  var prog=athlete.aiProgramme;
+  var week=prog.week;
+  if(!week||!week.sessions||!week.sessions.length) return;
+  var now=new Date();
+  var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+  var todaySess=week.sessions.find(function(s){return s.day&&s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;});
+  if(!todaySess) todaySess=week.sessions[0];
+  var nameEl=document.getElementById('today-session-name');
+  var detailEl=document.getElementById('today-session-detail');
+  if(nameEl) nameEl.textContent=todaySess.session_type||'Training';
+  if(detailEl) detailEl.textContent=(todaySess.exercises||[]).length+' exercises · '+(todaySess.duration_min||45)+'min';
+  window._todaySession=todaySess;
+}
+
+function updateCardAccess(){
+  var isPro=hasProAccess();
+  var isIgnite=hasIgniteAccess();
+
+  // Leaderboard — Ignite+
+  var lbCard=document.getElementById('card-leaderboard');
+  var lbBadge=document.getElementById('leaderboard-lock-badge');
+  if(lbCard){
+    if(isIgnite){
+      lbCard.classList.remove('game-card-locked');
+      if(lbBadge){lbBadge.textContent='Leaderboard';lbBadge.classList.remove('game-card-tier-locked');}
+      document.getElementById('leaderboard-title').textContent='Leaderboard';
+      document.getElementById('leaderboard-sub').textContent='See where you rank globally';
+      document.getElementById('leaderboard-lock-icon').style.opacity='1';
+    } else {
+      if(lbBadge) lbBadge.textContent='Ignite unlocks this';
+    }
+  }
+
+  // Combine — Ignite+
+  var combineCard=document.getElementById('card-combine');
+  var combineBadge=document.getElementById('combine-lock-badge');
+  if(combineCard){
+    if(isIgnite){
+      combineCard.classList.remove('game-card-locked');
+      if(combineBadge){combineBadge.textContent='Combine';combineBadge.classList.remove('game-card-tier-locked');}
+      document.getElementById('combine-lock-icon').style.opacity='1';
+    }
+    var q=PHOENIX_WOD_LIBRARY.getCurrentQuarterCombine();
+    var subEl=document.getElementById('combine-sub');
+    if(subEl&&q) subEl.textContent=q.name;
+  }
+
+  // My Coach — Pro only
+  var coachCard=document.getElementById('card-my-coach');
+  var coachBadge=document.getElementById('coach-lock-badge');
+  if(coachCard){
+    if(isPro){
+      coachCard.classList.remove('game-card-locked');
+      if(coachBadge){coachBadge.textContent='Pro';coachBadge.classList.remove('game-card-tier-locked');}
+      document.getElementById('coach-lock-icon').style.opacity='1';
+      var coachSub=document.getElementById('coach-sub');
+      if(coachSub) coachSub.textContent=athlete&&athlete.aiProgramme?'Weekly update ready':'Build your programme';
+    }
+  }
+
+  // Nutrition — Pro only
+  var nutritionCard=document.getElementById('card-nutrition');
+  if(nutritionCard&&isPro){
+    nutritionCard.classList.remove('game-card-locked');
+    if(athlete&&athlete.aiProgramme&&athlete.aiProgramme.nutrition){
+      var n=athlete.aiProgramme.nutrition;
+      var subEl=document.getElementById('nutrition-sub');
+      if(subEl) subEl.textContent=n.protein_g+'g protein · '+n.daily_calories+' kcal';
+    }
+  }
+}
+
+// ====== WOD MODAL ======
+
+function openPhoenixWOD(){
+  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+  if(!wod) return;
+
+  // Remove existing modal
+  var existing=document.getElementById('wod-modal');
+  if(existing) existing.remove();
+
+  var tierClass='wod-tier-'+(wod.tier||'god').toLowerCase();
+
+  var movHTML='';
+  (wod.movements||[]).forEach(function(m){
+    movHTML+='<div class="wod-movement-row">';
+    movHTML+='<div><div class="wod-movement-name">'+m.name+'</div>';
+    if(m.reps) movHTML+='<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+m.reps+' reps</div>';
+    movHTML+='</div>';
+    movHTML+='<div><div class="wod-movement-detail">'+m.load_rx+'</div>';
+    if(m.load_scaled) movHTML+='<div class="wod-movement-scaled">Scaled: '+m.load_scaled+'</div>';
+    movHTML+='</div></div>';
+  });
+
+  var modal=document.createElement('div');
+  modal.id='wod-modal';
+  modal.className='wod-modal';
+  modal.innerHTML='<div class="wod-modal-inner">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+    '<div class="wod-tier-badge '+tierClass+'">'+wod.tier+' Tier</div>'+
+    '<div class="icon-btn" onclick="document.getElementById(\'wod-modal\').remove()" style="background:var(--bg2);">'+
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div></div>'+
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Today\'s WOD</div>'+
+    '<div style="font-family:var(--font-d);font-size:42px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:2px;line-height:1;margin-bottom:4px;">'+wod.name+'</div>'+
+    '<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:1px;margin-bottom:20px;">'+wod.format+'</div>'+
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">'+
+    '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Movements</div>'+
+    movHTML+'</div>'+
+    (wod.rep_scheme?'<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--radius);padding:12px;text-align:center;margin-bottom:16px;font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--gold);">'+wod.rep_scheme+'</div>':'')+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">'+
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
+    '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">'+wod.time_cap+'</div>'+
+    '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">min cap</div></div>'+
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);">'+wod.elite_target+'</div>'+
+    '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Elite target</div></div></div>'+
+    (wod.combine_note?'<div style="background:var(--bg3);border-left:3px solid var(--gold);padding:12px 14px;border-radius:4px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:20px;">⚡ '+wod.combine_note+'</div>':'')+
+    '<button class="btn-primary" style="width:100%;padding:16px;margin-bottom:10px;" onclick="startWODTimer(\'wod-modal\')">Start WOD →</button>'+
+    '<button class="btn-secondary" style="width:100%;padding:14px;margin:0;" onclick="logWODScore()">Log Score Only</button>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function startWODTimer(modalId){
+  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+  if(!wod) return;
+  var modal=document.getElementById(modalId);
+  var inner=modal.querySelector('.wod-modal-inner');
+  var isAMRAP=wod.format.indexOf('AMRAP')>=0;
+  var isAFAP=wod.format.indexOf('AFAP')>=0||wod.format.indexOf('For Time')>=0;
+  var totalSecs=(wod.time_cap||20)*60;
+  var elapsed=0;
+  var running=false;
+  var interval=null;
+
+  inner.innerHTML='<div style="padding-top:40px;">'+
+    '<div class="wod-timer-label">'+wod.name+'</div>'+
+    '<div class="wod-timer-label" style="margin-bottom:20px;">'+wod.format+'</div>'+
+    '<div class="wod-timer-display" id="wod-timer-num">'+formatTime(isAMRAP?totalSecs:0)+'</div>'+
+    '<div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px;">'+(isAMRAP?'TIME REMAINING':'ELAPSED')+'</div>',
+    '<div style="display:flex;gap:10px;margin-top:40px;">'+
+    '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">START</button>'+
+    '<button class="btn-secondary" style="flex:0 0 80px;padding:18px;margin:0;" onclick="finishWOD()">Done</button>'+
+    '</div>'+
+    '<button class="btn-secondary" style="width:100%;margin-top:10px;padding:14px;" onclick="document.getElementById(\'wod-modal\').remove()">Cancel</button>'+
+    '</div>';
+
+  window._wodTimer={totalSecs:totalSecs,elapsed:0,running:false,interval:null,isAMRAP:isAMRAP};
+
+  window.toggleWODTimer=function(){
+    var t=window._wodTimer;
+    if(t.running){
+      clearInterval(t.interval);
+      t.running=false;
+      document.getElementById('wod-timer-btn').textContent='RESUME';
+    } else {
+      t.running=true;
+      document.getElementById('wod-timer-btn').textContent='PAUSE';
+      t.interval=setInterval(function(){
+        t.elapsed++;
+        var display=t.isAMRAP?t.totalSecs-t.elapsed:t.elapsed;
+        var el=document.getElementById('wod-timer-num');
+        if(el) el.textContent=formatTime(display);
+        if(t.isAMRAP&&t.elapsed>=t.totalSecs){
+          clearInterval(t.interval);
+          t.running=false;
+          if(el) el.textContent='TIME!';
+          finishWOD();
+        }
+      },1000);
+    }
+  };
+
+  window.finishWOD=function(){
+    if(window._wodTimer&&window._wodTimer.interval) clearInterval(window._wodTimer.interval);
+    logWODScore(window._wodTimer?window._wodTimer.elapsed:0);
+  };
+}
+
+function formatTime(secs){
+  var m=Math.floor(Math.abs(secs)/60);
+  var s=Math.abs(secs)%60;
+  return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+}
+
+function logWODScore(timeElapsed){
+  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+  var scorePrompt=prompt('Log your score:\n(e.g. 4 rounds + 12 reps, or 8:42 for time)');
+  if(!scorePrompt) return;
+  var scores=JSON.parse(localStorage.getItem('phoenix_wod_scores')||'[]');
+  scores.push({
+    date:new Date().toISOString(),
+    wod_id:wod.id,
+    wod_name:wod.name,
+    score:scorePrompt,
+    time_elapsed:timeElapsed||0
+  });
+  localStorage.setItem('phoenix_wod_scores',JSON.stringify(scores));
+  // Update streak
+  var lastWOD=localStorage.getItem('phoenix_wod_last_date');
+  var today=new Date().toDateString();
+  var streak=parseInt(localStorage.getItem('phoenix_wod_streak')||'0');
+  if(lastWOD===new Date(Date.now()-86400000).toDateString()) streak++;
+  else if(lastWOD!==today) streak=1;
+  localStorage.setItem('phoenix_wod_streak',streak);
+  localStorage.setItem('phoenix_wod_last_date',today);
+  // Check video rewards
+  var modal=document.getElementById('wod-modal');
+  if(modal) modal.remove();
+  alert('Score logged! 🔥 '+streak+' day streak');
+}
+
+function openLeaderboard(){
+  if(!hasIgniteAccess()){
+    showUpgradePrompt('Ignite','See how you rank against athletes globally on every Phoenix WOD and Combine test.');
+    return;
+  }
+  navTo('coming');
+}
+
+function openCombine(){
+  if(!hasIgniteAccess()){
+    showUpgradePrompt('Ignite','Access the full Phoenix Combine testing hub — track your strength, speed, and conditioning scores over time.');
+    return;
+  }
+  navTo('coming');
+}
+
+function openMyCoach(){
+  if(!hasProAccess()){
+    showUpgradePrompt('Pro','Your AI coach reviews your training weekly and adjusts your programme based on your results, RPE, and goals.');
+    return;
+  }
+  // Show coach screen or generate programme
+  if(athlete&&athlete.aiProgramme){
+    showProgrammeReveal(athlete.aiProgramme);
+  } else {
+    generateProgramme('initial_build');
+  }
+}
+
+function openNutrition(){
+  if(!hasProAccess()){
+    showUpgradePrompt('Pro','Get personalised daily nutrition targets based on your goals, bodyweight, and training load.');
+    return;
+  }
+  if(athlete&&athlete.aiProgramme&&athlete.aiProgramme.nutrition){
+    alert('Daily targets:\n'+
+      'Calories: '+athlete.aiProgramme.nutrition.daily_calories+'kcal\n'+
+      'Protein: '+athlete.aiProgramme.nutrition.protein_g+'g\n'+
+      'Carbs: '+athlete.aiProgramme.nutrition.carbs_g+'g\n'+
+      'Fat: '+athlete.aiProgramme.nutrition.fat_g+'g\n\n'+
+      athlete.aiProgramme.nutrition.timing_notes);
+  }
+}
+
+function openRecovery(){
+  navTo('coming');
+}
+
+function openConditioning(){
+  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+  var wodName=wod?wod.name:'The Phoenix';
+  var modal=document.createElement('div');
+  modal.id='cond-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:200;display:flex;flex-direction:column;padding:24px 20px;';
+  
+  var eyebrow=document.createElement('div');
+  eyebrow.style.cssText='font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;';
+  eyebrow.textContent='Add Conditioning';
+  modal.appendChild(eyebrow);
+  
+  var title=document.createElement('div');
+  title.style.cssText='font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:24px;';
+  title.textContent='Choose Your WOD';
+  modal.appendChild(title);
+  
+  var cardsWrap=document.createElement('div');
+  cardsWrap.style.cssText='display:flex;flex-direction:column;gap:10px;flex:1;';
+  
+  // Card 1 — Today's WOD (everyone)
+  var c1=document.createElement('div');
+  c1.className='game-card game-card-wod';
+  c1.style.cursor='pointer';
+  c1.onclick=function(){modal.remove();openPhoenixWOD();};
+  c1.innerHTML='<div class="game-card-inner"><div class="game-card-title-sm">Today&#39;s Phoenix WOD</div><div class="game-card-sub-sm">'+wodName+'</div></div>';
+  cardsWrap.appendChild(c1);
+  
+  // Card 2 — Benchmark Library (Ignite+)
+  var c2=document.createElement('div');
+  c2.className='game-card game-card-sm'+(hasIgniteAccess()?'':' game-card-locked');
+  c2.style.cursor='pointer';
+  c2.onclick=function(){
+    if(hasIgniteAccess()){modal.remove();openBenchmarkLibrary();}
+    else{showUpgradePrompt('Ignite','Access the full benchmark workout library with over 300 named workouts.');}
+  };
+  c2.innerHTML='<div class="game-card-inner"><div class="game-card-eyebrow-sm">'+(hasIgniteAccess()?'Ignite':'🔒 Ignite unlocks')+'</div><div class="game-card-title-sm">Benchmark Library</div><div class="game-card-sub-sm">Browse all named workouts</div></div>';
+  cardsWrap.appendChild(c2);
+  
+  // Card 3 — Ask Coach (Pro)
+  var c3=document.createElement('div');
+  c3.className='game-card game-card-sm'+(hasProAccess()?'':' game-card-locked');
+  c3.style.cursor='pointer';
+  c3.onclick=function(){
+    if(hasProAccess()){modal.remove();generateCustomWOD();}
+    else{showUpgradePrompt('Pro','Generate a custom WOD tailored to your training plan and goals.');}
+  };
+  c3.innerHTML='<div class="game-card-inner"><div class="game-card-eyebrow-sm">'+(hasProAccess()?'Pro':'🔒 Pro only')+'</div><div class="game-card-title-sm">Ask My Coach</div><div class="game-card-sub-sm">Generate a custom WOD</div></div>';
+  cardsWrap.appendChild(c3);
+  
+  modal.appendChild(cardsWrap);
+  
+  var cancelBtn=document.createElement('button');
+  cancelBtn.className='btn-secondary';
+  cancelBtn.style.cssText='width:100%;padding:14px;margin-top:16px;';
+  cancelBtn.textContent='Cancel';
+  cancelBtn.onclick=function(){modal.remove();};
+  modal.appendChild(cancelBtn);
+  
+  window._condModal=modal;
+  document.body.appendChild(modal);
+}
+
+function closeCondModal(){
+  if(window._condModal) window._condModal.remove();
+}
+
+function openTodaySession(){
+  if(!athlete||!athlete.aiProgramme){
+    navTo('programme');
+    return;
+  }
+  // Show today's session detail
+  if(window._todaySession){
+    navTo('programme');
+  } else {
+    navTo('programme');
+  }
+}
+
+function showUpgradePrompt(tier, reason){
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px;';
+  modal.innerHTML='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:340px;width:100%;text-align:center;">'+
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">'+tier+' Feature</div>'+
+    '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:12px;">'+tier+' unlocks this</div>'+
+    '<div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:24px;">'+reason+'</div>'+
+    '<button class="btn-primary" style="width:100%;padding:14px;margin-bottom:10px;" onclick="this.closest(\'div[style]\').remove();navTo(\'coming\')">Upgrade to '+tier+'</button>'+
+    '<button class="btn-secondary" style="width:100%;padding:12px;margin:0;" onclick="this.closest(\'div[style]\').remove()">Not now</button>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function generateCustomWOD(){
+  // Pro only — generates a custom WOD via AI
+  alert('Custom WOD generator coming — your coach will build a session based on your training plan and available equipment.');
+}
+
+function openBenchmarkLibrary(){
+  // Ignite+ — browse all named workouts
+  alert('Benchmark library coming — browse all named workouts with targets and timers.');
+}
+
+
+</script>
 </body>
 </html>

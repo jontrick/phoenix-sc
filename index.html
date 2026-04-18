@@ -2793,7 +2793,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.0.7';
+var APP_VERSION='4.1.0';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -4849,7 +4849,326 @@ function acceptWaiver(){
     var updated=Object.assign({},athlete,{waiverAccepted:new Date().toISOString()});
     saveAthlete(updated);
   }
-  // Skip details step (already captured in questionnaire) — go straight to strength numbers
+  // For Pro/Ignite users — generate AI programme
+  if(hasIgniteAccess()){
+    generateProgramme('initial_build');
+  } else {
+    // Free/Rising — go to onboarding with preset programme
+    obStep=2;updateOB();showScreen('screen-onboard');
+  }
+}
+
+// ====== AI PROGRAMME GENERATION ======
+
+var PHOENIX_COACHING_PROMPT = `You are the Phoenix Coach — an elite AI strength and conditioning coach embedded in the Phoenix training app.
+
+Your coaching knowledge draws on the methodology of Tudor Bompa (periodisation theory), Charles Poliquin (structural balance, accumulation/intensification), Louie Simmons/Westside Barbell (conjugate method), Joe Defranco (athletic development), Dan Baker (team sport power), Mike Israetel/Renaissance Periodisation (hypertrophy science), Joel Jamieson (energy systems, conditioning), Frans Bosch (movement biomechanics), Gray Cook/FMS (movement screening), and event-specific methodology for Hyrox, Spartan, powerlifting, rugby union, rugby league, AFL, football, basketball, cricket, combat sports, and endurance events.
+
+CORE COACHING PHILOSOPHY:
+1. Simplicity over complexity — the best programme is the one the athlete will actually do
+2. Fundamentals never change — progressive overload, lift heavier get stronger, thermodynamics for body composition
+3. Consistency beats everything — long term beats any 6-week programme
+4. Movement quality before load — never progress load at expense of movement integrity
+5. The individual is everything — prescribe for this person, not the average person
+6. Recovery is training — sleep, nutrition, stress, and recovery modalities are part of the programme
+
+PROGRAMME DESIGN RULES:
+- Determine total programme length based on goal, training age, and timeline. State the length and reasoning.
+- Structure phases: GPP → SPP → Peak → Deload
+- Beginners: longer GPP, simpler movements, linear progression
+- Intermediate/Advanced: wave loading, tempo, accumulation/intensification blocks
+- Always include deload week every 4th week
+- Injury protocol: never prescribe contraindicated movements, offer 3 ranked substitutions
+- Complexity scales with training age — no Olympic lifting unless confirmed coaching background
+
+TESTING: Insert assessment sessions when baseline data is missing (week 1-2), at programme midpoint, and 2-3 weeks before goal/event.
+
+WEEKLY ADJUSTMENT: Assess completion rate, RPE data, injury flags, and event proximity each week.
+
+NUTRITION: Generate goal-specific macro targets based on bodyweight, goal, and training load. Include nutrient timing guidance.
+
+RECOVERY: Include recovery protocols based on available modalities.
+
+SEX-SPECIFIC: Female athletes get ACL prevention work, posterior chain emphasis, appropriate body composition ranges, and cycle periodisation if opted in. Male athletes get posterior chain correction and appropriate standards.
+
+BENCHMARKS: Classify test results against sex-appropriate normative data (Novice/Beginner/Intermediate/Advanced/Elite/World class).
+
+OUTPUT: Return ONLY valid JSON with this exact structure — no other text:
+{
+  "programme_summary": {
+    "total_weeks": number,
+    "current_phase": string,
+    "phase_goal": string,
+    "coach_note": string,
+    "next_milestone": string
+  },
+  "nutrition": {
+    "daily_calories": number,
+    "protein_g": number,
+    "carbs_g": number,
+    "fat_g": number,
+    "timing_notes": string,
+    "hydration_target_L": number
+  },
+  "recovery": {
+    "protocols": [string],
+    "sleep_target_hrs": number,
+    "deload_due": false
+  },
+  "week": {
+    "week_number": 1,
+    "week_type": "training",
+    "sessions": [
+      {
+        "day": string,
+        "session_type": string,
+        "duration_min": number,
+        "warmup": [{"name": string, "sets": number, "reps": string, "notes": string}],
+        "exercises": [
+          {
+            "name": string,
+            "sets": number,
+            "reps": string,
+            "load_guidance": string,
+            "tempo": string,
+            "rest_sec": number,
+            "coaching_note": string,
+            "substitutions": [{"name": string, "note": string}]
+          }
+        ],
+        "conditioning": [],
+        "cool_down": string
+      }
+    ]
+  },
+  "adjustments_made": [],
+  "flags": [],
+  "testing_inserted": false,
+  "testing_reason": ""
+}`;
+
+function buildAthleteProfile(trigger, checkIn){
+  var a = athlete || {};
+  return JSON.stringify({
+    trigger: trigger || 'initial_build',
+    athlete: {
+      name: a.name || 'Athlete',
+      age: a.dob ? (new Date().getFullYear() - parseInt(a.dob)) : (a.age || 30),
+      sex: a.sex || 'male',
+      weight_kg: a.bw || 80,
+      training_background: a.fqBackground || 'intermediate',
+      time_away_months: a.fqAway || 0,
+      goal: a.fqGoals ? a.fqGoals[0] : 'general_fitness',
+      goals_all: a.fqGoals || [],
+      equipment: a.fqEquip || 'full_commercial_gym',
+      days_available: a.fqDays || 4,
+      training_days: a.fqTrainingDays || {},
+      am_pm: a.fqAmPm || {},
+      injuries: a.fqInjury || [],
+      injury_notes: a.fqInjuryNotes || '',
+      recovery_access: [],
+      sleep_avg_hrs: 7,
+      stress_level: 'moderate',
+      cycle_sync: a.cycleSync || false,
+      path: a.fqPath || 'phoenix',
+      test_scores: {
+        bench_1rm: a.b1rm || 0,
+        bench_100kg_reps: a.b100 || 0,
+        pull_ups: a.pbw || 0,
+        squat_1rm: a.sq || 0,
+        deadlift_1rm: a.dl || 0,
+        row_500m: a.row500 || '',
+        mile_run: a.mile || '',
+        plank_sec: a.plank || 0,
+        oh_squat: a.ohsq || ''
+      }
+    },
+    check_in: checkIn || null,
+    current_programme_week: a.currentWeek || 0,
+    previous_block: a.previousBlock || null
+  });
+}
+
+function showProgrammeLoadingScreen(){
+  showScreen('screen-foundation-q');
+  // Replace content with loading state
+  var container = document.querySelector('#screen-foundation-q .q-screen');
+  if(!container) return;
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px 24px;">
+      <div class="phoenix-emblem" style="width:80px;height:80px;margin:0 auto 24px;animation:pulse 2s ease infinite;">
+        ${document.querySelector('.phoenix-emblem svg') ? document.querySelector('.phoenix-emblem svg').outerHTML : ''}
+      </div>
+      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">Your Coach is Working</div>
+      <div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:16px;" id="coach-loading-title">Building Your Programme</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.8;max-width:280px;" id="coach-loading-msg">Analysing your profile, goals, and training history...</div>
+      <div style="margin-top:32px;display:flex;gap:8px;" id="coach-loading-dots">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--gold);animation:pulse 1s ease infinite;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--gold);animation:pulse 1s ease 0.2s infinite;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--gold);animation:pulse 1s ease 0.4s infinite;"></div>
+      </div>
+    </div>`;
+  document.querySelector('.q-nav').style.display='none';
+}
+
+var coachLoadingMessages = [
+  'Analysing your profile...',
+  'Applying coaching methodology...',
+  'Structuring your phases...',
+  'Calibrating to your goals...',
+  'Calculating nutrition targets...',
+  'Building your first week...',
+  'Almost ready...'
+];
+
+function cycleLoadingMessages(){
+  var i = 0;
+  return setInterval(function(){
+    var el = document.getElementById('coach-loading-msg');
+    if(el && i < coachLoadingMessages.length){
+      el.textContent = coachLoadingMessages[i];
+      i++;
+    }
+  }, 1800);
+}
+
+async function generateProgramme(trigger, checkIn){
+  showProgrammeLoadingScreen();
+  var msgTimer = cycleLoadingMessages();
+  try {
+    var profileMsg = buildAthleteProfile(trigger, checkIn);
+    var response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+  'Content-Type': 'application/json',
+  'x-api-key': 'YOUR-NEW-KEY',
+  'anthropic-version': '2023-06-01'
+},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
+        system: PHOENIX_COACHING_PROMPT,
+        messages: [{role: 'user', content: profileMsg}]
+      })
+    });
+    clearInterval(msgTimer);
+    if(!response.ok){
+      var err = await response.json();
+      console.error('API error:', err);
+      onProgrammeError('API error: ' + (err.error && err.error.message ? err.error.message : response.status));
+      return;
+    }
+    var data = await response.json();
+    var raw = data.content && data.content[0] && data.content[0].text ? data.content[0].text : '';
+    // Strip markdown fences if present
+    var clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    var programme = JSON.parse(clean);
+    onProgrammeGenerated(programme, trigger);
+  } catch(e) {
+    clearInterval(msgTimer);
+    console.error('Programme generation error:', e);
+    onProgrammeError(e.message);
+  }
+}
+
+function onProgrammeGenerated(programme, trigger){
+  // Save programme to athlete profile
+  var updated = Object.assign({}, athlete, {
+    aiProgramme: programme,
+    aiProgrammeDate: new Date().toISOString(),
+    aiProgrammeTrigger: trigger,
+    currentWeek: 1
+  });
+  saveAthlete(updated);
+  // Show programme reveal screen
+  showProgrammeReveal(programme);
+}
+
+function onProgrammeError(msg){
+  // Graceful fallback — go to onboarding without AI programme
+  console.warn('Programme generation failed, using fallback:', msg);
+  var el = document.getElementById('coach-loading-msg');
+  if(el) el.textContent = 'Setting up your profile...';
+  var title = document.getElementById('coach-loading-title');
+  if(title) title.textContent = 'Almost There';
+  setTimeout(function(){
+    obStep=2;updateOB();showScreen('screen-onboard');
+  }, 1500);
+}
+
+function showProgrammeReveal(programme){
+  var s = programme.programme_summary || {};
+  var n = programme.nutrition || {};
+  var w = programme.week || {};
+  var sessions = w.sessions || [];
+  showScreen('screen-foundation-q');
+  var container = document.querySelector('#screen-foundation-q .q-screen');
+  if(!container) return;
+
+  var sessHTML = sessions.map(function(sess){
+    var exHTML = (sess.exercises||[]).map(function(ex){
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+        <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:1px;">${ex.name}</div>
+        <div style="font-size:12px;color:var(--gold);margin:2px 0;">${ex.sets} sets × ${ex.reps} — ${ex.load_guidance}</div>
+        ${ex.coaching_note ? `<div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:4px;">${ex.coaching_note}</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);">${sess.day}</div>
+        <div style="font-size:11px;color:var(--text2);">${sess.session_type} · ${sess.duration_min}min</div>
+      </div>
+      ${exHTML}
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="padding:24px 0 120px;">
+      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Your Programme is Ready</div>
+      <div style="font-family:var(--font-d);font-size:32px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:16px;">${s.current_phase||'Phase 1'}</div>
+
+      <div style="background:var(--bg3);border-left:3px solid var(--gold);border-radius:4px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:var(--text2);line-height:1.7;">
+        ${s.coach_note||'Your programme has been built. Let\'s get to work.'}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">
+          <div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">${s.total_weeks||10}</div>
+          <div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Weeks</div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">
+          <div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">${sessions.length}</div>
+          <div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Sessions/wk</div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">
+          <div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">${n.protein_g||0}g</div>
+          <div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Protein/day</div>
+        </div>
+      </div>
+
+      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Week 1 — ${w.week_type||'Training'}</div>
+      ${sessHTML}
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:8px;">
+        <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Daily Nutrition Target</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
+          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.daily_calories||0}</div><div style="font-size:10px;color:var(--text3);">kcal</div></div>
+          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.protein_g||0}g</div><div style="font-size:10px;color:var(--text3);">protein</div></div>
+          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.carbs_g||0}g</div><div style="font-size:10px;color:var(--text3);">carbs</div></div>
+          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.fat_g||0}g</div><div style="font-size:10px;color:var(--text3);">fat</div></div>
+        </div>
+        ${n.timing_notes ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6;">${n.timing_notes}</div>` : ''}
+      </div>
+
+      <button class="btn-primary" style="width:100%;padding:16px;margin-top:16px;" onclick="beginProgramme()">
+        Start Training →
+      </button>
+    </div>`;
+
+  document.querySelector('.q-nav').style.display='none';
+}
+
+function beginProgramme(){
   obStep=2;updateOB();showScreen('screen-onboard');
 }
 

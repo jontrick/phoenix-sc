@@ -2720,7 +2720,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='3.9.7';
+var APP_VERSION='3.9.9';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -6113,8 +6113,94 @@ var BETA_CODES = {
 };
 
 var REWARD_CODES = {};
-// Format: 'REWARDXXX': { tier:'pro', duration_days:30, label:'1 Month Pro' }
-// Add reward codes here as the rewards system grows
+// Format: 'CODE': { tier:'pro', duration_days:30, label:'1 Month Pro' }
+// Add reward codes here as needed
+
+// Watermark rule:
+// Ember + Rising = watermark always
+// Beta lifetime Pro = watermark always (fair exchange for free Pro)
+// Ignite + Pro (paid) = clean share, no watermark
+function requiresWatermark(){
+  var d=getTierData();
+  if(d.beta||d.source==='beta_lifetime') return true;
+  return !hasIgniteAccess();
+}
+
+// Video upload reward tracking
+function getVideoUploadCount(){
+  return parseInt(localStorage.getItem('phoenix_video_uploads')||'0');
+}
+
+function incrementVideoUpload(){
+  var count=getVideoUploadCount()+1;
+  localStorage.setItem('phoenix_video_uploads',count.toString());
+  var today=new Date().toDateString();
+  var todayCount=parseInt(localStorage.getItem('phoenix_video_uploads_today')||'0');
+  var lastDay=localStorage.getItem('phoenix_video_uploads_last_day')||'';
+  if(lastDay!==today) todayCount=0;
+  todayCount++;
+  localStorage.setItem('phoenix_video_uploads_today',todayCount.toString());
+  localStorage.setItem('phoenix_video_uploads_last_day',today);
+  checkVideoRewards(count);
+  return {total:count, today:todayCount, reward_eligible:todayCount<=2};
+}
+
+function checkVideoRewards(count){
+  var claimed=JSON.parse(localStorage.getItem('phoenix_video_rewards_claimed')||'[]');
+  var rewards=[
+    {at:1,  badge:'first_flame',  label:'First Flame',  reward:'3 premium skins unlocked'},
+    {at:5,  badge:'rising_flame', label:'Rising',       reward:'1 week Rising tier',   tier:'rising', days:7},
+    {at:10, badge:'burning',      label:'Burning',      reward:'1 month Ignite free',  tier:'ignite', days:30},
+    {at:25, badge:'blazing',      label:'Blazing',      reward:'1 month Pro free',     tier:'pro',    days:30},
+    {at:50, badge:'phoenix_rare', label:'Phoenix',      reward:'3 months Pro free',    tier:'pro',    days:90}
+  ];
+  rewards.forEach(function(r){
+    if(count>=r.at&&claimed.indexOf(r.badge)===-1){
+      claimed.push(r.badge);
+      localStorage.setItem('phoenix_video_rewards_claimed',JSON.stringify(claimed));
+      if(r.tier&&r.days){
+        var shouldUpgrade=false;
+        if(r.tier==='pro'&&!hasProAccess()) shouldUpgrade=true;
+        if(r.tier==='ignite'&&!hasIgniteAccess()) shouldUpgrade=true;
+        if(r.tier==='rising'&&!hasRisingAccess()) shouldUpgrade=true;
+        if(shouldUpgrade){
+          var expiry=new Date();
+          expiry.setDate(expiry.getDate()+r.days);
+          if(r.tier==='pro'){
+            localStorage.setItem('phoenix_user_tier','pro');
+            localStorage.setItem('phoenix_tier_source','reward');
+            localStorage.setItem('phoenix_reward_expiry',expiry.toISOString());
+            localStorage.setItem('phoenix_reward_label',r.reward);
+          } else if(r.tier==='ignite'){
+            localStorage.setItem('phoenix_ignite_purchase','true');
+          } else if(r.tier==='rising'){
+            if(!hasRisingAccess()) localStorage.setItem('phoenix_user_tier','rising');
+          }
+        }
+      }
+      showVideoRewardNotification(r);
+    }
+  });
+}
+
+function showVideoRewardNotification(reward){
+  var existing=document.getElementById('video-reward-toast');
+  if(existing) existing.remove();
+  var toast=document.createElement('div');
+  toast.id='video-reward-toast';
+  toast.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px 20px;border-radius:8px;z-index:999;text-align:center;max-width:300px;';
+  toast.innerHTML='<div style="font-size:10px;margin-bottom:4px;opacity:0.7;">'+reward.label+' UNLOCKED</div><div>'+reward.reward+'</div>';
+  document.body.appendChild(toast);
+  setTimeout(function(){toast.remove();},4000);
+}
+
+function getVideoRewardProgress(){
+  var count=getVideoUploadCount();
+  var milestones=[1,5,10,25,50];
+  var next=milestones.find(function(m){return m>count;})||null;
+  var claimed=JSON.parse(localStorage.getItem('phoenix_video_rewards_claimed')||'[]');
+  return {count:count,next_milestone:next,remaining:next?next-count:0,claimed:claimed};
+}
 
 function getTierData(){
   return {

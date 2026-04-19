@@ -370,7 +370,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 /* TODAY SCREEN */
 #screen-today{background:var(--bg);}
 .today-body{flex:1;padding:0 0 80px;overflow-y:auto;}
-.today-hero{background:linear-gradient(135deg,var(--bg3) 0%,#161616 100%);border-bottom:1px solid var(--border);padding:20px;position:relative;overflow:hidden;}
+.today-hero{background:linear-gradient(135deg,var(--bg3) 0%,#161616 100%);border-bottom:1px solid var(--border);padding:20px;padding-bottom:36px;position:relative;overflow:hidden;}
 .today-hero::before{content:"";position:absolute;top:0;right:0;width:200px;height:100%;background:radial-gradient(ellipse at right,rgba(200,150,62,0.08),transparent 70%);}
 .today-tag{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;}
 .today-dayname{font-family:var(--font-d);font-size:34px;font-weight:900;letter-spacing:1px;color:var(--text);text-transform:uppercase;}
@@ -470,6 +470,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .modal-close{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:3px;text-transform:uppercase;padding:14px;cursor:pointer;border-radius:var(--radius);margin-top:12px;}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 
 /* ══ SESSION SCREEN ══ */
@@ -1548,12 +1549,12 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
             <div class="game-card-action-sm">Choose →</div>
           </div>
         </div>
-        <div class="game-card game-card-sm" onclick="openCoreModal()" style="flex:1;border-left:3px solid var(--blue);">
+        <div class="game-card game-card-sm" onclick="generateDailyCore()" style="flex:1;border-left:3px solid var(--blue);">
           <div class="game-card-inner">
             <div class="game-card-eyebrow-sm">Add on</div>
             <div class="game-card-title-sm">Core</div>
-            <div class="game-card-sub-sm">20 min AMRAP</div>
-            <div class="game-card-action-sm">Start →</div>
+            <div class="game-card-sub-sm">AI Generated</div>
+            <div class="game-card-action-sm">Generate →</div>
           </div>
         </div>
       </div>
@@ -3247,6 +3248,58 @@ function openCoreModal(){
   document.getElementById('core-modal').classList.add('active');
 }
 function closeCoreModal(){document.getElementById('core-modal').classList.remove('active');}
+
+// ====== GENERATE DAILY CORE (AI) ======
+function generateDailyCore(){
+  // Show loading overlay
+  var overlay=document.getElementById('core-modal');
+  var sheet=overlay.querySelector('.modal-sheet');
+  sheet.innerHTML='<div class="modal-title">Generating Session</div><div class="modal-subtitle">Core Training</div>'+
+    '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;">'+
+    '<div class="core-gen-spinner" style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px;"></div>'+
+    '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:2px;color:var(--text2);text-transform:uppercase;">Building your session...</div>'+
+    '</div>'+
+    '<button class="modal-close" onclick="closeCoreModal()">Cancel</button>';
+  overlay.classList.add('active');
+
+  var today=new Date();
+  var dateStr=today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+
+  fetch('https://phoenix-coach.jon-d87.workers.dev',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-5',
+      max_tokens:1000,
+      messages:[{role:'user',content:'Generate a daily 20-minute AMRAP core and gymnastics session for '+dateStr+'. Return ONLY valid JSON with no explanation, in this exact format: {"name":"<session name>","format":"AMRAP 20","exercises":[{"name":"<exercise>","reps":"<reps>","load":"<load>"}]}. Include 4-5 exercises mixing core strength, gymnastics holds, and dynamic movements. Vary difficulty and use equipment like kettlebells, med balls, ab wheel, rings where appropriate. Use bodyweight (BW) for load when no equipment is needed.'}]
+    })
+  })
+  .then(function(res){
+    if(!res.ok) throw new Error('API error '+res.status);
+    return res.json();
+  })
+  .then(function(data){
+    var text=(data.content&&data.content[0]&&data.content[0].text)||'';
+    var jsonMatch=text.match(/\{[\s\S]*\}/);
+    if(!jsonMatch) throw new Error('No JSON in response');
+    var session=JSON.parse(jsonMatch[0]);
+    closeCoreModal();
+    // Build a coreSession-compatible object and launch
+    coreSession={num:'AI',exercises:session.exercises};
+    coreLog=[];
+    coreExIdx=0;
+    coreRepIdx=0;
+    startCorePrepCountdown();
+  })
+  .catch(function(err){
+    console.warn('Core generation failed, falling back to static:',err);
+    // Restore modal to normal picker
+    sheet.innerHTML='<div class="modal-title">Select Session</div><div class="modal-subtitle">Core Training</div>'+
+      '<div id="core-options-container"></div>'+
+      '<button class="modal-close" onclick="closeCoreModal()">Cancel</button>';
+    openCoreModal();
+  });
+}
 
 // ====== PROGRAMME ======
 function renderProgramme(){

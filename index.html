@@ -2832,7 +2832,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.2.8';
+var APP_VERSION='4.3.1';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -5099,6 +5099,12 @@ async function generateProgramme(trigger, checkIn){
     console.log('stop_reason:', data.stop_reason);
     // Strip markdown fences if present
     var clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    // Also handle any trailing content after the JSON
+    var jsonStart = clean.indexOf('{');
+    var jsonEnd = clean.lastIndexOf('}');
+    if(jsonStart >= 0 && jsonEnd > jsonStart){
+      clean = clean.substring(jsonStart, jsonEnd+1);
+    }
     // If truncated, try to salvage partial JSON
     if(data.stop_reason === 'max_tokens'){
       console.warn('Response truncated - trying to salvage');
@@ -7912,7 +7918,7 @@ function updateCardAccess(){
   var isIgnite=hasIgniteAccess();
 
   // Leaderboard — Ignite+
-  var lbCard=document.getElementById('card-leaderboard');
+  var lbCard=document.getElementById('card-leaderboard'); if(!lbCard) return;
   var lbBadge=document.getElementById('leaderboard-lock-badge');
   if(lbCard){
     if(isIgnite){

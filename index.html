@@ -508,6 +508,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .set-input-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;text-align:center;margin-top:2px;}
 .set-done-btn{width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text3);font-size:18px;transition:all 0.2s;flex-shrink:0;align-self:center;}
 .set-done-btn.done{background:var(--green-dim);border-color:var(--green);color:#5cb85c;}
+.set-row{position:relative;overflow:hidden;transition:transform 0.25s ease;}
+.set-row .set-swipe-bg{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:var(--radius);}
+.set-row.swiped .set-swipe-bg{opacity:1;}
+.amrap-counter{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin:12px 0;}
+.amrap-counter-btn{width:48px;height:48px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:24px;font-family:var(--font-d);font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;}
+.amrap-counter-btn:active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
+.amrap-counter-val{font-family:var(--font-d);font-size:42px;font-weight:900;color:var(--gold);min-width:60px;text-align:center;}
 .set-col{display:flex;flex-direction:column;}
 .set-header-row{display:grid;grid-template-columns:32px 1fr 1fr auto;gap:8px;margin-bottom:6px;}
 .set-col-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;text-align:center;}
@@ -1826,6 +1833,32 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="q-option-card" onclick="fqSetCycle('no',this)">Not now</div>
     </div>
   </div>
+  <div class="q-field" style="margin-top:16px;">
+    <label class="q-label">Theme</label>
+    <div style="display:flex;gap:10px;margin-top:8px;" id="fq-skin-picker">
+      <div class="fq-skin-dot" onclick="applySkin('phoenix')" data-skin="phoenix" style="width:32px;height:32px;border-radius:50%;background:#c8963e;border:2px solid transparent;cursor:pointer;transition:border-color 0.2s;" title="Phoenix"></div>
+      <div class="fq-skin-dot" onclick="applySkin('carbon')" data-skin="carbon" style="width:32px;height:32px;border-radius:50%;background:#3a8fff;border:2px solid transparent;cursor:pointer;transition:border-color 0.2s;" title="Carbon"></div>
+      <div class="fq-skin-dot" onclick="applySkin('ember')" data-skin="ember" style="width:32px;height:32px;border-radius:50%;background:#e8825a;border:2px solid transparent;cursor:pointer;transition:border-color 0.2s;" title="Ember"></div>
+      <div class="fq-skin-dot" onclick="applySkin('midnight')" data-skin="midnight" style="width:32px;height:32px;border-radius:50%;background:#8870ff;border:2px solid transparent;cursor:pointer;transition:border-color 0.2s;" title="Midnight"></div>
+    </div>
+  </div>
+  <div class="q-field" style="margin-top:12px;">
+    <label class="q-label">Font style</label>
+    <div style="display:flex;gap:8px;margin-top:8px;" id="fq-font-picker">
+      <div class="fq-font-opt" onclick="applyFont('phoenix')" data-font="phoenix" style="flex:1;padding:10px 8px;border-radius:var(--radius);background:var(--bg3);border:2px solid var(--gold);cursor:pointer;text-align:center;transition:border-color 0.2s;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;color:var(--text);">Classic</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Barlow</div>
+      </div>
+      <div class="fq-font-opt" onclick="applyFont('bold')" data-font="bold" style="flex:1;padding:10px 8px;border-radius:var(--radius);background:var(--bg3);border:2px solid transparent;cursor:pointer;text-align:center;transition:border-color 0.2s;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;color:var(--text);">Bold</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Bebas</div>
+      </div>
+      <div class="fq-font-opt" onclick="applyFont('sharp')" data-font="sharp" style="flex:1;padding:10px 8px;border-radius:var(--radius);background:var(--bg3);border:2px solid transparent;cursor:pointer;text-align:center;transition:border-color 0.2s;">
+        <div style="font-family:'Oswald',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;color:var(--text);">Sharp</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">Oswald</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- STEP 2: Health Advisory + PAR-Q -->
@@ -1934,6 +1967,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       </div>
     </div>
     <div id="injury-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:20px;"></div>
+  <button class="btn-secondary" id="fq-skip-injuries-btn" onclick="fqAnswers.injury=[];injuryZones={};renderInjuryTags();fqNext();" style="width:100%;padding:12px;margin-bottom:12px;font-family:var(--font-d);font-size:13px;letter-spacing:2px;text-transform:uppercase;">No injuries — skip</button>
   <textarea id="fq-injury-notes" class="q-input" placeholder="Any additional notes about injuries or limitations..." rows="2" style="margin-top:4px;" oninput="fqAnswers.injuryNotes=this.value"></textarea>
 </div>
 
@@ -2130,6 +2164,18 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="q-option-card" onclick="fqSetDays(4,this)">4</div>
       <div class="q-option-card" onclick="fqSetDays(5,this)">5</div>
       <div class="q-option-card" onclick="fqSetDays(6,this)">6</div>
+    </div>
+  </div>
+  <div style="margin-bottom:20px;">
+    <label class="q-label">Which days do you train?</label>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px;" id="fq-day-picker">
+      <div class="q-option-card" onclick="fqToggleDayPicker('Mon',this)" style="padding:10px 4px;font-size:12px;">Mon</div>
+      <div class="q-option-card" onclick="fqToggleDayPicker('Tue',this)" style="padding:10px 4px;font-size:12px;">Tue</div>
+      <div class="q-option-card" onclick="fqToggleDayPicker('Wed',this)" style="padding:10px 4px;font-size:12px;">Wed</div>
+      <div class="q-option-card" onclick="fqToggleDayPicker('Thu',this)" style="padding:10px 4px;font-size:12px;">Thu</div>
+      <div class="q-option-card" onclick="fqToggleDayPicker('Fri',this)" style="padding:10px 4px;font-size:12px;">Fri</div>
+      <div class="q-option-card" onclick="fqToggleDayPicker('Sat',this)" style="padding:10px 4px;font-size:12px;">Sat</div>
+      <div class="q-option-card" onclick="fqToggleDayPicker('Sun',this)" style="padding:10px 4px;font-size:12px;">Sun</div>
     </div>
   </div>
   <div style="margin-bottom:20px;">
@@ -3482,7 +3528,8 @@ function renderSetRow(ex,set,idx){
     '<div class="set-col" style="max-width:60px"><input type="text" class="set-input" id="pct-'+ex.id+'-'+idx+'" value="'+pctVal+'" placeholder="%" readonly style="opacity:0.55;color:var(--text2);font-size:15px;text-align:center"><div class="set-input-label">%</div></div>':
     '';
   var gridCols=hasPct?'28px 60px 1fr 1fr auto':'28px 1fr 1fr auto';
-  return '<div class="set-row" id="setrow-'+ex.id+'-'+idx+'" style="grid-template-columns:'+gridCols+'">'+
+  return '<div class="set-row" id="setrow-'+ex.id+'-'+idx+'" style="grid-template-columns:'+gridCols+'" data-exid="'+ex.id+'" data-setidx="'+idx+'">'+
+    '<div class="set-swipe-bg">DONE</div>'+
     '<div class="set-num">'+(idx+1)+'</div>'+
     pctBox+
     '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+(hasPct?'':kgVal)+'" placeholder="kg"'+kgReadonly+' inputmode="decimal"><div class="set-input-label">kg</div></div>'+
@@ -3508,6 +3555,63 @@ function onSetDone(ex,idx){
   }
   if(restSecs>0)startRestTimer(restSecs,nextLabel,nextKg,nextReps);
 }
+
+// Swipe-to-complete on set rows
+(function(){
+  var swipeThreshold=80;
+  document.addEventListener('touchstart',function(e){
+    var row=e.target.closest('.set-row');
+    if(!row||e.target.tagName==='INPUT') return;
+    row._swipeStartX=e.touches[0].clientX;
+    row._swipeStartY=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    var row=e.target.closest('.set-row');
+    if(!row||row._swipeStartX===undefined) return;
+    var dx=row._swipeStartX-e.touches[0].clientX;
+    var dy=Math.abs(e.touches[0].clientY-row._swipeStartY);
+    if(dy>30){row._swipeStartX=undefined;row.style.transform='';return;}
+    if(dx>0){
+      row.style.transform='translateX(-'+Math.min(dx,swipeThreshold+20)+'px)';
+      row.classList.toggle('swiped',dx>swipeThreshold/2);
+    }
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    var row=e.target.closest('.set-row');
+    if(!row||row._swipeStartX===undefined) return;
+    var dx=row._swipeStartX-(e.changedTouches[0]||{clientX:row._swipeStartX}).clientX;
+    row.style.transform='';
+    row.classList.remove('swiped');
+    row._swipeStartX=undefined;
+    if(dx>=swipeThreshold){
+      var btn=row.querySelector('.set-done-btn');
+      if(btn&&!btn.classList.contains('done')) btn.click();
+    }
+  },{passive:true});
+})();
+
+// AMRAP Rep Counter
+var amrapRepCount=0;
+function renderAmrapCounter(targetEl){
+  amrapRepCount=0;
+  var div=document.createElement('div');
+  div.className='amrap-counter';
+  div.id='amrap-counter-block';
+  div.innerHTML='<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;text-align:center;width:100%;">AMRAP Reps</div>'+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:16px;width:100%;">'+
+    '<div class="amrap-counter-btn" onclick="amrapAdjust(-1)">−</div>'+
+    '<div class="amrap-counter-val" id="amrap-val">0</div>'+
+    '<div class="amrap-counter-btn" onclick="amrapAdjust(1)">+</div>'+
+    '</div>';
+  targetEl.appendChild(div);
+}
+function amrapAdjust(delta){
+  amrapRepCount=Math.max(0,amrapRepCount+delta);
+  var el=document.getElementById('amrap-val');
+  if(el) el.textContent=amrapRepCount;
+}
+function getAmrapTotal(){return amrapRepCount;}
+
 function pickExercise(exId,optionsKey){
   var titleMap={row:'Select Row Exercise',delt:'Select Delt Exercise',shrug:'Select Shrug Exercise',curl:'Select Curl / Arm Exercise',legcurl:'Select Leg Curl Exercise',backhip:'Select Back / Hip Exercise',unilateral:'Select Unilateral Exercise',de_lower:'Select DE Finisher'};
   openExPicker(exId,titleMap[optionsKey]||'Select Exercise',optionsKey,function(chosen){
@@ -6436,7 +6540,8 @@ function openTBBSSession(){
     html+='<div class="set-header-row"><div></div><div class="set-col-label">reps</div><div class="set-col-label">kg</div><div></div></div>';
     html+='<div id="sets-'+ex.id+'">';
     ex.sets.forEach(function(set,idx){
-      html+='<div class="set-row" id="setrow-'+ex.id+'-'+idx+'" style="grid-template-columns:28px 1fr 1fr auto">'+
+      html+='<div class="set-row" id="setrow-'+ex.id+'-'+idx+'" style="grid-template-columns:28px 1fr 1fr auto" data-exid="'+ex.id+'" data-setidx="'+idx+'">'+
+        '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-num">'+(idx+1)+'</div>'+
         '<div class="set-col"><input type="number" class="set-input reps" id="reps-'+ex.id+'-'+idx+'" value="'+set.reps+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
         '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+set.kg+'" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
@@ -7109,6 +7214,34 @@ function fqSetAmPm(val, el){
   el.classList.add('active');
 }
 
+if(!fqAnswers.trainingDays) fqAnswers.trainingDays=[];
+function fqToggleDayPicker(day, el){
+  var idx=fqAnswers.trainingDays.indexOf(day);
+  if(idx>-1){
+    fqAnswers.trainingDays.splice(idx,1);
+    el.classList.remove('active');
+  } else {
+    fqAnswers.trainingDays.push(day);
+    el.classList.add('active');
+  }
+}
+
+function updateFqSkinPicker(){
+  document.querySelectorAll('#fq-skin-picker .fq-skin-dot').forEach(function(dot){
+    dot.style.borderColor=dot.getAttribute('data-skin')===currentSkin?'var(--gold)':'transparent';
+  });
+}
+function updateFqFontPicker(){
+  document.querySelectorAll('#fq-font-picker .fq-font-opt').forEach(function(opt){
+    opt.style.borderColor=opt.getAttribute('data-font')===currentFont?'var(--gold)':'transparent';
+  });
+}
+// Hook into existing apply functions
+var _origApplySkin=applySkin;
+applySkin=function(skin){_origApplySkin(skin);updateFqSkinPicker();};
+var _origApplyFont=applyFont;
+applyFont=function(font){_origApplyFont(font);updateFqFontPicker();};
+
 var parqData={};
 function parqToggle(el,id){}
 function parqSet(id, val, e){
@@ -7129,17 +7262,23 @@ function parqSet(id, val, e){
 
 function bodyDiagramTap(e, side){
   var el=e.target;
+  // Walk up to find element with data-zone (text labels don't have it)
+  while(el && !el.getAttribute('data-zone')){
+    el=el.parentElement;
+    if(!el || el.tagName==='svg' || el.tagName==='SVG') return;
+  }
+  if(!el) return;
   var zone=el.getAttribute('data-zone');
   if(!zone) return;
   var key=side+'_'+zone;
   if(injuryZones[key]){
     delete injuryZones[key];
-    el.style.fill='';
-    el.style.stroke='';
+    el.setAttribute('fill','var(--bg3)');
+    el.setAttribute('stroke','var(--border2)');
   } else {
-    injuryZones[key]={zone:zone,side:side};
-    el.style.fill='rgba(200,150,62,0.35)';
-    el.style.stroke='var(--gold)';
+    injuryZones[key]={zone:zone,side:side,el:el};
+    el.setAttribute('fill','rgba(200,150,62,0.5)');
+    el.setAttribute('stroke','var(--gold)');
   }
   fqAnswers.injury=Object.keys(injuryZones);
   renderInjuryTags();
@@ -7162,6 +7301,11 @@ function removeInjuryZone(el){
   removeInjuryTag(key);
 }
 function removeInjuryTag(key){
+  var info=injuryZones[key];
+  if(info&&info.el){
+    info.el.setAttribute('fill','var(--bg3)');
+    info.el.setAttribute('stroke','var(--border2)');
+  }
   delete injuryZones[key];
   fqAnswers.injury=Object.keys(injuryZones);
   renderInjuryTags();
@@ -8071,6 +8215,9 @@ function openPhoenixWOD(){
     '<button class="btn-primary" style="width:100%;padding:16px;margin-bottom:10px;" onclick="startWODTimer(\'wod-modal\')">Start WOD →</button>'+
     '<button class="btn-secondary" style="width:100%;padding:14px;margin:0;" onclick="logWODScore()">Log Score Only</button>'+
     '</div>';
+  modal.addEventListener('click',function(ev){
+    if(ev.target===modal) modal.remove();
+  });
   document.body.appendChild(modal);
 }
 
@@ -8090,7 +8237,8 @@ function startWODTimer(modalId){
     '<div class="wod-timer-label">'+wod.name+'</div>'+
     '<div class="wod-timer-label" style="margin-bottom:20px;">'+wod.format+'</div>'+
     '<div class="wod-timer-display" id="wod-timer-num">'+formatTime(isAMRAP?totalSecs:0)+'</div>'+
-    '<div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px;">'+(isAMRAP?'TIME REMAINING':'ELAPSED')+'</div>',
+    '<div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px;">'+(isAMRAP?'TIME REMAINING':'ELAPSED')+'</div>'+
+    (isAMRAP?'<div id="wod-amrap-counter-slot" style="margin-top:24px;"></div>':'')+
     '<div style="display:flex;gap:10px;margin-top:40px;">'+
     '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">START</button>'+
     '<button class="btn-secondary" style="flex:0 0 80px;padding:18px;margin:0;" onclick="finishWOD()">Done</button>'+
@@ -8099,6 +8247,13 @@ function startWODTimer(modalId){
     '</div>';
 
   window._wodTimer={totalSecs:totalSecs,elapsed:0,running:false,interval:null,isAMRAP:isAMRAP};
+
+  if(isAMRAP){
+    setTimeout(function(){
+      var slot=document.getElementById('wod-amrap-counter-slot');
+      if(slot) renderAmrapCounter(slot);
+    },0);
+  }
 
   window.toggleWODTimer=function(){
     var t=window._wodTimer;
@@ -8126,7 +8281,8 @@ function startWODTimer(modalId){
 
   window.finishWOD=function(){
     if(window._wodTimer&&window._wodTimer.interval) clearInterval(window._wodTimer.interval);
-    logWODScore(window._wodTimer?window._wodTimer.elapsed:0);
+    var reps=window._wodTimer&&window._wodTimer.isAMRAP?getAmrapTotal():0;
+    logWODScore(window._wodTimer?window._wodTimer.elapsed:0,reps);
   };
 }
 
@@ -8136,9 +8292,10 @@ function formatTime(secs){
   return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
 }
 
-function logWODScore(timeElapsed){
+function logWODScore(timeElapsed,amrapReps){
   var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
-  var scorePrompt=prompt('Log your score:\n(e.g. 4 rounds + 12 reps, or 8:42 for time)');
+  var defaultScore=amrapReps?amrapReps+' reps':'';
+  var scorePrompt=prompt('Log your score:\n(e.g. 4 rounds + 12 reps, or 8:42 for time)',defaultScore);
   if(!scorePrompt) return;
   var scores=JSON.parse(localStorage.getItem('phoenix_wod_scores')||'[]');
   scores.push({
@@ -8146,7 +8303,8 @@ function logWODScore(timeElapsed){
     wod_id:wod.id,
     wod_name:wod.name,
     score:scorePrompt,
-    time_elapsed:timeElapsed||0
+    time_elapsed:timeElapsed||0,
+    amrap_reps:amrapReps||0
   });
   localStorage.setItem('phoenix_wod_scores',JSON.stringify(scores));
   // Update streak

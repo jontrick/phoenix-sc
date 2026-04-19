@@ -598,6 +598,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .parq-btn.active-yes{background:rgba(192,57,43,0.15);border-color:#e74c3c;color:#e74c3c;}
 .parq-btn.active-no{background:rgba(58,125,68,0.15);border-color:var(--green);color:var(--green);}
 
+
+.q-label{font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:6px;}
+.q-field{margin-bottom:16px;}
+.q-input{width:100%;padding:12px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-b);font-size:15px;box-sizing:border-box;-webkit-appearance:none;outline:none;}
+.q-input:focus{border-color:var(--gold);}
+.q-input::placeholder{color:var(--text3);}
+select.q-input{background:var(--bg2);color:var(--text);}
+textarea.q-input{resize:vertical;min-height:60px;}
+
 /* WARM-UP BLOCKS */
 .wu-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;}
 .wu-block-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);}
@@ -2723,7 +2732,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.2.3';
+var APP_VERSION='4.2.4';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -4972,7 +4981,7 @@ async function generateProgramme(trigger, checkIn){
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 3000,
+        max_tokens: 6000,
         system: PHOENIX_COACHING_PROMPT,
         messages: [{role: 'user', content: profileMsg}]
       })
@@ -5095,7 +5104,9 @@ function showProgrammeReveal(programme){
 }
 
 function beginProgramme(){
-  obStep=2;updateOB();showScreen('screen-onboard');
+  viewWeek=1;
+  if(typeof renderToday === 'function') renderToday();
+  navTo('today');
 }
 
 function openFoundationQ(){
@@ -6857,9 +6868,16 @@ function fqSetEquip(val, el){
 }
 
 function fqSetDays(val, el){
-  fqAnswers.days=val;
-  document.querySelectorAll('#fq-step-7 .q-option-card').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
+  if(fqAnswers.days===val){
+    fqAnswers.days=null;
+    el.classList.remove('active');
+  } else {
+    fqAnswers.days=val;
+    document.querySelectorAll('#fq-step-8 .q-option-card, #fq-step-7 .q-option-card').forEach(function(e){
+      if(e.onclick && e.onclick.toString().indexOf('fqSetDays')>-1) e.classList.remove('active');
+    });
+    el.classList.add('active');
+  }
   fqValidateStep();
 }
 

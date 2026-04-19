@@ -1477,25 +1477,98 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
   </div>
 </div>
-<div class="today-body">
+<div class="today-body" id="today-body">
   <div class="today-hero">
     <div class="today-tag" id="today-greeting-tag">Today</div>
     <div class="today-dayname" id="t-dayname">Monday</div>
     <div class="today-datestr" id="t-datestr"></div>
     <div class="today-week-badge" id="t-weekbadge">Week 1</div>
   </div>
-  <div class="session-tiles" id="t-tiles"></div>
-  <div id="ad-today" class="ad-slot tall" style="margin:0 0 4px;">
-    <div>
-      <div class="ad-slot-label">Advertisement</div>
-      <!-- AdSense slot: today-screen -->
-    </div>
+  <div id="ad-today" class="ad-slot tall" style="display:none;margin:0 0 4px;">
+    <div><div class="ad-slot-label">Advertisement</div></div>
   </div>
-  <div id="ad-today-remove" class="ad-remove-btn" onclick="navTo('coming')">Remove ads forever — unlock Phoenix</div>
-  <div style="padding:0 20px 80px;">
-    <div onclick="navTo('coming')" class="shimmer-card" style="background:linear-gradient(135deg,rgba(200,150,62,0.22) 0%,rgba(200,150,62,0.06) 60%,transparent 100%);border:1px solid var(--gold);border-radius:var(--radius);padding:16px 18px;cursor:pointer;">
-      <div style="font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:5px;">This is just the beginning</div>
-      <div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);text-transform:uppercase;letter-spacing:1px;">See what's coming &#8250;</div>
+  <div style="padding:0 16px 100px;">
+    <div id="card-phoenix-wod" class="game-card game-card-wod" onclick="openPhoenixWOD()" style="margin-bottom:10px;">
+      <div class="game-card-inner">
+        <div class="game-card-eyebrow">
+          <span class="game-card-tier-badge">Everyone</span>
+          <span id="wod-countdown" class="game-card-countdown">24h 00m</span>
+        </div>
+        <div class="game-card-title" id="wod-name">THE ZEUS</div>
+        <div class="game-card-sub" id="wod-format">God Tier — AMRAP 12</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+          <div class="game-card-streak" id="wod-streak">
+            <span id="wod-streak-text">🔥 0 day streak</span>
+          </div>
+          <div class="game-card-action">View WOD →</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div id="card-today-session" class="game-card game-card-sm" onclick="openTodaySession()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm">Your Programme</div>
+          <div class="game-card-title-sm" id="today-session-name">Today</div>
+          <div class="game-card-sub-sm" id="today-session-detail">Start training</div>
+          <div class="game-card-action-sm">Start →</div>
+        </div>
+      </div>
+      <div class="game-card game-card-sm" onclick="openConditioning()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm">Add on</div>
+          <div class="game-card-title-sm">Conditioning</div>
+          <div class="game-card-sub-sm">Pick or generate</div>
+          <div class="game-card-action-sm">Choose →</div>
+        </div>
+      </div>
+    </div>
+    <div id="card-leaderboard" class="game-card game-card-locked" onclick="openLeaderboard()" style="margin-bottom:10px;">
+      <div class="game-card-inner" style="display:flex;align-items:center;gap:14px;">
+        <div style="flex:1;">
+          <div class="game-card-eyebrow">
+            <span id="leaderboard-lock-badge" class="game-card-tier-badge game-card-tier-locked">Ignite unlocks this</span>
+          </div>
+          <div class="game-card-title" id="leaderboard-title">Leaderboard</div>
+          <div class="game-card-sub" id="leaderboard-sub">See where you rank globally</div>
+        </div>
+        <div style="font-size:28px;opacity:0.4;">🏆</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div id="card-combine" class="game-card game-card-sm game-card-locked" onclick="openCombine()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Ignite+</span></div>
+          <div class="game-card-title-sm">Combine</div>
+          <div class="game-card-sub-sm" id="combine-sub">Q1 Strength Battery</div>
+          <div style="font-size:20px;opacity:0.35;margin-top:4px;">⚡</div>
+        </div>
+      </div>
+      <div id="card-my-coach" class="game-card game-card-sm game-card-locked" onclick="openMyCoach()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span></div>
+          <div class="game-card-title-sm">My Coach</div>
+          <div class="game-card-sub-sm" id="coach-sub">Your coach is waiting</div>
+          <div style="font-size:20px;opacity:0.35;margin-top:4px;">🧠</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div id="card-nutrition" class="game-card game-card-sm game-card-locked" onclick="openNutrition()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span></div>
+          <div class="game-card-title-sm">Nutrition</div>
+          <div class="game-card-sub-sm" id="nutrition-sub">Daily targets</div>
+          <div style="font-size:20px;opacity:0.35;margin-top:4px;">🥩</div>
+        </div>
+      </div>
+      <div class="game-card game-card-sm" onclick="openRecovery()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm">All tiers</div>
+          <div class="game-card-title-sm">Recovery</div>
+          <div class="game-card-sub-sm">Sleep and meditation</div>
+          <div style="font-size:20px;margin-top:4px;">😴</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -2732,7 +2805,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.2.7';
+var APP_VERSION='4.2.8';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){

@@ -376,7 +376,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .today-dayname{font-family:var(--font-d);font-size:34px;font-weight:900;letter-spacing:1px;color:var(--text);text-transform:uppercase;}
 .today-datestr{font-size:13px;color:var(--text2);margin-top:2px;}
 .today-week-badge{display:inline-block;background:var(--gold-dim);border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:3px 10px;border-radius:2px;margin-top:8px;}
-.session-tiles{padding:16px 20px;display:flex;flex-direction:column;gap:12px;}
+.session-tiles{padding:16px 20px;display:flex;flex-direction:column;gap:12px;margin-top:16px;}
 .session-tile{background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:space-between;}
 .session-tile:active{opacity:0.8;}
 .session-tile.conditioning{border-left-color:var(--orange);}
@@ -541,10 +541,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .ad-slot-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;}
 .ad-remove-btn{display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;text-align:center;padding:6px;cursor:pointer;border-top:1px solid var(--border);}
 
-/* BODY DIAGRAM */
-.body-zone{cursor:pointer;transition:fill 0.15s;}
-.body-zone:hover{fill:rgba(200,150,62,0.15);}
-.body-zone.active{fill:rgba(200,150,62,0.35);stroke:var(--gold);stroke-width:1.5px;}
+/* INJURY SELECTOR */
+.injury-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.injury-col-head{font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:8px;font-weight:700;}
+.injury-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color 0.15s,background 0.15s;font-family:var(--font-d);font-size:13px;color:var(--text);letter-spacing:1px;}
+.injury-card.active{border-color:var(--gold);background:var(--gold-dim);color:var(--gold);}
+.injury-card-expand{margin-top:10px;display:flex;flex-direction:column;gap:8px;}
+.injury-side-btns{display:flex;gap:6px;}
+.injury-side-btn{flex:1;padding:5px 0;border:1px solid var(--border);border-radius:6px;background:var(--bg3);color:var(--text2);font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-align:center;cursor:pointer;transition:all 0.15s;}
+.injury-side-btn.active{border-color:var(--gold);background:var(--gold-dim);color:var(--gold);font-weight:700;}
+.injury-detail-input{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg3);color:var(--text);font-family:var(--font-d);font-size:12px;outline:none;}
+.injury-detail-input:focus{border-color:var(--gold);}
 .injury-tag{background:var(--gold-dim);border:1px solid var(--gold);border-radius:20px;padding:4px 10px;font-family:var(--font-d);font-size:11px;font-weight:600;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:4px;}
 .injury-tag-remove{font-size:14px;line-height:1;}
 @keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(200%);}}
@@ -1963,53 +1970,17 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div class="q-tag">Step 3 — Your body</div>
   <div class="q-title">Any Injuries<br>or Niggles?</div>
   <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Tap any area where you have a current or recent injury. Your programme will work around it.</div>
-  <div style="display:flex;justify-content:center;gap:20px;margin-bottom:16px;">
-      <div style="text-align:center;">
-        <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Front</div>
-        <svg viewBox="0 0 120 280" width="100" style="cursor:pointer;">
-          <ellipse cx="60" cy="22" rx="18" ry="20" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
-          <rect x="54" y="40" width="12" height="12" rx="4" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
-          <rect x="30" y="52" width="60" height="68" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="chest" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="8" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_shoulder" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="92" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_shoulder" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="5" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_elbow" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="98" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_elbow" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="28" y="120" width="64" height="26" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="lower_back" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="30" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_knee" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="64" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_knee" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="32" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_ankle" onclick="bodyZoneTap(this,'front')"/>
-          <rect x="66" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_ankle" onclick="bodyZoneTap(this,'front')"/>
-          <text x="60" y="88" text-anchor="middle" font-size="7" fill="var(--text3)" font-family="sans-serif">CHEST</text>
-          <text x="18" y="72" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">L.SH</text>
-          <text x="102" y="72" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">R.SH</text>
-          <text x="43" y="178" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">L.KNEE</text>
-          <text x="77" y="178" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">R.KNEE</text>
-        </svg>
-      </div>
-      <div style="text-align:center;">
-        <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Back</div>
-        <svg viewBox="0 0 120 280" width="100" style="cursor:pointer;">
-          <ellipse cx="60" cy="22" rx="18" ry="20" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
-          <rect x="54" y="40" width="12" height="12" rx="4" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
-          <rect x="30" y="52" width="60" height="68" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="upper_back" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="8" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_shoulder_back" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="92" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_shoulder_back" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="5" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_tricep" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="98" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_tricep" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="28" y="120" width="64" height="26" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="lower_back_back" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="30" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_hamstring" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="64" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_hamstring" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="32" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_calf" onclick="bodyZoneTap(this,'back')"/>
-          <rect x="66" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_calf" onclick="bodyZoneTap(this,'back')"/>
-          <text x="60" y="86" text-anchor="middle" font-size="7" fill="var(--text3)" font-family="sans-serif">UPPER BACK</text>
-          <text x="60" y="130" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">LOWER BACK</text>
-          <text x="43" y="178" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">L.HAM</text>
-          <text x="77" y="178" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">R.HAM</text>
-        </svg>
-      </div>
+  <div class="injury-cols" id="injury-selector">
+    <div>
+      <div class="injury-col-head">Front</div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="injury-col-front"></div>
     </div>
-    <div id="injury-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:20px;"></div>
-  <label class="disclaimer-check" style="margin-bottom:12px;">
+    <div>
+      <div class="injury-col-head">Back</div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="injury-col-back"></div>
+    </div>
+  </div>
+  <label class="disclaimer-check" style="margin-top:16px;margin-bottom:12px;">
     <input type="checkbox" id="fq-no-injuries-check" onchange="fqNoInjuriesToggle(this)">
     <span class="disclaimer-check-text" style="font-family:var(--font-d);font-size:13px;letter-spacing:2px;text-transform:uppercase;">No injuries</span>
   </label>
@@ -4779,7 +4750,7 @@ function fqValidateStep(){
       var hc=document.getElementById('fq-health-check');
       valid=!!(hc&&hc.checked&&Object.keys(parqData).length>=5);
       break;
-    case 3: var noInj3=document.getElementById('fq-no-injuries-check'); valid=!!(Object.keys(injuryZones).length>0||(noInj3&&noInj3.checked)); break;
+    case 3: valid=true; break;
     case 4: valid=!!fqAnswers.path; break;
     case 5: valid=!!(fqAnswers.background&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
     case 6: valid=!!fqAnswers.goal; break;
@@ -4808,7 +4779,7 @@ function renderFQSummary(){
     ['Background', fqAnswers.background||'-'],
     ['Days per week', fqAnswers.days||'-'],
     ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
-    ['Injuries', fqAnswers.injury.length?fqAnswers.injury.join(', '):'None reported']
+    ['Injuries', fqAnswers.injury.length?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
   ];
   el.innerHTML=lines.map(function(l){
     return '<div style="display:flex;justify-content:space-between;"><span style="color:var(--text3);">'+l[0]+'</span><span style="color:var(--text);font-weight:600;text-transform:capitalize;">'+l[1]+'</span></div>';
@@ -5869,87 +5840,9 @@ function parqClear(){
   if(ack) ack.checked=false;
 }
 
-// ====== BODY DIAGRAM ======
+// ====== INJURY SELECTOR (legacy vars kept for compat) ======
 var injuryZones={};
 var currentZone=null;
-
-function bodyZoneTap(zone,label){
-  // Clear no-injuries if selecting a zone
-  var noneOpt=document.querySelector('#fq-injury-opts .q-option');
-  if(noneOpt) noneOpt.classList.remove('selected');
-  fqAnswers.injury=fqAnswers.injury||[];
-
-  if(injuryZones[zone]){
-    // Already selected — remove, de-highlight all matching zones
-    delete injuryZones[zone];
-    document.querySelectorAll('.bz[data-zone="'+zone+'"]').forEach(function(el){el.classList.remove('on');});
-    fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.zone!==zone;});
-    updateInjuryDisplay();
-    fqValidateStep();
-    return;
-  }
-
-  // Immediately highlight the tapped zone
-  document.querySelectorAll('.bz[data-zone="'+zone+'"]').forEach(function(el){el.classList.add('on');});
-
-  // Store it right away (note is optional, added via popup)
-  injuryZones[zone]={label:label,note:''};
-  if(!fqAnswers.injury) fqAnswers.injury=[];
-  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.zone!==zone;});
-  fqAnswers.injury.push({zone:zone,label:label,note:''});
-  updateInjuryDisplay();
-  fqValidateStep();
-
-  // Open note popup so they can add detail
-  currentZone={zone:zone,label:label};
-  document.getElementById('injury-popup-title').textContent=label;
-  document.getElementById('injury-popup-note').value='';
-  document.getElementById('injury-popup').style.display='flex';
-}
-
-function saveInjuryNote(){
-  if(!currentZone) return;
-  var note=document.getElementById('injury-popup-note').value||'';
-  // Update note on already-stored zone
-  if(injuryZones[currentZone.zone]) injuryZones[currentZone.zone].note=note;
-  if(fqAnswers.injury){
-    fqAnswers.injury.forEach(function(i){if(i.zone===currentZone.zone) i.note=note;});
-  }
-  document.getElementById('injury-popup').style.display='none';
-  currentZone=null;
-  updateInjuryDisplay();
-  fqValidateStep();
-}
-
-function cancelInjuryNote(){
-  document.getElementById('injury-popup').style.display='none';
-  currentZone=null;
-}
-
-function updateInjuryDisplay(){
-  var display=document.getElementById('injury-zones-display');
-  if(!display) return;
-  display.innerHTML='';
-  Object.keys(injuryZones).forEach(function(zone){
-    var tag=document.createElement('div');
-    tag.className='injury-tag';
-    tag.innerHTML=injuryZones[zone].label+' <span class="injury-tag-remove" onclick="bodyZoneTap(\''+zone+'\',\''+injuryZones[zone].label+'\')">×</span>';
-    display.appendChild(tag);
-  });
-}
-
-function selectNoInjury(el){
-  // Clear all zones
-  injuryZones={};
-  fqAnswers.injury=[];
-  document.querySelectorAll('.body-zone').forEach(function(z){z.classList.remove('active');});
-  updateInjuryDisplay();
-  // Select the no-injury option
-  el.classList.add('selected');
-  el.querySelector('.q-check').textContent='✓';
-  fqAnswers.injuryNone=true;
-  fqValidateStep();
-}
 
 // ====== GOAL SETTING ======
 function saveGoals(){
@@ -6597,7 +6490,8 @@ function getLastTBBSKg(exId){
 function openTBBSSession(){
   var w=currentProgWeek||progWeek();
   var scheme=getTBBSScheme(w);
-  var injuries=athlete&&athlete.fqInjury?athlete.fqInjury:[];
+  var rawInj=athlete&&athlete.fqInjury?athlete.fqInjury:[];
+  var injuries=rawInj.map(function(i){return typeof i==='string'?i:(i.area||'').toLowerCase().replace(/\s+/g,'');});
 
   var body=document.getElementById('session-body-content');body.innerHTML='';
   var hero=document.createElement('div');hero.className='session-hero';
@@ -7355,73 +7249,98 @@ function parqSet(id, val, e){
   fqValidateStep();
 }
 
-function bodyDiagramTap(evt, side){
-  bodyZoneTap(evt.target, side);
+var INJURY_FRONT=['Chest','Shoulder','Elbow','Wrist','Hip','Quad','Knee','Shin','Ankle'];
+var INJURY_BACK=['Neck','Upper Arm','Upper Back','Lower Back','Glute','Hamstring','Calf','Achilles/Heel'];
+var INJURY_NO_SIDE=['Neck','Upper Back','Lower Back'];
+
+function buildInjurySelector(){
+  var fc=document.getElementById('injury-col-front');
+  var bc=document.getElementById('injury-col-back');
+  if(!fc||!bc) return;
+  fc.innerHTML='';bc.innerHTML='';
+  INJURY_FRONT.forEach(function(area){fc.appendChild(makeInjuryCard(area));});
+  INJURY_BACK.forEach(function(area){bc.appendChild(makeInjuryCard(area));});
 }
-function bodyZoneTap(el, side){
-  if(!el||!el.getAttribute('data-zone')) return;
-  var zone=el.getAttribute('data-zone');
-  var key=side+'_'+zone;
-  // Toggle: if already selected, deselect
-  if(injuryZones[key]){
-    el.setAttribute('fill','var(--bg3)');
-    el.setAttribute('stroke','var(--border2)');
-    delete injuryZones[key];
+
+function makeInjuryCard(area){
+  var card=document.createElement('div');
+  card.className='injury-card';
+  card.setAttribute('data-area',area);
+  var hasSide=INJURY_NO_SIDE.indexOf(area)===-1;
+  card.innerHTML='<div style="font-weight:600;">'+area+'</div>';
+  card.onclick=function(e){
+    if(e.target.classList.contains('injury-side-btn')||e.target.classList.contains('injury-detail-input')) return;
+    toggleInjuryCard(card,area,hasSide);
+  };
+  return card;
+}
+
+function toggleInjuryCard(card,area,hasSide){
+  var isActive=card.classList.contains('active');
+  if(isActive){
+    card.classList.remove('active');
+    var exp=card.querySelector('.injury-card-expand');
+    if(exp) exp.remove();
+    removeInjuryFromAnswers(area);
   } else {
-    el.setAttribute('fill','rgba(200,150,62,0.5)');
-    el.setAttribute('stroke','#c8963e');
-    injuryZones[key]=zone;
+    card.classList.add('active');
+    var expand=document.createElement('div');
+    expand.className='injury-card-expand';
+    var html='';
+    if(hasSide){
+      html+='<div class="injury-side-btns">';
+      html+='<div class="injury-side-btn" data-side="L" onclick="pickInjurySide(this,\''+area+'\',\'L\')">L</div>';
+      html+='<div class="injury-side-btn" data-side="R" onclick="pickInjurySide(this,\''+area+'\',\'R\')">R</div>';
+      html+='<div class="injury-side-btn" data-side="Both" onclick="pickInjurySide(this,\''+area+'\',\'Both\')">Both</div>';
+      html+='</div>';
+    }
+    html+='<input type="text" class="injury-detail-input" placeholder="e.g. old injury, clicking, stiffness" oninput="updateInjuryDetail(\''+area+'\',this.value)">';
+    expand.innerHTML=html;
+    card.appendChild(expand);
+    addInjuryToAnswers(area,hasSide?'':'N/A','');
+    var noInj=document.getElementById('fq-no-injuries-check');
+    if(noInj) noInj.checked=false;
   }
-  fqAnswers.injury=Object.keys(injuryZones);
-  // Uncheck "no injuries" if user taps a zone
-  var noInj=document.getElementById('fq-no-injuries-check');
-  if(noInj&&Object.keys(injuryZones).length>0) noInj.checked=false;
-  renderInjuryTags();
   fqValidateStep();
 }
 
-function renderInjuryTags(){
-  var container=document.getElementById('injury-tags');
-  if(!container) return;
-  container.innerHTML='';
-  Object.keys(injuryZones).forEach(function(key){
-    var tag=document.createElement('div');
-    tag.className='injury-tag';
-    tag.innerHTML=key.replace(/_/g,' ')+'<span class="injury-tag-remove" onclick="removeInjuryZone(this)" data-key="'+key+'">×</span>';
-    container.appendChild(tag);
-  });
+function pickInjurySide(btn,area,side){
+  var btns=btn.parentElement.querySelectorAll('.injury-side-btn');
+  btns.forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  updateInjurySide(area,side);
 }
 
-function removeInjuryZone(el){
-  var key=el.getAttribute('data-key');
-  removeInjuryTag(key);
-}
-function removeInjuryTag(key){
-  var info=injuryZones[key];
-  if(info&&info.el){
-    info.el.setAttribute('fill','var(--bg3)');
-    info.el.setAttribute('stroke','var(--border2)');
-  }
-  delete injuryZones[key];
-  fqAnswers.injury=Object.keys(injuryZones);
-  renderInjuryTags();
+function addInjuryToAnswers(area,side,detail){
+  if(!fqAnswers.injury) fqAnswers.injury=[];
+  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.area!==area;});
+  fqAnswers.injury.push({area:area,side:side,detail:detail});
 }
 
-function fqMarkNoInjuries(btn){
-  fqAnswers.injury=[];
-  injuryZones={};
-  renderInjuryTags();
-  btn.style.borderColor='var(--gold)';
-  btn.style.background='var(--gold-dim)';
-  btn.style.color='var(--gold)';
-  btn.innerHTML='&#10003; No injuries';
+function removeInjuryFromAnswers(area){
+  if(!fqAnswers.injury) return;
+  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.area!==area;});
+}
+
+function updateInjurySide(area,side){
+  if(!fqAnswers.injury) return;
+  fqAnswers.injury.forEach(function(i){if(i.area===area) i.side=side;});
+}
+
+function updateInjuryDetail(area,detail){
+  if(!fqAnswers.injury) return;
+  fqAnswers.injury.forEach(function(i){if(i.area===area) i.detail=detail;});
 }
 
 function fqNoInjuriesToggle(cb){
   if(cb.checked){
     fqAnswers.injury=[];
     injuryZones={};
-    renderInjuryTags();
+    document.querySelectorAll('#injury-selector .injury-card.active').forEach(function(c){
+      c.classList.remove('active');
+      var exp=c.querySelector('.injury-card-expand');
+      if(exp) exp.remove();
+    });
     fqAnswers.noInjuries=true;
   } else {
     fqAnswers.noInjuries=false;
@@ -7437,7 +7356,7 @@ function fqValidateStep(){
       var hc=document.getElementById('fq-health-check');
       valid=!!(hc&&hc.checked&&Object.keys(parqData).length>=5);
       break;
-    case 3: var noInj=document.getElementById('fq-no-injuries-check'); valid=!!(Object.keys(injuryZones).length>0||(noInj&&noInj.checked)); break;
+    case 3: valid=true; break;
     case 4: valid=!!fqAnswers.path; break; // path selection
     case 5: valid=!!(fqAnswers.background&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
     case 6: valid=!!fqAnswers.goal; break;
@@ -7466,7 +7385,7 @@ function renderFQSummary(){
     ['Background', fqAnswers.background||'-'],
     ['Days per week', fqAnswers.days||'-'],
     ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
-    ['Injuries', fqAnswers.injury.length?fqAnswers.injury.join(', '):'None reported']
+    ['Injuries', fqAnswers.injury.length?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
   ];
   el.innerHTML=lines.map(function(l){
     return '<div style="display:flex;justify-content:space-between;"><span style="color:var(--text3);">'+l[0]+'</span><span style="color:var(--text);font-weight:600;text-transform:capitalize;">'+l[1]+'</span></div>';
@@ -7485,6 +7404,8 @@ function updateFQStep(){
   if(btn) btn.textContent=fqStep===fqTotalSteps?'Build my plan →':'Next →';
   var backBtn=document.getElementById('fq-back-btn');
   if(backBtn) backBtn.style.display=fqStep>1?'block':'none';
+  // Build injury selector cards
+  if(fqStep===3) buildInjurySelector();
   // Tier-gate the path step
   if(fqStep===4){
     var coachCard=document.getElementById('path-phoenix-coach');

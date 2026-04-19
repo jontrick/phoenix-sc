@@ -5105,6 +5105,12 @@ async function generateProgramme(trigger, checkIn){
     if(jsonStart >= 0 && jsonEnd > jsonStart){
       clean = clean.substring(jsonStart, jsonEnd+1);
     }
+    // Also handle any trailing content after the JSON
+    var jsonStart = clean.indexOf('{');
+    var jsonEnd = clean.lastIndexOf('}');
+    if(jsonStart >= 0 && jsonEnd > jsonStart){
+      clean = clean.substring(jsonStart, jsonEnd+1);
+    }
     // If truncated, try to salvage partial JSON
     if(data.stop_reason === 'max_tokens'){
       console.warn('Response truncated - trying to salvage');
@@ -7918,7 +7924,7 @@ function updateCardAccess(){
   var isIgnite=hasIgniteAccess();
 
   // Leaderboard — Ignite+
-  var lbCard=document.getElementById('card-leaderboard'); if(!lbCard) return;
+  var lbCard=document.getElementById('card-leaderboard'); if(!lbCard) return; if(!lbCard) return;
   var lbBadge=document.getElementById('leaderboard-lock-badge');
   if(lbCard){
     if(isIgnite){

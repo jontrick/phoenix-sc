@@ -1724,7 +1724,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <div class="q-field">
     <label class="q-label">Date of birth</label>
-    <input class="q-input" type="date" id="fq-dob" onchange="fqAnswers.dob=this.value;fqValidateStep()">
+    <input class="q-input" type="date" id="fq-dob" onchange="fqAnswers.dob=this.value;fqValidateStep()" style="color-scheme:dark;cursor:pointer;">
   </div>
   <div class="q-field">
     <label class="q-label">Bodyweight (kg)</label>
@@ -2732,7 +2732,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.2.4';
+var APP_VERSION='4.2.5';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -4832,58 +4832,42 @@ SEX-SPECIFIC: Female athletes get ACL prevention work, posterior chain emphasis,
 
 BENCHMARKS: Classify test results against sex-appropriate normative data (Novice/Beginner/Intermediate/Advanced/Elite/World class).
 
-OUTPUT: Return ONLY valid JSON with this exact structure — no other text:
+OUTPUT: Return ONLY valid JSON, no other text, no markdown:
 {
   "programme_summary": {
     "total_weeks": number,
     "current_phase": string,
     "phase_goal": string,
-    "coach_note": string,
-    "next_milestone": string
+    "coach_note": string
   },
   "nutrition": {
     "daily_calories": number,
     "protein_g": number,
     "carbs_g": number,
     "fat_g": number,
-    "timing_notes": string,
-    "hydration_target_L": number
-  },
-  "recovery": {
-    "protocols": [string],
-    "sleep_target_hrs": number,
-    "deload_due": false
+    "timing_notes": string
   },
   "week": {
     "week_number": 1,
-    "week_type": "training",
     "sessions": [
       {
         "day": string,
         "session_type": string,
         "duration_min": number,
-        "warmup": [{"name": string, "sets": number, "reps": string, "notes": string}],
         "exercises": [
           {
             "name": string,
             "sets": number,
             "reps": string,
             "load_guidance": string,
-            "tempo": string,
             "rest_sec": number,
-            "coaching_note": string,
-            "substitutions": [{"name": string, "note": string}]
+            "coaching_note": string
           }
-        ],
-        "conditioning": [],
-        "cool_down": string
+        ]
       }
     ]
   },
-  "adjustments_made": [],
-  "flags": [],
-  "testing_inserted": false,
-  "testing_reason": ""
+  "flags": []
 }`;
 
 function buildAthleteProfile(trigger, checkIn){
@@ -4981,7 +4965,7 @@ async function generateProgramme(trigger, checkIn){
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 6000,
+        max_tokens: 8000,
         system: PHOENIX_COACHING_PROMPT,
         messages: [{role: 'user', content: profileMsg}]
       })
@@ -5104,8 +5088,7 @@ function showProgrammeReveal(programme){
 }
 
 function beginProgramme(){
-  viewWeek=1;
-  if(typeof renderToday === 'function') renderToday();
+  if(typeof renderToday==='function') renderToday();
   navTo('today');
 }
 
@@ -6827,26 +6810,70 @@ function fqSetAway(val, el){
 }
 
 function fqSetGoal(val, el){
-  fqAnswers.goal=val;
-  document.querySelectorAll('#fq-step-4 .q-option-wide').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
+  // Toggle off if already selected
+  if(fqAnswers.goal===val){
+    fqAnswers.goal=null;
+    el.classList.remove('active');
+  } else {
+    fqAnswers.goal=val;
+    document.querySelectorAll('#fq-step-5 .q-option-wide').forEach(function(e){e.classList.remove('active');});
+    el.classList.add('active');
+  }
   fqValidateStep();
 }
 
 function fqSetSport(val, el){
   fqAnswers.sport=val;
-  document.querySelectorAll('#fq-sport-list .q-option-wide').forEach(e=>e.classList.remove('active'));
+  // Collapse all sport cards except selected
+  document.querySelectorAll('#fq-sport-list .q-option-wide').forEach(function(e){
+    e.classList.remove('active');
+    // Hide others if sport selected, show all if none
+    if(val !== 'none'){
+      e.style.display = (e === el) ? 'flex' : 'none';
+    } else {
+      e.style.display = 'flex';
+    }
+  });
+  if(val === 'none'){
+    // Show all options again
+    document.querySelectorAll('#fq-sport-list .q-option-wide').forEach(function(e){
+      e.style.display='flex';
+    });
+  }
   el.classList.add('active');
+  
   var posRow=document.getElementById('fq-position-row');
   var seasonRow=document.getElementById('fq-season-row');
   var posSelect=document.getElementById('fq-position');
+  
   if(val!=='none' && SPORT_POSITIONS[val]){
     posRow.style.display='block';
     seasonRow.style.display='block';
-    posSelect.innerHTML='<option value="">Select position...</option>';
+    posSelect.innerHTML='<option value="">Select your position...</option>';
     SPORT_POSITIONS[val].forEach(function(pos){
       posSelect.innerHTML+='<option value="'+pos+'">'+pos+'</option>';
     });
+    // Add change all button
+    var changeBtn=document.getElementById('fq-sport-change');
+    if(!changeBtn){
+      changeBtn=document.createElement('div');
+      changeBtn.id='fq-sport-change';
+      changeBtn.style.cssText='font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);cursor:pointer;padding:8px 0;text-decoration:underline;';
+      changeBtn.textContent='Change sport';
+      changeBtn.onclick=function(){
+        fqAnswers.sport='none';
+        fqAnswers.position='';
+        document.querySelectorAll('#fq-sport-list .q-option-wide').forEach(function(e){
+          e.style.display='flex';
+          e.classList.remove('active');
+        });
+        posRow.style.display='none';
+        seasonRow.style.display='none';
+        changeBtn.remove();
+        fqValidateStep();
+      };
+      el.parentElement.insertBefore(changeBtn, posRow);
+    }
   } else {
     posRow.style.display='none';
     seasonRow.style.display='none';

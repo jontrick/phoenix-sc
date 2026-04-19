@@ -1503,40 +1503,55 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     </div>
   </div>
   <div style="padding:0 16px 100px;">
-    <div id="card-phoenix-wod" class="game-card game-card-wod" onclick="openPhoenixWOD()" style="margin-bottom:10px;border:1px solid rgba(200,150,62,0.4);">
-      <div class="game-card-inner" style="padding:18px 18px;">
+    <!-- Row 1: Full width prescribed workout -->
+    <div id="card-today-session" class="game-card" onclick="openTodaySession()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);">
+      <div class="game-card-inner" style="padding:18px;">
         <div class="game-card-eyebrow">
-          <span class="game-card-tier-badge">Everyone</span>
-          <span id="wod-countdown" class="game-card-countdown">24h 00m</span>
+          <span class="game-card-eyebrow-sm">Your Programme</span>
         </div>
-        <div class="game-card-title" id="wod-name" style="font-size:32px;letter-spacing:2px;">THE ZEUS</div>
-        <div class="game-card-sub" id="wod-format" style="color:var(--gold);font-weight:600;">God Tier — AMRAP 12</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
-          <div class="game-card-streak" id="wod-streak">
-            <span id="wod-streak-text" style="display:flex;align-items:center;gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--gold)" stroke="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z"/></svg> 0 day streak</span>
-          </div>
-          <div class="game-card-action" style="font-size:12px;">View WOD →</div>
-        </div>
+        <div class="game-card-title" id="today-session-name" style="font-size:28px;">Today's Session</div>
+        <div class="game-card-sub" id="today-session-detail">Start training</div>
+        <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
       </div>
     </div>
+    <!-- Row 2: WOD (half) + Conditioning + Core (quarter each) -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-      <div id="card-today-session" class="game-card game-card-sm" onclick="openTodaySession()">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm">Your Programme</div>
-          <div class="game-card-title-sm" id="today-session-name">Today</div>
-          <div class="game-card-sub-sm" id="today-session-detail">Start training</div>
-          <div class="game-card-action-sm">Start →</div>
+      <div id="card-phoenix-wod" class="game-card game-card-wod" onclick="openPhoenixWOD()" style="border:1px solid rgba(200,150,62,0.4);">
+        <div class="game-card-inner" style="padding:16px;">
+          <div class="game-card-eyebrow">
+            <span class="game-card-tier-badge" style="font-size:8px;">Everyone</span>
+            <span id="wod-countdown" class="game-card-countdown">24h 00m</span>
+          </div>
+          <div class="game-card-title" id="wod-name" style="font-size:22px;letter-spacing:1px;">THE ZEUS</div>
+          <div class="game-card-sub" id="wod-format" style="color:var(--gold);font-weight:600;font-size:11px;">God Tier — AMRAP 12</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+            <div class="game-card-streak" id="wod-streak">
+              <span id="wod-streak-text" style="display:flex;align-items:center;gap:5px;font-size:10px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="var(--gold)" stroke="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z"/></svg> 0 day streak</span>
+            </div>
+            <div class="game-card-action-sm">View WOD →</div>
+          </div>
         </div>
       </div>
-      <div class="game-card game-card-sm" onclick="openConditioning()">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm">Add on</div>
-          <div class="game-card-title-sm">Conditioning</div>
-          <div class="game-card-sub-sm">Pick or generate</div>
-          <div class="game-card-action-sm">Choose →</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="game-card game-card-sm" onclick="openConditioning()" style="flex:1;">
+          <div class="game-card-inner">
+            <div class="game-card-eyebrow-sm">Add on</div>
+            <div class="game-card-title-sm">Conditioning</div>
+            <div class="game-card-sub-sm">Pick or generate</div>
+            <div class="game-card-action-sm">Choose →</div>
+          </div>
+        </div>
+        <div class="game-card game-card-sm" onclick="openCoreModal()" style="flex:1;border-left:3px solid var(--blue);">
+          <div class="game-card-inner">
+            <div class="game-card-eyebrow-sm">Add on</div>
+            <div class="game-card-title-sm">Core</div>
+            <div class="game-card-sub-sm">20 min AMRAP</div>
+            <div class="game-card-action-sm">Start →</div>
+          </div>
         </div>
       </div>
     </div>
+    <!-- Row 3: Locked feature cards -->
     <div id="card-leaderboard" class="game-card game-card-locked" onclick="openLeaderboard()" style="margin-bottom:10px;">
       <div class="game-card-inner" style="display:flex;align-items:center;gap:14px;">
         <div style="flex:1;">
@@ -1951,19 +1966,19 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div style="display:flex;justify-content:center;gap:20px;margin-bottom:16px;">
       <div style="text-align:center;">
         <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Front</div>
-        <svg viewBox="0 0 120 280" width="100" style="cursor:pointer;" onclick="bodyDiagramTap(event,'front')">
+        <svg viewBox="0 0 120 280" width="100" style="cursor:pointer;">
           <ellipse cx="60" cy="22" rx="18" ry="20" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
           <rect x="54" y="40" width="12" height="12" rx="4" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
-          <rect x="30" y="52" width="60" height="68" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="chest"/>
-          <rect x="8" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_shoulder"/>
-          <rect x="92" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_shoulder"/>
-          <rect x="5" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_elbow"/>
-          <rect x="98" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_elbow"/>
-          <rect x="28" y="120" width="64" height="26" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="lower_back"/>
-          <rect x="30" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_knee"/>
-          <rect x="64" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_knee"/>
-          <rect x="32" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_ankle"/>
-          <rect x="66" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_ankle"/>
+          <rect x="30" y="52" width="60" height="68" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="chest" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="8" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_shoulder" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="92" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_shoulder" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="5" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_elbow" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="98" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_elbow" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="28" y="120" width="64" height="26" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="lower_back" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="30" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_knee" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="64" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_knee" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="32" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_ankle" onclick="bodyZoneTap(this,'front')"/>
+          <rect x="66" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_ankle" onclick="bodyZoneTap(this,'front')"/>
           <text x="60" y="88" text-anchor="middle" font-size="7" fill="var(--text3)" font-family="sans-serif">CHEST</text>
           <text x="18" y="72" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">L.SH</text>
           <text x="102" y="72" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">R.SH</text>
@@ -1973,19 +1988,19 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       </div>
       <div style="text-align:center;">
         <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Back</div>
-        <svg viewBox="0 0 120 280" width="100" style="cursor:pointer;" onclick="bodyDiagramTap(event,'back')">
+        <svg viewBox="0 0 120 280" width="100" style="cursor:pointer;">
           <ellipse cx="60" cy="22" rx="18" ry="20" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
           <rect x="54" y="40" width="12" height="12" rx="4" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>
-          <rect x="30" y="52" width="60" height="68" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="upper_back"/>
-          <rect x="8" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_shoulder_back"/>
-          <rect x="92" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_shoulder_back"/>
-          <rect x="5" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_tricep"/>
-          <rect x="98" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_tricep"/>
-          <rect x="28" y="120" width="64" height="26" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="lower_back_back"/>
-          <rect x="30" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_hamstring"/>
-          <rect x="64" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_hamstring"/>
-          <rect x="32" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_calf"/>
-          <rect x="66" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_calf"/>
+          <rect x="30" y="52" width="60" height="68" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="upper_back" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="8" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_shoulder_back" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="92" y="54" width="20" height="50" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_shoulder_back" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="5" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_tricep" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="98" y="107" width="17" height="38" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_tricep" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="28" y="120" width="64" height="26" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="lower_back_back" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="30" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_hamstring" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="64" y="148" width="26" height="58" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_hamstring" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="32" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="left_calf" onclick="bodyZoneTap(this,'back')"/>
+          <rect x="66" y="210" width="22" height="44" rx="6" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5" data-zone="right_calf" onclick="bodyZoneTap(this,'back')"/>
           <text x="60" y="86" text-anchor="middle" font-size="7" fill="var(--text3)" font-family="sans-serif">UPPER BACK</text>
           <text x="60" y="130" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">LOWER BACK</text>
           <text x="43" y="178" text-anchor="middle" font-size="6" fill="var(--text3)" font-family="sans-serif">L.HAM</text>
@@ -4923,9 +4938,9 @@ function renderFQSkinGrid(){
   var freeGrid=document.getElementById('fq-skin-grid');
   var risingGrid=document.getElementById('fq-skin-grid-rising');
   var proGrid=document.getElementById('fq-skin-grid-pro');
-  if(freeGrid){freeGrid.innerHTML='';FREE_SKINS.forEach(function(s){var sw=makeFQSwatch(s,false,'');if(sw)freeGrid.appendChild(sw);});}
-  if(risingGrid){risingGrid.innerHTML='';ADFREE_SKINS.forEach(function(s){var sw=makeFQSwatch(s,true,'Rising');if(sw)risingGrid.appendChild(sw);});}
-  if(proGrid){proGrid.innerHTML='';PRO_SKINS.forEach(function(s){var sw=makeFQSwatch(s,true,'Pro');if(sw)proGrid.appendChild(sw);});}
+  if(freeGrid){freeGrid.innerHTML='';FREE_SKINS.forEach(function(s){var sw=makeFQSwatch(s,false,'Free');if(sw)freeGrid.appendChild(sw);});}
+  if(risingGrid){risingGrid.innerHTML='';ADFREE_SKINS.forEach(function(s){var unlocked=hasRisingAccess();var sw=makeFQSwatch(s,!unlocked,'Rising');if(sw)risingGrid.appendChild(sw);});}
+  if(proGrid){proGrid.innerHTML='';PRO_SKINS.forEach(function(s){var unlocked=hasProAccess();var sw=makeFQSwatch(s,!unlocked,'Pro');if(sw)proGrid.appendChild(sw);});}
 }
 
 function fqNext(){
@@ -7341,18 +7356,26 @@ function parqSet(id, val, e){
 }
 
 function bodyDiagramTap(evt, side){
-  var el=evt.target;
-  if(!el.getAttribute('data-zone')){el=el.parentElement;}
+  bodyZoneTap(evt.target, side);
+}
+function bodyZoneTap(el, side){
   if(!el||!el.getAttribute('data-zone')) return;
   var zone=el.getAttribute('data-zone');
-  el.setAttribute('fill','rgba(200,150,62,0.5)');
-  el.setAttribute('stroke','#c8963e');
   var key=side+'_'+zone;
-  injuryZones[key]=zone;
+  // Toggle: if already selected, deselect
+  if(injuryZones[key]){
+    el.setAttribute('fill','var(--bg3)');
+    el.setAttribute('stroke','var(--border2)');
+    delete injuryZones[key];
+  } else {
+    el.setAttribute('fill','rgba(200,150,62,0.5)');
+    el.setAttribute('stroke','#c8963e');
+    injuryZones[key]=zone;
+  }
   fqAnswers.injury=Object.keys(injuryZones);
   // Uncheck "no injuries" if user taps a zone
   var noInj=document.getElementById('fq-no-injuries-check');
-  if(noInj) noInj.checked=false;
+  if(noInj&&Object.keys(injuryZones).length>0) noInj.checked=false;
   renderInjuryTags();
   fqValidateStep();
 }
@@ -8280,12 +8303,9 @@ function openPhoenixWOD(){
 
   var tierClass='wod-tier-'+(wod.tier||'god').toLowerCase();
 
-  var isAMRAPFormat=wod.format&&wod.format.indexOf('AMRAP')>=0;
-
   var movHTML='';
   (wod.movements||[]).forEach(function(m,idx){
-    movHTML+='<div class="set-row" id="wod-mov-'+idx+'" style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);position:relative;overflow:hidden;touch-action:pan-y;">';
-    movHTML+='<div class="set-swipe-bg" style="position:absolute;left:0;top:0;bottom:0;width:80px;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:var(--radius);">DONE</div>';
+    movHTML+='<div style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);">';
     movHTML+='<div style="flex:1;"><div class="wod-movement-name">'+m.name+'</div>';
     if(m.reps) movHTML+='<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+m.reps+' reps</div>';
     movHTML+='</div>';
@@ -8293,16 +8313,6 @@ function openPhoenixWOD(){
     if(m.load_scaled) movHTML+='<div class="wod-movement-scaled">Scaled: '+m.load_scaled+'</div>';
     movHTML+='</div></div>';
   });
-
-  if(isAMRAPFormat){
-    movHTML+='<div style="margin-top:16px;text-align:center;">'+
-      '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Round Counter</div>'+
-      '<div style="display:flex;align-items:center;justify-content:center;gap:16px;">'+
-      '<div class="amrap-counter-btn" onclick="var v=document.getElementById(\'wod-preview-counter\');var n=parseInt(v.textContent)||0;if(n>0){v.textContent=n-1;}">−</div>'+
-      '<div id="wod-preview-counter" style="font-family:var(--font-d);font-size:64px;font-weight:900;color:var(--gold);min-width:80px;text-align:center;line-height:1;cursor:pointer;" onclick="var n=parseInt(this.textContent)||0;this.textContent=n+1;">0</div>'+
-      '<div class="amrap-counter-btn" onclick="var v=document.getElementById(\'wod-preview-counter\');var n=parseInt(v.textContent)||0;v.textContent=n+1;">+</div>'+
-      '</div></div>';
-  }
 
   var modal=document.createElement('div');
   modal.id='wod-modal';
@@ -8334,35 +8344,6 @@ function openPhoenixWOD(){
     if(ev.target===modal) modal.remove();
   });
   document.body.appendChild(modal);
-
-  // Swipe-to-complete for WOD movement rows
-  (wod.movements||[]).forEach(function(m,idx){
-    var row=document.getElementById('wod-mov-'+idx);
-    if(!row) return;
-    var startX=0,currentX=0,swiping=false;
-    row.addEventListener('touchstart',function(e){startX=e.touches[0].clientX;currentX=startX;swiping=true;},{passive:true});
-    row.addEventListener('touchmove',function(e){
-      if(!swiping) return;
-      currentX=e.touches[0].clientX;
-      var dx=currentX-startX;
-      if(dx>0){row.style.transform='translateX('+dx+'px)';row.querySelector('.set-swipe-bg').style.opacity=dx>40?'1':'0';}
-    },{passive:true});
-    row.addEventListener('touchend',function(){
-      if(!swiping) return;
-      swiping=false;
-      var dx=currentX-startX;
-      if(dx>60){
-        row.style.transform='translateX(0)';
-        row.style.opacity='0.4';
-        row.querySelector('.set-swipe-bg').style.opacity='0';
-        row.style.background='var(--green-dim)';
-        row.style.borderLeft='3px solid var(--green)';
-      } else {
-        row.style.transform='translateX(0)';
-        row.querySelector('.set-swipe-bg').style.opacity='0';
-      }
-    });
-  });
 }
 
 function startWODTimer(modalId){
@@ -8371,33 +8352,77 @@ function startWODTimer(modalId){
   var modal=document.getElementById(modalId);
   var inner=modal.querySelector('.wod-modal-inner');
   var isAMRAP=wod.format.indexOf('AMRAP')>=0;
-  var isAFAP=wod.format.indexOf('AFAP')>=0||wod.format.indexOf('For Time')>=0;
   var totalSecs=(wod.time_cap||20)*60;
-  var elapsed=0;
-  var running=false;
-  var interval=null;
+  var movements=wod.movements||[];
+  var wodExIdx=0;
 
-  inner.innerHTML='<div style="padding-top:40px;">'+
-    '<div class="wod-timer-label">'+wod.name+'</div>'+
-    '<div class="wod-timer-label" style="margin-bottom:20px;">'+wod.format+'</div>'+
-    '<div class="wod-timer-display" id="wod-timer-num">'+formatTime(isAMRAP?totalSecs:0)+'</div>'+
-    '<div style="font-size:12px;color:var(--text3);text-align:center;margin-top:8px;">'+(isAMRAP?'TIME REMAINING':'ELAPSED')+'</div>'+
-    (isAMRAP?'<div id="wod-amrap-counter-slot" style="margin-top:24px;"></div>':'')+
-    '<div style="display:flex;gap:10px;margin-top:40px;">'+
-    '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">START</button>'+
-    '<button class="btn-secondary" style="flex:0 0 80px;padding:18px;margin:0;" onclick="finishWOD()">Done</button>'+
-    '</div>'+
-    '<button class="btn-secondary" style="width:100%;margin-top:10px;padding:14px;" onclick="document.getElementById(\'wod-modal\').remove()">Cancel</button>'+
-    '</div>';
+  function renderWODSession(){
+    var nowMov=movements[wodExIdx]||null;
+    var nextMov=movements[wodExIdx+1]||null;
+    var nowHTML='';
+    if(nowMov){
+      nowHTML='<div id="wod-now-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:12px;position:relative;overflow:hidden;touch-action:pan-y;">'+
+        '<div class="set-swipe-bg" style="position:absolute;left:0;top:0;bottom:0;width:80px;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:var(--radius);">DONE</div>'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Now</div>'+
+        '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;">'+nowMov.name+'</div>'+
+        (nowMov.reps?'<div style="font-family:var(--font-d);font-size:16px;color:var(--gold);margin-top:4px;">'+nowMov.reps+' reps</div>':'')+
+        '<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+nowMov.load_rx+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:8px;">← Swipe to complete</div>'+
+        '</div>';
+    }
+    var nextHTML='';
+    if(nextMov){
+      nextHTML='<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;opacity:0.6;">'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Next</div>'+
+        '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;text-transform:uppercase;color:var(--text2);line-height:1;">'+nextMov.name+'</div>'+
+        (nextMov.reps?'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+nextMov.reps+' reps — '+nextMov.load_rx+'</div>':'')+
+        '</div>';
+    }
+
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+      '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' — '+wod.format+'</div>'+
+      '<div class="icon-btn" onclick="document.getElementById(\'wod-modal\').remove();if(window._wodTimer&&window._wodTimer.interval)clearInterval(window._wodTimer.interval);" style="background:var(--bg2);">'+
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div></div>'+
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(isAMRAP?totalSecs:0)+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:24px;">'+(isAMRAP?'TIME REMAINING':'ELAPSED')+'</div>'+
+      nowHTML+nextHTML+
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:16px;">Movement '+(wodExIdx+1)+' of '+movements.length+'</div>'+
+      '<div style="display:flex;gap:10px;">'+
+      '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(window._wodTimer&&window._wodTimer.running?'PAUSE':'START')+'</button>'+
+      '<button class="btn-secondary" style="flex:0 0 80px;padding:18px;margin:0;" onclick="finishWOD()">Done</button>'+
+      '</div>'+
+      '</div>';
+
+    // Swipe on NOW card
+    var nowCard=document.getElementById('wod-now-card');
+    if(nowCard){
+      var startX=0,currentX=0,swiping=false;
+      nowCard.addEventListener('touchstart',function(e){startX=e.touches[0].clientX;currentX=startX;swiping=true;},{passive:true});
+      nowCard.addEventListener('touchmove',function(e){
+        if(!swiping) return;
+        currentX=e.touches[0].clientX;
+        var dx=currentX-startX;
+        if(dx>0){nowCard.style.transform='translateX('+dx+'px)';var bg=nowCard.querySelector('.set-swipe-bg');if(bg)bg.style.opacity=dx>40?'1':'0';}
+      },{passive:true});
+      nowCard.addEventListener('touchend',function(){
+        if(!swiping) return;
+        swiping=false;
+        var dx=currentX-startX;
+        if(dx>60){
+          wodExIdx++;
+          if(wodExIdx>=movements.length){wodExIdx=0;}
+          renderWODSession();
+        } else {
+          nowCard.style.transform='translateX(0)';
+          var bg=nowCard.querySelector('.set-swipe-bg');if(bg)bg.style.opacity='0';
+        }
+      });
+    }
+  }
 
   window._wodTimer={totalSecs:totalSecs,elapsed:0,running:false,interval:null,isAMRAP:isAMRAP};
-
-  if(isAMRAP){
-    setTimeout(function(){
-      var slot=document.getElementById('wod-amrap-counter-slot');
-      if(slot) renderAmrapCounter(slot);
-    },0);
-  }
+  renderWODSession();
 
   window.toggleWODTimer=function(){
     var t=window._wodTimer;
@@ -8425,7 +8450,7 @@ function startWODTimer(modalId){
 
   window.finishWOD=function(){
     if(window._wodTimer&&window._wodTimer.interval) clearInterval(window._wodTimer.interval);
-    var reps=window._wodTimer&&window._wodTimer.isAMRAP?getAmrapTotal():0;
+    var reps=window._wodTimer&&window._wodTimer.isAMRAP&&typeof getAmrapTotal==='function'?getAmrapTotal():0;
     logWODScore(window._wodTimer?window._wodTimer.elapsed:0,reps);
   };
 }

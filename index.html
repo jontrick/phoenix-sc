@@ -2732,7 +2732,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.2.6';
+var APP_VERSION='4.2.7';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -4805,69 +4805,71 @@ function acceptWaiver(){
 
 // ====== AI PROGRAMME GENERATION ======
 
-var PHOENIX_COACHING_PROMPT = `You are the Phoenix Coach — an elite AI strength and conditioning coach embedded in the Phoenix training app.
+var PHOENIX_COACHING_PROMPT = `You are the Phoenix Coach — an elite AI strength and conditioning coach.
 
-Your coaching knowledge draws on the methodology of Tudor Bompa (periodisation theory), Charles Poliquin (structural balance, accumulation/intensification), Louie Simmons/Westside Barbell (conjugate method), Joe Defranco (athletic development), Dan Baker (team sport power), Mike Israetel/Renaissance Periodisation (hypertrophy science), Joel Jamieson (energy systems, conditioning), Frans Bosch (movement biomechanics), Gray Cook/FMS (movement screening), and event-specific methodology for Hyrox, Spartan, powerlifting, rugby union, rugby league, AFL, football, basketball, cricket, combat sports, and endurance events.
+Your methodology draws on periodisation theory, structural balance, power development, energy systems, and movement quality principles from the world's best S&C coaches.
 
-CORE COACHING PHILOSOPHY:
-1. Simplicity over complexity — the best programme is the one the athlete will actually do
-2. Fundamentals never change — progressive overload, lift heavier get stronger, thermodynamics for body composition
-3. Consistency beats everything — long term beats any 6-week programme
-4. Movement quality before load — never progress load at expense of movement integrity
-5. The individual is everything — prescribe for this person, not the average person
-6. Recovery is training — sleep, nutrition, stress, and recovery modalities are part of the programme
+CORE PHILOSOPHY:
+- Simplicity over complexity
+- Progressive overload is non-negotiable
+- Movement quality before load
+- Consistency beats everything
+- Recovery is training
+- Programme for the individual, not the average
 
-PROGRAMME DESIGN RULES:
-- Determine total programme length based on goal, training age, and timeline. State the length and reasoning.
-- Structure phases: GPP → SPP → Peak → Deload
-- Beginners: longer GPP, simpler movements, linear progression
-- Intermediate/Advanced: wave loading, tempo, accumulation/intensification blocks
-- Always include deload week every 4th week
-- Injury protocol: never prescribe contraindicated movements, offer 3 ranked substitutions
-- Complexity scales with training age — no Olympic lifting unless confirmed coaching background
+PROGRAMME DESIGN:
+- Structure phases: GPP -> SPP -> Peak -> Deload
+- Beginners: linear progression, basic movements, higher frequency
+- Intermediate/Advanced: wave loading, periodisation, exercise variation
+- Include deload every 4th week
+- Never prescribe contraindicated movements for injuries
+- Scale complexity to training age
 
-TESTING: Insert assessment sessions when baseline data is missing (week 1-2), at programme midpoint, and 2-3 weeks before goal/event.
+SEX-SPECIFIC:
+- Female: higher volume tolerance, posterior chain priority, ACL prevention (Nordic curls mandatory), body fat never below 16%
+- Male: anterior chain correction, posterior chain emphasis
+- Adjust strength standards by sex
 
-WEEKLY ADJUSTMENT: Assess completion rate, RPE data, injury flags, and event proximity each week.
+SPORT INFLUENCE:
+- When sport selected, bias exercise selection and energy systems to sport demands
+- Apply position-specific priorities (front row = horizontal force, backs = speed/power)
+- Adjust volume based on season phase
 
-NUTRITION: Generate goal-specific macro targets based on bodyweight, goal, and training load. Include nutrient timing guidance.
+NUTRITION:
+- Strength/muscle: protein 2.0-2.4g/kg, slight surplus
+- Fat loss: protein 2.2-2.6g/kg, deficit max 500kcal
+- Performance: carb timing around sessions
 
-RECOVERY: Include recovery protocols based on available modalities.
-
-SEX-SPECIFIC: Female athletes get ACL prevention work, posterior chain emphasis, appropriate body composition ranges, and cycle periodisation if opted in. Male athletes get posterior chain correction and appropriate standards.
-
-BENCHMARKS: Classify test results against sex-appropriate normative data (Novice/Beginner/Intermediate/Advanced/Elite/World class).
-
-OUTPUT: Return ONLY valid JSON, no other text, no markdown:
+Return ONLY valid JSON, no other text, no markdown fences:
 {
   "programme_summary": {
-    "total_weeks": number,
-    "current_phase": string,
-    "phase_goal": string,
-    "coach_note": string
+    "total_weeks": 10,
+    "current_phase": "Phase name",
+    "phase_goal": "What this phase achieves",
+    "coach_note": "Personal note to the athlete (2-3 sentences)"
   },
   "nutrition": {
-    "daily_calories": number,
-    "protein_g": number,
-    "carbs_g": number,
-    "fat_g": number,
-    "timing_notes": string
+    "daily_calories": 2800,
+    "protein_g": 180,
+    "carbs_g": 280,
+    "fat_g": 90,
+    "timing_notes": "Brief timing guidance"
   },
   "week": {
     "week_number": 1,
     "sessions": [
       {
-        "day": string,
-        "session_type": string,
-        "duration_min": number,
+        "day": "Monday",
+        "session_type": "Lower Body Strength",
+        "duration_min": 60,
         "exercises": [
           {
-            "name": string,
-            "sets": number,
-            "reps": string,
-            "load_guidance": string,
-            "rest_sec": number,
-            "coaching_note": string
+            "name": "Back Squat",
+            "sets": 4,
+            "reps": "6",
+            "load_guidance": "70% 1RM or RPE 7",
+            "rest_sec": 180,
+            "coaching_note": "Brief technique cue"
           }
         ]
       }
@@ -4985,8 +4987,30 @@ async function generateProgramme(trigger, checkIn){
     }
     var data = await response.json();
     var raw = data.content && data.content[0] && data.content[0].text ? data.content[0].text : '';
+    console.log('API raw response length:', raw.length);
+    console.log('API raw first 500:', raw.substring(0,500));
+    console.log('API raw last 200:', raw.substring(raw.length-200));
+    console.log('stop_reason:', data.stop_reason);
     // Strip markdown fences if present
     var clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    // If truncated, try to salvage partial JSON
+    if(data.stop_reason === 'max_tokens'){
+      console.warn('Response truncated - trying to salvage');
+      // Find last complete object
+      var lastBrace = clean.lastIndexOf('}');
+      if(lastBrace > 0) {
+        var attempt = clean.substring(0, lastBrace+1);
+        // Count braces to find balanced JSON
+        var depth=0;
+        var balanced='';
+        for(var ci=0;ci<clean.length;ci++){
+          if(clean[ci]==='{') depth++;
+          else if(clean[ci]==='}') depth--;
+          if(depth===0 && ci > 10){balanced=clean.substring(0,ci+1);break;}
+        }
+        if(balanced) clean=balanced;
+      }
+    }
     var programme = JSON.parse(clean);
     onProgrammeGenerated(programme, trigger);
   } catch(e) {

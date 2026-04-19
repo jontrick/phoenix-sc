@@ -2378,10 +2378,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div class="coming-card-desc">Connect with other Phoenix members. Post PRs, share progress, compete on relative strength leaderboards. Your comeback story, shared with people who get it.</div>
   </div>
 
-  <div class="coming-card">
-    <div class="coming-card-tag">Coming soon</div>
-    <div class="coming-card-title">AI programme builder</div>
-    <div class="coming-card-desc">Tell the app your goals, history and schedule. Get a fully periodised programme built for you. Adjust it, own it, train it.</div>
+  <div class="coming-card" onclick="openRecovery()" style="cursor:pointer;">
+    <div class="coming-card-tag">Available now</div>
+    <div class="coming-card-title">Sleep & Meditation</div>
+    <div class="coming-card-desc">Wind down with guided meditation, sleep sounds, and recovery tracking. Build better habits for rest and regeneration.</div>
   </div>
 
   <div class="coming-card">
@@ -3556,6 +3556,12 @@ function onSetDone(ex,idx){
   var btn=document.getElementById('done-'+ex.id+'-'+idx);
   if(!btn)return;
   btn.classList.add('done');
+  // Highlight the completed row gold
+  var row=document.getElementById('setrow-'+ex.id+'-'+idx);
+  if(row){
+    row.style.background='rgba(200,150,62,0.08)';
+    row.style.borderLeft='3px solid var(--gold)';
+  }
   var restSecs=ex.restOptions?chinRestSecs:(ex.autoRest||0);
   var nextIdx=idx+1;
   var nextLabel=nextIdx<ex.sets.length?'Set '+(nextIdx+1):'Move to next exercise';
@@ -4849,26 +4855,32 @@ function renderFQSkinGrid(){
     var div=document.createElement('div');
     div.className='skin-swatch'+(locked?' locked':'')+(skin===currentSkin?' active':'');
     div.id='fq-swatch-'+skin;
+    div.style.cssText='display:flex;flex-direction:column;align-items:center;padding:10px 4px 8px;position:relative;';
     if(locked){
       var lock=document.createElement('div');
       lock.className='skin-lock';
-      lock.textContent='\u{1F512}';
+      lock.innerHTML='&#128274;';
       div.appendChild(lock);
     }
-    var preview=document.createElement('div');
-    preview.className='skin-preview';
-    preview.style.background=m.bg;
+    // Colour circle
     var dot=document.createElement('div');
-    dot.className='skin-dot';
-    dot.style.background=m.dot;
-    preview.appendChild(dot);
-    div.appendChild(preview);
+    dot.style.cssText='width:36px;height:36px;border-radius:50%;border:2px solid '+(locked?'rgba(255,255,255,0.1)':m.dot)+';background:'+m.bg+';margin-bottom:6px;display:flex;align-items:center;justify-content:center;';
+    var innerDot=document.createElement('div');
+    innerDot.style.cssText='width:16px;height:16px;border-radius:50%;background:'+m.dot+';';
+    dot.appendChild(innerDot);
+    div.appendChild(dot);
+    // Skin name
     var name=document.createElement('div');
-    name.className='skin-name';
-    name.style.background=m.label;
-    name.style.color=m.labelText;
+    name.style.cssText='font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:'+(locked?'var(--text3)':'var(--text)')+';text-align:center;line-height:1.2;margin-bottom:4px;';
     name.textContent=m.name;
     div.appendChild(name);
+    // Tier badge
+    var badge=document.createElement('div');
+    var badgeLabel=tierLabel||'Free';
+    var badgeColor=badgeLabel==='Pro'?'var(--gold)':badgeLabel==='Rising'?'var(--orange)':'var(--green)';
+    badge.style.cssText='font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:'+badgeColor+';background:rgba(0,0,0,0.3);border:1px solid '+badgeColor+';padding:1px 6px;border-radius:10px;';
+    badge.textContent=badgeLabel;
+    div.appendChild(badge);
     if(!locked){
       div.addEventListener('click',function(){
         applySkin(skin);
@@ -7305,30 +7317,39 @@ function parqSet(id, val, e){
 }
 
 function bodyDiagramTap(e, side){
+  console.log('[bodyDiagramTap] fired — side:', side, 'event.target:', e.target, 'tagName:', e.target?e.target.tagName:'none');
   var el=e.target;
   if(!el) return;
   // Try the element itself first
   var zone=el.getAttribute?el.getAttribute('data-zone'):null;
+  console.log('[bodyDiagramTap] direct data-zone:', zone);
   // If no data-zone, check parent (for text labels inside rects etc)
   if(!zone && el.parentElement){
     zone=el.parentElement.getAttribute?el.parentElement.getAttribute('data-zone'):null;
     if(zone) el=el.parentElement;
+    console.log('[bodyDiagramTap] parent data-zone:', zone);
   }
   // If still no zone, walk up through closest SVG elements
   if(!zone){
     var closest=el.closest?el.closest('[data-zone]'):null;
     if(closest){el=closest;zone=closest.getAttribute('data-zone');}
+    console.log('[bodyDiagramTap] closest data-zone:', zone, 'element:', closest);
   }
-  if(!zone) return;
+  if(!zone){console.log('[bodyDiagramTap] no zone found — returning');return;}
+  console.log('[bodyDiagramTap] toggling zone:', zone, 'side:', side);
+  // Find the rect element within the zone group (or use el if it is the rect)
+  var rect=el.tagName==='rect'?el:(el.querySelector?el.querySelector('rect'):null)||el;
   var key=side+'_'+zone;
   if(injuryZones[key]){
     delete injuryZones[key];
-    el.setAttribute('fill','var(--bg3)');
-    el.setAttribute('stroke','var(--border2)');
+    rect.setAttribute('fill','transparent');
+    rect.setAttribute('stroke','none');
+    rect.style.fill='transparent';
   } else {
-    injuryZones[key]={zone:zone,side:side,el:el};
-    el.setAttribute('fill','rgba(200,150,62,0.5)');
-    el.setAttribute('stroke','var(--gold)');
+    injuryZones[key]={zone:zone,side:side,el:rect};
+    rect.setAttribute('fill','rgba(200,150,62,0.5)');
+    rect.setAttribute('stroke','#c8963e');
+    rect.style.fill='rgba(200,150,62,0.5)';
   }
   fqAnswers.injury=Object.keys(injuryZones);
   renderInjuryTags();
@@ -7979,7 +8000,7 @@ var PHOENIX_WOD_LIBRARY = {
       ]
     },
     q2: {
-      name:'The God Games',
+      name:'The Phoenix Combine',
       subtitle:'Q2 Athletic Battery',
       tests:[
         {name:'Vertical Jump',type:'distance',equipment:[]},
@@ -8530,22 +8551,49 @@ function openTodaySession(){
     var block=document.createElement('div');
     block.className='ex-block';
     var setsCount=parseInt(ex.sets)||3;
+    var restSec=parseInt(ex.rest_sec)||0;
+    var isAmrap=String(ex.reps||'').toLowerCase().indexOf('amrap')>-1;
     var setsHTML='';
     var gridCols='28px 1fr 1fr auto';
+    // Calculate suggested kg from baseline strength + load_guidance
+    var suggestedKg='';
+    if(ex.load_guidance && athlete){
+      var pctMatch=String(ex.load_guidance).match(/([\d.]+)%/);
+      if(pctMatch){
+        var pct=parseFloat(pctMatch[1])/100;
+        var exNameLower=(ex.name||'').toLowerCase();
+        var baseRM=0;
+        if((exNameLower.indexOf('squat')>-1||exNameLower.indexOf('leg press')>-1)&&athlete.sq) baseRM=parseFloat(athlete.sq);
+        else if((exNameLower.indexOf('deadlift')>-1||exNameLower.indexOf('rdl')>-1||exNameLower.indexOf('hip hinge')>-1)&&athlete.dl) baseRM=parseFloat(athlete.dl);
+        else if((exNameLower.indexOf('bench')>-1||exNameLower.indexOf('press')>-1)&&athlete.b1rm) baseRM=parseFloat(athlete.b1rm);
+        else if(athlete.b1rm) baseRM=parseFloat(athlete.b1rm);
+        if(baseRM>0) suggestedKg=String(Math.round((baseRM*pct)/2.5)*2.5);
+      }
+    }
     for(var s=0;s<setsCount;s++){
       var setId='ai-'+i+'-'+s;
-      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'">'+
+      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-num">'+(s+1)+'</div>'+
-        '<div class="set-col"><input type="text" class="set-input" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
-        '<div class="set-col"><input type="text" class="set-input reps" value="'+(ex.reps||'')+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
-        '<button class="set-done-btn" onclick="this.classList.toggle(\'done\')">&#10003;</button>'+
+        '<div class="set-col"><input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="'+suggestedKg+'" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
+        '<div class="set-col"><input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="'+(isAmrap?'':ex.reps||'')+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
+        '<button class="set-done-btn" id="done-ai-'+i+'-'+s+'" data-exidx="'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">&#10003;</button>'+
         '</div>';
+    }
+    // AMRAP counter
+    if(isAmrap){
+      setsHTML+='<div class="amrap-counter" id="amrap-counter-ai-'+i+'">'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;text-align:center;width:100%;">AMRAP Reps</div>'+
+        '<div style="display:flex;align-items:center;justify-content:center;gap:16px;width:100%;">'+
+        '<div class="amrap-counter-btn" onclick="amrapAdjust(-1)">&#8722;</div>'+
+        '<div class="amrap-counter-val" id="amrap-val">0</div>'+
+        '<div class="amrap-counter-btn" onclick="amrapAdjust(1)">+</div>'+
+        '</div></div>';
     }
     var upNextHTML='';
     if(i<exercises.length-1){
       var next=exercises[i+1];
-      upNextHTML='<div style="padding:8px 0 0;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Up next: <span style="color:var(--text2);">'+next.name+'</span></div>';
+      upNextHTML='<div style="padding:8px 20px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);background:var(--bg2);border-bottom:1px solid var(--border);">Up next: <span style="color:var(--text2);">'+next.name+'</span></div>';
     }
     block.innerHTML='<div class="ex-block-header"><div>'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
@@ -8554,9 +8602,37 @@ function openTodaySession(){
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">'+ex.coaching_note+'</div>':'')+
       '</div></div>'+
       '<div class="set-header-row"><div></div><div class="set-col-label">kg</div><div class="set-col-label">reps</div><div></div></div>'+
-      setsHTML+upNextHTML;
+      setsHTML;
     body.appendChild(block);
+    if(upNextHTML){var upDiv=document.createElement('div');upDiv.innerHTML=upNextHTML;body.appendChild(upDiv.firstChild);}
   });
+  // Wire up set done buttons for AI sessions
+  setTimeout(function(){
+    exercises.forEach(function(ex,i){
+      var setsCount=parseInt(ex.sets)||3;
+      var restSec=parseInt(ex.rest_sec)||0;
+      for(var s=0;s<setsCount;s++){
+        (function(exIdx,setIdx,rest){
+          var btn=document.getElementById('done-ai-'+exIdx+'-'+setIdx);
+          if(btn) btn.addEventListener('click',function(){
+            this.classList.add('done');
+            var row=document.getElementById('setrow-ai-'+exIdx+'-'+setIdx);
+            if(row){row.style.background='rgba(200,150,62,0.08)';row.style.borderLeft='3px solid var(--gold)';}
+            if(rest>0){
+              var nextSetIdx=setIdx+1;
+              var nextLabel=nextSetIdx<setsCount?'Set '+(nextSetIdx+1):'Move to next exercise';
+              var nk='',nr='';
+              var nkEl=document.getElementById('kg-ai-'+exIdx+'-'+nextSetIdx);
+              var nrEl=document.getElementById('reps-ai-'+exIdx+'-'+nextSetIdx);
+              if(nkEl)nk=nkEl.value||'';
+              if(nrEl)nr=nrEl.value||'';
+              startRestTimer(rest,nextLabel,nk,nr);
+            }
+          });
+        })(i,s,restSec);
+      }
+    });
+  },50);
   var notesBlock=document.createElement('div');
   notesBlock.className='session-notes-block';
   notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? Any modifications..."></textarea>';

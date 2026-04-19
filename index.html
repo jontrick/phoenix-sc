@@ -1493,7 +1493,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
 </div>
 <div class="today-body" id="today-body">
-  <div class="today-hero">
+  <div class="today-hero" style="margin-bottom:16px;">
     <div class="today-tag" id="today-greeting-tag">Today</div>
     <div class="today-dayname" id="t-dayname">Monday</div>
     <div class="today-datestr" id="t-datestr"></div>
@@ -1517,13 +1517,21 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div class="game-card-eyebrow">
           <span class="game-card-eyebrow-sm">Your Programme</span>
         </div>
-        <div class="game-card-title" id="today-session-name" style="font-size:28px;">Today's Session</div>
+        <div class="game-card-title" id="today-session-name" style="font-size:28px;">Today’s Session</div>
         <div class="game-card-sub" id="today-session-detail">Start training</div>
         <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
       </div>
     </div>
-    <!-- Row 2: WOD (half) + Conditioning + Core (quarter each) -->
+    <!-- Row 2: My Coach (left) + WOD (right) -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div id="card-my-coach" class="game-card game-card-sm game-card-locked" onclick="openMyCoach()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span></div>
+          <div class="game-card-title-sm">My Coach</div>
+          <div class="game-card-sub-sm" id="coach-sub">Your coach is waiting</div>
+          <div style="opacity:0.35;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg></div>
+        </div>
+      </div>
       <div id="card-phoenix-wod" class="game-card game-card-wod" onclick="openPhoenixWOD()" style="border:1px solid rgba(200,150,62,0.4);">
         <div class="game-card-inner" style="padding:16px;">
           <div class="game-card-eyebrow">
@@ -1540,26 +1548,35 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           </div>
         </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <div class="game-card game-card-sm" onclick="openConditioning()" style="flex:1;">
-          <div class="game-card-inner">
-            <div class="game-card-eyebrow-sm">Add on</div>
-            <div class="game-card-title-sm">Conditioning</div>
-            <div class="game-card-sub-sm">Pick or generate</div>
-            <div class="game-card-action-sm">Choose →</div>
-          </div>
+    </div>
+    <!-- Row 3: Core + Conditioning + Walk/Run (three equal columns) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="game-card game-card-sm" onclick="generateDailyCore()" style="border-left:3px solid var(--blue);">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm">Phoenix Coach</div>
+          <div class="game-card-title-sm">Core</div>
+          <div class="game-card-sub-sm">AI Generated</div>
+          <div class="game-card-action-sm">Coach generates →</div>
         </div>
-        <div class="game-card game-card-sm" onclick="generateDailyCore()" style="flex:1;border-left:3px solid var(--blue);">
-          <div class="game-card-inner">
-            <div class="game-card-eyebrow-sm">Add on</div>
-            <div class="game-card-title-sm">Core</div>
-            <div class="game-card-sub-sm">AI Generated</div>
-            <div class="game-card-action-sm">Generate →</div>
-          </div>
+      </div>
+      <div class="game-card game-card-sm" onclick="openConditioning()">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm">Add on</div>
+          <div class="game-card-title-sm">Conditioning</div>
+          <div class="game-card-sub-sm">Pick or generate</div>
+          <div class="game-card-action-sm">Choose →</div>
+        </div>
+      </div>
+      <div class="game-card game-card-sm" onclick="openWalkLog()" style="border-left:3px solid var(--green,#4CAF50);">
+        <div class="game-card-inner">
+          <div class="game-card-eyebrow-sm">Phoenix Coach</div>
+          <div class="game-card-title-sm">Walk / Run</div>
+          <div class="game-card-sub-sm">GPS tracked session</div>
+          <div class="game-card-action-sm">Start →</div>
         </div>
       </div>
     </div>
-    <!-- Row 3: Locked feature cards -->
+    <!-- Row 4: Locked feature cards -->
     <div id="card-leaderboard" class="game-card game-card-locked" onclick="openLeaderboard()" style="margin-bottom:10px;">
       <div class="game-card-inner" style="display:flex;align-items:center;gap:14px;">
         <div style="flex:1;">
@@ -1581,16 +1598,6 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div style="opacity:0.35;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
         </div>
       </div>
-      <div id="card-my-coach" class="game-card game-card-sm game-card-locked" onclick="openMyCoach()">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span></div>
-          <div class="game-card-title-sm">My Coach</div>
-          <div class="game-card-sub-sm" id="coach-sub">Your coach is waiting</div>
-          <div style="opacity:0.35;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg></div>
-        </div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <div id="card-nutrition" class="game-card game-card-sm game-card-locked" onclick="openNutrition()">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span></div>
@@ -1599,6 +1606,8 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div style="opacity:0.35;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><path d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3"/></svg></div>
         </div>
       </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <div class="game-card game-card-sm" onclick="openRecovery()">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">All tiers</div>
@@ -1612,7 +1621,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Coming Soon</div>
       <div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:4px;">More Features Dropping</div>
       <div style="font-size:12px;color:var(--text2);line-height:1.5;">Challenges, community leaderboards, nutrition tracking, and more. Stay tuned.</div>
-      <div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-top:8px;">See what's coming →</div>
+      <div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-top:8px;">See what’s coming →</div>
     </div>
   </div>
 </div>
@@ -3283,13 +3292,27 @@ function generateDailyCore(){
     var jsonMatch=text.match(/\{[\s\S]*\}/);
     if(!jsonMatch) throw new Error('No JSON in response');
     var session=JSON.parse(jsonMatch[0]);
-    closeCoreModal();
-    // Build a coreSession-compatible object and launch
-    coreSession={num:'AI',exercises:session.exercises};
-    coreLog=[];
-    coreExIdx=0;
-    coreRepIdx=0;
-    startCorePrepCountdown();
+    // Show preview modal with exercises
+    var rows=session.exercises.map(function(e){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">'+
+        '<div style="font-family:var(--font-d);font-size:14px;color:var(--text);text-transform:uppercase;">'+e.name+'</div>'+
+        '<div style="font-size:12px;color:var(--text2);">'+e.reps+' \u00b7 '+e.load+'</div>'+
+        '</div>';
+    }).join('');
+    sheet.innerHTML='<div class="modal-title">'+session.name+'</div><div class="modal-subtitle">Core Training \u2014 AMRAP 20</div>'+
+      '<div style="padding:10px 20px;">'+rows+'</div>'+
+      '<div style="padding:10px 20px 20px;display:flex;gap:10px;">'+
+      '<button onclick="closeCoreModal()" style="flex:1;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Cancel</button>'+
+      '<button id="core-preview-start" style="flex:1;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Start Session</button>'+
+      '</div>';
+    document.getElementById('core-preview-start').addEventListener('click',function(){
+      closeCoreModal();
+      coreSession={num:'AI',exercises:session.exercises};
+      coreLog=[];
+      coreExIdx=0;
+      coreRepIdx=0;
+      startCorePrepCountdown();
+    });
   })
   .catch(function(err){
     console.warn('Core generation failed, falling back to static:',err);

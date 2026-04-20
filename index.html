@@ -7,6 +7,10 @@
 <link rel="manifest" href="manifest.json">
 <title>PROJECT PHOENIX PLAN</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+  (function(){try{emailjs.init('PLACEHOLDER_KEY');}catch(e){console.warn('EmailJS not loaded yet');}})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500;600&family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Oswald:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=Rock+Salt&display=swap" rel="stylesheet">
 <style>
@@ -1295,6 +1299,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button class="btn-primary" id="splash-start-btn" style="display:none">Begin Programme</button>
   <button class="btn-secondary" id="splash-continue-btn" style="display:none;margin-top:0;">Continue Training</button>
   <div id="splash-tier-badge" style="margin-top:14px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
+  <div id="splash-founding-badge" style="margin-top:10px;font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);opacity:0.85;">Founding Member &mdash; 1,987 of 2,000 spots remaining</div>
 
 </div>
 
@@ -3742,6 +3747,7 @@ function onSetDone(ex,idx){
   if(row){
     row.style.background='rgba(200,150,62,0.08)';
     row.style.borderLeft='3px solid var(--gold)';
+    autoLogSet(row);
   }
   var restSecs=ex.restOptions?chinRestSecs:(ex.autoRest||0);
   var nextIdx=idx+1;
@@ -3788,10 +3794,42 @@ function onSetDone(ex,idx){
     row._swipeStartX=undefined;
     if(Math.abs(dx)>=swipeThreshold){
       var btn=row.querySelector('.set-done-btn');
-      if(btn&&!btn.classList.contains('done')) btn.click();
+      if(btn&&!btn.classList.contains('done')){btn.click();autoLogSet(row);}
     }
   },{passive:true});
 })();
+
+// Auto-log individual set to localStorage on completion (swipe or tap)
+function autoLogSet(row){
+  if(!row) return;
+  var exId=row.getAttribute('data-exid')||'';
+  var setIdx=parseInt(row.getAttribute('data-setidx'))||0;
+  // Find exercise name from nearest ex-block-header
+  var block=row.closest('.ex-block')||row.parentElement;
+  var nameEl=block?block.querySelector('.ex-name'):null;
+  var exerciseName=nameEl?nameEl.textContent.trim():(exId||'Unknown');
+  // Read current kg/reps from inputs
+  var kgEl=row.querySelector('.set-input[id^="kg-"]');
+  var repsEl=row.querySelector('.set-input[id^="reps-"]');
+  var kg=kgEl?kgEl.value:'';
+  var reps=repsEl?repsEl.value:'';
+  // Determine sessionId from the session hero
+  var heroEl=document.querySelector('#screen-session .sh-name');
+  var sessionId=heroEl?heroEl.textContent.trim().toLowerCase().replace(/\s+/g,'-'):'unknown';
+  var entry={
+    date:new Date().toISOString().split('T')[0],
+    sessionId:sessionId,
+    exerciseName:exerciseName,
+    setIndex:setIdx,
+    kg:kg,
+    reps:reps,
+    completed:true,
+    timestamp:Date.now()
+  };
+  var logs=JSON.parse(localStorage.getItem('phoenix_session_logs_sets')||'[]');
+  logs.push(entry);
+  localStorage.setItem('phoenix_session_logs_sets',JSON.stringify(logs));
+}
 
 // AMRAP Rep Counter
 var amrapRepCount=0;
@@ -5619,6 +5657,23 @@ function addDevNote(){
   };
   devNotes.unshift(note);
   saveDevNotes();
+  // Send dev note via EmailJS
+  var emailParams={
+    to_email:'hello@projectphoenix-app.com',
+    from_name:'Dev Notes',
+    reply_to:'noreply@projectphoenix-app.com',
+    subject:'Phoenix Dev Note ['+devNoteTag+']',
+    message:'Tag: '+devNoteTag+'\n\n'+note.text+'\n\nDate: '+note.date+'\nAthlete: '+(athlete?athlete.name:'Unknown')
+  };
+  if(typeof emailjs!=='undefined'&&emailjs.send){
+    emailjs.send('service_phoenix','template_feedback',emailParams).then(function(){
+      console.log('Dev note sent via EmailJS',emailParams);
+    },function(err){
+      console.log('EmailJS send failed, logged locally:',emailParams,err);
+    });
+  } else {
+    console.log('EmailJS not configured — dev note submission:',emailParams);
+  }
   inp.value='';
   renderDevNotes();
 }
@@ -6594,6 +6649,23 @@ function submitFeedback(){
   var list=JSON.parse(localStorage.getItem('phoenix_feedback')||'[]');
   list.push(feedback);
   localStorage.setItem('phoenix_feedback',JSON.stringify(list));
+  // Send via EmailJS
+  var emailParams={
+    to_email:'hello@projectphoenix-app.com',
+    from_name:feedback.athleteName,
+    reply_to:email||'noreply@projectphoenix-app.com',
+    subject:'Phoenix Feedback ['+selectedFeedbackType+']',
+    message:'Type: '+selectedFeedbackType+'\n\n'+msg+'\n\nEmail: '+(email||'Not provided')+'\nAthlete: '+feedback.athleteName+'\nVersion: '+APP_VERSION+'\nDate: '+feedback.date
+  };
+  if(typeof emailjs!=='undefined'&&emailjs.send){
+    emailjs.send('service_phoenix','template_feedback',emailParams).then(function(){
+      console.log('Feedback sent via EmailJS',emailParams);
+    },function(err){
+      console.log('EmailJS send failed, logged locally:',emailParams,err);
+    });
+  } else {
+    console.log('EmailJS not configured — feedback submission:',emailParams);
+  }
   document.getElementById('feedback-message').value='';
   document.getElementById('feedback-email').value='';
   alert('Feedback sent. Thank you — we read every single one.');
@@ -6700,6 +6772,8 @@ function openTBBSSession(){
         var btn=document.getElementById('done-'+exCopy.id+'-'+idx);
         if(btn) btn.addEventListener('click',function(){
           btn.classList.add('done');
+          var rowEl=document.getElementById('setrow-'+exCopy.id+'-'+idx);
+          if(rowEl) autoLogSet(rowEl);
           var nextIdx=idx+1;
           var nextLabel=nextIdx<exCopy.sets.length?'Set '+(nextIdx+1):'Next exercise';
           var nextKg='',nextReps='';
@@ -8832,7 +8906,7 @@ function openTodaySession(){
           if(btn) btn.addEventListener('click',function(){
             this.classList.add('done');
             var row=document.getElementById('setrow-ai-'+exIdx+'-'+setIdx);
-            if(row){row.style.background='rgba(200,150,62,0.08)';row.style.borderLeft='3px solid var(--gold)';}
+            if(row){row.style.background='rgba(200,150,62,0.08)';row.style.borderLeft='3px solid var(--gold)';autoLogSet(row);}
             if(rest>0){
               var nextSetIdx=setIdx+1;
               var nextLabel=nextSetIdx<setsCount?'Set '+(nextSetIdx+1):'Move to next exercise';

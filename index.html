@@ -513,7 +513,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .set-done-btn.done{background:var(--green-dim);border-color:var(--green);color:#5cb85c;}
 .set-row{position:relative;overflow:hidden;transition:transform 0.25s ease;}
 .set-row .set-swipe-bg{position:absolute;left:0;top:0;bottom:0;width:80px;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:var(--radius);}
-.set-row.swiped .set-swipe-bg{opacity:1;}
+.set-row .set-swipe-bg-right{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:var(--radius);}
+.set-row.swiped .set-swipe-bg,.set-row.swiped .set-swipe-bg-right{opacity:1;}
 .amrap-counter{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin:12px 0;}
 .amrap-counter-btn{width:48px;height:48px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:24px;font-family:var(--font-d);font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;}
 .amrap-counter-btn:active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold);}
@@ -591,6 +592,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .wod-tier-hero{background:rgba(224,92,42,0.15);color:var(--orange);}
 .wod-tier-philosopher{background:rgba(58,125,68,0.15);color:var(--green);}
 .wod-tier-creature{background:rgba(192,57,43,0.15);color:#e74c3c;}
+.wod-tier-legend{background:rgba(224,92,42,0.15);color:var(--orange);}
+.wod-tier-myth{background:rgba(58,125,68,0.15);color:var(--green);}
+.wod-tier-beast{background:rgba(192,57,43,0.15);color:#e74c3c;}
+.wod-tier-immortal{background:rgba(108,61,143,0.15);color:var(--purple);}
 .wod-tier-rising{background:rgba(200,150,62,0.1);color:var(--text2);}
 .wod-movement-row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);}
 .wod-movement-row:last-child{border-bottom:none;}
@@ -3557,6 +3562,32 @@ function releaseWakeLock(){
   if(wakeLock){wakeLock.release();wakeLock=null;}
 }
 
+function showCountIn(callback){
+  var overlay=document.createElement('div');
+  overlay.id='count-in-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+  var numEl=document.createElement('div');
+  numEl.style.cssText='font-family:var(--font-d);font-size:160px;font-weight:900;color:var(--gold);line-height:1;transition:transform 0.15s ease,opacity 0.15s ease;';
+  numEl.textContent='5';
+  overlay.appendChild(numEl);
+  document.body.appendChild(overlay);
+  var count=5;
+  var iv=setInterval(function(){
+    count--;
+    if(count>0){
+      numEl.style.transform='scale(0.7)';numEl.style.opacity='0.3';
+      setTimeout(function(){numEl.textContent=count;numEl.style.transform='scale(1)';numEl.style.opacity='1';},80);
+    } else if(count===0){
+      numEl.style.transform='scale(0.7)';numEl.style.opacity='0.3';
+      setTimeout(function(){numEl.textContent='GO!';numEl.style.transform='scale(1.2)';numEl.style.opacity='1';},80);
+    } else {
+      clearInterval(iv);
+      overlay.remove();
+      if(callback) callback();
+    }
+  },1000);
+}
+
 function startRestTimer(secs,nextLabel,nextKg,nextReps){
   rtTotal=secs;
   rtEndTime=Date.now()+(secs*1000);
@@ -3693,6 +3724,7 @@ function renderSetRow(ex,set,idx){
   var gridCols=hasPct?'28px 60px 1fr 1fr auto':'28px 1fr 1fr auto';
   return '<div class="set-row" id="setrow-'+ex.id+'-'+idx+'" style="grid-template-columns:'+gridCols+'" data-exid="'+ex.id+'" data-setidx="'+idx+'">'+
     '<div class="set-swipe-bg">DONE</div>'+
+    '<div class="set-swipe-bg-right">DONE</div>'+
     '<div class="set-num">'+(idx+1)+'</div>'+
     pctBox+
     '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+(hasPct?'':kgVal)+'" placeholder="kg"'+kgReadonly+' inputmode="decimal"><div class="set-input-label">kg</div></div>'+
@@ -3725,7 +3757,7 @@ function onSetDone(ex,idx){
   if(restSecs>0)startRestTimer(restSecs,nextLabel,nextKg,nextReps);
 }
 
-// Swipe-to-complete on set rows
+// Swipe-to-complete on set rows (both directions)
 (function(){
   var swipeThreshold=80;
   document.addEventListener('touchstart',function(e){
@@ -3740,9 +3772,11 @@ function onSetDone(ex,idx){
     var dx=e.touches[0].clientX-row._swipeStartX;
     var dy=Math.abs(e.touches[0].clientY-row._swipeStartY);
     if(dy>30){row._swipeStartX=undefined;row.style.transform='';return;}
-    if(dx>0){
-      row.style.transform='translateX('+Math.min(dx,swipeThreshold+20)+'px)';
-      row.classList.toggle('swiped',dx>swipeThreshold/2);
+    var absDx=Math.abs(dx);
+    if(absDx>0){
+      var clamped=Math.sign(dx)*Math.min(absDx,swipeThreshold+20);
+      row.style.transform='translateX('+clamped+'px)';
+      row.classList.toggle('swiped',absDx>swipeThreshold/2);
     }
   },{passive:true});
   document.addEventListener('touchend',function(e){
@@ -3752,7 +3786,7 @@ function onSetDone(ex,idx){
     row.style.transform='';
     row.classList.remove('swiped');
     row._swipeStartX=undefined;
-    if(dx>=swipeThreshold){
+    if(Math.abs(dx)>=swipeThreshold){
       var btn=row.querySelector('.set-done-btn');
       if(btn&&!btn.classList.contains('done')) btn.click();
     }
@@ -4140,28 +4174,9 @@ function startCorePrepCountdown(){
     navTo('today');
   };
   buildWarmupBlocks('core',body);
-  var heroEl=document.createElement('div');
-  heroEl.innerHTML=
-    '<div class="session-hero"><div class="sh-tag">Core Session</div>'+
-    '<div class="sh-name">Core '+coreSession.num+'</div>'+
-    '<div class="sh-detail">20 min AMRAP</div></div>'+
-    '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 20px;">'+
-    '<div style="font-family:var(--font-d);font-size:14px;letter-spacing:4px;color:var(--text2);text-transform:uppercase;margin-bottom:16px;">Get Ready</div>'+
-    '<div id="prep-count" style="font-family:var(--font-d);font-size:120px;font-weight:900;color:var(--gold);line-height:1;">5</div>'+
-    '</div>';
-  body.appendChild(heroEl);
-
-  var prepSecs=5;
-  if(corePrepInterval)clearInterval(corePrepInterval);
-  corePrepInterval=setInterval(function(){
-    prepSecs--;
-    var el=document.getElementById('prep-count');
-    if(el) el.textContent=prepSecs;
-    if(prepSecs<=0){
-      clearInterval(corePrepInterval);
-      startCoreAMRAP();
-    }
-  },1000);
+  showCountIn(function(){
+    startCoreAMRAP();
+  });
 }
 
 function startCoreAMRAP(){
@@ -6668,6 +6683,7 @@ function openTBBSSession(){
     ex.sets.forEach(function(set,idx){
       html+='<div class="set-row" id="setrow-'+ex.id+'-'+idx+'" style="grid-template-columns:28px 1fr 1fr auto" data-exid="'+ex.id+'" data-setidx="'+idx+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
+        '<div class="set-swipe-bg-right">DONE</div>'+
         '<div class="set-num">'+(idx+1)+'</div>'+
         '<div class="set-col"><input type="number" class="set-input reps" id="reps-'+ex.id+'-'+idx+'" value="'+set.reps+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
         '<div class="set-col"><input type="text" class="set-input" id="kg-'+ex.id+'-'+idx+'" value="'+set.kg+'" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
@@ -7831,11 +7847,11 @@ var PHOENIX_WOD_LIBRARY = {
   ],
 
   // ============================================================
-  // HEROES — Longer, endurance-based (Q2-Q3)
+  // LEGENDS — Longer, endurance-based (Q2-Q3)
   // ============================================================
 
-  heroes: [
-    {id:'h01',name:'The Achilles',tier:'Hero',format:'AFAP',
+  legends: [
+    {id:'h01',name:'The Achilles',tier:'Legend',format:'AFAP',
      movements:[
        {name:'Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'},
        {name:'100 Pull Up',sets:0,reps:'100',load_rx:'',load_scaled:'50 + 50 ring row'},
@@ -7844,8 +7860,8 @@ var PHOENIX_WOD_LIBRARY = {
        {name:'Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'}
      ],
      time_cap:60,elite_target:'Sub 40 min',equipment:['pull_up_bar'],
-     combine_note:'The full test — mile run, pull ups, push ups all in one hero workout'},
-    {id:'h02',name:'The Odysseus',tier:'Hero',format:'AFAP Chipper',
+     combine_note:'The full test — mile run, pull ups, push ups all in one legendary workout'},
+    {id:'h02',name:'The Odysseus',tier:'Legend',format:'AFAP Chipper',
      movements:[
        {name:'Row',sets:0,reps:'2000m',load_rx:'',load_scaled:'1500m'},
        {name:'50 Thruster',sets:0,reps:'50',load_rx:'43kg',load_scaled:'30kg'},
@@ -7853,7 +7869,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:35,elite_target:'Sub 25 min',equipment:['rower','barbell','pull_up_bar'],
      combine_note:'2km row is a direct Combine test — this is the full version with added work'},
-    {id:'h03',name:'The Perseus',tier:'Hero',format:'AMRAP 30',
+    {id:'h03',name:'The Perseus',tier:'Legend',format:'AMRAP 30',
      movements:[
        {name:'5 Pull Up',sets:0,reps:'5',load_rx:'',load_scaled:'Banded'},
        {name:'10 Push Up',sets:0,reps:'10',load_rx:'',load_scaled:'Knee'},
@@ -7861,7 +7877,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:30,elite_target:'20+ rounds',equipment:['pull_up_bar'],
      combine_note:'Endurance and consistency — push up and pull up Combine tests in a longer format'},
-    {id:'h04',name:'The Theseus',tier:'Hero',format:'AFAP',
+    {id:'h04',name:'The Theseus',tier:'Legend',format:'AFAP',
      movements:[
        {name:'21 Deadlift',sets:0,reps:'21',load_rx:'102.5kg',load_scaled:'70kg'},
        {name:'15 Hang Power Clean',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'},
@@ -7875,14 +7891,14 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:30,elite_target:'Sub 18 min',equipment:['barbell'],
      combine_note:'Triple barbell complex — power and endurance under fatigue'},
-    {id:'h05',name:'The Leonidas',tier:'Hero',format:'AFAP',
+    {id:'h05',name:'The Leonidas',tier:'Legend',format:'AFAP',
      movements:[
        {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
        {name:'Max Rep Pull Up',sets:0,reps:'max',load_rx:'',load_scaled:'Ring Row'},
      ],
      rounds:5,rest:'none',time_cap:35,elite_target:'100+ total pull ups',equipment:['pull_up_bar'],
      combine_note:'Max pull up test in a fatigued state — harder than the Combine version'},
-    {id:'h06',name:'The Heracles',tier:'Hero',format:'AFAP Chipper',
+    {id:'h06',name:'The Heracles',tier:'Legend',format:'AFAP Chipper',
      movements:[
        {name:'100 Wall Ball',sets:0,reps:'100',load_rx:'9kg',load_scaled:'6kg'},
        {name:'90 Double Under',sets:0,reps:'90',load_rx:'',load_scaled:'180 singles'},
@@ -7897,7 +7913,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:45,elite_target:'Sub 35 min',equipment:['wall_ball','kettlebell','pull_up_bar','box','dumbbells','barbell'],
      combine_note:'The big one — touches every Combine quality in one chipper'},
-    {id:'h07',name:'The Orpheus',tier:'Hero',format:'AMRAP 20',
+    {id:'h07',name:'The Orpheus',tier:'Legend',format:'AMRAP 20',
      movements:[
        {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
        {name:'15 OH Squat',sets:0,reps:'15',load_rx:'43kg',load_scaled:'PVC technique'},
@@ -7908,11 +7924,11 @@ var PHOENIX_WOD_LIBRARY = {
   ],
 
   // ============================================================
-  // PHILOSOPHERS — Skill/EMOM, technique focus
+  // MYTHS — Skill/EMOM, technique focus
   // ============================================================
 
-  philosophers: [
-    {id:'p01',name:'The Socrates',tier:'Philosopher',format:'EMOM 20',
+  myths: [
+    {id:'p01',name:'The Socrates',tier:'Myth',format:'EMOM 20',
      movements:[
        {name:'3 Snatch',sets:5,reps:'3',load_rx:'70% 1RM',load_scaled:'Technique weight'},
        {name:'3 Clean & Jerk',sets:5,reps:'3',load_rx:'70% 1RM',load_scaled:'Technique weight'},
@@ -7921,7 +7937,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'All sets unbroken',equipment:['barbell','pull_up_bar','ghd'],
      combine_note:'Movement quality under fatigue — form is everything'},
-    {id:'p02',name:'The Plato',tier:'Philosopher',format:'Tabata',
+    {id:'p02',name:'The Plato',tier:'Myth',format:'Tabata',
      movements:[
        {name:'Squat',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:''},
        {name:'Push Up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:'Knee'},
@@ -7930,7 +7946,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:16,elite_target:'Maintain 10+ reps each interval',equipment:['pull_up_bar'],
      combine_note:'Push up and pull up Combine prep in a metabolic format'},
-    {id:'p03',name:'The Aristotle',tier:'Philosopher',format:'EMOM 15',
+    {id:'p03',name:'The Aristotle',tier:'Myth',format:'EMOM 15',
      movements:[
        {name:'5 Turkish Get Up',sets:5,reps:'5 each side',load_rx:'24kg KB',load_scaled:'16kg'},
        {name:'10 Single Leg RDL',sets:5,reps:'10 each',load_rx:'Light DB',load_scaled:'Bodyweight'},
@@ -7938,7 +7954,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:15,elite_target:'TGU = 32kg, L-sit 15s+',equipment:['kettlebell'],
      combine_note:'Movement quality and stability — injury prevention and body control'},
-    {id:'p04',name:'The Diogenes',tier:'Philosopher',format:'EMOM 12',
+    {id:'p04',name:'The Diogenes',tier:'Myth',format:'EMOM 12',
      movements:[
        {name:'3 Overhead Squat',sets:4,reps:'3',load_rx:'60% snatch 1RM',load_scaled:'PVC technique'},
        {name:'5 Ring Dip',sets:4,reps:'5',load_rx:'Weighted',load_scaled:'Bodyweight'},
@@ -7946,7 +7962,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:12,elite_target:'All sets unbroken',equipment:['barbell','rings','box'],
      combine_note:'OH squat is the Combine mobility screen — practice it'},
-    {id:'p05',name:'The Seneca',tier:'Philosopher',format:'Skill + Strength',
+    {id:'p05',name:'The Seneca',tier:'Myth',format:'Skill + Strength',
      movements:[
        {name:'Handstand Walk',sets:5,reps:'10m',load_rx:'',load_scaled:'Wall Walk x5'},
        {name:'Pistol Squat',sets:5,reps:'5 each',load_rx:'Weighted',load_scaled:'Assisted'},
@@ -7954,7 +7970,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:25,elite_target:'Unassisted all movements',equipment:['rings'],
      combine_note:'Body control and single leg strength — athletic movement quality'},
-    {id:'p06',name:'The Marcus',tier:'Philosopher',format:'EMOM 18',
+    {id:'p06',name:'The Marcus',tier:'Myth',format:'EMOM 18',
      movements:[
        {name:'3 Power Snatch',sets:6,reps:'3',load_rx:'70% 1RM',load_scaled:'60% 1RM'},
        {name:'6 Box Jump',sets:6,reps:'6',load_rx:'60cm',load_scaled:'50cm'},
@@ -7962,7 +7978,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:18,elite_target:'Complete all',equipment:['barbell','box','bike'],
      combine_note:'Power and conditioning — vertical jump mechanics with conditioning'},
-    {id:'p07',name:'The Epictetus',tier:'Philosopher',format:'20 Min Skill Work',
+    {id:'p07',name:'The Epictetus',tier:'Myth',format:'20 Min Skill Work',
      movements:[
        {name:'Rope Climb',sets:0,reps:'10 ascents',load_rx:'',load_scaled:'Ring Row 20'},
        {name:'Handstand Push Up',sets:0,reps:'50 total',load_rx:'',load_scaled:'Pike PU'},
@@ -7970,7 +7986,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'All unassisted',equipment:['rope','wall'],
      combine_note:'Upper body pulling strength — directly improves pull up Combine score'},
-    {id:'p08',name:'The Zeno',tier:'Philosopher',format:'EMOM 30',
+    {id:'p08',name:'The Zeno',tier:'Myth',format:'EMOM 30',
      movements:[
        {name:'1 Squat Clean + Jerk',sets:10,reps:'1',load_rx:'80% 1RM',load_scaled:'70% 1RM'},
        {name:'5 Strict HSPU',sets:10,reps:'5',load_rx:'',load_scaled:'Pike PU'},
@@ -7981,15 +7997,15 @@ var PHOENIX_WOD_LIBRARY = {
   ],
 
   // ============================================================
-  // CREATURES — Brutal conditioning (Q3)
+  // BEASTS — Brutal conditioning (Q3)
   // ============================================================
 
-  creatures: [
-    {id:'c01',name:'The Hydra',tier:'Creature',format:'Death By',
+  beasts: [
+    {id:'c01',name:'The Hydra',tier:'Beast',format:'Death By',
      movements:[{name:'Thruster',sets:0,reps:'',load_rx:'43kg',load_scaled:'30kg'}],
      starting_reps:1,time_cap:20,elite_target:'Minute 13+',equipment:['barbell'],
      combine_note:'Thruster endurance — same mechanics as your vertical jump test but at high fatigue'},
-    {id:'c02',name:'The Chimera',tier:'Creature',format:'AFAP',
+    {id:'c02',name:'The Chimera',tier:'Beast',format:'AFAP',
      movements:[
        {name:'100 Burpee',sets:0,reps:'100',load_rx:'',load_scaled:'50'},
        {name:'100 Kb Swing',sets:0,reps:'100',load_rx:'32kg',load_scaled:'24kg'},
@@ -7998,7 +8014,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:40,elite_target:'Sub 30 min',equipment:['kettlebell','wall_ball'],
      combine_note:'Pure conditioning capacity — improves all time-based Combine tests'},
-    {id:'c03',name:'The Minotaur',tier:'Creature',format:'5 Rounds AFAP',
+    {id:'c03',name:'The Minotaur',tier:'Beast',format:'5 Rounds AFAP',
      movements:[
        {name:'400m Run',sets:5,reps:'400m',load_rx:'',load_scaled:'300m'},
        {name:'30 Box Jump',sets:5,reps:'30',load_rx:'60cm',load_scaled:'50cm'},
@@ -8006,7 +8022,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:45,elite_target:'Sub 35 min',equipment:['box','wall_ball'],
      combine_note:'Running volume and explosive jumping — mile run and broad jump prep'},
-    {id:'c04',name:'The Cerberus',tier:'Creature',format:'AMRAP 30',
+    {id:'c04',name:'The Cerberus',tier:'Beast',format:'AMRAP 30',
      movements:[
        {name:'5 Deadlift',sets:0,reps:'5',load_rx:'102.5kg',load_scaled:'70kg'},
        {name:'10 Hang Power Clean',sets:0,reps:'10',load_rx:'102.5kg',load_scaled:'70kg'},
@@ -8014,7 +8030,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:30,elite_target:'5+ rounds',equipment:['barbell'],
      combine_note:'Barbell endurance — sustained power output across all pulling and squatting patterns'},
-    {id:'c05',name:'The Medusa',tier:'Creature',format:'AFAP',
+    {id:'c05',name:'The Medusa',tier:'Beast',format:'AFAP',
      movements:[
        {name:'50 Pull Up',sets:0,reps:'50',load_rx:'',load_scaled:'Banded'},
        {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
@@ -8027,11 +8043,11 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:40,elite_target:'Sub 28 min',equipment:['kettlebell','pull_up_bar'],
      combine_note:'Running, pulling, pushing — three Combine tests in one brutal session'},
-    {id:'c06',name:'The Cyclops',tier:'Creature',format:'EMOM until failure',
+    {id:'c06',name:'The Cyclops',tier:'Beast',format:'EMOM until failure',
      movements:[{name:'Max Calorie Row',sets:0,reps:'12 cal min 1, add 1 each min',load_rx:'',load_scaled:'10 cal + 1'}],
      time_cap:25,elite_target:'Complete minute 15+',equipment:['rower'],
      combine_note:'Row endurance — directly improves your 2km row Combine score'},
-    {id:'c07',name:'The Sphinx',tier:'Creature',format:'4 Rounds AFAP',
+    {id:'c07',name:'The Sphinx',tier:'Beast',format:'4 Rounds AFAP',
      movements:[
        {name:'800m Run',sets:4,reps:'800m',load_rx:'',load_scaled:'600m'},
        {name:'50 Air Squat',sets:4,reps:'50',load_rx:'',load_scaled:'35'},
@@ -8039,7 +8055,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:50,elite_target:'Sub 40 min',equipment:['pull_up_bar'],
      combine_note:'Running and pulling endurance — mile run and pull up Combine prep'},
-    {id:'c08',name:'The Scylla',tier:'Creature',format:'AFAP Chipper',
+    {id:'c08',name:'The Scylla',tier:'Beast',format:'AFAP Chipper',
      movements:[
        {name:'2km Row',sets:0,reps:'2000m',load_rx:'',load_scaled:'1500m'},
        {name:'150 Wall Ball',sets:0,reps:'150',load_rx:'9kg',load_scaled:'6kg'},
@@ -8047,6 +8063,53 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:50,elite_target:'Sub 38 min',equipment:['rower','wall_ball'],
      combine_note:'Row + Karen + Mile — three Combine tests back to back. Your ultimate benchmark.'},
+  ],
+
+  // ============================================================
+  // IMMORTALS — The hardest elite workouts (Q4)
+  // ============================================================
+
+  immortals: [
+    {id:'i01',name:'The Prometheus',tier:'Immortal',format:'AFAP Chipper',
+     movements:[
+       {name:'50 Calorie Row',sets:0,reps:'50 cal',load_rx:'',load_scaled:'35 cal'},
+       {name:'50 Box Jump Over',sets:0,reps:'50',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'50 Deadlift',sets:0,reps:'50',load_rx:'60kg',load_scaled:'40kg'},
+       {name:'50 Wall Ball',sets:0,reps:'50',load_rx:'9kg',load_scaled:'6kg'},
+       {name:'50 Ring Muscle Up',sets:0,reps:'50',load_rx:'',load_scaled:'Pull Up + Dip'},
+       {name:'50 Calorie Row',sets:0,reps:'50 cal',load_rx:'',load_scaled:'35 cal'}
+     ],
+     time_cap:50,elite_target:'Sub 35 min',equipment:['rower','box','barbell','wall_ball','rings'],
+     combine_note:'The ultimate chipper — 300 reps of relentless work across every domain'},
+    {id:'i02',name:'The Kronos',tier:'Immortal',format:'10 Rounds AFAP',
+     movements:[
+       {name:'200m Run',sets:10,reps:'200m',load_rx:'',load_scaled:''},
+       {name:'10 Power Clean',sets:10,reps:'10',load_rx:'61kg',load_scaled:'43kg'},
+       {name:'10 Burpee Over Bar',sets:10,reps:'10',load_rx:'',load_scaled:'Burpee'}
+     ],
+     time_cap:45,elite_target:'Sub 30 min',equipment:['barbell'],
+     combine_note:'Ten rounds of pain — sustained power output and mental fortitude'},
+    {id:'i03',name:'The Atlas',tier:'Immortal',format:'AFAP',
+     movements:[
+       {name:'1 Mile Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'},
+       {name:'100 Pull Up',sets:0,reps:'100',load_rx:'',load_scaled:'50 + 50 banded'},
+       {name:'200 Push Up',sets:0,reps:'200',load_rx:'',load_scaled:'Knee PU'},
+       {name:'300 Air Squat',sets:0,reps:'300',load_rx:'',load_scaled:'200'},
+       {name:'1 Mile Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'},
+       {name:'50 Deadlift',sets:0,reps:'50',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'50 Clean',sets:0,reps:'50',load_rx:'61kg',load_scaled:'43kg'}
+     ],
+     time_cap:75,elite_target:'Sub 55 min',equipment:['pull_up_bar','barbell'],
+     combine_note:'The extended legend — bodyweight endurance plus heavy barbell work. Only for the elite.'},
+    {id:'i04',name:'The Nemesis',tier:'Immortal',format:'AMRAP 40',
+     movements:[
+       {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
+       {name:'15 Thruster',sets:0,reps:'15',load_rx:'43kg',load_scaled:'30kg'},
+       {name:'15 Pull Up',sets:0,reps:'15',load_rx:'Chest to bar',load_scaled:'Chin over'},
+       {name:'15 Burpee',sets:0,reps:'15',load_rx:'',load_scaled:''}
+     ],
+     time_cap:40,elite_target:'8+ rounds',equipment:['barbell','pull_up_bar'],
+     combine_note:'40 minutes of relentless mixed modal — the true test of an immortal engine'},
   ],
 
   // ============================================================
@@ -8108,7 +8171,7 @@ var PHOENIX_WOD_LIBRARY = {
       ]
     },
     q3: {
-      name:"The Hero's Test",
+      name:"The Legend's Test",
       subtitle:'Q3 Engine Battery',
       tests:[
         {name:'2km Row',type:'time',equipment:['rower']},
@@ -8144,9 +8207,9 @@ var PHOENIX_WOD_LIBRARY = {
   // 52-week rolling WOD schedule
   // Maps week number + day to a WOD ID
   // Q1: weeks 1-13 (Titans + Gods)
-  // Q2: weeks 14-26 (Gods + Heroes)
-  // Q3: weeks 27-39 (Heroes + Creatures)
-  // Q4: weeks 40-52 (Mixed + The Phoenix)
+  // Q2: weeks 14-26 (Gods + Legends)
+  // Q3: weeks 27-39 (Legends + Beasts)
+  // Q4: weeks 40-52 (Mixed + Immortals + The Phoenix)
 
   getDailyWOD: function(date){
     var d = date || new Date();
@@ -8161,9 +8224,9 @@ var PHOENIX_WOD_LIBRARY = {
     // Get pool based on quarter and day
     var pool;
     if(quarter === 1) pool = [...this.titans, ...this.gods];
-    else if(quarter === 2) pool = [...this.gods, ...this.heroes];
-    else if(quarter === 3) pool = [...this.heroes, ...this.creatures];
-    else pool = [...this.gods, ...this.heroes, ...this.creatures, ...this.titans];
+    else if(quarter === 2) pool = [...this.gods, ...this.legends];
+    else if(quarter === 3) pool = [...this.legends, ...this.beasts];
+    else pool = [...this.gods, ...this.legends, ...this.beasts, ...this.titans, ...this.immortals];
 
     // Sundays = The Rising (accessible to all)
     if(dayOfWeek === 0) pool = this.rising;
@@ -8410,6 +8473,12 @@ function startWODTimer(modalId){
   if(!wod) return;
   var modal=document.getElementById(modalId);
   var inner=modal.querySelector('.wod-modal-inner');
+  if(!window._wodCountInDone){
+    window._wodCountInDone=true;
+    showCountIn(function(){startWODTimer(modalId);});
+    return;
+  }
+  window._wodCountInDone=false;
   var isAMRAP=wod.format.indexOf('AMRAP')>=0;
   var totalSecs=(wod.time_cap||20)*60;
   var movements=wod.movements||[];
@@ -8426,7 +8495,7 @@ function startWODTimer(modalId){
         '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;">'+nowMov.name+'</div>'+
         (nowMov.reps?'<div style="font-family:var(--font-d);font-size:16px;color:var(--gold);margin-top:4px;">'+nowMov.reps+' reps</div>':'')+
         '<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+nowMov.load_rx+'</div>'+
-        '<div style="font-size:11px;color:var(--text3);margin-top:8px;">← Swipe to complete</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:8px;">← Swipe either direction to complete →</div>'+
         '</div>';
     }
     var nextHTML='';
@@ -8441,7 +8510,7 @@ function startWODTimer(modalId){
     inner.innerHTML='<div style="padding-top:20px;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
       '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' — '+wod.format+'</div>'+
-      '<div class="icon-btn" onclick="document.getElementById(\'wod-modal\').remove();if(window._wodTimer&&window._wodTimer.interval)clearInterval(window._wodTimer.interval);" style="background:var(--bg2);">'+
+      '<div class="icon-btn" onclick="document.getElementById(\'wod-modal\').remove();if(window._wodTimer&&window._wodTimer.interval)clearInterval(window._wodTimer.interval);releaseWakeLock();" style="background:var(--bg2);">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div></div>'+
       '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(isAMRAP?totalSecs:0)+'</div>'+
       '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:24px;">'+(isAMRAP?'TIME REMAINING':'ELAPSED')+'</div>'+
@@ -8462,13 +8531,14 @@ function startWODTimer(modalId){
         if(!swiping) return;
         currentX=e.touches[0].clientX;
         var dx=currentX-startX;
-        if(dx>0){nowCard.style.transform='translateX('+dx+'px)';var bg=nowCard.querySelector('.set-swipe-bg');if(bg)bg.style.opacity=dx>40?'1':'0';}
+        var absDx=Math.abs(dx);
+        if(absDx>0){nowCard.style.transform='translateX('+dx+'px)';var bg=nowCard.querySelector('.set-swipe-bg');if(bg)bg.style.opacity=absDx>40?'1':'0';}
       },{passive:true});
       nowCard.addEventListener('touchend',function(){
         if(!swiping) return;
         swiping=false;
         var dx=currentX-startX;
-        if(dx>60){
+        if(Math.abs(dx)>60){
           wodExIdx++;
           if(wodExIdx>=movements.length){wodExIdx=0;}
           renderWODSession();
@@ -8491,6 +8561,7 @@ function startWODTimer(modalId){
       document.getElementById('wod-timer-btn').textContent='RESUME';
     } else {
       t.running=true;
+      requestWakeLock();
       document.getElementById('wod-timer-btn').textContent='PAUSE';
       t.interval=setInterval(function(){
         t.elapsed++;
@@ -8500,6 +8571,7 @@ function startWODTimer(modalId){
         if(t.isAMRAP&&t.elapsed>=t.totalSecs){
           clearInterval(t.interval);
           t.running=false;
+          releaseWakeLock();
           if(el) el.textContent='TIME!';
           finishWOD();
         }
@@ -8509,6 +8581,7 @@ function startWODTimer(modalId){
 
   window.finishWOD=function(){
     if(window._wodTimer&&window._wodTimer.interval) clearInterval(window._wodTimer.interval);
+    releaseWakeLock();
     var reps=window._wodTimer&&window._wodTimer.isAMRAP&&typeof getAmrapTotal==='function'?getAmrapTotal():0;
     logWODScore(window._wodTimer?window._wodTimer.elapsed:0,reps);
   };
@@ -8715,6 +8788,7 @@ function openTodaySession(){
       var setId='ai-'+i+'-'+s;
       setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
+        '<div class="set-swipe-bg-right">DONE</div>'+
         '<div class="set-num">'+(s+1)+'</div>'+
         '<div class="set-col"><input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="'+suggestedKg+'" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
         '<div class="set-col"><input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="'+(isAmrap?'':ex.reps||'')+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+

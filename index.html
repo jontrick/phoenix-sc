@@ -3329,10 +3329,70 @@ function generateDailyCore(){
 // ====== PROGRAMME ======
 function renderProgramme(){
   if(!athlete) return;
+  var container=document.getElementById('week-sched');
+  if(!container) return;
+
+  // If no AI programme, show prompt to complete questionnaire
+  if(!athlete.aiProgramme){
+    document.querySelector('.stats-widget').style.display='none';
+    document.querySelector('.week-nav').style.display='none';
+    container.innerHTML=`
+      <div style="text-align:center;padding:60px 20px;">
+        <div style="font-size:48px;margin-bottom:16px;opacity:0.3;">&#128170;</div>
+        <div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;">No Programme Yet</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:24px;">Complete the questionnaire so your AI coach can build a personalised programme.</div>
+        <button class="btn-primary" style="padding:14px 32px;" onclick="openFoundationQ()">Start Questionnaire</button>
+      </div>`;
+    return;
+  }
+
+  // Show AI programme
+  document.querySelector('.stats-widget').style.display='';
+  document.querySelector('.week-nav').style.display='';
   renderProgStatsWidget();
-  renderWeekSched(viewWeek);
-  document.getElementById('prev-wk').onclick=function(){if(viewWeek>1){viewWeek--;renderWeekSched(viewWeek);}};
-  document.getElementById('next-wk').onclick=function(){if(viewWeek<15){viewWeek++;renderWeekSched(viewWeek);}};
+
+  var prog=athlete.aiProgramme;
+  var s=prog.programme_summary||{};
+  var w=prog.week||{};
+  var sessions=w.sessions||[];
+
+  // Update week nav header
+  document.getElementById('wk-num').textContent='Week '+(athlete.currentWeek||1);
+  document.getElementById('wk-phase').textContent=s.current_phase||w.week_type||'Training';
+
+  // Hide week nav arrows (single week from AI)
+  document.getElementById('prev-wk').style.visibility='hidden';
+  document.getElementById('next-wk').style.visibility='hidden';
+
+  // Build summary + session cards
+  var html='';
+
+  // Programme summary
+  if(s.current_phase||s.coach_note){
+    html+=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">
+      ${s.current_phase?`<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">${s.current_phase}</div>`:''}
+      ${s.coach_note?`<div style="font-size:13px;color:var(--text2);line-height:1.6;">${s.coach_note}</div>`:''}
+    </div>`;
+  }
+
+  // Session cards
+  sessions.forEach(function(sess){
+    var exList=(sess.exercises||[]).map(function(ex){
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:13px;color:var(--text);font-weight:600;">${ex.name}</div>
+        <div style="font-size:11px;color:var(--text3);white-space:nowrap;margin-left:8px;">${ex.sets}×${ex.reps}</div>
+      </div>`;
+    }).join('');
+    html+=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);">${sess.day||''}</div>
+        <div style="font-size:11px;color:var(--text2);">${sess.session_type||''} · ${sess.duration_min||''}min</div>
+      </div>
+      ${exList}
+    </div>`;
+  });
+
+  container.innerHTML=html;
 }
 function renderProgStatsWidget(){
   if(!athlete) return;
@@ -6052,7 +6112,7 @@ function renderThemesScreen(){
   function makeSwatch(skin){
     var m=SKIN_META[skin];
     var tier=getSkinTier(skin);
-    var locked=tier!=='free';
+    var locked=(tier==='adfree'&&!hasRisingAccess())||(tier==='pro'&&!hasProAccess());
     var div=document.createElement('div');
     div.className='skin-swatch'+(locked?' locked':'')+(skin===currentSkin?' active':'');
     div.id='swatch-'+skin;

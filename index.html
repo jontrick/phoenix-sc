@@ -8300,7 +8300,15 @@ var PHOENIX_WOD_LIBRARY = {
 
     // Deterministic selection based on date
     var idx = dayOfYear % pool.length;
-    return pool[idx];
+    var selected = pool[idx];
+
+    // Prevent same WOD on consecutive days
+    var lastWodId = localStorage.getItem('phoenix_last_wod_id');
+    if(lastWodId && selected.id === lastWodId){
+      selected = pool[(idx + 1) % pool.length];
+    }
+    localStorage.setItem('phoenix_last_wod_id', selected.id);
+    return selected;
   },
 
   getWeeklyRising: function(weekNumber){

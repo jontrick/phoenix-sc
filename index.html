@@ -2194,43 +2194,19 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 <div class="q-step" id="fq-step-8">
   <div class="q-tag">Step 9 — Your schedule</div>
   <div class="q-title">Training<br>Days</div>
-  <div style="margin-bottom:20px;">
-    <label class="q-label">How many days per week can you train?</label>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;">
-      <div class="q-option-card" onclick="fqSetDays(2,this)">2</div>
-      <div class="q-option-card" onclick="fqSetDays(3,this)">3</div>
-      <div class="q-option-card" onclick="fqSetDays(4,this)">4</div>
-      <div class="q-option-card" onclick="fqSetDays(5,this)">5</div>
-      <div class="q-option-card" onclick="fqSetDays(6,this)">6</div>
-    </div>
+  <label class="q-label">Tap each day you can train</label>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;margin-bottom:6px;" id="fq-day-pills">
+    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('mon',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Mon</div>
+    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('tue',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Tue</div>
+    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('wed',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Wed</div>
+    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('thu',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Thu</div>
+    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('fri',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Fri</div>
+    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('sat',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Sat</div>
+    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('sun',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Sun</div>
   </div>
-  <div style="margin-bottom:20px;">
-    <label class="q-label">Which days do you train?</label>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px;" id="fq-day-picker">
-      <div class="q-option-card" onclick="fqToggleDayPicker('Mon',this)" style="padding:10px 4px;font-size:12px;">Mon</div>
-      <div class="q-option-card" onclick="fqToggleDayPicker('Tue',this)" style="padding:10px 4px;font-size:12px;">Tue</div>
-      <div class="q-option-card" onclick="fqToggleDayPicker('Wed',this)" style="padding:10px 4px;font-size:12px;">Wed</div>
-      <div class="q-option-card" onclick="fqToggleDayPicker('Thu',this)" style="padding:10px 4px;font-size:12px;">Thu</div>
-      <div class="q-option-card" onclick="fqToggleDayPicker('Fri',this)" style="padding:10px 4px;font-size:12px;">Fri</div>
-      <div class="q-option-card" onclick="fqToggleDayPicker('Sat',this)" style="padding:10px 4px;font-size:12px;">Sat</div>
-      <div class="q-option-card" onclick="fqToggleDayPicker('Sun',this)" style="padding:10px 4px;font-size:12px;">Sun</div>
-    </div>
-  </div>
-  <div style="margin-bottom:20px;">
-    <label class="q-label">Preferred training time</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
-      <div class="q-option-card" onclick="fqSetAmPm('morning',this)">Morning</div>
-      <div class="q-option-card" onclick="fqSetAmPm('afternoon',this)">Afternoon</div>
-      <div class="q-option-card" onclick="fqSetAmPm('evening',this)">Evening</div>
-    </div>
-  </div>
-  <div>
-    <label class="q-label">Average session length</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
-      <div class="q-option-card" onclick="fqSetDuration(45,this)">45 min</div>
-      <div class="q-option-card" onclick="fqSetDuration(60,this)">60 min</div>
-      <div class="q-option-card" onclick="fqSetDuration(90,this)">90 min</div>
-    </div>
+  <div id="fq-day-details" style="margin-top:12px;"></div>
+  <div id="fq-rest-nudge" style="display:none;margin-top:14px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text2);line-height:1.5;">
+    Your coach will build in rest and recovery days — training 6+ days requires careful programming.
   </div>
 </div>
 
@@ -4928,9 +4904,7 @@ function logGenericSession(sessionId,structure){
 
 // ====== FOUNDATION QUESTIONNAIRE ======
 var fqStep=1,fqTotalSteps=10;
-var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:[],sex:'',cycleSync:false};
-var fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
-var fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
+var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},sex:'',cycleSync:false};
 
 // Old fqValidateStep — overridden by newer version below
 function fqValidateStep(){
@@ -4947,7 +4921,7 @@ function fqValidateStep(){
     case 6: valid=!!fqAnswers.goal; break;
     case 7: valid=true; break;
     case 8: valid=!!fqAnswers.equip; break;
-    case 9: valid=!!fqAnswers.days; break;
+    case 9: valid=fqAnswers.days>=2; break;
     case 10:
       var c1=document.getElementById('fq-confirm-accurate');
       var c2=document.getElementById('fq-confirm-waiver');
@@ -4968,7 +4942,7 @@ function renderFQSummary(){
     ['Goal', fqAnswers.goal?fqAnswers.goal.replace(/_/g,' '):'-'],
     ['Sport', fqAnswers.sport&&fqAnswers.sport!=='none'?fqAnswers.sport.replace(/_/g,' '):'-'],
     ['Background', fqAnswers.background||'-'],
-    ['Days per week', fqAnswers.days||'-'],
+    ['Training days', (function(){var td=fqAnswers.trainingDays;if(td&&typeof td==='object'){var a=Object.keys(td).filter(function(k){return td[k].active;});if(a.length) return a.map(function(k){return k.charAt(0).toUpperCase()+k.slice(1);}).join(', ');}return fqAnswers.days?fqAnswers.days+' days':'-';})()],
     ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
     ['Injuries', fqAnswers.injury.length?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
   ];
@@ -5132,8 +5106,7 @@ function fqNext(){
   }
   // Step 9 — final, save day selections then complete
   if(fqStep===10){
-    fqAnswers.trainingDays=Object.assign({},fqDayState);
-    fqAnswers.amPm=Object.assign({},fqAmPm);
+    if(typeof fqTrainingDays!=='undefined') fqAnswers.trainingDays=JSON.parse(JSON.stringify(fqTrainingDays));
     completeFQ();return;
   }
   // Build profile just before step 10
@@ -5618,9 +5591,8 @@ function beginProgramme(){
 
 function openFoundationQ(){
   fqStep=1;
-  fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{},sex:'',cycleSync:false};
-  fqDayState={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
-  fqAmPm={mon:{am:true,pm:false},tue:{am:true,pm:false},wed:{am:true,pm:false},thu:{am:true,pm:false},fri:{am:true,pm:false},sat:{am:true,pm:false},sun:{am:true,pm:false}};
+  fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},sex:'',cycleSync:false};
+  if(typeof fqTrainingDays!=='undefined') fqTrainingDays={mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}};
   injuryZones={};
   parqClear();
   updateFQStep();
@@ -7247,7 +7219,8 @@ var fqAnswers={
   background:null,away:null,
   goal:null,path:'phoenix',
   sport:'none',position:'',season:'off',
-  equip:null,days:null,ampm:'morning',
+  equip:null,days:null,ampm:'morning',duration:60,
+  trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},
   injury:[],injuryNotes:''
 };
 var injuryZones={};
@@ -7403,44 +7376,62 @@ function fqSetEquip(val, el){
   fqValidateStep();
 }
 
-function fqSetDays(val, el){
-  if(fqAnswers.days===val){
-    fqAnswers.days=null;
-    el.classList.remove('active');
-  } else {
-    fqAnswers.days=val;
-    document.querySelectorAll('#fq-step-8 .q-option-card, #fq-step-7 .q-option-card').forEach(function(e){
-      if(e.onclick && e.onclick.toString().indexOf('fqSetDays')>-1) e.classList.remove('active');
-    });
-    el.classList.add('active');
-  }
+// Per-day training schedule
+var fqTrainingDays={mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}};
+
+function fqToggleTrainingDay(day, el){
+  fqTrainingDays[day].active=!fqTrainingDays[day].active;
+  el.classList.toggle('active',fqTrainingDays[day].active);
+  fqRenderDayDetails();
+  fqSyncDaysCount();
   fqValidateStep();
 }
 
-function fqSetDuration(val, el){
-  fqAnswers.duration=val;
-  var parent=el.parentElement;
-  parent.querySelectorAll('.q-option-card').forEach(function(e){e.classList.remove('active');});
-  el.classList.add('active');
-}
-function fqSetAmPm(val, el){
-  fqAnswers.ampm=val;
-  var parent=el.parentElement;
-  parent.querySelectorAll('.q-option-card').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
+function fqSyncDaysCount(){
+  var count=Object.values(fqTrainingDays).filter(function(d){return d.active;}).length;
+  fqAnswers.days=count||null;
+  fqAnswers.trainingDays=JSON.parse(JSON.stringify(fqTrainingDays));
+  // Rest day nudge
+  var nudge=document.getElementById('fq-rest-nudge');
+  if(nudge) nudge.style.display=count>=6?'block':'none';
 }
 
-if(!fqAnswers.trainingDays||!Array.isArray(fqAnswers.trainingDays)) fqAnswers.trainingDays=[];
-function fqToggleDayPicker(day, el){
-  if(!fqAnswers.trainingDays||!Array.isArray(fqAnswers.trainingDays)) fqAnswers.trainingDays=[];
-  var idx=fqAnswers.trainingDays.indexOf(day);
-  if(idx>-1){
-    fqAnswers.trainingDays.splice(idx,1);
-    el.classList.remove('active');
-  } else {
-    fqAnswers.trainingDays.push(day);
-    el.classList.add('active');
-  }
+function fqRenderDayDetails(){
+  var container=document.getElementById('fq-day-details');
+  if(!container) return;
+  var dayNames={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+  var html='';
+  Object.keys(dayNames).forEach(function(key){
+    if(!fqTrainingDays[key].active) return;
+    var d=fqTrainingDays[key];
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<span style="font-size:13px;font-weight:600;min-width:36px;color:var(--text);">'+dayNames[key]+'</span>';
+    // Time selector
+    html+='<div style="display:flex;gap:4px;">';
+    html+='<div class="q-option-card fq-day-opt'+(d.time==='AM'?' active':'')+'" onclick="fqSetDayTime(\''+key+'\',\'AM\',this)" style="padding:6px 12px;font-size:11px;border-radius:14px;">AM</div>';
+    html+='<div class="q-option-card fq-day-opt'+(d.time==='PM'?' active':'')+'" onclick="fqSetDayTime(\''+key+'\',\'PM\',this)" style="padding:6px 12px;font-size:11px;border-radius:14px;">PM</div>';
+    html+='</div>';
+    // Duration selector
+    html+='<div style="display:flex;gap:4px;margin-left:auto;">';
+    html+='<div class="q-option-card fq-day-opt'+(d.duration===45?' active':'')+'" onclick="fqSetDayDuration(\''+key+'\',45,this)" style="padding:6px 10px;font-size:11px;border-radius:14px;">45m</div>';
+    html+='<div class="q-option-card fq-day-opt'+(d.duration===60?' active':'')+'" onclick="fqSetDayDuration(\''+key+'\',60,this)" style="padding:6px 10px;font-size:11px;border-radius:14px;">60m</div>';
+    html+='<div class="q-option-card fq-day-opt'+(d.duration===90?' active':'')+'" onclick="fqSetDayDuration(\''+key+'\',90,this)" style="padding:6px 10px;font-size:11px;border-radius:14px;">90m</div>';
+    html+='</div>';
+    html+='</div>';
+  });
+  container.innerHTML=html;
+}
+
+function fqSetDayTime(day, val, el){
+  fqTrainingDays[day].time=val;
+  fqRenderDayDetails();
+  fqSyncDaysCount();
+}
+
+function fqSetDayDuration(day, val, el){
+  fqTrainingDays[day].duration=val;
+  fqRenderDayDetails();
+  fqSyncDaysCount();
 }
 
 function updateFqSkinPicker(){
@@ -7590,7 +7581,7 @@ function fqValidateStep(){
     case 6: valid=!!fqAnswers.goal; break;
     case 7: valid=true; break; // sport optional
     case 8: valid=!!fqAnswers.equip; break;
-    case 9: valid=!!fqAnswers.days; break;
+    case 9: valid=fqAnswers.days>=2; break;
     case 10:
       var c1=document.getElementById('fq-confirm-accurate');
       var c2=document.getElementById('fq-confirm-waiver');
@@ -7611,7 +7602,7 @@ function renderFQSummary(){
     ['Goal', fqAnswers.goal?fqAnswers.goal.replace(/_/g,' '):'-'],
     ['Sport', fqAnswers.sport&&fqAnswers.sport!=='none'?fqAnswers.sport.replace(/_/g,' '):'-'],
     ['Background', fqAnswers.background||'-'],
-    ['Days per week', fqAnswers.days||'-'],
+    ['Training days', (function(){var td=fqAnswers.trainingDays;if(td&&typeof td==='object'){var a=Object.keys(td).filter(function(k){return td[k].active;});if(a.length) return a.map(function(k){return k.charAt(0).toUpperCase()+k.slice(1);}).join(', ');}return fqAnswers.days?fqAnswers.days+' days':'-';})()],
     ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
     ['Injuries', fqAnswers.injury.length?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
   ];
@@ -7679,6 +7670,7 @@ function fqNext(){
     fqSeason:fqAnswers.season,
     fqEquip:fqAnswers.equip,
     fqDays:fqAnswers.days,
+    fqTrainingDays:fqAnswers.trainingDays,
     fqAmPm:fqAnswers.ampm,
     fqInjury:fqAnswers.injury,
     fqInjuryNotes:fqAnswers.injuryNotes,
@@ -7709,7 +7701,8 @@ function fqBack(){
 
 function openFoundationQ(){
   fqStep=1;
-  fqAnswers={name:'',dob:'',bw:0,sex:'',cycleSync:false,background:null,away:null,b1rm:0,sq:0,dl:0,pbw:0,goal:null,path:'phoenix',sport:'none',position:'',season:'off',equip:null,days:null,ampm:'morning',duration:60,injury:[],injuryNotes:'',parqClear:true};
+  fqAnswers={name:'',dob:'',bw:0,sex:'',cycleSync:false,background:null,away:null,b1rm:0,sq:0,dl:0,pbw:0,goal:null,path:'phoenix',sport:'none',position:'',season:'off',equip:null,days:null,ampm:'morning',duration:60,trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},injury:[],injuryNotes:'',parqClear:true};
+  if(typeof fqTrainingDays!=='undefined') fqTrainingDays={mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}};
   parqData={};injuryZones={};
   updateFQStep();
   showScreen('screen-foundation-q');

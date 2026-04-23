@@ -1,7 +1,8 @@
-var CACHE_NAME = 'phoenix-v1';
+var CACHE_NAME = 'phoenix-v4.4.9';
 var CACHE_FILES = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e) {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
       return cache.addAll(CACHE_FILES);
@@ -16,7 +17,7 @@ self.addEventListener('activate', function(e) {
         names.filter(function(name) { return name !== CACHE_NAME; })
              .map(function(name) { return caches.delete(name); })
       );
-    })
+    }).then(function() { return self.clients.claim(); })
   );
 });
 

@@ -2915,7 +2915,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.4.8';
+var APP_VERSION='4.4.9';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -3010,7 +3010,7 @@ function loadState(){
       // Migrate to new key if needed
       localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
     }
-  }catch(e){}
+  }catch(e){ console.error('loadState parse error:', e); localStorage.removeItem('phoenix_athlete'); localStorage.removeItem('phoenix_v2'); }
 }
 function saveAthlete(d){athlete=d;localStorage.setItem('phoenix_athlete',JSON.stringify(d));}
 
@@ -3144,10 +3144,10 @@ function editProfile(){
 }
 function resetApp(){
   if(confirm('Reset all data? This cannot be undone.')){
-    localStorage.removeItem('phoenix_athlete');
-    localStorage.removeItem('phoenix_v2');
-    localStorage.removeItem('phoenix_session_logs');
-    localStorage.removeItem('phoenix_core_logs');
+    for(var i=localStorage.length-1;i>=0;i--){
+      var key=localStorage.key(i);
+      if(key.indexOf('phoenix_')===0) localStorage.removeItem(key);
+    }
     athlete=null;location.reload();
   }
 }
@@ -6858,20 +6858,6 @@ function logLiftSession(sessionId){
 function getSessionLogs(sessionId){
   var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
   return sessionId?logs.filter(function(l){return l.sessionId===sessionId;}):logs;
-}
-
-function exportAllData(){
-  var data={
-    athlete:athlete,
-    sessionLogs:JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]'),
-    coreLogs:JSON.parse(localStorage.getItem('phoenix_core_logs')||'[]'),
-    exportDate:new Date().toISOString()
-  };
-  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;a.download='phoenix_backup_'+new Date().toISOString().split('T')[0]+'.json';
-  a.click();URL.revokeObjectURL(url);
 }
 
 // ====== BACKUP & RESTORE ======

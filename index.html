@@ -1305,6 +1305,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <button class="btn-primary" style="padding:10px 24px;font-size:13px;" onclick="restoreFromAutoBackup()">Restore My Data</button>
   </div>
 
+  <div id="splash-import-section" style="display:none;margin-top:22px;text-align:center;">
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:1.2px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;">Already have a Phoenix backup? Restore here</div>
+    <button onclick="restoreMyData()" style="background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:10px 28px;border-radius:6px;cursor:pointer;">Import Backup</button>
+  </div>
+
 </div>
 
 <!-- Sign-off — Let's Rise bottom of splash -->
@@ -2910,7 +2915,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.4.7';
+var APP_VERSION='4.4.8';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -6919,13 +6924,31 @@ function handleRestoreFile(e){
   reader.onload=function(ev){
     try{
       var parsed=JSON.parse(ev.target.result);
-      var data=parsed.data||null;
-      if(!data){alert('Invalid backup file — no data found.');return;}
-      var hasAthlete=false;
-      for(var k in data){if(k==='phoenix_athlete'||k==='phoenix_v2'){hasAthlete=true;break;}}
-      if(!hasAthlete){alert('Invalid backup file — no athlete data found.');return;}
-      var ts=parsed.timestamp?new Date(parsed.timestamp).toLocaleDateString():'unknown date';
-      if(!confirm('Restore this backup from '+ts+'? This will overwrite current data.')) return;
+      var isLegacy=false;
+      var data=null;
+
+      if(parsed.data){
+        // New format: { timestamp, version, data: { phoenix_*: ... } }
+        data=parsed.data;
+        var hasAthlete=false;
+        for(var k in data){if(k==='phoenix_athlete'||k==='phoenix_v2'){hasAthlete=true;break;}}
+        if(!hasAthlete){alert('Invalid backup file — no athlete data found.');return;}
+      } else if(parsed.athlete){
+        // Legacy format: { athlete, sessionLogs, coreLogs, exportDate }
+        isLegacy=true;
+        data={};
+        data['phoenix_athlete']=JSON.stringify(parsed.athlete);
+        if(parsed.sessionLogs) data['phoenix_session_logs']=JSON.stringify(parsed.sessionLogs);
+        if(parsed.coreLogs) data['phoenix_core_logs']=JSON.stringify(parsed.coreLogs);
+      } else {
+        alert('Invalid backup file — no data found.');return;
+      }
+
+      var ts=parsed.timestamp?new Date(parsed.timestamp).toLocaleDateString():
+             parsed.exportDate?new Date(parsed.exportDate).toLocaleDateString():'unknown date';
+      var msg='Restore this backup from '+ts+'? This will overwrite current data.';
+      if(isLegacy) msg+='\n\nLegacy backup detected — converting to current format.';
+      if(!confirm(msg)) return;
       for(var key in data){
         localStorage.setItem(key,data[key]);
       }
@@ -7261,6 +7284,8 @@ if(athlete){
   document.getElementById('splash-start-btn').addEventListener('click',function(){
     openFoundationQ();
   });
+  var importSection=document.getElementById('splash-import-section');
+  if(importSection) importSection.style.display='block';
   checkAutoRecovery();
 }
 

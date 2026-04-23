@@ -1300,6 +1300,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button class="btn-secondary" id="splash-continue-btn" style="display:none;margin-top:0;">Continue Training</button>
   <div id="splash-tier-badge" style="margin-top:14px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
   <div id="splash-founding-badge" style="margin-top:10px;font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);opacity:0.85;">Founding Member &mdash; 1,987 of 2,000 spots remaining</div>
+  <div id="recovery-banner" style="display:none;margin-top:18px;padding:14px 18px;background:var(--bg2);border:1px solid var(--gold);border-radius:10px;text-align:center;">
+    <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;" id="recovery-banner-msg">Previous data found. Restore?</div>
+    <button class="btn-primary" style="padding:10px 24px;font-size:13px;" onclick="restoreFromAutoBackup()">Restore My Data</button>
+  </div>
 
 </div>
 
@@ -1813,7 +1817,13 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div id="band-profile-display"></div>
     <button class="edit-btn" onclick="openBandSetup()" id="band-setup-btn" style="margin-top:10px;color:var(--gold);border-color:var(--gold);">⊕ Set Up My Bands</button>
   </div>
-  <button class="edit-btn" onclick="exportAllData()" style="margin-top:8px;color:#6a9fd8;border-color:#2a5fa8">&#8659; Export All Data (Backup)</button>
+  <div style="margin-top:28px;margin-bottom:28px;">
+    <div class="section-hdr">Backup &amp; Restore</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Export your data to keep a safe copy, or restore from a previous backup.</div>
+    <button class="edit-btn" onclick="exportMyData()" style="color:#6a9fd8;border-color:#2a5fa8">&#8659; Export My Data</button>
+    <button class="edit-btn" onclick="restoreMyData()" style="margin-top:8px;color:#6a9fd8;border-color:#2a5fa8">&#8657; Restore My Data</button>
+    <input type="file" id="restore-file-input" accept=".json" style="display:none" onchange="handleRestoreFile(event)">
+  </div>
   <button class="danger-btn" onclick="resetApp()">Reset App Data</button>
 </div>
 <div class="bottom-nav">
@@ -2900,7 +2910,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
 <script>
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.4.6';
+var APP_VERSION='4.4.7';
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
   if(stored!==APP_VERSION){
@@ -6859,6 +6869,106 @@ function exportAllData(){
   a.click();URL.revokeObjectURL(url);
 }
 
+// ====== BACKUP & RESTORE ======
+
+function collectAllPhoenixKeys(){
+  var data={};
+  for(var i=0;i<localStorage.length;i++){
+    var key=localStorage.key(i);
+    if(key.indexOf('phoenix_')===0 && key!=='phoenix_backup_latest'){
+      data[key]=localStorage.getItem(key);
+    }
+  }
+  return data;
+}
+
+function createAutoBackup(){
+  if(!athlete) return;
+  var snapshot={
+    timestamp:new Date().toISOString(),
+    version:APP_VERSION,
+    data:collectAllPhoenixKeys()
+  };
+  localStorage.setItem('phoenix_backup_latest',JSON.stringify(snapshot));
+}
+
+function exportMyData(){
+  var data=collectAllPhoenixKeys();
+  var payload={
+    timestamp:new Date().toISOString(),
+    version:APP_VERSION,
+    data:data
+  };
+  var blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  var d=new Date().toISOString().split('T')[0];
+  a.href=url;a.download='phoenix-backup-'+d+'.json';
+  a.click();URL.revokeObjectURL(url);
+  alert('Backup saved. Email this file to yourself so you never lose your data.');
+}
+
+function restoreMyData(){
+  document.getElementById('restore-file-input').click();
+}
+
+function handleRestoreFile(e){
+  var file=e.target.files[0];
+  if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      var parsed=JSON.parse(ev.target.result);
+      var data=parsed.data||null;
+      if(!data){alert('Invalid backup file — no data found.');return;}
+      var hasAthlete=false;
+      for(var k in data){if(k==='phoenix_athlete'||k==='phoenix_v2'){hasAthlete=true;break;}}
+      if(!hasAthlete){alert('Invalid backup file — no athlete data found.');return;}
+      var ts=parsed.timestamp?new Date(parsed.timestamp).toLocaleDateString():'unknown date';
+      if(!confirm('Restore this backup from '+ts+'? This will overwrite current data.')) return;
+      for(var key in data){
+        localStorage.setItem(key,data[key]);
+      }
+      location.reload();
+    }catch(err){
+      alert('Could not read backup file. Make sure it is a valid Phoenix backup.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+function checkAutoRecovery(){
+  if(athlete) return;
+  var raw=localStorage.getItem('phoenix_backup_latest');
+  if(!raw) return;
+  try{
+    var backup=JSON.parse(raw);
+    if(!backup.data||!backup.data.phoenix_athlete) return;
+    var ts=backup.timestamp?new Date(backup.timestamp).toLocaleDateString():'a previous session';
+    var banner=document.getElementById('recovery-banner');
+    var msg=document.getElementById('recovery-banner-msg');
+    if(banner&&msg){
+      msg.textContent='Previous data found from '+ts+'. Restore?';
+      banner.style.display='block';
+    }
+  }catch(e){}
+}
+
+function restoreFromAutoBackup(){
+  var raw=localStorage.getItem('phoenix_backup_latest');
+  if(!raw) return;
+  try{
+    var backup=JSON.parse(raw);
+    for(var key in backup.data){
+      localStorage.setItem(key,backup.data[key]);
+    }
+    location.reload();
+  }catch(e){
+    alert('Could not restore backup data.');
+  }
+}
+
 // ====== ACCESS + TIER SYSTEM ======
 
 var BETA_CODES = {
@@ -7116,6 +7226,7 @@ loadSkin();
 loadFont();
 loadBandProfile();
 loadState();
+createAutoBackup();
 
 // Render tier badge on splash
 var tierBadge=document.getElementById('splash-tier-badge');
@@ -7150,6 +7261,7 @@ if(athlete){
   document.getElementById('splash-start-btn').addEventListener('click',function(){
     openFoundationQ();
   });
+  checkAutoRecovery();
 }
 
 // ====== SESSION DATA ======

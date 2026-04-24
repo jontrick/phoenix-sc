@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.2';
+var APP_VERSION='4.6.3';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3041,7 +3041,11 @@ var FIELD_MAP=[
 function athleteToProfile(a){
   if(!a) return {};
   var p={};
-  FIELD_MAP.forEach(function(pair){if(a[pair[0]]!==undefined) p[pair[1]]=a[pair[0]];});
+  FIELD_MAP.forEach(function(pair){
+    var val=a[pair[0]];
+    if(val===''||val===undefined) val=null;
+    p[pair[1]]=val;
+  });
   return p;
 }
 function profileToAthlete(p){
@@ -3182,6 +3186,9 @@ async function loadProfileAndRoute(){
     if(pRes.error&&pRes.error.code!=='PGRST116') throw pRes.error;
     profile=pRes.data;
     console.log('[PHX] profile fetched:',profile);
+    if(profile&&!profile.name&&currentSession&&currentSession.user&&currentSession.user.user_metadata&&currentSession.user.user_metadata.name){
+      profile.name=currentSession.user.user_metadata.name;
+    }
   }catch(e){
     console.warn('Profile fetch failed:',e);
     // Check for 401/403 — session expired
@@ -3322,14 +3329,21 @@ function showMigrationModal(localAthlete,session){
 
 // ====== SUPABASE WRITE HELPER ======
 async function saveAthleteToSupabase(data){
-  if(!currentSession) return;
+  if(!currentSession||!currentSession.user||!currentSession.user.id) return;
   var profileData=athleteToProfile(data);
   profileData.id=currentSession.user.id;
+  profileData.updated_at=new Date().toISOString();
+  console.log('[PHX] saveAthleteToSupabase payload:',profileData);
   try{
     var res=await sb.from('profiles').upsert(profileData);
-    if(res.error) throw res.error;
+    if(res.error){
+      console.error('[PHX] Supabase save failed:',res.error);
+      console.error('[PHX] Payload that failed:',profileData);
+    }else{
+      console.log('[PHX] Supabase save succeeded');
+    }
   }catch(e){
-    console.error('Supabase save failed:',e);
+    console.error('[PHX] Supabase save exception:',e);
   }
 }
 

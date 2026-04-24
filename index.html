@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.6';
+var APP_VERSION='4.6.7';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7539,7 +7539,7 @@ function getVideoRewardProgress(){
 
 function getTierData(){
   return {
-    tier: (athlete&&athlete.tier)||localStorage.getItem('phoenix_user_tier')||'ember',
+    tier: (athlete&&athlete.tier)||localStorage.getItem('phoenix_user_tier')||'free',
     source: (athlete&&athlete.tierSource)||localStorage.getItem('phoenix_tier_source')||'free',
     beta: localStorage.getItem('phoenix_beta_user')==='true',
     reward_expiry: localStorage.getItem('phoenix_reward_expiry')||null,
@@ -7574,16 +7574,18 @@ function hasRisingAccess(){
 }
 
 function getTierLabel(){
+  var d=getTierData();
+  // Special-case overrides for pro access variants
   if(hasProAccess()){
-    var d=getTierData();
     if(d.beta||d.source==='beta_lifetime') return 'Phoenix Pro — Beta Lifetime';
     if(d.source==='reward') return 'Phoenix Pro — Reward';
     if(d.pro_trial_expiry&&new Date()<new Date(d.pro_trial_expiry)) return 'Phoenix Pro — Trial';
     return 'Phoenix Pro';
   }
   if(hasIgniteAccess()) return 'Ignite';
-  if(hasRisingAccess()) return 'Rising';
-  return 'Ember';
+  // Map tier values to display labels
+  var tierMap={free:'Ember',unlock:'Rising',pro:'Burning'};
+  return tierMap[d.tier]||'Ember';
 }
 
 function activateCode(code){

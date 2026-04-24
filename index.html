@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.3';
+var APP_VERSION='4.6.4';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3167,7 +3167,13 @@ function enableAuthButtons(){
 }
 
 // ====== PROFILE ROUTING ======
+var _routingInFlight=false;
 async function loadProfileAndRoute(){
+  if(_routingInFlight){console.log('[PHX] skipping duplicate loadProfileAndRoute');return;}
+  _routingInFlight=true;
+  try{return await _loadProfileAndRouteInner();}finally{_routingInFlight=false;}
+}
+async function _loadProfileAndRouteInner(){
   console.log('[PHX] loadProfileAndRoute start');
   var session;
   try{
@@ -3218,18 +3224,8 @@ async function loadProfileAndRoute(){
     return;
   }
 
-  // Check for pending migration retry
-  var pendingMigration=localStorage.getItem(PHX_AUTH_PENDING_KEY);
-  if(pendingMigration){
-    try{
-      var pendingData=JSON.parse(pendingMigration);
-      var uRes=await sb.from('profiles').upsert(Object.assign({id:session.user.id},pendingData));
-      if(!uRes.error){
-        localStorage.removeItem(PHX_AUTH_PENDING_KEY);
-        profile=Object.assign(profile||{},pendingData);
-      }
-    }catch(e){console.warn('Pending migration retry failed:',e);}
-  }
+  // v4.6.4: removed silent auto-write of pending migration data.
+  // If pending migration exists, the migration modal handles it via user-confirmed Sync.
 
   var localData=localStorage.getItem('phoenix_athlete');
   var localAthlete=null;
@@ -3289,28 +3285,20 @@ function showMigrationModal(localAthlete,session){
     this.disabled=true;
     var msgEl=document.getElementById('migration-msg');
     msgEl.textContent='Syncing...';msgEl.style.color='var(--text2)';
-    var profileData=athleteToProfile(localAthlete);
-    profileData.id=session.user.id;
+    // v4.6.4: route through saveAthleteToSupabase — uses currentSession.user.id,
+    // coerces empty strings to null via athleteToProfile(), and has full error logging.
     try{
-      var res=await sb.from('profiles').upsert(profileData);
-      if(res.error) throw res.error;
+      await saveAthleteToSupabase(localAthlete);
       localStorage.removeItem(PHX_AUTH_PENDING_KEY);
       overlay.remove();
       athlete=localAthlete;
       viewWeek=progWeek();
       navTo('today');
     }catch(e){
-      console.error('Migration sync failed:',e);
-      // Store for retry
-      localStorage.setItem(PHX_AUTH_PENDING_KEY,JSON.stringify(profileData));
-      msgEl.textContent='Sync failed \u2014 will retry next time. Loading local data.';
+      console.error('[PHX] Migration sync failed:',e);
+      msgEl.textContent='Sync failed. Please try again.';
       msgEl.style.color='var(--red)';
-      setTimeout(function(){
-        overlay.remove();
-        athlete=localAthlete;
-        viewWeek=progWeek();
-        navTo('today');
-      },2000);
+      this.disabled=false;
     }
   });
 
@@ -3334,17 +3322,13 @@ async function saveAthleteToSupabase(data){
   profileData.id=currentSession.user.id;
   profileData.updated_at=new Date().toISOString();
   console.log('[PHX] saveAthleteToSupabase payload:',profileData);
-  try{
-    var res=await sb.from('profiles').upsert(profileData);
-    if(res.error){
-      console.error('[PHX] Supabase save failed:',res.error);
-      console.error('[PHX] Payload that failed:',profileData);
-    }else{
-      console.log('[PHX] Supabase save succeeded');
-    }
-  }catch(e){
-    console.error('[PHX] Supabase save exception:',e);
+  var res=await sb.from('profiles').upsert(profileData);
+  if(res.error){
+    console.error('[PHX] Supabase save failed:',res.error);
+    console.error('[PHX] Payload that failed:',profileData);
+    throw res.error;
   }
+  console.log('[PHX] Supabase save succeeded');
 }
 
 // Background sync — fetch fresh profile and update local cache
@@ -3453,7 +3437,7 @@ function loadState(){
     }
   }catch(e){ console.error('loadState parse error:', e); localStorage.removeItem('phoenix_athlete'); localStorage.removeItem('phoenix_v2'); }
 }
-function saveAthlete(d){athlete=d;localStorage.setItem('phoenix_athlete',JSON.stringify(d));saveAthleteToSupabase(d);}
+function saveAthlete(d){athlete=d;localStorage.setItem('phoenix_athlete',JSON.stringify(d));saveAthleteToSupabase(d).catch(function(e){});}
 
 function progWeek(){
   if(!athlete||!athlete.startDate) return 1;

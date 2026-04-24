@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <title>PROJECT PHOENIX PLAN</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
   (function(){try{emailjs.init('6-eXtS8UDYr0TBGyG');}catch(e){console.warn('EmailJS not loaded yet');}})();
@@ -316,6 +317,32 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .walk-ctrl-btn.stop{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);}
 .walk-weight-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
 .walk-weight-row label{font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;white-space:nowrap;}
+
+/* AUTH SCREEN */
+#screen-auth{align-items:center;justify-content:center;background:var(--bg);position:relative;overflow:hidden;}
+.auth-bg{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 30%,rgba(200,150,62,0.08) 0%,transparent 70%),radial-gradient(ellipse 60% 40% at 80% 80%,rgba(224,92,42,0.05) 0%,transparent 60%);}
+.auth-content{position:relative;text-align:center;padding:40px 24px;animation:fadeUp 0.8s ease both;z-index:2;width:100%;max-width:400px;margin:0 auto;}
+.auth-emblem{width:90px;height:90px;margin:0 auto 20px;color:var(--gold);}
+.auth-emblem svg{width:100%;height:100%;display:block;}
+.auth-tagline{font-family:var(--font-d);font-size:13px;font-weight:300;letter-spacing:4px;color:var(--text2);text-transform:uppercase;margin-bottom:28px;}
+.auth-tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border);}
+.auth-tab{flex:1;padding:12px 8px;font-family:var(--font-d);font-size:12px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--text3);background:none;border:none;cursor:pointer;transition:all 0.2s;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.auth-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.auth-form{text-align:left;}
+.auth-field{margin-bottom:14px;}
+.auth-field label{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:3px;color:var(--text2);text-transform:uppercase;display:block;margin-bottom:6px;}
+.auth-field input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--font-b);font-size:16px;font-weight:500;padding:13px 16px;border-radius:var(--radius);outline:none;transition:border-color 0.2s;-webkit-appearance:none;box-sizing:border-box;}
+.auth-field input:focus{border-color:var(--gold);}
+.auth-field input::placeholder{color:var(--text3);font-size:14px;}
+.auth-field-hint{font-size:11px;color:var(--text3);margin-top:4px;}
+.auth-msg{min-height:20px;font-size:13px;line-height:1.5;margin:14px 0;text-align:center;padding:0 8px;}
+.auth-msg.error{color:var(--red);}
+.auth-msg.success{color:var(--green);}
+.auth-forgot{display:inline-block;font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);cursor:pointer;margin-top:4px;transition:color 0.2s;background:none;border:none;padding:0;text-decoration:underline;text-underline-offset:2px;}
+.auth-forgot:hover,.auth-forgot:active{color:var(--gold);}
+.auth-bottom-note{font-size:11px;color:var(--text3);line-height:1.5;margin-top:22px;text-align:center;}
+.auth-version{text-align:center;padding:24px 16px 16px;font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text3);}
+.auth-offline-msg{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:18px;font-size:13px;color:var(--text2);line-height:1.5;text-align:center;}
 
 /* SPLASH */
 #screen-splash{align-items:center;justify-content:center;background:var(--bg);position:relative;overflow:hidden;}
@@ -725,8 +752,56 @@ textarea.q-input{resize:vertical;min-height:60px;}
 </head>
 <body>
 
+<!-- AUTH SCREEN -->
+<div id="screen-auth" class="screen">
+<div class="auth-bg"></div>
+<div class="auth-content">
+  <div class="splash-title">Project</div>
+  <div class="splash-name">Phoenix</div>
+  <div class="splash-sub" style="margin-bottom:24px;">Plan</div>
+  <div class="auth-tagline">Sign in to continue</div>
+  <div id="auth-offline-banner" class="auth-offline-msg" style="display:none;"></div>
+  <div class="auth-tabs">
+    <button class="auth-tab active" id="auth-tab-signin" onclick="switchAuthTab('signin')">Sign In</button>
+    <button class="auth-tab" id="auth-tab-signup" onclick="switchAuthTab('signup')">Create Account</button>
+  </div>
+  <div id="auth-form-signin" class="auth-form">
+    <div class="auth-field">
+      <label>Email</label>
+      <input type="email" id="auth-email-si" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="auth-pass-si" placeholder="Your password" autocomplete="current-password">
+    </div>
+    <button class="auth-forgot" onclick="handleForgotPassword()">Forgot password?</button>
+    <div class="auth-msg" id="auth-msg-si"></div>
+    <button class="btn-primary" id="auth-submit-si" onclick="handleSignIn()">Sign In</button>
+  </div>
+  <div id="auth-form-signup" class="auth-form" style="display:none;">
+    <div class="auth-field">
+      <label>Name <span style="font-weight:300;letter-spacing:0;text-transform:none;font-size:10px;">(optional)</span></label>
+      <input type="text" id="auth-name-su" placeholder="Your name" autocomplete="name">
+    </div>
+    <div class="auth-field">
+      <label>Email</label>
+      <input type="email" id="auth-email-su" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label>Password</label>
+      <input type="password" id="auth-pass-su" placeholder="Choose a password" autocomplete="new-password">
+      <div class="auth-field-hint">Password must be at least 8 characters</div>
+    </div>
+    <div class="auth-msg" id="auth-msg-su"></div>
+    <button class="btn-primary" id="auth-submit-su" onclick="handleSignUp()">Create Account</button>
+  </div>
+  <div class="auth-bottom-note">Already have a Phoenix backup? Import data after sign-in</div>
+  <div class="auth-version" id="auth-version-display">v&mdash;</div>
+</div>
+</div>
+
 <!-- SPLASH -->
-<div id="screen-splash" class="screen active">
+<div id="screen-splash" class="screen">
 <div class="splash-bg"></div>
 <!-- Video background — replace src with your actual video URL when ready -->
 <video class="splash-video-bg" id="splash-video" autoplay muted loop playsinline poster="">
@@ -1834,6 +1909,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <input type="file" id="restore-file-input" accept=".json" style="display:none" onchange="handleRestoreFile(event)">
   </div>
   <button class="danger-btn" onclick="resetApp()">Reset App Data</button>
+  <button class="edit-btn" onclick="handleSignOut()" style="margin-top:12px;color:var(--text2);border-color:var(--border2);">Sign Out</button>
   <div style="text-align:center;padding:24px 16px 40px;font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">
     <div style="margin-bottom:4px;">PROJECT PHOENIX</div>
     <div id="settings-version-display">Version —</div>
@@ -2923,15 +2999,23 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 
 <script>
+// ====== SUPABASE CLIENT ======
+var SUPABASE_URL='https://mxtowhccuqarszcwpbkq.supabase.co';
+var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
+var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.5.0';
+var APP_VERSION='4.6.0';
+var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
   var settings=document.getElementById('settings-version-display');
   var sidebar=document.getElementById('sidebar-version-display');
+  var auth=document.getElementById('auth-version-display');
   if(splash) splash.textContent='v'+APP_VERSION;
   if(settings) settings.textContent='Version '+APP_VERSION;
   if(sidebar) sidebar.textContent='v'+APP_VERSION;
+  if(auth) auth.textContent='v'+APP_VERSION;
 }
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
@@ -2940,6 +3024,293 @@ function renderVersionDisplays(){
     // Preserve user data keys, just flag version update
   }
 })();
+
+// ====== FIELD MAPPING ======
+var FIELD_MAP=[
+  ['name','name'],['dob','dob'],['bw','bw'],['sex','sex'],
+  ['cycleSync','cycle_sync'],['b1rm','b1rm'],['sq','sq'],['dl','dl'],['pbw','pbw'],
+  ['fqDuration','fq_duration'],['fqBackground','fq_background'],['fqAway','fq_away'],
+  ['fqGoal','fq_goal'],['fqGoals','fq_goals'],['fqSport','fq_sport'],
+  ['fqPosition','fq_position'],['fqSeason','fq_season'],['fqEquip','fq_equip'],
+  ['fqDays','fq_days'],['fqTrainingDays','fq_training_days'],['fqAmPm','fq_am_pm'],
+  ['fqInjury','fq_injury'],['fqInjuryNotes','fq_injury_notes'],['fqPath','fq_path'],
+  ['fqParqClear','fq_parq_clear'],['fqCompleted','fq_completed'],
+  ['currentWeek','current_week'],['aiProgramme','ai_programme'],
+  ['aiProgrammeDate','ai_programme_date'],['aiProgrammeTrigger','ai_programme_trigger']
+];
+function athleteToProfile(a){
+  if(!a) return {};
+  var p={};
+  FIELD_MAP.forEach(function(pair){if(a[pair[0]]!==undefined) p[pair[1]]=a[pair[0]];});
+  return p;
+}
+function profileToAthlete(p){
+  if(!p) return {};
+  var a={};
+  FIELD_MAP.forEach(function(pair){if(p[pair[1]]!==undefined) a[pair[0]]=p[pair[1]];});
+  return a;
+}
+
+// ====== AUTH HANDLERS ======
+var currentSession=null;
+
+function switchAuthTab(tab){
+  document.getElementById('auth-tab-signin').classList.toggle('active',tab==='signin');
+  document.getElementById('auth-tab-signup').classList.toggle('active',tab==='signup');
+  document.getElementById('auth-form-signin').style.display=tab==='signin'?'block':'none';
+  document.getElementById('auth-form-signup').style.display=tab==='signup'?'block':'none';
+  document.getElementById('auth-msg-si').textContent='';
+  document.getElementById('auth-msg-su').textContent='';
+}
+
+function setAuthMsg(id,msg,isError){
+  var el=document.getElementById(id);
+  el.textContent=msg;
+  el.className='auth-msg '+(isError?'error':'success');
+}
+
+async function handleSignIn(){
+  var email=document.getElementById('auth-email-si').value.trim();
+  var pass=document.getElementById('auth-pass-si').value;
+  if(!email||!pass){setAuthMsg('auth-msg-si','Please enter email and password.',true);return;}
+  document.getElementById('auth-submit-si').disabled=true;
+  try{
+    var res=await sb.auth.signInWithPassword({email:email,password:pass});
+    if(res.error) throw res.error;
+  }catch(e){
+    setAuthMsg('auth-msg-si',e.message||'Sign in failed.',true);
+    document.getElementById('auth-submit-si').disabled=false;
+  }
+}
+
+async function handleSignUp(){
+  var name=document.getElementById('auth-name-su').value.trim();
+  var email=document.getElementById('auth-email-su').value.trim();
+  var pass=document.getElementById('auth-pass-su').value;
+  if(!email||!pass){setAuthMsg('auth-msg-su','Please enter email and password.',true);return;}
+  if(pass.length<8){setAuthMsg('auth-msg-su','Password must be at least 8 characters.',true);return;}
+  document.getElementById('auth-submit-su').disabled=true;
+  try{
+    var res=await sb.auth.signUp({email:email,password:pass,options:{data:{name:name||''}}});
+    if(res.error) throw res.error;
+    setAuthMsg('auth-msg-su','Check your email to confirm your account.',false);
+  }catch(e){
+    setAuthMsg('auth-msg-su',e.message||'Sign up failed.',true);
+  }
+  document.getElementById('auth-submit-su').disabled=false;
+}
+
+async function handleForgotPassword(){
+  var email=document.getElementById('auth-email-si').value.trim();
+  if(!email){setAuthMsg('auth-msg-si','Enter your email above first.',true);return;}
+  try{
+    var res=await sb.auth.resetPasswordForEmail(email);
+    if(res.error) throw res.error;
+    setAuthMsg('auth-msg-si','Check your email for a reset link.',false);
+  }catch(e){
+    setAuthMsg('auth-msg-si',e.message||'Could not send reset email.',true);
+  }
+}
+
+async function handleSignOut(){
+  try{await sb.auth.signOut();}catch(e){console.warn('Sign out error:',e);}
+  location.reload();
+}
+
+// ====== OFFLINE BANNER ======
+function showOfflineBanner(){
+  var banner=document.getElementById('offline-banner');
+  if(!banner){
+    banner=document.createElement('div');
+    banner.id='offline-banner';
+    banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:500;background:var(--bg2);border-bottom:1px solid var(--gold);padding:8px 16px;font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--gold);text-align:center;text-transform:uppercase;';
+    banner.textContent='Offline \u2014 changes will sync when online';
+    document.body.appendChild(banner);
+  }
+  banner.style.display='block';
+}
+function hideOfflineBanner(){
+  var banner=document.getElementById('offline-banner');
+  if(banner) banner.style.display='none';
+}
+
+// ====== PROFILE ROUTING ======
+async function loadProfileAndRoute(){
+  var session;
+  try{
+    var res=await sb.auth.getSession();
+    session=res.data.session;
+  }catch(e){session=null;}
+  if(!session){
+    showScreen('screen-auth');
+    return;
+  }
+  currentSession=session;
+  // Try fetch profile from Supabase
+  var profile=null;
+  try{
+    var pRes=await sb.from('profiles').select('*').eq('id',session.user.id).single();
+    if(pRes.error&&pRes.error.code!=='PGRST116') throw pRes.error;
+    profile=pRes.data;
+  }catch(e){
+    console.warn('Profile fetch failed:',e);
+    // Check for 401/403 — session expired
+    if(e&&(e.code==='401'||e.code==='403'||e.message&&e.message.indexOf('JWT')>=0)){
+      try{await sb.auth.signOut();}catch(ex){}
+      showScreen('screen-auth');
+      return;
+    }
+    // Network failure — try local cache
+    var localData=localStorage.getItem('phoenix_athlete');
+    if(localData){
+      try{athlete=JSON.parse(localData);}catch(ex){}
+      if(athlete){
+        showOfflineBanner();
+        viewWeek=progWeek();
+        navTo('today');
+        return;
+      }
+    }
+    // No local cache, need network
+    var authOffline=document.getElementById('auth-offline-banner');
+    if(authOffline){
+      authOffline.textContent='Connection needed for first-time sign-in';
+      authOffline.style.display='block';
+    }
+    showScreen('screen-auth');
+    return;
+  }
+
+  // Check for pending migration retry
+  var pendingMigration=localStorage.getItem(PHX_AUTH_PENDING_KEY);
+  if(pendingMigration){
+    try{
+      var pendingData=JSON.parse(pendingMigration);
+      var uRes=await sb.from('profiles').upsert(Object.assign({id:session.user.id},pendingData));
+      if(!uRes.error){
+        localStorage.removeItem(PHX_AUTH_PENDING_KEY);
+        profile=Object.assign(profile||{},pendingData);
+      }
+    }catch(e){console.warn('Pending migration retry failed:',e);}
+  }
+
+  var localData=localStorage.getItem('phoenix_athlete');
+  var localAthlete=null;
+  if(localData){try{localAthlete=JSON.parse(localData);}catch(e){}}
+
+  // Profile exists and questionnaire completed
+  if(profile&&profile.fq_completed){
+    athlete=profileToAthlete(profile);
+    // Preserve local-only fields
+    if(localAthlete){
+      ['startDate','b100','p1rm','row500','mile','plank','ohsq','waiverAccepted','notes','accessCode','tier','tierGrantedAt','bandProfile','fqProfile','fqBlock'].forEach(function(k){
+        if(localAthlete[k]!==undefined&&athlete[k]===undefined) athlete[k]=localAthlete[k];
+      });
+    }
+    localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+    viewWeek=progWeek();
+    navTo('today');
+    return;
+  }
+
+  // Profile exists but questionnaire NOT completed — check for local migration
+  if(localAthlete&&localAthlete.fqCompleted){
+    showMigrationModal(localAthlete,session);
+    return;
+  }
+
+  // No profile data, no local data — new user, show splash to begin
+  showScreen('screen-splash');
+}
+
+function showMigrationModal(localAthlete,session){
+  // Build modal
+  var overlay=document.createElement('div');
+  overlay.id='migration-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;display:flex;align-items:center;justify-content:center;padding:24px;';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:380px;';
+  box.innerHTML='<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Data Migration</div>'
+    +'<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:12px;">Previous Phoenix data found</div>'
+    +'<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:24px;">We found existing training data on this device from before you signed in. Sync it to your Phoenix account?</div>'
+    +'<div id="migration-msg" style="min-height:18px;font-size:12px;margin-bottom:14px;text-align:center;"></div>'
+    +'<button id="migration-sync-btn" class="btn-primary" style="margin-bottom:10px;">Sync to account</button>'
+    +'<button id="migration-fresh-btn" class="btn-secondary" style="color:var(--red);border-color:var(--red);">Start fresh</button>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  document.getElementById('migration-sync-btn').addEventListener('click',async function(){
+    this.disabled=true;
+    var msgEl=document.getElementById('migration-msg');
+    msgEl.textContent='Syncing...';msgEl.style.color='var(--text2)';
+    var profileData=athleteToProfile(localAthlete);
+    profileData.id=session.user.id;
+    try{
+      var res=await sb.from('profiles').upsert(profileData);
+      if(res.error) throw res.error;
+      localStorage.removeItem(PHX_AUTH_PENDING_KEY);
+      overlay.remove();
+      athlete=localAthlete;
+      viewWeek=progWeek();
+      navTo('today');
+    }catch(e){
+      console.error('Migration sync failed:',e);
+      // Store for retry
+      localStorage.setItem(PHX_AUTH_PENDING_KEY,JSON.stringify(profileData));
+      msgEl.textContent='Sync failed \u2014 will retry next time. Loading local data.';
+      msgEl.style.color='var(--red)';
+      setTimeout(function(){
+        overlay.remove();
+        athlete=localAthlete;
+        viewWeek=progWeek();
+        navTo('today');
+      },2000);
+    }
+  });
+
+  document.getElementById('migration-fresh-btn').addEventListener('click',function(){
+    if(confirm('This will discard local data permanently. Continue?')){
+      // Clear local athlete data
+      localStorage.removeItem('phoenix_athlete');
+      localStorage.removeItem('phoenix_v2');
+      localStorage.removeItem(PHX_AUTH_PENDING_KEY);
+      athlete=null;
+      overlay.remove();
+      showScreen('screen-splash');
+    }
+  });
+}
+
+// ====== SUPABASE WRITE HELPER ======
+async function saveAthleteToSupabase(data){
+  if(!currentSession) return;
+  var profileData=athleteToProfile(data);
+  profileData.id=currentSession.user.id;
+  try{
+    var res=await sb.from('profiles').upsert(profileData);
+    if(res.error) throw res.error;
+  }catch(e){
+    console.error('Supabase save failed:',e);
+  }
+}
+
+// Background sync — fetch fresh profile and update local cache
+async function backgroundSync(){
+  if(!currentSession) return;
+  try{
+    var res=await sb.from('profiles').select('*').eq('id',currentSession.user.id).single();
+    if(res.error||!res.data) return;
+    var fresh=profileToAthlete(res.data);
+    if(!athlete) return;
+    // Preserve local-only fields
+    ['startDate','b100','p1rm','row500','mile','plank','ohsq','waiverAccepted','notes','accessCode','tier','tierGrantedAt','bandProfile','fqProfile','fqBlock'].forEach(function(k){
+      if(athlete[k]!==undefined&&fresh[k]===undefined) fresh[k]=athlete[k];
+    });
+    athlete=fresh;
+    localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+    hideOfflineBanner();
+  }catch(e){console.warn('Background sync failed:',e);}
+}
 
 // ====== DATA ======
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -3029,7 +3400,7 @@ function loadState(){
     }
   }catch(e){ console.error('loadState parse error:', e); localStorage.removeItem('phoenix_athlete'); localStorage.removeItem('phoenix_v2'); }
 }
-function saveAthlete(d){athlete=d;localStorage.setItem('phoenix_athlete',JSON.stringify(d));}
+function saveAthlete(d){athlete=d;localStorage.setItem('phoenix_athlete',JSON.stringify(d));saveAthleteToSupabase(d);}
 
 function progWeek(){
   if(!athlete||!athlete.startDate) return 1;
@@ -3161,11 +3532,13 @@ function editProfile(){
 }
 function resetApp(){
   if(confirm('Reset all data? This cannot be undone.')){
-    for(var i=localStorage.length-1;i>=0;i--){
-      var key=localStorage.key(i);
-      if(key.indexOf('phoenix_')===0) localStorage.removeItem(key);
-    }
-    athlete=null;location.reload();
+    sb.auth.signOut().catch(function(e){console.warn('Sign out during reset:',e);}).finally(function(){
+      for(var i=localStorage.length-1;i>=0;i--){
+        var key=localStorage.key(i);
+        if(key.indexOf('phoenix_')===0) localStorage.removeItem(key);
+      }
+      athlete=null;location.reload();
+    });
   }
 }
 
@@ -7245,7 +7618,7 @@ function emblemTap(){
   }
 }
 
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", async function() {
 // ====== INIT ======
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
 loadSkin();
@@ -7253,50 +7626,95 @@ loadFont();
 loadBandProfile();
 loadState();
 createAutoBackup();
-
-// Render tier badge on splash
-var tierBadge=document.getElementById('splash-tier-badge');
-if(tierBadge){
-  var tLabel=getTierLabel();
-  var tLabel=getTierLabel();
-  // Format tier badge copy
-  var tierCopy='';
-  if(tLabel.includes('Beta')) tierCopy='Beta — Lifetime Pro';
-  else if(tLabel.includes('Pro')) tierCopy='Phoenix Pro';
-  else if(tLabel.includes('Ignite')) tierCopy='Ignite';
-  else if(tLabel.includes('Rising')) tierCopy='Rising';
-  else tierCopy='Ember — Free';
-  tierBadge.textContent=tierCopy;
-  if(tLabel.includes('Beta')||tLabel.includes('Pro')) tierBadge.style.color='var(--gold)';
-  else if(tLabel.includes('Ignite')) tierBadge.style.color='var(--text2)';
-  else if(tLabel.includes('Rising')) tierBadge.style.color='var(--text2)';
-  else tierBadge.style.color='var(--text3)';
-}
-if(athlete){
-  // Returning user — Continue Training only
-  // New programme accessible from inside the app via sidebar
-  document.getElementById('splash-continue-btn').style.display='block';
-  document.getElementById('splash-start-btn').style.display='none';
-  document.getElementById('splash-continue-btn').addEventListener('click',function(){
-    viewWeek=progWeek();navTo('today');
-  });
-} else {
-  // New user — Begin Programme
-  document.getElementById('splash-start-btn').style.display='block';
-  document.getElementById('splash-continue-btn').style.display='none';
-  document.getElementById('splash-start-btn').addEventListener('click',function(){
-    openFoundationQ();
-  });
-  var importSection=document.getElementById('splash-import-section');
-  if(importSection) importSection.style.display='block';
-  checkAutoRecovery();
-}
-
 renderVersionDisplays();
+
+// ====== AUTH STATE LISTENER ======
+sb.auth.onAuthStateChange(function(event,session){
+  currentSession=session;
+  if(event==='SIGNED_IN') loadProfileAndRoute();
+  if(event==='SIGNED_OUT') showScreen('screen-auth');
+});
+
+// ====== AUTH CHECK ======
+var session=null;
+try{
+  var res=await sb.auth.getSession();
+  session=res.data.session;
+}catch(e){
+  console.warn('Auth check failed (offline?):',e);
+  // Offline fallback
+  var localData=localStorage.getItem('phoenix_athlete');
+  if(localData){
+    try{athlete=JSON.parse(localData);}catch(ex){}
+    if(athlete){
+      showOfflineBanner();
+      setupSplashButtons();
+      viewWeek=progWeek();
+      navTo('today');
+      return;
+    }
+  }
+  // No local data, need network
+  var authOffline=document.getElementById('auth-offline-banner');
+  if(authOffline){
+    authOffline.textContent='Connection needed for first-time sign-in';
+    authOffline.style.display='block';
+  }
+  showScreen('screen-auth');
+  return;
+}
+
+if(!session){
+  showScreen('screen-auth');
+  return;
+}
+
+currentSession=session;
+setupSplashButtons();
+await loadProfileAndRoute();
+
+// Background sync for cache freshness
+setTimeout(backgroundSync,3000);
 
 // ====== SESSION DATA ======
 
-});;</script>
+});
+
+function setupSplashButtons(){
+  // Render tier badge on splash
+  var tierBadge=document.getElementById('splash-tier-badge');
+  if(tierBadge){
+    var tLabel=getTierLabel();
+    var tierCopy='';
+    if(tLabel.includes('Beta')) tierCopy='Beta \u2014 Lifetime Pro';
+    else if(tLabel.includes('Pro')) tierCopy='Phoenix Pro';
+    else if(tLabel.includes('Ignite')) tierCopy='Ignite';
+    else if(tLabel.includes('Rising')) tierCopy='Rising';
+    else tierCopy='Ember \u2014 Free';
+    tierBadge.textContent=tierCopy;
+    if(tLabel.includes('Beta')||tLabel.includes('Pro')) tierBadge.style.color='var(--gold)';
+    else if(tLabel.includes('Ignite')) tierBadge.style.color='var(--text2)';
+    else if(tLabel.includes('Rising')) tierBadge.style.color='var(--text2)';
+    else tierBadge.style.color='var(--text3)';
+  }
+  if(athlete){
+    document.getElementById('splash-continue-btn').style.display='block';
+    document.getElementById('splash-start-btn').style.display='none';
+    document.getElementById('splash-continue-btn').addEventListener('click',function(){
+      viewWeek=progWeek();navTo('today');
+    });
+  } else {
+    document.getElementById('splash-start-btn').style.display='block';
+    document.getElementById('splash-continue-btn').style.display='none';
+    document.getElementById('splash-start-btn').addEventListener('click',function(){
+      openFoundationQ();
+    });
+    var importSection=document.getElementById('splash-import-section');
+    if(importSection) importSection.style.display='block';
+    checkAutoRecovery();
+  }
+}
+</script>
 
 <!-- SESSION SCREEN -->
 <div id="screen-session" class="screen">

@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.8';
+var APP_VERSION='4.6.9';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7551,26 +7551,25 @@ function getTierData(){
 
 function hasProAccess(){
   var d=getTierData();
+  // Tier value itself grants access (includes legacy 'unlock'/'ignite'/'rising' → Pro)
+  if(d.tier==='pro'||d.tier==='unlock'||d.tier==='ignite'||d.tier==='rising') return true;
+  // Source flags
   if(d.beta) return true;
   if(d.source==='beta_lifetime') return true;
-  if(d.tier==='pro'&&d.source==='subscription') return true;
+  if(d.source==='subscription') return true;
   if(d.reward_expiry&&new Date()<new Date(d.reward_expiry)) return true;
   if(d.pro_trial_expiry&&new Date()<new Date(d.pro_trial_expiry)) return true;
   return false;
 }
 
 function hasIgniteAccess(){
-  var d=getTierData();
-  if(hasProAccess()) return true;
-  if(d.ignite_purchase) return true;
-  return false;
+  // 2-tier model: Ignite = Pro
+  return hasProAccess();
 }
 
 function hasRisingAccess(){
-  var d=getTierData();
-  if(hasProAccess()||hasIgniteAccess()) return true;
-  if(d.tier==='rising') return true;
-  return false;
+  // 2-tier model: Rising = Pro
+  return hasProAccess();
 }
 
 function getTierLabel(){

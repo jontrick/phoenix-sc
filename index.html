@@ -1373,7 +1373,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div class="splash-sub">Plan</div>
   <button class="btn-primary" id="splash-start-btn" style="display:none">Begin Programme</button>
   <button class="btn-secondary" id="splash-continue-btn" style="display:none;margin-top:0;">Continue Training</button>
-  <div id="splash-tier-badge" style="margin-top:14px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
+  <div id="splash-tier-badge" class="splash-tier-badge" style="margin-top:14px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
   <div id="splash-founding-badge" style="margin-top:10px;font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);opacity:0.85;">Founding Member &mdash; 1,987 of 2,000 spots remaining</div>
   <div id="recovery-banner" style="display:none;margin-top:18px;padding:14px 18px;background:var(--bg2);border:1px solid var(--gold);border-radius:10px;text-align:center;">
     <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;" id="recovery-banner-msg">Previous data found. Restore?</div>
@@ -1449,7 +1449,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </svg></div>
 <!-- Tier badge bottom -->
 <div class="splash-tier-wrap">
-  <div id="splash-tier-badge" style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
+  <div id="splash-tier-badge" class="splash-tier-badge" style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
 </div>
 
 </div>
@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.7';
+var APP_VERSION='4.6.8';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7751,23 +7751,26 @@ setTimeout(backgroundSync,3000);
 
 });
 
-function setupSplashButtons(){
-  // Render tier badge on splash
-  var tierBadge=document.getElementById('splash-tier-badge');
-  if(tierBadge){
-    var tLabel=getTierLabel();
-    var tierCopy='';
-    if(tLabel.includes('Beta')) tierCopy='Beta \u2014 Lifetime Pro';
-    else if(tLabel.includes('Pro')) tierCopy='Phoenix Pro';
-    else if(tLabel.includes('Ignite')) tierCopy='Ignite';
-    else if(tLabel.includes('Rising')) tierCopy='Rising';
-    else tierCopy='Ember \u2014 Free';
-    tierBadge.textContent=tierCopy;
-    if(tLabel.includes('Beta')||tLabel.includes('Pro')) tierBadge.style.color='var(--gold)';
-    else if(tLabel.includes('Ignite')) tierBadge.style.color='var(--text2)';
-    else if(tLabel.includes('Rising')) tierBadge.style.color='var(--text2)';
-    else tierBadge.style.color='var(--text3)';
+function makeSplashTierBadge(){
+  var badges=document.querySelectorAll('.splash-tier-badge');
+  if(!badges.length) return;
+  var tierCopy='Ember \u2014 Free';
+  var tierColor='var(--text3)';
+  if(athlete){
+    var d=getTierData();
+    if(hasProAccess()||d.tier==='pro'||d.tier==='unlock'){
+      tierCopy='Phoenix Pro';
+      tierColor='var(--gold)';
+    }
   }
+  for(var i=0;i<badges.length;i++){
+    badges[i].textContent=tierCopy;
+    badges[i].style.color=tierColor;
+  }
+}
+
+function setupSplashButtons(){
+  makeSplashTierBadge();
   var beginBtn=document.getElementById('splash-start-btn');
   var continueBtn=document.getElementById('splash-continue-btn');
   var importSection=document.getElementById('splash-import-section');

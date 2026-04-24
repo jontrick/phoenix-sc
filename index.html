@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.1';
+var APP_VERSION='4.6.2';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3077,6 +3077,8 @@ async function handleSignIn(){
   try{
     var res=await sb.auth.signInWithPassword({email:email,password:pass});
     if(res.error) throw res.error;
+    currentSession=res.data.session;
+    setTimeout(function(){loadProfileAndRoute();},500);
   }catch(e){
     setAuthMsg('auth-msg-si',e.message||'Sign in failed.',true);
     document.getElementById('auth-submit-si').disabled=false;
@@ -3095,6 +3097,8 @@ async function handleSignUp(){
     if(res.error) throw res.error;
     if(res.data.session){
       setAuthMsg('auth-msg-su','Account created. Welcome.',false);
+      currentSession=res.data.session;
+      setTimeout(function(){loadProfileAndRoute();},500);
     }else{
       setAuthMsg('auth-msg-su','Check your email to confirm your account.',false);
     }
@@ -3160,6 +3164,7 @@ function enableAuthButtons(){
 
 // ====== PROFILE ROUTING ======
 async function loadProfileAndRoute(){
+  console.log('[PHX] loadProfileAndRoute start');
   var session;
   try{
     var res=await sb.auth.getSession();
@@ -3176,6 +3181,7 @@ async function loadProfileAndRoute(){
     var pRes=await sb.from('profiles').select('*').eq('id',session.user.id).single();
     if(pRes.error&&pRes.error.code!=='PGRST116') throw pRes.error;
     profile=pRes.data;
+    console.log('[PHX] profile fetched:',profile);
   }catch(e){
     console.warn('Profile fetch failed:',e);
     // Check for 401/403 — session expired
@@ -3232,6 +3238,7 @@ async function loadProfileAndRoute(){
       });
     }
     localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+    console.log('[PHX] routing decision:',{hasAthlete:true,fqCompleted:profile.fq_completed,targetScreen:'today'});
     viewWeek=progWeek();
     navTo('today');
     return;
@@ -3239,11 +3246,19 @@ async function loadProfileAndRoute(){
 
   // Profile exists but questionnaire NOT completed — check for local migration
   if(localAthlete&&localAthlete.fqCompleted){
+    console.log('[PHX] routing decision:',{hasAthlete:false,fqCompleted:null,targetScreen:'migration-modal'});
     showMigrationModal(localAthlete,session);
     return;
   }
 
-  // No profile data, no local data — new user, show splash to begin
+  // Profile exists but sparse (fq not completed), or no profile — new user, show splash
+  if(profile){
+    athlete=profileToAthlete(profile);
+    if(!athlete||Object.keys(athlete).length===0) athlete={id:profile.id};
+    localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+  }
+  console.log('[PHX] routing decision:',{hasAthlete:!!athlete,fqCompleted:athlete?athlete.fqCompleted:null,targetScreen:'screen-splash'});
+  setupSplashButtons();
   showScreen('screen-splash');
 }
 
@@ -7643,6 +7658,7 @@ function emblemTap(){
 }
 
 document.addEventListener("DOMContentLoaded", async function() {
+console.log('[PHX] DOMContentLoaded start');
 // ====== INIT ======
 document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
 loadSkin();
@@ -7654,6 +7670,7 @@ renderVersionDisplays();
 
 // ====== AUTH STATE LISTENER ======
 sb.auth.onAuthStateChange(function(event,session){
+  console.log('[PHX] onAuthStateChange:',event,session&&session.user?session.user.email:null);
   currentSession=session;
   if(event==='SIGNED_IN') loadProfileAndRoute();
   if(event==='SIGNED_OUT') showScreen('screen-auth');
@@ -7666,6 +7683,7 @@ try{
   var res=await sb.auth.getSession();
   if(res.error) throw res.error;
   session=res.data.session;
+  console.log('[PHX] getSession result:',session);
 }catch(e){
   var msg=(e&&e.message)||'';
   if(!navigator.onLine||/fetch|network|failed to fetch/i.test(msg)){
@@ -7729,22 +7747,41 @@ function setupSplashButtons(){
     else if(tLabel.includes('Rising')) tierBadge.style.color='var(--text2)';
     else tierBadge.style.color='var(--text3)';
   }
-  if(athlete){
-    document.getElementById('splash-continue-btn').style.display='block';
-    document.getElementById('splash-start-btn').style.display='none';
-    document.getElementById('splash-continue-btn').addEventListener('click',function(){
+  var beginBtn=document.getElementById('splash-start-btn');
+  var continueBtn=document.getElementById('splash-continue-btn');
+  var importSection=document.getElementById('splash-import-section');
+  var beginVisible=false,continueVisible=false,importVisible=false;
+  if(athlete&&athlete.fqCompleted){
+    // Returning user with completed programme
+    continueVisible=true;
+    continueBtn.style.display='block';
+    beginBtn.style.display='none';
+    if(importSection) importSection.style.display='none';
+    continueBtn.addEventListener('click',function(){
       viewWeek=progWeek();navTo('today');
     });
-  } else {
-    document.getElementById('splash-start-btn').style.display='block';
-    document.getElementById('splash-continue-btn').style.display='none';
-    document.getElementById('splash-start-btn').addEventListener('click',function(){
+  } else if(athlete){
+    // New user with profile but fq not completed — show Begin Programme, no import
+    beginVisible=true;
+    beginBtn.style.display='block';
+    continueBtn.style.display='none';
+    if(importSection) importSection.style.display='none';
+    beginBtn.addEventListener('click',function(){
       openFoundationQ();
     });
-    var importSection=document.getElementById('splash-import-section');
+  } else {
+    // No athlete at all — brand new, show Begin Programme + Import
+    beginVisible=true;
+    importVisible=true;
+    beginBtn.style.display='block';
+    continueBtn.style.display='none';
     if(importSection) importSection.style.display='block';
+    beginBtn.addEventListener('click',function(){
+      openFoundationQ();
+    });
     checkAutoRecovery();
   }
+  console.log('[PHX] setupSplashButtons:',{beginVisible:beginVisible,continueVisible:continueVisible,importVisible:importVisible});
 }
 </script>
 

@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.0';
+var APP_VERSION='4.6.1';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3093,7 +3093,11 @@ async function handleSignUp(){
   try{
     var res=await sb.auth.signUp({email:email,password:pass,options:{data:{name:name||''}}});
     if(res.error) throw res.error;
-    setAuthMsg('auth-msg-su','Check your email to confirm your account.',false);
+    if(res.data.session){
+      setAuthMsg('auth-msg-su','Account created. Welcome.',false);
+    }else{
+      setAuthMsg('auth-msg-su','Check your email to confirm your account.',false);
+    }
   }catch(e){
     setAuthMsg('auth-msg-su',e.message||'Sign up failed.',true);
   }
@@ -3132,6 +3136,26 @@ function showOfflineBanner(){
 function hideOfflineBanner(){
   var banner=document.getElementById('offline-banner');
   if(banner) banner.style.display='none';
+}
+function showAuthConnectionMessage(){
+  var el=document.getElementById('auth-offline-banner');
+  if(el){el.textContent='Connection needed for first-time sign-in';el.style.display='block';}
+}
+function hideAuthConnectionMessage(){
+  var el=document.getElementById('auth-offline-banner');
+  if(el) el.style.display='none';
+}
+function disableAuthButtons(){
+  var si=document.getElementById('auth-submit-si');
+  var su=document.getElementById('auth-submit-su');
+  if(si) si.disabled=true;
+  if(su) su.disabled=true;
+}
+function enableAuthButtons(){
+  var si=document.getElementById('auth-submit-si');
+  var su=document.getElementById('auth-submit-su');
+  if(si) si.disabled=false;
+  if(su) su.disabled=false;
 }
 
 // ====== PROFILE ROUTING ======
@@ -7637,35 +7661,43 @@ sb.auth.onAuthStateChange(function(event,session){
 
 // ====== AUTH CHECK ======
 var session=null;
+var networkError=false;
 try{
   var res=await sb.auth.getSession();
+  if(res.error) throw res.error;
   session=res.data.session;
 }catch(e){
-  console.warn('Auth check failed (offline?):',e);
-  // Offline fallback
+  var msg=(e&&e.message)||'';
+  if(!navigator.onLine||/fetch|network|failed to fetch/i.test(msg)){
+    networkError=true;
+    console.warn('Supabase offline:',e);
+  }else{
+    console.error('Supabase init error (non-network):',e);
+  }
+}
+
+if(networkError&&localStorage.getItem('phoenix_athlete')){
   var localData=localStorage.getItem('phoenix_athlete');
-  if(localData){
-    try{athlete=JSON.parse(localData);}catch(ex){}
-    if(athlete){
-      showOfflineBanner();
-      setupSplashButtons();
-      viewWeek=progWeek();
-      navTo('today');
-      return;
-    }
+  try{athlete=JSON.parse(localData);}catch(ex){}
+  if(athlete){
+    showOfflineBanner();
+    setupSplashButtons();
+    viewWeek=progWeek();
+    navTo('today');
+    return;
   }
-  // No local data, need network
-  var authOffline=document.getElementById('auth-offline-banner');
-  if(authOffline){
-    authOffline.textContent='Connection needed for first-time sign-in';
-    authOffline.style.display='block';
-  }
+}
+if(networkError){
   showScreen('screen-auth');
+  showAuthConnectionMessage();
+  disableAuthButtons();
   return;
 }
 
 if(!session){
   showScreen('screen-auth');
+  hideAuthConnectionMessage();
+  enableAuthButtons();
   return;
 }
 

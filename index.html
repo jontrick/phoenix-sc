@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.4';
+var APP_VERSION='4.6.5';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3036,7 +3036,8 @@ var FIELD_MAP=[
   ['fqInjury','fq_injury'],['fqInjuryNotes','fq_injury_notes'],['fqPath','fq_path'],
   ['fqParqClear','fq_parq_clear'],['fqCompleted','fq_completed'],
   ['currentWeek','current_week'],['aiProgramme','ai_programme'],
-  ['aiProgrammeDate','ai_programme_date'],['aiProgrammeTrigger','ai_programme_trigger']
+  ['aiProgrammeDate','ai_programme_date'],['aiProgrammeTrigger','ai_programme_trigger'],
+  ['tier','tier'],['tierSource','tier_source'],['theme','theme']
 ];
 function athleteToProfile(a){
   if(!a) return {};
@@ -3240,7 +3241,20 @@ async function _loadProfileAndRouteInner(){
         if(localAthlete[k]!==undefined&&athlete[k]===undefined) athlete[k]=localAthlete[k];
       });
     }
-    localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+    // v4.6.5 migration: copy localStorage tier/theme into athlete if not yet synced
+    var _migrated=false;
+    if(!athlete.tier&&localStorage.getItem('phoenix_user_tier')){
+      athlete.tier=localStorage.getItem('phoenix_user_tier');_migrated=true;
+    }
+    if(!athlete.tierSource&&localStorage.getItem('phoenix_tier_source')){
+      athlete.tierSource=localStorage.getItem('phoenix_tier_source');_migrated=true;
+    }
+    if(!athlete.theme&&localStorage.getItem('phoenix_skin')){
+      athlete.theme=localStorage.getItem('phoenix_skin');_migrated=true;
+    }
+    if(_migrated){saveAthlete(athlete);}else{
+      localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+    }
     console.log('[PHX] routing decision:',{hasAthlete:true,fqCompleted:profile.fq_completed,targetScreen:'today'});
     viewWeek=progWeek();
     navTo('today');
@@ -6571,6 +6585,7 @@ function applySkin(skin){
   if(skin!=='phoenix') document.body.classList.add('skin-'+skin);
   currentSkin=skin;
   localStorage.setItem('phoenix_skin',skin);
+  if(athlete){athlete.theme=skin;saveAthlete(athlete);}
   updateSwatchStates();
 }
 
@@ -6582,7 +6597,7 @@ function updateSwatchStates(){
 }
 
 function loadSkin(){
-  var saved=localStorage.getItem('phoenix_skin')||'phoenix';
+  var saved=(athlete&&athlete.theme)||localStorage.getItem('phoenix_skin')||'phoenix';
   var tier=getSkinTier(saved);
   var canUse=tier==='free'||(tier==='adfree'&&hasRisingAccess())||(tier==='pro'&&hasProAccess());
   if(canUse){
@@ -7487,10 +7502,14 @@ function checkVideoRewards(count){
             localStorage.setItem('phoenix_tier_source','reward');
             localStorage.setItem('phoenix_reward_expiry',expiry.toISOString());
             localStorage.setItem('phoenix_reward_label',r.reward);
+            if(athlete){athlete.tier='pro';athlete.tierSource='reward';saveAthlete(athlete);}
           } else if(r.tier==='ignite'){
             localStorage.setItem('phoenix_ignite_purchase','true');
           } else if(r.tier==='rising'){
-            if(!hasRisingAccess()) localStorage.setItem('phoenix_user_tier','rising');
+            if(!hasRisingAccess()){
+              localStorage.setItem('phoenix_user_tier','rising');
+              if(athlete){athlete.tier='rising';athlete.tierSource='reward';saveAthlete(athlete);}
+            }
           }
         }
       }
@@ -7520,8 +7539,8 @@ function getVideoRewardProgress(){
 
 function getTierData(){
   return {
-    tier: localStorage.getItem('phoenix_user_tier')||'ember',
-    source: localStorage.getItem('phoenix_tier_source')||'free',
+    tier: (athlete&&athlete.tier)||localStorage.getItem('phoenix_user_tier')||'ember',
+    source: (athlete&&athlete.tierSource)||localStorage.getItem('phoenix_tier_source')||'free',
     beta: localStorage.getItem('phoenix_beta_user')==='true',
     reward_expiry: localStorage.getItem('phoenix_reward_expiry')||null,
     ignite_purchase: localStorage.getItem('phoenix_ignite_purchase')==='true',
@@ -7575,6 +7594,7 @@ function activateCode(code){
     localStorage.setItem('phoenix_tier_source','beta_lifetime');
     localStorage.setItem('phoenix_beta_user','true');
     localStorage.setItem('phoenix_access_code_used',c);
+    if(athlete){athlete.tier='pro';athlete.tierSource='beta_lifetime';saveAthlete(athlete);}
     return {success:true, type:'beta_lifetime', label:'Beta Lifetime Pro unlocked'};
   }
   // Check reward codes
@@ -7587,6 +7607,7 @@ function activateCode(code){
     localStorage.setItem('phoenix_reward_expiry',expiry.toISOString());
     localStorage.setItem('phoenix_reward_label',r.label||'Reward Pro');
     localStorage.setItem('phoenix_access_code_used',c);
+    if(athlete){athlete.tier='pro';athlete.tierSource='reward';saveAthlete(athlete);}
     return {success:true, type:'reward', label:r.label+' unlocked', expiry:expiry};
   }
   return {success:false};
@@ -7600,6 +7621,7 @@ function activateIgniteProTrial(){
     localStorage.setItem('phoenix_user_tier','pro');
     localStorage.setItem('phoenix_pro_trial_used','true');
     localStorage.setItem('phoenix_pro_trial_expiry',expiry.toISOString());
+    if(athlete){athlete.tier='pro';athlete.tierSource='pro_trial';saveAthlete(athlete);}
     return true;
   }
   return false;

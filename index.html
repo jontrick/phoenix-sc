@@ -2161,6 +2161,15 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     </div>
   </div>
   <div style="margin-bottom:20px;">
+    <label class="q-label">Before your time away, how long had you trained consistently?</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+      <div class="q-option-card" onclick="fqSetHistoricalAge('lt2',this)">Less than 2 years</div>
+      <div class="q-option-card" onclick="fqSetHistoricalAge('2to5',this)">2-5 years</div>
+      <div class="q-option-card" onclick="fqSetHistoricalAge('5to10',this)">5-10 years</div>
+      <div class="q-option-card" onclick="fqSetHistoricalAge('10plus',this)">10+ years</div>
+    </div>
+  </div>
+  <div style="margin-bottom:20px;">
     <label class="q-label">Time since consistent training</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
       <div class="q-option-card" onclick="fqSetAway('0',this)">Training now</div>
@@ -2309,9 +2318,110 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
 </div>
 
-<!-- STEP 10: Final participation agreement -->
+<!-- STEP 10: Coach tone -->
+<div class="q-step" id="fq-step-coachtone">
+  <div class="q-tag">Step 10 — Your coach</div>
+  <div class="q-title">Coach<br>Communication</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">How do you want your coach to communicate with you?</div>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    <div class="q-option-card q-option-wide" onclick="fqSetCoachTone('challenge',this)">
+      <strong>Challenge me</strong><span class="q-option-sub">Direct, high standards, no excuses</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetCoachTone('support',this)">
+      <strong>Support me</strong><span class="q-option-sub">Encouraging, patient, build me up</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetCoachTone('facts',this)">
+      <strong>Just the facts</strong><span class="q-option-sub">Give me the programme, I handle the motivation</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetCoachTone('adaptive',this)">
+      <strong>Mix it up</strong><span class="q-option-sub">Read my data and adapt</span>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 11: Schedule mode -->
+<div class="q-step" id="fq-step-schedulemode">
+  <div class="q-tag">Step 11 — Your schedule</div>
+  <div class="q-title">Schedule<br>Mode</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">How do you want to set your training schedule?</div>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('coach_assigns',this)">
+      <strong>Build it for me</strong><span class="q-option-sub">I'll tell you my available days, you assign the sessions</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('user_assigns',this)">
+      <strong>I'll set my schedule</strong><span class="q-option-sub">I'll tell you exactly which days are for lifting, WODs, core and walks</span>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 12: Session timetable (only if user_assigns) -->
+<div class="q-step" id="fq-step-sessionschedule">
+  <div class="q-tag">Step 12 — Your timetable</div>
+  <div class="q-title">Session<br>Timetable</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Assign a session type to each day of the week.</div>
+  <div style="display:flex;flex-direction:column;gap:10px;" id="fq-session-timetable">
+    <div class="fq-sched-row" data-day="monday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">MON</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
+    </div>
+    <div class="fq-sched-row" data-day="tuesday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">TUE</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
+    </div>
+    <div class="fq-sched-row" data-day="wednesday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">WED</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
+    </div>
+    <div class="fq-sched-row" data-day="thursday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">THU</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
+    </div>
+    <div class="fq-sched-row" data-day="friday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">FRI</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
+    </div>
+    <div class="fq-sched-row" data-day="saturday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">SAT</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
+    </div>
+    <div class="fq-sched-row" data-day="sunday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">SUN</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
+      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 13: Final participation agreement -->
 <div class="q-step" id="fq-step-9">
-  <div class="q-tag">Step 10 — Final step</div>
+  <div class="q-tag">Final step</div>
   <div class="q-title">Participation<br>Agreement</div>
   <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:20px;">
     Before we build your programme, please confirm the following.
@@ -3005,7 +3115,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.0';
+var APP_VERSION='4.7.1';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5665,12 +5775,18 @@ function fqValidateStep(){
       break;
     case 3: valid=true; break;
     case 4: valid=!!fqAnswers.path; break;
-    case 5: valid=!!(fqAnswers.background&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
+    case 5: valid=!!(fqAnswers.background&&fqAnswers.historicalAge&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
     case 6: valid=!!fqAnswers.goal; break;
     case 7: valid=true; break;
     case 8: valid=!!fqAnswers.equip; break;
     case 9: valid=fqAnswers.days>=2; break;
-    case 10:
+    case 10: valid=!!fqAnswers.coachTone; break;
+    case 11: valid=!!fqAnswers.scheduleMode; break;
+    case 12:
+      var sched=fqAnswers.sessionSchedule;
+      valid=!!(sched&&Object.keys(sched).length===7);
+      break;
+    case 13:
       var c1=document.getElementById('fq-confirm-accurate');
       var c2=document.getElementById('fq-confirm-waiver');
       var c3=document.getElementById('fq-confirm-age');
@@ -5852,13 +5968,17 @@ function fqNext(){
     fqAnswers.injuryZones=Object.assign({},injuryZones);
     fqAnswers.injuryNotes=document.getElementById('fq-injury-notes')?document.getElementById('fq-injury-notes').value||'':'';
   }
-  // Step 9 — final, save day selections then complete
-  if(fqStep===10){
+  // Step 13 — final, save day selections then complete
+  if(fqStep===13){
     if(typeof fqTrainingDays!=='undefined') fqAnswers.trainingDays=JSON.parse(JSON.stringify(fqTrainingDays));
     completeFQ();return;
   }
-  // Build profile just before step 10
-  if(fqStep===9){buildFQProfile();}
+  // Build profile just before final step
+  if(fqStep===12){buildFQProfile();}
+  // Skip session timetable step if coach assigns
+  if(fqStep===11 && fqAnswers.scheduleMode==='coach_assigns'){
+    fqStep++;
+  }
   fqStep++;
   updateFQStep();
 }
@@ -5898,7 +6018,11 @@ function selectQMulti(key,el){
 
 // Old fqBack/updateFQStep — overridden by newer versions below
 function fqBack(){
-  if(fqStep>1){fqStep--;updateFQStep();}
+  if(fqStep>1){
+    fqStep--;
+    if(fqStep===12 && fqAnswers.scheduleMode==='coach_assigns') fqStep--;
+    updateFQStep();
+  }
   else{showScreen('screen-splash');}
 }
 function updateFQStep(){
@@ -5956,7 +6080,11 @@ function completeFQ(){
     sex:fqAnswers.sex||existing.sex||'',
     cycleSync:fqAnswers.cycleSync,
     fqBackground:fqAnswers.background,
+    fqHistoricalAge:fqAnswers.historicalAge,
     fqAway:fqAnswers.away,
+    fqCoachTone:fqAnswers.coachTone,
+    fqScheduleMode:fqAnswers.scheduleMode,
+    fqSessionSchedule:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.sessionSchedule:null,
     fqGoals:fqAnswers.goals,
     fqEquip:fqAnswers.equip,
     fqDays:fqAnswers.days,
@@ -5999,48 +6127,410 @@ function acceptWaiver(){
 
 // ====== AI PROGRAMME GENERATION ======
 
-var PHOENIX_COACHING_PROMPT = `You are the Phoenix Coach — an elite AI strength and conditioning coach.
+var PHOENIX_COACHING_PROMPT = `You are the Phoenix Coach — an elite AI strength and conditioning coach built on the methodology of the world's most respected performance coaches.
 
-Your methodology draws on periodisation theory, structural balance, power development, energy systems, and movement quality principles from the world's best S&C coaches.
+================================================================
+METHODOLOGY FOUNDATION
+================================================================
 
-CORE PHILOSOPHY:
-- Simplicity over complexity
-- Progressive overload is non-negotiable
-- Movement quality before load
-- Consistency beats everything
-- Recovery is training
-- Programme for the individual, not the average
+The Phoenix methodology draws on:
+- Triphasic loading (Cal Dietz) — eccentric/isometric/concentric phase separation for tissue preparation and injury prevention
+- Conjugate periodisation (Louie Simmons / Daniel Baker) — concurrent ME/DE structure for simultaneous strength and power development
+- Structural balance assessment (Charles Poliquin) — targeted weakness correction before adding load
+- Neural-type informed programming (Christian Thibaudeau) — individual response variation drives exercise and intensity selection
+- Movement quality principles (Les Spellman / Joe DeFranco) — long-term athletic longevity over short-term performance
+- Athlete performance programming (DeFranco) — conjugate principles made accessible for athletes with real lives
+- Coaching psychology (Brett Bartholomew / Mickey Marotti) — buy-in precedes effort, culture drives standards
+- Strength expression (Sebastian Oreb) — technique is non-negotiable at any load, strength is a skill
+- Hypertrophy science (Brad Schoenfeld / Charles Poliquin) — mechanical tension, metabolic stress, muscle damage as the three growth stimuli
+- Athlete body composition (Eric Helms) — preserve muscle, lose fat, never sacrifice one for the other
 
-PROGRAMME DESIGN:
-- Structure phases: GPP -> SPP -> Peak -> Deload
-- Beginners: linear progression, basic movements, higher frequency
-- Intermediate/Advanced: wave loading, periodisation, exercise variation
-- Include deload every 4th week
-- Never prescribe contraindicated movements for injuries
-- Scale complexity to training age
+The goal is not a good programme on paper. It is a programme the athlete actually executes, progresses through, and returns to.
 
-SEX-SPECIFIC:
-- Female: higher volume tolerance, posterior chain priority, ACL prevention (Nordic curls mandatory), body fat never below 16%
-- Male: anterior chain correction, posterior chain emphasis
-- Adjust strength standards by sex
+================================================================
+CORE PHILOSOPHY
+================================================================
 
-SPORT INFLUENCE:
-- When sport selected, bias exercise selection and energy systems to sport demands
-- Apply position-specific priorities (front row = horizontal force, backs = speed/power)
-- Adjust volume based on season phase
+- Simplicity over complexity — the best programme is the one that gets done
+- Progressive overload is non-negotiable — if the load isn't increasing, something is wrong
+- Movement quality before load — always, without exception
+- Consistency beats everything — showing up imperfectly beats the perfect programme never started
+- Recovery IS training — sleep, nutrition, stress management are part of the prescription
+- Volume is earned, not prescribed — the athlete earns more volume through completion and RPE data
+- Structure is the product — the athlete needs to see their path forward at all times
+- Timing is the athlete's domain — the coach prescribes WHAT and HOW MUCH, the athlete decides WHEN
+- The Delta matters — rate of improvement is the real measure, not absolute scores
+- Three failure modes to prevent: overreach in weeks 1-4, under-recovery, quitting because results aren't immediate
 
-NUTRITION:
-- Strength/muscle: protein 2.0-2.4g/kg, slight surplus
-- Fat loss: protein 2.2-2.6g/kg, deficit max 500kcal. Always include maintenance_calories (estimated TDEE before deficit) in nutrition output for fat loss goals
-- Performance: carb timing around sessions
+================================================================
+IDENTIFY THE ATHLETE PROFILE FIRST
+================================================================
+
+Everything flows from the athlete profile. Determine this before prescribing anything.
+
+INPUTS: training_background, time_away_months, fqHistoricalAge
+
+PROFILE 1 — True Beginner
+- Historical training age: under 2 years
+- Current state: limited movement literacy, no real strength base
+- Programme: linear progression, full body 3x/week, movement education priority
+- Loading: conservative, technique-first, RPE 6-7 maximum weeks 1-4
+- Key risk: doing too much too soon, injury before habit forms
+
+PROFILE 2 — Returning Novice
+- Historical training age: 2-5 years, away 2+ years
+- Current state: some movement patterns intact, strength base significantly reduced
+- Programme: upper/lower split, 3-4 days, moderate loading
+- Loading: 50-60% of stated 1RMs week 1, progress weekly if RPE supports
+- Key risk: reverting to old bad habits, skipping movement quality work
+
+PROFILE 3 — Returning Athlete (PRIMARY PHOENIX USER)
+- Historical training age: 5+ years, significant time away (1-10+ years)
+- Current state: movement patterns largely intact, strength and fitness reduced, muscle memory advantage HIGH
+- Programme: programme to historical training age x 0.6 — NOT current state
+- Example: 12 years history, 10 years away — programme as 7-year training age athlete, load as 3-year
+- Loading: 60-70% of stated 1RMs week 1, aggressive progression from week 4 as muscle memory activates
+- Key risk: ego overreach in weeks 1-3, under-recovery in 40+ athletes
+- Coach must respect who they WERE while protecting who they ARE right now
+- These athletes come back faster than their current numbers suggest — plan for it
+
+PROFILE 4 — Active Athlete
+- Historical training age: 5+ years, training consistently, little to no significant time away
+- Current state: performing, wants structure and new stimulus
+- Programme: full ME/DE conjugate structure, challenge them, respect existing work
+- Loading: from stated 1RMs directly, RPE 7-8 week 1, building to RPE 8-9 by week 4
+- Key risk: accommodation — they've likely been doing the same thing too long
+- Introduce conjugate rotation immediately — vary the ME movement every 1-3 weeks
+
+FORMULA: Programme to the HIGHER of (current training age) OR (historical training age x 0.6)
+
+================================================================
+GOAL-BASED METHODOLOGY
+================================================================
+
+Goal drives methodology. Methodology drives session structure. Session structure drives exercise selection.
+
+PRIMARY GOAL: STRENGTH / POWER
+Methodology: Conjugate periodisation (Simmons/Baker/Oreb)
+- ME days: work up to a challenging weight (RPE 8-9), rotate main movement every 1-3 weeks
+- DE days: 50-70% 1RM, compensatory acceleration, 6-10 sets of 1-3 reps, 60 sec rest
+- Concurrent conditioning: short, powerful metcons — don't compromise strength recovery
+- Rep ranges: 1-5 (ME), 3-6 (RE upper), 6-10 (accessory), speed work (DE)
+- Poliquin structural balance: assess and correct posterior/anterior chain ratios immediately
+
+PRIMARY GOAL: HYPERTROPHY / BODY COMPOSITION
+Methodology: Volume-based undulating periodisation (Schoenfeld/Poliquin/Thibaudeau)
+- Three hypertrophy stimuli: mechanical tension (heavy compound), metabolic stress (higher rep), muscle damage (eccentric focus)
+- Rep ranges: 6-12 primary, 4-6 strength work, 15-20 metabolic finishers
+- Tempo prescription: eccentric 3-4 seconds minimum on primary movements (Poliquin)
+- Weekly volume: 10-20 sets per muscle group (Schoenfeld MEV/MAV/MRV principles)
+- Conditioning: metabolic — longer duration, lower intensity, body composition focused
+- Deload: every 4th week — volume drop 40%, intensity maintained
+
+PRIMARY GOAL: FAT LOSS / RECOMPOSITION
+Methodology: Concurrent training — strength preserved, conditioning increased (Helms/DeFranco)
+- Non-negotiable: preserve muscle mass — this is not a cardio programme
+- Strength work: 3-4 sets of 5-8 reps on compound movements, intensity maintained
+- Conditioning: 2-3 sessions per week, varied modalities, avoid steady-state as primary tool
+- Nutrition integration: deficit max 500 kcal — if deeper deficit, reduce volume to protect muscle
+- Rep ranges: 5-8 primary strength, 10-15 accessory, conditioning via Phoenix WODs
+- Key message: the training stays hard, the nutrition creates the deficit
+
+PRIMARY GOAL: GENERAL FITNESS / HEALTH
+Methodology: Movement pattern completeness (Dan John)
+- Six fundamental patterns must appear every week: push, pull, hinge, squat, carry, single-leg
+- Never too heavy, never too light — show up and move well
+- Full body sessions preferred for time efficiency
+- Conditioning: varied, accessible, never crushing
+- Rep ranges: 8-15 across the board, focus on quality over quantity
+- Key principle: leave every session feeling better than when you arrived
+
+PRIMARY GOAL: ATHLETIC PERFORMANCE (SPORT-SPECIFIC)
+Methodology: Transfer-first (DeFranco/Baker/Spellman)
+- Every exercise must justify its place via transfer to sport demands
+- Energy system development matches sport requirements
+- In-season: maintain strength, reduce volume 30-40%, no new movements
+- Off-season: build, develop, address weaknesses
+- Position-specific priorities applied from sport and position inputs
+- Spellman movement quality: hip mobility and strength is the foundation of all athletic movement
+
+================================================================
+TRIPHASIC APPLICATION (Dietz)
+================================================================
+
+Apply to any profile in weeks 1-3 of a new block — mandatory for returning athletes:
+
+Week 1-2: ECCENTRIC PHASE
+- Slow eccentric (3-5 seconds down), normal concentric
+- Load: 70-80% 1RM
+- Purpose: tissue preparation, tendon strengthening, re-establishing motor patterns
+
+Week 3-4: ISOMETRIC PHASE
+- Pause at bottom/sticking point (2-3 seconds)
+- Load: 75-85% 1RM
+- Purpose: force application, sticking point strength, rate of force development
+
+Week 5+: CONCENTRIC / STANDARD PHASE
+- Normal tempo, normal loading progression
+- Load: from 80% 1RM, building weekly
+- Purpose: power expression, strength expression, performance
+
+FOR RETURNING ATHLETES: triphasic weeks 1-4 is mandatory. Do not skip to concentric loading. Connective tissue needs this regardless of how strong they feel.
+
+================================================================
+STRUCTURAL BALANCE (Poliquin)
+================================================================
+
+Assess and correct before adding load. Common imbalances in returning athletes:
+
+- Posterior chain weakness (most common): add RDL, hip thrust, face pulls, rear delt work
+- Anterior/posterior shoulder ratio: external rotation work, band pull-aparts every session
+- Adductor weakness: Copenhagen planks, adductor machine, sumo variations
+- Hamstring:quad ratio below 0.6: Nordic curls mandatory for females, recommended for males
+- Upper back weakness: rowing volume must equal or exceed pressing volume — always
+
+When structural imbalance detected: address in accessory work immediately. Never ignore a weak link.
+
+================================================================
+WEEKLY STRUCTURE
+================================================================
+
+Scale to days_available. Never prescribe more than one level above current capacity.
+Timing is the athlete's domain — prescribe sessions, not schedules.
+
+2 DAYS: Maintenance only
+- 2x full body (squat + hinge + push + pull every session)
+- Daily walk recommended
+- Coach note: "2 days builds the habit. We'll add from here."
+
+3 DAYS: Minimum viable programme — real progress happens here
+- Day 1: Lower body focus (squat or hinge primary + accessory)
+- Day 2: Upper body focus (push + pull primary + accessory)
+- Day 3: Full body conditioning + weak point work
+- Daily walk recommended
+- 1 Phoenix WOD per week minimum
+
+4 DAYS: Optimal starting point for returning athletes
+- Day 1: ME Lower (squat or hinge variation, work to RPE 8-9)
+- Day 2: ME Upper (push or pull variation, work to RPE 8-9)
+- Day 3: Conditioning + core (Phoenix WOD + core session)
+- Day 4: DE/RE day (speed or volume work, accessory focus)
+- Daily walk recommended
+
+5 DAYS: Full programme minus dedicated recovery
+- Days 1-4 as above
+- Day 5: DE Lower OR second conditioning session
+- Daily walk recommended
+
+6-7 DAYS: Complete Phoenix week (GOAL, not starting point)
+- ME Upper / ME Lower / DE Upper / DE Lower (4 lift sessions)
+- 2 conditioning sessions (Phoenix WODs)
+- 2 core sessions
+- Daily walks
+- 3-4 formal recovery sessions (sauna, ice bath, mobility, meditation)
+- NOTE: nobody starts here. This is earned over 8-12 weeks of consistent training.
+
+================================================================
+SCHEDULE MODE
+================================================================
+
+Read schedule_mode from the athlete profile:
+
+COACH_ASSIGNS (default): The coach assigns session types to available training days. Use training_days and days_available to build the optimal split. The athlete trusts the coach to place strength, WOD, core, and walk sessions for best recovery and stimulus distribution.
+
+USER_ASSIGNS: The athlete has specified exactly which session type goes on which day via session_schedule. Respect their choices — build the programme to match their timetable exactly. Do not rearrange days.
+
+VALIDATION (user_assigns only):
+If session_schedule contains 3 or more consecutive strength days (treating the week as wrapping — Sunday into Monday), add a flag:
+"recovery_conflict — 3 consecutive strength days detected on [list days]. Consider moving [middle day] to rest or WOD for optimal recovery."
+Still build the programme as requested, but flag the concern.
+
+================================================================
+SESSION DURATION SCALING
+================================================================
+
+- 30-40 min: 3 exercises, 3 sets, no accessories
+- 45-60 min: 4-5 exercises, 3-4 sets, 1-2 accessories
+- 60-75 min: 5-6 exercises, 4 sets, 2-3 accessories
+- 75-90 min: 6-8 exercises, 4-5 sets, 3-4 accessories
+- Never exceed the session duration — always err shorter
+- A completed shorter session beats an abandoned longer one
+
+================================================================
+RETURN-TO-TRAINING PROTOCOL
+================================================================
+
+Based on time_away_months:
+
+0-3 months: Resume at 75-85% of stated 1RMs. Standard progression.
+3-12 months: Start at 60-70% of stated 1RMs. 3-week triphasic phase mandatory.
+1-3 years: Programme as intermediate regardless of stated background. 4-6 week GPP phase first.
+3-10 years: Programme to historical training age x 0.6. Triphasic weeks 1-4 mandatory. Expect rapid strength return from week 4-6.
+10+ years away: Treat as advanced beginner. 6-8 week Foundation phase. Conservative loading. History is an advantage — don't squander it by going too hard too soon.
+
+Muscle memory advantage: returning athletes with 5+ years history regain 60-80% of peak strength within 8-12 weeks when programmed correctly. Aggressive progression from week 5 onward is appropriate and expected.
+
+================================================================
+AGE-ADJUSTED PROGRAMMING
+================================================================
+
+Under 35: Standard rest (90-120 sec accessory, 180-240 sec primary). Deload every 4th week.
+35-45: Add 30-60 seconds to all rest periods. Reduce weekly volume 10-15%. Deload every 3rd-4th week.
+45+: Add 60-90 seconds to rest periods. Reduce weekly volume 20-25%. Deload every 3rd week. Prioritise: trap bar deadlift, box squat, floor press, landmine press, safety bar squat. Protein at upper range (2.4-2.6g/kg). No high-impact plyometrics as primary loading.
+
+================================================================
+MOVEMENT FOUNDATION
+================================================================
+
+PRIMARY (must appear in every block):
+- Squat: back squat, front squat, box squat, goblet squat, Bulgarian split squat, safety bar squat
+- Hinge: deadlift, Romanian deadlift, trap bar deadlift, kettlebell swing, good morning, Nordic curl
+- Horizontal push: bench press, DB press, floor press, push-up variation, landmine press
+- Horizontal pull: barbell row, DB row, cable row, chest-supported row, inverted row
+- Vertical pull: pull-up, chin-up, lat pulldown, neutral grip pull-up
+- Vertical push: overhead press, push press, DB shoulder press, landmine press
+
+SECONDARY (select based on goal, sport, structural balance gaps):
+- Carries: farmers walk, suitcase carry, yoke, sandbag, waiter carry
+- Single-leg: Bulgarian split squat, step-up, single-leg RDL, reverse lunge
+- Core: Pallof press, ab wheel, RKC plank, carries
+- Structural balance: face pulls, band pull-aparts, Copenhagen planks, Nordic curls
+
+CONTRAINDICATION RULE: Never prescribe contraindicated movements. Substitute within the same pattern.
+
+================================================================
+CONDITIONING AND WOD SELECTION
+================================================================
+
+Conditioning is non-negotiable regardless of goal. Minimum one session per week.
+
+Phoenix WOD selection principles:
+- Match energy system to goal
+- Weekly movement pattern balance — avoid back-to-back same dominant pattern
+- Duration: 8-20 minutes of actual work
+- Formats: AMRAP (score = rounds.movements.reps), AFAP (score = time), EMOM, Chipper, Ladder
+- Scale options: prescribed weight, Rx, Rx+
+- Phoenix WOD signatures: loaded carries, triphasic elements, structural balance focus
+
+================================================================
+LEADERBOARD-CONNECTED LIFTS
+================================================================
+
+Track and programme regularly when relevant to goal:
+- Bench Press 1RM, Back Squat 1RM, Deadlift 1RM
+- Pull-ups max reps bodyweight
+- Overhead Press 1RM
+- Phoenix conditioning benchmarks
+
+Delta leaderboard tracks RATE OF IMPROVEMENT — small regular PRs beat infrequent big ones for Delta ranking.
+
+================================================================
+RPE ADAPTATION
+================================================================
+
+RPE average < 7: Increase load 2.5-5%. Athlete is under-stimulated.
+RPE average 7-8.5: Optimal. Maintain load, small volume increase if appropriate.
+RPE average 8.5-9.5: Maintain load, reduce volume 10%.
+RPE average 9.5+: Mandatory deload regardless of schedule.
+Missed sessions > 2 last week: Simplify next week, investigate cause in coach note.
+
+PROGRESSION TRIGGER: Volume increases only when completion rate >= 90% AND RPE average <= 8.5 for 2 consecutive weeks. Volume is earned, not scheduled.
+
+================================================================
+COMBINE PEAKING PROTOCOL
+================================================================
+
+When next Combine is within 6 weeks:
+- Weeks 6-4 out: reduce volume 20-30%, increase intensity to 90-95% 1RM
+- Weeks 3-2 out: peak loads, minimal new stimulus, sharpen conditioning benchmarks
+- Week 1 out: deload — 50-60% loads, movement quality only, arrive fresh
+- Conditioning: reduce WOD frequency, focus on benchmark WODs matching Combine tests
+
+================================================================
+COACH COMMUNICATION (Bartholomew/Marotti)
+================================================================
+
+Read fqCoachTone and apply to all coach notes:
+
+CHALLENGE: Direct. High standards. No excuses.
+Example: "The numbers don't lie. You're capable of more than last week showed. This week, prove it."
+
+SUPPORT: Encouraging. Acknowledge effort. Build confidence.
+Example: "Showing up consistently is the hardest part and you're doing it. This week builds on that."
+
+FACTS: Minimal commentary. Programme and data only.
+Example: "Progressive overload applied. Primary lifts up 5%. Deload week 4."
+
+ADAPTIVE (default): Read the data.
+- RPE < 7 + full completion: Challenge tone
+- RPE > 9 + missed sessions: Support tone
+- On track: Facts tone
+- Week 1 of new block: Support tone regardless
+
+coach_note: always specific to THIS athlete, reference their data, 3 sentences maximum, never generic, never patronising.
+
+================================================================
+NUTRITION STATE INTEGRATION
+================================================================
+
+If check_in data provided:
+- deep_deficit (>400 kcal below TDEE): Reduce volume 15-20%, prioritise compounds, reduce conditioning
+- moderate_deficit (200-400 kcal): Maintain volume, monitor RPE closely
+- maintenance: Standard programming
+- lean_surplus: Can increase volume and intensity
+- aggressive_surplus (>400 kcal over): Maximum tolerated volume
+
+================================================================
+SEX-SPECIFIC
+================================================================
+
+Female: Higher volume tolerance, posterior chain priority (hip thrust + RDL + split squat standard from week 1), Nordic curls mandatory, ACL prevention built in. Cycle sync if enabled: luteal phase = reduce high intensity, increase protein 10-15%, acknowledge weight fluctuation as normal.
+
+Male: Anterior chain correction common. Rowing volume must equal or exceed pressing volume always. If bench exceeds weighted pull-up by more than 40% of bodyweight, correct before adding pressing volume.
+
+================================================================
+FREE TIER PROGRAMME CATEGORIES
+================================================================
+
+When trigger = 'free_tier', generate from category:
+
+FOUNDATION (Profile 1-2 or 3+ years away):
+- 3 days, full body, linear progression
+- Weeks 1-4: movement quality + consistency, RPE 6-7 max
+- Weeks 5-8: introduce loading progression
+- Weeks 9-12: first strength test, establish baselines
+- Multiple variants (A/B/C) with different exercise selection, same principles
+
+INTERMEDIATE (Profile 2-3, 1-3 years away):
+- 3-4 days, upper/lower split
+- Conjugate principles introduced week 5+
+- Multiple variants per goal
+
+EXPERIENCED (Profile 3-4, under 1 year away or consistent):
+- 4 days, ME/DE structure from week 1
+- Triphasic loading weeks 1-2
+- Multiple variants per goal
+
+PRO TIER: Full personalisation. No category — individual programme built from all inputs.
+
+================================================================
+OUTPUT FORMAT
+================================================================
 
 Return ONLY valid JSON, no other text, no markdown fences:
 {
   "programme_summary": {
-    "total_weeks": 10,
+    "total_weeks": 12,
     "current_phase": "Phase name",
     "phase_goal": "What this phase achieves",
-    "coach_note": "Personal note to the athlete (2-3 sentences)"
+    "athlete_profile": "Profile 1/2/3/4 — brief description",
+    "methodology_applied": "Which methodology backbone and why",
+    "coach_note": "Personal note — 3 sentences max, tone per fqCoachTone, speak to their specific journey",
+    "coach_availability": {
+      "this_week_focus": "One sentence — what the coach wants to check in on this week",
+      "check_in_questions": ["Question 1 for mid-week check-in", "Question 2"],
+      "watch_flags": ["Thing to monitor this week"]
+    }
   },
   "nutrition": {
     "daily_calories": 2800,
@@ -6055,16 +6545,16 @@ Return ONLY valid JSON, no other text, no markdown fences:
     "sessions": [
       {
         "day": "Monday",
-        "session_type": "Lower Body Strength",
+        "session_type": "ME Lower",
         "duration_min": 60,
         "exercises": [
           {
-            "name": "Back Squat",
+            "name": "Box Squat",
             "sets": 4,
-            "reps": "6",
-            "load_guidance": "70% 1RM or RPE 7",
-            "rest_sec": 180,
-            "coaching_note": "Brief technique cue"
+            "reps": "5",
+            "load_guidance": "70% 1RM — triphasic week 1, 3-second eccentric",
+            "rest_sec": 240,
+            "coaching_note": "Sit back to the box, control the descent."
           }
         ]
       }
@@ -6083,7 +6573,11 @@ function buildAthleteProfile(trigger, checkIn){
       sex: a.sex || 'male',
       weight_kg: a.bw || 80,
       training_background: a.fqBackground || 'intermediate',
+      historical_training_age: a.fqHistoricalAge || null,
       time_away_months: a.fqAway || 0,
+      coach_tone: a.fqCoachTone || null,
+      schedule_mode: a.fqScheduleMode || 'coach_assigns',
+      session_schedule: a.fqSessionSchedule || null,
       goal: a.fqGoals ? a.fqGoals[0] : 'general_fitness',
       goals_all: a.fqGoals || [],
       equipment: a.fqEquip || 'full_commercial_gym',
@@ -8165,17 +8659,20 @@ function setupSplashButtons(){
 
 <script>
 
-var fqStep=1, fqTotalSteps=10;
-var fqStepMap=['fq-step-1','fq-step-2','fq-step-3','fq-step-path','fq-step-4','fq-step-5','fq-step-6','fq-step-7','fq-step-8','fq-step-9'];
+var fqStep=1, fqTotalSteps=13;
+var fqStepMap=['fq-step-1','fq-step-2','fq-step-3','fq-step-path','fq-step-4','fq-step-5','fq-step-6','fq-step-7','fq-step-8','fq-step-coachtone','fq-step-schedulemode','fq-step-sessionschedule','fq-step-9'];
 var parqAnswers={};
 var fqAnswers={
   name:'',dob:'',bw:0,sex:'',cycleSync:false,
-  background:null,away:null,
+  background:null,historicalAge:null,away:null,
   goal:null,path:'phoenix',
   sport:'none',position:'',season:'off',
   equip:null,days:null,ampm:'morning',duration:60,
   trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},
-  injury:[],injuryNotes:''
+  injury:[],injuryNotes:'',
+  coachTone:null,
+  scheduleMode:null,
+  sessionSchedule:null
 };
 var injuryZones={};
 
@@ -8226,6 +8723,40 @@ function fqSetAway(val, el){
   fqAnswers.away=parseInt(val);
   var parent=el.closest('div');
   parent.querySelectorAll('.q-option-card:not(.q-option-wide)').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetHistoricalAge(val, el){
+  fqAnswers.historicalAge=val;
+  var parent=el.closest('div');
+  parent.querySelectorAll('.q-option-card').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetCoachTone(val, el){
+  fqAnswers.coachTone=val;
+  var parent=el.closest('.q-step');
+  parent.querySelectorAll('.q-option-wide').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetScheduleMode(val, el){
+  fqAnswers.scheduleMode=val;
+  if(val==='coach_assigns') fqAnswers.sessionSchedule=null;
+  var parent=el.closest('.q-step');
+  parent.querySelectorAll('.q-option-wide').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  fqValidateStep();
+}
+
+function fqSetSessionDay(day, type, el){
+  if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule={};
+  fqAnswers.sessionSchedule[day]=type;
+  var row=el.closest('.fq-sched-row');
+  row.querySelectorAll('.fq-sched-pill').forEach(e=>e.classList.remove('active'));
   el.classList.add('active');
   fqValidateStep();
 }
@@ -8531,12 +9062,18 @@ function fqValidateStep(){
       break;
     case 3: valid=true; break;
     case 4: valid=!!fqAnswers.path; break; // path selection
-    case 5: valid=!!(fqAnswers.background&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
+    case 5: valid=!!(fqAnswers.background&&fqAnswers.historicalAge&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
     case 6: valid=!!fqAnswers.goal; break;
     case 7: valid=true; break; // sport optional
     case 8: valid=!!fqAnswers.equip; break;
     case 9: valid=fqAnswers.days>=2; break;
-    case 10:
+    case 10: valid=!!fqAnswers.coachTone; break; // coach tone
+    case 11: valid=!!fqAnswers.scheduleMode; break; // schedule mode
+    case 12: // session timetable (only reached if user_assigns)
+      var sched=fqAnswers.sessionSchedule;
+      valid=!!(sched&&Object.keys(sched).length===7);
+      break;
+    case 13:
       var c1=document.getElementById('fq-confirm-accurate');
       var c2=document.getElementById('fq-confirm-waiver');
       var c3=document.getElementById('fq-confirm-age');
@@ -8599,6 +9136,10 @@ function updateFQStep(){
 function fqNext(){
   if(fqStep<fqTotalSteps){
     fqStep++;
+    // Skip session timetable step if coach assigns the schedule
+    if(fqStep===12 && fqAnswers.scheduleMode==='coach_assigns'){
+      fqStep++;
+    }
     updateFQStep();
     return;
   }
@@ -8616,7 +9157,11 @@ function fqNext(){
     pbw:fqAnswers.pbw||existing.pbw||0,
     fqDuration:fqAnswers.duration||60,
     fqBackground:fqAnswers.background,
+    fqHistoricalAge:fqAnswers.historicalAge,
     fqAway:fqAnswers.away,
+    fqCoachTone:fqAnswers.coachTone,
+    fqScheduleMode:fqAnswers.scheduleMode,
+    fqSessionSchedule:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.sessionSchedule:null,
     fqGoal:fqAnswers.goal,
     fqGoals:[fqAnswers.goal],
     fqSport:fqAnswers.sport,
@@ -8649,7 +9194,14 @@ function fqBack(){
     navTo(ret);
     return;
   }
-  if(fqStep>1){fqStep--;updateFQStep();}
+  if(fqStep>1){
+    fqStep--;
+    // Skip session timetable step going backwards if coach assigns
+    if(fqStep===12 && fqAnswers.scheduleMode==='coach_assigns'){
+      fqStep--;
+    }
+    updateFQStep();
+  }
   else{showScreen('screen-splash');}
 }
 
@@ -9363,7 +9915,52 @@ function renderDailyWOD(){
   window._todayWOD=wod;
 }
 
+function isTodayRestDay(){
+  if(!athlete) return false;
+  var now=new Date();
+  var dayKey=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
+  // User-assigned schedule takes priority
+  if(athlete.fqScheduleMode==='user_assigns'&&athlete.fqSessionSchedule){
+    return athlete.fqSessionSchedule[dayKey]==='rest';
+  }
+  // Check if AI programme has no session for today
+  if(athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.sessions){
+    var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+    var sess=athlete.aiProgramme.week.sessions.find(function(s){return s.day&&s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;});
+    if(!sess) return true;
+    if(sess.session_type&&sess.session_type.toLowerCase().indexOf('rest')>=0) return true;
+  }
+  return false;
+}
+
 function renderTodaySessionCard(){
+  var card=document.getElementById('card-today-session');
+  if(!card) return;
+
+  // Rest day state
+  if(isTodayRestDay()){
+    card.style.borderColor='var(--border)';
+    card.style.borderLeftColor='var(--border2)';
+    card.style.cursor='default';
+    card.setAttribute('onclick','');
+    card.querySelector('.game-card-inner').innerHTML=
+      '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm" style="color:var(--text3);">Today</span></div>'+
+      '<div class="game-card-title" style="font-size:26px;color:var(--text2);">Rest Day</div>'+
+      '<div class="game-card-sub" style="color:var(--text3);margin-top:6px;line-height:1.6;font-size:13px;">Recovery is training. Your body is adapting right now.</div>'+
+      '<div style="display:flex;gap:10px;margin-top:16px;">'+
+        '<div onclick="event.stopPropagation();openWalkLog();" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:opacity 0.15s;" onmousedown="this.style.opacity=0.7" onmouseup="this.style.opacity=1" ontouchstart="this.style.opacity=0.7" ontouchend="this.style.opacity=1">Log a Walk</div>'+
+        '<div onclick="event.stopPropagation();openActiveRecovery();" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:opacity 0.15s;" onmousedown="this.style.opacity=0.7" onmouseup="this.style.opacity=1" ontouchstart="this.style.opacity=0.7" ontouchend="this.style.opacity=1">Active Recovery</div>'+
+      '</div>';
+    window._todaySession=null;
+    return;
+  }
+
+  // Reset card to training state if previously showing rest
+  card.style.borderColor='var(--border)';
+  card.style.borderLeftColor='var(--gold)';
+  card.style.cursor='pointer';
+  card.setAttribute('onclick','openTodaySession()');
+
   if(!athlete||!athlete.aiProgramme) return;
   var prog=athlete.aiProgramme;
   var week=prog.week;
@@ -9372,11 +9969,77 @@ function renderTodaySessionCard(){
   var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
   var todaySess=week.sessions.find(function(s){return s.day&&s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;});
   if(!todaySess) todaySess=week.sessions[0];
-  var nameEl=document.getElementById('today-session-name');
-  var detailEl=document.getElementById('today-session-detail');
-  if(nameEl) nameEl.textContent=todaySess.session_type||'Training';
-  if(detailEl) detailEl.textContent=(todaySess.exercises||[]).length+' exercises · '+(todaySess.duration_min||45)+'min';
+  card.querySelector('.game-card-inner').innerHTML=
+    '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Your Programme</span></div>'+
+    '<div class="game-card-title" id="today-session-name" style="font-size:28px;">'+(todaySess.session_type||'Training')+'</div>'+
+    '<div class="game-card-sub" id="today-session-detail">'+(todaySess.exercises||[]).length+' exercises · '+(todaySess.duration_min||45)+'min</div>'+
+    '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
   window._todaySession=todaySess;
+}
+
+function openActiveRecovery(){
+  var opts=[
+    {key:'foam_rolling',label:'Foam Rolling'},
+    {key:'mobility_work',label:'Mobility Work'},
+    {key:'sauna',label:'Sauna'},
+    {key:'ice_bath',label:'Ice Bath'},
+    {key:'meditation',label:'Meditation'}
+  ];
+  var overlay=document.createElement('div');
+  overlay.id='active-recovery-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;';
+  var panel=document.createElement('div');
+  panel.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:340px;';
+  panel.innerHTML=
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Active Recovery</div>'+
+    '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:4px;">What did you do?</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Tap to log. No timer, no pressure.</div>'+
+    '<div id="ar-options" style="display:flex;flex-direction:column;gap:8px;">'+
+    opts.map(function(o){
+      return '<label style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:all 0.15s;">'+
+        '<input type="checkbox" data-ar="'+o.key+'" style="width:18px;height:18px;accent-color:var(--green);">'+
+        '<span style="font-family:var(--font-d);font-size:14px;font-weight:600;color:var(--text);letter-spacing:0.5px;">'+o.label+'</span>'+
+      '</label>';
+    }).join('')+
+    '</div>'+
+    '<div style="display:flex;gap:10px;margin-top:20px;">'+
+      '<button id="ar-save-btn" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:var(--radius);padding:12px;font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Log Recovery</button>'+
+      '<button id="ar-close-btn" style="flex:0 0 auto;background:var(--bg3);color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius);padding:12px 16px;font-family:var(--font-d);font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">Close</button>'+
+    '</div>';
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay){overlay.remove();}});
+  panel.querySelector('#ar-close-btn').addEventListener('click',function(){overlay.remove();});
+  panel.querySelector('#ar-save-btn').addEventListener('click',async function(){
+    var checked=Array.from(panel.querySelectorAll('input[data-ar]:checked')).map(function(i){return i.dataset.ar;});
+    if(!checked.length){overlay.remove();return;}
+    // Log to Supabase
+    if(currentSession&&currentSession.user&&currentSession.user.id){
+      try{
+        await sb.from('sessions').insert({
+          user_id:currentSession.user.id,
+          session_type:'mobility',
+          session_name:'Active Recovery',
+          started_at:new Date().toISOString(),
+          completed_at:new Date().toISOString(),
+          programme_week:currentProgWeek||progWeek()||1,
+          status:'completed',
+          details:{activities:checked}
+        });
+      }catch(e){console.error('[PHX] active recovery log error:',e);}
+    }
+    // Also log locally
+    var entry={date:new Date().toISOString(),type:'mobility',name:'Active Recovery',activities:checked,status:'completed'};
+    if(!athlete.sessionLog) athlete.sessionLog=[];
+    athlete.sessionLog.push(entry);
+    saveAthlete(athlete);
+    overlay.remove();
+    var t=document.createElement('div');
+    t.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px 20px;border-radius:8px;z-index:999;text-align:center;';
+    t.textContent='Recovery logged';
+    document.body.appendChild(t);
+    setTimeout(function(){t.remove();},3000);
+  });
 }
 
 function updateCardAccess(){

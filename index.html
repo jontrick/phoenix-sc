@@ -3005,7 +3005,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.6.9';
+var APP_VERSION='4.7.0';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3343,6 +3343,267 @@ async function saveAthleteToSupabase(data){
     throw res.error;
   }
   console.log('[PHX] Supabase save succeeded');
+}
+
+// ====== SUPABASE SESSION + SET SYNC (Phase 2) ======
+var currentSupabaseSessionId=null;
+
+function mapSessionType(rawSessionId){
+  if(!rawSessionId) return 'strength';
+  var id=rawSessionId.toLowerCase();
+  if(id==='walk') return 'walk';
+  if(id==='run') return 'run';
+  if(id==='core') return 'core';
+  if(id.indexOf('cf-')===0||id==='karen-core') return 'wod';
+  // All lift sessions: me-upper-press, me-lower-sq, me-pull, de-total, tbbs, ai-*
+  return 'strength';
+}
+
+async function supabaseStartSession(sessionType,sessionName,rawSessionId,opts){
+  if(!currentSession||!currentSession.user||!currentSession.user.id) return null;
+  var row={
+    user_id:currentSession.user.id,
+    session_type:sessionType,
+    session_name:sessionName,
+    started_at:new Date().toISOString(),
+    programme_week:currentProgWeek||progWeek()||1,
+    status:'in_progress',
+    details:Object.assign({session_id:rawSessionId},opts||{})
+  };
+  try{
+    var res=await sb.from('sessions').insert(row).select('id').single();
+    if(res.error){console.error('[PHX] supabaseStartSession failed:',res.error);return null;}
+    currentSupabaseSessionId=res.data.id;
+    console.log('[PHX] session started:',currentSupabaseSessionId);
+    return currentSupabaseSessionId;
+  }catch(e){console.error('[PHX] supabaseStartSession error:',e);return null;}
+}
+
+async function supabaseCompleteSession(updates){
+  if(!currentSupabaseSessionId||!currentSession||!currentSession.user) return;
+  var patch={
+    status:'completed',
+    completed_at:new Date().toISOString()
+  };
+  if(updates){
+    if(updates.duration_seconds!==undefined) patch.duration_seconds=updates.duration_seconds;
+    if(updates.total_volume_kg!==undefined) patch.total_volume_kg=updates.total_volume_kg;
+    if(updates.total_reps!==undefined) patch.total_reps=updates.total_reps;
+    if(updates.total_distance_m!==undefined) patch.total_distance_m=updates.total_distance_m;
+    if(updates.rpe_session!==undefined) patch.rpe_session=updates.rpe_session;
+    if(updates.mood!==undefined) patch.mood=updates.mood;
+    if(updates.energy!==undefined) patch.energy=updates.energy;
+    if(updates.notes!==undefined) patch.details_patch_notes=updates.notes;
+    if(updates.details!==undefined) patch.details=updates.details;
+  }
+  var sessionId=currentSupabaseSessionId;
+  currentSupabaseSessionId=null;
+  try{
+    // Merge details: read existing, merge new
+    if(patch.details||patch.details_patch_notes){
+      var existing=await sb.from('sessions').select('details').eq('id',sessionId).single();
+      var merged=existing&&existing.data&&existing.data.details?Object.assign({},existing.data.details):{};
+      if(patch.details) Object.assign(merged,patch.details);
+      if(patch.details_patch_notes) merged.notes=patch.details_patch_notes;
+      patch.details=merged;
+    }
+    delete patch.details_patch_notes;
+    patch.updated_at=new Date().toISOString();
+    var res=await sb.from('sessions').update(patch).eq('id',sessionId);
+    if(res.error) console.error('[PHX] supabaseCompleteSession failed:',res.error);
+    else console.log('[PHX] session completed:',sessionId);
+  }catch(e){console.error('[PHX] supabaseCompleteSession error:',e);}
+}
+
+function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
+  if(!currentSupabaseSessionId||!currentSession||!currentSession.user) return;
+  var row={
+    session_id:currentSupabaseSessionId,
+    user_id:currentSession.user.id,
+    exercise_name:exerciseName||'',
+    exercise_id:exerciseId||'',
+    set_number:setNumber||0,
+    weight_kg:parseFloat(weightKg)||null,
+    reps:parseInt(reps)||null,
+    completed:true,
+    logged_at:new Date().toISOString()
+  };
+  if(opts){
+    if(opts.duration_seconds!==undefined) row.duration_seconds=opts.duration_seconds;
+    if(opts.distance_m!==undefined) row.distance_m=opts.distance_m;
+    if(opts.rpe!==undefined) row.rpe=opts.rpe;
+    if(opts.is_warmup!==undefined) row.is_warmup=opts.is_warmup;
+    if(opts.is_failure!==undefined) row.is_failure=opts.is_failure;
+    if(opts.notes!==undefined) row.notes=opts.notes;
+    if(opts.rest_taken_seconds!==undefined) row.rest_taken_seconds=opts.rest_taken_seconds;
+  }
+  // Fire-and-forget
+  sb.from('set_logs').insert(row).then(function(res){
+    if(res.error) console.error('[PHX] supabaseLogSet failed:',res.error);
+  });
+}
+
+function computeSessionMetrics(sets){
+  var totalVol=0,totalReps=0;
+  if(!sets) return {total_volume_kg:0,total_reps:0};
+  for(var exId in sets){
+    if(!sets.hasOwnProperty(exId)) continue;
+    var exSets=sets[exId];
+    if(!Array.isArray(exSets)) continue;
+    exSets.forEach(function(s){
+      var kg=parseFloat(s.kg)||0;
+      var r=parseInt(s.reps)||0;
+      totalReps+=r;
+      if(kg>0&&r>0) totalVol+=kg*r;
+    });
+  }
+  return {total_volume_kg:Math.round(totalVol*10)/10,total_reps:totalReps};
+}
+
+async function migrateSessionsToSupabase(){
+  if(!currentSession||!currentSession.user||!currentSession.user.id) return;
+  var uid=currentSession.user.id;
+  try{
+    // Check if any sessions already exist for this user
+    var check=await sb.from('sessions').select('id').eq('user_id',uid).limit(1);
+    if(check.data&&check.data.length>0){console.log('[PHX] sessions already migrated, skipping');return;}
+
+    var sessionRows=[];
+    var setLogRows=[];
+    var now=new Date().toISOString();
+
+    // 1. phoenix_session_logs
+    var slRaw=localStorage.getItem('phoenix_session_logs');
+    if(slRaw){
+      try{
+        var sl=JSON.parse(slRaw);
+        sl.forEach(function(s){
+          var rawId=s.sessionId||'unknown';
+          var sType=mapSessionType(rawId);
+          var row={
+            user_id:uid,session_type:sType,session_name:rawId,
+            started_at:s.date||now,completed_at:s.date||now,
+            programme_week:s.week||null,status:'completed',
+            details:Object.assign({session_id:rawId},s),
+            created_at:s.date||now,updated_at:now
+          };
+          // Compute metrics for lift sessions with sets
+          if(s.sets){
+            var m=computeSessionMetrics(s.sets);
+            row.total_volume_kg=m.total_volume_kg;
+            row.total_reps=m.total_reps;
+          }
+          if(s.karenReps) row.total_reps=parseInt(s.karenReps)||0;
+          if(s.notes) row.details.notes=s.notes;
+          sessionRows.push(row);
+        });
+      }catch(e){console.warn('[PHX] migration: failed to parse phoenix_session_logs',e);}
+    }
+
+    // 2. phoenix_core_logs
+    var clRaw=localStorage.getItem('phoenix_core_logs');
+    if(clRaw){
+      try{
+        var cl=JSON.parse(clRaw);
+        cl.forEach(function(c){
+          sessionRows.push({
+            user_id:uid,session_type:'core',session_name:'Core '+(c.coreNum||''),
+            started_at:c.date||now,completed_at:c.date||now,
+            programme_week:null,status:'completed',
+            total_reps:c.totalReps||0,
+            details:{session_id:'core',coreNum:c.coreNum,fullRounds:c.fullRounds,finalPartialReps:c.finalPartialReps,log:c.log},
+            created_at:c.date||now,updated_at:now
+          });
+        });
+      }catch(e){console.warn('[PHX] migration: failed to parse phoenix_core_logs',e);}
+    }
+
+    // 3. phoenix_walk_logs
+    var wlRaw=localStorage.getItem('phoenix_walk_logs');
+    if(wlRaw){
+      try{
+        var wl=JSON.parse(wlRaw);
+        wl.forEach(function(w){
+          sessionRows.push({
+            user_id:uid,session_type:w.mode||'walk',session_name:w.mode==='run'?'Run':'Walk',
+            started_at:w.date||now,completed_at:w.date||now,
+            duration_seconds:w.durationSecs||null,
+            total_distance_m:w.distance?Math.round(w.distance*1000):null,
+            mood:w.feel||null,status:'completed',
+            details:{session_id:w.mode||'walk',mode:w.mode,weight:w.weight,distance:w.distance},
+            created_at:w.date||now,updated_at:now
+          });
+        });
+      }catch(e){console.warn('[PHX] migration: failed to parse phoenix_walk_logs',e);}
+    }
+
+    // 4. phoenix_wod_scores
+    var wsRaw=localStorage.getItem('phoenix_wod_scores');
+    if(wsRaw){
+      try{
+        var ws=JSON.parse(wsRaw);
+        ws.forEach(function(w){
+          sessionRows.push({
+            user_id:uid,session_type:'wod',session_name:w.wod_name||'WOD',
+            started_at:w.date||now,completed_at:w.date||now,
+            duration_seconds:w.time_elapsed||null,
+            total_reps:w.amrap_reps||null,status:'completed',
+            details:{session_id:'wod',wod_id:w.wod_id,wod_name:w.wod_name,score:w.score,amrap_reps:w.amrap_reps},
+            created_at:w.date||now,updated_at:now
+          });
+        });
+      }catch(e){console.warn('[PHX] migration: failed to parse phoenix_wod_scores',e);}
+    }
+
+    if(!sessionRows.length){console.log('[PHX] no local sessions to migrate');return;}
+
+    // Batch insert sessions (Supabase returns inserted rows with IDs)
+    var insertRes=await sb.from('sessions').insert(sessionRows).select('id');
+    if(insertRes.error){
+      console.error('[PHX] migration: sessions insert failed:',insertRes.error);
+      return;
+    }
+    console.log('[PHX] migrated '+insertRes.data.length+' sessions to Supabase');
+
+    // Build set_logs from phoenix_session_logs entries that have sets data
+    // Map by index: sessionRows[i] → insertRes.data[i].id
+    if(slRaw){
+      try{
+        var sl2=JSON.parse(slRaw);
+        var offset=0; // first N sessionRows come from phoenix_session_logs
+        sl2.forEach(function(s,idx){
+          if(!s.sets||!insertRes.data[offset+idx]) return;
+          var sessId=insertRes.data[offset+idx].id;
+          for(var exId in s.sets){
+            if(!s.sets.hasOwnProperty(exId)) continue;
+            var exSets=s.sets[exId];
+            if(!Array.isArray(exSets)) continue;
+            exSets.forEach(function(setData,setIdx){
+              setLogRows.push({
+                session_id:sessId,user_id:uid,
+                exercise_name:exId,exercise_id:exId,
+                set_number:setIdx,
+                weight_kg:parseFloat(setData.kg)||null,
+                reps:parseInt(setData.reps)||null,
+                completed:true,
+                logged_at:s.date||now
+              });
+            });
+          }
+        });
+      }catch(e){console.warn('[PHX] migration: failed to build set_logs',e);}
+    }
+
+    if(setLogRows.length){
+      // Batch insert in chunks of 500 to stay under Supabase limits
+      for(var i=0;i<setLogRows.length;i+=500){
+        var chunk=setLogRows.slice(i,i+500);
+        var slRes=await sb.from('set_logs').insert(chunk);
+        if(slRes.error) console.error('[PHX] migration: set_logs chunk insert failed:',slRes.error);
+      }
+      console.log('[PHX] migrated '+setLogRows.length+' set_logs to Supabase');
+    }
+  }catch(e){console.error('[PHX] migrateSessionsToSupabase error:',e);}
 }
 
 // Background sync — fetch fresh profile and update local cache
@@ -4103,9 +4364,15 @@ function openSession(sessionId){
   notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? Any modifications..."></textarea>';
   body.appendChild(notesBlock);
   var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session \u2713';
-  finBtn.addEventListener('click',function(){if(confirm('Mark session as complete?')){navTo('today');}});
+  finBtn.addEventListener('click',function(){
+    if(confirm('Mark session as complete?')){
+      logLiftSession('me-pull');
+      navTo('today');
+    }
+  });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  supabaseStartSession('strength','ME Upper Pull','me-pull');
   showScreen('screen-session');
 }
 function renderExBlock(ex){
@@ -4261,6 +4528,8 @@ function autoLogSet(row){
   var logs=JSON.parse(localStorage.getItem('phoenix_session_logs_sets')||'[]');
   logs.push(entry);
   localStorage.setItem('phoenix_session_logs_sets',JSON.stringify(logs));
+  // Supabase real-time set logging
+  supabaseLogSet(exerciseName,exId,setIdx,kg,reps);
 }
 
 // AMRAP Rep Counter
@@ -4423,6 +4692,7 @@ function openLowerSqSession() {
   });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  supabaseStartSession('strength','ME Lower','me-lower-sq');
   showScreen('screen-session');
 }
 
@@ -4574,10 +4844,19 @@ function openCoreSession(coreNum) {
   var finBtn = document.createElement('button');
   finBtn.className = 'finish-btn';
   finBtn.textContent = 'Complete Session';
-  finBtn.addEventListener('click', function(){if(confirm('Mark session as complete?')){stopCoreTimer();navTo('today');}});
+  finBtn.addEventListener('click', function(){
+    if(confirm('Mark session as complete?')){
+      stopCoreTimer();
+      var roundEl=document.getElementById('round-count');
+      var rounds=roundEl?parseInt(roundEl.textContent)||0:0;
+      supabaseCompleteSession({total_reps:rounds,details:{session_id:'core',coreNum:coreNum,fullRounds:rounds}});
+      navTo('today');
+    }
+  });
   body.appendChild(finBtn);
 
   document.getElementById('session-back-btn').onclick = function(){stopCoreTimer();navTo('today');};
+  supabaseStartSession('core','Core '+coreNum,'core',{coreNum:coreNum});
   showScreen('screen-session');
 }
 
@@ -4632,6 +4911,7 @@ function openCoreSessionFromPicker(coreNum){
   coreLog=[];
   coreExIdx=0;
   coreRepIdx=0;
+  supabaseStartSession('core','Core '+coreNum,'core',{coreNum:coreNum});
   startCorePrepCountdown();
 }
 
@@ -4786,6 +5066,7 @@ function logCoreSession(){
     log:coreLog
   });
   localStorage.setItem('phoenix_core_logs',JSON.stringify(logs));
+  supabaseCompleteSession({total_reps:totalReps,details:{session_id:'core',coreNum:coreSession.num,fullRounds:fullRounds,finalPartialReps:finalReps,log:coreLog}});
   navTo('today');
 }
 
@@ -4928,6 +5209,7 @@ function openPressSession(){
   });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  supabaseStartSession('strength','ME Upper Press','me-upper-press');
   showScreen('screen-session');
 }
 
@@ -5048,12 +5330,15 @@ function openKarenSession(){
         notes:notesEl?notesEl.value:''
       });
       localStorage.setItem('phoenix_session_logs',JSON.stringify(logs2));
+      var _karenReps=parseInt(repsEl?repsEl.value:0)||0;
+      supabaseCompleteSession({total_reps:_karenReps,notes:notesEl?notesEl.value:'',details:{session_id:'karen-core',week:currentProgWeek||1,karenTime:timerEl?timerEl.textContent:'',karenReps:repsEl?repsEl.value:'150'}});
       clearInterval(karenInterval);releaseWakeLock();
       navTo('today');
     }
   });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){clearInterval(karenInterval);releaseWakeLock();navTo('today');};
+  supabaseStartSession('wod','Karen + Core','karen-core');
   showScreen('screen-session');
 }
 
@@ -5149,6 +5434,7 @@ function openDESession(){
   });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  supabaseStartSession('strength','DE Total','de-total');
   showScreen('screen-session');
 }
 
@@ -5327,11 +5613,14 @@ function openCFSession(name){
       var logs2=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
       logs2.push(entry);
       localStorage.setItem('phoenix_session_logs',JSON.stringify(logs2));
+      var _cfReps=parseInt(repsEl?repsEl.value:0)||0;
+      supabaseCompleteSession({total_reps:_cfReps,notes:entry.notes,details:{session_id:'cf-'+name.toLowerCase(),week:entry.week,time:entry.time,rounds:entry.rounds,reps:entry.reps}});
       navTo('today');
     }
   });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){clearInterval(cfTimerInterval);cfRunning=false;releaseWakeLock();navTo('today');};
+  supabaseStartSession('wod',name,'cf-'+name.toLowerCase());
   showScreen('screen-session');
 }
 
@@ -5356,6 +5645,9 @@ function logGenericSession(sessionId,structure){
   var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
   logs.push(entry);
   localStorage.setItem('phoenix_session_logs',JSON.stringify(logs));
+  // Supabase complete
+  var m=computeSessionMetrics(sets);
+  supabaseCompleteSession({total_volume_kg:m.total_volume_kg,total_reps:m.total_reps,notes:entry.notes,details:{session_id:sessionId,week:entry.week,sets:sets}});
 }
 
 // ====== FOUNDATION QUESTIONNAIRE ======
@@ -6770,6 +7062,7 @@ function walkStart(){
   if(walkTracking) return;
   walkTracking=true;walkPaused=false;
   walkCoords=[];walkStartTime=Date.now();walkTotalPause=0;
+  supabaseStartSession(walkMode,walkMode==='run'?'Run':'Walk',walkMode);
   var sb=document.getElementById('wt-start-btn');
   var pb=document.getElementById('wt-pause-btn');
   if(sb) sb.style.display='none';
@@ -6831,6 +7124,7 @@ function walkStop(){
   var logs=JSON.parse(localStorage.getItem('phoenix_walk_logs')||'[]');
   logs.push(entry);
   localStorage.setItem('phoenix_walk_logs',JSON.stringify(logs));
+  supabaseCompleteSession({duration_seconds:elapsed,total_distance_m:Math.round(dist*1000),mood:feel,details:{session_id:walkMode,mode:walkMode,weight:weight,distance:entry.distance}});
   checkFreeTrialUnlock();
   var streak=getWalkStreak();
   var name=getFirstName();
@@ -7260,12 +7554,15 @@ function openTBBSSession(){
       var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
       logs.push(entry);
       localStorage.setItem('phoenix_session_logs',JSON.stringify(logs));
+      var _tbbsM=computeSessionMetrics(sets);
+      supabaseCompleteSession({total_volume_kg:_tbbsM.total_volume_kg,total_reps:_tbbsM.total_reps,notes:entry.notes,details:{session_id:'tbbs',week:entry.week,sets:sets}});
       checkFreeTrialUnlock();
       navTo('today');
     }
   });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  supabaseStartSession('strength','Total Body Basic Split','tbbs');
   showScreen('screen-session');
 }
 
@@ -7295,6 +7592,9 @@ function logLiftSession(sessionId){
   var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
   logs.push(entry);
   localStorage.setItem('phoenix_session_logs',JSON.stringify(logs));
+  // Supabase complete
+  var m=computeSessionMetrics(sets);
+  supabaseCompleteSession({total_volume_kg:m.total_volume_kg,total_reps:m.total_reps,notes:entry.notes,details:{session_id:sessionId,week:entry.week,sets:sets}});
 }
 
 function getSessionLogs(sessionId){
@@ -7745,6 +8045,8 @@ await loadProfileAndRoute();
 
 // Background sync for cache freshness
 setTimeout(backgroundSync,3000);
+// Phase 2: migrate historical sessions to Supabase (one-time, after profile sync)
+setTimeout(migrateSessionsToSupabase,5000);
 
 // ====== SESSION DATA ======
 
@@ -9335,6 +9637,11 @@ function logWODScore(timeElapsed,amrapReps){
     amrap_reps:amrapReps||0
   });
   localStorage.setItem('phoenix_wod_scores',JSON.stringify(scores));
+  // Supabase: WOD scores are logged atomically (no separate start)
+  (async function(){
+    await supabaseStartSession('wod',wod.name||'WOD','wod');
+    supabaseCompleteSession({duration_seconds:timeElapsed||0,total_reps:amrapReps||0,details:{session_id:'wod',wod_id:wod.id,wod_name:wod.name,score:scorePrompt,amrap_reps:amrapReps||0}});
+  })();
   // Update streak
   var lastWOD=localStorage.getItem('phoenix_wod_last_date');
   var today=new Date().toDateString();
@@ -9582,9 +9889,36 @@ function openTodaySession(){
   var finBtn=document.createElement('button');
   finBtn.className='finish-btn';
   finBtn.textContent='Complete Session \u2713';
-  finBtn.addEventListener('click',function(){if(confirm('Mark session as complete?')){navTo('today');}});
+  finBtn.addEventListener('click',function(){
+    if(confirm('Mark session as complete?')){
+      // Collect AI session sets from DOM
+      var aiSets={};
+      exercises.forEach(function(ex,i){
+        var setsCount=parseInt(ex.sets)||3;
+        aiSets['ai-'+i]=[];
+        for(var s=0;s<setsCount;s++){
+          var kgEl=document.getElementById('kg-ai-'+i+'-'+s);
+          var rpEl=document.getElementById('reps-ai-'+i+'-'+s);
+          aiSets['ai-'+i].push({kg:kgEl?kgEl.value:'',reps:rpEl?rpEl.value:''});
+        }
+      });
+      var notesEl=document.getElementById('session-notes-field');
+      var aiSessionId='ai-'+(sess.session_type||'training').toLowerCase();
+      // Log to localStorage
+      var entry={date:new Date().toISOString(),sessionId:aiSessionId,week:currentProgWeek||1,notes:notesEl?notesEl.value:'',sets:aiSets};
+      var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
+      logs.push(entry);
+      localStorage.setItem('phoenix_session_logs',JSON.stringify(logs));
+      // Supabase complete
+      var _aiM=computeSessionMetrics(aiSets);
+      supabaseCompleteSession({total_volume_kg:_aiM.total_volume_kg,total_reps:_aiM.total_reps,notes:entry.notes,details:{session_id:aiSessionId,week:entry.week,sets:aiSets}});
+      navTo('today');
+    }
+  });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
+  var aiSessionType=mapSessionType('ai-'+(sess.session_type||'strength').toLowerCase());
+  supabaseStartSession(aiSessionType,sess.session_type||'Training','ai-'+(sess.session_type||'training').toLowerCase());
   showScreen('screen-session');
 }
 

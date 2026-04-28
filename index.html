@@ -1948,10 +1948,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 <div class="q-screen">
 
 <!-- ============================================================ -->
-<!-- SECTION A: WHO YOU ARE (Steps 1-3) -->
+<!-- v4.7.3 QUESTIONNAIRE — 9 UI steps (10th is loading screen) -->
 <!-- ============================================================ -->
 
-<!-- STEP 1: Personal Details -->
+<!-- STEP 1: Personal Details + Skin + Equipment -->
 <div class="q-step active" id="fq-step-1">
   <div class="q-tag">Step 1 — Who you are</div>
   <div class="q-title">Personal<br>Details</div>
@@ -1969,7 +1969,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <div class="q-field">
     <label class="q-label">Biological sex</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;" id="fq-sex-row">
       <div class="q-option-card" onclick="fqSetSex('male',this)">Male</div>
       <div class="q-option-card" onclick="fqSetSex('female',this)">Female</div>
       <div class="q-option-card" onclick="fqSetSex('other',this)">Other</div>
@@ -1981,6 +1981,17 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="q-option-card" onclick="fqSetCycle('yes',this)">Yes please</div>
       <div class="q-option-card" onclick="fqSetCycle('no',this)">Not now</div>
     </div>
+  </div>
+  <div class="q-field" style="margin-top:16px;">
+    <label class="q-label">Equipment access</label>
+    <select class="q-input" id="fq-equip" onchange="fqAnswers.equip=this.value;fqValidateStep()" style="margin-top:6px;">
+      <option value="">Select your setup...</option>
+      <option value="full_commercial_gym">Full commercial gym</option>
+      <option value="crossfit_box">CrossFit / functional gym</option>
+      <option value="home_gym_barbell">Home gym — barbell setup</option>
+      <option value="home_gym_dumbbell">Home gym — dumbbells / kettlebells</option>
+      <option value="bodyweight">Bodyweight only</option>
+    </select>
   </div>
   <div class="q-field" style="margin-top:16px;">
     <label class="q-label">Theme</label>
@@ -2031,7 +2042,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
 </div>
 
-<!-- STEP 2: Health Advisory + PAR-Q -->
+<!-- STEP 2: PAR-Q + Injuries (combined) -->
 <div class="q-step" id="fq-step-2">
   <div class="q-tag">Step 2 — Health check</div>
   <div class="q-title">Your Safety<br>Matters</div>
@@ -2084,13 +2095,8 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div id="parq-flag" style="display:none;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:12px;margin-top:12px;font-size:12px;color:var(--orange);line-height:1.6;">
     You answered yes to one or more questions. We recommend consulting your doctor before starting. You can still proceed but please train with appropriate caution.
   </div>
-</div>
-
-<!-- STEP 3: Injuries -->
-<div class="q-step" id="fq-step-3">
-  <div class="q-tag">Step 3 — Your body</div>
-  <div class="q-title">Any Injuries<br>or Niggles?</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Tap any area where you have a current or recent injury. Your programme will work around it.</div>
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:24px 0 8px;">Injury assessment</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6;">Tap any area where you have a current or recent injury. Your programme will work around it.</div>
   <div class="injury-cols" id="injury-selector">
     <div>
       <div class="injury-col-head">Front</div>
@@ -2108,41 +2114,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <textarea id="fq-injury-notes" class="q-input" placeholder="Any additional notes about injuries or limitations..." rows="2" style="margin-top:4px;" oninput="fqAnswers.injuryNotes=this.value"></textarea>
 </div>
 
-<!-- STEP 3b: Programme Path Selection -->
-<div class="q-step" id="fq-step-path">
-  <div class="q-tag">Step 4 — Your path</div>
-  <div class="q-title">Choose Your<br>Programme Path</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6;">How would you like your programme built?</div>
-  <div style="display:flex;flex-direction:column;gap:12px;">
-    <div class="q-option-card q-option-wide" id="path-phoenix-coach" onclick="fqSetPath('phoenix',this)" style="position:relative;">
-      <div style="display:flex;align-items:flex-start;gap:12px;">
-        <div style="flex:1;">
-          <strong>Phoenix Coach</strong>
-          <span class="q-option-sub" style="display:block;margin-top:4px;">AI-built programme personalised to your goals, sport, injuries and schedule. Periodised and auto-progressed.</span>
-          <div id="path-phoenix-tier" style="margin-top:8px;font-size:10px;font-family:var(--font-d);letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Ignite / Pro</div>
-        </div>
-      </div>
-    </div>
-    <div class="q-option-card q-option-wide" id="path-byo" onclick="fqSetPath('byo',this)" style="position:relative;opacity:0.5;pointer-events:none;">
-      <div style="display:flex;align-items:flex-start;gap:12px;">
-        <div style="flex:1;">
-          <strong>Build My Own</strong>
-          <span class="q-option-sub" style="display:block;margin-top:4px;">Choose your own exercises, sets and reps from the Phoenix exercise library. Full control.</span>
-          <div style="margin-top:8px;font-size:10px;font-family:var(--font-d);letter-spacing:2px;text-transform:uppercase;color:var(--text3);">All tiers — Coming soon</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ============================================================ -->
-<!-- SECTION B: YOUR TRAINING (Steps 5-10) -->
-<!-- ============================================================ -->
-
-<!-- STEP 5: Training background + time away + current metrics -->
-<div class="q-step" id="fq-step-4">
-  <div class="q-tag">Step 5 — Your training</div>
-  <div class="q-title">Training<br>Background</div>
+<!-- STEP 3: Training history -->
+<div class="q-step" id="fq-step-3">
+  <div class="q-tag">Step 3 — Your training history</div>
+  <div class="q-title">Training<br>History</div>
   <div style="margin-bottom:20px;">
     <label class="q-label">Training experience</label>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
@@ -2161,17 +2136,17 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     </div>
   </div>
   <div style="margin-bottom:20px;">
-    <label class="q-label">Before your time away, how long had you trained consistently?</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+    <label class="q-label">How long have you trained consistently in total?</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;" id="fq-historical-row">
       <div class="q-option-card" onclick="fqSetHistoricalAge('lt2',this)">Less than 2 years</div>
       <div class="q-option-card" onclick="fqSetHistoricalAge('2to5',this)">2-5 years</div>
       <div class="q-option-card" onclick="fqSetHistoricalAge('5to10',this)">5-10 years</div>
       <div class="q-option-card" onclick="fqSetHistoricalAge('10plus',this)">10+ years</div>
     </div>
   </div>
-  <div style="margin-bottom:20px;">
-    <label class="q-label">Time since consistent training</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+  <div>
+    <label class="q-label">Time since you last trained consistently</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;" id="fq-away-row">
       <div class="q-option-card" onclick="fqSetAway('0',this)">Training now</div>
       <div class="q-option-card" onclick="fqSetAway('1',this)">1-3 months</div>
       <div class="q-option-card" onclick="fqSetAway('3',this)">3-6 months</div>
@@ -2180,147 +2155,172 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="q-option-card" onclick="fqSetAway('24',this)">2+ years</div>
     </div>
   </div>
-  <div>
-    <label class="q-label" style="margin-bottom:8px;display:block;">Current strength metrics <span style="color:var(--text3);font-weight:400;">(optional — skip if unsure)</span></label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <div><label class="q-label" style="font-size:11px;">Bench 1RM (kg)</label><input class="q-input" type="number" id="fq-b1rm" placeholder="e.g. 100" oninput="fqAnswers.b1rm=parseFloat(this.value)||0" style="margin-top:4px;"></div>
-      <div><label class="q-label" style="font-size:11px;">Squat 1RM (kg)</label><input class="q-input" type="number" id="fq-sq" placeholder="e.g. 120" oninput="fqAnswers.sq=parseFloat(this.value)||0" style="margin-top:4px;"></div>
-      <div><label class="q-label" style="font-size:11px;">Deadlift 1RM (kg)</label><input class="q-input" type="number" id="fq-dl" placeholder="e.g. 140" oninput="fqAnswers.dl=parseFloat(this.value)||0" style="margin-top:4px;"></div>
-      <div><label class="q-label" style="font-size:11px;">Max pull ups</label><input class="q-input" type="number" id="fq-pbw" placeholder="e.g. 12" oninput="fqAnswers.pbw=parseFloat(this.value)||0" style="margin-top:4px;"></div>
-    </div>
-  </div>
 </div>
 
-<!-- STEP 5: Primary goal -->
-<div class="q-step" id="fq-step-5">
-  <div class="q-tag">Step 6 — Your direction</div>
-  <div class="q-title">Primary<br>Goal</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">What is your main training objective? Your programme is built around this.</div>
+<!-- STEP 4: Goals + Sport + Programme target + Assessment scores -->
+<div class="q-step" id="fq-step-4">
+  <div class="q-tag">Step 4 — Direction &amp; numbers</div>
+  <div class="q-title">Your Goals<br>&amp; Numbers</div>
+
+  <!-- Section A: Goals -->
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:8px 0 6px;">A — Goals</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Tap your <strong>primary</strong> goal first, then optionally a secondary.</div>
   <div style="display:flex;flex-direction:column;gap:8px;">
     <div class="q-option-card q-option-wide" onclick="fqSetGoal('strength',this)" data-goal="strength">
-      <strong>Strength</strong><span class="q-option-sub">Get stronger. Move heavier. Build a foundation.</span>
+      <strong>Strength &amp; Power</strong><span class="q-option-sub">Get stronger. Move heavier. Build a foundation.</span>
     </div>
     <div class="q-option-card q-option-wide" onclick="fqSetGoal('hypertrophy',this)" data-goal="hypertrophy">
-      <strong>Muscle and size</strong><span class="q-option-sub">Build muscle mass and improve body composition</span>
+      <strong>Hypertrophy &amp; Body Composition</strong><span class="q-option-sub">Build muscle and improve composition</span>
     </div>
     <div class="q-option-card q-option-wide" onclick="fqSetGoal('fat_loss',this)" data-goal="fat_loss">
-      <strong>Fat loss</strong><span class="q-option-sub">Lose body fat while maintaining or building muscle</span>
+      <strong>Fat Loss</strong><span class="q-option-sub">Lose body fat while keeping or building muscle</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetGoal('general_fitness',this)" data-goal="general_fitness">
+      <strong>General Fitness</strong><span class="q-option-sub">Conditioning, capacity, all-round health</span>
     </div>
     <div class="q-option-card q-option-wide" onclick="fqSetGoal('athletic',this)" data-goal="athletic">
-      <strong>Athletic performance</strong><span class="q-option-sub">Speed, power, and sport-specific conditioning</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetGoal('conditioning',this)" data-goal="conditioning">
-      <strong>Conditioning and fitness</strong><span class="q-option-sub">Improve aerobic capacity and general fitness</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetGoal('event',this)" data-goal="event">
-      <strong>Event preparation</strong><span class="q-option-sub">Hyrox, Spartan, Combine, powerlifting, marathon</span>
+      <strong>Athletic Performance</strong><span class="q-option-sub">Speed, power, sport-specific output</span>
     </div>
   </div>
-</div>
+  <div style="font-size:11px;color:var(--text3);margin-top:8px;">Secondary goal optional — tap a second card or skip.</div>
 
-<!-- STEP 6: Sport influence -->
-<div class="q-step" id="fq-step-6">
-  <div class="q-tag">Step 7 — Sport influence</div>
-  <div class="q-title">Do You<br>Play a Sport?</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Your programme can be influenced by your sport and position even if your primary goal is strength or hypertrophy. This is optional.</div>
-  <div style="display:flex;flex-direction:column;gap:8px;" id="fq-sport-list">
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('none',this)">
-      <strong>No sport</strong><span class="q-option-sub">Pure goal-based programming</span>
+  <!-- Section B: Sport -->
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">B — Sport <span style="color:var(--text3);font-weight:400;letter-spacing:1px;">(optional)</span></div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Does sport play a role in your training?</div>
+  <div style="display:flex;flex-direction:column;gap:8px;" id="fq-sport-role-list">
+    <div class="q-option-card q-option-wide" onclick="fqSetSportRole('competing',this)">
+      <strong>Actively competing</strong><span class="q-option-sub">Programme me for sport performance</span>
     </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('rugby_union',this)">
-      <strong>Rugby Union</strong><span class="q-option-sub">15-a-side, set piece, lineout</span>
+    <div class="q-option-card q-option-wide" onclick="fqSetSportRole('background',this)">
+      <strong>Sport background</strong><span class="q-option-sub">Use it to influence my programme</span>
     </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('rugby_league',this)">
-      <strong>Rugby League</strong><span class="q-option-sub">13-a-side, carry and defend</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('afl',this)">
-      <strong>AFL</strong><span class="q-option-sub">Australian rules football</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('football',this)">
-      <strong>Football / Soccer</strong><span class="q-option-sub">Association football</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('nfl',this)">
-      <strong>American Football / NFL</strong><span class="q-option-sub">NFL Combine preparation</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('basketball',this)">
-      <strong>Basketball</strong><span class="q-option-sub">Court sport, vertical and sprint</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('cricket',this)">
-      <strong>Cricket</strong><span class="q-option-sub">Fast bowler, batter, all-rounder</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('combat',this)">
-      <strong>Combat sports</strong><span class="q-option-sub">Boxing, MMA, wrestling, BJJ</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('hyrox',this)">
-      <strong>Hyrox / Functional fitness</strong><span class="q-option-sub">Hyrox, Spartan, CrossFit competition</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetSport('powerlifting',this)">
-      <strong>Powerlifting</strong><span class="q-option-sub">Squat, bench, deadlift competition</span>
+    <div class="q-option-card q-option-wide" onclick="fqSetSportRole('none',this)">
+      <strong>Not relevant right now</strong><span class="q-option-sub">Pure goal-based programming</span>
     </div>
   </div>
-  <div id="fq-position-row" style="display:none;margin-top:16px;">
-    <label class="q-label">Your position</label>
+  <div id="fq-sport-row" style="display:none;margin-top:12px;">
+    <label class="q-label">Sport</label>
+    <select class="q-input" id="fq-sport" onchange="fqSetSportFromSelect(this.value)" style="margin-top:6px;">
+      <option value="">Select your sport...</option>
+      <option value="rugby_union">Rugby Union</option>
+      <option value="rugby_league">Rugby League</option>
+      <option value="afl">AFL</option>
+      <option value="football">Football / Soccer</option>
+      <option value="nfl">American Football / NFL</option>
+      <option value="basketball">Basketball</option>
+      <option value="netball">Netball</option>
+      <option value="cricket">Cricket</option>
+      <option value="combat">Combat sports</option>
+      <option value="hyrox">Hyrox / Functional fitness</option>
+      <option value="powerlifting">Powerlifting</option>
+      <option value="swimming">Swimming</option>
+      <option value="cycling">Cycling</option>
+    </select>
+  </div>
+  <div id="fq-position-row" style="display:none;margin-top:10px;">
+    <label class="q-label">Your position / role</label>
     <select class="q-input" id="fq-position" onchange="fqAnswers.position=this.value" style="margin-top:6px;">
       <option value="">Select position...</option>
     </select>
   </div>
-  <div id="fq-season-row" style="display:none;margin-top:12px;">
+  <div id="fq-season-row" style="display:none;margin-top:10px;">
     <label class="q-label">Current season phase</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
-      <div class="q-option-card" onclick="fqSetSeason('off',this)">Off-season</div>
-      <div class="q-option-card" onclick="fqSetSeason('pre',this)">Pre-season</div>
-      <div class="q-option-card" onclick="fqSetSeason('in',this)">In-season</div>
-      <div class="q-option-card" onclick="fqSetSeason('post',this)">Post-season</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
+      <div class="q-option-card" onclick="fqSetSeasonPhase('off',this)">Off-season</div>
+      <div class="q-option-card" onclick="fqSetSeasonPhase('pre',this)">Pre-season</div>
+      <div class="q-option-card" onclick="fqSetSeasonPhase('in',this)">In-season</div>
+    </div>
+  </div>
+
+  <!-- Section C: Programme target -->
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">C — Programme target</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Do you have a goal you're training toward?</div>
+  <div style="display:flex;flex-direction:column;gap:8px;" id="fq-target-list">
+    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('agoge',this)">
+      <strong>The Phoenix Agoge</strong><span class="q-option-sub">Peak for the annual test in July</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('event',this)">
+      <strong>A specific event</strong><span class="q-option-sub">Race, season, competition or challenge</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('quarterly',this)">
+      <strong>Quarterly progress checks</strong><span class="q-option-sub">No specific peak — benchmark every 12 weeks</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('none',this)">
+      <strong>No specific event</strong><span class="q-option-sub">Just get fitter and stronger</span>
+    </div>
+  </div>
+  <div id="fq-event-fields" style="display:none;margin-top:12px;">
+    <label class="q-label">Event date</label>
+    <input class="q-input" type="date" id="fq-event-date" onchange="fqAnswers.eventDate=this.value;fqValidateStep()" style="margin-top:6px;color-scheme:dark;cursor:pointer;">
+    <label class="q-label" style="margin-top:10px;display:block;">What is the event?</label>
+    <input class="q-input" type="text" id="fq-event-desc" placeholder="e.g. Hyrox Manchester, Spartan Beast" oninput="fqAnswers.eventDescription=this.value" style="margin-top:6px;">
+  </div>
+
+  <!-- Section D: Assessment scores -->
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">D — Assessment scores</div>
+  <div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">Do you know any of your current numbers? The more you share, the more accurate your programme from day one. If you don't know them yet — no problem, your coach will build assessment into your first block.</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    <div><label class="q-label" style="font-size:11px;">Squat 1RM (kg)</label><input class="q-input" type="number" id="fq-sq" placeholder="0 = unknown" oninput="fqAnswers.sq=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+    <div><label class="q-label" style="font-size:11px;">Deadlift 1RM (kg)</label><input class="q-input" type="number" id="fq-dl" placeholder="0 = unknown" oninput="fqAnswers.dl=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+    <div><label class="q-label" style="font-size:11px;">Bench Press 1RM (kg)</label><input class="q-input" type="number" id="fq-b1rm" placeholder="0 = unknown" oninput="fqAnswers.b1rm=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+    <div><label class="q-label" style="font-size:11px;">Pull-ups (max reps)</label><input class="q-input" type="number" id="fq-pbw" placeholder="0 = unknown" oninput="fqAnswers.pbw=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+    <div><label class="q-label" style="font-size:11px;">1 mile run (mm:ss)</label><input class="q-input" type="text" id="fq-mile" placeholder="e.g. 7:30" oninput="fqAnswers.mile=this.value" style="margin-top:4px;"></div>
+    <div><label class="q-label" style="font-size:11px;">500m row (mm:ss)</label><input class="q-input" type="text" id="fq-row500" placeholder="e.g. 1:45" oninput="fqAnswers.row500=this.value" style="margin-top:4px;"></div>
+  </div>
+  <div id="fq-extended-toggle" onclick="fqToggleExtendedScores()" style="margin-top:12px;font-size:12px;color:var(--gold);cursor:pointer;font-family:var(--font-d);letter-spacing:1px;text-transform:uppercase;text-align:center;padding:10px;border:1px dashed var(--border2);border-radius:var(--radius);">Add more numbers +</div>
+  <div id="fq-extended-scores" style="display:none;margin-top:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><label class="q-label" style="font-size:11px;">Overhead Press 1RM (kg)</label><input class="q-input" type="number" id="fq-ohp" placeholder="0 = unknown" oninput="fqAnswers.ohp=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+      <div><label class="q-label" style="font-size:11px;">Bench @100kg (max reps)</label><input class="q-input" type="number" id="fq-b100" placeholder="0 = unknown" oninput="fqAnswers.b100=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+      <div><label class="q-label" style="font-size:11px;">Weighted pull-up 1RM (kg)</label><input class="q-input" type="number" id="fq-wpu" placeholder="0 = unknown" oninput="fqAnswers.wpu=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+      <div><label class="q-label" style="font-size:11px;">Karen time (mm:ss)</label><input class="q-input" type="text" id="fq-karen" placeholder="e.g. 5:30" oninput="fqAnswers.karen=this.value" style="margin-top:4px;"></div>
+      <div><label class="q-label" style="font-size:11px;">Plank hold (seconds)</label><input class="q-input" type="number" id="fq-plank" placeholder="0 = unknown" oninput="fqAnswers.plank=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+      <div>
+        <label class="q-label" style="font-size:11px;">OH Squat</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px;" id="fq-ohsq-row">
+          <div class="q-option-card" onclick="fqSetOhsq('pass',this)" style="padding:10px 8px;font-size:12px;">Pass</div>
+          <div class="q-option-card" onclick="fqSetOhsq('fail',this)" style="padding:10px 8px;font-size:12px;">Fail</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- STEP 7: Equipment -->
-<div class="q-step" id="fq-step-7">
-  <div class="q-tag">Step 8 — Your setup</div>
-  <div class="q-title">What Do You<br>Have Access To?</div>
+<!-- STEP 5: Schedule mode gateway -->
+<div class="q-step" id="fq-step-schedulemode">
+  <div class="q-tag">Step 5 — Your schedule</div>
+  <div class="q-title">Schedule<br>Mode</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">How do you want to set up your training schedule?</div>
   <div style="display:flex;flex-direction:column;gap:8px;">
-    <div class="q-option-card q-option-wide" onclick="fqSetEquip('full_commercial_gym',this)">
-      <strong>Full commercial gym</strong><span class="q-option-sub">Barbells, racks, cables, machines, cardio</span>
+    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('coach_assigns',this)">
+      <strong>Build it for me</strong><span class="q-option-sub">Tell me your available days, I assign the sessions</span>
     </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetEquip('crossfit_box',this)">
-      <strong>CrossFit / functional gym</strong><span class="q-option-sub">Barbells, rowers, rigs, rings, wall balls</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetEquip('home_gym_barbell',this)">
-      <strong>Home gym — barbell setup</strong><span class="q-option-sub">Rack, barbell, plates, basic accessories</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetEquip('home_gym_dumbbell',this)">
-      <strong>Home gym — dumbbells / kettlebells</strong><span class="q-option-sub">Dumbbells, kettlebells, pull up bar</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetEquip('bodyweight',this)">
-      <strong>Bodyweight only</strong><span class="q-option-sub">No equipment, can train anywhere</span>
+    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('user_assigns',this)">
+      <strong>I'll set my schedule</strong><span class="q-option-sub">I choose which days are for what</span>
     </div>
   </div>
 </div>
 
-<!-- STEP 8: Schedule -->
-<div class="q-step" id="fq-step-8">
-  <div class="q-tag">Step 9 — Your schedule</div>
-  <div class="q-title">Training<br>Days</div>
-  <label class="q-label">Tap each day you can train</label>
-  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;margin-bottom:6px;" id="fq-day-pills">
-    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('mon',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Mon</div>
-    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('tue',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Tue</div>
-    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('wed',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Wed</div>
-    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('thu',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Thu</div>
-    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('fri',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Fri</div>
-    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('sat',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Sat</div>
-    <div class="q-option-card fq-day-pill" onclick="fqToggleTrainingDay('sun',this)" style="padding:10px 14px;font-size:13px;border-radius:20px;">Sun</div>
-  </div>
-  <div id="fq-day-details" style="margin-top:12px;"></div>
-  <div id="fq-rest-nudge" style="display:none;margin-top:14px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;color:var(--text2);line-height:1.5;">
-    Your coach will build in rest and recovery days — training 6+ days requires careful programming.
-  </div>
+<!-- STEP 6: Day & slot availability (only if user_assigns) -->
+<div class="q-step" id="fq-step-availability">
+  <div class="q-tag">Step 6 — Availability</div>
+  <div class="q-title">When Can<br>You Train?</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Tap each slot you have available. We'll only ask you to assign sessions to slots you mark here.</div>
+  <div style="display:flex;flex-direction:column;gap:6px;" id="fq-availability-grid"></div>
 </div>
 
-<!-- STEP 10: Coach tone -->
+<!-- STEP 7: Session timetable (only if user_assigns) -->
+<div class="q-step" id="fq-step-sessionschedule">
+  <div class="q-tag">Step 7 — Your timetable</div>
+  <div class="q-title">Session<br>Timetable</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Assign a session type to each available slot. Use &ldquo;&mdash;&rdquo; for no session.</div>
+  <div id="fq-session-warning" style="display:none;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--orange);line-height:1.5;"></div>
+  <div style="display:flex;flex-direction:column;gap:6px;" id="fq-session-timetable"></div>
+</div>
+
+<!-- STEP 8: Coach tone -->
 <div class="q-step" id="fq-step-coachtone">
-  <div class="q-tag">Step 10 — Your coach</div>
+  <div class="q-tag">Step 8 — Your coach</div>
   <div class="q-title">Coach<br>Communication</div>
   <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">How do you want your coach to communicate with you?</div>
   <div style="display:flex;flex-direction:column;gap:8px;">
@@ -2339,89 +2339,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
 </div>
 
-<!-- STEP 11: Schedule mode -->
-<div class="q-step" id="fq-step-schedulemode">
-  <div class="q-tag">Step 11 — Your schedule</div>
-  <div class="q-title">Schedule<br>Mode</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">How do you want to set your training schedule?</div>
-  <div style="display:flex;flex-direction:column;gap:8px;">
-    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('coach_assigns',this)">
-      <strong>Build it for me</strong><span class="q-option-sub">I'll tell you my available days, you assign the sessions</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('user_assigns',this)">
-      <strong>I'll set my schedule</strong><span class="q-option-sub">I'll tell you exactly which days are for lifting, WODs, core and walks</span>
-    </div>
-  </div>
-</div>
-
-<!-- STEP 12: Session timetable (only if user_assigns) -->
-<div class="q-step" id="fq-step-sessionschedule">
-  <div class="q-tag">Step 12 — Your timetable</div>
-  <div class="q-title">Session<br>Timetable</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Assign a session type to each day of the week.</div>
-  <div style="display:flex;flex-direction:column;gap:10px;" id="fq-session-timetable">
-    <div class="fq-sched-row" data-day="monday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">MON</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('monday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
-    </div>
-    <div class="fq-sched-row" data-day="tuesday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">TUE</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('tuesday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
-    </div>
-    <div class="fq-sched-row" data-day="wednesday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">WED</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('wednesday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
-    </div>
-    <div class="fq-sched-row" data-day="thursday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">THU</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('thursday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
-    </div>
-    <div class="fq-sched-row" data-day="friday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">FRI</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('friday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
-    </div>
-    <div class="fq-sched-row" data-day="saturday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">SAT</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('saturday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
-    </div>
-    <div class="fq-sched-row" data-day="sunday" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-      <div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">SUN</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','strength',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Strength</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','wod',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">WOD</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','core',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Core</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','walk',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Walk</div>
-      <div class="q-option-card fq-sched-pill" onclick="fqSetSessionDay('sunday','rest',this)" style="padding:8px 10px;font-size:11px;border-radius:16px;flex:1;text-align:center;">Rest</div>
-    </div>
-  </div>
-</div>
-
-<!-- STEP 13: Final participation agreement -->
+<!-- STEP 9: Waiver + confirm -->
 <div class="q-step" id="fq-step-9">
-  <div class="q-tag">Final step</div>
+  <div class="q-tag">Step 9 — Confirm</div>
   <div class="q-title">Participation<br>Agreement</div>
   <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:20px;">
     Before we build your programme, please confirm the following.
@@ -2432,15 +2352,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <label class="disclaimer-check" style="margin-bottom:12px;">
     <input type="checkbox" id="fq-confirm-accurate" onchange="fqValidateStep()">
-    <span class="disclaimer-check-text">I confirm all information I have provided is accurate and complete</span>
-  </label>
-  <label class="disclaimer-check" style="margin-bottom:12px;">
-    <input type="checkbox" id="fq-confirm-waiver" onchange="fqValidateStep()">
-    <span class="disclaimer-check-text">I accept the Phoenix participation agreement and understand the risks of physical training</span>
+    <span class="disclaimer-check-text">I confirm the information I have provided is accurate to the best of my knowledge</span>
   </label>
   <label class="disclaimer-check">
-    <input type="checkbox" id="fq-confirm-age" onchange="fqValidateStep()">
-    <span class="disclaimer-check-text">I confirm I am 16 years of age or older</span>
+    <input type="checkbox" id="fq-confirm-waiver" onchange="fqValidateStep()">
+    <span class="disclaimer-check-text">I understand Phoenix is a fitness tool and not a substitute for professional medical advice. I accept responsibility for my own training.</span>
   </label>
 </div>
 
@@ -3115,7 +3031,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.1';
+var APP_VERSION='4.7.3';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5760,133 +5676,6 @@ function logGenericSession(sessionId,structure){
   supabaseCompleteSession({total_volume_kg:m.total_volume_kg,total_reps:m.total_reps,notes:entry.notes,details:{session_id:sessionId,week:entry.week,sets:sets}});
 }
 
-// ====== FOUNDATION QUESTIONNAIRE ======
-var fqStep=1,fqTotalSteps=10;
-var fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},sex:'',cycleSync:false};
-
-// Old fqValidateStep — overridden by newer version below
-function fqValidateStep(){
-  var valid=false;
-  switch(fqStep){
-    case 1: valid=!!(fqAnswers.name&&fqAnswers.bw&&fqAnswers.sex); break;
-    case 2:
-      var hc=document.getElementById('fq-health-check');
-      valid=!!(hc&&hc.checked&&Object.keys(parqData).length>=5);
-      break;
-    case 3: valid=true; break;
-    case 4: valid=!!fqAnswers.path; break;
-    case 5: valid=!!(fqAnswers.background&&fqAnswers.historicalAge&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
-    case 6: valid=!!fqAnswers.goal; break;
-    case 7: valid=true; break;
-    case 8: valid=!!fqAnswers.equip; break;
-    case 9: valid=fqAnswers.days>=2; break;
-    case 10: valid=!!fqAnswers.coachTone; break;
-    case 11: valid=!!fqAnswers.scheduleMode; break;
-    case 12:
-      var sched=fqAnswers.sessionSchedule;
-      valid=!!(sched&&Object.keys(sched).length===7);
-      break;
-    case 13:
-      var c1=document.getElementById('fq-confirm-accurate');
-      var c2=document.getElementById('fq-confirm-waiver');
-      var c3=document.getElementById('fq-confirm-age');
-      valid=!!(c1&&c1.checked&&c2&&c2.checked&&c3&&c3.checked);
-      break;
-    default: valid=true;
-  }
-  var btn=document.getElementById('fq-next-btn');
-  if(btn) btn.disabled=!valid;
-}
-
-function renderFQSummary(){
-  var el=document.getElementById('fq-summary');
-  if(!el) return;
-  var lines=[
-    ['Name', fqAnswers.name||'-'],
-    ['Goal', fqAnswers.goal?fqAnswers.goal.replace(/_/g,' '):'-'],
-    ['Sport', fqAnswers.sport&&fqAnswers.sport!=='none'?fqAnswers.sport.replace(/_/g,' '):'-'],
-    ['Background', fqAnswers.background||'-'],
-    ['Training days', (function(){var td=fqAnswers.trainingDays;if(td&&typeof td==='object'){var a=Object.keys(td).filter(function(k){return td[k].active;});if(a.length) return a.map(function(k){return k.charAt(0).toUpperCase()+k.slice(1);}).join(', ');}return fqAnswers.days?fqAnswers.days+' days':'-';})()],
-    ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
-    ['Injuries', fqAnswers.injury.length?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
-  ];
-  el.innerHTML=lines.map(function(l){
-    return '<div style="display:flex;justify-content:space-between;"><span style="color:var(--text3);">'+l[0]+'</span><span style="color:var(--text);font-weight:600;text-transform:capitalize;">'+l[1]+'</span></div>';
-  }).join('');
-}
-
-function fqSelectSex(sex){
-  fqAnswers.sex=sex;
-  var male=document.getElementById('fq-sex-male');
-  var female=document.getElementById('fq-sex-female');
-  var active='border-color:var(--gold);background:var(--gold-dim);color:var(--gold);';
-  var inactive='border:1px solid var(--border2);background:var(--bg3);color:var(--text2);';
-  if(male) male.setAttribute('style',male.getAttribute('style').replace(/border[^;]*;/,'')+';'+(sex==='male'?active:inactive));
-  if(female) female.setAttribute('style',female.getAttribute('style').replace(/border[^;]*;/,'')+';'+(sex==='female'?active:inactive));
-  var cs=document.getElementById('fq-cycle-section');
-  if(cs) cs.style.display=sex==='female'?'block':'none';
-  fqValidateStep();
-}
-
-function fqSelectCycle(val){
-  fqAnswers.cycleSync=val==='yes';
-  var yes=document.getElementById('fq-cycle-yes');
-  var no=document.getElementById('fq-cycle-no');
-  if(yes) yes.style.cssText+=(val==='yes'?';border-color:var(--gold);background:var(--gold-dim);color:var(--gold)':';border:1px solid var(--border2);background:var(--bg3);color:var(--text2)');
-  if(no) no.style.cssText+=(val==='no'?';border-color:var(--gold);background:var(--gold-dim);color:var(--gold)':';border:1px solid var(--border2);background:var(--bg3);color:var(--text2)');
-}
-
-function fqSelectPath(path){
-  fqAnswers.path=path;
-  var pc=document.getElementById('path-phoenix-card');
-  var oc=document.getElementById('path-own-card');
-  if(pc) pc.style.border=path==='phoenix'?'2px solid var(--gold)':'1px solid var(--border2)';
-  if(oc) oc.style.border=path==='own'?'2px solid var(--gold)':'1px solid var(--border2)';
-}
-
-function fqSetDayCount(n){
-  fqAnswers.days=n;
-  // Highlight selected number button
-  document.querySelectorAll('.fq-num-btn').forEach(function(b){
-    b.classList.toggle('active',parseInt(b.textContent)===n||
-      (n===7&&b.textContent==='7'));
-  });
-  // Show day rows
-  var rows=document.getElementById('fq-day-rows');
-  if(rows) rows.style.display='block';
-  fqValidateStep();
-}
-
-function fqToggleDay(day){
-  fqDayState[day]=!fqDayState[day];
-  var tick=document.getElementById('fq-tick-'+day);
-  var ampm=document.getElementById('fq-ampm-'+day);
-  if(tick) tick.classList.toggle('active',fqDayState[day]);
-  if(ampm) ampm.style.display=fqDayState[day]?'flex':'none';
-  // Default to AM on first enable
-  if(fqDayState[day]){
-    fqAmPm[day]={am:true,pm:false};
-    updateAmPmUI(day);
-  }
-}
-
-function fqToggleAmPm(day,slot){
-  // Toggle independently — both can be on
-  if(!fqAmPm[day]) fqAmPm[day]={am:false,pm:false};
-  fqAmPm[day][slot]=!fqAmPm[day][slot];
-  // Ensure at least one is always on
-  if(!fqAmPm[day].am&&!fqAmPm[day].pm) fqAmPm[day][slot]=true;
-  updateAmPmUI(day);
-}
-
-function updateAmPmUI(day){
-  var am=document.getElementById('fq-am-'+day);
-  var pm=document.getElementById('fq-pm-'+day);
-  var state=fqAmPm[day]||{am:true,pm:false};
-  if(am) am.classList.toggle('active',!!state.am);
-  if(pm) pm.classList.toggle('active',!!state.pm);
-}
-
 function renderFQSkinGrid(){
   if(typeof SKIN_META==='undefined') return;
   function makeFQSwatch(skin,locked,tierLabel){
@@ -5943,169 +5732,6 @@ function renderFQSkinGrid(){
   if(proGrid){proGrid.innerHTML='';PRO_SKINS.forEach(function(s){var unlocked=hasProAccess();var sw=makeFQSwatch(s,!unlocked,'Pro');if(sw)proGrid.appendChild(sw);});}
 }
 
-function fqNext(){
-  // Step 1 — disclaimer
-  if(fqStep===1){
-    var d=document.getElementById('fq-disclaimer-check');
-    var a=document.getElementById('fq-age-check');
-    if(!d.checked||!a.checked){alert('Please confirm both checkboxes to continue.');return;}
-  }
-  // Step 2 — personal details — only name required, button handles validation
-  if(fqStep===2){
-    var name=document.getElementById('fq-name').value||'';
-    if(!name.trim()) return; // button should be disabled but safety check
-    fqAnswers.name=name;
-    fqAnswers.dob=document.getElementById('fq-dob').value||'';
-    fqAnswers.bw=parseFloat(document.getElementById('fq-bw').value)||0;
-    fqAnswers.country=document.getElementById('fq-country').value||'';
-    renderFQSkinGrid();
-  }
-  if(fqStep===8){
-    fqAnswers.parq=Object.assign({},parqAnswers);
-    fqAnswers.parqClear=Object.values(parqAnswers).every(function(a){return a==='no';});
-  }
-  if(fqStep===9){
-    fqAnswers.injuryZones=Object.assign({},injuryZones);
-    fqAnswers.injuryNotes=document.getElementById('fq-injury-notes')?document.getElementById('fq-injury-notes').value||'':'';
-  }
-  // Step 13 — final, save day selections then complete
-  if(fqStep===13){
-    if(typeof fqTrainingDays!=='undefined') fqAnswers.trainingDays=JSON.parse(JSON.stringify(fqTrainingDays));
-    completeFQ();return;
-  }
-  // Build profile just before final step
-  if(fqStep===12){buildFQProfile();}
-  // Skip session timetable step if coach assigns
-  if(fqStep===11 && fqAnswers.scheduleMode==='coach_assigns'){
-    fqStep++;
-  }
-  fqStep++;
-  updateFQStep();
-}
-
-function selectQ(key,el){
-  var container=el.closest('.q-options');
-  container.querySelectorAll('.q-option').forEach(function(o){
-    o.classList.remove('selected');
-    o.querySelector('.q-check').textContent='';
-  });
-  el.classList.add('selected');
-  el.querySelector('.q-check').textContent='✓';
-  fqAnswers[key]=el.getAttribute('data-val');
-  fqValidateStep();
-}
-function selectQMulti(key,el){
-  if(key==='injury'&&el.getAttribute('data-val')==='none'){
-    el.closest('.q-options').querySelectorAll('.q-option').forEach(function(o){
-      o.classList.remove('selected');o.querySelector('.q-check').textContent='';
-    });
-    el.classList.add('selected');el.querySelector('.q-check').textContent='✓';
-    fqAnswers[key]=[];return;
-  }
-  // Clear "none" option if selecting something specific
-  var none=el.closest('.q-options').querySelector('[data-val="none"]');
-  if(none){none.classList.remove('selected');none.querySelector('.q-check').textContent='';}
-  el.classList.toggle('selected');
-  var checked=el.classList.contains('selected');
-  el.querySelector('.q-check').textContent=checked?'✓':'';
-  var val=el.getAttribute('data-val');
-  if(!fqAnswers[key]) fqAnswers[key]=[];
-  if(checked){if(fqAnswers[key].indexOf(val)<0)fqAnswers[key].push(val);}
-  else{fqAnswers[key]=fqAnswers[key].filter(function(v){return v!==val;});}
-  fqValidateStep();
-}
-
-
-// Old fqBack/updateFQStep — overridden by newer versions below
-function fqBack(){
-  if(fqStep>1){
-    fqStep--;
-    if(fqStep===12 && fqAnswers.scheduleMode==='coach_assigns') fqStep--;
-    updateFQStep();
-  }
-  else{showScreen('screen-splash');}
-}
-function updateFQStep(){
-  if(typeof fqStepMap!=='undefined'){
-    fqStepMap.forEach(function(id,idx){
-      var el=document.getElementById(id);
-      if(el) el.classList.toggle('active',(idx+1)===fqStep);
-    });
-  }
-  document.getElementById('fq-progress').style.width=(fqStep/fqTotalSteps*100)+'%';
-  document.getElementById('fq-back-btn').style.display=fqStep>1?'block':'none';
-  document.getElementById('fq-next-btn').textContent=fqStep===fqTotalSteps?'Build my plan \u2192':'Next \u2192';
-  fqValidateStep();
-}
-
-function getUserProfile(){
-  var bg=fqAnswers.background,away=fqAnswers.away;
-  if(bg==='active') return {name:'The Active',desc:'You\'re already training. Phoenix gives you structure, periodisation, and a community to push with.',route:'Phoenix Programme',block:'phoenix',badge:null};
-  if(bg==='returning'&&(away==='5to10'||away==='10plus')) return {name:'The Phoenix',desc:'You were there. Life happened. Now you\'re coming back — and this time it\'s different. This is exactly who this app was built for.',route:'Foundation Block (10 weeks) then Phoenix Programme',block:'foundation',badge:'Risen'};
-  if(bg==='returning'||away==='1to5') return {name:'The Restarter',desc:'You have the base. You know what hard work feels like. You just need to rebuild the engine.',route:'Foundation Block (6 weeks) then Phoenix Programme',block:'foundation_short',badge:null};
-  return {name:'The Starter',desc:'Everyone starts somewhere. The Phoenix Foundation block is designed to meet you exactly where you are and build you into someone unrecognisable.',route:'Foundation Block (10 weeks) then Phoenix Programme',block:'foundation',badge:null};
-}
-
-function buildFQProfile(){
-  var p=getUserProfile();
-  var resultEl=document.getElementById('fq-profile-result');
-  if(!resultEl) return;
-  var isFoundation=p.block==='foundation'||p.block==='foundation_short';
-  var weeks=p.block==='foundation_short'?6:10;
-  var journey=
-    '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">'+
-    (isFoundation?'<div style="display:flex;gap:10px;align-items:center;"><div style="width:8px;height:8px;border-radius:50%;background:var(--gold);flex-shrink:0"></div><div style="font-size:12px;color:var(--text2)">Months 1-2: Foundation Block ('+weeks+' weeks)</div></div>':'')+
-    '<div style="display:flex;gap:10px;align-items:center;"><div style="width:8px;height:8px;border-radius:50%;background:var(--orange);flex-shrink:0"></div><div style="font-size:12px;color:var(--text2)">'+(isFoundation?'Months 3-4':'Months 1-2')+': Phoenix Programme — Phase 1 + 2</div></div>'+
-    '<div style="display:flex;gap:10px;align-items:center;"><div style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0"></div><div style="font-size:12px;color:var(--text2)">'+(isFoundation?'Months 5-6':'Months 3-4')+': Phoenix Programme — Phase 3 + Combine</div></div>'+
-    '</div>';
-  resultEl.innerHTML=
-    '<div class="profile-result">'+
-    '<div class="profile-result-label">Your profile</div>'+
-    '<div class="profile-result-name">'+p.name+'</div>'+
-    '<div class="profile-result-desc">'+p.desc+'</div>'+
-    (p.badge?'<div style="margin-top:8px;font-size:12px;color:var(--gold);">You qualify for the <strong>'+p.badge+'</strong> badge when you complete your Foundation block.</div>':'')+
-    '<div class="profile-result-route">'+p.route+'</div>'+
-    journey+
-    '</div>';
-}
-
-function completeFQ(){
-  var p=getUserProfile();
-  var existing=athlete||{};
-  var updated=Object.assign({},existing,{
-    name:fqAnswers.name||existing.name||'',
-    dob:fqAnswers.dob||existing.dob||'',
-    bw:fqAnswers.bw||existing.bw||0,
-    country:fqAnswers.country||existing.country||'',
-    sex:fqAnswers.sex||existing.sex||'',
-    cycleSync:fqAnswers.cycleSync,
-    fqBackground:fqAnswers.background,
-    fqHistoricalAge:fqAnswers.historicalAge,
-    fqAway:fqAnswers.away,
-    fqCoachTone:fqAnswers.coachTone,
-    fqScheduleMode:fqAnswers.scheduleMode,
-    fqSessionSchedule:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.sessionSchedule:null,
-    fqGoals:fqAnswers.goals,
-    fqEquip:fqAnswers.equip,
-    fqDays:fqAnswers.days,
-    fqInjury:fqAnswers.injury,
-    fqInjuryNotes:fqAnswers.injuryNotes,
-    fqPath:fqAnswers.path,
-    fqTrainingDays:fqAnswers.trainingDays,
-    fqAmPm:fqAnswers.amPm,
-    fqProfile:p.name,
-    fqBlock:p.block,
-    fqCompleted:new Date().toISOString()
-  });
-  saveAthlete(updated);
-  // Go straight to AI for Pro/Ignite, otherwise today screen
-  if(typeof hasIgniteAccess === 'function' && hasIgniteAccess()){
-    generateProgramme('initial_build');
-  } else {
-    if(typeof renderTodayScreen==='function') renderTodayScreen();
-    navTo('today');
-  }
-}
 
 function acceptWaiver(){
   var c1=document.getElementById('waiver-check-1');
@@ -6341,8 +5967,9 @@ COACH_ASSIGNS (default): The coach assigns session types to available training d
 USER_ASSIGNS: The athlete has specified exactly which session type goes on which day via session_schedule. Respect their choices — build the programme to match their timetable exactly. Do not rearrange days.
 
 VALIDATION (user_assigns only):
-If session_schedule contains 3 or more consecutive strength days (treating the week as wrapping — Sunday into Monday), add a flag:
-"recovery_conflict — 3 consecutive strength days detected on [list days]. Consider moving [middle day] to rest or WOD for optimal recovery."
+session_schedule now uses AM/PM slots: {"monday":{"am":"strength","pm":null},...}
+If session_schedule contains 3 or more consecutive strength sessions (counting each AM/PM slot as a separate session in order: Mon-AM, Mon-PM, Tue-AM, Tue-PM, ... Sun-PM, wrapping to Mon-AM), add a flag:
+"recovery_conflict — 3 consecutive strength sessions detected at [list slots]. Consider swapping one to rest or WOD for optimal recovery."
 Still build the programme as requested, but flag the concern.
 
 ================================================================
@@ -6445,6 +6072,76 @@ When next Combine is within 6 weeks:
 - Weeks 3-2 out: peak loads, minimal new stimulus, sharpen conditioning benchmarks
 - Week 1 out: deload — 50-60% loads, movement quality only, arrive fresh
 - Conditioning: reduce WOD frequency, focus on benchmark WODs matching Combine tests
+
+================================================================
+PROGRAMME TARGET
+================================================================
+
+Read fqProgrammeTarget.
+
+agoge → programme backward from next July Agoge.
+- >6 months out: full prep cycle, GPP→SPP→Peak→Deload.
+- 3-6 months out: accelerated prep, compress GPP, extend SPP.
+- <8 weeks out: baseline year framing. Coach note week 1: "This July is your first Agoge — we use it to set your baselines. Next year is when we come for the leaderboard." Do not peak, just prepare.
+- 6 weeks out regardless of entry: activate peaking protocol automatically.
+
+event → programme backward from fqEventDate.
+- fqEventDescription informs sport/event-specific conditioning.
+- Agoge available as mid-cycle benchmark if it falls before event date.
+- If event is within 6 weeks of programme start: flag in flags array "event_proximity — less than 6 weeks to event, limited preparation time."
+
+quarterly → no periodised peak.
+- Progressive overload as primary driver.
+- Schedule deload week before each quarterly Agoge automatically.
+- Agoge used as benchmark test only — not a peaking target.
+
+none → coach decides.
+- Default: build quietly toward next Agoge without mentioning it.
+- Let athlete discover the Agoge naturally through the app.
+
+================================================================
+ASSESSMENT SCORE HANDLING
+================================================================
+
+If all test_scores are zero or missing:
+- Programme weeks 1-3 conservatively at RPE 6-7.
+- Build a testing week at week 3: establish squat/deadlift/bench working maxes through 5RM rep-max protocol (use Epley formula to estimate 1RM: weight × (1 + reps/30)).
+- Recalibrate programme from week 4 using established numbers.
+- Coach note week 1: "We will find your numbers together in the first few weeks. Your programme starts conservative and gets sharper as we learn what you are capable of."
+
+If mile run time provided: use to calibrate conditioning session intensity and WOD duration selection.
+- Sub 7 min mile → high aerobic capacity, longer duration WODs appropriate (15-20 min).
+- 7-9 min mile → moderate aerobic capacity, standard WOD duration (10-15 min).
+- 9+ min mile → building aerobic base, shorter WODs (8-12 min), more walking prescription.
+
+If 500m row time provided: use to calibrate anaerobic conditioning.
+- Sub 1:30 → high anaerobic capacity, high intensity intervals appropriate.
+- 1:30-2:00 → moderate, standard interval work.
+- 2:00+ → building base, reduce interval intensity, increase rest ratios.
+
+================================================================
+SPORT CONTEXT
+================================================================
+
+Read fqSportRole. This replaces all earlier sport rules.
+
+competing → sport performance methodology.
+- Read fqSport, fqPosition, fqSeasonPhase.
+- In-season: maintain strength, reduce volume 30-40%, no new movements, sport-specific conditioning only.
+- Off-season: build, address weaknesses, develop power, higher volume.
+- Pre-season: peak for competition readiness, transfer training to sport demands.
+- All exercise selection justified by transfer to sport demands (DeFranco/Baker/Spellman).
+
+background → sport informs but does not drive.
+- Read fqSport for context only.
+- Bias exercise selection toward sport-relevant movement patterns:
+  - Rugby/AFL/NRL: posterior chain priority, horizontal force, contact-prep carries.
+  - Netball/basketball: lateral movement, single-leg strength, ACL prevention standard.
+  - Swimming/cycling: shoulder health priority, hip flexor management, aerobic base.
+  - Football/soccer: repeated sprint capacity, change of direction, single-leg power.
+- Do NOT build a sport prep programme — build a goal-based programme with sport-intelligent exercise selection.
+
+none → pure goal-based programming, no sport influence.
 
 ================================================================
 COACH COMMUNICATION (Bartholomew/Marotti)
@@ -6565,6 +6262,14 @@ Return ONLY valid JSON, no other text, no markdown fences:
 
 function buildAthleteProfile(trigger, checkIn){
   var a = athlete || {};
+  // v4.7.3: derive days_available from availableSlots when user_assigns
+  var daysAvail = 4;
+  if(a.fqScheduleMode==='user_assigns' && a.fqAvailableSlots){
+    daysAvail = Object.keys(a.fqAvailableSlots).filter(function(d){
+      var s=a.fqAvailableSlots[d]||{};
+      return s.am||s.pm;
+    }).length || 4;
+  }
   return JSON.stringify({
     trigger: trigger || 'initial_build',
     athlete: {
@@ -6577,13 +6282,20 @@ function buildAthleteProfile(trigger, checkIn){
       time_away_months: a.fqAway || 0,
       coach_tone: a.fqCoachTone || null,
       schedule_mode: a.fqScheduleMode || 'coach_assigns',
+      available_slots: a.fqAvailableSlots || null,
       session_schedule: a.fqSessionSchedule || null,
-      goal: a.fqGoals ? a.fqGoals[0] : 'general_fitness',
+      goal: (a.fqGoals && a.fqGoals[0]) || 'general_fitness',
+      goal_secondary: (a.fqGoals && a.fqGoals[1]) || null,
       goals_all: a.fqGoals || [],
+      sport_role: a.fqSportRole || null,
+      sport: a.fqSport || 'none',
+      position: a.fqPosition || '',
+      season_phase: a.fqSeasonPhase || null,
+      programme_target: a.fqProgrammeTarget || null,
+      event_date: a.fqEventDate || null,
+      event_description: a.fqEventDescription || null,
       equipment: a.fqEquip || 'full_commercial_gym',
-      days_available: a.fqDays || 4,
-      training_days: a.fqTrainingDays || {},
-      am_pm: a.fqAmPm || {},
+      days_available: daysAvail,
       injuries: a.fqInjury || [],
       injury_notes: a.fqInjuryNotes || '',
       recovery_access: [],
@@ -6591,14 +6303,18 @@ function buildAthleteProfile(trigger, checkIn){
       stress_level: 'moderate',
       cycle_sync: a.cycleSync || false,
       path: a.fqPath || 'phoenix',
+      waiver_accepted: a.fqWaiverAccepted || false,
       test_scores: {
         bench_1rm: a.b1rm || 0,
         bench_100kg_reps: a.b100 || 0,
         pull_ups: a.pbw || 0,
         squat_1rm: a.sq || 0,
         deadlift_1rm: a.dl || 0,
+        overhead_press_1rm: a.ohp || 0,
+        weighted_pullup_1rm: a.wpu || 0,
         row_500m: a.row500 || '',
         mile_run: a.mile || '',
+        karen_time: a.karen || '',
         plank_sec: a.plank || 0,
         oh_squat: a.ohsq || ''
       }
@@ -6831,15 +6547,6 @@ function beginProgramme(){
   navTo('today');
 }
 
-function openFoundationQ(){
-  fqStep=1;
-  fqAnswers={background:null,away:null,goals:[],equip:null,days:null,injury:[],injuryNotes:'',path:'phoenix',trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},sex:'',cycleSync:false};
-  if(typeof fqTrainingDays!=='undefined') fqTrainingDays={mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}};
-  injuryZones={};
-  parqClear();
-  updateFQStep();
-  showScreen('screen-foundation-q');
-}
 
 // ====== DEV NOTES ======
 var devNotes=[];
@@ -8659,561 +8366,6 @@ function setupSplashButtons(){
 
 <script>
 
-var fqStep=1, fqTotalSteps=13;
-var fqStepMap=['fq-step-1','fq-step-2','fq-step-3','fq-step-path','fq-step-4','fq-step-5','fq-step-6','fq-step-7','fq-step-8','fq-step-coachtone','fq-step-schedulemode','fq-step-sessionschedule','fq-step-9'];
-var parqAnswers={};
-var fqAnswers={
-  name:'',dob:'',bw:0,sex:'',cycleSync:false,
-  background:null,historicalAge:null,away:null,
-  goal:null,path:'phoenix',
-  sport:'none',position:'',season:'off',
-  equip:null,days:null,ampm:'morning',duration:60,
-  trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},
-  injury:[],injuryNotes:'',
-  coachTone:null,
-  scheduleMode:null,
-  sessionSchedule:null
-};
-var injuryZones={};
-
-var SPORT_POSITIONS = {
-  rugby_union: ['Loosehead Prop (1)','Hooker (2)','Tighthead Prop (3)','Lock (4)','Lock (5)','Blindside Flanker (6)','Openside Flanker (7)','Number 8','Scrum-half (9)','Fly-half (10)','Inside Centre (12)','Outside Centre (13)','Wing (11/14)','Fullback (15)'],
-  rugby_league: ['Prop (8/10)','Hooker (9)','Second Row (11/12)','Loose Forward (13)','Halfback (7)','Five-eighth (6)','Centre (3/4)','Wing (2/5)','Fullback (1)'],
-  afl: ['Key Forward','Key Defender','Midfielder','Wing','Ruck','Small Forward','Defensive Flanker'],
-  football: ['Goalkeeper','Centre Back','Full Back / Wing Back','Holding Midfielder','Box-to-Box Midfielder','Attacking Mid / Winger','Striker'],
-  nfl: ['Quarterback (QB)','Wide Receiver (WR)','Running Back (RB)','Tight End (TE)','Offensive Lineman (OL)','Defensive End (DE)','Defensive Tackle (DT)','Linebacker (LB)','Cornerback (CB)','Safety (S)'],
-  basketball: ['Point Guard','Shooting Guard','Small Forward','Power Forward','Centre'],
-  cricket: ['Fast Bowler','Medium Pace Bowler','Spin Bowler','Wicketkeeper','Batting All-rounder','Bowling All-rounder'],
-  combat: ['Striker (Boxing/Muay Thai)','Grappler (Wrestling/BJJ)','MMA Fighter','BJJ/Submission Wrestling'],
-  hyrox: ['Open Division','Pro Division'],
-  powerlifting: ['Sub-Junior','Junior','Open','Masters']
-};
-
-function fqSetSex(val, el){
-  fqAnswers.sex=val;
-  document.querySelectorAll('#fq-step-2 .q-option-card').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  var cycleRow=document.getElementById('fq-cycle-row');
-  if(cycleRow) cycleRow.style.display=val==='female'?'block':'none';
-  fqValidateStep();
-}
-
-function fqSetCycle(val, el){
-  fqAnswers.cycleSync=val==='yes';
-  var parent=el.parentElement;
-  parent.querySelectorAll('.q-option-card').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-}
-
-function fqSetBg(val, el){
-  fqAnswers.background=val;
-  document.querySelectorAll('#fq-step-4 .q-option-wide').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-function fqSetPath(val, el){
-  fqAnswers.path=val;
-  document.querySelectorAll('#fq-step-path .q-option-wide').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-function fqSetAway(val, el){
-  fqAnswers.away=parseInt(val);
-  var parent=el.closest('div');
-  parent.querySelectorAll('.q-option-card:not(.q-option-wide)').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-function fqSetHistoricalAge(val, el){
-  fqAnswers.historicalAge=val;
-  var parent=el.closest('div');
-  parent.querySelectorAll('.q-option-card').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-function fqSetCoachTone(val, el){
-  fqAnswers.coachTone=val;
-  var parent=el.closest('.q-step');
-  parent.querySelectorAll('.q-option-wide').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-function fqSetScheduleMode(val, el){
-  fqAnswers.scheduleMode=val;
-  if(val==='coach_assigns') fqAnswers.sessionSchedule=null;
-  var parent=el.closest('.q-step');
-  parent.querySelectorAll('.q-option-wide').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-function fqSetSessionDay(day, type, el){
-  if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule={};
-  fqAnswers.sessionSchedule[day]=type;
-  var row=el.closest('.fq-sched-row');
-  row.querySelectorAll('.fq-sched-pill').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-function fqSetGoal(val, el){
-  if(!fqAnswers.goals) fqAnswers.goals=[];
-  var idx=fqAnswers.goals.indexOf(val);
-  if(idx===0){
-    // Primary — deselect all
-    fqAnswers.goals=[];
-    el.classList.remove('active');
-    el.querySelector('.goal-rank-badge') && el.querySelector('.goal-rank-badge').remove();
-  } else if(idx>0){
-    // Secondary — remove from list
-    fqAnswers.goals.splice(idx,1);
-    el.classList.remove('active');
-    el.querySelector('.goal-rank-badge') && el.querySelector('.goal-rank-badge').remove();
-    // Re-number remaining
-    fqAnswers.goals.forEach(function(g,i){
-      var card=document.querySelector('[data-goal="'+g+'"]');
-      if(card){
-        var badge=card.querySelector('.goal-rank-badge');
-        if(badge) badge.textContent=i===0?'Primary':'Secondary';
-      }
-    });
-  } else if(fqAnswers.goals.length<2){
-    // Add to goals
-    fqAnswers.goals.push(val);
-    el.classList.add('active');
-    var badge=document.createElement('span');
-    badge.className='goal-rank-badge';
-    badge.style.cssText='font-size:9px;background:var(--gold);color:#000;padding:2px 6px;border-radius:10px;margin-left:8px;font-family:var(--font-d);letter-spacing:1px;';
-    badge.textContent=fqAnswers.goals.length===1?'Primary':'Secondary';
-    var strong=el.querySelector('strong');
-    if(strong) strong.appendChild(badge);
-  }
-  fqAnswers.goal=fqAnswers.goals[0]||null;
-  fqValidateStep();
-}
-
-function fqSetSport(val, el){
-  fqAnswers.sport=val;
-  fqAnswers.position='';
-  var allCards=document.querySelectorAll('#fq-sport-list .q-option-wide');
-  if(val==='none'){
-    allCards.forEach(function(e){e.style.display='flex';e.classList.remove('active');});
-    el.classList.add('active');
-    document.getElementById('fq-position-row').style.display='none';
-    document.getElementById('fq-season-row').style.display='none';
-    var existingChange=document.getElementById('fq-sport-change');
-    if(existingChange) existingChange.remove();
-  } else {
-    allCards.forEach(function(e){
-      e.style.display=(e===el)?'flex':'none';
-      e.classList.remove('active');
-    });
-    el.classList.add('active');
-    // Add change link inside the selected card
-    var existing=document.getElementById('fq-sport-change');
-    if(!existing){
-      var btn=document.createElement('div');
-      btn.id='fq-sport-change';
-      btn.style.cssText='font-size:11px;color:var(--gold);cursor:pointer;margin-top:6px;text-decoration:underline;font-family:var(--font-b);';
-      btn.textContent='Change sport';
-      btn.onclick=function(e){
-        e.stopPropagation();
-        fqAnswers.sport='none';
-        fqAnswers.position='';
-        allCards.forEach(function(c){c.style.display='flex';c.classList.remove('active');});
-        document.getElementById('fq-position-row').style.display='none';
-        document.getElementById('fq-season-row').style.display='none';
-        btn.remove();
-        fqValidateStep();
-      };
-      el.appendChild(btn);
-    }
-    var posRow=document.getElementById('fq-position-row');
-    var seasonRow=document.getElementById('fq-season-row');
-    var posSelect=document.getElementById('fq-position');
-    if(SPORT_POSITIONS[val]){
-      posRow.style.display='block';
-      seasonRow.style.display='block';
-      posSelect.innerHTML='<option value="">Select your position...</option>';
-      SPORT_POSITIONS[val].forEach(function(pos){
-        posSelect.innerHTML+='<option value="'+pos+'">'+pos+'</option>';
-      });
-    }
-  }
-  fqValidateStep();
-}
-
-function fqSetSeason(val, el){
-  fqAnswers.season=val;
-  document.querySelectorAll('#fq-season-row .q-option-card').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-}
-
-function fqSetEquip(val, el){
-  fqAnswers.equip=val;
-  document.querySelectorAll('#fq-step-7 .q-option-wide').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-  fqValidateStep();
-}
-
-// Per-day training schedule
-var fqTrainingDays={mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}};
-
-function fqToggleTrainingDay(day, el){
-  fqTrainingDays[day].active=!fqTrainingDays[day].active;
-  el.classList.toggle('active',fqTrainingDays[day].active);
-  fqRenderDayDetails();
-  fqSyncDaysCount();
-  fqValidateStep();
-}
-
-function fqSyncDaysCount(){
-  var count=Object.values(fqTrainingDays).filter(function(d){return d.active;}).length;
-  fqAnswers.days=count||null;
-  fqAnswers.trainingDays=JSON.parse(JSON.stringify(fqTrainingDays));
-  // Rest day nudge
-  var nudge=document.getElementById('fq-rest-nudge');
-  if(nudge) nudge.style.display=count>=6?'block':'none';
-}
-
-function fqRenderDayDetails(){
-  var container=document.getElementById('fq-day-details');
-  if(!container) return;
-  var dayNames={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
-  var html='';
-  Object.keys(dayNames).forEach(function(key){
-    if(!fqTrainingDays[key].active) return;
-    var d=fqTrainingDays[key];
-    html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">';
-    html+='<span style="font-size:13px;font-weight:600;min-width:36px;color:var(--text);">'+dayNames[key]+'</span>';
-    // Time selector
-    html+='<div style="display:flex;gap:4px;">';
-    html+='<div class="q-option-card fq-day-opt'+(d.time==='AM'?' active':'')+'" onclick="fqSetDayTime(\''+key+'\',\'AM\',this)" style="padding:6px 12px;font-size:11px;border-radius:14px;">AM</div>';
-    html+='<div class="q-option-card fq-day-opt'+(d.time==='PM'?' active':'')+'" onclick="fqSetDayTime(\''+key+'\',\'PM\',this)" style="padding:6px 12px;font-size:11px;border-radius:14px;">PM</div>';
-    html+='</div>';
-    // Duration selector
-    html+='<div style="display:flex;gap:4px;margin-left:auto;">';
-    html+='<div class="q-option-card fq-day-opt'+(d.duration===45?' active':'')+'" onclick="fqSetDayDuration(\''+key+'\',45,this)" style="padding:6px 10px;font-size:11px;border-radius:14px;">45m</div>';
-    html+='<div class="q-option-card fq-day-opt'+(d.duration===60?' active':'')+'" onclick="fqSetDayDuration(\''+key+'\',60,this)" style="padding:6px 10px;font-size:11px;border-radius:14px;">60m</div>';
-    html+='<div class="q-option-card fq-day-opt'+(d.duration===90?' active':'')+'" onclick="fqSetDayDuration(\''+key+'\',90,this)" style="padding:6px 10px;font-size:11px;border-radius:14px;">90m</div>';
-    html+='</div>';
-    html+='</div>';
-  });
-  container.innerHTML=html;
-}
-
-function fqSetDayTime(day, val, el){
-  fqTrainingDays[day].time=val;
-  fqRenderDayDetails();
-  fqSyncDaysCount();
-}
-
-function fqSetDayDuration(day, val, el){
-  fqTrainingDays[day].duration=val;
-  fqRenderDayDetails();
-  fqSyncDaysCount();
-}
-
-function updateFqSkinPicker(){
-  document.querySelectorAll('#fq-skin-picker .fq-skin-dot').forEach(function(dot){
-    dot.style.borderColor=dot.getAttribute('data-skin')===currentSkin?'var(--gold)':'transparent';
-  });
-}
-function updateFqFontPicker(){
-  document.querySelectorAll('#fq-font-picker .fq-font-opt').forEach(function(opt){
-    opt.style.borderColor=opt.getAttribute('data-font')===currentFont?'var(--gold)':'transparent';
-  });
-}
-// Hook into existing apply functions
-var _origApplySkin=applySkin;
-applySkin=function(skin){_origApplySkin(skin);updateFqSkinPicker();};
-var _origApplyFont=applyFont;
-applyFont=function(font){_origApplyFont(font);updateFqFontPicker();};
-
-var parqData={};
-function parqToggle(el,id){}
-function parqSet(id, val, e){
-  if(e) e.stopPropagation();
-  parqData[id]=val;
-  var yesBtn=document.getElementById('parq-'+id+'-yes');
-  var noBtn=document.getElementById('parq-'+id+'-no');
-  if(yesBtn) yesBtn.className='parq-btn'+(val==='yes'?' active-yes':'');
-  if(noBtn) noBtn.className='parq-btn'+(val==='no'?' active-no':'');
-  var anyYes=Object.values(parqData).some(v=>v==='yes');
-  var flag=document.getElementById('parq-flag');
-  if(flag) flag.style.display=anyYes?'block':'none';
-  var allAnswered=Object.keys(parqData).length>=5;
-  fqAnswers.parqClear=!anyYes;
-  if(allAnswered) document.getElementById('fq-next-btn').disabled=false;
-  fqValidateStep();
-}
-
-var INJURY_FRONT=['Chest','Shoulder','Elbow','Wrist','Hip','Quad','Knee','Shin','Ankle'];
-var INJURY_BACK=['Neck','Upper Arm','Upper Back','Lower Back','Glute','Hamstring','Calf','Achilles/Heel'];
-var INJURY_NO_SIDE=['Neck','Upper Back','Lower Back'];
-
-function buildInjurySelector(){
-  var fc=document.getElementById('injury-col-front');
-  var bc=document.getElementById('injury-col-back');
-  if(!fc||!bc) return;
-  fc.innerHTML='';bc.innerHTML='';
-  INJURY_FRONT.forEach(function(area){fc.appendChild(makeInjuryCard(area));});
-  INJURY_BACK.forEach(function(area){bc.appendChild(makeInjuryCard(area));});
-}
-
-function makeInjuryCard(area){
-  var card=document.createElement('div');
-  card.className='injury-card';
-  card.setAttribute('data-area',area);
-  var hasSide=INJURY_NO_SIDE.indexOf(area)===-1;
-  card.innerHTML='<div style="font-weight:600;">'+area+'</div>';
-  card.onclick=function(e){
-    if(e.target.classList.contains('injury-side-btn')||e.target.classList.contains('injury-detail-input')) return;
-    toggleInjuryCard(card,area,hasSide);
-  };
-  return card;
-}
-
-function toggleInjuryCard(card,area,hasSide){
-  var isActive=card.classList.contains('active');
-  if(isActive){
-    card.classList.remove('active');
-    var exp=card.querySelector('.injury-card-expand');
-    if(exp) exp.remove();
-    removeInjuryFromAnswers(area);
-  } else {
-    card.classList.add('active');
-    var expand=document.createElement('div');
-    expand.className='injury-card-expand';
-    var html='';
-    if(hasSide){
-      html+='<div class="injury-side-btns">';
-      html+='<div class="injury-side-btn" data-side="L" onclick="pickInjurySide(this,\''+area+'\',\'L\')">L</div>';
-      html+='<div class="injury-side-btn" data-side="R" onclick="pickInjurySide(this,\''+area+'\',\'R\')">R</div>';
-      html+='<div class="injury-side-btn" data-side="Both" onclick="pickInjurySide(this,\''+area+'\',\'Both\')">Both</div>';
-      html+='</div>';
-    }
-    html+='<input type="text" class="injury-detail-input" placeholder="e.g. old injury, clicking, stiffness" oninput="updateInjuryDetail(\''+area+'\',this.value)">';
-    expand.innerHTML=html;
-    card.appendChild(expand);
-    addInjuryToAnswers(area,hasSide?'':'N/A','');
-    var noInj=document.getElementById('fq-no-injuries-check');
-    if(noInj) noInj.checked=false;
-  }
-  fqValidateStep();
-}
-
-function pickInjurySide(btn,area,side){
-  var btns=btn.parentElement.querySelectorAll('.injury-side-btn');
-  btns.forEach(function(b){b.classList.remove('active');});
-  btn.classList.add('active');
-  updateInjurySide(area,side);
-}
-
-function addInjuryToAnswers(area,side,detail){
-  if(!fqAnswers.injury) fqAnswers.injury=[];
-  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.area!==area;});
-  fqAnswers.injury.push({area:area,side:side,detail:detail});
-}
-
-function removeInjuryFromAnswers(area){
-  if(!fqAnswers.injury) return;
-  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.area!==area;});
-}
-
-function updateInjurySide(area,side){
-  if(!fqAnswers.injury) return;
-  fqAnswers.injury.forEach(function(i){if(i.area===area) i.side=side;});
-}
-
-function updateInjuryDetail(area,detail){
-  if(!fqAnswers.injury) return;
-  fqAnswers.injury.forEach(function(i){if(i.area===area) i.detail=detail;});
-}
-
-function fqNoInjuriesToggle(cb){
-  if(cb.checked){
-    fqAnswers.injury=[];
-    injuryZones={};
-    document.querySelectorAll('#injury-selector .injury-card.active').forEach(function(c){
-      c.classList.remove('active');
-      var exp=c.querySelector('.injury-card-expand');
-      if(exp) exp.remove();
-    });
-    fqAnswers.noInjuries=true;
-  } else {
-    fqAnswers.noInjuries=false;
-  }
-  fqValidateStep();
-}
-
-function fqValidateStep(){
-  var valid=false;
-  switch(fqStep){
-    case 1: valid=!!(fqAnswers.name&&fqAnswers.bw&&fqAnswers.sex); break;
-    case 2:
-      var hc=document.getElementById('fq-health-check');
-      valid=!!(hc&&hc.checked&&Object.keys(parqData).length>=5);
-      break;
-    case 3: valid=true; break;
-    case 4: valid=!!fqAnswers.path; break; // path selection
-    case 5: valid=!!(fqAnswers.background&&fqAnswers.historicalAge&&fqAnswers.away!==null&&fqAnswers.away!==undefined); break;
-    case 6: valid=!!fqAnswers.goal; break;
-    case 7: valid=true; break; // sport optional
-    case 8: valid=!!fqAnswers.equip; break;
-    case 9: valid=fqAnswers.days>=2; break;
-    case 10: valid=!!fqAnswers.coachTone; break; // coach tone
-    case 11: valid=!!fqAnswers.scheduleMode; break; // schedule mode
-    case 12: // session timetable (only reached if user_assigns)
-      var sched=fqAnswers.sessionSchedule;
-      valid=!!(sched&&Object.keys(sched).length===7);
-      break;
-    case 13:
-      var c1=document.getElementById('fq-confirm-accurate');
-      var c2=document.getElementById('fq-confirm-waiver');
-      var c3=document.getElementById('fq-confirm-age');
-      valid=!!(c1&&c1.checked&&c2&&c2.checked&&c3&&c3.checked);
-      break;
-    default: valid=true;
-  }
-  var btn=document.getElementById('fq-next-btn');
-  if(btn) btn.disabled=!valid;
-}
-
-function renderFQSummary(){
-  var el=document.getElementById('fq-summary');
-  if(!el) return;
-  var lines=[
-    ['Name', fqAnswers.name||'-'],
-    ['Goal', fqAnswers.goal?fqAnswers.goal.replace(/_/g,' '):'-'],
-    ['Sport', fqAnswers.sport&&fqAnswers.sport!=='none'?fqAnswers.sport.replace(/_/g,' '):'-'],
-    ['Background', fqAnswers.background||'-'],
-    ['Training days', (function(){var td=fqAnswers.trainingDays;if(td&&typeof td==='object'){var a=Object.keys(td).filter(function(k){return td[k].active;});if(a.length) return a.map(function(k){return k.charAt(0).toUpperCase()+k.slice(1);}).join(', ');}return fqAnswers.days?fqAnswers.days+' days':'-';})()],
-    ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
-    ['Injuries', fqAnswers.injury.length?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
-  ];
-  el.innerHTML=lines.map(function(l){
-    return '<div style="display:flex;justify-content:space-between;"><span style="color:var(--text3);">'+l[0]+'</span><span style="color:var(--text);font-weight:600;text-transform:capitalize;">'+l[1]+'</span></div>';
-  }).join('');
-}
-function updateFQStep(){
-  fqStepMap.forEach(function(id, idx){
-    var el=document.getElementById(id);
-    if(el) el.classList.toggle('active',(idx+1)===fqStep);
-  });
-  var pct=(fqStep/fqTotalSteps)*100;
-  var prog=document.getElementById('fq-progress');
-  if(prog) prog.style.width=pct+'%';
-  if(fqStep===fqTotalSteps) renderFQSummary();
-  var btn=document.getElementById('fq-next-btn');
-  if(btn) btn.textContent=fqStep===fqTotalSteps?'Build my plan →':'Next →';
-  var backBtn=document.getElementById('fq-back-btn');
-  if(backBtn) backBtn.style.display=fqStep>1?'block':'none';
-  // Build injury selector cards
-  if(fqStep===3) buildInjurySelector();
-  // Tier-gate the path step
-  if(fqStep===4){
-    var coachCard=document.getElementById('path-phoenix-coach');
-    var tierLabel=document.getElementById('path-phoenix-tier');
-    if(coachCard&&tierLabel){
-      if(hasIgniteAccess()){
-        coachCard.style.opacity='1';coachCard.style.pointerEvents='auto';
-        tierLabel.textContent='Ignite / Pro';tierLabel.style.color='var(--gold)';
-      } else {
-        coachCard.style.opacity='0.5';coachCard.style.pointerEvents='none';
-        tierLabel.innerHTML='🔒 Requires Ignite or Pro';tierLabel.style.color='var(--text3)';
-      }
-    }
-  }
-  fqValidateStep();
-}
-
-function fqNext(){
-  if(fqStep<fqTotalSteps){
-    fqStep++;
-    // Skip session timetable step if coach assigns the schedule
-    if(fqStep===12 && fqAnswers.scheduleMode==='coach_assigns'){
-      fqStep++;
-    }
-    updateFQStep();
-    return;
-  }
-  // Final step — save and proceed
-  var existing=athlete||{};
-  var updated=Object.assign({},existing,{
-    name:fqAnswers.name||existing.name||'',
-    dob:fqAnswers.dob||existing.dob||'',
-    bw:fqAnswers.bw||existing.bw||0,
-    sex:fqAnswers.sex||existing.sex||'',
-    cycleSync:fqAnswers.cycleSync,
-    b1rm:fqAnswers.b1rm||existing.b1rm||0,
-    sq:fqAnswers.sq||existing.sq||0,
-    dl:fqAnswers.dl||existing.dl||0,
-    pbw:fqAnswers.pbw||existing.pbw||0,
-    fqDuration:fqAnswers.duration||60,
-    fqBackground:fqAnswers.background,
-    fqHistoricalAge:fqAnswers.historicalAge,
-    fqAway:fqAnswers.away,
-    fqCoachTone:fqAnswers.coachTone,
-    fqScheduleMode:fqAnswers.scheduleMode,
-    fqSessionSchedule:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.sessionSchedule:null,
-    fqGoal:fqAnswers.goal,
-    fqGoals:[fqAnswers.goal],
-    fqSport:fqAnswers.sport,
-    fqPosition:fqAnswers.position,
-    fqSeason:fqAnswers.season,
-    fqEquip:fqAnswers.equip,
-    fqDays:fqAnswers.days,
-    fqTrainingDays:fqAnswers.trainingDays,
-    fqAmPm:fqAnswers.ampm,
-    fqInjury:fqAnswers.injury,
-    fqInjuryNotes:fqAnswers.injuryNotes,
-    fqPath:fqAnswers.path||'phoenix',
-    fqParqClear:fqAnswers.parqClear,
-    fqCompleted:new Date().toISOString()
-  });
-  saveAthlete(updated);
-  // Go straight to AI for Ignite/Pro, otherwise today screen
-  if(hasIgniteAccess()){
-    generateProgramme('initial_build');
-  } else {
-    if(typeof renderTodayScreen==='function') renderTodayScreen();
-    navTo('today');
-  }
-}
-
-function fqBack(){
-  if(window._coachViewReturn){
-    var ret=window._coachViewReturn;
-    window._coachViewReturn=null;
-    navTo(ret);
-    return;
-  }
-  if(fqStep>1){
-    fqStep--;
-    // Skip session timetable step going backwards if coach assigns
-    if(fqStep===12 && fqAnswers.scheduleMode==='coach_assigns'){
-      fqStep--;
-    }
-    updateFQStep();
-  }
-  else{showScreen('screen-splash');}
-}
-
-function openFoundationQ(){
-  fqStep=1;
-  fqAnswers={name:'',dob:'',bw:0,sex:'',cycleSync:false,background:null,away:null,b1rm:0,sq:0,dl:0,pbw:0,goal:null,path:'phoenix',sport:'none',position:'',season:'off',equip:null,days:null,ampm:'morning',duration:60,trainingDays:{mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}},injury:[],injuryNotes:'',parqClear:true};
-  if(typeof fqTrainingDays!=='undefined') fqTrainingDays={mon:{active:false,time:'AM',duration:60},tue:{active:false,time:'AM',duration:60},wed:{active:false,time:'AM',duration:60},thu:{active:false,time:'AM',duration:60},fri:{active:false,time:'AM',duration:60},sat:{active:false,time:'AM',duration:60},sun:{active:false,time:'AM',duration:60}};
-  parqData={};injuryZones={};
-  updateFQStep();
-  showScreen('screen-foundation-q');
-  setTimeout(renderFQSkinGrid,50);
-}
 
 
 // ====== SESSION DATA ======
@@ -9859,7 +9011,7 @@ function renderTodayScreen(){
 
   // Ad slot
   var adEl=document.getElementById('ad-today');
-  if(adEl) adEl.style.display=hasRisingAccess()?'none':'block';
+  if(adEl) adEl.style.display=hasProAccess()?'none':'block';
 
   // Session info
   renderTodaySessionCard();
@@ -9921,7 +9073,13 @@ function isTodayRestDay(){
   var dayKey=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
   // User-assigned schedule takes priority
   if(athlete.fqScheduleMode==='user_assigns'&&athlete.fqSessionSchedule){
-    return athlete.fqSessionSchedule[dayKey]==='rest';
+    var ds=athlete.fqSessionSchedule[dayKey];
+    if(!ds) return true;
+    if(typeof ds==='object'){
+      var am=ds.am, pm=ds.pm;
+      return (am==='rest'||am===null||!am)&&(pm==='rest'||pm===null||!pm);
+    }
+    return ds==='rest';
   }
   // Check if AI programme has no session for today
   if(athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.sessions){
@@ -10609,6 +9767,730 @@ function openBenchmarkLibrary(){
 }
 
 
+</script>
+<script>
+/* ===== v4.7.3 OVERRIDES =====
+   Replaces the v4.7.2 questionnaire state machine and adds:
+   - 9-step flow with new fields (sport role, programme target, availability, etc.)
+   - Bug 1: active session persistence + navigation guard + visual restore
+   - Bug 2 ad gate already moved to hasProAccess() inline
+*/
+
+// ---------- 1. QUESTIONNAIRE OVERRIDES ----------
+var fqStep = 1;
+var fqTotalSteps = 9;
+var fqStepMap = ['fq-step-1','fq-step-2','fq-step-3','fq-step-4','fq-step-schedulemode','fq-step-availability','fq-step-sessionschedule','fq-step-coachtone','fq-step-9'];
+
+var FQ_DAYS_ORDER = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+var FQ_DAY_LABEL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
+var FQ_DAY_FULL = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
+
+if(typeof SPORT_POSITIONS==='undefined'){
+  window.SPORT_POSITIONS = {
+    rugby_union:['Loosehead Prop (1)','Hooker (2)','Tighthead Prop (3)','Lock (4)','Lock (5)','Blindside Flanker (6)','Openside Flanker (7)','Number 8','Scrum-half (9)','Fly-half (10)','Inside Centre (12)','Outside Centre (13)','Wing (11/14)','Fullback (15)'],
+    rugby_league:['Prop (8/10)','Hooker (9)','Second Row (11/12)','Loose Forward (13)','Halfback (7)','Five-eighth (6)','Centre (3/4)','Wing (2/5)','Fullback (1)'],
+    afl:['Key Forward','Key Defender','Midfielder','Wing','Ruck','Small Forward','Defensive Flanker'],
+    football:['Goalkeeper','Centre Back','Full Back / Wing Back','Holding Midfielder','Box-to-Box Midfielder','Attacking Mid / Winger','Striker'],
+    nfl:['Quarterback (QB)','Wide Receiver (WR)','Running Back (RB)','Tight End (TE)','Offensive Lineman (OL)','Defensive End (DE)','Defensive Tackle (DT)','Linebacker (LB)','Cornerback (CB)','Safety (S)'],
+    basketball:['Point Guard','Shooting Guard','Small Forward','Power Forward','Centre'],
+    netball:['Goal Shooter','Goal Attack','Wing Attack','Centre','Wing Defence','Goal Defence','Goal Keeper'],
+    cricket:['Fast Bowler','Medium Pace Bowler','Spin Bowler','Wicketkeeper','Batting All-rounder','Bowling All-rounder'],
+    combat:['Striker (Boxing/Muay Thai)','Grappler (Wrestling/BJJ)','MMA Fighter','BJJ/Submission Wrestling'],
+    hyrox:['Open Division','Pro Division'],
+    powerlifting:['Sub-Junior','Junior','Open','Masters'],
+    swimming:['Sprint','Middle distance','Distance'],
+    cycling:['Road','Track','Mountain','Time trial']
+  };
+}
+
+window.fqResetAnswers = function(){
+  window.fqAnswers = {
+    name:'', dob:'', bw:0, sex:'', cycleSync:false,
+    equip:null,
+    background:null, historicalAge:null, away:null,
+    goals:[], goal:null,
+    sportRole:null, sport:'none', position:'', seasonPhase:null,
+    programmeTarget:null, eventDate:'', eventDescription:'',
+    b1rm:0, sq:0, dl:0, pbw:0, mile:'', row500:'',
+    ohp:0, b100:0, wpu:0, karen:'', plank:0, ohsq:'',
+    scheduleMode:null,
+    availableSlots:{}, sessionSchedule:null,
+    coachTone:null,
+    injury:[], injuryNotes:'', noInjuries:false,
+    parqClear:true,
+    waiverAccepted:false,
+    path:'phoenix'
+  };
+  window.parqData = {};
+};
+
+window.fqSetSex = function(val,el){
+  fqAnswers.sex=val;
+  document.querySelectorAll('#fq-sex-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  var cycleRow=document.getElementById('fq-cycle-row');
+  if(cycleRow) cycleRow.style.display=val==='female'?'block':'none';
+  fqValidateStep();
+};
+
+window.fqSetCycle = function(val,el){
+  fqAnswers.cycleSync=val==='yes';
+  el.parentElement.querySelectorAll('.q-option-card').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+};
+
+window.fqSetBg = function(val,el){
+  fqAnswers.background=val;
+  // Only deselect siblings under the same Training-experience grid
+  var grid=el.parentElement;
+  grid.querySelectorAll('.q-option-wide').forEach(function(c){c.classList.remove('active');});
+  el.classList.add('active');
+  fqValidateStep();
+};
+
+window.fqSetHistoricalAge = function(val,el){
+  fqAnswers.historicalAge=val;
+  document.querySelectorAll('#fq-historical-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  fqValidateStep();
+};
+
+window.fqSetAway = function(val,el){
+  fqAnswers.away=parseInt(val);
+  document.querySelectorAll('#fq-away-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  fqValidateStep();
+};
+
+window.fqSetGoal = function(val,el){
+  if(!Array.isArray(fqAnswers.goals)) fqAnswers.goals=[];
+  var idx=fqAnswers.goals.indexOf(val);
+  if(idx===0){
+    // Tapping primary clears everything
+    fqAnswers.goals=[];
+    document.querySelectorAll('[data-goal]').forEach(function(c){
+      c.classList.remove('active');
+      var b=c.querySelector('.goal-rank-badge'); if(b) b.remove();
+    });
+  } else if(idx>0){
+    fqAnswers.goals.splice(idx,1);
+    el.classList.remove('active');
+    var b2=el.querySelector('.goal-rank-badge'); if(b2) b2.remove();
+    fqAnswers.goals.forEach(function(g,i){
+      var card=document.querySelector('[data-goal="'+g+'"]');
+      if(card){
+        var badge=card.querySelector('.goal-rank-badge');
+        if(badge) badge.textContent=i===0?'Primary':'Secondary';
+      }
+    });
+  } else if(fqAnswers.goals.length<2){
+    fqAnswers.goals.push(val);
+    el.classList.add('active');
+    var badge=document.createElement('span');
+    badge.className='goal-rank-badge';
+    badge.style.cssText='font-size:9px;background:var(--gold);color:#000;padding:2px 6px;border-radius:10px;margin-left:8px;font-family:var(--font-d);letter-spacing:1px;';
+    badge.textContent=fqAnswers.goals.length===1?'Primary':'Secondary';
+    var strong=el.querySelector('strong');
+    if(strong) strong.appendChild(badge);
+  }
+  fqAnswers.goal=fqAnswers.goals[0]||null;
+  fqValidateStep();
+};
+
+window.fqSetSportRole = function(val,el){
+  fqAnswers.sportRole=val;
+  document.querySelectorAll('#fq-sport-role-list .q-option-wide').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  var sportRow=document.getElementById('fq-sport-row');
+  var posRow=document.getElementById('fq-position-row');
+  var seasonRow=document.getElementById('fq-season-row');
+  if(val==='none'){
+    fqAnswers.sport='none'; fqAnswers.position=''; fqAnswers.seasonPhase=null;
+    if(sportRow) sportRow.style.display='none';
+    if(posRow) posRow.style.display='none';
+    if(seasonRow) seasonRow.style.display='none';
+  } else {
+    if(sportRow) sportRow.style.display='block';
+    if(val==='competing'){
+      if(seasonRow) seasonRow.style.display='block';
+    } else {
+      if(seasonRow) seasonRow.style.display='none';
+      fqAnswers.seasonPhase=null;
+    }
+  }
+  fqValidateStep();
+};
+
+window.fqSetSportFromSelect = function(val){
+  fqAnswers.sport=val||'none';
+  fqAnswers.position='';
+  var posRow=document.getElementById('fq-position-row');
+  var posSelect=document.getElementById('fq-position');
+  if(val && SPORT_POSITIONS[val] && fqAnswers.sportRole==='competing'){
+    if(posRow) posRow.style.display='block';
+    if(posSelect){
+      posSelect.innerHTML='<option value="">Select position...</option>';
+      SPORT_POSITIONS[val].forEach(function(p){
+        posSelect.innerHTML+='<option value="'+p+'">'+p+'</option>';
+      });
+    }
+  } else {
+    if(posRow) posRow.style.display='none';
+  }
+  fqValidateStep();
+};
+
+window.fqSetSeasonPhase = function(val,el){
+  fqAnswers.seasonPhase=val;
+  document.querySelectorAll('#fq-season-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+};
+
+window.fqSetProgrammeTarget = function(val,el){
+  fqAnswers.programmeTarget=val;
+  document.querySelectorAll('#fq-target-list .q-option-wide').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  var ev=document.getElementById('fq-event-fields');
+  if(ev) ev.style.display=val==='event'?'block':'none';
+  if(val!=='event'){fqAnswers.eventDate='';fqAnswers.eventDescription='';}
+  fqValidateStep();
+};
+
+window.fqSetOhsq = function(val,el){
+  fqAnswers.ohsq=val;
+  document.querySelectorAll('#fq-ohsq-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+};
+
+window.fqToggleExtendedScores = function(){
+  var ext=document.getElementById('fq-extended-scores');
+  var tog=document.getElementById('fq-extended-toggle');
+  if(!ext||!tog) return;
+  if(ext.style.display==='none'){
+    ext.style.display='block';
+    tog.textContent='Hide extra numbers −';
+  } else {
+    ext.style.display='none';
+    tog.textContent='Add more numbers +';
+  }
+};
+
+window.fqSetCoachTone = function(val,el){
+  fqAnswers.coachTone=val;
+  el.closest('.q-step').querySelectorAll('.q-option-wide').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  fqValidateStep();
+};
+
+window.fqSetScheduleMode = function(val,el){
+  fqAnswers.scheduleMode=val;
+  if(val==='coach_assigns'){
+    fqAnswers.sessionSchedule=null;
+    fqAnswers.availableSlots={};
+  }
+  el.closest('.q-step').querySelectorAll('.q-option-wide').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  fqValidateStep();
+};
+
+window.fqRenderAvailability = function(){
+  var grid=document.getElementById('fq-availability-grid');
+  if(!grid) return;
+  grid.innerHTML='';
+  FQ_DAYS_ORDER.forEach(function(day){
+    var slot=fqAnswers.availableSlots[day]||{am:false,pm:false};
+    grid.insertAdjacentHTML('beforeend',
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'+
+      '<div style="width:50px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+FQ_DAY_LABEL[day]+'</div>'+
+      '<div class="q-option-card'+(slot.am?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'am\')" style="flex:1;padding:8px;font-size:11px;text-align:center;border-radius:14px;">AM</div>'+
+      '<div class="q-option-card'+(slot.pm?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'pm\')" style="flex:1;padding:8px;font-size:11px;text-align:center;border-radius:14px;">PM</div>'+
+      '<div style="width:60px;font-size:10px;color:var(--text3);text-align:right;">'+(!slot.am&&!slot.pm?'Rest day':'')+'</div>'+
+      '</div>');
+  });
+};
+
+window.fqToggleAvailability = function(day,slot){
+  if(!fqAnswers.availableSlots[day]) fqAnswers.availableSlots[day]={am:false,pm:false};
+  fqAnswers.availableSlots[day][slot]=!fqAnswers.availableSlots[day][slot];
+  // If we toggle off a slot, drop any existing session-type for that slot
+  if(!fqAnswers.availableSlots[day][slot] && fqAnswers.sessionSchedule && fqAnswers.sessionSchedule[day]){
+    delete fqAnswers.sessionSchedule[day][slot];
+  }
+  fqRenderAvailability();
+  fqValidateStep();
+};
+
+window.fqRenderSessionTimetable = function(){
+  var container=document.getElementById('fq-session-timetable');
+  if(!container) return;
+  container.innerHTML='';
+  if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule={};
+  var anyAvailable=false;
+  FQ_DAYS_ORDER.forEach(function(day){
+    var slot=fqAnswers.availableSlots[day]||{am:false,pm:false};
+    if(!slot.am && !slot.pm){
+      container.insertAdjacentHTML('beforeend',
+        '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;color:var(--text3);font-size:11px;font-family:var(--font-d);letter-spacing:1px;">'+
+        '<div style="width:44px;">'+FQ_DAY_LABEL[day]+'</div>'+
+        '<div style="flex:1;">Rest day</div></div>');
+      return;
+    }
+    anyAvailable=true;
+    ['am','pm'].forEach(function(sl){
+      if(!slot[sl]) return;
+      var cur=(fqAnswers.sessionSchedule[day]||{})[sl];
+      var labels=[['strength','Strength'],['wod','WOD'],['core','Core'],['walk','Walk'],['rest','Rest'],[null,'—']];
+      var pillsHtml=labels.map(function(p){
+        var active=(cur===p[0])?' active':'';
+        var jsArg=p[0]===null?'null':"'"+p[0]+"'";
+        return '<div class="q-option-card fq-sched-pill'+active+'" onclick="fqSetSessionDay(\''+day+'\',\''+sl+'\','+jsArg+',this)" style="padding:8px 6px;font-size:10px;border-radius:14px;flex:1;text-align:center;">'+p[1]+'</div>';
+      }).join('');
+      container.insertAdjacentHTML('beforeend',
+        '<div class="fq-sched-row" data-day="'+day+'" data-slot="'+sl+'" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+        '<div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+(sl==='am'?FQ_DAY_LABEL[day]:'')+'</div>'+
+        '<div style="width:24px;font-size:10px;color:var(--text3);font-weight:600;">'+sl.toUpperCase()+'</div>'+
+        pillsHtml+
+        '</div>');
+    });
+  });
+  if(!anyAvailable){
+    container.insertAdjacentHTML('beforeend','<div style="padding:14px;color:var(--orange);font-size:12px;">No slots marked available — go back and pick at least one AM or PM slot.</div>');
+  }
+  fqEvaluateConsecutiveStrength();
+};
+
+window.fqSetSessionDay = function(day,slot,type,el){
+  if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule={};
+  if(!fqAnswers.sessionSchedule[day]) fqAnswers.sessionSchedule[day]={};
+  fqAnswers.sessionSchedule[day][slot]=type;
+  el.closest('.fq-sched-row').querySelectorAll('.fq-sched-pill').forEach(function(e){e.classList.remove('active');});
+  el.classList.add('active');
+  fqEvaluateConsecutiveStrength();
+  fqValidateStep();
+};
+
+window.fqEvaluateConsecutiveStrength = function(){
+  var warn=document.getElementById('fq-session-warning');
+  if(!warn) return;
+  var sched=fqAnswers.sessionSchedule||{};
+  var seq=[];
+  FQ_DAYS_ORDER.forEach(function(day){
+    ['am','pm'].forEach(function(sl){
+      var slot=fqAnswers.availableSlots[day]||{};
+      if(slot[sl]){
+        seq.push({day:day,slot:sl,type:(sched[day]||{})[sl]});
+      }
+    });
+  });
+  var run=0, runStart=null, worst={count:0,start:null,end:null};
+  for(var i=0;i<seq.length;i++){
+    if(seq[i].type==='strength'){
+      if(run===0) runStart=i;
+      run++;
+      if(run>worst.count) worst={count:run,start:runStart,end:i};
+    } else { run=0; runStart=null; }
+  }
+  if(worst.count>=3){
+    var s=seq[worst.start], e=seq[worst.end];
+    warn.style.display='block';
+    warn.textContent='You have '+worst.count+' consecutive strength sessions. Consider adding a rest or WOD day between '+FQ_DAY_FULL[s.day]+' and '+FQ_DAY_FULL[e.day]+' for better recovery.';
+  } else {
+    warn.style.display='none';
+  }
+};
+
+window.fqValidateStep = function(){
+  var valid=false;
+  switch(fqStep){
+    case 1: valid=!!(fqAnswers.name && fqAnswers.bw && fqAnswers.sex && fqAnswers.equip); break;
+    case 2:
+      var hc=document.getElementById('fq-health-check');
+      valid=!!(hc && hc.checked && Object.keys(parqData||{}).length>=5);
+      break;
+    case 3: valid=!!(fqAnswers.background && fqAnswers.historicalAge && fqAnswers.away!==null && fqAnswers.away!==undefined); break;
+    case 4:
+      var goalsOk=fqAnswers.goals && fqAnswers.goals.length>=1;
+      var sportOk=fqAnswers.sportRole==='none' || (fqAnswers.sportRole && fqAnswers.sport && fqAnswers.sport!=='' && fqAnswers.sport!=='none');
+      var targetOk=!!fqAnswers.programmeTarget && (fqAnswers.programmeTarget!=='event' || (fqAnswers.eventDate && fqAnswers.eventDescription));
+      valid=goalsOk && !!fqAnswers.sportRole && sportOk && targetOk;
+      break;
+    case 5: valid=!!fqAnswers.scheduleMode; break;
+    case 6:
+      var anySlot=false;
+      Object.keys(fqAnswers.availableSlots||{}).forEach(function(d){
+        var s=fqAnswers.availableSlots[d];
+        if(s && (s.am||s.pm)) anySlot=true;
+      });
+      valid=anySlot;
+      break;
+    case 7:
+      var sched=fqAnswers.sessionSchedule||{};
+      var allAssigned=true, anyAvail=false;
+      FQ_DAYS_ORDER.forEach(function(day){
+        ['am','pm'].forEach(function(sl){
+          var slot=fqAnswers.availableSlots[day]||{};
+          if(slot[sl]){
+            anyAvail=true;
+            if(!sched[day] || typeof sched[day][sl]==='undefined') allAssigned=false;
+          }
+        });
+      });
+      valid=anyAvail && allAssigned;
+      break;
+    case 8: valid=!!fqAnswers.coachTone; break;
+    case 9:
+      var c1=document.getElementById('fq-confirm-accurate');
+      var c2=document.getElementById('fq-confirm-waiver');
+      valid=!!(c1 && c1.checked && c2 && c2.checked);
+      break;
+    default: valid=true;
+  }
+  var btn=document.getElementById('fq-next-btn');
+  if(btn) btn.disabled=!valid;
+};
+
+window.renderFQSummary = function(){
+  var el=document.getElementById('fq-summary');
+  if(!el) return;
+  var goalLabel=(fqAnswers.goals||[]).map(function(g,i){return (i===0?'Primary: ':'Secondary: ')+g.replace(/_/g,' ');}).join(' • ')||'-';
+  var sportLabel='-';
+  if(fqAnswers.sportRole==='none') sportLabel='Not relevant';
+  else if(fqAnswers.sport && fqAnswers.sport!=='none') sportLabel=fqAnswers.sport.replace(/_/g,' ')+' ('+fqAnswers.sportRole+')';
+  var lines=[
+    ['Name', fqAnswers.name||'-'],
+    ['Goals', goalLabel],
+    ['Sport', sportLabel],
+    ['Programme target', fqAnswers.programmeTarget?fqAnswers.programmeTarget.replace(/_/g,' '):'-'],
+    ['Background', fqAnswers.background||'-'],
+    ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
+    ['Schedule', fqAnswers.scheduleMode==='coach_assigns'?'Coach assigns':(fqAnswers.scheduleMode==='user_assigns'?'You set':'-')],
+    ['Injuries', (fqAnswers.injury && fqAnswers.injury.length)?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
+  ];
+  el.innerHTML=lines.map(function(l){
+    return '<div style="display:flex;justify-content:space-between;gap:8px;"><span style="color:var(--text3);">'+l[0]+'</span><span style="color:var(--text);font-weight:600;text-transform:capitalize;text-align:right;">'+l[1]+'</span></div>';
+  }).join('');
+};
+
+window.updateFQStep = function(){
+  fqStepMap.forEach(function(id, idx){
+    var el=document.getElementById(id);
+    if(el) el.classList.toggle('active',(idx+1)===fqStep);
+  });
+  var pct=(fqStep/fqTotalSteps)*100;
+  var prog=document.getElementById('fq-progress');
+  if(prog) prog.style.width=pct+'%';
+  if(fqStep===fqTotalSteps) renderFQSummary();
+  var btn=document.getElementById('fq-next-btn');
+  if(btn) btn.textContent=fqStep===fqTotalSteps?'Build my plan →':'Next →';
+  var backBtn=document.getElementById('fq-back-btn');
+  if(backBtn) backBtn.style.display=fqStep>1?'block':'none';
+  if(fqStep===2 && typeof buildInjurySelector==='function') buildInjurySelector();
+  if(fqStep===6) fqRenderAvailability();
+  if(fqStep===7) fqRenderSessionTimetable();
+  fqValidateStep();
+};
+
+window.fqNext = function(){
+  if(fqStep<fqTotalSteps){
+    fqStep++;
+    if(fqStep===6 && fqAnswers.scheduleMode==='coach_assigns'){
+      fqStep=8;
+    }
+    updateFQStep();
+    return;
+  }
+  fqAnswers.waiverAccepted=true;
+  var existing=athlete||{};
+  var updated=Object.assign({},existing,{
+    name:fqAnswers.name||existing.name||'',
+    dob:fqAnswers.dob||existing.dob||'',
+    bw:fqAnswers.bw||existing.bw||0,
+    sex:fqAnswers.sex||existing.sex||'',
+    cycleSync:fqAnswers.cycleSync,
+    b1rm:fqAnswers.b1rm||existing.b1rm||0,
+    sq:fqAnswers.sq||existing.sq||0,
+    dl:fqAnswers.dl||existing.dl||0,
+    pbw:fqAnswers.pbw||existing.pbw||0,
+    mile:fqAnswers.mile||existing.mile||'',
+    row500:fqAnswers.row500||existing.row500||'',
+    ohp:fqAnswers.ohp||existing.ohp||0,
+    b100:fqAnswers.b100||existing.b100||0,
+    wpu:fqAnswers.wpu||existing.wpu||0,
+    karen:fqAnswers.karen||existing.karen||'',
+    plank:fqAnswers.plank||existing.plank||0,
+    ohsq:fqAnswers.ohsq||existing.ohsq||'',
+    fqBackground:fqAnswers.background,
+    fqHistoricalAge:fqAnswers.historicalAge,
+    fqAway:fqAnswers.away,
+    fqGoals:fqAnswers.goals||[],
+    fqGoal:fqAnswers.goal,
+    fqSportRole:fqAnswers.sportRole,
+    fqSport:fqAnswers.sport,
+    fqPosition:fqAnswers.position,
+    fqSeasonPhase:fqAnswers.seasonPhase,
+    fqProgrammeTarget:fqAnswers.programmeTarget,
+    fqEventDate:fqAnswers.eventDate,
+    fqEventDescription:fqAnswers.eventDescription,
+    fqEquip:fqAnswers.equip,
+    fqScheduleMode:fqAnswers.scheduleMode,
+    fqAvailableSlots:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.availableSlots:null,
+    fqSessionSchedule:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.sessionSchedule:null,
+    fqCoachTone:fqAnswers.coachTone,
+    fqInjury:fqAnswers.injury,
+    fqInjuryNotes:fqAnswers.injuryNotes,
+    fqParqClear:fqAnswers.parqClear,
+    fqWaiverAccepted:true,
+    fqPath:'phoenix',
+    fqCompleted:new Date().toISOString()
+  });
+  saveAthlete(updated);
+  if(hasIgniteAccess()){
+    generateProgramme('initial_build');
+  } else {
+    if(typeof renderTodayScreen==='function') renderTodayScreen();
+    navTo('today');
+  }
+};
+
+window.fqBack = function(){
+  if(window._coachViewReturn){
+    var ret=window._coachViewReturn;
+    window._coachViewReturn=null;
+    navTo(ret);
+    return;
+  }
+  if(fqStep>1){
+    fqStep--;
+    if(fqStep===7 && fqAnswers.scheduleMode==='coach_assigns'){
+      fqStep=5;
+    }
+    updateFQStep();
+  } else {
+    showScreen('screen-splash');
+  }
+};
+
+window.openFoundationQ = function(){
+  fqStep=1;
+  fqResetAnswers();
+  if(typeof injuryZones!=='undefined') injuryZones={};
+  updateFQStep();
+  showScreen('screen-foundation-q');
+  setTimeout(function(){ if(typeof renderFQSkinGrid==='function') renderFQSkinGrid(); },50);
+};
+
+// Initialise the v4.7.3 answers object once on first load
+fqResetAnswers();
+
+// ---------- 1b. PAR-Q + INJURY HELPERS (restored from v4.7.2) ----------
+window.parqData = window.parqData || {};
+
+window.parqSet = function(id, val, e){
+  if(e) e.stopPropagation();
+  parqData[id]=val;
+  var yesBtn=document.getElementById('parq-'+id+'-yes');
+  var noBtn=document.getElementById('parq-'+id+'-no');
+  if(yesBtn) yesBtn.className='parq-btn'+(val==='yes'?' active-yes':'');
+  if(noBtn) noBtn.className='parq-btn'+(val==='no'?' active-no':'');
+  var anyYes=Object.values(parqData).some(function(v){return v==='yes';});
+  var flag=document.getElementById('parq-flag');
+  if(flag) flag.style.display=anyYes?'block':'none';
+  fqAnswers.parqClear=!anyYes;
+  fqValidateStep();
+};
+
+var INJURY_FRONT=['Chest','Shoulder','Elbow','Wrist','Hip','Quad','Knee','Shin','Ankle'];
+var INJURY_BACK=['Neck','Upper Arm','Upper Back','Lower Back','Glute','Hamstring','Calf','Achilles/Heel'];
+var INJURY_NO_SIDE=['Neck','Upper Back','Lower Back'];
+window.injuryZones = window.injuryZones || {};
+
+window.buildInjurySelector = function(){
+  var fc=document.getElementById('injury-col-front');
+  var bc=document.getElementById('injury-col-back');
+  if(!fc||!bc) return;
+  fc.innerHTML='';bc.innerHTML='';
+  INJURY_FRONT.forEach(function(area){fc.appendChild(makeInjuryCard(area));});
+  INJURY_BACK.forEach(function(area){bc.appendChild(makeInjuryCard(area));});
+};
+
+window.makeInjuryCard = function(area){
+  var card=document.createElement('div');
+  card.className='injury-card';
+  card.setAttribute('data-area',area);
+  var hasSide=INJURY_NO_SIDE.indexOf(area)===-1;
+  card.innerHTML='<div style="font-weight:600;">'+area+'</div>';
+  card.onclick=function(e){
+    if(e.target.classList.contains('injury-side-btn')||e.target.classList.contains('injury-detail-input')) return;
+    toggleInjuryCard(card,area,hasSide);
+  };
+  return card;
+};
+
+window.toggleInjuryCard = function(card,area,hasSide){
+  var isActive=card.classList.contains('active');
+  if(isActive){
+    card.classList.remove('active');
+    var exp=card.querySelector('.injury-card-expand');
+    if(exp) exp.remove();
+    removeInjuryFromAnswers(area);
+  } else {
+    card.classList.add('active');
+    var expand=document.createElement('div');
+    expand.className='injury-card-expand';
+    var html='';
+    if(hasSide){
+      html+='<div class="injury-side-btns">';
+      html+='<div class="injury-side-btn" data-side="L" onclick="pickInjurySide(this,\''+area+'\',\'L\')">L</div>';
+      html+='<div class="injury-side-btn" data-side="R" onclick="pickInjurySide(this,\''+area+'\',\'R\')">R</div>';
+      html+='<div class="injury-side-btn" data-side="Both" onclick="pickInjurySide(this,\''+area+'\',\'Both\')">Both</div>';
+      html+='</div>';
+    }
+    html+='<input type="text" class="injury-detail-input" placeholder="e.g. old injury, clicking, stiffness" oninput="updateInjuryDetail(\''+area+'\',this.value)">';
+    expand.innerHTML=html;
+    card.appendChild(expand);
+    addInjuryToAnswers(area,hasSide?'':'N/A','');
+    var noInj=document.getElementById('fq-no-injuries-check');
+    if(noInj) noInj.checked=false;
+  }
+  fqValidateStep();
+};
+
+window.pickInjurySide = function(btn,area,side){
+  btn.parentElement.querySelectorAll('.injury-side-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  updateInjurySide(area,side);
+};
+
+window.addInjuryToAnswers = function(area,side,detail){
+  if(!fqAnswers.injury) fqAnswers.injury=[];
+  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.area!==area;});
+  fqAnswers.injury.push({area:area,side:side,detail:detail});
+};
+
+window.removeInjuryFromAnswers = function(area){
+  if(!fqAnswers.injury) return;
+  fqAnswers.injury=fqAnswers.injury.filter(function(i){return i.area!==area;});
+};
+
+window.updateInjurySide = function(area,side){
+  if(!fqAnswers.injury) return;
+  fqAnswers.injury.forEach(function(i){if(i.area===area) i.side=side;});
+};
+
+window.updateInjuryDetail = function(area,detail){
+  if(!fqAnswers.injury) return;
+  fqAnswers.injury.forEach(function(i){if(i.area===area) i.detail=detail;});
+};
+
+window.fqNoInjuriesToggle = function(cb){
+  if(cb.checked){
+    fqAnswers.injury=[];
+    injuryZones={};
+    document.querySelectorAll('#injury-selector .injury-card.active').forEach(function(c){
+      c.classList.remove('active');
+      var exp=c.querySelector('.injury-card-expand');
+      if(exp) exp.remove();
+    });
+    fqAnswers.noInjuries=true;
+  } else {
+    fqAnswers.noInjuries=false;
+  }
+  fqValidateStep();
+};
+
+// ---------- 2. BUG 1: ACTIVE SESSION PERSIST + NAV GUARD + RESTORE ----------
+var PHX_ACTIVE_SESSION_KEY = 'phoenix_active_session_id';
+
+function _phxSaveActiveSessionId(id){
+  if(id) localStorage.setItem(PHX_ACTIVE_SESSION_KEY, id);
+  else localStorage.removeItem(PHX_ACTIVE_SESSION_KEY);
+}
+
+// Wrap the existing supabaseStartSession to persist the id once it's set
+if(typeof supabaseStartSession==='function'){
+  var _origSupabaseStartSession = supabaseStartSession;
+  window.supabaseStartSession = async function(){
+    var id = await _origSupabaseStartSession.apply(this, arguments);
+    if(id) _phxSaveActiveSessionId(id);
+    return id;
+  };
+}
+
+// Wrap supabaseCompleteSession to clear the id once the session finishes
+if(typeof supabaseCompleteSession==='function'){
+  var _origSupabaseCompleteSession = supabaseCompleteSession;
+  window.supabaseCompleteSession = async function(){
+    try { await _origSupabaseCompleteSession.apply(this, arguments); }
+    finally { _phxSaveActiveSessionId(null); }
+  };
+}
+
+// On page load, recover the persisted id back into the in-memory variable
+(function recoverActiveSessionId(){
+  try {
+    var stored = localStorage.getItem(PHX_ACTIVE_SESSION_KEY);
+    if(stored && typeof currentSupabaseSessionId !== 'undefined' && !currentSupabaseSessionId){
+      window.currentSupabaseSessionId = stored;
+      console.log('[PHX] recovered active session id from localStorage:', stored);
+    }
+  } catch(e){}
+})();
+
+function _phxIsOnSessionScreen(){
+  var s = document.getElementById('screen-session');
+  return !!(s && s.classList.contains('active'));
+}
+
+function _phxConfirmLeaveActiveSession(){
+  // Only prompt if we're currently inside a session screen with an active id
+  if(!currentSupabaseSessionId) return true;
+  if(!_phxIsOnSessionScreen()) return true;
+  return confirm('You have an active session. If you leave, your logged sets are saved but your place in the session will be lost. Continue anyway?');
+}
+
+// Intercept navTo
+if(typeof navTo==='function'){
+  var _origNavTo = navTo;
+  window.navTo = function(tab){
+    if(!_phxConfirmLeaveActiveSession()) return;
+    return _origNavTo.apply(this, arguments);
+  };
+}
+
+// Intercept showScreen for non-session-screen targets when a session is active
+if(typeof showScreen==='function'){
+  var _origShowScreen = showScreen;
+  window.showScreen = function(id){
+    if(id !== 'screen-session' && _phxIsOnSessionScreen() && currentSupabaseSessionId){
+      if(!confirm('You have an active session. If you leave, your logged sets are saved but your place in the session will be lost. Continue anyway?')) return;
+    }
+    var result = _origShowScreen.apply(this, arguments);
+    if(id === 'screen-session') _phxRestoreSessionVisualState();
+    return result;
+  };
+}
+
+// Best-effort visual restore: pull set_logs for the active session id and tag
+// any matching exercise/set DOM nodes as completed. The session screen
+// renders different markup per session type, so we look for common selectors.
+async function _phxRestoreSessionVisualState(){
+  if(!currentSupabaseSessionId || typeof sb==='undefined') return;
+  try {
+    var res = await sb.from('set_logs').select('exercise_name, exercise_id, set_number').eq('session_id', currentSupabaseSessionId);
+    if(res.error || !res.data || !res.data.length) return;
+    res.data.forEach(function(row){
+      var selectors = [
+        '[data-ex-id="'+row.exercise_id+'"][data-set-idx="'+row.set_number+'"]',
+        '[data-exercise-id="'+row.exercise_id+'"][data-set="'+row.set_number+'"]',
+        '[data-exercise="'+row.exercise_name+'"][data-set="'+row.set_number+'"]'
+      ];
+      selectors.forEach(function(sel){
+        document.querySelectorAll(sel).forEach(function(el){ el.classList.add('completed'); el.classList.add('logged'); });
+      });
+    });
+    console.log('[PHX] restored visual state for', res.data.length, 'sets');
+  } catch(e){ console.warn('[PHX] restoreSessionVisualState failed:', e); }
+}
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}</script>
 </body>

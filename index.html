@@ -1983,17 +1983,6 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     </div>
   </div>
   <div class="q-field" style="margin-top:16px;">
-    <label class="q-label">Equipment access</label>
-    <select class="q-input" id="fq-equip" onchange="fqAnswers.equip=this.value;fqValidateStep()" style="margin-top:6px;">
-      <option value="">Select your setup...</option>
-      <option value="full_commercial_gym">Full commercial gym</option>
-      <option value="crossfit_box">CrossFit / functional gym</option>
-      <option value="home_gym_barbell">Home gym — barbell setup</option>
-      <option value="home_gym_dumbbell">Home gym — dumbbells / kettlebells</option>
-      <option value="bodyweight">Bodyweight only</option>
-    </select>
-  </div>
-  <div class="q-field" style="margin-top:16px;">
     <label class="q-label">Theme</label>
     <div style="font-size:11px;color:var(--text3);margin:6px 0 4px;font-family:var(--font-d);letter-spacing:2px;text-transform:uppercase;">Free</div>
     <div class="skin-grid" id="fq-skin-grid" style="margin-bottom:12px;">
@@ -2018,9 +2007,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);background:rgba(0,0,0,0.3);border:1px solid var(--green);padding:1px 6px;border-radius:10px;">Free</div>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin:4px 0 4px;font-family:var(--font-d);letter-spacing:2px;text-transform:uppercase;">Rising</div>
-    <div class="skin-grid" id="fq-skin-grid-rising" style="margin-bottom:12px;"></div>
-    <div style="font-size:11px;color:var(--text3);margin:4px 0 4px;font-family:var(--font-d);letter-spacing:2px;text-transform:uppercase;">Pro</div>
+    <div style="font-size:11px;color:var(--text3);margin:4px 0 4px;font-family:var(--font-d);letter-spacing:2px;text-transform:uppercase;">Phoenix Pro</div>
     <div class="skin-grid" id="fq-skin-grid-pro" style="margin-bottom:4px;"></div>
   </div>
   <div class="q-field" style="margin-top:12px;">
@@ -2118,42 +2105,76 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 <div class="q-step" id="fq-step-3">
   <div class="q-tag">Step 3 — Your training history</div>
   <div class="q-title">Training<br>History</div>
+
+  <!-- Q1: Currently training? -->
   <div style="margin-bottom:20px;">
-    <label class="q-label">Training experience</label>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-      <div class="q-option-card q-option-wide" onclick="fqSetBg('beginner',this)">
-        <strong>Beginner</strong><span class="q-option-sub">New to structured training or returning after 2+ years</span>
-      </div>
-      <div class="q-option-card q-option-wide" onclick="fqSetBg('intermediate',this)">
-        <strong>Intermediate</strong><span class="q-option-sub">1-3 years consistent training, know the basics</span>
-      </div>
-      <div class="q-option-card q-option-wide" onclick="fqSetBg('advanced',this)">
-        <strong>Advanced</strong><span class="q-option-sub">3+ years, comfortable with compound lifts</span>
-      </div>
-      <div class="q-option-card q-option-wide" onclick="fqSetBg('athlete',this)">
-        <strong>Competitive athlete</strong><span class="q-option-sub">Current or recent competitive sport background</span>
-      </div>
+    <label class="q-label">Are you currently training consistently?</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;" id="fq-currently-row">
+      <div class="q-option-card q-option-wide" onclick="fqSetCurrentlyTraining('yes',this)" style="text-align:center;padding:18px;"><strong>Yes</strong></div>
+      <div class="q-option-card q-option-wide" onclick="fqSetCurrentlyTraining('no',this)" style="text-align:center;padding:18px;"><strong>No</strong></div>
     </div>
   </div>
-  <div style="margin-bottom:20px;">
-    <label class="q-label">How long have you trained consistently in total?</label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;" id="fq-historical-row">
-      <div class="q-option-card" onclick="fqSetHistoricalAge('lt2',this)">Less than 2 years</div>
-      <div class="q-option-card" onclick="fqSetHistoricalAge('2to5',this)">2-5 years</div>
-      <div class="q-option-card" onclick="fqSetHistoricalAge('5to10',this)">5-10 years</div>
-      <div class="q-option-card" onclick="fqSetHistoricalAge('10plus',this)">10+ years</div>
+
+  <!-- Conditional: current stint (if YES) -->
+  <div id="fq-stint-block" style="display:none;margin-bottom:20px;">
+    <label class="q-label">How long have you been training in this current stint?</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;" id="fq-stint-row">
+      <div class="q-option-card" onclick="fqSetCurrentStint('lt3m',this)">Less than 3 months</div>
+      <div class="q-option-card" onclick="fqSetCurrentStint('3to6m',this)">3-6 months</div>
+      <div class="q-option-card" onclick="fqSetCurrentStint('6to12m',this)">6-12 months</div>
+      <div class="q-option-card" onclick="fqSetCurrentStint('1to2y',this)">1-2 years</div>
+      <div class="q-option-card" onclick="fqSetCurrentStint('2plus',this)">2+ years</div>
     </div>
   </div>
-  <div>
-    <label class="q-label">Time since you last trained consistently</label>
+
+  <!-- Conditional: time away (if NO) -->
+  <div id="fq-away-block" style="display:none;margin-bottom:20px;">
+    <label class="q-label">How long has it been since you last trained consistently?</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;" id="fq-away-row">
-      <div class="q-option-card" onclick="fqSetAway('0',this)">Training now</div>
-      <div class="q-option-card" onclick="fqSetAway('1',this)">1-3 months</div>
-      <div class="q-option-card" onclick="fqSetAway('3',this)">3-6 months</div>
-      <div class="q-option-card" onclick="fqSetAway('6',this)">6-12 months</div>
-      <div class="q-option-card" onclick="fqSetAway('12',this)">1-2 years</div>
-      <div class="q-option-card" onclick="fqSetAway('24',this)">2+ years</div>
+      <div class="q-option-card" onclick="fqSetTimeAway('lt3m',this)">Less than 3 months</div>
+      <div class="q-option-card" onclick="fqSetTimeAway('3to12m',this)">3-12 months</div>
+      <div class="q-option-card" onclick="fqSetTimeAway('1to3y',this)">1-3 years</div>
+      <div class="q-option-card" onclick="fqSetTimeAway('3to5y',this)">3-5 years</div>
+      <div class="q-option-card" onclick="fqSetTimeAway('5plus',this)">5+ years</div>
     </div>
+  </div>
+
+  <!-- Q2: Lifetime training age -->
+  <div id="fq-lifetime-block" style="display:none;margin-bottom:20px;">
+    <label class="q-label">Over your whole life, how much serious training experience do you have in total?</label>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">Count all your training history — not just recently.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;" id="fq-lifetime-row">
+      <div class="q-option-card" onclick="fqSetLifetimeAge('lt1',this)">Under 1 year</div>
+      <div class="q-option-card" onclick="fqSetLifetimeAge('1to3',this)">1-3 years</div>
+      <div class="q-option-card" onclick="fqSetLifetimeAge('3to7',this)">3-7 years</div>
+      <div class="q-option-card" onclick="fqSetLifetimeAge('7plus',this)">7+ years</div>
+    </div>
+  </div>
+
+  <!-- Q3: Movement confidence -->
+  <div id="fq-movement-block" style="display:none;margin-bottom:20px;">
+    <label class="q-label">How confident are you with these movements?</label>
+    <div id="fq-movement-grid" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;"></div>
+  </div>
+
+  <!-- Q4: Olympic lifts (only if olympic !== never) -->
+  <div id="fq-oly-block" style="display:none;margin-bottom:20px;">
+    <label class="q-label">Which Olympic movements would you like included?</label>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">Tick all that apply.</div>
+    <div id="fq-oly-list" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
+  </div>
+
+  <!-- Equipment access (moved here from Step 1 in v4.7.4) -->
+  <div id="fq-equip-block" style="display:none;margin-bottom:8px;">
+    <label class="q-label">Equipment access</label>
+    <select class="q-input" id="fq-equip" onchange="fqAnswers.equip=this.value;fqValidateStep()" style="margin-top:6px;">
+      <option value="">Select your setup...</option>
+      <option value="full_commercial_gym">Full commercial gym</option>
+      <option value="crossfit_box">CrossFit / functional gym</option>
+      <option value="home_gym_barbell">Home gym — barbell setup</option>
+      <option value="home_gym_dumbbell">Home gym — dumbbells / kettlebells</option>
+      <option value="bodyweight">Bodyweight only</option>
+    </select>
   </div>
 </div>
 
@@ -2282,6 +2303,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="q-option-card" onclick="fqSetOhsq('fail',this)" style="padding:10px 8px;font-size:12px;">Fail</div>
         </div>
       </div>
+      <div><label class="q-label" style="font-size:11px;">Vertical jump (cm)</label><input class="q-input" type="number" id="fq-vert" placeholder="0 = unknown" oninput="fqAnswers.vertJump=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+      <div><label class="q-label" style="font-size:11px;">Broad jump (cm)</label><input class="q-input" type="number" id="fq-broad" placeholder="0 = unknown" oninput="fqAnswers.broadJump=parseFloat(this.value)||0" style="margin-top:4px;"></div>
+      <div><label class="q-label" style="font-size:11px;">40m sprint (ss.ss)</label><input class="q-input" type="text" id="fq-sprint40" placeholder="e.g. 5.20" oninput="fqAnswers.sprint40=this.value" style="margin-top:4px;"></div>
+      <div><label class="q-label" style="font-size:11px;">Wingate 30s peak watts</label><input class="q-input" type="number" id="fq-wingate" placeholder="0 = unknown" oninput="fqAnswers.wingate=parseFloat(this.value)||0" style="margin-top:4px;"></div>
     </div>
   </div>
 </div>
@@ -3031,7 +3056,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.3';
+var APP_VERSION='4.7.4';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5725,11 +5750,14 @@ function renderFQSkinGrid(){
     return div;
   }
   var freeGrid=document.getElementById('fq-skin-grid');
-  var risingGrid=document.getElementById('fq-skin-grid-rising');
   var proGrid=document.getElementById('fq-skin-grid-pro');
   if(freeGrid){freeGrid.innerHTML='';FREE_SKINS.forEach(function(s){var sw=makeFQSwatch(s,false,'Free');if(sw)freeGrid.appendChild(sw);});}
-  if(risingGrid){risingGrid.innerHTML='';ADFREE_SKINS.forEach(function(s){var unlocked=hasRisingAccess();var sw=makeFQSwatch(s,!unlocked,'Rising');if(sw)risingGrid.appendChild(sw);});}
-  if(proGrid){proGrid.innerHTML='';PRO_SKINS.forEach(function(s){var unlocked=hasProAccess();var sw=makeFQSwatch(s,!unlocked,'Pro');if(sw)proGrid.appendChild(sw);});}
+  // v4.7.4: Rising tier removed from FQ skin picker — fold ADFREE_SKINS into the Pro grid (still gated by hasProAccess)
+  if(proGrid){
+    proGrid.innerHTML='';
+    var proCombined=[].concat(typeof ADFREE_SKINS!=='undefined'?ADFREE_SKINS:[]).concat(typeof PRO_SKINS!=='undefined'?PRO_SKINS:[]);
+    proCombined.forEach(function(s){var unlocked=hasProAccess();var sw=makeFQSwatch(s,!unlocked,'Pro');if(sw)proGrid.appendChild(sw);});
+  }
 }
 
 
@@ -6120,6 +6148,41 @@ If 500m row time provided: use to calibrate anaerobic conditioning.
 - 2:00+ → building base, reduce interval intensity, increase rest ratios.
 
 ================================================================
+COMBINE BATTERY (The Agoge — read when programming)
+================================================================
+
+The Phoenix Combine is the annual benchmark test. Programme so athletes peak for these specific tests:
+
+FULL COMBINE (July annually — 11 tests):
+Day 1: OH Squat screen, Deadlift 1RM, Bench Press 1RM, Bench @100kg max reps, Vertical jump, Broad jump.
+Day 2: 40m sprint, Max strict pull-ups, 500m row, Wingate assault bike 30sec peak watts, 1 mile run.
+
+QUARTERLY CHECK-INS (Oct/Jan/Apr — 6 tests): Deadlift 1RM, Max strict pull-ups, Broad jump, 500m row, 1 mile run, OH Squat.
+
+April quarterly = 8 weeks out from Full Combine — activate peaking protocol after this check-in.
+
+Programme so each of these qualities is trained and trackable: max strength (bench/deadlift), strength endurance (bench @100kg, pull-ups), power (vertical/broad/sprint), anaerobic capacity (row/wingate), aerobic capacity (mile run), mobility (OH squat).
+
+================================================================
+MOVEMENT CONFIDENCE (read fqMovementConfidence)
+================================================================
+
+comfortable → prescribe standard barbell variation from week 1.
+learning → prescribe technique-focused variation for weeks 1-4 (goblet squat not back squat, trap bar not conventional deadlift, DB press not barbell bench), progress to barbell when coach note indicates readiness.
+never → do not prescribe that movement pattern with barbell. Use machine/dumbbell/bodyweight equivalent. Flag in coach_note week 1.
+
+================================================================
+OLYMPIC LIFTING (read fqOlyLifts)
+================================================================
+
+Empty array → no Oly lifting. Use kettlebell swings, jump squats, medicine ball throws as power alternatives.
+High pull only → include barbell high pulls on DE days as primary power movement.
+Hang variations → hang clean or hang snatch on DE days, avoid full lifts from floor.
+Full lifts → include full cleans or snatches on DE days, athlete has Oly background.
+
+NEVER prescribe a movement not in fqOlyLifts array.
+
+================================================================
 SPORT CONTEXT
 ================================================================
 
@@ -6277,7 +6340,15 @@ function buildAthleteProfile(trigger, checkIn){
       age: a.dob ? (new Date().getFullYear() - parseInt(a.dob)) : (a.age || 30),
       sex: a.sex || 'male',
       weight_kg: a.bw || 80,
-      training_background: a.fqBackground || 'intermediate',
+      // v4.7.4: training-history decision tree (preferred)
+      currently_training: a.fqCurrentlyTraining || null,
+      current_stint: a.fqCurrentStint || null,
+      time_away: a.fqTimeAway || null,
+      lifetime_training_age: a.fqLifetimeAge || null,
+      movement_confidence: a.fqMovementConfidence || null,
+      oly_lifts: a.fqOlyLifts || [],
+      // legacy training-history fields (kept for backward-compat with existing prompt logic)
+      training_background: a.fqBackground || null,
       historical_training_age: a.fqHistoricalAge || null,
       time_away_months: a.fqAway || 0,
       coach_tone: a.fqCoachTone || null,
@@ -6316,7 +6387,12 @@ function buildAthleteProfile(trigger, checkIn){
         mile_run: a.mile || '',
         karen_time: a.karen || '',
         plank_sec: a.plank || 0,
-        oh_squat: a.ohsq || ''
+        oh_squat: a.ohsq || '',
+        // v4.7.4: combine battery extras
+        vertical_jump_cm: a.vertJump || 0,
+        broad_jump_cm: a.broadJump || 0,
+        sprint_40m_sec: a.sprint40 || '',
+        wingate_30s_peak_watts: a.wingate || 0
       }
     },
     check_in: checkIn || null,
@@ -9624,29 +9700,32 @@ function openTodaySession(){
     var isAmrap=String(ex.reps||'').toLowerCase().indexOf('amrap')>-1;
     var setsHTML='';
     var gridCols='28px 1fr 1fr auto';
-    // Calculate suggested kg from baseline strength + load_guidance
-    var suggestedKg='';
-    if(ex.load_guidance && athlete){
-      var pctMatch=String(ex.load_guidance).match(/([\d.]+)%/);
-      if(pctMatch){
-        var pct=parseFloat(pctMatch[1])/100;
-        var exNameLower=(ex.name||'').toLowerCase();
-        var baseRM=0;
-        if((exNameLower.indexOf('squat')>-1||exNameLower.indexOf('leg press')>-1)&&athlete.sq) baseRM=parseFloat(athlete.sq);
-        else if((exNameLower.indexOf('deadlift')>-1||exNameLower.indexOf('rdl')>-1||exNameLower.indexOf('hip hinge')>-1)&&athlete.dl) baseRM=parseFloat(athlete.dl);
-        else if((exNameLower.indexOf('bench')>-1||exNameLower.indexOf('press')>-1)&&athlete.b1rm) baseRM=parseFloat(athlete.b1rm);
-        else if(athlete.b1rm) baseRM=parseFloat(athlete.b1rm);
-        if(baseRM>0) suggestedKg=String(Math.round((baseRM*pct)/2.5)*2.5);
-      }
+    // v4.7.4: per-set parsing for reps and load_guidance + equipment-aware rounding
+    var repsArr = phxParseRepsArray(ex.reps, setsCount);
+    var pctArr  = phxParsePctArray(ex.load_guidance, setsCount);
+    var baseRM  = phxResolveBaseRM(ex.name, athlete);
+    var equipType = phxDetectEquipType(ex.name);
+    var loadFallback = '';
+    if(ex.load_guidance && !pctArr.some(function(p){return p!==null;})){
+      // No percentage we can parse — surface the raw guidance text for the athlete to read
+      loadFallback = String(ex.load_guidance);
     }
     for(var s=0;s<setsCount;s++){
       var setId='ai-'+i+'-'+s;
+      var pctForSet = pctArr[s];
+      var kgForSet = '';
+      if(pctForSet !== null && baseRM > 0){
+        kgForSet = String(roundToEquipment(baseRM * pctForSet, equipType));
+      } else if(loadFallback){
+        kgForSet = loadFallback; // fallback: show raw guidance string
+      }
+      var repsForSet = isAmrap ? '' : (repsArr[s] != null ? repsArr[s] : '');
       setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-swipe-bg-right">DONE</div>'+
         '<div class="set-num">'+(s+1)+'</div>'+
-        '<div class="set-col"><input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="'+suggestedKg+'" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
-        '<div class="set-col"><input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="'+(isAmrap?'':ex.reps||'')+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
+        '<div class="set-col"><input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="'+kgForSet+'" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
+        '<div class="set-col"><input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="'+repsForSet+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
         '<button class="set-done-btn" id="done-ai-'+i+'-'+s+'" data-exidx="'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">&#10003;</button>'+
         '</div>';
     }
@@ -9769,12 +9848,123 @@ function openBenchmarkLibrary(){
 
 </script>
 <script>
-/* ===== v4.7.3 OVERRIDES =====
-   Replaces the v4.7.2 questionnaire state machine and adds:
-   - 9-step flow with new fields (sport role, programme target, availability, etc.)
-   - Bug 1: active session persistence + navigation guard + visual restore
-   - Bug 2 ad gate already moved to hasProAccess() inline
+/* ===== v4.7.3 / v4.7.4 OVERRIDES =====
+   - 9-step questionnaire flow (sport role, programme target, availability, etc.)
+   - Active session persistence + nav guard + visual restore (v4.7.3 Bug 1)
+   - Per-set reps/weight parsing + equipment-aware rounding (v4.7.4 FIX 6/7/8)
+   - Resume-where-you-left-off after sleep / back button (v4.7.4 FIX 4)
 */
+
+// ---------- 0. SESSION PARSING + ROUNDING UTILITIES (v4.7.4) ----------
+
+// roundToEquipment(kg, type) — clamps a calculated kg load to plate/dumbbell/kettlebell increments
+window.roundToEquipment = function(kg, type){
+  if(!isFinite(kg) || kg<=0) return 0;
+  if(type==='dumbbell') return Math.round(kg/2)*2;
+  if(type==='kettlebell'){
+    var ladder=[8,12,16,20,24,28,32,40,48];
+    var best=ladder[0], bestD=Math.abs(kg-ladder[0]);
+    for(var i=1;i<ladder.length;i++){
+      var d=Math.abs(kg-ladder[i]);
+      if(d<bestD){best=ladder[i];bestD=d;}
+    }
+    return best;
+  }
+  // default: barbell
+  return Math.round(kg/2.5)*2.5;
+};
+
+window.phxDetectEquipType = function(exName){
+  var n=String(exName||'').toLowerCase();
+  if(n.indexOf('dumbbell')>-1 || /\bdb\b/.test(n)) return 'dumbbell';
+  if(n.indexOf('kettlebell')>-1 || /\bkb\b/.test(n)) return 'kettlebell';
+  return 'barbell';
+};
+
+window.phxResolveBaseRM = function(exName, ath){
+  if(!ath) return 0;
+  var n=String(exName||'').toLowerCase();
+  // Pull/chin patterns → bodyweight (for percentage-based pull work)
+  if(/(pull[- ]?up|chin[- ]?up|muscle[- ]?up)/.test(n)){
+    return parseFloat(ath.bw)||0;
+  }
+  // Squat family
+  if(n.indexOf('squat')>-1 || n.indexOf('leg press')>-1){
+    return parseFloat(ath.sq)||0;
+  }
+  // Deadlift / hinge family
+  if(n.indexOf('deadlift')>-1 || n.indexOf('rdl')>-1 || n.indexOf('hip hinge')>-1 || n.indexOf('good morning')>-1){
+    return parseFloat(ath.dl)||0;
+  }
+  // Bench
+  if(n.indexOf('bench')>-1){
+    return parseFloat(ath.b1rm)||0;
+  }
+  // Press (overhead/military/strict press)
+  if(/(overhead press|military press|strict press|push press|\bohp\b|\bsts press\b)/.test(n) || (n.indexOf('press')>-1 && n.indexOf('bench')===-1)){
+    if(parseFloat(ath.ohp)>0) return parseFloat(ath.ohp);
+    if(parseFloat(ath.b1rm)>0) return parseFloat(ath.b1rm)*0.65;
+    return 0;
+  }
+  // Generic press fallback handled above; otherwise no specific 1RM match
+  return 0;
+};
+
+// Returns array of length setsCount with the rep value for each set, or nulls.
+// "5,4,3,2,1" → ["5","4","3","2","1"]; "8" → ["8","8","8","8"]; missing tail → repeats last value.
+window.phxParseRepsArray = function(reps, setsCount){
+  var n=setsCount||1;
+  var out=new Array(n).fill(null);
+  if(reps==null) return out;
+  var raw=String(reps).trim();
+  if(!raw) return out;
+  if(raw.indexOf(',')===-1){
+    for(var i=0;i<n;i++) out[i]=raw;
+    return out;
+  }
+  var parts=raw.split(',').map(function(p){return p.trim();}).filter(function(p){return p.length;});
+  for(var j=0;j<n;j++){
+    out[j] = j<parts.length ? parts[j] : parts[parts.length-1];
+  }
+  return out;
+};
+
+// Returns array of length setsCount; each entry is either a fractional decimal (0.7) or null.
+// Accepts "60%, 70%, 80%, 85%, 90-92%" → [0.6, 0.7, 0.8, 0.85, 0.91]
+// Accepts "70% 1RM" → [0.7, 0.7, 0.7, ...]
+// Accepts "RPE 7" or text without a percentage → all nulls.
+window.phxParsePctArray = function(load, setsCount){
+  var n=setsCount||1;
+  var out=new Array(n).fill(null);
+  if(load==null) return out;
+  var raw=String(load).trim();
+  if(!raw) return out;
+  function pickPct(token){
+    // Range "90-92%" → midpoint 91. Single "85%" → 85.
+    var rangeM=token.match(/([\d.]+)\s*[-–]\s*([\d.]+)\s*%/);
+    if(rangeM){
+      var lo=parseFloat(rangeM[1]), hi=parseFloat(rangeM[2]);
+      if(isFinite(lo)&&isFinite(hi)) return (lo+hi)/2/100;
+    }
+    var single=token.match(/([\d.]+)\s*%/);
+    if(single){
+      var v=parseFloat(single[1]);
+      if(isFinite(v)) return v/100;
+    }
+    return null;
+  }
+  if(raw.indexOf(',')===-1){
+    var p=pickPct(raw);
+    for(var i=0;i<n;i++) out[i]=p;
+    return out;
+  }
+  var tokens=raw.split(',').map(function(t){return t.trim();}).filter(function(t){return t.length;});
+  var pcts=tokens.map(pickPct);
+  for(var j=0;j<n;j++){
+    out[j] = j<pcts.length ? pcts[j] : pcts[pcts.length-1];
+  }
+  return out;
+};
 
 // ---------- 1. QUESTIONNAIRE OVERRIDES ----------
 var fqStep = 1;
@@ -9807,12 +9997,19 @@ window.fqResetAnswers = function(){
   window.fqAnswers = {
     name:'', dob:'', bw:0, sex:'', cycleSync:false,
     equip:null,
+    // v4.7.4: training-history decision tree
+    currentlyTraining:null, currentStint:null, timeAway:null, lifetimeAge:null,
+    movementConfidence:{squat:null, deadlift:null, bench:null, pullup:null, olympic:null},
+    olyLifts:[],
+    // legacy mirrors (kept for any old prompt/profile code referencing them)
     background:null, historicalAge:null, away:null,
     goals:[], goal:null,
     sportRole:null, sport:'none', position:'', seasonPhase:null,
     programmeTarget:null, eventDate:'', eventDescription:'',
     b1rm:0, sq:0, dl:0, pbw:0, mile:'', row500:'',
     ohp:0, b100:0, wpu:0, karen:'', plank:0, ohsq:'',
+    // v4.7.4: combine battery extras
+    vertJump:0, broadJump:0, sprint40:'', wingate:0,
     scheduleMode:null,
     availableSlots:{}, sessionSchedule:null,
     coachTone:null,
@@ -9839,26 +10036,138 @@ window.fqSetCycle = function(val,el){
   el.classList.add('active');
 };
 
-window.fqSetBg = function(val,el){
-  fqAnswers.background=val;
-  // Only deselect siblings under the same Training-experience grid
-  var grid=el.parentElement;
-  grid.querySelectorAll('.q-option-wide').forEach(function(c){c.classList.remove('active');});
-  el.classList.add('active');
+// v4.7.4: training-history decision tree handlers (replaces fqSetBg / fqSetHistoricalAge / fqSetAway)
+
+window.fqSetCurrentlyTraining = function(val, el){
+  fqAnswers.currentlyTraining = val;
+  document.querySelectorAll('#fq-currently-row .q-option-wide').forEach(function(e){e.classList.remove('active');});
+  if(el) el.classList.add('active');
+  // Show the appropriate follow-up
+  var stintBlock=document.getElementById('fq-stint-block');
+  var awayBlock=document.getElementById('fq-away-block');
+  if(val==='yes'){
+    if(stintBlock) stintBlock.style.display='block';
+    if(awayBlock)  awayBlock.style.display='none';
+    fqAnswers.timeAway = null;
+  } else {
+    if(stintBlock) stintBlock.style.display='none';
+    if(awayBlock)  awayBlock.style.display='block';
+    fqAnswers.currentStint = null;
+  }
+  fqRevealLifetimeIfReady();
   fqValidateStep();
 };
 
-window.fqSetHistoricalAge = function(val,el){
-  fqAnswers.historicalAge=val;
-  document.querySelectorAll('#fq-historical-row .q-option-card').forEach(function(e){e.classList.remove('active');});
-  el.classList.add('active');
+window.fqSetCurrentStint = function(val, el){
+  fqAnswers.currentStint = val;
+  document.querySelectorAll('#fq-stint-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  if(el) el.classList.add('active');
+  fqRevealLifetimeIfReady();
   fqValidateStep();
 };
 
-window.fqSetAway = function(val,el){
-  fqAnswers.away=parseInt(val);
+window.fqSetTimeAway = function(val, el){
+  fqAnswers.timeAway = val;
   document.querySelectorAll('#fq-away-row .q-option-card').forEach(function(e){e.classList.remove('active');});
-  el.classList.add('active');
+  if(el) el.classList.add('active');
+  fqRevealLifetimeIfReady();
+  fqValidateStep();
+};
+
+window.fqRevealLifetimeIfReady = function(){
+  var ready = (fqAnswers.currentlyTraining==='yes' && fqAnswers.currentStint) ||
+              (fqAnswers.currentlyTraining==='no'  && fqAnswers.timeAway);
+  var block=document.getElementById('fq-lifetime-block');
+  if(block) block.style.display = ready ? 'block' : 'none';
+};
+
+window.fqSetLifetimeAge = function(val, el){
+  fqAnswers.lifetimeAge = val;
+  document.querySelectorAll('#fq-lifetime-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  if(el) el.classList.add('active');
+  fqRenderMovementGrid();
+  var moveBlock=document.getElementById('fq-movement-block');
+  if(moveBlock) moveBlock.style.display='block';
+  fqValidateStep();
+};
+
+window.fqRenderMovementGrid = function(){
+  var grid=document.getElementById('fq-movement-grid');
+  if(!grid) return;
+  if(grid.dataset.rendered==='1') return; // idempotent
+  grid.dataset.rendered='1';
+  var moves=[
+    {key:'squat',    label:'Back Squat'},
+    {key:'deadlift', label:'Deadlift'},
+    {key:'bench',    label:'Bench Press'},
+    {key:'pullup',   label:'Pull-up / Chin-up'},
+    {key:'olympic',  label:'Olympic lifts (Clean / Snatch)'}
+  ];
+  grid.innerHTML='';
+  moves.forEach(function(m){
+    var row=document.createElement('div');
+    row.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;';
+    row.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;">'+m.label+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;" id="fq-mov-'+m.key+'-row">'+
+      '<div class="q-option-card" onclick="fqSetMovementConfidence(\''+m.key+'\',\'comfortable\',this)" style="padding:8px 4px;font-size:11px;">Comfortable</div>'+
+      '<div class="q-option-card" onclick="fqSetMovementConfidence(\''+m.key+'\',\'learning\',this)" style="padding:8px 4px;font-size:11px;">Still learning</div>'+
+      '<div class="q-option-card" onclick="fqSetMovementConfidence(\''+m.key+'\',\'never\',this)" style="padding:8px 4px;font-size:11px;">Never done it</div>'+
+      '</div>';
+    grid.appendChild(row);
+  });
+};
+
+window.fqSetMovementConfidence = function(moveKey, val, el){
+  if(!fqAnswers.movementConfidence) fqAnswers.movementConfidence={};
+  fqAnswers.movementConfidence[moveKey] = val;
+  var rowEl=document.getElementById('fq-mov-'+moveKey+'-row');
+  if(rowEl) rowEl.querySelectorAll('.q-option-card').forEach(function(c){c.classList.remove('active');});
+  if(el) el.classList.add('active');
+  if(moveKey==='olympic'){
+    var olyBlock=document.getElementById('fq-oly-block');
+    if(val==='never'){
+      fqAnswers.olyLifts=[];
+      if(olyBlock) olyBlock.style.display='none';
+    } else {
+      fqRenderOlyList();
+      if(olyBlock) olyBlock.style.display='block';
+    }
+  }
+  // Equipment block reveals once all five movements have been answered
+  var allAnswered = ['squat','deadlift','bench','pullup','olympic'].every(function(k){return !!fqAnswers.movementConfidence[k];});
+  var equipBlock=document.getElementById('fq-equip-block');
+  if(equipBlock) equipBlock.style.display = allAnswered ? 'block' : 'none';
+  fqValidateStep();
+};
+
+window.fqRenderOlyList = function(){
+  var list=document.getElementById('fq-oly-list');
+  if(!list) return;
+  if(list.dataset.rendered==='1') return;
+  list.dataset.rendered='1';
+  var lifts=[
+    {key:'power_clean',  label:'Power Clean'},
+    {key:'hang_clean',   label:'Hang Clean'},
+    {key:'high_pull',    label:'High Pull'},
+    {key:'hang_snatch',  label:'Hang Snatch'},
+    {key:'full_clean_jerk', label:'Full Clean & Jerk'},
+    {key:'full_snatch',  label:'Full Snatch'}
+  ];
+  list.innerHTML='';
+  lifts.forEach(function(L){
+    var lab=document.createElement('label');
+    lab.style.cssText='display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;cursor:pointer;font-size:13px;color:var(--text);';
+    var checked = (fqAnswers.olyLifts||[]).indexOf(L.key)>=0 ? 'checked' : '';
+    lab.innerHTML='<input type="checkbox" data-oly="'+L.key+'" '+checked+' onchange="fqToggleOlyLift(\''+L.key+'\',this.checked)" style="width:16px;height:16px;accent-color:var(--gold);"> <span>'+L.label+'</span>';
+    list.appendChild(lab);
+  });
+};
+
+window.fqToggleOlyLift = function(key, on){
+  if(!Array.isArray(fqAnswers.olyLifts)) fqAnswers.olyLifts=[];
+  var idx=fqAnswers.olyLifts.indexOf(key);
+  if(on && idx<0) fqAnswers.olyLifts.push(key);
+  if(!on && idx>=0) fqAnswers.olyLifts.splice(idx,1);
   fqValidateStep();
 };
 
@@ -10102,12 +10411,20 @@ window.fqEvaluateConsecutiveStrength = function(){
 window.fqValidateStep = function(){
   var valid=false;
   switch(fqStep){
-    case 1: valid=!!(fqAnswers.name && fqAnswers.bw && fqAnswers.sex && fqAnswers.equip); break;
+    case 1: valid=!!(fqAnswers.name && fqAnswers.bw && fqAnswers.sex); break;
     case 2:
       var hc=document.getElementById('fq-health-check');
       valid=!!(hc && hc.checked && Object.keys(parqData||{}).length>=5);
       break;
-    case 3: valid=!!(fqAnswers.background && fqAnswers.historicalAge && fqAnswers.away!==null && fqAnswers.away!==undefined); break;
+    case 3:
+      // v4.7.4 decision tree: Q1 + (Q1a or Q1b) + Q2 + Q3 (all 5 movement confidences) + Q4 if relevant + equipment.
+      var stintOrAway = (fqAnswers.currentlyTraining==='yes' && fqAnswers.currentStint) ||
+                        (fqAnswers.currentlyTraining==='no'  && fqAnswers.timeAway);
+      var mc = fqAnswers.movementConfidence || {};
+      var allMovements = ['squat','deadlift','bench','pullup','olympic'].every(function(k){return !!mc[k];});
+      var olyOk = mc.olympic==='never' || (mc.olympic && (fqAnswers.olyLifts && fqAnswers.olyLifts.length>=1));
+      valid=!!stintOrAway && !!fqAnswers.lifetimeAge && allMovements && olyOk && !!fqAnswers.equip;
+      break;
     case 4:
       var goalsOk=fqAnswers.goals && fqAnswers.goals.length>=1;
       var sportOk=fqAnswers.sportRole==='none' || (fqAnswers.sportRole && fqAnswers.sport && fqAnswers.sport!=='' && fqAnswers.sport!=='none');
@@ -10156,12 +10473,20 @@ window.renderFQSummary = function(){
   var sportLabel='-';
   if(fqAnswers.sportRole==='none') sportLabel='Not relevant';
   else if(fqAnswers.sport && fqAnswers.sport!=='none') sportLabel=fqAnswers.sport.replace(/_/g,' ')+' ('+fqAnswers.sportRole+')';
+  var trainingLabel='-';
+  if(fqAnswers.currentlyTraining==='yes' && fqAnswers.currentStint) trainingLabel='Training now ('+fqAnswers.currentStint.replace(/_/g,' ')+')';
+  else if(fqAnswers.currentlyTraining==='no' && fqAnswers.timeAway) trainingLabel='Returning ('+fqAnswers.timeAway.replace(/_/g,' ')+' away)';
+  var olyLabel = (!fqAnswers.movementConfidence || fqAnswers.movementConfidence.olympic==='never')
+    ? 'No Oly lifts'
+    : ((fqAnswers.olyLifts||[]).length+' Oly movements');
   var lines=[
     ['Name', fqAnswers.name||'-'],
     ['Goals', goalLabel],
     ['Sport', sportLabel],
     ['Programme target', fqAnswers.programmeTarget?fqAnswers.programmeTarget.replace(/_/g,' '):'-'],
-    ['Background', fqAnswers.background||'-'],
+    ['Training', trainingLabel],
+    ['Lifetime experience', fqAnswers.lifetimeAge?fqAnswers.lifetimeAge.replace(/_/g,' '):'-'],
+    ['Olympic lifts', olyLabel],
     ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
     ['Schedule', fqAnswers.scheduleMode==='coach_assigns'?'Coach assigns':(fqAnswers.scheduleMode==='user_assigns'?'You set':'-')],
     ['Injuries', (fqAnswers.injury && fqAnswers.injury.length)?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
@@ -10197,6 +10522,7 @@ window.fqNext = function(){
       fqStep=8;
     }
     updateFQStep();
+    fqPersistProgress(); // v4.7.4 FIX 4: snapshot after every step
     return;
   }
   fqAnswers.waiverAccepted=true;
@@ -10219,6 +10545,19 @@ window.fqNext = function(){
     karen:fqAnswers.karen||existing.karen||'',
     plank:fqAnswers.plank||existing.plank||0,
     ohsq:fqAnswers.ohsq||existing.ohsq||'',
+    // v4.7.4 combine battery extras
+    vertJump:fqAnswers.vertJump||existing.vertJump||0,
+    broadJump:fqAnswers.broadJump||existing.broadJump||0,
+    sprint40:fqAnswers.sprint40||existing.sprint40||'',
+    wingate:fqAnswers.wingate||existing.wingate||0,
+    // v4.7.4 training-history decision tree fields
+    fqCurrentlyTraining:fqAnswers.currentlyTraining,
+    fqCurrentStint:fqAnswers.currentStint,
+    fqTimeAway:fqAnswers.timeAway,
+    fqLifetimeAge:fqAnswers.lifetimeAge,
+    fqMovementConfidence:fqAnswers.movementConfidence,
+    fqOlyLifts:fqAnswers.olyLifts||[],
+    // legacy mirrors (left null intentionally — superseded)
     fqBackground:fqAnswers.background,
     fqHistoricalAge:fqAnswers.historicalAge,
     fqAway:fqAnswers.away,
@@ -10244,6 +10583,7 @@ window.fqNext = function(){
     fqCompleted:new Date().toISOString()
   });
   saveAthlete(updated);
+  fqClearProgress(); // v4.7.4 FIX 4: programme generated → drop saved snapshot
   if(hasIgniteAccess()){
     generateProgramme('initial_build');
   } else {
@@ -10265,15 +10605,219 @@ window.fqBack = function(){
       fqStep=5;
     }
     updateFQStep();
+    fqPersistProgress(); // v4.7.4 FIX 4
   } else {
     showScreen('screen-splash');
   }
 };
 
+// ---------- 1c. v4.7.4 FIX 4: PROGRESS PERSISTENCE + RESUME ----------
+var FQ_PROGRESS_KEY = 'phoenix_fq_progress';
+
+window.fqPersistProgress = function(){
+  try {
+    localStorage.setItem(FQ_PROGRESS_KEY, JSON.stringify({step: fqStep, answers: fqAnswers, parqData: parqData}));
+  } catch(e){}
+};
+
+window.fqClearProgress = function(){
+  try { localStorage.removeItem(FQ_PROGRESS_KEY); } catch(e){}
+};
+
+window.fqLoadProgress = function(){
+  try {
+    var raw=localStorage.getItem(FQ_PROGRESS_KEY);
+    if(!raw) return null;
+    var saved=JSON.parse(raw);
+    if(!saved||typeof saved!=='object') return null;
+    if(!saved.step||saved.step<1||saved.step>fqTotalSteps) return null;
+    return saved;
+  } catch(e){ return null; }
+};
+
+// Re-paint UI from restored answers: re-tick option cards, re-fill inputs, expand conditional blocks
+window.fqRestoreProgressUI = function(){
+  // Step 1
+  if(fqAnswers.name){var n=document.getElementById('fq-name');if(n)n.value=fqAnswers.name;}
+  if(fqAnswers.dob){var d=document.getElementById('fq-dob');if(d)d.value=fqAnswers.dob;}
+  if(fqAnswers.bw){var b=document.getElementById('fq-bw');if(b)b.value=fqAnswers.bw;}
+  if(fqAnswers.sex){
+    var sexEl=document.querySelector('#fq-sex-row .q-option-card[onclick*="\''+fqAnswers.sex+'\'"]');
+    if(sexEl){sexEl.classList.add('active'); var cycleRow=document.getElementById('fq-cycle-row'); if(cycleRow) cycleRow.style.display=fqAnswers.sex==='female'?'block':'none';}
+  }
+  // Step 2
+  Object.keys(parqData||{}).forEach(function(k){
+    var v=parqData[k];
+    var btn=document.getElementById('parq-'+k+'-'+v);
+    if(btn) btn.className='parq-btn'+(v==='yes'?' active-yes':' active-no');
+  });
+  var hc=document.getElementById('fq-health-check');
+  if(hc) hc.checked = fqAnswers.parqClear || (Object.keys(parqData||{}).length>=5 && !Object.values(parqData).some(function(v){return v==='yes';}));
+  if(typeof buildInjurySelector==='function') buildInjurySelector();
+  (fqAnswers.injury||[]).forEach(function(inj){
+    var card=document.querySelector('#injury-selector .injury-card[data-area="'+inj.area+'"]');
+    if(card && !card.classList.contains('active')) card.click();
+  });
+  if(fqAnswers.injuryNotes){var nt=document.getElementById('fq-injury-notes');if(nt)nt.value=fqAnswers.injuryNotes;}
+  if(fqAnswers.noInjuries){var ni=document.getElementById('fq-no-injuries-check');if(ni){ni.checked=true;}}
+  // Step 3 — decision tree
+  if(fqAnswers.currentlyTraining){
+    var ctEl=document.querySelector('#fq-currently-row .q-option-wide[onclick*="\''+fqAnswers.currentlyTraining+'\'"]');
+    if(ctEl){ctEl.classList.add('active');}
+    document.getElementById('fq-stint-block').style.display = fqAnswers.currentlyTraining==='yes'?'block':'none';
+    document.getElementById('fq-away-block').style.display  = fqAnswers.currentlyTraining==='no'?'block':'none';
+  }
+  if(fqAnswers.currentStint){
+    var stEl=document.querySelector('#fq-stint-row .q-option-card[onclick*="\''+fqAnswers.currentStint+'\'"]');
+    if(stEl) stEl.classList.add('active');
+  }
+  if(fqAnswers.timeAway){
+    var taEl=document.querySelector('#fq-away-row .q-option-card[onclick*="\''+fqAnswers.timeAway+'\'"]');
+    if(taEl) taEl.classList.add('active');
+  }
+  fqRevealLifetimeIfReady();
+  if(fqAnswers.lifetimeAge){
+    var lfEl=document.querySelector('#fq-lifetime-row .q-option-card[onclick*="\''+fqAnswers.lifetimeAge+'\'"]');
+    if(lfEl) lfEl.classList.add('active');
+    document.getElementById('fq-movement-block').style.display='block';
+    fqRenderMovementGrid();
+  }
+  var mc=fqAnswers.movementConfidence||{};
+  ['squat','deadlift','bench','pullup','olympic'].forEach(function(k){
+    if(mc[k]){
+      var rowEl=document.getElementById('fq-mov-'+k+'-row');
+      if(rowEl){
+        var card=rowEl.querySelector('.q-option-card[onclick*="\''+mc[k]+'\'"]');
+        if(card) card.classList.add('active');
+      }
+    }
+  });
+  if(mc.olympic && mc.olympic!=='never'){
+    document.getElementById('fq-oly-block').style.display='block';
+    fqRenderOlyList();
+  }
+  var allMovesAnswered=['squat','deadlift','bench','pullup','olympic'].every(function(k){return !!mc[k];});
+  if(allMovesAnswered){
+    document.getElementById('fq-equip-block').style.display='block';
+  }
+  if(fqAnswers.equip){var eq=document.getElementById('fq-equip');if(eq)eq.value=fqAnswers.equip;}
+  // Step 4 — goals + sport + target + scores
+  (fqAnswers.goals||[]).forEach(function(g,i){
+    var card=document.querySelector('[data-goal="'+g+'"]');
+    if(card){
+      card.classList.add('active');
+      var badge=document.createElement('span');
+      badge.className='goal-rank-badge';
+      badge.style.cssText='font-size:9px;background:var(--gold);color:#000;padding:2px 6px;border-radius:10px;margin-left:8px;font-family:var(--font-d);letter-spacing:1px;';
+      badge.textContent=i===0?'Primary':'Secondary';
+      var strong=card.querySelector('strong');
+      if(strong && !card.querySelector('.goal-rank-badge')) strong.appendChild(badge);
+    }
+  });
+  if(fqAnswers.sportRole){
+    var srEl=document.querySelector('#fq-sport-role-list .q-option-wide[onclick*="\''+fqAnswers.sportRole+'\'"]');
+    if(srEl) srEl.classList.add('active');
+    if(fqAnswers.sportRole!=='none'){
+      document.getElementById('fq-sport-row').style.display='block';
+      var sportSel=document.getElementById('fq-sport');
+      if(sportSel && fqAnswers.sport) sportSel.value=fqAnswers.sport;
+      if(fqAnswers.sport && fqAnswers.sportRole==='competing'){
+        fqSetSportFromSelect(fqAnswers.sport);
+        var posSel=document.getElementById('fq-position'); if(posSel && fqAnswers.position) posSel.value=fqAnswers.position;
+        document.getElementById('fq-season-row').style.display='block';
+        if(fqAnswers.seasonPhase){
+          var spEl=document.querySelector('#fq-season-row .q-option-card[onclick*="\''+fqAnswers.seasonPhase+'\'"]');
+          if(spEl) spEl.classList.add('active');
+        }
+      }
+    }
+  }
+  if(fqAnswers.programmeTarget){
+    var ptEl=document.querySelector('#fq-target-list .q-option-wide[onclick*="\''+fqAnswers.programmeTarget+'\'"]');
+    if(ptEl) ptEl.classList.add('active');
+    if(fqAnswers.programmeTarget==='event'){
+      document.getElementById('fq-event-fields').style.display='block';
+      if(fqAnswers.eventDate){var ed=document.getElementById('fq-event-date'); if(ed) ed.value=fqAnswers.eventDate;}
+      if(fqAnswers.eventDescription){var edd=document.getElementById('fq-event-desc'); if(edd) edd.value=fqAnswers.eventDescription;}
+    }
+  }
+  // Assessment scores (always rendered)
+  ['b1rm','sq','dl','pbw','mile','row500','ohp','b100','wpu','karen','plank','vert','broad','sprint40','wingate'].forEach(function(k){
+    var el=document.getElementById('fq-'+k);
+    var fieldKey={'vert':'vertJump','broad':'broadJump'}[k]||k;
+    if(el && fqAnswers[fieldKey]) el.value=fqAnswers[fieldKey];
+  });
+  if(fqAnswers.ohsq){
+    var ohEl=document.querySelector('#fq-ohsq-row .q-option-card[onclick*="\''+fqAnswers.ohsq+'\'"]');
+    if(ohEl) ohEl.classList.add('active');
+  }
+  // Step 5
+  if(fqAnswers.scheduleMode){
+    var smEl=document.querySelector('#fq-step-schedulemode .q-option-wide[onclick*="\''+fqAnswers.scheduleMode+'\'"]');
+    if(smEl) smEl.classList.add('active');
+  }
+  // Steps 6 + 7 are dynamic — updateFQStep() will rebuild them from fqAnswers
+  // Step 8
+  if(fqAnswers.coachTone){
+    var ctEl2=document.querySelector('#fq-step-coachtone .q-option-wide[onclick*="\''+fqAnswers.coachTone+'\'"]');
+    if(ctEl2) ctEl2.classList.add('active');
+  }
+};
+
 window.openFoundationQ = function(){
+  if(typeof injuryZones!=='undefined') injuryZones={};
+  var saved = fqLoadProgress();
+  // Show resume gate only when there's saved progress AND profile hasn't been completed yet
+  var notCompleted = !athlete || !athlete.fqCompleted;
+  if(saved && notCompleted){
+    showScreen('screen-foundation-q');
+    var qScreen=document.querySelector('#screen-foundation-q .q-screen');
+    if(qScreen){
+      // Hide all step blocks, show a resume chooser overlay until the user picks
+      var existing=document.getElementById('fq-resume-gate');
+      if(existing) existing.remove();
+      var gate=document.createElement('div');
+      gate.id='fq-resume-gate';
+      gate.style.cssText='position:absolute;inset:0;background:var(--bg);z-index:50;padding:32px 24px;display:flex;flex-direction:column;justify-content:center;';
+      gate.innerHTML=
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Welcome back</div>'+
+        '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:12px;">Resume your<br>questionnaire?</div>'+
+        '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:24px;">You were on step '+saved.step+' of '+fqTotalSteps+'. Pick up where you left off, or start fresh.</div>'+
+        '<button id="fq-resume-btn" class="btn-primary" style="margin-bottom:10px;">Resume where I left off</button>'+
+        '<button id="fq-fresh-btn" class="btn-secondary">Start fresh</button>';
+      qScreen.style.position='relative';
+      qScreen.appendChild(gate);
+      document.querySelector('.q-nav').style.display='none';
+      document.getElementById('fq-resume-btn').onclick=function(){
+        // Restore state
+        window.fqAnswers = Object.assign({}, fqAnswers, saved.answers||{});
+        if(saved.parqData) window.parqData = saved.parqData;
+        fqStep = saved.step;
+        gate.remove();
+        document.querySelector('.q-nav').style.display='flex';
+        updateFQStep();
+        setTimeout(function(){
+          fqRestoreProgressUI();
+          fqValidateStep();
+          if(typeof renderFQSkinGrid==='function') renderFQSkinGrid();
+        }, 50);
+      };
+      document.getElementById('fq-fresh-btn').onclick=function(){
+        fqClearProgress();
+        fqStep=1;
+        fqResetAnswers();
+        gate.remove();
+        document.querySelector('.q-nav').style.display='flex';
+        updateFQStep();
+        setTimeout(function(){ if(typeof renderFQSkinGrid==='function') renderFQSkinGrid(); },50);
+      };
+    }
+    return;
+  }
+  // No saved progress (or profile already complete) — fresh start
+  fqClearProgress();
   fqStep=1;
   fqResetAnswers();
-  if(typeof injuryZones!=='undefined') injuryZones={};
   updateFQStep();
   showScreen('screen-foundation-q');
   setTimeout(function(){ if(typeof renderFQSkinGrid==='function') renderFQSkinGrid(); },50);

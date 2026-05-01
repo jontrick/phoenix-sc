@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.6';
+var APP_VERSION='4.7.7';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3710,6 +3710,22 @@ const CORE_SESSIONS = [
   ]}
 ];
 
+// v4.7.7 FIX 4: deterministic daily core selection — same date-hash pattern as PHOENIX_WOD_LIBRARY.getDailyWOD.
+// Returns the same core session for the entire local calendar day; rotates at midnight.
+function getDailyCore(date){
+  var d = date || new Date();
+  var dateStr = d.getFullYear()+'-'+
+    String(d.getMonth()+1).padStart(2,'0')+'-'+
+    String(d.getDate()).padStart(2,'0')+'-core'; // suffix so the daily WOD and daily core don't share a hash
+  var hash = 0;
+  for(var i=0;i<dateStr.length;i++){
+    hash = ((hash<<5)-hash) + dateStr.charCodeAt(i);
+    hash |= 0;
+  }
+  var idx = Math.abs(hash) % CORE_SESSIONS.length;
+  return CORE_SESSIONS[idx];
+}
+
 const CF_SAT = ['Base','Cindy','Danny','Fran'];
 
 function isDeload(w){return w===5||w===10||w===15;}
@@ -4021,7 +4037,41 @@ function closeCoreModal(){document.getElementById('core-modal').classList.remove
 
 // ====== GENERATE DAILY CORE (AI) ======
 function generateDailyCore(){
-  // Show loading overlay
+  // v4.7.7 FIX 4: default daily core is now a date-hash pick from the static library (same model as WODs).
+  // Shows the picked session in a preview sheet with Start / Switch / AI Generate.
+  var overlay=document.getElementById('core-modal');
+  var sheet=overlay.querySelector('.modal-sheet');
+  var todayCore = getDailyCore();
+  if(todayCore){
+    var rows = todayCore.exercises.map(function(e){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">'+
+        '<div style="font-family:var(--font-d);font-size:14px;color:var(--text);text-transform:uppercase;">'+e.name+'</div>'+
+        '<div style="font-size:12px;color:var(--text2);">'+e.reps+' · '+phxFormatHeight(e.load)+'</div>'+
+      '</div>';
+    }).join('');
+    sheet.innerHTML='<div class="modal-title">Today\'s Core</div><div class="modal-subtitle">Core '+todayCore.num+' — AMRAP 20</div>'+
+      '<div style="padding:10px 20px;">'+rows+'</div>'+
+      '<div style="padding:10px 20px 16px;display:flex;gap:10px;">'+
+        '<button onclick="closeCoreModal()" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Cancel</button>'+
+        '<button onclick="closeCoreModal();openCoreModal();" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Switch / Library</button>'+
+        '<button id="core-today-start" style="flex:1.2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:var(--bg);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Start Session</button>'+
+      '</div>'+
+      '<div style="padding:0 20px 16px;text-align:center;">'+
+        '<button onclick="_generateCoreFromAI()" style="background:none;border:none;color:var(--text3);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;">Or generate a fresh AI session</button>'+
+      '</div>';
+    overlay.classList.add('active');
+    var startBtn=document.getElementById('core-today-start');
+    if(startBtn) startBtn.addEventListener('click',function(){
+      closeCoreModal();
+      openCoreSessionFromPicker(todayCore.num);
+    });
+    return;
+  }
+  // No library available — fall back to AI generation
+  _generateCoreFromAI();
+}
+
+function _generateCoreFromAI(){
   var overlay=document.getElementById('core-modal');
   var sheet=overlay.querySelector('.modal-sheet');
   sheet.innerHTML='<div class="modal-title">Generating Session</div><div class="modal-subtitle">Core Training</div>'+
@@ -6388,7 +6438,45 @@ Allowed wod.format values:
 
 Every movement MUST have name and reps as separate fields. Do not embed reps inside the name string. Use distance_m for distance work (carries, runs, rows). Use load_rx for the prescribed load and load_scale for a sensible scaling option.
 
-If you absolutely cannot fit the WOD into the structured shape, leave the wod field null and the legacy renderer will fall back to parsing exercises[0].load_guidance — but always prefer the structured shape.`;
+If you absolutely cannot fit the WOD into the structured shape, leave the wod field null and the legacy renderer will fall back to parsing exercises[0].load_guidance — but always prefer the structured shape.
+
+================================================================
+HEIGHT UNITS (v4.7.7)
+================================================================
+
+Always prescribe box jump and step-up heights in INCHES as the primary unit. The renderer auto-appends the cm conversion. Common heights: 20" (51cm), 24" (61cm), 30" (76cm).
+
+Wall-ball target heights are prescribed in FEET. Common: 9ft (women), 10ft (men). The renderer auto-appends the metric conversion.
+
+Do not write "60cm box" — write "24" box". Do not write "3m wall ball target" — write "10ft wall ball target".
+
+================================================================
+CORE SESSION FORMAT (REQUIRED when session_type is "Core")
+================================================================
+
+Same model as WODs. When session_type is "Core", include a structured "core" field. The "exercises" array stays empty.
+
+{
+  "day": "Wednesday",
+  "session_type": "Core",
+  "duration_min": 20,
+  "core": {
+    "name": "Phoenix Core 3",
+    "format": "amrap",
+    "duration_sec": 1200,
+    "movements": [
+      {"name": "Hanging Leg Raise", "reps": 10, "load_rx": "BW", "load_scale": "Knee tucks"},
+      {"name": "Med Ball Slam", "reps": 10, "load_rx": "20kg", "load_scale": "12kg"},
+      {"name": "OH Plate Carry", "reps": "1 length", "load_rx": "20kg", "load_scale": "10kg"},
+      {"name": "Cherry Picker", "reps": 10, "load_rx": "BW", "load_scale": "BW"}
+    ],
+    "score_format": "rounds.movements.reps",
+    "coaching_note": "Brace before every rep. Quality over speed."
+  },
+  "exercises": []
+}
+
+If you don't have a specific core session in mind, leave the core field null and the app will pick today's date-hashed core session from the static library automatically.`;
 
 function buildAthleteProfile(trigger, checkIn){
   var a = athlete || {};
@@ -9423,9 +9511,59 @@ function updateCardAccess(){
 
 // ====== WOD MODAL ======
 
+// v4.7.7 FIX 2: format box-jump / wall-ball / box heights with imperial primary + metric in brackets.
+// Accepts strings like "60cm", "30 cm", "24"", "20 in", "10ft" and returns "24" (61cm)" / "20" (51cm)" / "10ft (3.05m)" etc.
+// Leaves any unrelated string untouched.
+function phxFormatHeight(s){
+  if(!s) return s;
+  var out = String(s);
+  // cm → inches (rounded to nearest inch)
+  out = out.replace(/(\d+(?:\.\d+)?)\s*cm\b/gi, function(_, n){
+    var cm = parseFloat(n); if(!isFinite(cm)) return _;
+    var inches = Math.round(cm/2.54);
+    return inches+'" ('+Math.round(cm)+'cm)';
+  });
+  // inches → primary, append cm in brackets if not already
+  out = out.replace(/(\d+(?:\.\d+)?)\s*(?:"|in\b|inch(?:es)?)\b(?!\s*\()/gi, function(_, n){
+    var inches = parseFloat(n); if(!isFinite(inches)) return _;
+    var cm = Math.round(inches*2.54);
+    return inches+'" ('+cm+'cm)';
+  });
+  // ft → primary, append metres in brackets if not already (wall-ball target)
+  out = out.replace(/(\d+(?:\.\d+)?)\s*ft\b(?!\s*\()/gi, function(_, n){
+    var ft = parseFloat(n); if(!isFinite(ft)) return _;
+    var m = (ft*0.3048).toFixed(2);
+    return ft+'ft ('+m+'m)';
+  });
+  return out;
+}
+
+// v4.7.7 FIX 3: which load list to read for a given selection ('rx' | 'scaled' | 'custom')
+function phxMovementLoad(m, selection, idx){
+  if(!m) return '';
+  if(selection==='scaled' && m.load_scaled) return m.load_scaled;
+  if(selection==='custom'){
+    var custom = (window._wodCustomLoads||{})[idx];
+    if(custom != null && custom !== '') return custom;
+    return m.load_rx || '';
+  }
+  return m.load_rx || '';
+}
+
 function openPhoenixWOD(){
   var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
+
+  // v4.7.7 FIX 1: ensure a fresh state every time the detail screen opens — no stale count-in or timer flag
+  // can leak across into "the count-in fires before I've seen the WOD detail".
+  window._wodCountInDone = false;
+  if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
+  window._wodTimer = null;
+
+  // v4.7.7 FIX 3: initialise per-WOD selection state. Default RX. Custom-loads object will populate
+  // when the user types into a CUSTOM input.
+  window._wodSelection = 'rx';
+  window._wodCustomLoads = {};
 
   // Remove existing modal
   var existing=document.getElementById('wod-modal');
@@ -9433,52 +9571,102 @@ function openPhoenixWOD(){
 
   var tierClass='wod-tier-'+(wod.tier||'god').toLowerCase();
 
-  var movHTML='';
-  (wod.movements||[]).forEach(function(m,idx){
-    movHTML+='<div style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);">';
-    movHTML+='<div style="flex:1;"><div class="wod-movement-name">'+m.name+'</div>';
-    if(m.reps) movHTML+='<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+m.reps+' reps</div>';
-    movHTML+='</div>';
-    movHTML+='<div style="text-align:right;"><div class="wod-movement-detail">'+m.load_rx+'</div>';
-    if(m.load_scaled) movHTML+='<div class="wod-movement-scaled">Scaled: '+m.load_scaled+'</div>';
-    movHTML+='</div></div>';
-  });
-
   var modal=document.createElement('div');
   modal.id='wod-modal';
   modal.className='wod-modal';
-  modal.innerHTML='<div class="wod-modal-inner">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
-    '<div class="wod-tier-badge '+tierClass+'">'+wod.tier+' Tier</div>'+
-    '<div class="icon-btn" onclick="document.getElementById(\'wod-modal\').remove()" style="background:var(--bg2);">'+
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div></div>'+
-    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Today\'s WOD</div>'+
-    '<div style="font-family:var(--font-d);font-size:42px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:2px;line-height:1;margin-bottom:4px;">'+wod.name+'</div>'+
-    '<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:1px;margin-bottom:20px;">'+wod.format+'</div>'+
-    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">'+
-    '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Movements</div>'+
-    movHTML+'</div>'+
-    (wod.rep_scheme?'<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--radius);padding:12px;text-align:center;margin-bottom:16px;font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--gold);">'+wod.rep_scheme+'</div>':'')+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">'+
-    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
-    '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">'+wod.time_cap+'</div>'+
-    '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">min cap</div></div>'+
-    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
-    '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);">'+wod.elite_target+'</div>'+
-    '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Elite target</div></div></div>'+
-    (wod.combine_note?'<div style="background:var(--bg3);border-left:3px solid var(--gold);padding:12px 14px;border-radius:4px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:20px;">⚡ '+wod.combine_note+'</div>':'')+
-    '<button class="btn-primary" style="width:100%;padding:16px;margin-bottom:10px;" onclick="startWODTimer(\'wod-modal\')">Start WOD →</button>'+
-    '<button class="btn-secondary" style="width:100%;padding:14px;margin:0;" onclick="logWODScore()">Log Score Only</button>'+
-    '</div>';
-  modal.addEventListener('click',function(ev){
-    if(ev.target===modal){
-      // v4.7.5 FIX 5: dropping the modal must also drop the wake lock and any running timer
-      if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
-      releaseWakeLock();
-      modal.remove();
-    }
-  });
   document.body.appendChild(modal);
+
+  function _renderDetail(){
+    var sel = window._wodSelection || 'rx';
+    var movHTML = (wod.movements||[]).map(function(m,idx){
+      var loadStr = phxFormatHeight(phxMovementLoad(m, sel, idx));
+      var rightCol;
+      if(sel === 'custom'){
+        var customVal = (window._wodCustomLoads[idx] != null) ? window._wodCustomLoads[idx] : (m.load_rx || '');
+        rightCol = '<input type="text" class="q-input" value="'+String(customVal).replace(/"/g,'&quot;')+'" oninput="window._wodCustomLoads['+idx+']=this.value;" style="max-width:140px;text-align:right;font-size:13px;padding:8px 10px;">';
+      } else {
+        rightCol = '<div class="wod-movement-detail">'+loadStr+'</div>'+
+          (sel==='rx' && m.load_scaled?'<div class="wod-movement-scaled">Scaled: '+phxFormatHeight(m.load_scaled)+'</div>':'');
+      }
+      return '<div style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;">'+
+        '<div style="flex:1;">'+
+          '<div class="wod-movement-name">'+m.name+'</div>'+
+          (m.reps?'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+m.reps+(/^\d+$/.test(String(m.reps))?' reps':'')+'</div>':'')+
+        '</div>'+
+        '<div style="text-align:right;min-width:120px;">'+rightCol+'</div>'+
+      '</div>';
+    }).join('');
+
+    function selBtn(val,label){
+      var active = (sel===val);
+      return '<button onclick="window._wodSetSelection(\''+val+'\')" style="flex:1;padding:10px 6px;border:1px solid '+(active?'var(--gold)':'var(--border2)')+';background:'+(active?'var(--gold-dim)':'var(--bg3)')+';color:'+(active?'var(--gold)':'var(--text2)')+';font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border-radius:var(--radius);cursor:pointer;">'+label+'</button>';
+    }
+
+    modal.innerHTML='<div class="wod-modal-inner">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+        '<div class="wod-tier-badge '+tierClass+'">'+(wod.tier||'')+' Tier</div>'+
+        '<div class="icon-btn" onclick="window._wodCloseDetail()" style="background:var(--bg2);">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'+
+        '</div>'+
+      '</div>'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Today\'s WOD</div>'+
+      '<div style="font-family:var(--font-d);font-size:42px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:2px;line-height:1;margin-bottom:4px;">'+wod.name+'</div>'+
+      '<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:1px;margin-bottom:20px;">'+wod.format+'</div>'+
+      // v4.7.7 FIX 3: Rx / Scaled / Custom selector — sits ABOVE movements so the loads update live
+      '<div style="display:flex;gap:6px;margin-bottom:14px;">'+
+        selBtn('rx','Rx')+
+        selBtn('scaled','Scaled')+
+        selBtn('custom','Custom')+
+      '</div>'+
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Movements &middot; '+sel.toUpperCase()+'</div>'+
+        movHTML+
+      '</div>'+
+      (wod.rep_scheme?'<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--radius);padding:12px;text-align:center;margin-bottom:16px;font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--gold);">'+wod.rep_scheme+'</div>':'')+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">'+
+        '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
+          '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">'+(wod.time_cap||0)+'</div>'+
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">min cap</div>'+
+        '</div>'+
+        '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
+          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);">'+(wod.elite_target||'—')+'</div>'+
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Elite target</div>'+
+        '</div>'+
+      '</div>'+
+      (wod.combine_note?'<div style="background:var(--bg3);border-left:3px solid var(--gold);padding:12px 14px;border-radius:4px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:20px;">⚡ '+wod.combine_note+'</div>':'')+
+      // v4.7.7 FIX 1: Start WOD is the ONLY thing that fires the count-in. No count-in on this screen.
+      '<button class="btn-primary" style="width:100%;padding:16px;margin-bottom:10px;" onclick="window._wodStartFromDetail()">Start WOD →</button>'+
+      '<button class="btn-secondary" style="width:100%;padding:14px;margin:0;" onclick="logWODScore()">Log Score Only</button>'+
+    '</div>';
+  }
+
+  // Live selection switch — re-renders the detail modal so loads update
+  window._wodSetSelection = function(val){
+    window._wodSelection = val;
+    if(val !== 'custom'){
+      // Leave _wodCustomLoads in place so toggling back to Custom restores prior edits
+    }
+    _renderDetail();
+  };
+
+  // Centralised close — also kills any leftover timer/wake-lock
+  window._wodCloseDetail = function(){
+    if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
+    releaseWakeLock();
+    var m=document.getElementById('wod-modal'); if(m) m.remove();
+  };
+
+  // Centralised "Start WOD" tap from detail screen — this is the ONE entry point that fires count-in
+  window._wodStartFromDetail = function(){
+    startWODTimer('wod-modal');
+  };
+
+  // Background-click-to-close on the modal backdrop
+  modal.addEventListener('click',function(ev){
+    if(ev.target===modal) window._wodCloseDetail();
+  });
+
+  _renderDetail();
 }
 
 // v4.7.5 FIX 3 + FIX 5: format-aware WOD timer (AFAP / AMRAP / EMOM / strength)
@@ -9662,7 +9850,7 @@ function startWODTimer(modalId){
         '<div style="flex:1;">'+
           '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
           (m.reps?'<div style="font-size:13px;color:var(--gold);margin-top:2px;font-family:var(--font-d);">'+m.reps+' reps</div>':'')+
-          (m.load_rx?'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+m.load_rx+'</div>':'')+
+          (function(){var ld=phxFormatHeight(phxMovementLoad(m,window._wodSelection,i));return ld?'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+ld+'</div>':'';})()+
         '</div>'+
         (done
           ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
@@ -9715,7 +9903,7 @@ function startWODTimer(modalId){
           '<div style="flex:1;">'+
             '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+m.name+'</div>'+
             (m.reps?'<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--orange);margin-top:6px;line-height:1;">'+m.reps+'</div>':'')+
-            (m.load_rx?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+m.load_rx+'</div>':'')+
+            (function(){var ld=phxFormatHeight(phxMovementLoad(m,window._wodSelection,i));return ld?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+ld+'</div>':'';})()+
           '</div>'+
           (done
             ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
@@ -9809,18 +9997,23 @@ function startWODTimer(modalId){
     var t=window._wodTimer;
     var totalMinutes = wod.time_cap || (movements.length||1);
     var minSec = 60 - (t.elapsed % 60);
-    var nowMov = movements[t.emomMovIdx % Math.max(1, movements.length)] || null;
-    var nextMov = movements[(t.emomMovIdx+1) % Math.max(1, movements.length)] || null;
+    var nowIdx = t.emomMovIdx % Math.max(1, movements.length);
+    var nextIdx = (t.emomMovIdx+1) % Math.max(1, movements.length);
+    var nowMov = movements[nowIdx] || null;
+    var nextMov = movements[nextIdx] || null;
+    var nowLoad = nowMov ? phxFormatHeight(phxMovementLoad(nowMov, window._wodSelection, nowIdx)) : '';
+    var nextLoad = nextMov ? phxFormatHeight(phxMovementLoad(nextMov, window._wodSelection, nextIdx)) : '';
     var nowHTML = nowMov ? '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:18px;margin-bottom:10px;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">This minute</div>'+
       '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;">'+nowMov.name+'</div>'+
       (nowMov.reps?'<div style="font-family:var(--font-d);font-size:16px;color:var(--gold);margin-top:4px;">'+nowMov.reps+' reps</div>':'')+
-      (nowMov.load_rx?'<div style="font-size:12px;color:var(--text2);margin-top:2px;">'+nowMov.load_rx+'</div>':'')+
+      (nowLoad?'<div style="font-size:12px;color:var(--text2);margin-top:2px;">'+nowLoad+'</div>':'')+
       '</div>' : '';
     var nextHTML = (nextMov && nextMov!==nowMov) ? '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;opacity:0.7;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Next minute</div>'+
       '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text2);line-height:1;">'+nextMov.name+'</div>'+
       (nextMov.reps?'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+nextMov.reps+' reps</div>':'')+
+      (nextLoad?'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+nextLoad+'</div>':'')+
       '</div>' : '';
     inner.innerHTML='<div style="padding-top:20px;">'+
       _headerHTML('EVERY MINUTE ON THE MINUTE')+
@@ -9842,11 +10035,12 @@ function startWODTimer(modalId){
   function _renderStrength(){
     var t=window._wodTimer;
     var nowMov=movements[0]||null;
+    var sLoad = nowMov ? phxFormatHeight(phxMovementLoad(nowMov, window._wodSelection, 0)) : '';
     var movHTML = (nowMov ? '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Movement</div>'+
       '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+nowMov.name+'</div>'+
       (nowMov.sets||nowMov.reps?'<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);margin-top:6px;">'+(nowMov.sets?nowMov.sets+' sets':'')+(nowMov.sets&&nowMov.reps?' &times; ':'')+(nowMov.reps?nowMov.reps+' reps':'')+'</div>':'')+
-      (nowMov.load_rx?'<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+nowMov.load_rx+'</div>':'')+
+      (sLoad?'<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+sLoad+'</div>':'')+
     '</div>' : '');
     inner.innerHTML='<div style="padding-top:20px;">'+
       _headerHTML(wod.format)+
@@ -9946,6 +10140,23 @@ function logWODScore(timeElapsed,amrapReps,amrapScore){
     var m=document.getElementById('wod-modal'); if(m) m.remove();
     return;
   }
+  // v4.7.7 FIX 3 (logging side): capture the actual weight the athlete used.
+  // Pre-fill from their Rx/Scaled/Custom selection so it's a one-tap confirm in the common case.
+  var sel = window._wodSelection || 'rx';
+  var firstMov = (wod.movements||[])[0];
+  var defaultActual = '';
+  if(firstMov){
+    if(sel === 'custom'){
+      var c0 = (window._wodCustomLoads||{})[0];
+      defaultActual = (c0 != null && c0 !== '') ? String(c0) : (firstMov.load_rx||'');
+    } else if(sel === 'scaled'){
+      defaultActual = firstMov.load_scaled || firstMov.load_rx || '';
+    } else {
+      defaultActual = firstMov.load_rx || '';
+    }
+  }
+  var actualWeight = prompt('Actual weight used:\n(Rx '+ (firstMov && firstMov.load_rx ? firstMov.load_rx : '—') +' / Scaled '+ (firstMov && firstMov.load_scaled ? firstMov.load_scaled : '—') +')', defaultActual);
+  if(actualWeight === null) actualWeight = defaultActual; // user hit Cancel → keep default rather than blocking the score log
   var scores=JSON.parse(localStorage.getItem('phoenix_wod_scores')||'[]');
   scores.push({
     date:new Date().toISOString(),
@@ -9954,13 +10165,18 @@ function logWODScore(timeElapsed,amrapReps,amrapScore){
     score:scorePrompt,
     time_elapsed:timeElapsed||0,
     amrap_reps:amrapReps||0,
-    amrap_score:amrapScore||null
+    amrap_score:amrapScore||null,
+    // v4.7.7 FIX 3: three-value system — what was prescribed, what was the scaled option, what they actually used
+    wod_selection: sel,
+    actual_weight: actualWeight,
+    rx_weight: firstMov ? (firstMov.load_rx||'') : '',
+    scaled_weight: firstMov ? (firstMov.load_scaled||'') : ''
   });
   localStorage.setItem('phoenix_wod_scores',JSON.stringify(scores));
   // Supabase: WOD scores are logged atomically (no separate start)
   (async function(){
     await supabaseStartSession('wod',wod.name||'WOD','wod');
-    supabaseCompleteSession({duration_seconds:timeElapsed||0,total_reps:amrapReps||0,details:{session_id:'wod',wod_id:wod.id,wod_name:wod.name,score:scorePrompt,amrap_reps:amrapReps||0,amrap_score:amrapScore||null}});
+    supabaseCompleteSession({duration_seconds:timeElapsed||0,total_reps:amrapReps||0,details:{session_id:'wod',wod_id:wod.id,wod_name:wod.name,score:scorePrompt,amrap_reps:amrapReps||0,amrap_score:amrapScore||null,wod_selection:sel,actual_weight:actualWeight,rx_weight:firstMov?(firstMov.load_rx||''):'',scaled_weight:firstMov?(firstMov.load_scaled||''):''}});
   })();
   // Update streak
   var lastWOD=localStorage.getItem('phoenix_wod_last_date');

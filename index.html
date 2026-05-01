@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.5';
+var APP_VERSION='4.7.6';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6342,7 +6342,53 @@ Return ONLY valid JSON, no other text, no markdown fences:
     ]
   },
   "flags": []
-}`;
+}
+
+================================================================
+WOD SESSION FORMAT (REQUIRED when session_type is "WOD")
+================================================================
+
+When session_type is "WOD", the session object MUST include a structured "wod" field. The "exercises" array stays empty for WOD sessions — do NOT cram the WOD into a single exercise with a load_guidance text blob. The renderer cannot parse text blobs.
+
+Required shape:
+{
+  "day": "Friday",
+  "session_type": "WOD",
+  "duration_min": 25,
+  "wod": {
+    "name": "Freight Train",
+    "format": "amrap",
+    "duration_sec": 900,
+    "movements": [
+      {
+        "name": "Farmers Carry",
+        "reps": 1,
+        "distance_m": 50,
+        "load_rx": "20kg DB each hand",
+        "load_scale": "16kg DB or 30m"
+      },
+      {
+        "name": "Goblet Squat",
+        "reps": 10,
+        "load_rx": "24kg KB",
+        "load_scale": "16kg KB"
+      }
+    ],
+    "score_format": "rounds.movements.reps",
+    "coaching_note": "Pace round 1 — should feel like 7/10 effort. Save the gas for rounds 4+."
+  },
+  "exercises": []
+}
+
+Allowed wod.format values:
+- "amrap"   → duration_sec = AMRAP duration in seconds; score_format = "rounds.movements.reps"
+- "afap"    → duration_sec = 0 (no time cap) OR a soft cap in seconds; score_format = "time"
+- "emom"    → duration_sec = total duration; movements array = one per minute (or repeating pattern across the whole duration); score_format = "completion"
+- "forload" → movements have sets+reps+load per movement; score_format = "load"
+
+Every movement MUST have name and reps as separate fields. Do not embed reps inside the name string. Use distance_m for distance work (carries, runs, rows). Use load_rx for the prescribed load and load_scale for a sensible scaling option.
+
+If you absolutely cannot fit the WOD into the structured shape, leave the wod field null and the legacy renderer will fall back to parsing exercises[0].load_guidance — but always prefer the structured shape.`;
 
 function buildAthleteProfile(trigger, checkIn){
   var a = athlete || {};
@@ -9443,7 +9489,115 @@ function _detectWODFormat(wod){
   if(f.indexOf('EMOM')>-1)  return 'emom';
   if(f.indexOf('AMRAP')>-1) return 'amrap';
   if(f.indexOf('AFAP')>-1 || f.indexOf('FOR TIME')>-1) return 'afap';
+  if(f.indexOf('FORLOAD')>-1 || f.indexOf('FOR LOAD')>-1) return 'strength';
   return 'strength';
+}
+
+// v4.7.6 FIX 2: convert an AI-generated session into the wod-shaped object that startWODTimer expects.
+// Case A — sess.wod is the structured object (preferred)
+// Case B — legacy: a single exercise with format/duration/movements packed into load_guidance text
+function _buildWodFromAISession(sess){
+  if(!sess) return null;
+  // Case A: structured wod field
+  if(sess.wod && typeof sess.wod === 'object'){
+    var w = sess.wod;
+    var fmtRaw = String(w.format||'').toLowerCase();
+    var fmtOut;
+    if(fmtRaw.indexOf('amrap')>-1) fmtOut = 'AMRAP '+Math.round((w.duration_sec||0)/60);
+    else if(fmtRaw.indexOf('emom')>-1) fmtOut = 'EMOM '+Math.round((w.duration_sec||0)/60);
+    else if(fmtRaw.indexOf('afap')>-1) fmtOut = 'AFAP';
+    else if(fmtRaw.indexOf('forload')>-1 || fmtRaw.indexOf('for load')>-1) fmtOut = 'For Load';
+    else fmtOut = w.format || 'AFAP';
+    var movs = (w.movements||[]).map(function(m){
+      var repsStr = '';
+      if(m.distance_m) repsStr = m.distance_m+'m';
+      else if(m.reps != null) repsStr = String(m.reps);
+      return {
+        name: m.name || 'Movement',
+        sets: m.sets || 0,
+        reps: repsStr,
+        load_rx: m.load_rx || '',
+        load_scaled: m.load_scale || m.load_scaled || ''
+      };
+    });
+    var capMin = w.duration_sec ? Math.round(w.duration_sec/60) : (sess.duration_min||0);
+    return {
+      id: 'ai-'+(sess.day||'today'),
+      name: w.name || 'Phoenix WOD',
+      tier: w.tier || 'AI',
+      format: fmtOut,
+      time_cap: capMin,
+      movements: movs,
+      rep_scheme: w.rep_scheme || '',
+      elite_target: w.elite_target || '',
+      coaching_note: w.coaching_note || '',
+      combine_note: w.coaching_note || ''
+    };
+  }
+  // Case B: legacy — parse single exercise with load_guidance blob
+  var exs = sess.exercises||[];
+  if(!exs.length) return null;
+  var ex = exs[0];
+  var blob = String(ex.load_guidance||'') + ' ' + String(ex.reps||'') + ' ' + String(ex.name||'');
+  var bUp = blob.toUpperCase();
+  var fmt = 'AFAP';
+  var capMinB = parseInt(sess.duration_min)||0;
+  // AMRAP X minutes / AMRAP X
+  var mAmrap = bUp.match(/AMRAP\s*(\d+)/);
+  if(mAmrap){ fmt = 'AMRAP '+mAmrap[1]; capMinB = parseInt(mAmrap[1])||capMinB; }
+  // EMOM X
+  var mEmom = bUp.match(/EMOM\s*(\d+)/);
+  if(mEmom){ fmt = 'EMOM '+mEmom[1]; capMinB = parseInt(mEmom[1])||capMinB; }
+  // AFAP / For Time
+  if(bUp.indexOf('AFAP')>-1 || bUp.indexOf('FOR TIME')>-1) fmt = 'AFAP';
+  // Split load_guidance into movement entries.
+  // Strategy: split on commas first; if a chunk starts with "Rx:" or "Scale:" strip it.
+  // Each chunk is: "20kg DB farmers carry 50m" or "10 goblet squats 24kg KB" → name = text without leading number, reps = leading number.
+  var lg = String(ex.load_guidance||'').replace(/^(rx|scaled?|prescribed):\s*/i,'');
+  var rxPart = lg.split(/scale[ds]?\s*:/i)[0]; // Rx-only chunk
+  var scalePart = (lg.split(/scale[ds]?\s*:/i)[1])||'';
+  var movChunks = rxPart.split(/[,;\n]/).map(function(c){return c.trim();}).filter(function(c){return c.length;});
+  var scaleChunks = scalePart.split(/[,;\n]/).map(function(c){return c.trim();}).filter(function(c){return c.length;});
+  function _parseMovChunk(chunk){
+    if(!chunk) return null;
+    // First number anywhere in the chunk = reps (or distance if followed by "m")
+    var distM = chunk.match(/(\d+(?:\.\d+)?)\s*m\b/i);
+    var leadingNum = chunk.match(/^[^\d]*?(\d+(?:\.\d+)?)/);
+    var reps = '';
+    if(leadingNum) reps = leadingNum[1];
+    if(distM) reps = distM[1]+'m';
+    // name = strip leading number + trailing weight tokens
+    var name = chunk
+      .replace(/^[\d.\s]+/, '')                    // leading number
+      .replace(/\b\d+(?:\.\d+)?\s*kg\b/ig, '')     // weight
+      .replace(/\b\d+(?:\.\d+)?\s*m\b/ig, '')      // distance
+      .replace(/\b(rx|scaled?)\b:?/ig, '')
+      .trim()
+      .replace(/^[-–—\s]+|[-–—\s]+$/g, '');
+    if(!name) name = 'Movement';
+    var loadM = chunk.match(/(\d+(?:\.\d+)?\s*kg(?:\s*\w+)?)/i);
+    return {name: name, sets: 0, reps: reps || (chunk.match(/(\d+)/)||['',''])[1] || '', load_rx: loadM?loadM[0]:'', load_scaled: ''};
+  }
+  var movs = movChunks.map(_parseMovChunk).filter(Boolean);
+  // Pair scale chunks back if same length
+  if(scaleChunks.length && scaleChunks.length === movs.length){
+    movs.forEach(function(m,i){ m.load_scaled = scaleChunks[i]; });
+  } else if(scaleChunks.length){
+    movs[0] && (movs[0].load_scaled = scaleChunks.join(' / '));
+  }
+  if(!movs.length) movs = [{name: ex.name||'WOD', sets:0, reps:'', load_rx: ex.load_guidance||'', load_scaled:''}];
+  return {
+    id: 'ai-legacy-'+(sess.day||'today'),
+    name: ex.name ? ex.name.replace(/^Phoenix\s*WOD\s*[-—:]+\s*/i,'').replace(/^['"]|['"]$/g,'') : 'Phoenix WOD',
+    tier: 'AI',
+    format: fmt,
+    time_cap: capMinB,
+    movements: movs,
+    rep_scheme: '',
+    elite_target: '',
+    coaching_note: ex.coaching_note || '',
+    combine_note: ex.coaching_note || ''
+  };
 }
 
 function startWODTimer(modalId){
@@ -9538,23 +9692,58 @@ function startWODTimer(modalId){
     }
   };
 
-  // ---------- AMRAP renderer ----------
+  // ---------- AMRAP renderer (v4.7.6 FIX 3) ----------
+  // UX rules:
+  // - One large card per movement showing name + reps required.
+  // - Tap the *current* movement card to mark it complete (full reps) and advance.
+  // - No per-rep input by default. Only the last 30s of the round OR a manual "Partial Round" tap reveals the rep counter.
+  // - At time cap mid-round, prompt for reps of the in-progress movement to finalise the .r value.
   function _renderAMRAP(){
     var t=window._wodTimer;
     var rem = Math.max(0, t.totalSecs - t.elapsed);
+    var showPartial = t.showPartial || (t.running && rem<=30 && rem>0);
     var movHTML = movements.map(function(m,i){
-      var current = i===t.partialMovIdx;
-      return '<div data-mov-idx="'+i+'" style="display:flex;align-items:center;justify-content:space-between;background:'+(current?'var(--bg2)':'var(--bg3)')+';border:1px solid '+(current?'var(--orange)':'var(--border)')+';border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;">'+
-        '<div style="flex:1;">'+
-          '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
-          (m.reps?'<div style="font-size:12px;color:var(--orange);margin-top:2px;font-family:var(--font-d);">'+m.reps+' reps</div>':'')+
+      var current = (i===t.partialMovIdx);
+      var done    = (i < t.partialMovIdx);
+      var bg      = current ? 'var(--bg2)' : (done ? 'var(--bg3)' : 'var(--bg2)');
+      var border  = current ? 'var(--orange)' : 'var(--border)';
+      var opacity = done ? '0.5' : '1';
+      var clickHandler = current ? 'onclick="window._wodAmrapTickCard('+i+')"' : '';
+      var cursor = current ? 'cursor:pointer;' : '';
+      return '<div data-mov-idx="'+i+'" '+clickHandler+' style="background:'+bg+';border:1px solid '+border+';border-radius:var(--radius);padding:18px 16px;margin-bottom:10px;opacity:'+opacity+';'+cursor+'transition:all 0.15s;">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
+          '<div style="flex:1;">'+
+            '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+m.name+'</div>'+
+            (m.reps?'<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--orange);margin-top:6px;line-height:1;">'+m.reps+'</div>':'')+
+            (m.load_rx?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+m.load_rx+'</div>':'')+
+          '</div>'+
+          (done
+            ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
+            : (current
+                ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--orange);text-transform:uppercase;">Tap when done</div>'
+                : '')
+          )+
         '</div>'+
-        (current
-          ? '<button class="btn-primary" style="padding:8px 12px;font-size:11px;width:auto;max-width:none;background:var(--orange);color:var(--bg);" onclick="window._wodAmrapAdvanceMov()">Next mov</button>'
-          : ''
-        )+
       '</div>';
     }).join('');
+    var partialBlock = '';
+    if(showPartial){
+      var curMov = movements[t.partialMovIdx]||{name:'current movement'};
+      partialBlock =
+        '<div style="background:var(--bg2);border:1px solid var(--orange);border-radius:var(--radius);padding:12px 14px;margin:14px 0;">'+
+          '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--orange);text-transform:uppercase;margin-bottom:8px;">Partial round &mdash; reps of '+curMov.name+'</div>'+
+          '<div style="display:flex;gap:8px;align-items:center;">'+
+            '<button class="btn-secondary" style="padding:8px 12px;font-size:14px;width:auto;max-width:none;margin:0;" onclick="window._wodAmrapReps(-1)">&#8722;</button>'+
+            '<div id="wod-amrap-curreps" style="flex:1;text-align:center;font-family:var(--font-d);font-size:32px;font-weight:900;color:var(--text);">'+t.partialReps+'</div>'+
+            '<button class="btn-secondary" style="padding:8px 12px;font-size:14px;width:auto;max-width:none;margin:0;" onclick="window._wodAmrapReps(1)">+</button>'+
+          '</div>'+
+        '</div>';
+    } else {
+      partialBlock =
+        '<div style="text-align:center;margin:14px 0;">'+
+          '<button class="btn-secondary" style="padding:8px 14px;font-size:11px;width:auto;max-width:none;margin:0;" onclick="window._wodAmrapShowPartial()">Show rep counter (partial round)</button>'+
+        '</div>';
+    }
     inner.innerHTML='<div style="padding-top:20px;">'+
       _headerHTML('AS MANY ROUNDS AS POSSIBLE')+
       '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:var(--orange);">'+formatTime(rem)+'</div>'+
@@ -9570,27 +9759,30 @@ function startWODTimer(modalId){
         '</div>'+
       '</div>'+
       movHTML+
-      '<div style="display:flex;gap:6px;align-items:center;margin:14px 0 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">'+
-        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;font-family:var(--font-d);flex:1;">Reps in current movement</div>'+
-        '<button class="btn-secondary" style="padding:6px 10px;font-size:11px;width:auto;max-width:none;margin:0;" onclick="window._wodAmrapReps(-1)">&#8722;</button>'+
-        '<div id="wod-amrap-curreps" style="min-width:36px;text-align:center;font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--text);">'+t.partialReps+'</div>'+
-        '<button class="btn-secondary" style="padding:6px 10px;font-size:11px;width:auto;max-width:none;margin:0;" onclick="window._wodAmrapReps(1)">+</button>'+
-      '</div>'+
+      partialBlock+
       '<div style="display:flex;gap:10px;">'+
         '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
         '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish WOD</button>'+
       '</div>'+
       '</div>';
   }
-  window._wodAmrapAdvanceMov = function(){
+  // Tap the current movement card → full reps done → advance
+  window._wodAmrapTickCard = function(i){
     var t=window._wodTimer;
+    if(i !== t.partialMovIdx) return; // only the current card responds
     t.partialMovIdx++;
     t.partialReps = 0;
     if(t.partialMovIdx >= movements.length){
-      // Round complete
       t.rounds++;
       t.partialMovIdx = 0;
+      t.showPartial = false; // new round starts fresh
     }
+    _renderAMRAP();
+  };
+  // Manual reveal of the rep counter
+  window._wodAmrapShowPartial = function(){
+    var t=window._wodTimer;
+    t.showPartial = true;
     _renderAMRAP();
   };
   window._wodAmrapReps = function(delta){
@@ -9600,6 +9792,16 @@ function startWODTimer(modalId){
     if(el) el.textContent = t.partialReps;
     var sc = document.getElementById('wod-amrap-score');
     if(sc) sc.textContent = t.rounds+'.'+t.partialMovIdx+'.'+t.partialReps;
+  };
+  // Final-tally prompt at time cap
+  window._wodAmrapFinalReps = function(){
+    var t=window._wodTimer;
+    if(!t || t.fmt!=='amrap') return;
+    var curMov = movements[t.partialMovIdx];
+    if(!curMov || (t.partialMovIdx===0 && t.partialReps===0)) return;
+    var ans = prompt('Time! How many reps of '+(curMov.name||'the current movement')+' did you complete?', String(t.partialReps||0));
+    var n = parseInt(ans);
+    if(!isNaN(n) && n>=0) t.partialReps = n;
   };
 
   // ---------- EMOM renderer ----------
@@ -9684,7 +9886,10 @@ function startWODTimer(modalId){
         var el = document.getElementById('wod-timer-num');
         if(el){
           if(t.fmt==='amrap'){
-            el.textContent = formatTime(Math.max(0, t.totalSecs - t.elapsed));
+            var remNow = Math.max(0, t.totalSecs - t.elapsed);
+            el.textContent = formatTime(remNow);
+            // v4.7.6 FIX 3: when we cross the 30s threshold, re-render so the partial-rep counter auto-reveals
+            if(remNow === 30) _renderRouter();
           } else if(t.fmt==='emom'){
             el.textContent = formatTime(60 - (t.elapsed % 60));
             // Tick over a minute → advance movement + minute counter
@@ -9702,6 +9907,10 @@ function startWODTimer(modalId){
           clearInterval(t.interval);
           t.running = false;
           if(el) el.textContent = 'TIME!';
+          // v4.7.6 FIX 3: at time cap mid-round, prompt for the in-progress movement reps to finalise .r
+          if(t.fmt==='amrap' && typeof window._wodAmrapFinalReps==='function'){
+            window._wodAmrapFinalReps();
+          }
           finishWOD();
         }
       }, 1000);
@@ -9895,6 +10104,29 @@ function openTodaySession(){
   if(!sess){
     navTo('programme');
     return;
+  }
+  // v4.7.6 FIX 2: AI sessions of type "WOD" route to the WOD timer instead of the strength renderer.
+  // Accept Case A (structured sess.wod field) AND Case B (legacy single-exercise with load_guidance text).
+  var sessTypeStr = String(sess.session_type||'').toLowerCase();
+  if(sessTypeStr === 'wod' || sessTypeStr.indexOf('wod')===0){
+    var aiWod = _buildWodFromAISession(sess);
+    if(aiWod){
+      window._todayWOD = aiWod;
+      // Render a hero + Start WOD button into the session screen, then the timer modal launches on tap.
+      var bodyW = document.getElementById('session-body-content');
+      bodyW.innerHTML = '';
+      var heroW = document.createElement('div');
+      heroW.className = 'session-hero';
+      heroW.innerHTML = '<div class="sh-tag">'+(sess.day||'Today')+' &middot; '+(sess.session_type||'WOD')+'</div>'+
+        '<div class="sh-name">'+(aiWod.name||'Phoenix WOD')+'</div>'+
+        '<div class="sh-detail">'+(aiWod.format||'').toUpperCase()+' &middot; '+Math.round((aiWod.time_cap||0))+' min &middot; '+(aiWod.movements||[]).length+' movements</div>';
+      bodyW.appendChild(heroW);
+      // Render the WOD modal (reuses openPhoenixWOD) — _todayWOD is the source of truth
+      openPhoenixWOD();
+      return;
+    }
+    // If we couldn't build a WOD object from the session, fall through to the strength renderer
+    // so the athlete still sees something rather than a blank screen.
   }
   // Render the AI session into the session screen
   var body=document.getElementById('session-body-content');

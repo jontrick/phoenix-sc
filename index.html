@@ -555,7 +555,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .set-col-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;text-align:center;}
 
 /* REST TIMER OVERLAY */
-.rest-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:600;display:none;flex-direction:column;align-items:center;justify-content:center;}
+.rest-overlay{position:fixed;inset:0;background:var(--bg);z-index:600;display:none;flex-direction:column;align-items:center;justify-content:center;}
 .rest-overlay.active{display:flex;}
 .rest-timer-label{font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:4px;color:var(--text2);text-transform:uppercase;margin-bottom:12px;}
 .rest-timer-display{font-family:var(--font-d);font-size:96px;font-weight:900;color:var(--gold);line-height:1;margin-bottom:8px;}
@@ -615,19 +615,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .game-card-tier-locked{background:rgba(255,255,255,0.05);color:var(--text3);}
 
 /* WOD MODAL */
-.wod-modal{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:200;overflow-y:auto;}
+.wod-modal{position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;}
 .wod-modal-inner{padding:24px 20px 100px;}
 .wod-tier-badge{display:inline-block;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:12px;}
-.wod-tier-titan{background:rgba(200,150,62,0.15);color:var(--gold);}
-.wod-tier-god{background:rgba(42,95,168,0.15);color:var(--blue);}
-.wod-tier-hero{background:rgba(224,92,42,0.15);color:var(--orange);}
-.wod-tier-philosopher{background:rgba(58,125,68,0.15);color:var(--green);}
-.wod-tier-creature{background:rgba(192,57,43,0.15);color:#e74c3c;}
-.wod-tier-legend{background:rgba(224,92,42,0.15);color:var(--orange);}
-.wod-tier-myth{background:rgba(58,125,68,0.15);color:var(--green);}
-.wod-tier-beast{background:rgba(192,57,43,0.15);color:#e74c3c;}
-.wod-tier-immortal{background:rgba(108,61,143,0.15);color:var(--purple);}
-.wod-tier-rising{background:rgba(200,150,62,0.1);color:var(--text2);}
+/* v4.7.5 FIX 6: tier badges use theme tokens so they recolour with active skin */
+.wod-tier-titan{background:var(--gold-dim);color:var(--gold);}
+.wod-tier-god{background:var(--blue-dim);color:var(--blue);}
+.wod-tier-hero{background:var(--orange-dim,rgba(224,92,42,0.15));color:var(--orange);}
+.wod-tier-philosopher{background:var(--green-dim,rgba(58,125,68,0.15));color:var(--green);}
+.wod-tier-creature{background:var(--red-dim,rgba(192,57,43,0.15));color:var(--red,#e74c3c);}
+.wod-tier-legend{background:var(--orange-dim,rgba(224,92,42,0.15));color:var(--orange);}
+.wod-tier-myth{background:var(--green-dim,rgba(58,125,68,0.15));color:var(--green);}
+.wod-tier-beast{background:var(--red-dim,rgba(192,57,43,0.15));color:var(--red,#e74c3c);}
+.wod-tier-immortal{background:var(--purple-dim,rgba(108,61,143,0.15));color:var(--purple);}
+.wod-tier-rising{background:var(--gold-dim);color:var(--text2);}
 .wod-movement-row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);}
 .wod-movement-row:last-child{border-bottom:none;}
 .wod-movement-name{font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:0.5px;}
@@ -1374,7 +1375,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button class="btn-primary" id="splash-start-btn" style="display:none">Begin Programme</button>
   <button class="btn-secondary" id="splash-continue-btn" style="display:none;margin-top:0;">Continue Training</button>
   <div id="splash-tier-badge" class="splash-tier-badge" style="margin-top:14px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);"></div>
+  <!-- v4.7.5 FIX 8: founding-member / Pro number display hidden until the feature is properly built.
+       Restore this block (and any future per-user Roman numeral assignment) when the membership system ships.
   <div id="splash-founding-badge" style="margin-top:10px;font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);opacity:0.85;">Founding Member &mdash; 1,987 of 2,000 spots remaining</div>
+  -->
+  <div id="splash-founding-badge" style="display:none;"></div>
   <div id="recovery-banner" style="display:none;margin-top:18px;padding:14px 18px;background:var(--bg2);border:1px solid var(--gold);border-radius:10px;text-align:center;">
     <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;" id="recovery-banner-msg">Previous data found. Restore?</div>
     <button class="btn-primary" style="padding:10px 24px;font-size:13px;" onclick="restoreFromAutoBackup()">Restore My Data</button>
@@ -3056,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.4';
+var APP_VERSION='4.7.5';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5567,11 +5572,12 @@ function openCFSession(name){
   var timerBlock=document.createElement('div');
   timerBlock.style.cssText='padding:24px 20px;border-bottom:1px solid var(--border);text-align:center';
   var timerColor=isAMRAP?'var(--orange)':'var(--gold)';
+  // v4.7.5 FIX 6: button text colour uses theme bg token so it inverts with the active skin
   timerBlock.innerHTML=
     '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;color:'+timerColor+';text-transform:uppercase;margin-bottom:8px">'+cf.format+'</div>'+
     '<div id="cf-timer-display" style="font-family:var(--font-d);font-size:80px;font-weight:900;color:var(--text);line-height:1">'+(isAMRAP?'20:00':'0:00')+'</div>'+
     '<div style="display:flex;gap:8px;margin-top:16px">'+
-      '<button id="cf-start-btn" style="flex:1;background:'+timerColor+';color:'+(isAMRAP?'#fff':'#000')+';font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px;border:none;border-radius:4px;cursor:pointer;">Start</button>'+
+      '<button id="cf-start-btn" style="flex:1;background:'+timerColor+';color:var(--bg);font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px;border:none;border-radius:4px;cursor:pointer;">Start</button>'+
       '<button id="cf-reset-btn" style="flex:0 0 80px;background:var(--bg3);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:14px;border:1px solid var(--border2);border-radius:4px;cursor:pointer;">Reset</button>'+
     '</div>';
   body.appendChild(timerBlock);
@@ -6052,6 +6058,21 @@ SECONDARY (select based on goal, sport, structural balance gaps):
 - Structural balance: face pulls, band pull-aparts, Copenhagen planks, Nordic curls
 
 CONTRAINDICATION RULE: Never prescribe contraindicated movements. Substitute within the same pattern.
+
+================================================================
+INJURY CONTRAINDICATION — CRITICAL
+================================================================
+
+Read fqInjuryNotes carefully. If the athlete has mentioned a specific exercise, movement, or body part in their injury notes, that movement must NEVER appear in the programme regardless of how minor it seems. This is non-negotiable.
+
+Examples:
+- If injury notes mention hammer curls — do not prescribe hammer curls or any variation.
+- If notes mention shoulder impingement — do not prescribe overhead pressing.
+- If notes mention knee pain — substitute all knee-dominant movements.
+
+Always err on the side of caution. When in doubt, substitute rather than include.
+
+Also read every entry in fqInjury (each has area, side, and detail). Treat the detail field as authoritative — it is the athlete's own words about what hurts and what to avoid.
 
 ================================================================
 CONDITIONING AND WOD SELECTION
@@ -7097,12 +7118,24 @@ function applyFont(font){
   currentFont=font;
   localStorage.setItem('phoenix_font',font);
   updateFontSwatches();
+  updateFqFontPicker(); // v4.7.5 FIX 7: keep the questionnaire Step 1 picker in sync
 }
 
 function updateFontSwatches(){
   FONTS.forEach(function(f){
     var sw=document.getElementById('font-swatch-'+f);
     if(sw) sw.classList.toggle('active',f===currentFont);
+  });
+}
+
+// v4.7.5 FIX 7: the questionnaire Step 1 font picker uses a different markup
+// (.fq-font-opt with inline border styles, no .active class). Keep its visual
+// state in sync with currentFont — without this it always shows "Classic" as
+// active even after the user picks Bold or Sharp.
+function updateFqFontPicker(){
+  document.querySelectorAll('#fq-font-picker .fq-font-opt').forEach(function(opt){
+    var isActive = opt.getAttribute('data-font') === currentFont;
+    opt.style.borderColor = isActive ? 'var(--gold)' : 'transparent';
   });
 }
 
@@ -9032,16 +9065,19 @@ var PHOENIX_WOD_LIBRARY = {
     // Sundays = The Rising (accessible to all)
     if(dayOfWeek === 0) pool = this.rising;
 
-    // Deterministic selection based on date
-    var idx = dayOfYear % pool.length;
-    var selected = pool[idx];
-
-    // Prevent same WOD on consecutive days
-    var lastWodId = localStorage.getItem('phoenix_last_wod_id');
-    if(lastWodId && selected.id === lastWodId){
-      selected = pool[(idx + 1) % pool.length];
+    // v4.7.5 FIX 1: deterministic date-string hash — same WOD all day, changes at midnight local time.
+    // Replaces the old 'phoenix_last_wod_id' guard which mutated state on every call and bounced
+    // the WOD between two values within the same day.
+    var dateStr = d.getFullYear() + '-' +
+      String(d.getMonth()+1).padStart(2,'0') + '-' +
+      String(d.getDate()).padStart(2,'0');
+    var hash = 0;
+    for(var i = 0; i < dateStr.length; i++){
+      hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+      hash |= 0;
     }
-    localStorage.setItem('phoenix_last_wod_id', selected.id);
+    var idx = Math.abs(hash) % pool.length;
+    var selected = pool[idx];
     return selected;
   },
 
@@ -9389,9 +9425,25 @@ function openPhoenixWOD(){
     '<button class="btn-secondary" style="width:100%;padding:14px;margin:0;" onclick="logWODScore()">Log Score Only</button>'+
     '</div>';
   modal.addEventListener('click',function(ev){
-    if(ev.target===modal) modal.remove();
+    if(ev.target===modal){
+      // v4.7.5 FIX 5: dropping the modal must also drop the wake lock and any running timer
+      if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
+      releaseWakeLock();
+      modal.remove();
+    }
   });
   document.body.appendChild(modal);
+}
+
+// v4.7.5 FIX 3 + FIX 5: format-aware WOD timer (AFAP / AMRAP / EMOM / strength)
+// + wake lock acquired the moment the timer screen renders, released on close.
+
+function _detectWODFormat(wod){
+  var f = String(wod.format||'').toUpperCase();
+  if(f.indexOf('EMOM')>-1)  return 'emom';
+  if(f.indexOf('AMRAP')>-1) return 'amrap';
+  if(f.indexOf('AFAP')>-1 || f.indexOf('FOR TIME')>-1) return 'afap';
+  return 'strength';
 }
 
 function startWODTimer(modalId){
@@ -9405,111 +9457,265 @@ function startWODTimer(modalId){
     return;
   }
   window._wodCountInDone=false;
-  var isAMRAP=wod.format.indexOf('AMRAP')>=0;
-  var totalSecs=(wod.time_cap||20)*60;
-  var movements=wod.movements||[];
-  var wodExIdx=0;
 
-  function renderWODSession(){
-    var nowMov=movements[wodExIdx]||null;
-    var nextMov=movements[wodExIdx+1]||null;
-    var nowHTML='';
-    if(nowMov){
-      nowHTML='<div id="wod-now-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:12px;position:relative;overflow:hidden;touch-action:pan-y;">'+
-        '<div class="set-swipe-bg" style="position:absolute;left:0;top:0;bottom:0;width:80px;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:0;transition:opacity 0.2s;pointer-events:none;border-radius:var(--radius);">DONE</div>'+
-        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Now</div>'+
-        '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;">'+nowMov.name+'</div>'+
-        (nowMov.reps?'<div style="font-family:var(--font-d);font-size:16px;color:var(--gold);margin-top:4px;">'+nowMov.reps+' reps</div>':'')+
-        '<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+nowMov.load_rx+'</div>'+
-        '<div style="font-size:11px;color:var(--text3);margin-top:8px;">← Swipe either direction to complete →</div>'+
-        '</div>';
-    }
-    var nextHTML='';
-    if(nextMov){
-      nextHTML='<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;opacity:0.6;">'+
-        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Next</div>'+
-        '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;text-transform:uppercase;color:var(--text2);line-height:1;">'+nextMov.name+'</div>'+
-        (nextMov.reps?'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+nextMov.reps+' reps — '+nextMov.load_rx+'</div>':'')+
-        '</div>';
-    }
+  var fmt = _detectWODFormat(wod);
+  var totalSecs = (wod.time_cap||20)*60;
+  var movements = wod.movements||[];
 
-    inner.innerHTML='<div style="padding-top:20px;">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
-      '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' — '+wod.format+'</div>'+
-      '<div class="icon-btn" onclick="document.getElementById(\'wod-modal\').remove();if(window._wodTimer&&window._wodTimer.interval)clearInterval(window._wodTimer.interval);releaseWakeLock();" style="background:var(--bg2);">'+
+  // v4.7.5 FIX 5: hold the screen awake from the moment the timer screen opens
+  requestWakeLock();
+
+  // Shared timer state
+  window._wodTimer = {
+    fmt: fmt,
+    totalSecs: totalSecs,
+    elapsed: 0,
+    running: false,
+    interval: null,
+    // AFAP per-movement ticks
+    doneIdx: -1,
+    // AMRAP round/partial state
+    rounds: 0,
+    partialMovIdx: 0,   // movements completed within current (in-progress) round
+    partialReps: 0,     // reps logged into the in-progress movement
+    // EMOM minute/movement state
+    minute: 1,
+    emomMovIdx: 0
+  };
+
+  function _closeWodTimer(){
+    if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
+    releaseWakeLock();
+    var m=document.getElementById(modalId);
+    if(m) m.remove();
+  }
+  window._wodCloseTimer = _closeWodTimer;
+
+  function _headerHTML(label){
+    return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+      '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' &mdash; '+wod.format+'</div>'+
+      '<div class="icon-btn" onclick="window._wodCloseTimer&&window._wodCloseTimer()" style="background:var(--bg2);">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div></div>'+
-      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(isAMRAP?totalSecs:0)+'</div>'+
-      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:24px;">'+(isAMRAP?'TIME REMAINING':'ELAPSED')+'</div>'+
-      nowHTML+nextHTML+
-      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:16px;">Movement '+(wodExIdx+1)+' of '+movements.length+'</div>'+
-      '<div style="display:flex;gap:10px;">'+
-      '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(window._wodTimer&&window._wodTimer.running?'PAUSE':'START')+'</button>'+
-      '<button class="btn-secondary" style="flex:0 0 80px;padding:18px;margin:0;" onclick="finishWOD()">Done</button>'+
-      '</div>'+
-      '</div>';
-
-    // Swipe on NOW card
-    var nowCard=document.getElementById('wod-now-card');
-    if(nowCard){
-      var startX=0,currentX=0,swiping=false;
-      nowCard.addEventListener('touchstart',function(e){startX=e.touches[0].clientX;currentX=startX;swiping=true;},{passive:true});
-      nowCard.addEventListener('touchmove',function(e){
-        if(!swiping) return;
-        currentX=e.touches[0].clientX;
-        var dx=currentX-startX;
-        var absDx=Math.abs(dx);
-        if(absDx>0){nowCard.style.transform='translateX('+dx+'px)';var bg=nowCard.querySelector('.set-swipe-bg');if(bg)bg.style.opacity=absDx>40?'1':'0';}
-      },{passive:true});
-      nowCard.addEventListener('touchend',function(){
-        if(!swiping) return;
-        swiping=false;
-        var dx=currentX-startX;
-        if(Math.abs(dx)>60){
-          wodExIdx++;
-          if(wodExIdx>=movements.length){wodExIdx=0;}
-          renderWODSession();
-        } else {
-          nowCard.style.transform='translateX(0)';
-          var bg=nowCard.querySelector('.set-swipe-bg');if(bg)bg.style.opacity='0';
-        }
-      });
-    }
+      (label?'<div style="font-size:11px;color:var(--gold);text-align:center;letter-spacing:3px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:6px;">'+label+'</div>':'');
   }
 
-  window._wodTimer={totalSecs:totalSecs,elapsed:0,running:false,interval:null,isAMRAP:isAMRAP};
-  renderWODSession();
-
-  window.toggleWODTimer=function(){
+  // ---------- AFAP renderer ----------
+  function _renderAFAP(){
     var t=window._wodTimer;
-    if(t.running){
-      clearInterval(t.interval);
-      t.running=false;
-      document.getElementById('wod-timer-btn').textContent='RESUME';
-    } else {
-      t.running=true;
-      requestWakeLock();
-      document.getElementById('wod-timer-btn').textContent='PAUSE';
-      t.interval=setInterval(function(){
-        t.elapsed++;
-        var display=t.isAMRAP?t.totalSecs-t.elapsed:t.elapsed;
-        var el=document.getElementById('wod-timer-num');
-        if(el) el.textContent=formatTime(display);
-        if(t.isAMRAP&&t.elapsed>=t.totalSecs){
-          clearInterval(t.interval);
-          t.running=false;
-          releaseWakeLock();
-          if(el) el.textContent='TIME!';
-          finishWOD();
-        }
-      },1000);
+    var movHTML = movements.map(function(m,i){
+      var done = i<=t.doneIdx;
+      return '<div data-mov-idx="'+i+'" style="display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border:1px solid '+(done?'var(--gold)':'var(--border)')+';border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;'+(done?'opacity:0.55;':'')+'">'+
+        '<div style="flex:1;">'+
+          '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
+          (m.reps?'<div style="font-size:13px;color:var(--gold);margin-top:2px;font-family:var(--font-d);">'+m.reps+' reps</div>':'')+
+          (m.load_rx?'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+m.load_rx+'</div>':'')+
+        '</div>'+
+        (done
+          ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
+          : '<button class="btn-primary" style="padding:10px 14px;font-size:12px;width:auto;max-width:none;" onclick="window._wodAfapTick('+i+')">Done</button>'
+        )+
+      '</div>';
+    }).join('');
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      _headerHTML('AS FAST AS POSSIBLE')+
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(t.elapsed)+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:24px;">ELAPSED</div>'+
+      (wod.rep_scheme?'<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--radius);padding:8px 12px;text-align:center;margin-bottom:14px;font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:2px;">'+wod.rep_scheme+'</div>':'')+
+      movHTML+
+      '<div style="display:flex;gap:10px;margin-top:14px;">'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish WOD</button>'+
+      '</div>'+
+      '</div>';
+  }
+  window._wodAfapTick = function(i){
+    var t=window._wodTimer;
+    if(i===t.doneIdx+1){ t.doneIdx = i; }
+    _renderAFAP();
+    if(t.doneIdx >= movements.length-1){
+      // All movements ticked → auto-stop and record
+      finishWOD();
     }
   };
 
-  window.finishWOD=function(){
-    if(window._wodTimer&&window._wodTimer.interval) clearInterval(window._wodTimer.interval);
+  // ---------- AMRAP renderer ----------
+  function _renderAMRAP(){
+    var t=window._wodTimer;
+    var rem = Math.max(0, t.totalSecs - t.elapsed);
+    var movHTML = movements.map(function(m,i){
+      var current = i===t.partialMovIdx;
+      return '<div data-mov-idx="'+i+'" style="display:flex;align-items:center;justify-content:space-between;background:'+(current?'var(--bg2)':'var(--bg3)')+';border:1px solid '+(current?'var(--orange)':'var(--border)')+';border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;">'+
+        '<div style="flex:1;">'+
+          '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
+          (m.reps?'<div style="font-size:12px;color:var(--orange);margin-top:2px;font-family:var(--font-d);">'+m.reps+' reps</div>':'')+
+        '</div>'+
+        (current
+          ? '<button class="btn-primary" style="padding:8px 12px;font-size:11px;width:auto;max-width:none;background:var(--orange);color:var(--bg);" onclick="window._wodAmrapAdvanceMov()">Next mov</button>'
+          : ''
+        )+
+      '</div>';
+    }).join('');
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      _headerHTML('AS MANY ROUNDS AS POSSIBLE')+
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:var(--orange);">'+formatTime(rem)+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">TIME REMAINING</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">'+
+        '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
+          '<div id="wod-amrap-rounds" style="font-family:var(--font-d);font-size:34px;font-weight:900;color:var(--text);line-height:1;">'+t.rounds+'</div>'+
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;margin-top:4px;">Rounds</div>'+
+        '</div>'+
+        '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">'+
+          '<div id="wod-amrap-score" style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--orange);line-height:1.1;">'+t.rounds+'.'+t.partialMovIdx+'.'+t.partialReps+'</div>'+
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;margin-top:4px;">Score (R.M.r)</div>'+
+        '</div>'+
+      '</div>'+
+      movHTML+
+      '<div style="display:flex;gap:6px;align-items:center;margin:14px 0 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;">'+
+        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;font-family:var(--font-d);flex:1;">Reps in current movement</div>'+
+        '<button class="btn-secondary" style="padding:6px 10px;font-size:11px;width:auto;max-width:none;margin:0;" onclick="window._wodAmrapReps(-1)">&#8722;</button>'+
+        '<div id="wod-amrap-curreps" style="min-width:36px;text-align:center;font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--text);">'+t.partialReps+'</div>'+
+        '<button class="btn-secondary" style="padding:6px 10px;font-size:11px;width:auto;max-width:none;margin:0;" onclick="window._wodAmrapReps(1)">+</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:10px;">'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish WOD</button>'+
+      '</div>'+
+      '</div>';
+  }
+  window._wodAmrapAdvanceMov = function(){
+    var t=window._wodTimer;
+    t.partialMovIdx++;
+    t.partialReps = 0;
+    if(t.partialMovIdx >= movements.length){
+      // Round complete
+      t.rounds++;
+      t.partialMovIdx = 0;
+    }
+    _renderAMRAP();
+  };
+  window._wodAmrapReps = function(delta){
+    var t=window._wodTimer;
+    t.partialReps = Math.max(0, t.partialReps + delta);
+    var el = document.getElementById('wod-amrap-curreps');
+    if(el) el.textContent = t.partialReps;
+    var sc = document.getElementById('wod-amrap-score');
+    if(sc) sc.textContent = t.rounds+'.'+t.partialMovIdx+'.'+t.partialReps;
+  };
+
+  // ---------- EMOM renderer ----------
+  function _renderEMOM(){
+    var t=window._wodTimer;
+    var totalMinutes = wod.time_cap || (movements.length||1);
+    var minSec = 60 - (t.elapsed % 60);
+    var nowMov = movements[t.emomMovIdx % Math.max(1, movements.length)] || null;
+    var nextMov = movements[(t.emomMovIdx+1) % Math.max(1, movements.length)] || null;
+    var nowHTML = nowMov ? '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:18px;margin-bottom:10px;">'+
+      '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">This minute</div>'+
+      '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;">'+nowMov.name+'</div>'+
+      (nowMov.reps?'<div style="font-family:var(--font-d);font-size:16px;color:var(--gold);margin-top:4px;">'+nowMov.reps+' reps</div>':'')+
+      (nowMov.load_rx?'<div style="font-size:12px;color:var(--text2);margin-top:2px;">'+nowMov.load_rx+'</div>':'')+
+      '</div>' : '';
+    var nextHTML = (nextMov && nextMov!==nowMov) ? '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;opacity:0.7;">'+
+      '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Next minute</div>'+
+      '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text2);line-height:1;">'+nextMov.name+'</div>'+
+      (nextMov.reps?'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+nextMov.reps+' reps</div>':'')+
+      '</div>' : '';
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      _headerHTML('EVERY MINUTE ON THE MINUTE')+
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(minSec)+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">SECONDS THIS MINUTE</div>'+
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Minute</div>'+
+        '<div id="wod-emom-minute" style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--text);">'+t.minute+' / '+totalMinutes+'</div>'+
+      '</div>'+
+      nowHTML+nextHTML+
+      '<div style="display:flex;gap:10px;">'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish WOD</button>'+
+      '</div>'+
+      '</div>';
+  }
+
+  // ---------- Strength fallback (For Load / 5x5) — keep simple Now/Next swipe ----------
+  function _renderStrength(){
+    var t=window._wodTimer;
+    var nowMov=movements[0]||null;
+    var movHTML = (nowMov ? '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px;">'+
+      '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Movement</div>'+
+      '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+nowMov.name+'</div>'+
+      (nowMov.sets||nowMov.reps?'<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);margin-top:6px;">'+(nowMov.sets?nowMov.sets+' sets':'')+(nowMov.sets&&nowMov.reps?' &times; ':'')+(nowMov.reps?nowMov.reps+' reps':'')+'</div>':'')+
+      (nowMov.load_rx?'<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+nowMov.load_rx+'</div>':'')+
+    '</div>' : '');
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      _headerHTML(wod.format)+
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(t.elapsed)+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">ELAPSED</div>'+
+      movHTML+
+      '<div style="display:flex;gap:10px;">'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>'+
+      '</div>'+
+      '</div>';
+  }
+
+  function _renderRouter(){
+    if(fmt==='afap')  return _renderAFAP();
+    if(fmt==='amrap') return _renderAMRAP();
+    if(fmt==='emom')  return _renderEMOM();
+    return _renderStrength();
+  }
+  window._wodRender = _renderRouter;
+
+  _renderRouter();
+
+  window.toggleWODTimer = function(){
+    var t = window._wodTimer;
+    if(t.running){
+      clearInterval(t.interval);
+      t.running = false;
+      var b=document.getElementById('wod-timer-btn'); if(b) b.textContent='RESUME';
+    } else {
+      t.running = true;
+      requestWakeLock();
+      var b=document.getElementById('wod-timer-btn'); if(b) b.textContent='PAUSE';
+      t.interval = setInterval(function(){
+        t.elapsed++;
+        // Update headline display
+        var el = document.getElementById('wod-timer-num');
+        if(el){
+          if(t.fmt==='amrap'){
+            el.textContent = formatTime(Math.max(0, t.totalSecs - t.elapsed));
+          } else if(t.fmt==='emom'){
+            el.textContent = formatTime(60 - (t.elapsed % 60));
+            // Tick over a minute → advance movement + minute counter
+            if(t.elapsed>0 && t.elapsed % 60 === 0){
+              t.minute++;
+              t.emomMovIdx++;
+              _renderRouter();
+            }
+          } else {
+            el.textContent = formatTime(t.elapsed);
+          }
+        }
+        // AMRAP / EMOM auto-stop at time cap
+        if((t.fmt==='amrap' || t.fmt==='emom') && t.elapsed >= t.totalSecs){
+          clearInterval(t.interval);
+          t.running = false;
+          if(el) el.textContent = 'TIME!';
+          finishWOD();
+        }
+      }, 1000);
+    }
+  };
+
+  window.finishWOD = function(){
+    var t = window._wodTimer;
+    if(t && t.interval) clearInterval(t.interval);
     releaseWakeLock();
-    var reps=window._wodTimer&&window._wodTimer.isAMRAP&&typeof getAmrapTotal==='function'?getAmrapTotal():0;
-    logWODScore(window._wodTimer?window._wodTimer.elapsed:0,reps);
+    var elapsed = t ? t.elapsed : 0;
+    var amrapReps = (t && t.fmt==='amrap') ? (t.rounds * (movements.length||1) * 1 + t.partialReps) : 0;
+    var amrapScore = (t && t.fmt==='amrap') ? (t.rounds+'.'+t.partialMovIdx+'.'+t.partialReps) : null;
+    logWODScore(elapsed, amrapReps, amrapScore);
   };
 }
 
@@ -9519,11 +9725,18 @@ function formatTime(secs){
   return (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
 }
 
-function logWODScore(timeElapsed,amrapReps){
+function logWODScore(timeElapsed,amrapReps,amrapScore){
+  // v4.7.5 FIX 5: any path that ends a WOD must drop the wake lock
+  releaseWakeLock();
   var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
-  var defaultScore=amrapReps?amrapReps+' reps':'';
+  // v4.7.5 FIX 3: prefer the AMRAP R.M.r score if we have one
+  var defaultScore = amrapScore || (amrapReps?amrapReps+' reps':(timeElapsed?formatTime(timeElapsed):''));
   var scorePrompt=prompt('Log your score:\n(e.g. 4 rounds + 12 reps, or 8:42 for time)',defaultScore);
-  if(!scorePrompt) return;
+  if(!scorePrompt){
+    // User cancelled — still close the modal so we don't leak the timer screen
+    var m=document.getElementById('wod-modal'); if(m) m.remove();
+    return;
+  }
   var scores=JSON.parse(localStorage.getItem('phoenix_wod_scores')||'[]');
   scores.push({
     date:new Date().toISOString(),
@@ -9531,13 +9744,14 @@ function logWODScore(timeElapsed,amrapReps){
     wod_name:wod.name,
     score:scorePrompt,
     time_elapsed:timeElapsed||0,
-    amrap_reps:amrapReps||0
+    amrap_reps:amrapReps||0,
+    amrap_score:amrapScore||null
   });
   localStorage.setItem('phoenix_wod_scores',JSON.stringify(scores));
   // Supabase: WOD scores are logged atomically (no separate start)
   (async function(){
     await supabaseStartSession('wod',wod.name||'WOD','wod');
-    supabaseCompleteSession({duration_seconds:timeElapsed||0,total_reps:amrapReps||0,details:{session_id:'wod',wod_id:wod.id,wod_name:wod.name,score:scorePrompt,amrap_reps:amrapReps||0}});
+    supabaseCompleteSession({duration_seconds:timeElapsed||0,total_reps:amrapReps||0,details:{session_id:'wod',wod_id:wod.id,wod_name:wod.name,score:scorePrompt,amrap_reps:amrapReps||0,amrap_score:amrapScore||null}});
   })();
   // Update streak
   var lastWOD=localStorage.getItem('phoenix_wod_last_date');
@@ -10800,6 +11014,7 @@ window.openFoundationQ = function(){
           fqRestoreProgressUI();
           fqValidateStep();
           if(typeof renderFQSkinGrid==='function') renderFQSkinGrid();
+          if(typeof updateFqFontPicker==='function') updateFqFontPicker(); // v4.7.5 FIX 7
         }, 50);
       };
       document.getElementById('fq-fresh-btn').onclick=function(){
@@ -10809,7 +11024,10 @@ window.openFoundationQ = function(){
         gate.remove();
         document.querySelector('.q-nav').style.display='flex';
         updateFQStep();
-        setTimeout(function(){ if(typeof renderFQSkinGrid==='function') renderFQSkinGrid(); },50);
+        setTimeout(function(){
+          if(typeof renderFQSkinGrid==='function') renderFQSkinGrid();
+          if(typeof updateFqFontPicker==='function') updateFqFontPicker(); // v4.7.5 FIX 7
+        },50);
       };
     }
     return;
@@ -10820,7 +11038,10 @@ window.openFoundationQ = function(){
   fqResetAnswers();
   updateFQStep();
   showScreen('screen-foundation-q');
-  setTimeout(function(){ if(typeof renderFQSkinGrid==='function') renderFQSkinGrid(); },50);
+  setTimeout(function(){
+    if(typeof renderFQSkinGrid==='function') renderFQSkinGrid();
+    if(typeof updateFqFontPicker==='function') updateFqFontPicker(); // v4.7.5 FIX 7
+  },50);
 };
 
 // Initialise the v4.7.3 answers object once on first load

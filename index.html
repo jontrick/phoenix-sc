@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.7';
+var APP_VERSION='4.7.8';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9550,12 +9550,23 @@ function phxMovementLoad(m, selection, idx){
   return m.load_rx || '';
 }
 
-function openPhoenixWOD(){
-  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+// v4.7.8 BUG 2: openPhoenixWOD now accepts an explicit wodOverride argument.
+// - No argument → ALWAYS the date-hashed library daily WOD (Daily Phoenix WOD tile path)
+// - Argument given → that specific wod (coach-prescribed WOD path, see openTodaySession)
+// This prevents the AI coach WOD from overwriting the daily WOD tile.
+function openPhoenixWOD(wodOverride){
+  var wod = wodOverride || PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
+  // The "active wod for this session" lives in window._activeWOD, NOT _todayWOD.
+  // _todayWOD is reserved for the daily Phoenix WOD tile read by other surfaces.
+  window._activeWOD = wod;
 
-  // v4.7.7 FIX 1: ensure a fresh state every time the detail screen opens — no stale count-in or timer flag
-  // can leak across into "the count-in fires before I've seen the WOD detail".
+  // v4.7.7 FIX 1 + v4.7.8 BUG 1 hardening:
+  // Tear down any stale count-in overlay AND timer state before we render the detail screen.
+  // If a previous session left a count-in overlay in the DOM (e.g. modal closed mid-countdown),
+  // it would otherwise still be visible the next time we open the detail screen.
+  var staleOverlay = document.getElementById('count-in-overlay');
+  if(staleOverlay) staleOverlay.remove();
   window._wodCountInDone = false;
   if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
   window._wodTimer = null;
@@ -9789,7 +9800,8 @@ function _buildWodFromAISession(sess){
 }
 
 function startWODTimer(modalId){
-  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+  // v4.7.8 BUG 2: prefer the WOD that openPhoenixWOD set on this run; fall back to library only if missing.
+  var wod=window._activeWOD||window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
   var modal=document.getElementById(modalId);
   var inner=modal.querySelector('.wod-modal-inner');
@@ -10131,7 +10143,8 @@ function formatTime(secs){
 function logWODScore(timeElapsed,amrapReps,amrapScore){
   // v4.7.5 FIX 5: any path that ends a WOD must drop the wake lock
   releaseWakeLock();
-  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+  // v4.7.8 BUG 2: log against the WOD that was actually started this session, not the daily-tile WOD.
+  var wod=window._activeWOD||window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
   // v4.7.5 FIX 3: prefer the AMRAP R.M.r score if we have one
   var defaultScore = amrapScore || (amrapReps?amrapReps+' reps':(timeElapsed?formatTime(timeElapsed):''));
   var scorePrompt=prompt('Log your score:\n(e.g. 4 rounds + 12 reps, or 8:42 for time)',defaultScore);
@@ -10245,7 +10258,9 @@ function openRecovery(){
 }
 
 function openConditioning(){
-  var wod=window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
+  // v4.7.8 BUG 2: this surface is the "Add Conditioning" picker — its "Today's Phoenix WOD" card
+  // must show the daily library WOD, never the coach-prescribed WOD.
+  var wod=PHOENIX_WOD_LIBRARY.getDailyWOD();
   var wodName=wod?wod.name:'The Phoenix';
   var modal=document.createElement('div');
   modal.id='cond-modal';
@@ -10312,6 +10327,10 @@ function closeCondModal(){
 }
 
 function openTodaySession(){
+  // v4.7.8 BUG 1 hardening: every tile-tap entry kills any stale count-in overlay before doing anything,
+  // so a leftover overlay from a previous session can never appear before the detail screen renders.
+  var staleCountIn = document.getElementById('count-in-overlay');
+  if(staleCountIn) staleCountIn.remove();
   if(!athlete||!athlete.aiProgramme){
     navTo('programme');
     return;
@@ -10321,14 +10340,14 @@ function openTodaySession(){
     navTo('programme');
     return;
   }
-  // v4.7.6 FIX 2: AI sessions of type "WOD" route to the WOD timer instead of the strength renderer.
-  // Accept Case A (structured sess.wod field) AND Case B (legacy single-exercise with load_guidance text).
+  // v4.7.6 FIX 2 + v4.7.8 BUG 2: AI sessions of type "WOD" route to the WOD timer.
+  // Pass the coach-built wod EXPLICITLY to openPhoenixWOD instead of writing window._todayWOD,
+  // so the daily Phoenix WOD tile keeps showing the date-hashed library WOD.
   var sessTypeStr = String(sess.session_type||'').toLowerCase();
   if(sessTypeStr === 'wod' || sessTypeStr.indexOf('wod')===0){
     var aiWod = _buildWodFromAISession(sess);
     if(aiWod){
-      window._todayWOD = aiWod;
-      // Render a hero + Start WOD button into the session screen, then the timer modal launches on tap.
+      window._coachWOD = aiWod; // available for any other coach-WOD surface that may want it
       var bodyW = document.getElementById('session-body-content');
       bodyW.innerHTML = '';
       var heroW = document.createElement('div');
@@ -10337,8 +10356,7 @@ function openTodaySession(){
         '<div class="sh-name">'+(aiWod.name||'Phoenix WOD')+'</div>'+
         '<div class="sh-detail">'+(aiWod.format||'').toUpperCase()+' &middot; '+Math.round((aiWod.time_cap||0))+' min &middot; '+(aiWod.movements||[]).length+' movements</div>';
       bodyW.appendChild(heroW);
-      // Render the WOD modal (reuses openPhoenixWOD) — _todayWOD is the source of truth
-      openPhoenixWOD();
+      openPhoenixWOD(aiWod); // ← explicit pass; does NOT touch window._todayWOD
       return;
     }
     // If we couldn't build a WOD object from the session, fall through to the strength renderer

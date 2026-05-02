@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.9';
+var APP_VERSION='4.7.10';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4366,8 +4366,15 @@ function releaseWakeLock(){
   if(wakeLock){wakeLock.release();wakeLock=null;}
 }
 
+// v4.7.10: cancellable count-in.
+// showCountIn now publishes its interval handle + overlay node + callback to window._countInState
+// so any later "modal closed" / "user navigated away" path can call _phxCancelCountIn() to kill it.
+// Without this, the interval lives in a private closure and fires its callback 5s later — invoking
+// startWODTimer against whatever modal happens to be open at that moment, which is the v4.7.9 bug.
 function showCountIn(callback){
   console.log('[PHX] showCountIn called', new Error().stack);
+  // Kill any prior count-in still running before we start a new one
+  _phxCancelCountIn();
   var overlay=document.createElement('div');
   overlay.id='count-in-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
@@ -4388,10 +4395,27 @@ function showCountIn(callback){
     } else {
       clearInterval(iv);
       overlay.remove();
+      window._countInState = null; // normal completion — clear before firing callback
       if(callback) callback();
     }
   },1000);
+  window._countInState = {iv: iv, overlay: overlay, callback: callback};
 }
+
+// v4.7.10: any "the user is leaving the WOD context" path calls this to make sure a stale
+// count-in cannot fire startWODTimer against a future modal. Safe to call when no count-in is active.
+function _phxCancelCountIn(){
+  var st = window._countInState;
+  if(!st) return;
+  if(st.iv) clearInterval(st.iv);
+  if(st.overlay && st.overlay.parentNode) st.overlay.parentNode.removeChild(st.overlay);
+  // Also belt-and-braces: any orphaned count-in DOM node from prior versions
+  var orphan = document.getElementById('count-in-overlay');
+  if(orphan && orphan!==st.overlay) orphan.remove();
+  window._countInState = null;
+  console.log('[PHX] _phxCancelCountIn: stale count-in cancelled');
+}
+window._phxCancelCountIn = _phxCancelCountIn;
 
 function startRestTimer(secs,nextLabel,nextKg,nextReps){
   rtTotal=secs;
@@ -9641,6 +9665,10 @@ function phxMovementLoad(m, selection, idx){
 // This prevents the AI coach WOD from overwriting the daily WOD tile.
 function openPhoenixWOD(wodOverride){
   console.log('[PHX] openPhoenixWOD called', new Error().stack);
+  // v4.7.10: kill any in-flight count-in before rendering the detail screen.
+  // Otherwise a count-in started by a previous (now-closed) Start tap would fire its callback
+  // mid-detail and trigger startWODTimer without the user touching anything.
+  _phxCancelCountIn();
   var wod = wodOverride || PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
   // The "active wod for this session" lives in window._activeWOD, NOT _todayWOD.
@@ -9748,6 +9776,8 @@ function openPhoenixWOD(wodOverride){
 
   // Centralised close — also kills any leftover timer/wake-lock
   window._wodCloseDetail = function(){
+    // v4.7.10: cancel any in-flight count-in so its 5s callback can't open a timer later.
+    _phxCancelCountIn();
     if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
     releaseWakeLock();
     var m=document.getElementById('wod-modal'); if(m) m.remove();
@@ -10422,6 +10452,8 @@ function closeCondModal(){
 function openTodaySession(){
   // v4.7.8 BUG 1 hardening: every tile-tap entry kills any stale count-in overlay before doing anything,
   // so a leftover overlay from a previous session can never appear before the detail screen renders.
+  // v4.7.10: also cancel the in-flight count-in INTERVAL so its callback can't fire startWODTimer later.
+  _phxCancelCountIn();
   var staleCountIn = document.getElementById('count-in-overlay');
   if(staleCountIn) staleCountIn.remove();
   if(!athlete||!athlete.aiProgramme){
@@ -11777,6 +11809,9 @@ if(typeof navTo==='function'){
   var _origNavTo = navTo;
   window.navTo = function(tab){
     if(!_phxConfirmLeaveActiveSession()) return;
+    // v4.7.10: any tab change cancels an in-flight count-in. The user is leaving the WOD context,
+    // so we must not let a 5-second-old start tap fire startWODTimer against whatever screen they land on.
+    if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();
     return _origNavTo.apply(this, arguments);
   };
 }

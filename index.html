@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.13';
+var APP_VERSION='4.7.14';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6462,6 +6462,15 @@ Allowed wod.format values:
 
 Every movement MUST have name and reps as separate fields. Do not embed reps inside the name string. Use distance_m for distance work (carries, runs, rows). Use load_rx for the prescribed load and load_scale for a sensible scaling option.
 
+CRITICAL — load_scale is PER MOVEMENT, not a combined blob: each movement object must carry its own load_scale specific to that single movement. Never put a blob like "reduce KB to 20kg / step-up burpees / band-assist pull-ups" into one movement's load_scale and leave the others empty. The renderer will suppress any load_scale containing slashes plus scaling verbs because it cannot route a blob to the right tile. Required pattern:
+
+  {"name": "KB Swings",            "reps": 40, "load_rx": "24kg",       "load_scale": "20kg"},
+  {"name": "Goblet Squats",        "reps": 30, "load_rx": "24kg",       "load_scale": "16kg"},
+  {"name": "Burpees",              "reps": 20, "load_rx": "bodyweight", "load_scale": "step-up burpees"},
+  {"name": "Neutral-Grip Pull-ups","reps": 10, "load_rx": "bodyweight", "load_scale": "banded"}
+
+Always include a unit on numeric loads (kg, lb, cm, m, ft, sec). A bare number like "12" is ambiguous — use "12kg" instead.
+
 If you absolutely cannot fit the WOD into the structured shape, leave the wod field null and the legacy renderer will fall back to parsing exercises[0].load_guidance — but always prefer the structured shape.
 
 ================================================================
@@ -9646,16 +9655,62 @@ function phxFormatHeight(s){
   return out;
 }
 
-// v4.7.7 FIX 3: which load list to read for a given selection ('rx' | 'scaled' | 'custom')
+// v4.7.14 BUG 3: a load string that's just a bare number (e.g. "12" instead of "12kg") is
+// confusing on a movement tile. Default the unit to kg unless the string already carries one
+// or is a recognised non-weight token (BW, bodyweight, banded, technique, light, etc).
+function phxNormaliseLoadUnit(s){
+  if(s==null) return '';
+  var raw = String(s).trim();
+  if(!raw) return '';
+  // Already has a unit / is a non-weight prescription → leave alone.
+  if(/[a-zA-Z]/.test(raw)) return raw;
+  // Pure number (with optional decimals, optional minus, optional %) → still numeric.
+  if(/^\d+(?:\.\d+)?\s*%$/.test(raw)) return raw; // percentages keep their %
+  if(/^\d+(?:\.\d+)?$/.test(raw)) return raw + 'kg';
+  return raw;
+}
+
+// v4.7.14 BUG 1: detect load_scale strings that look like a "global blob" of scaling notes
+// covering multiple movements rather than a per-movement load. Examples:
+//   "reduce KB to 20kg / step-up burpees / band-assist pull-ups" → blob (3 movements, slashes, verbs)
+//   "20kg" → not a blob
+//   "16kg KB" → not a blob
+//   "20kg / 16kg" → not a blob (alternative weights for same movement)
+//   "knee tucks" → not a blob (single movement note)
+function _phxLooksLikeScaleBlob(s){
+  var t = String(s||'').trim();
+  if(!t) return false;
+  if(t.indexOf('/') < 0) return false; // no slashes → never a blob
+  // Slash-separated weights (e.g. "20kg / 16kg / 12kg") are not blobs — each part is a numeric weight ± a unit.
+  var parts = t.split('/').map(function(p){return p.trim();}).filter(function(p){return p.length;});
+  if(parts.length >= 2 && parts.every(function(p){return /^\d+(?:\.\d+)?\s*(kg|lb|lbs|kgs|cm|m|ft|in|"|%|sec|secs|reps?)?\.?$/i.test(p);})){
+    return false;
+  }
+  // Heuristic: contains scaling verbs OR multiple movement-name-like words → blob.
+  var hasScaleVerb = /\b(reduce|swap|use|step[- ]?up|band[- ]?assist(?:ed)?|knee|substitute|lighter|easier|skip|drop|halve|half|scale|use a|sub|sub in)\b/i.test(t);
+  // Or: contains multiple commas/slashes joined fragments with verbs/adjectives → blob
+  return hasScaleVerb;
+}
+
+// v4.7.7 FIX 3 + v4.7.14 BUG 1 + BUG 2:
+//   - 'rx'     → load_rx
+//   - 'scaled' → load_scaled IF it's a per-movement value (not a blob) AND non-empty; else empty (NEVER fall back to Rx)
+//   - 'custom' → user-edited value, defaulting to load_rx
+// Bare numeric loads get a 'kg' unit appended via phxNormaliseLoadUnit.
 function phxMovementLoad(m, selection, idx){
   if(!m) return '';
-  if(selection==='scaled' && m.load_scaled) return m.load_scaled;
+  if(selection==='scaled'){
+    var sc = m.load_scaled;
+    if(!sc) return ''; // BUG 2: don't fall back to Rx — user picked Scaled and means it
+    if(_phxLooksLikeScaleBlob(sc)) return ''; // BUG 1: blob covering multiple movements → suppress
+    return phxNormaliseLoadUnit(sc);
+  }
   if(selection==='custom'){
     var custom = (window._wodCustomLoads||{})[idx];
-    if(custom != null && custom !== '') return custom;
-    return m.load_rx || '';
+    if(custom != null && custom !== '') return phxNormaliseLoadUnit(custom);
+    return phxNormaliseLoadUnit(m.load_rx || '');
   }
-  return m.load_rx || '';
+  return phxNormaliseLoadUnit(m.load_rx || '');
 }
 
 // v4.7.13: SINGLE CHOKEPOINT for rendering a movement's load string into a tile.

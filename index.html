@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.11';
+var APP_VERSION='4.7.12';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9708,8 +9708,8 @@ function openPhoenixWOD(wodOverride){
         var customVal = (window._wodCustomLoads[idx] != null) ? window._wodCustomLoads[idx] : (m.load_rx || '');
         rightCol = '<input type="text" class="q-input" value="'+String(customVal).replace(/"/g,'&quot;')+'" oninput="window._wodCustomLoads['+idx+']=this.value;" style="max-width:140px;text-align:right;font-size:13px;padding:8px 10px;">';
       } else {
-        rightCol = '<div class="wod-movement-detail">'+loadStr+'</div>'+
-          (sel==='rx' && m.load_scaled?'<div class="wod-movement-scaled">Scaled: '+phxFormatHeight(m.load_scaled)+'</div>':'');
+        // v4.7.12 FIX 2: show only the load for the active selection — no stacking of Rx + Scaled.
+        rightCol = '<div class="wod-movement-detail">'+loadStr+'</div>';
       }
       return '<div style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;">'+
         '<div style="flex:1;">'+
@@ -9914,24 +9914,21 @@ function _buildWodFromAISession(sess){
   };
 }
 
+// v4.7.12 FIX 1: startWODTimer is now Screen 2 (action page) only — it renders the timer layout
+// in a paused, ready state. NO count-in. NO interval. The athlete confirms readiness by tapping
+// "Start WOD" on the page, which triggers _wodPrimaryAction() → showCountIn() → auto-start.
 function startWODTimer(modalId){
   // v4.7.8 BUG 2: prefer the WOD that openPhoenixWOD set on this run; fall back to library only if missing.
   var wod=window._activeWOD||window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
   var modal=document.getElementById(modalId);
   var inner=modal.querySelector('.wod-modal-inner');
-  if(!window._wodCountInDone){
-    window._wodCountInDone=true;
-    showCountIn(function(){startWODTimer(modalId);});
-    return;
-  }
-  window._wodCountInDone=false;
 
   var fmt = _detectWODFormat(wod);
   var totalSecs = (wod.time_cap||20)*60;
   var movements = wod.movements||[];
 
-  // v4.7.5 FIX 5: hold the screen awake from the moment the timer screen opens
+  // v4.7.5 FIX 5: hold the screen awake from the moment the action page opens.
   requestWakeLock();
 
   // Shared timer state
@@ -9939,6 +9936,7 @@ function startWODTimer(modalId){
     fmt: fmt,
     totalSecs: totalSecs,
     elapsed: 0,
+    started: false,    // v4.7.12: flips to true once count-in completes; controls primary-button label
     running: false,
     interval: null,
     // AFAP per-movement ticks
@@ -9996,7 +9994,7 @@ function startWODTimer(modalId){
       (wod.rep_scheme?'<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--radius);padding:8px 12px;text-align:center;margin-bottom:14px;font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:2px;">'+wod.rep_scheme+'</div>':'')+
       movHTML+
       '<div style="display:flex;gap:10px;margin-top:14px;">'+
-        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>'+
         '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish WOD</button>'+
       '</div>'+
       '</div>';
@@ -10080,7 +10078,7 @@ function startWODTimer(modalId){
       movHTML+
       partialBlock+
       '<div style="display:flex;gap:10px;">'+
-        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>'+
         '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish WOD</button>'+
       '</div>'+
       '</div>';
@@ -10156,7 +10154,7 @@ function startWODTimer(modalId){
       '</div>'+
       nowHTML+nextHTML+
       '<div style="display:flex;gap:10px;">'+
-        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>'+
         '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish WOD</button>'+
       '</div>'+
       '</div>';
@@ -10179,7 +10177,7 @@ function startWODTimer(modalId){
       '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">ELAPSED</div>'+
       movHTML+
       '<div style="display:flex;gap:10px;">'+
-        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="toggleWODTimer()">'+(t.running?'PAUSE':'START')+'</button>'+
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>'+
         '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>'+
       '</div>'+
       '</div>';
@@ -10195,16 +10193,29 @@ function startWODTimer(modalId){
 
   _renderRouter();
 
-  // v4.7.11 FIX 2: the count-in IS the start confirmation. Auto-start the timer immediately
-  // so the user doesn't have to tap a second "Start" button after watching 5,4,3,2,1,GO.
-  // Defer one tick so:
-  //   (a) window.toggleWODTimer is assigned (it's defined just below)
-  //   (b) getElementById('wod-timer-btn') resolves on the freshly-rendered DOM
-  setTimeout(function(){
-    if(window._wodTimer && !window._wodTimer.running && typeof window.toggleWODTimer==='function'){
-      window.toggleWODTimer();
+  // v4.7.12 FIX 1: the v4.7.11 auto-start setTimeout has been removed. Screen 2 stays paused
+  // until the athlete taps "Start WOD", which routes through _wodPrimaryAction → showCountIn.
+  // After count-in completes, _wodPrimaryAction's callback sets started=true and toggles the timer on.
+
+  // Primary-button dispatcher: decides what tapping the big bottom button means based on timer state.
+  //   not started  → "Start WOD" → fire count-in then auto-start timer
+  //   started + running → "Pause"  → toggle off
+  //   started + paused  → "Resume" → toggle on (no count-in)
+  window._wodPrimaryAction = function(){
+    var t = window._wodTimer;
+    if(!t) return;
+    if(!t.started){
+      // First Start tap → count-in, then auto-start.
+      showCountIn(function(){
+        var t2 = window._wodTimer;
+        if(!t2) return;
+        t2.started = true;
+        if(typeof window.toggleWODTimer==='function') window.toggleWODTimer();
+      });
+      return;
     }
-  }, 0);
+    if(typeof window.toggleWODTimer==='function') window.toggleWODTimer();
+  };
 
   window.toggleWODTimer = function(){
     var t = window._wodTimer;

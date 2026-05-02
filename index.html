@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.10';
+var APP_VERSION='4.7.11';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4372,7 +4372,6 @@ function releaseWakeLock(){
 // Without this, the interval lives in a private closure and fires its callback 5s later — invoking
 // startWODTimer against whatever modal happens to be open at that moment, which is the v4.7.9 bug.
 function showCountIn(callback){
-  console.log('[PHX] showCountIn called', new Error().stack);
   // Kill any prior count-in still running before we start a new one
   _phxCancelCountIn();
   var overlay=document.createElement('div');
@@ -9664,7 +9663,6 @@ function phxMovementLoad(m, selection, idx){
 // - Argument given → that specific wod (coach-prescribed WOD path, see openTodaySession)
 // This prevents the AI coach WOD from overwriting the daily WOD tile.
 function openPhoenixWOD(wodOverride){
-  console.log('[PHX] openPhoenixWOD called', new Error().stack);
   // v4.7.10: kill any in-flight count-in before rendering the detail screen.
   // Otherwise a count-in started by a previous (now-closed) Start tap would fire its callback
   // mid-detail and trigger startWODTimer without the user touching anything.
@@ -9759,8 +9757,9 @@ function openPhoenixWOD(wodOverride){
         '</div>'+
       '</div>'+
       (wod.combine_note?'<div style="background:var(--bg3);border-left:3px solid var(--gold);padding:12px 14px;border-radius:4px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:20px;">⚡ '+wod.combine_note+'</div>':'')+
-      // v4.7.7 FIX 1: Start WOD is the ONLY thing that fires the count-in. No count-in on this screen.
-      '<button class="btn-primary" style="width:100%;padding:16px;margin-bottom:10px;" onclick="window._wodStartFromDetail()">Start WOD →</button>'+
+      // v4.7.7 FIX 1 + v4.7.11 FIX 1: this is the ONLY trigger for the count-in. The button reads
+      // "Enter WOD" because this screen is the pre-session overview, not the start.
+      '<button class="btn-primary" style="width:100%;padding:16px;margin-bottom:10px;" onclick="window._wodStartFromDetail()">Enter WOD →</button>'+
       '<button class="btn-secondary" style="width:100%;padding:14px;margin:0;" onclick="logWODScore()">Log Score Only</button>'+
     '</div>';
   }
@@ -9916,9 +9915,6 @@ function _buildWodFromAISession(sess){
 }
 
 function startWODTimer(modalId){
-  console.log('[PHX] startWODTimer called', new Error().stack);
-  // v4.7.9 TASK 2: log the selection so we can verify Scaled/Custom is preserved across the count-in.
-  console.log('[PHX] startWODTimer selection=', window._wodSelection, 'customLoads=', window._wodCustomLoads);
   // v4.7.8 BUG 2: prefer the WOD that openPhoenixWOD set on this run; fall back to library only if missing.
   var wod=window._activeWOD||window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
@@ -10198,6 +10194,17 @@ function startWODTimer(modalId){
   window._wodRender = _renderRouter;
 
   _renderRouter();
+
+  // v4.7.11 FIX 2: the count-in IS the start confirmation. Auto-start the timer immediately
+  // so the user doesn't have to tap a second "Start" button after watching 5,4,3,2,1,GO.
+  // Defer one tick so:
+  //   (a) window.toggleWODTimer is assigned (it's defined just below)
+  //   (b) getElementById('wod-timer-btn') resolves on the freshly-rendered DOM
+  setTimeout(function(){
+    if(window._wodTimer && !window._wodTimer.running && typeof window.toggleWODTimer==='function'){
+      window.toggleWODTimer();
+    }
+  }, 0);
 
   window.toggleWODTimer = function(){
     var t = window._wodTimer;

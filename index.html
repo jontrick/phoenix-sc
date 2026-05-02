@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.8';
+var APP_VERSION='4.7.9';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4367,6 +4367,7 @@ function releaseWakeLock(){
 }
 
 function showCountIn(callback){
+  console.log('[PHX] showCountIn called', new Error().stack);
   var overlay=document.createElement('div');
   overlay.id='count-in-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
@@ -9365,21 +9366,105 @@ function renderTodaySessionCard(){
   card.style.cursor='pointer';
   card.setAttribute('onclick','openTodaySession()');
 
+  // v4.7.9 TASK 3: clear any previously-rendered extra-session tiles before re-rendering.
+  document.querySelectorAll('.card-today-extra').forEach(function(n){ n.remove(); });
+
   if(!athlete||!athlete.aiProgramme) return;
   var prog=athlete.aiProgramme;
   var week=prog.week;
   if(!week||!week.sessions||!week.sessions.length) return;
   var now=new Date();
   var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
-  var todaySess=week.sessions.find(function(s){return s.day&&s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;});
-  if(!todaySess) todaySess=week.sessions[0];
-  card.querySelector('.game-card-inner').innerHTML=
-    '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Your Programme</span></div>'+
-    '<div class="game-card-title" id="today-session-name" style="font-size:28px;">'+(todaySess.session_type||'Training')+'</div>'+
-    '<div class="game-card-sub" id="today-session-detail">'+(todaySess.exercises||[]).length+' exercises · '+(todaySess.duration_min||45)+'min</div>'+
-    '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
-  window._todaySession=todaySess;
+
+  // v4.7.9 TASK 3: collect ALL sessions for today's day (was: .find → first match only)
+  var todaySessions = week.sessions.filter(function(s){
+    return s.day && s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;
+  });
+  if(!todaySessions.length) todaySessions = [week.sessions[0]];
+
+  // v4.7.9 TASK 3: order AM before PM when the user assigned slots in the questionnaire.
+  // fqSessionSchedule[dayKey] = {am:'strength'|'wod'|'core'|'walk'|'rest'|null, pm:...}
+  // Map session_type → slot kind to find which session matches AM vs PM.
+  function _slotKindForSession(s){
+    var t = String(s.session_type||'').toLowerCase();
+    if(t.indexOf('wod')>=0) return 'wod';
+    if(t.indexOf('core')>=0) return 'core';
+    if(t.indexOf('walk')>=0 || t.indexOf('run')>=0) return 'walk';
+    return 'strength';
+  }
+  if(todaySessions.length>1 && athlete.fqScheduleMode==='user_assigns' && athlete.fqSessionSchedule){
+    var dayKey = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
+    var slot = athlete.fqSessionSchedule[dayKey];
+    if(slot && typeof slot==='object' && (slot.am || slot.pm)){
+      // Sort: sessions matching AM slot come first, then PM. Unmatched fall to the back.
+      todaySessions.sort(function(a,b){
+        var ka=_slotKindForSession(a), kb=_slotKindForSession(b);
+        var aIsAm = (ka === slot.am), bIsAm = (kb === slot.am);
+        var aIsPm = (ka === slot.pm), bIsPm = (kb === slot.pm);
+        var aRank = aIsAm ? 0 : (aIsPm ? 1 : 2);
+        var bRank = bIsAm ? 0 : (bIsPm ? 1 : 2);
+        return aRank - bRank;
+      });
+    }
+  }
+
+  // Helper: render a single session into a card-inner block.
+  function _renderSessionInto(targetCard, sess, idx, slotLabel){
+    var movementsSummary = '';
+    if(sess.wod && sess.wod.movements && sess.wod.movements.length){
+      movementsSummary = sess.wod.movements.slice(0,3).map(function(m){return m.name;}).join(' · ');
+    } else if(sess.core && sess.core.movements && sess.core.movements.length){
+      movementsSummary = sess.core.movements.slice(0,3).map(function(m){return m.name;}).join(' · ');
+    } else if(sess.exercises && sess.exercises.length){
+      movementsSummary = sess.exercises.slice(0,3).map(function(e){return e.name;}).join(' · ');
+    }
+    var inner = targetCard.querySelector('.game-card-inner');
+    inner.innerHTML =
+      '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">'+(slotLabel||'Your Programme')+'</span></div>'+
+      '<div class="game-card-title" '+(idx===0?'id="today-session-name"':'')+' style="font-size:28px;">'+(sess.session_type||'Training')+'</div>'+
+      '<div class="game-card-sub" '+(idx===0?'id="today-session-detail"':'')+'>'+
+        ((sess.duration_min||45)+'min')+
+        (movementsSummary?' · '+movementsSummary:'')+
+      '</div>'+
+      '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
+  }
+
+  function _slotLabelFor(idx){
+    if(todaySessions.length<2) return 'Your Programme';
+    return idx===0 ? 'AM · Session 1' : 'PM · Session 2';
+  }
+
+  // First session → existing card-today-session
+  var first = todaySessions[0];
+  _renderSessionInto(card, first, 0, _slotLabelFor(0));
+  card.setAttribute('onclick', 'window._openTodaySessionByIndex(0)');
+
+  // Extra sessions → injected as sibling cards after card-today-session
+  for(var i=1; i<todaySessions.length; i++){
+    var extra = document.createElement('div');
+    extra.className = 'game-card card-today-extra';
+    extra.style.cssText = 'margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--orange);cursor:pointer;';
+    extra.innerHTML = '<div class="game-card-inner"></div>';
+    card.parentNode.insertBefore(extra, card.nextSibling);
+    _renderSessionInto(extra, todaySessions[i], i, _slotLabelFor(i));
+    (function(idx){
+      extra.addEventListener('click', function(){ window._openTodaySessionByIndex(idx); });
+    })(i);
+  }
+
+  // Hold the full list so the dispatcher can pick by index.
+  window._todaySessions = todaySessions;
+  // Back-compat: legacy openers read window._todaySession (singular). Default to first.
+  window._todaySession = first;
 }
+
+// v4.7.9 TASK 3: tile-tap dispatcher — picks the right session by index then opens it.
+window._openTodaySessionByIndex = function(idx){
+  var list = window._todaySessions || [];
+  var sess = list[idx] || list[0];
+  if(sess) window._todaySession = sess;
+  openTodaySession();
+};
 
 function openActiveRecovery(){
   var opts=[
@@ -9555,6 +9640,7 @@ function phxMovementLoad(m, selection, idx){
 // - Argument given → that specific wod (coach-prescribed WOD path, see openTodaySession)
 // This prevents the AI coach WOD from overwriting the daily WOD tile.
 function openPhoenixWOD(wodOverride){
+  console.log('[PHX] openPhoenixWOD called', new Error().stack);
   var wod = wodOverride || PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
   // The "active wod for this session" lives in window._activeWOD, NOT _todayWOD.
@@ -9800,6 +9886,9 @@ function _buildWodFromAISession(sess){
 }
 
 function startWODTimer(modalId){
+  console.log('[PHX] startWODTimer called', new Error().stack);
+  // v4.7.9 TASK 2: log the selection so we can verify Scaled/Custom is preserved across the count-in.
+  console.log('[PHX] startWODTimer selection=', window._wodSelection, 'customLoads=', window._wodCustomLoads);
   // v4.7.8 BUG 2: prefer the WOD that openPhoenixWOD set on this run; fall back to library only if missing.
   var wod=window._activeWOD||window._todayWOD||PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
@@ -9846,8 +9935,12 @@ function startWODTimer(modalId){
   window._wodCloseTimer = _closeWodTimer;
 
   function _headerHTML(label){
+    // v4.7.9 TASK 2: surface the active selection (RX / SCALED / CUSTOM) inside the timer so the user
+    // can confirm at a glance which load list the renderer is reading from.
+    var sel = (window._wodSelection || 'rx').toUpperCase();
+    var selBadge = '<span style="display:inline-block;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;color:var(--gold);background:var(--gold-dim);border:1px solid var(--gold);padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle;">'+sel+'</span>';
     return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
-      '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' &mdash; '+wod.format+'</div>'+
+      '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' &mdash; '+wod.format+selBadge+'</div>'+
       '<div class="icon-btn" onclick="window._wodCloseTimer&&window._wodCloseTimer()" style="background:var(--bg2);">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div></div>'+
       (label?'<div style="font-size:11px;color:var(--gold);text-align:center;letter-spacing:3px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:6px;">'+label+'</div>':'');

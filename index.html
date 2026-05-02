@@ -4401,6 +4401,25 @@ function showCountIn(callback){
   window._countInState = {iv: iv, overlay: overlay, callback: callback};
 }
 
+// v4.7.15 FIX 3 (global): one place that hides every ad surface in the app when the user is Pro.
+// Called on every showScreen / navTo so newly-entered screens get gated immediately. Selectors:
+//   - id starting with "ad-"   (legacy: ad-today, ad-stats, ad-walk, ad-rest-top, ad-rest-bottom)
+//   - .ad-slot / .phx-ad-slot  (any future ad container should use one of these)
+// Also hides any "Remove ads — unlock Phoenix" upsell links since they're meaningless for Pro.
+function _phxApplyAdGate(){
+  try {
+    var pro = (typeof hasProAccess==='function') && hasProAccess();
+    var sel = '[id^="ad-"], .ad-slot, .phx-ad-slot';
+    document.querySelectorAll(sel).forEach(function(el){
+      el.style.display = pro ? 'none' : '';
+    });
+    document.querySelectorAll('.ad-remove-btn, #rt-upgrade-link').forEach(function(el){
+      el.style.display = pro ? 'none' : '';
+    });
+  } catch(e){}
+}
+window._phxApplyAdGate = _phxApplyAdGate;
+
 // v4.7.10: any "the user is leaving the WOD context" path calls this to make sure a stale
 // count-in cannot fire startWODTimer against a future modal. Safe to call when no count-in is active.
 function _phxCancelCountIn(){
@@ -4416,20 +4435,41 @@ function _phxCancelCountIn(){
 }
 window._phxCancelCountIn = _phxCancelCountIn;
 
-function startRestTimer(secs,nextLabel,nextKg,nextReps){
+// v4.7.15 FIX 2: clean weight × reps display + ≤8-word technique cue subtext.
+// v4.7.15 FIX 3: hide ad slots + upgrade link for Pro accounts.
+function startRestTimer(secs,nextLabel,nextKg,nextReps,cue){
   rtTotal=secs;
   rtEndTime=Date.now()+(secs*1000);
   document.getElementById('rt-next').textContent=nextLabel||'Next set';
-  // Show next set kg/reps if provided
+  // Compose the prescription cleanly: "77.5kg × 3 reps" (or just one side if the other is missing)
   var nextInfo=document.getElementById('rt-next-info');
   if(nextInfo){
-    if(nextKg||nextReps){
-      nextInfo.textContent=(nextKg?nextKg:'')+(nextKg&&nextReps?' x ':'')+(nextReps?nextReps+' reps':'');
+    var kgClean = phxExtractTargetWeight(nextKg||'');
+    var repsClean = nextReps ? String(nextReps).trim() : '';
+    if(kgClean && kgClean!=='—' || repsClean){
+      var parts = [];
+      if(kgClean && kgClean!=='—') parts.push(kgClean);
+      if(repsClean) parts.push(repsClean+' reps');
+      nextInfo.textContent = parts.join(' × ');
       nextInfo.style.display='block';
     } else {
       nextInfo.style.display='none';
     }
   }
+  // Technique cue (≤8 words). Hide if empty.
+  var cueEl=document.getElementById('rt-cue');
+  if(cueEl){
+    var clamped = cue ? String(cue).split(/\s+/).slice(0,8).join(' ') : '';
+    if(clamped && cue && cue.split(/\s+/).length > 8) clamped += '…';
+    cueEl.textContent = clamped;
+    cueEl.style.display = clamped ? 'block' : 'none';
+  }
+  // Pro tier hides the two ad banners + the "remove ads" upgrade link
+  var pro = (typeof hasProAccess==='function') && hasProAccess();
+  ['ad-rest-top','ad-rest-bottom','rt-upgrade-link'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.style.display = pro ? 'none' : '';
+  });
   // Show rest selector in overlay
   var overlayRest=document.getElementById('rt-rest-selector');
   if(overlayRest){overlayRest.style.display='flex';}
@@ -4629,6 +4669,68 @@ function onSetDone(ex,idx){
 })();
 
 // Auto-log individual set to localStorage on completion (swipe or tap)
+// v4.7.15 FIX 4: RPE + notes capture after each exercise BLOCK (not per set, not per session).
+// Triggered when the last set of an AI exercise block is ticked done. On Save / Skip, we PATCH
+// the set_logs rows for this block (matched by session_id + exercise_name) with rpe + notes.
+function showExerciseBlockRPE(exIdx, ex){
+  var existing = document.getElementById('phx-rpe-overlay');
+  if(existing) existing.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-rpe-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9000;display:flex;align-items:center;justify-content:center;padding:24px;';
+  var title = (ex && ex.name) ? ('How was '+ex.name+'?') : 'How was that?';
+  overlay.innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px 20px;width:100%;max-width:360px;">'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">RPE check-in</div>'+
+      '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:18px;">'+title+'</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">'+
+        '<span>1 Very Easy</span><span>5 Moderate</span><span>10 Max</span>'+
+      '</div>'+
+      '<input type="range" id="phx-rpe-slider" min="1" max="10" value="7" step="1" style="width:100%;accent-color:var(--gold);margin-bottom:8px;">'+
+      '<div style="text-align:center;font-family:var(--font-d);font-size:36px;font-weight:900;color:var(--gold);line-height:1;margin-bottom:18px;"><span id="phx-rpe-val">7</span><span style="font-size:14px;color:var(--text3);"> / 10</span></div>'+
+      '<input type="text" id="phx-rpe-notes" placeholder="Notes for your coach…" style="width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:13px;margin-bottom:16px;">'+
+      '<div style="display:flex;gap:10px;">'+
+        '<button id="phx-rpe-skip" class="btn-secondary" style="flex:1;padding:12px;margin:0;">Skip</button>'+
+        '<button id="phx-rpe-save" class="btn-primary" style="flex:1.4;padding:12px;">Save &amp; Continue</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  var slider = document.getElementById('phx-rpe-slider');
+  var sliderVal = document.getElementById('phx-rpe-val');
+  if(slider && sliderVal){
+    slider.addEventListener('input', function(){ sliderVal.textContent = slider.value; });
+  }
+  function close(){
+    overlay.remove();
+    // Scroll the next exercise block into view (idx+1) if it exists
+    var next = document.querySelector('.ex-block:nth-of-type('+(exIdx+2)+')');
+    if(next && next.scrollIntoView) next.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  document.getElementById('phx-rpe-skip').addEventListener('click', close);
+  document.getElementById('phx-rpe-save').addEventListener('click', function(){
+    var rpe = parseInt(slider ? slider.value : '0') || null;
+    var notesEl = document.getElementById('phx-rpe-notes');
+    var notes = notesEl ? (notesEl.value||'').trim() : '';
+    // PATCH the set_logs rows for this block. Match by session_id + exercise_name.
+    if(rpe || notes){
+      try {
+        if(typeof sb !== 'undefined' && currentSupabaseSessionId && ex && ex.name){
+          var patch = {};
+          if(rpe) patch.rpe = rpe;
+          if(notes) patch.notes = notes;
+          sb.from('set_logs').update(patch)
+            .eq('session_id', currentSupabaseSessionId)
+            .eq('exercise_name', ex.name)
+            .then(function(res){
+              if(res.error) console.error('[PHX] block-RPE update failed:', res.error);
+            });
+        }
+      } catch(e){ console.warn('[PHX] block-RPE skipped:', e); }
+    }
+    close();
+  });
+}
+
 function autoLogSet(row){
   if(!row) return;
   var exId=row.getAttribute('data-exid')||'';
@@ -8601,15 +8703,16 @@ function setupSplashButtons(){
 
 <!-- REST TIMER OVERLAY -->
 <div class="rest-overlay" id="rest-overlay">
-  <!-- Top ad banner -->
-  <div id="ad-rest-top" style="width:100%;background:rgba(0,0,0,0.6);border-bottom:1px solid var(--border);padding:8px 16px;text-align:center;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+  <!-- v4.7.15 FIX 3: ad banners hide for Pro accounts; gate enforced in startRestTimer. -->
+  <div id="ad-rest-top" class="phx-ad-slot" style="width:100%;background:rgba(0,0,0,0.6);border-bottom:1px solid var(--border);padding:8px 16px;text-align:center;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
     <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Advertisement</div>
     <!-- AdSense slot: rest-timer-top -->
   </div>
   <div class="rest-timer-label" style="margin-top:16px;">Rest</div>
   <div class="rest-timer-display" id="rt-display">3:00</div>
-  <div class="rest-timer-next" id="rt-next">Next set</div>
-  <div id="rt-next-info" style="font-family:var(--font-d);font-size:28px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:8px;display:none"></div>
+  <div id="rt-next" style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-top:14px;">Set 2</div>
+  <div id="rt-next-info" style="font-family:var(--font-d);font-size:28px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:4px;margin-top:2px;display:none"></div>
+  <div id="rt-cue" style="font-size:12px;color:var(--text3);font-style:italic;text-align:center;margin-bottom:12px;max-width:280px;line-height:1.4;display:none;"></div>
   <div class="rest-timer-bar-wrap"><div class="rest-timer-bar" id="rt-bar" style="width:100%"></div></div>
   <div id="rt-rest-selector" style="display:none;align-items:center;gap:8px;margin-bottom:16px;">
     <span style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase">Adjust Rest</span>
@@ -8622,12 +8725,11 @@ function setupSplashButtons(){
     </div>
   </div>
   <button class="rest-skip-btn" id="rt-skip">Skip Rest</button>
-  <!-- Bottom ad banner -->
-  <div id="ad-rest-bottom" style="width:100%;background:rgba(0,0,0,0.6);border-top:1px solid var(--border);padding:8px 16px;text-align:center;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:16px;">
+  <div id="ad-rest-bottom" class="phx-ad-slot" style="width:100%;background:rgba(0,0,0,0.6);border-top:1px solid var(--border);padding:8px 16px;text-align:center;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:16px;">
     <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Advertisement</div>
     <!-- AdSense slot: rest-timer-bottom -->
   </div>
-  <div onclick="navTo('coming')" style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;padding:10px;cursor:pointer;">Remove ads — unlock Phoenix</div>
+  <div id="rt-upgrade-link" onclick="navTo('coming')" style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;padding:10px;cursor:pointer;">Remove ads — unlock Phoenix</div>
 </div>
 
 <!-- EXERCISE PICKER MODAL -->
@@ -9655,6 +9757,81 @@ function phxFormatHeight(s){
   return out;
 }
 
+// v4.7.15 FIX 1: distil a possibly-verbose load_guidance string into a clean per-set TARGET label.
+// Handles weight, DB, band colour, bodyweight, percentage, distance, height — and falls back to
+// "—" for anything that's pure prose with no extractable weight.
+function phxExtractTargetWeight(s){
+  if(s==null) return '';
+  var raw = String(s).trim();
+  if(!raw) return '';
+  // Bodyweight tokens
+  if(/(?:^|\b)(bw|bodyweight|body\s*weight)\b/i.test(raw)) return 'Bodyweight';
+  // Band colour / type → preserve as text
+  var bandM = raw.match(/(green|blue|red|black|orange|yellow|purple|grey|gray|pink|white|light|heavy|medium)\s*band/i);
+  if(bandM){
+    return bandM[0].replace(/\b\w/g, function(c){return c.toUpperCase();});
+  }
+  // First weight pattern (kg / lb)
+  var kgM = raw.match(/(\d+(?:\.\d+)?)\s*kg\b/i);
+  if(kgM){
+    var dbHint = /\b(db|dumbbell)s?\b/i.test(raw) ? ' DB' : (/\b(kb|kettlebell)s?\b/i.test(raw) ? ' KB' : '');
+    return kgM[1]+'kg'+dbHint;
+  }
+  var lbM = raw.match(/(\d+(?:\.\d+)?)\s*(?:lb|lbs)\b/i);
+  if(lbM) return lbM[1]+'lb';
+  // Percentage
+  var pctM = raw.match(/(\d+(?:\.\d+)?)\s*%/);
+  if(pctM) return pctM[1]+'%';
+  // Inches / box-jump height
+  var inchM = raw.match(/(\d+(?:\.\d+)?)\s*(?:"|in\b|inch(?:es)?)/i);
+  if(inchM) return phxFormatHeight(inchM[1]+'"');
+  // cm height
+  var cmM = raw.match(/(\d+(?:\.\d+)?)\s*cm\b/i);
+  if(cmM) return phxFormatHeight(cmM[1]+'cm');
+  // Metres distance (only if not part of "1m" inside a sentence)
+  var mM = raw.match(/(\d+(?:\.\d+)?)\s*m\b(?!\w)/);
+  if(mM) return mM[1]+'m';
+  // Bare number → assume kg
+  var bareM = raw.match(/^(\d+(?:\.\d+)?)$/);
+  if(bareM) return bareM[1]+'kg';
+  // Long descriptive prose with no extractable weight → em-dash
+  if(raw.length > 10 && /\s/.test(raw)) return '—';
+  // Short token like "Heavy" / "Moderate" → surface as-is
+  return raw;
+}
+
+// v4.7.15 FIX 1: reps target for the small TARGET label above the blank reps input.
+function phxExtractTargetReps(reps){
+  if(reps==null) return '—';
+  var s = String(reps).trim();
+  if(!s) return '—';
+  if(/amrap/i.test(s)) return 'AMRAP';
+  return s;
+}
+
+// v4.7.15 FIX 2: a technique cue for the rest-timer subtext — extracted from coaching_note or
+// the long part of load_guidance after the weight. Clamped to 8 words.
+function phxTechniqueCue(ex){
+  if(!ex) return '';
+  // Prefer coaching_note when present
+  var src = ex.coaching_note || '';
+  if(!src && ex.load_guidance){
+    // Strip leading weight chunk (e.g. "60kg —" / "80% 1RM —") and use the remainder.
+    var rest = String(ex.load_guidance)
+      .replace(/^\s*\d+(?:\.\d+)?\s*(?:kg|lb|%)?\s*[-–—:|]*\s*/i,'')
+      .replace(/^\s*\d+(?:\.\d+)?\s*1RM\s*[-–—:|]*\s*/i,'')
+      .trim();
+    if(rest && rest.split(/\s+/).length >= 2) src = rest;
+  }
+  if(!src) return '';
+  // Drop trailing "x N reps" tail if present
+  src = String(src).replace(/\s*[x×]\s*\d+\s*reps?\s*$/i,'').trim();
+  // Clamp to 8 words
+  var words = src.split(/\s+/).filter(Boolean);
+  if(words.length > 8) src = words.slice(0,8).join(' ') + '…';
+  return src;
+}
+
 // v4.7.14 BUG 3: a load string that's just a bare number (e.g. "12" instead of "12kg") is
 // confusing on a movement tile. Default the unit to kg unless the string already carries one
 // or is a recognised non-weight token (BW, bodyweight, banded, technique, light, etc).
@@ -10616,19 +10793,37 @@ function openTodaySession(){
     for(var s=0;s<setsCount;s++){
       var setId='ai-'+i+'-'+s;
       var pctForSet = pctArr[s];
-      var kgForSet = '';
+      // v4.7.15 FIX 1: build the read-only TARGET label separately from the editable input.
+      // The input is BLANK by default — placeholder "—" — so the athlete types the actual
+      // weight/reps they used. The TARGET sits above the input, never editable.
+      var kgTarget = '';
       if(pctForSet !== null && baseRM > 0){
-        kgForSet = String(roundToEquipment(baseRM * pctForSet, equipType));
+        kgTarget = String(roundToEquipment(baseRM * pctForSet, equipType))+'kg';
       } else if(loadFallback){
-        kgForSet = loadFallback; // fallback: show raw guidance string
+        // Distil verbose load_guidance into a clean target label.
+        kgTarget = phxExtractTargetWeight(loadFallback);
       }
-      var repsForSet = isAmrap ? '' : (repsArr[s] != null ? repsArr[s] : '');
-      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">'+
+      if(!kgTarget) kgTarget = '—';
+      var repsTargetRaw = repsArr[s] != null ? repsArr[s] : (ex.reps||'');
+      var repsTarget = isAmrap ? 'AMRAP' : phxExtractTargetReps(repsTargetRaw);
+      // Stash the parsed targets on the row so the rest timer can read clean values
+      // instead of grabbing whatever the user has typed (or not typed) into the inputs.
+      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(kgTarget).replace(/"/g,'&quot;')+'" data-target-reps="'+String(repsTarget).replace(/"/g,'&quot;')+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-swipe-bg-right">DONE</div>'+
         '<div class="set-num">'+(s+1)+'</div>'+
-        '<div class="set-col"><input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="'+kgForSet+'" placeholder="kg" inputmode="decimal"><div class="set-input-label">kg</div></div>'+
-        '<div class="set-col"><input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="'+repsForSet+'" placeholder="reps" inputmode="numeric"><div class="set-input-label">reps</div></div>'+
+        '<div class="set-col" style="display:flex;flex-direction:column;align-items:stretch;">'+
+          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
+          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+kgTarget+'</div>'+
+          '<input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="decimal">'+
+          '<div class="set-input-label">kg</div>'+
+        '</div>'+
+        '<div class="set-col" style="display:flex;flex-direction:column;align-items:stretch;">'+
+          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
+          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+repsTarget+'</div>'+
+          '<input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="numeric">'+
+          '<div class="set-input-label">reps</div>'+
+        '</div>'+
         '<button class="set-done-btn" id="done-ai-'+i+'-'+s+'" data-exidx="'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">&#10003;</button>'+
         '</div>';
     }
@@ -10664,24 +10859,34 @@ function openTodaySession(){
       var setsCount=parseInt(ex.sets)||3;
       var restSec=parseInt(ex.rest_sec)||0;
       for(var s=0;s<setsCount;s++){
-        (function(exIdx,setIdx,rest){
+        (function(exIdx,setIdx,rest,exObj,totalSets){
           var btn=document.getElementById('done-ai-'+exIdx+'-'+setIdx);
           if(btn) btn.addEventListener('click',function(){
             this.classList.add('done');
             var row=document.getElementById('setrow-ai-'+exIdx+'-'+setIdx);
             if(row){row.style.background='rgba(200,150,62,0.08)';row.style.borderLeft='3px solid var(--gold)';autoLogSet(row);}
+            // v4.7.15 FIX 4: last set of the block → trigger the RPE prompt for this exercise.
+            // Skip the rest timer in this case — the user is moving exercises, not sets.
+            var isLastSetOfBlock = (setIdx >= totalSets - 1);
+            if(isLastSetOfBlock){
+              showExerciseBlockRPE(exIdx, exObj);
+              return;
+            }
             if(rest>0){
               var nextSetIdx=setIdx+1;
-              var nextLabel=nextSetIdx<setsCount?'Set '+(nextSetIdx+1):'Move to next exercise';
-              var nk='',nr='';
-              var nkEl=document.getElementById('kg-ai-'+exIdx+'-'+nextSetIdx);
-              var nrEl=document.getElementById('reps-ai-'+exIdx+'-'+nextSetIdx);
-              if(nkEl)nk=nkEl.value||'';
-              if(nrEl)nr=nrEl.value||'';
-              startRestTimer(rest,nextLabel,nk,nr);
+              var nextLabel='Set '+(nextSetIdx+1);
+              // v4.7.15 FIX 1/2: read clean prescribed targets off the next row, not whatever
+              // the user has typed (or hasn't) into the inputs.
+              var nextRow = document.getElementById('setrow-ai-'+exIdx+'-'+nextSetIdx);
+              var nk = nextRow ? (nextRow.getAttribute('data-target-kg')||'') : '';
+              var nr = nextRow ? (nextRow.getAttribute('data-target-reps')||'') : '';
+              if(nk === '—') nk = '';
+              if(nr === '—') nr = '';
+              var cue = phxTechniqueCue(exObj);
+              startRestTimer(rest, nextLabel, nk, nr, cue);
             }
           });
-        })(i,s,restSec);
+        })(i,s,restSec,ex,setsCount);
       }
     });
   },50);
@@ -11923,9 +12128,16 @@ if(typeof showScreen==='function'){
     }
     var result = _origShowScreen.apply(this, arguments);
     if(id === 'screen-session') _phxRestoreSessionVisualState();
+    // v4.7.15 FIX 3: every navigation reapplies the ad gate so any newly-rendered ad slot is hidden for Pro.
+    if(typeof _phxApplyAdGate==='function') _phxApplyAdGate();
     return result;
   };
 }
+
+// v4.7.15 FIX 3: also apply on initial load so the splash → today first paint hides ads for Pro accounts.
+document.addEventListener('DOMContentLoaded', function(){
+  if(typeof _phxApplyAdGate==='function') setTimeout(_phxApplyAdGate, 100);
+});
 
 // Best-effort visual restore: pull set_logs for the active session id and tag
 // any matching exercise/set DOM nodes as completed. The session screen

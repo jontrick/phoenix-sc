@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.14';
+var APP_VERSION='4.7.15';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9737,6 +9737,10 @@ function openPhoenixWOD(wodOverride){
   _phxCancelCountIn();
   var wod = wodOverride || PHOENIX_WOD_LIBRARY.getDailyWOD();
   if(!wod) return;
+  // v4.7.15: stamp source so the detail screen knows which selectors to render.
+  // Coach WODs already carry source:'coach' from _buildWodFromAISession.
+  // Library/daily WODs have no source set yet — default to 'library' on the way through.
+  if(!wod.source) wod.source = 'library';
   // The "active wod for this session" lives in window._activeWOD, NOT _todayWOD.
   // _todayWOD is reserved for the daily Phoenix WOD tile read by other surfaces.
   window._activeWOD = wod;
@@ -9751,9 +9755,10 @@ function openPhoenixWOD(wodOverride){
   if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
   window._wodTimer = null;
 
-  // v4.7.7 FIX 3: initialise per-WOD selection state. Default RX. Custom-loads object will populate
-  // when the user types into a CUSTOM input.
-  window._wodSelection = 'rx';
+  // v4.7.7 FIX 3 + v4.7.15: initialise per-WOD selection state.
+  // Library WODs default to RX (athlete picks their level). Coach WODs default to CUSTOM (coach
+  // already prescribed the load — only meaningful adjustment is per-movement editing).
+  window._wodSelection = (wod.source === 'coach') ? 'custom' : 'rx';
   window._wodCustomLoads = {};
 
   // Remove existing modal
@@ -9804,11 +9809,14 @@ function openPhoenixWOD(wodOverride){
       '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Today\'s WOD</div>'+
       '<div style="font-family:var(--font-d);font-size:42px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:2px;line-height:1;margin-bottom:4px;">'+wod.name+'</div>'+
       '<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:1px;margin-bottom:20px;">'+wod.format+'</div>'+
-      // v4.7.7 FIX 3: Rx / Scaled / Custom selector — sits ABOVE movements so the loads update live
+      // v4.7.7 FIX 3 + v4.7.15: selector row.
+      // - Library WOD → Rx / Scaled / Custom (athlete picks their level)
+      // - Coach WOD   → Custom only (coach already prescribed the load; the only meaningful action is to edit per movement)
       '<div style="display:flex;gap:6px;margin-bottom:14px;">'+
-        selBtn('rx','Rx')+
-        selBtn('scaled','Scaled')+
-        selBtn('custom','Custom')+
+        ((wod.source === 'coach')
+          ? selBtn('custom','Custom')
+          : (selBtn('rx','Rx') + selBtn('scaled','Scaled') + selBtn('custom','Custom'))
+        )+
       '</div>'+
       '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">'+
         '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Movements &middot; '+sel.toUpperCase()+'</div>'+
@@ -9905,6 +9913,8 @@ function _buildWodFromAISession(sess){
     });
     var capMin = w.duration_sec ? Math.round(w.duration_sec/60) : (sess.duration_min||0);
     return {
+      // v4.7.15: tag this WOD as coach-generated so the detail screen shows only the Custom selector.
+      source: 'coach',
       id: 'ai-'+(sess.day||'today'),
       name: w.name || 'Phoenix WOD',
       tier: w.tier || 'AI',
@@ -9970,6 +9980,8 @@ function _buildWodFromAISession(sess){
   }
   if(!movs.length) movs = [{name: ex.name||'WOD', sets:0, reps:'', load_rx: ex.load_guidance||'', load_scaled:''}];
   return {
+    // v4.7.15: legacy AI WOD path also tagged as coach-generated.
+    source: 'coach',
     id: 'ai-legacy-'+(sess.day||'today'),
     name: ex.name ? ex.name.replace(/^Phoenix\s*WOD\s*[-—:]+\s*/i,'').replace(/^['"]|['"]$/g,'') : 'Phoenix WOD',
     tier: 'AI',

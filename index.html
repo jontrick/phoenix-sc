@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.12';
+var APP_VERSION='4.7.13';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9658,6 +9658,19 @@ function phxMovementLoad(m, selection, idx){
   return m.load_rx || '';
 }
 
+// v4.7.13: SINGLE CHOKEPOINT for rendering a movement's load string into a tile.
+// Every WOD movement tile across detail screen + AFAP / AMRAP / EMOM / Strength renderers
+// must call this helper. Direct rendering of m.load_rx / m.load_scaled / m.load_scale anywhere
+// in tile HTML is a regression — the only string that ever appears is what this returns,
+// which is always exactly one load (per the active selection) or an empty string.
+function phxRenderMovementLoad(m, idx, extraStyle){
+  var sel = window._wodSelection || 'rx';
+  var ld = phxFormatHeight(phxMovementLoad(m, sel, idx));
+  if(!ld) return '';
+  var style = 'font-size:11px;color:var(--text3);margin-top:4px;'+(extraStyle||'');
+  return '<div style="'+style+'">'+ld+'</div>';
+}
+
 // v4.7.8 BUG 2: openPhoenixWOD now accepts an explicit wodOverride argument.
 // - No argument → ALWAYS the date-hashed library daily WOD (Daily Phoenix WOD tile path)
 // - Argument given → that specific wod (coach-prescribed WOD path, see openTodaySession)
@@ -9702,14 +9715,15 @@ function openPhoenixWOD(wodOverride){
   function _renderDetail(){
     var sel = window._wodSelection || 'rx';
     var movHTML = (wod.movements||[]).map(function(m,idx){
-      var loadStr = phxFormatHeight(phxMovementLoad(m, sel, idx));
       var rightCol;
       if(sel === 'custom'){
         var customVal = (window._wodCustomLoads[idx] != null) ? window._wodCustomLoads[idx] : (m.load_rx || '');
         rightCol = '<input type="text" class="q-input" value="'+String(customVal).replace(/"/g,'&quot;')+'" oninput="window._wodCustomLoads['+idx+']=this.value;" style="max-width:140px;text-align:right;font-size:13px;padding:8px 10px;">';
       } else {
-        // v4.7.12 FIX 2: show only the load for the active selection — no stacking of Rx + Scaled.
-        rightCol = '<div class="wod-movement-detail">'+loadStr+'</div>';
+        // v4.7.13: route through the single phxRenderMovementLoad chokepoint.
+        // The wod-movement-detail wrapper is preserved for the existing CSS styling (gold, right-aligned).
+        var ld = phxFormatHeight(phxMovementLoad(m, sel, idx));
+        rightCol = ld ? '<div class="wod-movement-detail">'+ld+'</div>' : '';
       }
       return '<div style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;">'+
         '<div style="flex:1;">'+
@@ -9979,7 +9993,7 @@ function startWODTimer(modalId){
         '<div style="flex:1;">'+
           '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
           (m.reps?'<div style="font-size:13px;color:var(--gold);margin-top:2px;font-family:var(--font-d);">'+m.reps+' reps</div>':'')+
-          (function(){var ld=phxFormatHeight(phxMovementLoad(m,window._wodSelection,i));return ld?'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+ld+'</div>':'';})()+
+          phxRenderMovementLoad(m, i, 'margin-top:2px;')+
         '</div>'+
         (done
           ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
@@ -10032,7 +10046,7 @@ function startWODTimer(modalId){
           '<div style="flex:1;">'+
             '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+m.name+'</div>'+
             (m.reps?'<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--orange);margin-top:6px;line-height:1;">'+m.reps+'</div>':'')+
-            (function(){var ld=phxFormatHeight(phxMovementLoad(m,window._wodSelection,i));return ld?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+ld+'</div>':'';})()+
+            phxRenderMovementLoad(m, i, 'margin-top:4px;')+
           '</div>'+
           (done
             ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
@@ -10130,19 +10144,18 @@ function startWODTimer(modalId){
     var nextIdx = (t.emomMovIdx+1) % Math.max(1, movements.length);
     var nowMov = movements[nowIdx] || null;
     var nextMov = movements[nextIdx] || null;
-    var nowLoad = nowMov ? phxFormatHeight(phxMovementLoad(nowMov, window._wodSelection, nowIdx)) : '';
-    var nextLoad = nextMov ? phxFormatHeight(phxMovementLoad(nextMov, window._wodSelection, nextIdx)) : '';
+    // v4.7.13: route through phxRenderMovementLoad single chokepoint.
     var nowHTML = nowMov ? '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:18px;margin-bottom:10px;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">This minute</div>'+
       '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;">'+nowMov.name+'</div>'+
       (nowMov.reps?'<div style="font-family:var(--font-d);font-size:16px;color:var(--gold);margin-top:4px;">'+nowMov.reps+' reps</div>':'')+
-      (nowLoad?'<div style="font-size:12px;color:var(--text2);margin-top:2px;">'+nowLoad+'</div>':'')+
+      phxRenderMovementLoad(nowMov, nowIdx, 'color:var(--text2);font-size:12px;margin-top:2px;')+
       '</div>' : '';
     var nextHTML = (nextMov && nextMov!==nowMov) ? '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;opacity:0.7;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Next minute</div>'+
       '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text2);line-height:1;">'+nextMov.name+'</div>'+
       (nextMov.reps?'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+nextMov.reps+' reps</div>':'')+
-      (nextLoad?'<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+nextLoad+'</div>':'')+
+      phxRenderMovementLoad(nextMov, nextIdx, 'margin-top:2px;')+
       '</div>' : '';
     inner.innerHTML='<div style="padding-top:20px;">'+
       _headerHTML('EVERY MINUTE ON THE MINUTE')+
@@ -10164,12 +10177,12 @@ function startWODTimer(modalId){
   function _renderStrength(){
     var t=window._wodTimer;
     var nowMov=movements[0]||null;
-    var sLoad = nowMov ? phxFormatHeight(phxMovementLoad(nowMov, window._wodSelection, 0)) : '';
+    // v4.7.13: route through phxRenderMovementLoad single chokepoint.
     var movHTML = (nowMov ? '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Movement</div>'+
       '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+nowMov.name+'</div>'+
       (nowMov.sets||nowMov.reps?'<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);margin-top:6px;">'+(nowMov.sets?nowMov.sets+' sets':'')+(nowMov.sets&&nowMov.reps?' &times; ':'')+(nowMov.reps?nowMov.reps+' reps':'')+'</div>':'')+
-      (sLoad?'<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+sLoad+'</div>':'')+
+      phxRenderMovementLoad(nowMov, 0, 'color:var(--text2);font-size:12px;margin-top:4px;')+
     '</div>' : '');
     inner.innerHTML='<div style="padding-top:20px;">'+
       _headerHTML(wod.format)+

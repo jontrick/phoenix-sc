@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.16';
+var APP_VERSION='4.7.17';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4442,19 +4442,20 @@ function startRestTimer(secs,nextLabel,nextKg,nextReps,cue,isPrescribed){
   rtTotal=secs;
   rtEndTime=Date.now()+(secs*1000);
   document.getElementById('rt-next').textContent=nextLabel||'Next set';
-  // Compose the prescription cleanly: "77.5kg × 3 reps" (or just one side if the other is missing)
+  // v4.7.17 FIX 2: render the next-set prescription as two adjacent gold boxes (load + reps).
   var nextInfo=document.getElementById('rt-next-info');
   if(nextInfo){
     var kgClean = phxExtractTargetWeight(nextKg||'');
     var repsClean = nextReps ? String(nextReps).trim() : '';
-    if(kgClean && kgClean!=='—' || repsClean){
-      var parts = [];
-      if(kgClean && kgClean!=='—') parts.push(kgClean);
-      if(repsClean) parts.push(repsClean+' reps');
-      nextInfo.textContent = parts.join(' × ');
-      nextInfo.style.display='block';
+    var hasAny = (kgClean && kgClean!=='—') || repsClean;
+    if(hasAny){
+      // Use the shared box renderer. Pass an empty exName so the default kg/reps units apply.
+      var loadForBox = (kgClean && kgClean!=='—') ? kgClean : '';
+      nextInfo.innerHTML = phxRenderTargetBoxes(loadForBox, repsClean, '');
+      nextInfo.style.display = 'block';
     } else {
-      nextInfo.style.display='none';
+      nextInfo.style.display = 'none';
+      nextInfo.innerHTML = '';
     }
   }
   // Technique cue (≤8 words). Hide if empty.
@@ -8726,7 +8727,8 @@ function setupSplashButtons(){
   <div class="rest-timer-label" style="margin-top:16px;">Rest</div>
   <div class="rest-timer-display" id="rt-display">3:00</div>
   <div id="rt-next" style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-top:14px;">Set 2</div>
-  <div id="rt-next-info" style="font-family:var(--font-d);font-size:28px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:4px;margin-top:2px;display:none"></div>
+  <!-- v4.7.17 FIX 2: rest-timer next-set preview now uses the same two-box layout as movement cards -->
+  <div id="rt-next-info" style="margin-bottom:4px;margin-top:6px;display:none;"></div>
   <div id="rt-cue" style="font-size:12px;color:var(--text3);font-style:italic;text-align:center;margin-bottom:12px;max-width:280px;line-height:1.4;display:none;"></div>
   <div class="rest-timer-bar-wrap"><div class="rest-timer-bar" id="rt-bar" style="width:100%"></div></div>
   <!-- v4.7.16 FIX 3: two control modes. Both default hidden; startRestTimer reveals one or the other. -->
@@ -9776,6 +9778,68 @@ function phxFormatHeight(s){
   return out;
 }
 
+// v4.7.17: which unit suffix sits OUTSIDE the editable input for a given exercise.
+// Used by both session set rows and the right-side label of the input field.
+//   box jump          → 'in'
+//   carry             → 'm'
+//   plank/hold/wallsit→ 'sec'  (load is meaningless; right label says "sec" instead of "reps")
+//   default           → 'kg'
+function phxExerciseUnitClass(exName){
+  var n = String(exName||'').toLowerCase();
+  if(/\bbox\s*jump|step[-\s]?up\s+box\b/.test(n)) return 'in';
+  if(/\bcarry|farmers|yoke|sandbag\b/.test(n)) return 'm';
+  if(/\bplank|hold|wall\s*sit|bridge|hang\b/.test(n)) return 'sec';
+  return 'kg';
+}
+
+// v4.7.17: render the two adjacent target boxes (left=load, right=reps).
+// Returns '' if both are empty/missing — caller can drop the wrapper entirely.
+function phxRenderTargetBoxes(loadStr, repsStr, exName){
+  var ucls = phxExerciseUnitClass(exName);
+  var n = String(exName||'').toLowerCase();
+  var isHold = ucls === 'sec';
+  // Load box content
+  var loadBox = '';
+  if(loadStr && loadStr !== '—' && !isHold){
+    loadBox = String(loadStr);
+  } else if(isHold){
+    // Holds have no load → suppress the load box
+    loadBox = '';
+  }
+  // Reps box content. Holds use "sec" instead of "reps".
+  var repsBox = '';
+  if(repsStr && repsStr !== '—'){
+    var clean = String(repsStr).trim();
+    // If reps already includes a unit (sec, reps, m, etc), don't double it.
+    if(/\b(reps?|sec|seconds?|m|cm|in|min|minutes?)\b/i.test(clean)){
+      repsBox = clean;
+    } else {
+      repsBox = clean + (isHold ? ' sec' : ' reps');
+    }
+  }
+  if(!loadBox && !repsBox) return '';
+  var boxStyle = 'border-radius:8px;border:1px solid var(--gold);background:var(--bg3);padding:8px 16px;text-align:center;font-size:16px;font-weight:500;color:var(--gold);min-width:64px;';
+  var html = '<div style="display:inline-flex;gap:8px;margin-top:10px;flex-wrap:wrap;">';
+  if(loadBox) html += '<div style="'+boxStyle+'">'+loadBox+'</div>';
+  if(repsBox) html += '<div style="'+boxStyle+'">'+repsBox+'</div>';
+  html += '</div>';
+  return html;
+}
+
+// v4.7.17 FIX 3: strip a unit off a value for an editable input.
+// "60kg" → "60", "24in" → "24", "Bodyweight" → "" (numeric-only inputs reject text).
+function phxStripUnit(s){
+  if(s==null) return '';
+  var raw = String(s).trim();
+  if(!raw) return '';
+  // If it's already pure numeric → return as-is
+  if(/^\d+(?:\.\d+)?$/.test(raw)) return raw;
+  // Pull leading number out
+  var m = raw.match(/^(\d+(?:\.\d+)?)\s*(?:kg|lb|lbs|cm|m|in|"|%|sec|secs?|min|mins?|reps?)?\b/i);
+  if(m) return m[1];
+  return ''; // non-numeric (e.g. "Bodyweight") becomes empty for a number input
+}
+
 // v4.7.15 FIX 1: distil a possibly-verbose load_guidance string into a clean per-set TARGET label.
 // Handles weight, DB, band colour, bodyweight, percentage, distance, height — and falls back to
 // "—" for anything that's pure prose with no extractable weight.
@@ -9970,23 +10034,37 @@ function openPhoenixWOD(wodOverride){
 
   function _renderDetail(){
     var sel = window._wodSelection || 'rx';
+    // v4.7.17 FIX 2: each movement card is name-on-top + two adjacent gold-bordered boxes (reps, load).
+    // v4.7.17 FIX 3: in Custom mode the load box becomes a numeric input with the unit label OUTSIDE.
     var movHTML = (wod.movements||[]).map(function(m,idx){
-      var rightCol;
-      if(sel === 'custom'){
-        var customVal = (window._wodCustomLoads[idx] != null) ? window._wodCustomLoads[idx] : (m.load_rx || '');
-        rightCol = '<input type="text" class="q-input" value="'+String(customVal).replace(/"/g,'&quot;')+'" oninput="window._wodCustomLoads['+idx+']=this.value;" style="max-width:140px;text-align:right;font-size:13px;padding:8px 10px;">';
-      } else {
-        // v4.7.13: route through the single phxRenderMovementLoad chokepoint.
-        // The wod-movement-detail wrapper is preserved for the existing CSS styling (gold, right-aligned).
-        var ld = phxFormatHeight(phxMovementLoad(m, sel, idx));
-        rightCol = ld ? '<div class="wod-movement-detail">'+ld+'</div>' : '';
+      var unitClass = phxExerciseUnitClass(m.name);
+      var unitLabel = unitClass === 'sec' ? '' : unitClass;
+      var loadStr = phxFormatHeight(phxMovementLoad(m, sel, idx));
+      var boxStyle = 'border-radius:8px;border:1px solid var(--gold);background:var(--bg3);padding:8px 16px;text-align:center;font-size:16px;font-weight:500;color:var(--gold);min-width:64px;';
+      var repsBox = '';
+      if(m.reps){
+        var rRaw = String(m.reps).trim();
+        var rTxt = /\b(reps?|sec|seconds?|m|cm|in|min|minutes?)\b/i.test(rRaw) ? rRaw : (rRaw + (unitClass==='sec'?' sec':' reps'));
+        repsBox = '<div style="'+boxStyle+'">'+rTxt+'</div>';
       }
-      return '<div style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;">'+
-        '<div style="flex:1;">'+
-          '<div class="wod-movement-name">'+m.name+'</div>'+
-          (m.reps?'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+m.reps+(/^\d+$/.test(String(m.reps))?' reps':'')+'</div>':'')+
-        '</div>'+
-        '<div style="text-align:right;min-width:120px;">'+rightCol+'</div>'+
+      var loadBoxHTML = '';
+      if(sel === 'custom'){
+        // Editable: numeric input + external unit label.
+        var customVal = (window._wodCustomLoads[idx] != null) ? window._wodCustomLoads[idx] : phxStripUnit(m.load_rx || '');
+        var inputBoxStyle = 'border-radius:8px;border:1px solid var(--gold);background:var(--bg3);padding:6px 10px;display:inline-flex;align-items:center;gap:6px;';
+        loadBoxHTML = '<div style="'+inputBoxStyle+'">'+
+          '<input type="number" inputmode="decimal" value="'+String(customVal).replace(/"/g,'&quot;')+'" placeholder="—" oninput="window._wodCustomLoads['+idx+']=this.value;" style="width:70px;background:transparent;border:none;color:var(--gold);font-size:16px;font-weight:500;text-align:center;outline:none;padding:2px 0;">'+
+          (unitLabel?'<span style="font-family:var(--font-d);font-size:12px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;">'+unitLabel+'</span>':'')+
+        '</div>';
+      } else if(loadStr && unitClass !== 'sec'){
+        loadBoxHTML = '<div style="'+boxStyle+'">'+loadStr+'</div>';
+      }
+      var boxesRow = (repsBox || loadBoxHTML)
+        ? '<div style="display:inline-flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'+repsBox+loadBoxHTML+'</div>'
+        : '';
+      return '<div style="padding:14px 0;border-bottom:1px solid var(--border);">'+
+        '<div class="wod-movement-name" style="font-size:18px;">'+m.name+'</div>'+
+        boxesRow+
       '</div>';
     }).join('');
 
@@ -10255,11 +10333,13 @@ function startWODTimer(modalId){
     var t=window._wodTimer;
     var movHTML = movements.map(function(m,i){
       var done = i<=t.doneIdx;
+      // v4.7.17 FIX 2: name on top + two adjacent gold-bordered boxes (reps, load).
+      var loadStr = phxFormatHeight(phxMovementLoad(m, window._wodSelection, i));
+      var boxes = phxRenderTargetBoxes(loadStr, m.reps, m.name);
       return '<div data-mov-idx="'+i+'" style="display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border:1px solid '+(done?'var(--gold)':'var(--border)')+';border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;'+(done?'opacity:0.55;':'')+'">'+
         '<div style="flex:1;">'+
           '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
-          (m.reps?'<div style="font-size:13px;color:var(--gold);margin-top:2px;font-family:var(--font-d);">'+m.reps+' reps</div>':'')+
-          phxRenderMovementLoad(m, i, 'margin-top:2px;')+
+          boxes+
         '</div>'+
         (done
           ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
@@ -10307,12 +10387,14 @@ function startWODTimer(modalId){
       var opacity = done ? '0.5' : '1';
       var clickHandler = current ? 'onclick="window._wodAmrapTickCard('+i+')"' : '';
       var cursor = current ? 'cursor:pointer;' : '';
+      // v4.7.17 FIX 2: name + two adjacent gold-bordered boxes (reps, load).
+      var amrapLoad = phxFormatHeight(phxMovementLoad(m, window._wodSelection, i));
+      var amrapBoxes = phxRenderTargetBoxes(amrapLoad, m.reps, m.name);
       return '<div data-mov-idx="'+i+'" '+clickHandler+' style="background:'+bg+';border:1px solid '+border+';border-radius:var(--radius);padding:18px 16px;margin-bottom:10px;opacity:'+opacity+';'+cursor+'transition:all 0.15s;">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
           '<div style="flex:1;">'+
             '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+m.name+'</div>'+
-            (m.reps?'<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--orange);margin-top:6px;line-height:1;">'+m.reps+'</div>':'')+
-            phxRenderMovementLoad(m, i, 'margin-top:4px;')+
+            amrapBoxes+
           '</div>'+
           (done
             ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
@@ -10410,18 +10492,20 @@ function startWODTimer(modalId){
     var nextIdx = (t.emomMovIdx+1) % Math.max(1, movements.length);
     var nowMov = movements[nowIdx] || null;
     var nextMov = movements[nextIdx] || null;
-    // v4.7.13: route through phxRenderMovementLoad single chokepoint.
+    // v4.7.17 FIX 2: name + two adjacent gold-bordered boxes (reps, load) for now and next.
+    var nowLoad  = nowMov  ? phxFormatHeight(phxMovementLoad(nowMov,  window._wodSelection, nowIdx))  : '';
+    var nextLoad = nextMov ? phxFormatHeight(phxMovementLoad(nextMov, window._wodSelection, nextIdx)) : '';
+    var nowBoxes  = nowMov  ? phxRenderTargetBoxes(nowLoad,  nowMov.reps,  nowMov.name)  : '';
+    var nextBoxes = nextMov ? phxRenderTargetBoxes(nextLoad, nextMov.reps, nextMov.name) : '';
     var nowHTML = nowMov ? '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:18px;margin-bottom:10px;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">This minute</div>'+
       '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;">'+nowMov.name+'</div>'+
-      (nowMov.reps?'<div style="font-family:var(--font-d);font-size:16px;color:var(--gold);margin-top:4px;">'+nowMov.reps+' reps</div>':'')+
-      phxRenderMovementLoad(nowMov, nowIdx, 'color:var(--text2);font-size:12px;margin-top:2px;')+
+      nowBoxes+
       '</div>' : '';
     var nextHTML = (nextMov && nextMov!==nowMov) ? '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;opacity:0.7;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Next minute</div>'+
       '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text2);line-height:1;">'+nextMov.name+'</div>'+
-      (nextMov.reps?'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+nextMov.reps+' reps</div>':'')+
-      phxRenderMovementLoad(nextMov, nextIdx, 'margin-top:2px;')+
+      nextBoxes+
       '</div>' : '';
     inner.innerHTML='<div style="padding-top:20px;">'+
       _headerHTML('EVERY MINUTE ON THE MINUTE')+
@@ -10443,12 +10527,14 @@ function startWODTimer(modalId){
   function _renderStrength(){
     var t=window._wodTimer;
     var nowMov=movements[0]||null;
-    // v4.7.13: route through phxRenderMovementLoad single chokepoint.
+    // v4.7.17 FIX 2: name + two adjacent gold-bordered boxes (reps, load). Sets count stays in scheme line.
+    var sLoad = nowMov ? phxFormatHeight(phxMovementLoad(nowMov, window._wodSelection, 0)) : '';
+    var sBoxes = nowMov ? phxRenderTargetBoxes(sLoad, nowMov.reps, nowMov.name) : '';
     var movHTML = (nowMov ? '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px;">'+
       '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Movement</div>'+
       '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">'+nowMov.name+'</div>'+
-      (nowMov.sets||nowMov.reps?'<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);margin-top:6px;">'+(nowMov.sets?nowMov.sets+' sets':'')+(nowMov.sets&&nowMov.reps?' &times; ':'')+(nowMov.reps?nowMov.reps+' reps':'')+'</div>':'')+
-      phxRenderMovementLoad(nowMov, 0, 'color:var(--text2);font-size:12px;margin-top:4px;')+
+      (nowMov.sets?'<div style="font-family:var(--font-d);font-size:13px;color:var(--text3);margin-top:4px;letter-spacing:1px;text-transform:uppercase;">'+nowMov.sets+' sets</div>':'')+
+      sBoxes+
     '</div>' : '');
     inner.innerHTML='<div style="padding-top:20px;">'+
       _headerHTML(wod.format)+
@@ -10812,8 +10898,8 @@ function openTodaySession(){
       // No percentage we can parse — surface the raw guidance text for the athlete to read
       loadFallback = String(ex.load_guidance);
     }
-    // v4.7.16 FIX 1: pre-compute every set's target so we can decide whether targets are
-    // uniform (show once in header) or per-set (show inline above each row).
+    // v4.7.17 FIX 1: pre-compute per-set targets (still used for rest-timer next-set hint).
+    // The header now shows the FIRST set's target via Section 2 boxes; per-row TARGET labels are removed.
     var perSetTargets = [];
     for(var sp=0;sp<setsCount;sp++){
       var pctSp = pctArr[sp];
@@ -10828,41 +10914,28 @@ function openTodaySession(){
       var repsT = isAmrap ? 'AMRAP' : phxExtractTargetReps(repsRaw);
       perSetTargets.push({kg: kgT, reps: repsT});
     }
-    var allKgsSame = perSetTargets.every(function(t){return t.kg === perSetTargets[0].kg;});
-    var allRepsSame = perSetTargets.every(function(t){return t.reps === perSetTargets[0].reps;});
-    // Stash the uniformity flags so the block header can render the single TARGET line.
-    var headerTargetKg = allKgsSame ? perSetTargets[0].kg : '';
-    var headerTargetReps = allRepsSame ? perSetTargets[0].reps : '';
+    // v4.7.17 FIX 1: external unit labels per exercise type.
+    var unitClass = phxExerciseUnitClass(ex.name);
+    var loadUnitLabel = unitClass === 'sec' ? '' : unitClass;   // holds: no kg input
+    var repsUnitLabel = unitClass === 'sec' ? 'sec' : 'reps';
+    // 6-column grid: set# | input | unit | input | unit | tick
+    var setsGrid = unitClass === 'sec'
+      ? '28px 1fr auto auto'                       // hold: tick is on the right of reps; no load input
+      : '28px 90px auto 90px auto auto';
 
     for(var s=0;s<setsCount;s++){
       var setId='ai-'+i+'-'+s;
       var t = perSetTargets[s];
-      // Per-row target line ONLY when the sets differ on that axis (e.g. wave loading 60/70/80).
-      var perRowKgHTML = !allKgsSame
-        ? '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
-          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+t.kg+'</div>'
-        : '';
-      var perRowRepsHTML = !allRepsSame
-        ? '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
-          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+t.reps+'</div>'
-        : '';
-      // Stash the parsed targets on the row so the rest timer can read clean values
-      // instead of grabbing whatever the user has typed (or not typed) into the inputs.
-      // v4.7.16 FIX 2: text-align:center on inputs so "—" placeholder + typed values centre cleanly.
-      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(t.kg).replace(/"/g,'&quot;')+'" data-target-reps="'+String(t.reps).replace(/"/g,'&quot;')+'">'+
+      var loadInputHTML = unitClass === 'sec' ? '' :
+        '<input type="number" class="set-input" id="kg-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="decimal" style="text-align:center;width:100%;">' +
+        '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:0 8px;">'+loadUnitLabel+'</div>';
+      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+setsGrid+';align-items:center;" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(t.kg).replace(/"/g,'&quot;')+'" data-target-reps="'+String(t.reps).replace(/"/g,'&quot;')+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-swipe-bg-right">DONE</div>'+
         '<div class="set-num">'+(s+1)+'</div>'+
-        '<div class="set-col" style="display:flex;flex-direction:column;align-items:stretch;">'+
-          perRowKgHTML+
-          '<input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="decimal" style="text-align:center;">'+
-          '<div class="set-input-label">kg</div>'+
-        '</div>'+
-        '<div class="set-col" style="display:flex;flex-direction:column;align-items:stretch;">'+
-          perRowRepsHTML+
-          '<input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="numeric" style="text-align:center;">'+
-          '<div class="set-input-label">reps</div>'+
-        '</div>'+
+        loadInputHTML+
+        '<input type="number" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="numeric" style="text-align:center;width:100%;">'+
+        '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:0 8px;">'+repsUnitLabel+'</div>'+
         '<button class="set-done-btn" id="done-ai-'+i+'-'+s+'" data-exidx="'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">&#10003;</button>'+
         '</div>';
     }
@@ -10881,23 +10954,17 @@ function openTodaySession(){
       var next=exercises[i+1];
       upNextHTML='<div style="padding:8px 20px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);background:var(--bg2);border-bottom:1px solid var(--border);">Up next: <span style="color:var(--text2);">'+next.name+'</span></div>';
     }
-    // v4.7.16 FIX 1: header-level TARGET line (kg / reps), shown only for whichever axis is uniform.
-    // When sets differ on an axis, the per-row TARGET is rendered above that row instead.
-    var headerTargetHTML = '';
-    if(headerTargetKg || headerTargetReps){
-      var parts = [];
-      if(headerTargetKg)   parts.push('<span style="color:var(--text3);">Target kg:</span> <span style="color:var(--gold);">'+headerTargetKg+'</span>');
-      if(headerTargetReps) parts.push('<span style="color:var(--text3);">Target reps:</span> <span style="color:var(--gold);">'+headerTargetReps+'</span>');
-      headerTargetHTML = '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">'+parts.join('')+'</div>';
-    }
-    block.innerHTML='<div class="ex-block-header"><div>'+
+    // v4.7.17 FIX 1 SECTION 2: target boxes — load + reps — sit below the coaching note.
+    // Uses the FIRST set's targets as the headline value (most common case = uniform sets).
+    var firstT = perSetTargets[0] || {kg:'', reps:''};
+    var targetBoxesHTML = phxRenderTargetBoxes(firstT.kg, firstT.reps, ex.name);
+    block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
       '<div class="ex-name">'+ex.name+'</div>'+
-      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+'</div>'+
-      headerTargetHTML+
-      (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">'+ex.coaching_note+'</div>':'')+
+      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+'</div>'+
+      (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
+      targetBoxesHTML+
       '</div></div>'+
-      '<div class="set-header-row"><div></div><div class="set-col-label">kg</div><div class="set-col-label">reps</div><div></div></div>'+
       setsHTML;
     body.appendChild(block);
     if(upNextHTML){var upDiv=document.createElement('div');upDiv.innerHTML=upNextHTML;body.appendChild(upDiv.firstChild);}

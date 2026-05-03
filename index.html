@@ -2314,6 +2314,12 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div><label class="q-label" style="font-size:11px;">Wingate 30s peak watts</label><input class="q-input" type="number" id="fq-wingate" placeholder="0 = unknown" oninput="fqAnswers.wingate=parseFloat(this.value)||0" style="margin-top:4px;"></div>
     </div>
   </div>
+
+  <!-- v4.7.19 BUILD 1: free-text coach notes — sits at the end of Step 4. Optional. -->
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">E — Notes for your coach</div>
+  <label class="q-label" style="margin-bottom:4px;display:block;">Anything else your coach should know?</label>
+  <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Training goals, upcoming events, life context, injury history not covered above — anything that helps your coach build the right programme.</div>
+  <textarea id="fq-coach-notes" class="q-input" rows="4" placeholder="e.g. I want to complete the Phoenix Agoge by July 4th. I travel for work 2 weeks per month. I had a shoulder reconstruction in 2019…" oninput="fqAnswers.coachNotes=this.value" style="resize:vertical;min-height:96px;"></textarea>
 </div>
 
 <!-- STEP 5: Schedule mode gateway -->
@@ -3018,6 +3024,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
       <div><div class="sidebar-item-text">My Profile</div><div class="sidebar-item-sub">Goals, injuries, programme path</div></div>
     </div>
+    <!-- v4.7.19 BUILD 2 -->
+    <div class="sidebar-item" onclick="closeSidebar();openWeeklyCheckin()">
+      <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg></div>
+      <div><div class="sidebar-item-text">Weekly Check-in</div><div class="sidebar-item-sub">Review the week with your coach</div></div>
+    </div>
     <div class="sidebar-item" onclick="closeSidebar();showScreen('screen-story')">
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
       <div><div class="sidebar-item-text">Our Story</div><div class="sidebar-item-sub">Why Phoenix exists</div></div>
@@ -3061,7 +3072,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.18';
+var APP_VERSION='4.7.19';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3803,7 +3814,9 @@ function showScreen(id){
   if(id==='screen-themes'){renderThemesScreen();updateFontSwatches();}
 }
 function navTo(tab){
-  var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk'};
+  // v4.7.19 BUILD 2: weekly-checkin is reachable via navTo('weekly-checkin') so the back button
+  // and any other nav surface can route to it the same way as the other screens.
+  var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk','weekly-checkin':'screen-weekly-checkin'};
   if(map[tab]){
     showScreen(map[tab]);
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -3814,6 +3827,7 @@ function navTo(tab){
   if(tab==='stats') renderStats();
   if(tab==='athlete') renderAthlete();
   if(tab==='walk') openWalkLog();
+  if(tab==='weekly-checkin') openWeeklyCheckin();
 }
 
 // ====== ONBOARDING ======
@@ -6267,6 +6281,12 @@ Always err on the side of caution. When in doubt, substitute rather than include
 Also read every entry in fqInjury (each has area, side, and detail). Treat the detail field as authoritative — it is the athlete's own words about what hurts and what to avoid.
 
 ================================================================
+ATHLETE NOTES (read fqCoachNotes)
+================================================================
+
+The athlete has provided additional context for programme design. Read carefully — this may contain specific goals, events, travel patterns, injury history, or lifestyle factors that should directly influence the programme structure, exercise selection, and timeline. If the notes mention a specific event date, peak the programme to that date. If they mention travel, build in flexible/portable session options for those weeks. If they mention old injuries not captured in the structured injury fields, treat them with the same contraindication weight as the structured entries.
+
+================================================================
 CONDITIONING AND WOD SELECTION
 ================================================================
 
@@ -6681,6 +6701,8 @@ function buildAthleteProfile(trigger, checkIn){
       cycle_sync: a.cycleSync || false,
       path: a.fqPath || 'phoenix',
       waiver_accepted: a.fqWaiverAccepted || false,
+      // v4.7.19 BUILD 1: free-text notes the athlete wrote during onboarding
+      coach_notes: a.fqCoachNotes || '',
       test_scores: {
         bench_1rm: a.b1rm || 0,
         bench_100kg_reps: a.b100 || 0,
@@ -8717,6 +8739,119 @@ function setupSplashButtons(){
 <div class="session-body" id="session-body-content"></div>
 </div>
 
+<!-- v4.7.19 BUILD 2: WEEKLY CHECK-IN SCREEN
+  ============================================================
+  Supabase table needed (run once):
+
+    CREATE TABLE IF NOT EXISTS public.weekly_checkins (
+      id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id              uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+      week_number          integer NOT NULL,
+      week_start_date      date NOT NULL,
+      sessions_completed   integer,
+      sessions_planned     integer,
+      total_volume_kg      numeric,
+      total_distance_m     numeric,
+      wods_completed       integer,
+      weight_kg            numeric,
+      feeling_score        smallint,
+      sleep_score          smallint,
+      energy_score         smallint,
+      niggle_notes         text,
+      coach_notes          text,
+      next_week_requests   text,
+      continue_programme   boolean,
+      submitted_at         timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (user_id, week_number, week_start_date)
+    );
+    ALTER TABLE public.weekly_checkins ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "weekly_checkins_owner_select" ON public.weekly_checkins
+      FOR SELECT USING (auth.uid() = user_id);
+    CREATE POLICY "weekly_checkins_owner_insert" ON public.weekly_checkins
+      FOR INSERT WITH CHECK (auth.uid() = user_id);
+    CREATE POLICY "weekly_checkins_owner_update" ON public.weekly_checkins
+      FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+============================================================ -->
+<div id="screen-weekly-checkin" class="screen">
+  <div class="app-header">
+    <div class="icon-btn" onclick="navTo('today')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="header-logo">PHOENIX <span>PLAN</span></div>
+    <div style="width:36px"></div>
+  </div>
+  <div style="padding:20px 20px 100px;">
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Weekly review</div>
+    <div style="font-family:var(--font-d);font-size:34px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.05;margin-bottom:4px;" id="wci-title">Week 1 Review</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:24px;" id="wci-daterange">—</div>
+
+    <!-- SECTION 1 — auto stats -->
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">This week</div>
+    <div id="wci-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px;">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:4px;">Sessions</div>
+        <div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--text);" id="wci-sessions">— / —</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:4px;">Total volume</div>
+        <div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--gold);" id="wci-volume">0 kg</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:4px;">WODs</div>
+        <div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--text);" id="wci-wods">0</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:4px;">Walk / Run</div>
+        <div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--text);" id="wci-distance">0 km</div>
+      </div>
+    </div>
+
+    <!-- SECTION 2 — body check-in -->
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Body check-in</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:24px;">
+      <label class="q-label" style="margin-bottom:6px;display:block;">Weight this morning</label>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <input class="q-input" type="number" id="wci-weight" placeholder="0" inputmode="decimal" style="flex:1;" oninput="window._wciWeight=parseFloat(this.value)||0">
+        <span style="font-family:var(--font-d);font-size:14px;color:var(--text2);letter-spacing:2px;">kg</span>
+      </div>
+      <label class="q-label" style="margin-bottom:6px;display:block;">How are you feeling overall</label>
+      <div id="wci-feeling-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;"></div>
+      <label class="q-label" style="margin-bottom:6px;display:block;">Sleep quality this week</label>
+      <div id="wci-sleep-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;"></div>
+      <label class="q-label" style="margin-bottom:6px;display:block;">Energy levels this week</label>
+      <div id="wci-energy-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-top:6px;">
+        <span>1 Poor</span><span>3 Avg</span><span>5 Great</span>
+      </div>
+    </div>
+
+    <!-- SECTION 3 — recovery notes -->
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Recovery</div>
+    <textarea id="wci-niggle" class="q-input" rows="3" placeholder="Note any new pain, tightness or injuries…" style="margin-bottom:24px;resize:vertical;min-height:80px;"></textarea>
+
+    <!-- SECTION 4 — coach notes -->
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Notes for your coach</div>
+    <textarea id="wci-coach-notes" class="q-input" rows="4" placeholder="Tell your coach anything about this week — what worked, what didn't, how you felt, life context…" style="margin-bottom:6px;resize:vertical;min-height:96px;"></textarea>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:24px;font-style:italic;">Your coach reads these notes before building next week's programme.</div>
+
+    <!-- SECTION 5 — next week -->
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Next week</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:8px;">Last week's structure</div>
+      <div id="wci-prev-structure" style="font-size:13px;color:var(--text2);line-height:1.7;"></div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">Continue with this structure?</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button class="btn-secondary" id="wci-continue-yes" style="flex:1;padding:12px;margin:0;" onclick="window._wciSetContinue(true)">Yes, continue</button>
+      <button class="btn-secondary" id="wci-continue-no" style="flex:1;padding:12px;margin:0;" onclick="window._wciSetContinue(false)">Request changes</button>
+    </div>
+    <textarea id="wci-next-requests" class="q-input" rows="3" placeholder="What would you like changed next week?" style="margin-bottom:24px;display:none;resize:vertical;min-height:80px;"></textarea>
+
+    <button class="btn-primary" style="width:100%;padding:16px;" onclick="submitWeeklyCheckin()">Submit to Coach</button>
+    <div id="wci-readonly-note" style="display:none;font-size:12px;color:var(--text3);text-align:center;margin-top:14px;font-style:italic;">Next check-in available Sunday.</div>
+  </div>
+</div>
+
 <!-- REST TIMER OVERLAY -->
 <div class="rest-overlay" id="rest-overlay">
   <!-- v4.7.15 FIX 3: ad banners hide for Pro accounts; gate enforced in startRestTimer. -->
@@ -9426,6 +9561,32 @@ function renderTodayScreen(){
     var daysSince=lastCheckin?Math.floor((Date.now()-new Date(lastCheckin).getTime())/(1000*60*60*24)):999;
     checkinBanner.style.display=(isFatLoss&&daysSince>=7)?'block':'none';
   }
+  // v4.7.19 BUILD 2: Sunday → append a Weekly Review card after the session tiles.
+  _phxRenderSundayReviewCard();
+}
+
+function _phxRenderSundayReviewCard(){
+  // Idempotent: remove any prior render so re-running doesn't duplicate the card.
+  var prior = document.getElementById('card-weekly-review');
+  if(prior) prior.remove();
+  if(new Date().getDay() !== 0) return; // Sunday only
+  // Anchor: append to the same container the prescribed-session tile lives in.
+  var sessionCard = document.getElementById('card-today-session');
+  var parent = sessionCard ? sessionCard.parentElement : null;
+  if(!parent) return;
+  var weekNum = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  var card = document.createElement('div');
+  card.id = 'card-weekly-review';
+  card.className = 'game-card';
+  card.style.cssText = 'margin-top:10px;border:1px solid var(--border);border-left:3px solid var(--gold);cursor:pointer;';
+  card.onclick = function(){ openWeeklyCheckin(); };
+  card.innerHTML =
+    '<div class="game-card-inner">'+
+      '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Sunday</span></div>'+
+      '<div class="game-card-title" style="font-size:24px;">Week '+weekNum+' Complete</div>'+
+      '<div class="game-card-sub" style="margin-top:6px;">Review your week and set up next week →</div>'+
+    '</div>';
+  parent.appendChild(card);
 }
 
 function submitWeightCheckin(){
@@ -9440,6 +9601,222 @@ function submitWeightCheckin(){
   saveAthlete(athlete);
   var banner=document.getElementById('weight-checkin-banner');
   if(banner) banner.style.display='none';
+}
+
+// ====== v4.7.19 BUILD 2: WEEKLY CHECK-IN ======
+// Local form state lives on window so the inline button onclicks can read/write it without
+// every handler having to look up DOM nodes.
+window._wciState = {feeling:0, sleep:0, energy:0, weight:0, continueProgramme:null};
+
+function _wciWeekBounds(d){
+  // Returns {start, end} where start = Monday 00:00 of the week containing d, end = Sunday 23:59:59.
+  var ref = d ? new Date(d) : new Date();
+  var day = ref.getDay(); // 0 Sun … 6 Sat
+  var mondayOffset = day === 0 ? -6 : (1 - day);
+  var start = new Date(ref);
+  start.setDate(ref.getDate() + mondayOffset);
+  start.setHours(0,0,0,0);
+  var end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23,59,59,999);
+  return {start: start, end: end};
+}
+
+function _wciFormatDateRange(start, end){
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return start.getDate()+' '+months[start.getMonth()]+' – '+end.getDate()+' '+months[end.getMonth()]+' '+end.getFullYear();
+}
+
+function openWeeklyCheckin(){
+  // Reset transient form state
+  window._wciState = {feeling:0, sleep:0, energy:0, weight:0, continueProgramme:null};
+  var weekNum = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  var bounds = _wciWeekBounds();
+  var titleEl = document.getElementById('wci-title');
+  if(titleEl) titleEl.textContent = 'Week '+weekNum+' Review';
+  var rangeEl = document.getElementById('wci-daterange');
+  if(rangeEl) rangeEl.textContent = _wciFormatDateRange(bounds.start, bounds.end);
+  // Clear inputs
+  ['wci-weight','wci-niggle','wci-coach-notes','wci-next-requests'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.value = '';
+  });
+  document.getElementById('wci-next-requests').style.display = 'none';
+  // Build the three 1-5 score rows
+  ['feeling','sleep','energy'].forEach(function(key){
+    var row = document.getElementById('wci-'+key+'-row');
+    if(!row) return;
+    row.innerHTML = '';
+    for(var n=1;n<=5;n++){
+      (function(val){
+        var btn = document.createElement('div');
+        btn.className = 'q-option-card';
+        btn.setAttribute('data-wci-score', val);
+        btn.style.cssText = 'padding:14px 0;text-align:center;font-family:var(--font-d);font-size:18px;font-weight:700;cursor:pointer;';
+        btn.textContent = String(val);
+        btn.onclick = function(){ _wciSetScore(key, val); };
+        row.appendChild(btn);
+      })(n);
+    }
+  });
+  // Render last week's programme structure
+  loadLastCheckin();
+  // Auto-populate this week's stats from Supabase
+  loadWeeklyStats();
+  // Sunday → editable submit. Other days → readonly view of the last submitted check-in.
+  var isSunday = new Date().getDay() === 0;
+  var roNote = document.getElementById('wci-readonly-note');
+  if(roNote) roNote.style.display = isSunday ? 'none' : 'block';
+  showScreen('screen-weekly-checkin');
+}
+
+window._wciSetScore = function(kind, val){
+  window._wciState[kind] = val;
+  var row = document.getElementById('wci-'+kind+'-row');
+  if(!row) return;
+  row.querySelectorAll('[data-wci-score]').forEach(function(b){
+    b.classList.toggle('active', parseInt(b.getAttribute('data-wci-score'))===val);
+  });
+};
+
+window._wciSetContinue = function(yes){
+  window._wciState.continueProgramme = !!yes;
+  var yesBtn = document.getElementById('wci-continue-yes');
+  var noBtn = document.getElementById('wci-continue-no');
+  if(yesBtn) yesBtn.classList.toggle('active', !!yes);
+  if(noBtn)  noBtn.classList.toggle('active', !yes);
+  var ta = document.getElementById('wci-next-requests');
+  if(ta) ta.style.display = yes ? 'none' : 'block';
+};
+
+async function loadWeeklyStats(){
+  // Defaults for the offline / not-signed-in case
+  function setText(id, txt){ var el = document.getElementById(id); if(el) el.textContent = txt; }
+  setText('wci-sessions','0 / —');
+  setText('wci-volume','0 kg');
+  setText('wci-wods','0');
+  setText('wci-distance','0 km');
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
+  var bounds = _wciWeekBounds();
+  try {
+    var res = await sb.from('sessions').select('session_type,total_volume_kg,total_distance_m,status,started_at')
+      .eq('user_id', currentSession.user.id)
+      .gte('started_at', bounds.start.toISOString())
+      .lte('started_at', bounds.end.toISOString());
+    if(res.error){ console.warn('[PHX] loadWeeklyStats error:', res.error); return; }
+    var rows = res.data || [];
+    var done = rows.filter(function(r){ return r.status === 'completed'; });
+    var totalVol = done.reduce(function(a,r){ return a + (parseFloat(r.total_volume_kg)||0); }, 0);
+    var totalDist = done.reduce(function(a,r){ return a + (parseFloat(r.total_distance_m)||0); }, 0);
+    var wods = done.filter(function(r){ return (r.session_type||'').toLowerCase() === 'wod'; }).length;
+    // Planned count from this week's AI programme if available
+    var planned = 0;
+    if(athlete && athlete.aiProgramme && athlete.aiProgramme.week && Array.isArray(athlete.aiProgramme.week.sessions)){
+      planned = athlete.aiProgramme.week.sessions.filter(function(s){
+        return s.session_type && s.session_type.toLowerCase().indexOf('rest') < 0;
+      }).length;
+    }
+    setText('wci-sessions', done.length+' / '+(planned||done.length||'—'));
+    setText('wci-volume', Math.round(totalVol)+' kg');
+    setText('wci-wods', String(wods));
+    setText('wci-distance', (totalDist/1000).toFixed(1)+' km');
+  } catch(e){ console.warn('[PHX] loadWeeklyStats failed:', e); }
+}
+
+async function loadLastCheckin(){
+  // Render last week's programme structure into Section 5 from athlete.aiProgramme.
+  var prevEl = document.getElementById('wci-prev-structure');
+  if(prevEl){
+    var html = '';
+    if(athlete && athlete.aiProgramme && athlete.aiProgramme.week && Array.isArray(athlete.aiProgramme.week.sessions)){
+      athlete.aiProgramme.week.sessions.forEach(function(s){
+        var day = s.day || '';
+        var summary = s.session_type || (s.exercises && s.exercises.length ? 'Training' : 'Rest');
+        var firstThree = '';
+        if(s.exercises && s.exercises.length){
+          firstThree = ' — '+s.exercises.slice(0,3).map(function(e){ return e.name; }).join(', ');
+          if(s.exercises.length > 3) firstThree += '…';
+        }
+        html += '<div><strong style="color:var(--text);">'+day+':</strong> '+summary+firstThree+'</div>';
+      });
+    } else {
+      html = '<div style="color:var(--text3);">No programme on file yet.</div>';
+    }
+    prevEl.innerHTML = html;
+  }
+  // Pre-fill any persisted "next week requests" / continue choice from the last submitted check-in
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
+  try {
+    var res = await sb.from('weekly_checkins').select('continue_programme,next_week_requests,coach_notes,niggle_notes,weight_kg,feeling_score,sleep_score,energy_score,submitted_at')
+      .eq('user_id', currentSession.user.id)
+      .order('submitted_at', {ascending: false})
+      .limit(1)
+      .single();
+    if(res.error || !res.data) return;
+    var last = res.data;
+    // On non-Sundays, show the previous submission as a read-only reference inside the form
+    if(new Date().getDay() !== 0){
+      var w = document.getElementById('wci-weight');         if(w && last.weight_kg) w.value = last.weight_kg;
+      var n = document.getElementById('wci-niggle');         if(n && last.niggle_notes) n.value = last.niggle_notes;
+      var c = document.getElementById('wci-coach-notes');    if(c && last.coach_notes) c.value = last.coach_notes;
+      var nr = document.getElementById('wci-next-requests'); if(nr && last.next_week_requests) nr.value = last.next_week_requests;
+      if(last.feeling_score) _wciSetScore('feeling', last.feeling_score);
+      if(last.sleep_score)   _wciSetScore('sleep',   last.sleep_score);
+      if(last.energy_score)  _wciSetScore('energy',  last.energy_score);
+      if(last.continue_programme != null) _wciSetContinue(!!last.continue_programme);
+    }
+  } catch(e){ /* no prior check-in — fine */ }
+}
+
+async function submitWeeklyCheckin(){
+  var s = window._wciState || {};
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user){
+    alert('Sign in required to submit a check-in.');
+    return;
+  }
+  var bounds = _wciWeekBounds();
+  var weekNum = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  // Read latest stat values straight off the DOM so what we save matches what the user saw.
+  function num(txt){ if(!txt) return 0; var m = String(txt).replace(/,/g,'').match(/(-?\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; }
+  function intPart(txt){ var m = String(txt||'').match(/^\s*(\d+)/); return m ? parseInt(m[1]) : null; }
+  function plannedPart(txt){ var m = String(txt||'').match(/\/\s*(\d+)/); return m ? parseInt(m[1]) : null; }
+  var sessionsTxt = (document.getElementById('wci-sessions')||{}).textContent || '';
+  var weightEl = document.getElementById('wci-weight');
+  var niggleEl = document.getElementById('wci-niggle');
+  var coachEl = document.getElementById('wci-coach-notes');
+  var nextEl = document.getElementById('wci-next-requests');
+  var row = {
+    user_id: currentSession.user.id,
+    week_number: weekNum,
+    week_start_date: bounds.start.toISOString().split('T')[0],
+    sessions_completed: intPart(sessionsTxt),
+    sessions_planned: plannedPart(sessionsTxt),
+    total_volume_kg: num((document.getElementById('wci-volume')||{}).textContent),
+    total_distance_m: Math.round(num((document.getElementById('wci-distance')||{}).textContent) * 1000),
+    wods_completed: parseInt((document.getElementById('wci-wods')||{}).textContent) || 0,
+    weight_kg: weightEl && weightEl.value ? parseFloat(weightEl.value) : null,
+    feeling_score: s.feeling || null,
+    sleep_score: s.sleep || null,
+    energy_score: s.energy || null,
+    niggle_notes: niggleEl ? (niggleEl.value||'').trim() || null : null,
+    coach_notes: coachEl ? (coachEl.value||'').trim() || null : null,
+    next_week_requests: nextEl ? (nextEl.value||'').trim() || null : null,
+    continue_programme: s.continueProgramme,
+    submitted_at: new Date().toISOString()
+  };
+  try {
+    // Upsert against (user_id, week_number, week_start_date)
+    var res = await sb.from('weekly_checkins').upsert(row, {onConflict: 'user_id,week_number,week_start_date'});
+    if(res.error){
+      console.error('[PHX] submitWeeklyCheckin failed:', res.error);
+      alert('Submit failed: '+res.error.message);
+      return;
+    }
+    alert('Check-in submitted. Your coach will review this before building next week.');
+    navTo('today');
+  } catch(e){
+    console.error('[PHX] submitWeeklyCheckin error:', e);
+    alert('Submit failed. Try again.');
+  }
 }
 
 function renderDailyWOD(){
@@ -11250,6 +11627,8 @@ window.fqResetAnswers = function(){
     ohp:0, b100:0, wpu:0, karen:'', plank:0, ohsq:'',
     // v4.7.4: combine battery extras
     vertJump:0, broadJump:0, sprint40:'', wingate:0,
+    // v4.7.19 BUILD 1: free-text coach notes
+    coachNotes:'',
     scheduleMode:null,
     availableSlots:{}, sessionSchedule:null,
     coachTone:null,
@@ -11790,6 +12169,8 @@ window.fqNext = function(){
     broadJump:fqAnswers.broadJump||existing.broadJump||0,
     sprint40:fqAnswers.sprint40||existing.sprint40||'',
     wingate:fqAnswers.wingate||existing.wingate||0,
+    // v4.7.19 BUILD 1: free-text coach notes
+    fqCoachNotes:fqAnswers.coachNotes||existing.fqCoachNotes||'',
     // v4.7.4 training-history decision tree fields
     fqCurrentlyTraining:fqAnswers.currentlyTraining,
     fqCurrentStint:fqAnswers.currentStint,
@@ -11990,6 +12371,10 @@ window.fqRestoreProgressUI = function(){
   if(fqAnswers.ohsq){
     var ohEl=document.querySelector('#fq-ohsq-row .q-option-card[onclick*="\''+fqAnswers.ohsq+'\'"]');
     if(ohEl) ohEl.classList.add('active');
+  }
+  // v4.7.19 BUILD 1: restore coach notes textarea
+  if(fqAnswers.coachNotes){
+    var cn=document.getElementById('fq-coach-notes'); if(cn) cn.value=fqAnswers.coachNotes;
   }
   // Step 5
   if(fqAnswers.scheduleMode){

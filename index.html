@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.17';
+var APP_VERSION='4.7.18';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -10956,14 +10956,29 @@ function openTodaySession(){
     }
     // v4.7.17 FIX 1 SECTION 2: target boxes — load + reps — sit below the coaching note.
     // Uses the FIRST set's targets as the headline value (most common case = uniform sets).
+    // v4.7.18: wrap in a centred flex container with a TARGET label above so users know
+    // the boxes represent the coach's prescription. The shared phxRenderTargetBoxes helper
+    // emits its own inline-flex wrapper; we override that by rendering the boxes directly here.
     var firstT = perSetTargets[0] || {kg:'', reps:''};
-    var targetBoxesHTML = phxRenderTargetBoxes(firstT.kg, firstT.reps, ex.name);
+    var rawBoxes = phxRenderTargetBoxes(firstT.kg, firstT.reps, ex.name);
+    var targetSection = '';
+    if(rawBoxes){
+      targetSection =
+        '<div style="margin-top:10px;text-align:center;">'+
+          '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;font-family:var(--font-d);">Coach Target</div>'+
+          // Strip the helper's inline-flex wrapper styling and re-wrap with justify-content:center so
+          // the boxes sit centred under the label rather than left-aligned.
+          '<div style="display:flex;justify-content:center;gap:8px;width:100%;flex-wrap:wrap;">'+
+            rawBoxes.replace(/^<div [^>]*>|<\/div>$/g,'')+
+          '</div>'+
+        '</div>';
+    }
     block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
       '<div class="ex-name">'+ex.name+'</div>'+
       '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
-      targetBoxesHTML+
+      targetSection+
       '</div></div>'+
       setsHTML;
     body.appendChild(block);

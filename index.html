@@ -3061,7 +3061,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.15';
+var APP_VERSION='4.7.16';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4437,7 +4437,8 @@ window._phxCancelCountIn = _phxCancelCountIn;
 
 // v4.7.15 FIX 2: clean weight × reps display + ≤8-word technique cue subtext.
 // v4.7.15 FIX 3: hide ad slots + upgrade link for Pro accounts.
-function startRestTimer(secs,nextLabel,nextKg,nextReps,cue){
+// v4.7.16 FIX 3: isPrescribed=true → show only "+30 sec" control. false → show full 2/3/4/5/6m selector.
+function startRestTimer(secs,nextLabel,nextKg,nextReps,cue,isPrescribed){
   rtTotal=secs;
   rtEndTime=Date.now()+(secs*1000);
   document.getElementById('rt-next').textContent=nextLabel||'Next set';
@@ -4470,9 +4471,13 @@ function startRestTimer(secs,nextLabel,nextKg,nextReps,cue){
     var el = document.getElementById(id);
     if(el) el.style.display = pro ? 'none' : '';
   });
-  // Show rest selector in overlay
-  var overlayRest=document.getElementById('rt-rest-selector');
-  if(overlayRest){overlayRest.style.display='flex';}
+  // v4.7.16 FIX 3: rest control variant.
+  //   isPrescribed (rest came from ex.rest_sec > 0) → "+30 sec" only.
+  //   otherwise (max-effort / no prescribed rest)  → full 2/3/4/5/6m selector.
+  var fullSelector = document.getElementById('rt-rest-selector');
+  var addBtn       = document.getElementById('rt-rest-add');
+  if(fullSelector) fullSelector.style.display = isPrescribed ? 'none'  : 'flex';
+  if(addBtn)       addBtn.style.display       = isPrescribed ? 'block' : 'none';
   document.getElementById('rest-overlay').classList.add('active');
   requestWakeLock();
   if(rtInterval)clearInterval(rtInterval);
@@ -4629,7 +4634,8 @@ function onSetDone(ex,idx){
     if(nkEl)nextKg=nkEl.value||nkEl.getAttribute('value')||'';
     if(nrEl)nextReps=nrEl.value||nrEl.getAttribute('value')||'';
   }
-  if(restSecs>0)startRestTimer(restSecs,nextLabel,nextKg,nextReps);
+  // v4.7.16 FIX 3: hardcoded sessions also pass rest from a prescribed value (restSecs > 0).
+  if(restSecs>0)startRestTimer(restSecs,nextLabel,nextKg,nextReps,'',true);
 }
 
 // Swipe-to-complete on set rows (both directions)
@@ -4991,6 +4997,15 @@ function populatePullLoads(){
 function adjustRest(newSecs){
   rtEndTime=Date.now()+(newSecs*1000);
   rtTotal=newSecs;
+  updateRTDisplay();
+}
+
+// v4.7.16 FIX 3: bump the remaining rest by N seconds (used by the +30 sec button on coach-prescribed rests)
+function addRestSeconds(extra){
+  var remaining = Math.max(0, Math.ceil((rtEndTime - Date.now()) / 1000));
+  var newSecs = remaining + extra;
+  rtEndTime = Date.now() + (newSecs * 1000);
+  rtTotal = Math.max(rtTotal, newSecs);
   updateRTDisplay();
 }
 
@@ -8085,7 +8100,7 @@ function openTBBSSession(){
             if(nk) nextKg=nk.value||'';
             if(nr) nextReps=nr.value||'';
           }
-          startRestTimer(90,nextLabel,nextKg,nextReps);
+          startRestTimer(90,nextLabel,nextKg,nextReps,'',true);
         });
       });
       // Wire up swap button
@@ -8714,6 +8729,7 @@ function setupSplashButtons(){
   <div id="rt-next-info" style="font-family:var(--font-d);font-size:28px;font-weight:700;color:var(--text);letter-spacing:1px;margin-bottom:4px;margin-top:2px;display:none"></div>
   <div id="rt-cue" style="font-size:12px;color:var(--text3);font-style:italic;text-align:center;margin-bottom:12px;max-width:280px;line-height:1.4;display:none;"></div>
   <div class="rest-timer-bar-wrap"><div class="rest-timer-bar" id="rt-bar" style="width:100%"></div></div>
+  <!-- v4.7.16 FIX 3: two control modes. Both default hidden; startRestTimer reveals one or the other. -->
   <div id="rt-rest-selector" style="display:none;align-items:center;gap:8px;margin-bottom:16px;">
     <span style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase">Adjust Rest</span>
     <div style="display:flex;gap:6px;" id="rt-rest-opts">
@@ -8723,6 +8739,9 @@ function setupSplashButtons(){
       <div class="rest-opt" onclick="adjustRest(300)">5m</div>
       <div class="rest-opt" onclick="adjustRest(360)">6m</div>
     </div>
+  </div>
+  <div id="rt-rest-add" style="display:none;margin-bottom:16px;">
+    <div class="rest-opt" onclick="addRestSeconds(30)" style="padding:10px 18px;">+30 sec</div>
   </div>
   <button class="rest-skip-btn" id="rt-skip">Skip Rest</button>
   <div id="ad-rest-bottom" class="phx-ad-slot" style="width:100%;background:rgba(0,0,0,0.6);border-top:1px solid var(--border);padding:8px 16px;text-align:center;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:16px;">
@@ -9932,10 +9951,10 @@ function openPhoenixWOD(wodOverride){
   if(window._wodTimer && window._wodTimer.interval) clearInterval(window._wodTimer.interval);
   window._wodTimer = null;
 
-  // v4.7.7 FIX 3 + v4.7.15: initialise per-WOD selection state.
-  // Library WODs default to RX (athlete picks their level). Coach WODs default to CUSTOM (coach
-  // already prescribed the load — only meaningful adjustment is per-movement editing).
-  window._wodSelection = (wod.source === 'coach') ? 'custom' : 'rx';
+  // v4.7.7 FIX 3 + v4.7.15 + v4.7.16 FIX 4: initialise per-WOD selection state.
+  // Both library AND coach WODs default to RX. The coach WOD's "Rx" is labelled "Coach Rx" — the
+  // coach's prescription is the default view. The athlete taps "Custom — Adjust" to override.
+  window._wodSelection = 'rx';
   window._wodCustomLoads = {};
 
   // Remove existing modal
@@ -9986,12 +10005,13 @@ function openPhoenixWOD(wodOverride){
       '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Today\'s WOD</div>'+
       '<div style="font-family:var(--font-d);font-size:42px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:2px;line-height:1;margin-bottom:4px;">'+wod.name+'</div>'+
       '<div style="font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:1px;margin-bottom:20px;">'+wod.format+'</div>'+
-      // v4.7.7 FIX 3 + v4.7.15: selector row.
+      // v4.7.7 FIX 3 + v4.7.15 + v4.7.16 FIX 4: selector row.
       // - Library WOD → Rx / Scaled / Custom (athlete picks their level)
-      // - Coach WOD   → Custom only (coach already prescribed the load; the only meaningful action is to edit per movement)
+      // - Coach WOD   → Coach Rx (prescribed, read-only) + Custom (per-movement edit). No Scaled — the
+      //   coach prescription IS the Rx and the alternative is to override each movement individually.
       '<div style="display:flex;gap:6px;margin-bottom:14px;">'+
         ((wod.source === 'coach')
-          ? selBtn('custom','Custom')
+          ? (selBtn('rx','Coach Rx') + selBtn('custom','Custom — Adjust'))
           : (selBtn('rx','Rx') + selBtn('scaled','Scaled') + selBtn('custom','Custom'))
         )+
       '</div>'+
@@ -10013,8 +10033,10 @@ function openPhoenixWOD(wodOverride){
       (wod.combine_note?'<div style="background:var(--bg3);border-left:3px solid var(--gold);padding:12px 14px;border-radius:4px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:20px;">⚡ '+wod.combine_note+'</div>':'')+
       // v4.7.7 FIX 1 + v4.7.11 FIX 1: this is the ONLY trigger for the count-in. The button reads
       // "Enter WOD" because this screen is the pre-session overview, not the start.
-      '<button class="btn-primary" style="width:100%;padding:16px;margin-bottom:10px;" onclick="window._wodStartFromDetail()">Enter WOD →</button>'+
-      '<button class="btn-secondary" style="width:100%;padding:14px;margin:0;" onclick="logWODScore()">Log Score Only</button>'+
+      // v4.7.16 FIX 5: force block display + auto margins so the buttons centre regardless of parent text-align.
+      // max-width:none allows the buttons to honour width:100% (the .btn-primary class has max-width:320px).
+      '<button class="btn-primary" style="display:block;margin:0 auto 10px;width:100%;max-width:none;padding:16px;text-align:center;" onclick="window._wodStartFromDetail()">Enter WOD →</button>'+
+      '<button class="btn-secondary" style="display:block;margin:0 auto;width:100%;max-width:none;padding:14px;text-align:center;" onclick="logWODScore()">Log Score Only</button>'+
     '</div>';
   }
 
@@ -10790,38 +10812,55 @@ function openTodaySession(){
       // No percentage we can parse — surface the raw guidance text for the athlete to read
       loadFallback = String(ex.load_guidance);
     }
+    // v4.7.16 FIX 1: pre-compute every set's target so we can decide whether targets are
+    // uniform (show once in header) or per-set (show inline above each row).
+    var perSetTargets = [];
+    for(var sp=0;sp<setsCount;sp++){
+      var pctSp = pctArr[sp];
+      var kgT = '';
+      if(pctSp !== null && baseRM > 0){
+        kgT = String(roundToEquipment(baseRM * pctSp, equipType))+'kg';
+      } else if(loadFallback){
+        kgT = phxExtractTargetWeight(loadFallback);
+      }
+      if(!kgT) kgT = '—';
+      var repsRaw = repsArr[sp] != null ? repsArr[sp] : (ex.reps||'');
+      var repsT = isAmrap ? 'AMRAP' : phxExtractTargetReps(repsRaw);
+      perSetTargets.push({kg: kgT, reps: repsT});
+    }
+    var allKgsSame = perSetTargets.every(function(t){return t.kg === perSetTargets[0].kg;});
+    var allRepsSame = perSetTargets.every(function(t){return t.reps === perSetTargets[0].reps;});
+    // Stash the uniformity flags so the block header can render the single TARGET line.
+    var headerTargetKg = allKgsSame ? perSetTargets[0].kg : '';
+    var headerTargetReps = allRepsSame ? perSetTargets[0].reps : '';
+
     for(var s=0;s<setsCount;s++){
       var setId='ai-'+i+'-'+s;
-      var pctForSet = pctArr[s];
-      // v4.7.15 FIX 1: build the read-only TARGET label separately from the editable input.
-      // The input is BLANK by default — placeholder "—" — so the athlete types the actual
-      // weight/reps they used. The TARGET sits above the input, never editable.
-      var kgTarget = '';
-      if(pctForSet !== null && baseRM > 0){
-        kgTarget = String(roundToEquipment(baseRM * pctForSet, equipType))+'kg';
-      } else if(loadFallback){
-        // Distil verbose load_guidance into a clean target label.
-        kgTarget = phxExtractTargetWeight(loadFallback);
-      }
-      if(!kgTarget) kgTarget = '—';
-      var repsTargetRaw = repsArr[s] != null ? repsArr[s] : (ex.reps||'');
-      var repsTarget = isAmrap ? 'AMRAP' : phxExtractTargetReps(repsTargetRaw);
+      var t = perSetTargets[s];
+      // Per-row target line ONLY when the sets differ on that axis (e.g. wave loading 60/70/80).
+      var perRowKgHTML = !allKgsSame
+        ? '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
+          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+t.kg+'</div>'
+        : '';
+      var perRowRepsHTML = !allRepsSame
+        ? '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
+          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+t.reps+'</div>'
+        : '';
       // Stash the parsed targets on the row so the rest timer can read clean values
       // instead of grabbing whatever the user has typed (or not typed) into the inputs.
-      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(kgTarget).replace(/"/g,'&quot;')+'" data-target-reps="'+String(repsTarget).replace(/"/g,'&quot;')+'">'+
+      // v4.7.16 FIX 2: text-align:center on inputs so "—" placeholder + typed values centre cleanly.
+      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+gridCols+'" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(t.kg).replace(/"/g,'&quot;')+'" data-target-reps="'+String(t.reps).replace(/"/g,'&quot;')+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-swipe-bg-right">DONE</div>'+
         '<div class="set-num">'+(s+1)+'</div>'+
         '<div class="set-col" style="display:flex;flex-direction:column;align-items:stretch;">'+
-          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
-          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+kgTarget+'</div>'+
-          '<input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="decimal">'+
+          perRowKgHTML+
+          '<input type="text" class="set-input" id="kg-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="decimal" style="text-align:center;">'+
           '<div class="set-input-label">kg</div>'+
         '</div>'+
         '<div class="set-col" style="display:flex;flex-direction:column;align-items:stretch;">'+
-          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;line-height:1;margin-bottom:2px;">Target</div>'+
-          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--gold);text-align:center;line-height:1.1;margin-bottom:6px;min-height:14px;">'+repsTarget+'</div>'+
-          '<input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="numeric">'+
+          perRowRepsHTML+
+          '<input type="text" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="numeric" style="text-align:center;">'+
           '<div class="set-input-label">reps</div>'+
         '</div>'+
         '<button class="set-done-btn" id="done-ai-'+i+'-'+s+'" data-exidx="'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">&#10003;</button>'+
@@ -10842,11 +10881,21 @@ function openTodaySession(){
       var next=exercises[i+1];
       upNextHTML='<div style="padding:8px 20px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);background:var(--bg2);border-bottom:1px solid var(--border);">Up next: <span style="color:var(--text2);">'+next.name+'</span></div>';
     }
+    // v4.7.16 FIX 1: header-level TARGET line (kg / reps), shown only for whichever axis is uniform.
+    // When sets differ on an axis, the per-row TARGET is rendered above that row instead.
+    var headerTargetHTML = '';
+    if(headerTargetKg || headerTargetReps){
+      var parts = [];
+      if(headerTargetKg)   parts.push('<span style="color:var(--text3);">Target kg:</span> <span style="color:var(--gold);">'+headerTargetKg+'</span>');
+      if(headerTargetReps) parts.push('<span style="color:var(--text3);">Target reps:</span> <span style="color:var(--gold);">'+headerTargetReps+'</span>');
+      headerTargetHTML = '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">'+parts.join('')+'</div>';
+    }
     block.innerHTML='<div class="ex-block-header"><div>'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
       '<div class="ex-name">'+ex.name+'</div>'+
-      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+' &mdash; '+(ex.load_guidance||'')+'</div>'+
-      (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">'+ex.coaching_note+'</div>':'')+
+      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+'</div>'+
+      headerTargetHTML+
+      (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">'+ex.coaching_note+'</div>':'')+
       '</div></div>'+
       '<div class="set-header-row"><div></div><div class="set-col-label">kg</div><div class="set-col-label">reps</div><div></div></div>'+
       setsHTML;
@@ -10883,7 +10932,8 @@ function openTodaySession(){
               if(nk === '—') nk = '';
               if(nr === '—') nr = '';
               var cue = phxTechniqueCue(exObj);
-              startRestTimer(rest, nextLabel, nk, nr, cue);
+              // v4.7.16 FIX 3: rest came from the exercise object's rest_sec → coach-prescribed.
+              startRestTimer(rest, nextLabel, nk, nr, cue, true);
             }
           });
         })(i,s,restSec,ex,setsCount);

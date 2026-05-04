@@ -403,12 +403,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 /* TODAY SCREEN */
 #screen-today{background:var(--bg);}
 .today-body{flex:1;padding:0 0 80px;overflow-y:auto;}
-.today-hero{background:linear-gradient(135deg,var(--bg3) 0%,#161616 100%);border-bottom:1px solid var(--border);padding:20px;padding-bottom:36px;position:relative;overflow:hidden;}
+/* v4.7.25 FIX 2: compact day banner — total height ~38px instead of ~120px. Day + date sit on a single row. */
+.today-hero{background:linear-gradient(135deg,var(--bg3) 0%,#161616 100%);border-bottom:1px solid var(--border);padding:8px 16px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px;}
 .today-hero::before{content:"";position:absolute;top:0;right:0;width:200px;height:100%;background:radial-gradient(ellipse at right,rgba(200,150,62,0.08),transparent 70%);}
-.today-tag{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;}
-.today-dayname{font-family:var(--font-d);font-size:34px;font-weight:900;letter-spacing:1px;color:var(--text);text-transform:uppercase;}
-.today-datestr{font-size:13px;color:var(--text2);margin-top:2px;}
-.today-week-badge{display:inline-block;background:var(--gold-dim);border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:3px 10px;border-radius:2px;margin-top:8px;}
+.today-tag{display:none;}
+.today-dayname{font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:2px;color:var(--text);text-transform:uppercase;line-height:1;}
+.today-datestr{font-size:11px;color:var(--text2);margin-top:0;letter-spacing:1px;}
+.today-week-badge{display:inline-block;background:var(--gold-dim);border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:2px 8px;border-radius:2px;margin-top:0;flex-shrink:0;}
 .session-tiles{padding:16px 20px;display:flex;flex-direction:column;gap:12px;margin-top:16px;}
 .session-tile{background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:space-between;}
 .session-tile:active{opacity:0.8;}
@@ -610,7 +611,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .game-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:all 0.15s;position:relative;}
 /* v4.7.24: tile background image + dark readability overlay. Apply alongside inline background-image. */
 .tile-bg{background-size:cover;background-position:center;background-color:var(--bg2);}
-.tile-bg::before{content:'';position:absolute;inset:0;background:rgba(0,0,0,0.65);border-radius:inherit;pointer-events:none;z-index:0;}
+.tile-bg::before{content:'';position:absolute;inset:0;background:rgba(0,0,0,0.45);border-radius:inherit;pointer-events:none;z-index:0;}
 .tile-bg > *{position:relative;z-index:1;}
 .game-card:active{transform:scale(0.98);}
 .game-card-inner{padding:14px 16px;}
@@ -1655,7 +1656,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="game-card-action-sm">Open chat →</div>
         </div>
       </div>
-      <div id="card-phoenix-wod" class="game-card game-card-wod tile-bg" onclick="openPhoenixWOD()" style="border:1px solid rgba(200,150,62,0.4);background-image:url('/assets/tiles/tile-daily.jpg');">
+      <div id="card-phoenix-wod" class="game-card game-card-wod tile-bg" onclick="openPhoenixWOD()" style="border:1px solid var(--gold);background-image:url('/assets/tiles/tile-daily.jpg');">
         <div class="game-card-inner" style="padding:16px;">
           <div class="game-card-eyebrow">
             <span class="game-card-tier-badge" style="font-size:8px;">Everyone</span>
@@ -3140,7 +3141,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.24';
+var APP_VERSION='4.7.25';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -11854,6 +11855,289 @@ function _phxUpdateMyCoachTilePreview(text){
   }
 }
 
+// ====== v4.7.25 BUILD 4: WARM-UP SYSTEM ======
+// Static library + duration scaling + AI-generated variant for Pro users.
+// Static routines are written for ~10 minutes of work; the scaler picks N exercises to fit the time window.
+var PHOENIX_WARMUP_LIBRARY = {
+  upper_pull: [
+    {name:'Band pull-aparts', val:'20 reps', uses_band:true},
+    {name:'Pull-aparts (no band — front raises with light DB)', val:'15 reps', uses_band:false},
+    {name:'Face pulls with band', val:'15 reps', uses_band:true},
+    {name:'Reverse-grip wall slides', val:'12 reps', uses_band:false},
+    {name:'Shoulder circles', val:'10 each direction'},
+    {name:'Dead hang', val:'30 seconds'},
+    {name:'Cat-cow', val:'10 reps'},
+    {name:'Scapular push-ups', val:'10 reps'}
+  ],
+  upper_press: [
+    {name:'Band pull-aparts', val:'20 reps', uses_band:true},
+    {name:'Wall slides', val:'10 reps'},
+    {name:'Push-up to downward dog', val:'8 reps'},
+    {name:'Shoulder circles', val:'10 each direction'},
+    {name:'Wrist circles', val:'10 each direction'},
+    {name:'Light DB press warm-up set', val:'15 reps light'}
+  ],
+  lower: [
+    {name:'Hip circles', val:'10 each direction'},
+    {name:'Bodyweight squat', val:'15 reps'},
+    {name:'Leg swings forward / back', val:'10 each leg'},
+    {name:'Leg swings side to side', val:'10 each leg'},
+    {name:'Glute bridges', val:'15 reps'},
+    {name:'Lateral band walks', val:'15 each direction', uses_band:true},
+    {name:'Side-step squat (no band)', val:'12 each side', uses_band:false},
+    {name:'Goblet squat (light)', val:'10 reps'}
+  ],
+  hinge: [
+    {name:'Cat-cow', val:'10 reps'},
+    {name:'Hip circles', val:'10 each direction'},
+    {name:'Bodyweight RDL', val:'15 reps'},
+    {name:'Glute bridges', val:'15 reps'},
+    {name:'Leg swings forward / back', val:'10 each leg'},
+    {name:'Thoracic rotation', val:'8 each side'},
+    {name:'Light deadlift warm-up set', val:'10 reps empty bar / light KB'}
+  ],
+  conditioning: [
+    {name:'Easy jog or row', val:'2 min'},
+    {name:'Jumping jacks', val:'30 reps'},
+    {name:'Leg swings', val:'10 each leg'},
+    {name:'Arm circles', val:'10 each direction'},
+    {name:'Air squats', val:'10 reps'},
+    {name:'Push-ups', val:'10 reps'}
+  ],
+  general: [
+    {name:'Jumping jacks', val:'30 reps'},
+    {name:'Arm circles', val:'10 each direction'},
+    {name:'Hip circles', val:'10 each direction'},
+    {name:'Bodyweight squat', val:'10 reps'},
+    {name:'Push-up', val:'10 reps'},
+    {name:'Dead hang', val:'20 seconds'}
+  ]
+};
+
+// Pick a routine key based on session type + exercise names.
+function _phxWarmupRoutineKey(sess){
+  if(!sess) return 'general';
+  var t = String(sess.session_type||'').toLowerCase();
+  var exNames = (sess.exercises||[]).map(function(e){return String(e.name||'').toLowerCase();}).join(' ');
+  // WOD / conditioning
+  if(t.indexOf('wod')>-1 || t.indexOf('met')>-1 || t.indexOf('cond')>-1) return 'conditioning';
+  // Hinge / deadlift family
+  if(/(deadlift|rdl|hinge|good morning)/.test(t) || /(deadlift|rdl|hinge)/.test(exNames)) return 'hinge';
+  // Squat / lower
+  if(/(squat|lower|leg)/.test(t) || /(back squat|front squat|leg press|bulgarian)/.test(exNames)) return 'lower';
+  // Upper pull
+  if(/pull|row|back\b/.test(t) || /(pull[- ]?up|chin|row|lat pulldown|face pull)/.test(exNames)) return 'upper_pull';
+  // Upper press
+  if(/press|push|bench|upper/.test(t) || /(bench|overhead press|push press|db press|landmine)/.test(exNames)) return 'upper_press';
+  return 'general';
+}
+
+// Duration scaling: 45min → 5min, 60min → 8min, 75min → 10min, 90+min → 12min, WOD → 5min, walk/run → 0.
+function _phxWarmupTargetMin(sess){
+  if(!sess) return 8;
+  var t = String(sess.session_type||'').toLowerCase();
+  if(t === 'walk' || t === 'run' || t.indexOf('walk')>-1 || t.indexOf('run')===0) return 0;
+  if(t.indexOf('wod')>-1) return 5;
+  var dur = parseInt(sess.duration_min) || 60;
+  if(dur >= 90) return 12;
+  if(dur >= 75) return 10;
+  if(dur >= 60) return 8;
+  return 5;
+}
+
+// True if a warm-up screen should appear before this session.
+function _phxWarmupNeeded(sess){
+  if(!sess) return false;
+  if(_phxWarmupTargetMin(sess) <= 0) return false;
+  // Athlete preference, default ON.
+  var pref = (athlete && athlete.warmupEnabled !== undefined) ? athlete.warmupEnabled : true;
+  return !!pref;
+}
+
+// Filter library routine for band availability + scale to fit time window.
+function _phxScaleWarmup(routine, targetMin, hasBand){
+  var pool = (routine||[]).filter(function(ex){
+    if(typeof ex.uses_band === 'undefined') return true;
+    return hasBand ? ex.uses_band : !ex.uses_band;
+  });
+  // Pick exercises to roughly fit time. Heuristic: 5min ≈ 4 exercises, 8min ≈ 6, 10min ≈ 7, 12min ≈ 8.
+  var maxCount = targetMin <= 5 ? 4 : (targetMin <= 8 ? 6 : (targetMin <= 10 ? 7 : 8));
+  return pool.slice(0, maxCount);
+}
+
+function _phxAthleteHasBand(){
+  var eq = String((athlete && athlete.fqEquip) || '').toLowerCase();
+  // Bands assumed available in commercial gym, CrossFit box, or anywhere "band" appears in equipment.
+  return /(commercial|crossfit|band)/.test(eq);
+}
+
+// Build the static warm-up for a given session — used for free tier and as the AI fallback.
+function _phxBuildStaticWarmup(sess){
+  var key = _phxWarmupRoutineKey(sess);
+  var target = _phxWarmupTargetMin(sess);
+  var hasBand = _phxAthleteHasBand();
+  return {
+    source: 'static',
+    targetMin: target,
+    routine: _phxScaleWarmup(PHOENIX_WARMUP_LIBRARY[key]||PHOENIX_WARMUP_LIBRARY.general, target, hasBand)
+  };
+}
+
+// AI variant — Pro only. Cached in localStorage by session id so it doesn't regenerate on re-open.
+async function _phxBuildAIWarmup(sess){
+  var sessKey = (sess && (sess.session_type||'') + '-' + (new Date().toISOString().split('T')[0])) || 'sess';
+  var cacheKey = 'phoenix_warmup_' + sessKey;
+  try {
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){
+      var parsed = JSON.parse(cached);
+      if(parsed && parsed.routine) return parsed;
+    }
+  } catch(e){}
+  var target = _phxWarmupTargetMin(sess);
+  var firstThree = (sess.exercises||[]).slice(0,3).map(function(e){return e.name;}).join(', ');
+  var maxCount = target <= 5 ? 4 : (target <= 8 ? 6 : (target <= 10 ? 7 : 8));
+  var prompt = 'Generate a '+target+'-minute warm-up for a '+(sess.session_type||'training')+' session. '+
+    'Athlete injuries: '+((athlete && athlete.fqInjuryNotes) || (athlete && athlete.fqInjury && athlete.fqInjury.map(function(i){return i.area+(i.detail?' ('+i.detail+')':'');}).join(', ')) || 'none')+'. '+
+    'Movement confidence: '+JSON.stringify((athlete && athlete.fqMovementConfidence) || {})+'. '+
+    'Equipment available: '+((athlete && athlete.fqEquip) || 'unknown')+'. '+
+    'Today\'s main session: '+(firstThree || '—')+'. '+
+    'Return ONLY a JSON array of warm-up exercises in this exact shape — no prose, no markdown fences: '+
+    '[{"name":"...","val":"reps or duration","notes":"optional brief note"}]. '+
+    'Maximum '+maxCount+' exercises to fit the time window. No equipment the athlete doesn\'t have. Avoid movements that aggravate listed injuries.';
+  try {
+    var resp = await fetch('https://phoenix-coach.jon-d87.workers.dev', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-5', max_tokens:600,
+        system:'You generate concise, safe, equipment-aware warm-up routines as JSON arrays. Return ONLY the JSON array, never prose.',
+        messages:[{role:'user', content: prompt}]
+      })
+    });
+    if(!resp.ok) throw new Error('http '+resp.status);
+    var data = await resp.json();
+    var raw = String((data.content && data.content[0] && data.content[0].text) || '').trim();
+    var jsonStart = raw.indexOf('['); var jsonEnd = raw.lastIndexOf(']');
+    if(jsonStart < 0 || jsonEnd <= jsonStart) throw new Error('no array');
+    var arr = JSON.parse(raw.substring(jsonStart, jsonEnd+1));
+    if(!Array.isArray(arr) || !arr.length) throw new Error('empty');
+    var out = {source:'ai', targetMin:target, routine:arr.slice(0, maxCount)};
+    try { localStorage.setItem(cacheKey, JSON.stringify(out)); } catch(e){}
+    return out;
+  } catch(e){
+    console.warn('[PHX] AI warm-up failed, falling back to static:', e);
+    return _phxBuildStaticWarmup(sess);
+  }
+}
+
+// Resolve which warm-up variant to use (Pro → AI; Free → static).
+async function _phxResolveWarmup(sess){
+  if(typeof hasProAccess === 'function' && hasProAccess()){
+    return await _phxBuildAIWarmup(sess);
+  }
+  return _phxBuildStaticWarmup(sess);
+}
+
+// State + UI for the warm-up screen.
+var _phxWarmupState = {targetSec:0, elapsed:0, interval:null, ticked:[], onProceed:null};
+
+function _phxRenderWarmup(warmup, sess){
+  var target = (warmup.targetMin || 5);
+  var routine = warmup.routine || [];
+  _phxWarmupState = {
+    targetSec: target * 60,
+    elapsed: 0,
+    interval: null,
+    ticked: routine.map(function(){return false;}),
+    onProceed: null
+  };
+  var listHTML = routine.map(function(ex, i){
+    var note = ex.notes ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic;">'+ex.notes+'</div>' : '';
+    return '<label style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;" data-wu-row="'+i+'">'+
+      '<input type="checkbox" data-wu-tick="'+i+'" style="width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:1px;">'+ex.name+'</div>'+
+        '<div style="font-size:12px;color:var(--gold);margin-top:2px;font-family:var(--font-d);">'+(ex.val||'')+'</div>'+
+        note+
+      '</div>'+
+    '</label>';
+  }).join('');
+  var screen = document.getElementById('screen-warmup');
+  if(!screen){
+    screen = document.createElement('div');
+    screen.id = 'screen-warmup';
+    screen.className = 'screen';
+    document.body.appendChild(screen);
+  }
+  screen.innerHTML =
+    '<div class="app-header">'+
+      '<div class="icon-btn" onclick="_phxFinishWarmup(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></div>'+
+      '<div class="header-logo">WARM <span>UP</span></div>'+
+      '<div style="width:36px"></div>'+
+    '</div>'+
+    '<div style="padding:18px 16px 100px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'+
+        '<div>'+
+          '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">'+(warmup.source==='ai'?'Coach-generated · ':'')+target+' min warm-up</div>'+
+          '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);margin-top:2px;line-height:1;">Prep your body</div>'+
+        '</div>'+
+        '<div id="wu-timer-display" style="font-family:var(--font-d);font-size:28px;font-weight:900;color:var(--gold);">0:00</div>'+
+      '</div>'+
+      '<div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:16px;"><div id="wu-progress-bar" style="height:100%;width:0%;background:var(--gold);transition:width 0.3s;"></div></div>'+
+      '<div id="wu-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">'+listHTML+'</div>'+
+      '<div style="display:flex;gap:10px;">'+
+        '<button class="btn-secondary" style="flex:1;padding:14px;margin:0;" onclick="_phxFinishWarmup(true)">Skip Warm-up</button>'+
+        '<button id="wu-start-btn" class="btn-primary" style="flex:1.5;padding:14px;" onclick="_phxFinishWarmup(false)">Start Session</button>'+
+      '</div>'+
+    '</div>';
+  // Wire ticks
+  screen.querySelectorAll('[data-wu-tick]').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      var idx = parseInt(this.getAttribute('data-wu-tick'));
+      _phxWarmupState.ticked[idx] = this.checked;
+    });
+  });
+  // Show
+  showScreen('screen-warmup');
+  // Wake-lock + start timer
+  if(typeof requestWakeLock === 'function') requestWakeLock();
+  if(_phxWarmupState.interval) clearInterval(_phxWarmupState.interval);
+  _phxWarmupState.interval = setInterval(function(){
+    _phxWarmupState.elapsed++;
+    var disp = document.getElementById('wu-timer-display');
+    var bar = document.getElementById('wu-progress-bar');
+    if(disp){
+      var m = Math.floor(_phxWarmupState.elapsed/60), s = _phxWarmupState.elapsed%60;
+      disp.textContent = m+':'+(s<10?'0':'')+s;
+    }
+    if(bar){
+      var pct = Math.min(100, (_phxWarmupState.elapsed / _phxWarmupState.targetSec) * 100);
+      bar.style.width = pct.toFixed(1)+'%';
+    }
+    if(_phxWarmupState.elapsed >= _phxWarmupState.targetSec){
+      // Auto-flag completion — Start Session enabled regardless of ticks.
+      var btn = document.getElementById('wu-start-btn');
+      if(btn) btn.classList.add('wu-ready');
+    }
+  }, 1000);
+}
+
+window._phxFinishWarmup = function(skipped){
+  if(_phxWarmupState.interval){ clearInterval(_phxWarmupState.interval); _phxWarmupState.interval = null; }
+  if(typeof releaseWakeLock === 'function') releaseWakeLock();
+  var cb = _phxWarmupState.onProceed;
+  _phxWarmupState.onProceed = null;
+  if(typeof cb === 'function') cb({skipped: !!skipped});
+};
+
+// Public entry point — called from openTodaySession before the main session renders.
+async function openWarmupBeforeSession(sess, onProceed){
+  if(!_phxWarmupNeeded(sess)){ if(typeof onProceed === 'function') onProceed({skipped:true}); return; }
+  var warmup = await _phxResolveWarmup(sess);
+  _phxWarmupState.onProceed = onProceed;
+  _phxRenderWarmup(warmup, sess);
+}
+
 async function _phxRefreshMyCoachTile(){
   if(typeof sb === 'undefined' || !currentSession || !currentSession.user){
     _phxUpdateMyCoachTilePreview('');
@@ -12310,6 +12594,15 @@ function openTodaySession(){
   var sess=window._todaySession;
   if(!sess){
     navTo('programme');
+    return;
+  }
+  // v4.7.25 BUILD 4: show the warm-up screen first (if applicable). The continuation runs on Start/Skip.
+  // Re-entry guard so the warm-up doesn't loop when the post-warmup callback fires openTodaySession again.
+  if(!window._phxWarmupSkipNext && _phxWarmupNeeded(sess)){
+    openWarmupBeforeSession(sess, function(){
+      window._phxWarmupSkipNext = true;
+      try { openTodaySession(); } finally { window._phxWarmupSkipNext = false; }
+    });
     return;
   }
   // v4.7.6 FIX 2 + v4.7.8 BUG 2: AI sessions of type "WOD" route to the WOD timer.
@@ -13226,6 +13519,14 @@ window.updateFQStep = function(){
   if(fqStep===6) fqRenderAvailability();
   if(fqStep===7) fqRenderSessionTimetable();
   fqValidateStep();
+  // v4.7.25 FIX 3: scroll to top of the questionnaire on every step transition so each step
+  // opens at the top, not mid-page where the previous step left off.
+  try {
+    var scroller = document.querySelector('.fq-body') || document.querySelector('#screen-foundation-q .q-screen') || document.getElementById('screen-foundation-q');
+    if(scroller && typeof scroller.scrollTo === 'function') scroller.scrollTo({top: 0, behavior: 'smooth'});
+    else if(scroller) scroller.scrollTop = 0;
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  } catch(e){}
 };
 
 window.fqNext = function(){

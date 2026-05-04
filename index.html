@@ -636,17 +636,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .wod-modal{position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;}
 .wod-modal-inner{padding:24px 20px 100px;}
 .wod-tier-badge{display:inline-block;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:12px;}
-/* v4.7.5 FIX 6: tier badges use theme tokens so they recolour with active skin */
-.wod-tier-titan{background:var(--gold-dim);color:var(--gold);}
-.wod-tier-god{background:var(--blue-dim);color:var(--blue);}
-.wod-tier-hero{background:var(--orange-dim,rgba(224,92,42,0.15));color:var(--orange);}
-.wod-tier-philosopher{background:var(--green-dim,rgba(58,125,68,0.15));color:var(--green);}
-.wod-tier-creature{background:var(--red-dim,rgba(192,57,43,0.15));color:var(--red,#e74c3c);}
-.wod-tier-legend{background:var(--orange-dim,rgba(224,92,42,0.15));color:var(--orange);}
-.wod-tier-myth{background:var(--green-dim,rgba(58,125,68,0.15));color:var(--green);}
-.wod-tier-beast{background:var(--red-dim,rgba(192,57,43,0.15));color:var(--red,#e74c3c);}
-.wod-tier-immortal{background:var(--purple-dim,rgba(108,61,143,0.15));color:var(--purple);}
-.wod-tier-rising{background:var(--gold-dim);color:var(--text2);}
+/* v4.7.26 CHANGE 8: 4-tier colour scheme (titan/legend/beast/daily) — replaces the old 7-tier set.
+   Single source of truth: phxWodTierColour(tier) returns the same colours dynamically. */
+.wod-tier-titan{background:transparent;color:var(--gold);border:1px solid var(--gold);}
+.wod-tier-legend{background:transparent;color:#CC3333;border:1px solid #CC3333;}
+.wod-tier-beast{background:transparent;color:var(--green);border:1px solid var(--green);}
+.wod-tier-daily{background:transparent;color:#3A6FD8;border:1px solid #3A6FD8;}
 .wod-movement-row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);}
 .wod-movement-row:last-child{border-bottom:none;}
 .wod-movement-name{font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:0.5px;}
@@ -3141,7 +3136,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.25';
+var APP_VERSION='4.7.26';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9227,57 +9222,75 @@ function setupSplashButtons(){
 </script>
 <script>
 
-// ====== WOD LIBRARY ======
-// PHOENIX WOD LIBRARY — 365 workouts across 4 quarters
-// Format: name, category, format, movements, rx_load, scaled_load, time_cap, elite_target, equipment, combine_note
+// ====== WOD LIBRARY (v4.7.26 rebuild) ======
+// 4-tier system: titan / legend / beast / daily
+// Internal arrays (titans/gods/legends/myths/beasts/immortals/rising) preserved for selection logic.
+// Per-WOD `tier` field is the user-facing tier and uses the new 4-value enum.
+// Every WOD carries a `phoenix_signature` field identifying its differentiator vs CrossFit benchmarks.
+
+// v4.7.26 CHANGE 8: tier display + colour helpers (single source of truth across tile + detail + action page).
+function phxWodTierColour(tier){
+  var t = String(tier||'').toLowerCase();
+  if(t === 'titan')  return 'var(--gold)';
+  if(t === 'legend') return '#CC3333';
+  if(t === 'beast')  return 'var(--green)';
+  if(t === 'daily')  return '#3A6FD8';
+  return 'var(--gold)';
+}
+function phxWodTierLabel(tier){
+  var t = String(tier||'').toLowerCase();
+  if(t === 'titan')  return 'Titan';
+  if(t === 'legend') return 'Legend';
+  if(t === 'beast')  return 'Beast';
+  if(t === 'daily')  return 'Daily';
+  return 'Phoenix';
+}
 
 var PHOENIX_WOD_LIBRARY = {
 
   // ============================================================
-  // QUARTER 1 — THE TITAN TRIAL (Weeks 1-13)
-  // Focus: Strength & Power base
-  // WOD bias: Heavy, low rep, strength-dominant
+  // TITAN TIER — strength templates + elite hybrid (was titans + immortals)
   // ============================================================
 
   titans: [
-    {id:'t01',name:'The Atlas',tier:'Titan',format:'For Load',
+    {id:'t01',name:'The Atlas',tier:'titan',phoenix_signature:'strength-template',format:'For Load',
      movements:[{name:'Back Squat',sets:5,reps:'5',load_rx:'85% 1RM',load_scaled:'70% 1RM'}],
      time_cap:20,elite_target:'2.0x BW',equipment:['barbell','rack'],
      combine_note:'Directly tests your Q1 Combine squat 1RM'},
-    {id:'t02',name:'The Kronos',tier:'Titan',format:'EMOM 10',
+    {id:'t02',name:'The Kronos',tier:'titan',phoenix_signature:'strength-template',format:'EMOM 10',
      movements:[{name:'Deadlift',sets:10,reps:'3',load_rx:'80% 1RM',load_scaled:'65% 1RM'}],
      time_cap:10,elite_target:'2.5x BW total volume',equipment:['barbell'],
      combine_note:'Builds the pulling strength tested in Combine deadlift'},
-    {id:'t03',name:'The Hyperion',tier:'Titan',format:'5 Rounds For Time',
+    {id:'t03',name:'The Hyperion',tier:'titan',phoenix_signature:'structural-balance',format:'5 Rounds For Time',
      movements:[
        {name:'Bench Press',sets:5,reps:'5',load_rx:'80% 1RM',load_scaled:'65% 1RM'},
        {name:'Bent Over Row',sets:5,reps:'5',load_rx:'same as bench',load_scaled:'same'}
      ],
      time_cap:25,elite_target:'Sub 18 min',equipment:['barbell','bench'],
-     combine_note:'Structural balance — bench strength meets Combine bench press test'},
-    {id:'t04',name:'The Coeus',tier:'Titan',format:'For Load',
+     combine_note:'Push-pull balance — bench strength meets Combine bench press test'},
+    {id:'t04',name:'The Coeus',tier:'titan',phoenix_signature:'strength-template',format:'For Load',
      movements:[{name:'Overhead Press',sets:5,reps:'3',load_rx:'85% 1RM',load_scaled:'70% 1RM'}],
      time_cap:20,elite_target:'1.0x BW',equipment:['barbell'],
      combine_note:'Overhead strength — shoulder health and pressing power'},
-    {id:'t05',name:'The Iapetus',tier:'Titan',format:'EMOM 12',
+    {id:'t05',name:'The Iapetus',tier:'titan',phoenix_signature:'strength-template',format:'EMOM 12',
      movements:[
        {name:'Power Clean',sets:6,reps:'3',load_rx:'70% 1RM',load_scaled:'60% 1RM'},
        {name:'Front Squat',sets:6,reps:'3',load_rx:'70% 1RM',load_scaled:'60% 1RM'}
      ],
      time_cap:12,elite_target:'Complete all sets unbroken',equipment:['barbell'],
      combine_note:'Triple extension — the foundation of all Combine power tests'},
-    {id:'t06',name:'The Oceanus',tier:'Titan',format:'5x5',
+    {id:'t06',name:'The Oceanus',tier:'titan',phoenix_signature:'structural-balance',format:'5x5',
      movements:[
        {name:'Romanian Deadlift',sets:5,reps:'8',load_rx:'60% deadlift 1RM',load_scaled:'50%'},
        {name:'Weighted Pull Up',sets:5,reps:'5',load_rx:'Heavy',load_scaled:'Bodyweight'}
      ],
      time_cap:25,elite_target:'Pull up = 0.5x BW added',equipment:['barbell','pull_up_bar'],
      combine_note:'Directly tests weighted pull up — Q1 Combine test'},
-    {id:'t07',name:'The Prometheus',tier:'Titan',format:'For Load — Max',
+    {id:'t07',name:'The Prometheus',tier:'titan',phoenix_signature:'strength-template',format:'For Load — Max',
      movements:[{name:'Back Squat 1RM Attempt',sets:1,reps:'1',load_rx:'Max',load_scaled:'90% est 1RM'}],
      time_cap:30,elite_target:'Post your 1RM to the leaderboard',equipment:['barbell','rack'],
      combine_note:'This IS the Q1 Combine squat test — log your score'},
-    {id:'t08',name:'The Tethys',tier:'Titan',format:'4 Rounds For Time',
+    {id:'t08',name:'The Tethys',tier:'titan',phoenix_signature:'strength-template',format:'4 Rounds For Time',
      movements:[
        {name:'Front Squat',sets:4,reps:'6',load_rx:'75% 1RM',load_scaled:'60% 1RM'},
        {name:'Ring Dip',sets:4,reps:'8',load_rx:'Weighted',load_scaled:'Bodyweight'},
@@ -9285,22 +9298,22 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'Sub 14 min',equipment:['barbell','rings'],
      combine_note:'Anterior chain strength — squat and press patterns'},
-    {id:'t09',name:'The Phoebe',tier:'Titan',format:'EMOM 15',
+    {id:'t09',name:'The Phoebe',tier:'titan',phoenix_signature:'throw-jump',format:'EMOM 15',
      movements:[
        {name:'Hang Power Snatch',sets:5,reps:'3',load_rx:'60% snatch 1RM',load_scaled:'Light technique'},
-       {name:'Box Jump',sets:5,reps:'5',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'Box Jump',sets:5,reps:'5',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'},
        {name:'Rest',sets:5,reps:'',load_rx:'',load_scaled:''}
      ],
      time_cap:15,elite_target:'All sets unbroken',equipment:['barbell','box'],
      combine_note:'Triple extension + reactive jumping — Combine vertical jump prep'},
-    {id:'t10',name:'The Rhea',tier:'Titan',format:'5 Rounds For Load',
+    {id:'t10',name:'The Rhea',tier:'titan',phoenix_signature:'carry-loaded',format:'5 Rounds For Load',
      movements:[
        {name:'Trap Bar Deadlift',sets:5,reps:'5',load_rx:'85% 1RM',load_scaled:'70% 1RM'},
        {name:'Weighted Carries 40m',sets:5,reps:'',load_rx:'Heavy',load_scaled:'Moderate'}
      ],
      time_cap:25,elite_target:'Deadlift 2.0x BW',equipment:['trap_bar'],
      combine_note:'Posterior chain power — deadlift and carry strength'},
-    {id:'t11',name:'The Mnemosyne',tier:'Titan',format:'3 Rounds For Time',
+    {id:'t11',name:'The Mnemosyne',tier:'titan',phoenix_signature:'structural-balance',format:'3 Rounds For Time',
      movements:[
        {name:'Deadlift',sets:3,reps:'10',load_rx:'70% 1RM',load_scaled:'60% 1RM'},
        {name:'Strict Pull Up',sets:3,reps:'10',load_rx:'',load_scaled:'Banded'},
@@ -9308,11 +9321,11 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'Sub 12 min',equipment:['barbell','pull_up_bar'],
      combine_note:'Pulling strength and pressing endurance'},
-    {id:'t12',name:'The Themis',tier:'Titan',format:'For Load',
+    {id:'t12',name:'The Themis',tier:'titan',phoenix_signature:'strength-template',format:'For Load',
      movements:[{name:'Bench Press 1RM Attempt',sets:1,reps:'1',load_rx:'Max',load_scaled:'90% est 1RM'}],
      time_cap:30,elite_target:'Post your 1RM',equipment:['barbell','bench'],
      combine_note:'This IS the Q1 Combine bench press test'},
-    {id:'t13',name:'The Dione',tier:'Titan',format:'EMOM 20',
+    {id:'t13',name:'The Dione',tier:'titan',phoenix_signature:'structural-balance',format:'EMOM 20',
      movements:[
        {name:'Back Squat',sets:5,reps:'4',load_rx:'75% 1RM',load_scaled:'65% 1RM'},
        {name:'Ring Row',sets:5,reps:'8',load_rx:'Feet elevated',load_scaled:'Standard'},
@@ -9321,47 +9334,40 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'Complete all sets',equipment:['barbell','rings','bench'],
      combine_note:'Posterior chain and structural balance'},
+    // v4.7.26 NEW additions to Titan tier
+    {id:'t14',name:'The Triphasic',tier:'titan',phoenix_signature:'triphasic',format:'5 sets For Load',
+     movements:[{name:'Back Squat (5s eccentric + 3s pause + explosive concentric)',sets:5,reps:'5',load_rx:'Work up to max with full tempo',load_scaled:'70% 1RM with full tempo'}],
+     time_cap:30,elite_target:'Max load held with full tempo on every rep',equipment:['barbell','rack'],
+     coaching_note:'Eccentric and pause are mandatory — a rep without the tempo does not count. This is not a race. Rest 3 minutes between sets.',
+     combine_note:'Triphasic loading — tissue preparation and rate of force development'},
+    {id:'t15',name:'The Polyphemus',tier:'titan',phoenix_signature:'strongman',format:'AFAP — 5 rounds',
+     movements:[
+       {name:'Sandbag Over Shoulder',sets:5,reps:'1',load_rx:'80kg',load_scaled:'40kg'},
+       {name:'Farmers Carry 40m',sets:5,reps:'40m',load_rx:'2×40kg',load_scaled:'2×24kg'},
+       {name:'Push Press',sets:5,reps:'5',load_rx:'80kg',load_scaled:'50kg'}
+     ],
+     time_cap:25,elite_target:'Sub 15 min unbroken carries',equipment:['sandbag','dumbbells','barbell'],
+     combine_note:'Strongman medley — full-body bracing and grip endurance'}
   ],
 
   // ============================================================
-  // GODS — Benchmark style (Q1-Q2, classic format)
+  // LEGEND TIER — metcons (was gods, retired Fran/Karen clones)
   // ============================================================
 
   gods: [
-    {id:'g01',name:'The Zeus',tier:'God',format:'AMRAP 12',
+    // g01 The Zeus retired (v4.7.26) — was Fran clone
+    {id:'g02',name:'The Ares',tier:'legend',phoenix_signature:'carry-loaded',format:'AFAP — 5 rounds',
      movements:[
-       {name:'Thruster',sets:0,reps:'',load_rx:'43kg',load_scaled:'30kg'},
-       {name:'Pull Up',sets:0,reps:'',load_rx:'',load_scaled:'Banded'}
+       {name:'Deadlift',sets:5,reps:'7',load_rx:'100kg',load_scaled:'70kg'},
+       {name:'Hang Power Clean',sets:5,reps:'5',load_rx:'100kg',load_scaled:'70kg'},
+       {name:'Front Squat',sets:5,reps:'3',load_rx:'100kg',load_scaled:'70kg'},
+       {name:'Farmers Carry',sets:5,reps:'200m',load_rx:'2×24kg',load_scaled:'2×16kg'}
      ],
-     rep_scheme:'21-15-9',time_cap:12,elite_target:'3+ rounds',equipment:['barbell','pull_up_bar'],
-     combine_note:'Thrusters test the same hip-to-shoulder chain as your vertical jump'},
-    {id:'g02',name:'The Ares',tier:'God',format:'AFAP',
-     movements:[
-       {name:'Deadlift',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'},
-       {name:'Hang Power Clean',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'},
-       {name:'Front Squat',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'},
-       {name:'Push Jerk',sets:0,reps:'',load_rx:'100kg',load_scaled:'70kg'}
-     ],
-     rep_scheme:'12-9-6-3',time_cap:15,elite_target:'Sub 8 min',equipment:['barbell'],
-     combine_note:'Full barbell complex — all Combine movement patterns in one'},
-    {id:'g03',name:'The Apollo',tier:'God',format:'AFAP',
-     movements:[
-       {name:'Wall Ball',sets:0,reps:'150',load_rx:'9kg to 3m',load_scaled:'6kg to 3m'},
-     ],
-     rep_scheme:'150 reps',time_cap:20,elite_target:'Sub 7 min',equipment:['wall_ball'],
-     combine_note:'This IS the Karen Combine test — log this as your official score'},
-    {id:'g04',name:'The Hermes',tier:'God',format:'AFAP',
-     movements:[
-       {name:'Thruster',sets:0,reps:'21',load_rx:'43kg',load_scaled:'30kg'},
-       {name:'Pull Up',sets:0,reps:'21',load_rx:'',load_scaled:'Banded'},
-       {name:'Thruster',sets:0,reps:'15',load_rx:'43kg',load_scaled:'30kg'},
-       {name:'Pull Up',sets:0,reps:'15',load_rx:'',load_scaled:'Banded'},
-       {name:'Thruster',sets:0,reps:'9',load_rx:'43kg',load_scaled:'30kg'},
-       {name:'Pull Up',sets:0,reps:'9',load_rx:'',load_scaled:'Banded'}
-     ],
-     rep_scheme:'21-15-9',time_cap:15,elite_target:'Sub 4 min',equipment:['barbell','pull_up_bar'],
-     combine_note:'Classic benchmark — upper body pulling and full body power'},
-    {id:'g05',name:'The Poseidon',tier:'God',format:'AMRAP 20',
+     time_cap:25,elite_target:'Sub 18 min',equipment:['barbell','kettlebell'],
+     combine_note:'Full barbell complex with carry finish — pulling, squatting and bracing'},
+    // g03 The Apollo retired (v4.7.26) — was Karen clone
+    // g04 The Hermes retired (v4.7.26) — was Fran clone
+    {id:'g05',name:'The Poseidon',tier:'legend',phoenix_signature:'mixed-modal',format:'AMRAP 20',
      movements:[
        {name:'Row',sets:0,reps:'500m',load_rx:'',load_scaled:''},
        {name:'Push Up',sets:0,reps:'40',load_rx:'',load_scaled:'Knee'},
@@ -9369,37 +9375,41 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'4+ rounds',equipment:['rower'],
      combine_note:'Rowing endurance maps directly to your 2km row Combine test'},
-    {id:'g06',name:'The Athena',tier:'God',format:'AFAP',
+    {id:'g06',name:'The Athena',tier:'legend',phoenix_signature:'mixed-modal',format:'AFAP',
      movements:[
-       {name:'Power Snatch',sets:0,reps:'',load_rx:'60kg',load_scaled:'40kg'},
-       {name:'Box Jump Over',sets:0,reps:'',load_rx:'60cm',load_scaled:'50cm'}
+       {name:'Hang Power Snatch',sets:0,reps:'21',load_rx:'50kg',load_scaled:'35kg'},
+       {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
+       {name:'Hang Power Snatch',sets:0,reps:'15',load_rx:'50kg',load_scaled:'35kg'},
+       {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
+       {name:'Hang Power Snatch',sets:0,reps:'9',load_rx:'50kg',load_scaled:'35kg'}
      ],
-     rep_scheme:'30-30',time_cap:15,elite_target:'Sub 8 min',equipment:['barbell','box'],
-     combine_note:'Explosive hip extension — trains your vertical and broad jump mechanics'},
-    {id:'g07',name:'The Hephaestus',tier:'God',format:'5 Rounds AFAP',
+     rep_scheme:'21-15-9 with runs',time_cap:18,elite_target:'Sub 12 min',equipment:['barbell'],
+     coaching_note:'No Oly background — substitute DB Snatch 22.5kg with 400m runs between sets.',
+     combine_note:'Triple extension explosive snatch with aerobic intervals between'},
+    {id:'g07',name:'The Hephaestus',tier:'legend',phoenix_signature:'throw-jump',format:'5 Rounds AFAP',
      movements:[
-       {name:'15 Kettlebell Swing',sets:5,reps:'15',load_rx:'32kg',load_scaled:'24kg'},
-       {name:'15 Box Jump',sets:5,reps:'15',load_rx:'60cm',load_scaled:'50cm'}
+       {name:'Kettlebell Swing',sets:5,reps:'15',load_rx:'32kg',load_scaled:'24kg'},
+       {name:'Box Jump',sets:5,reps:'15',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'}
      ],
      time_cap:20,elite_target:'Sub 14 min',equipment:['kettlebell','box'],
      combine_note:'Hip drive and reactive power — vertical jump and broad jump prep'},
-    {id:'g08',name:'The Dionysus',tier:'God',format:'AMRAP 15',
+    {id:'g08',name:'The Dionysus',tier:'legend',phoenix_signature:'mixed-modal',format:'AMRAP 15',
      movements:[
        {name:'Muscle Up',sets:0,reps:'5',load_rx:'',load_scaled:'Pull Up + Dip'},
        {name:'Squat Clean',sets:0,reps:'10',load_rx:'70kg',load_scaled:'50kg'}
      ],
      time_cap:15,elite_target:'6+ rounds',equipment:['rings','barbell'],
      combine_note:'Full body power — upper pulling strength and lower body drive'},
-    {id:'g09',name:'The Artemis',tier:'God',format:'AFAP',
+    {id:'g09',name:'The Artemis',tier:'legend',phoenix_signature:'strongman',format:'AFAP',
      movements:[
        {name:'Run',sets:0,reps:'800m',load_rx:'',load_scaled:'600m'},
-       {name:'Kettlebell Swing',sets:0,reps:'50',load_rx:'32kg',load_scaled:'24kg'},
-       {name:'Pull Up',sets:0,reps:'30',load_rx:'',load_scaled:'Banded'},
+       {name:'Sandbag Clean Over Shoulder',sets:0,reps:'30',load_rx:'60kg',load_scaled:'40kg'},
+       {name:'Strict Pull Up',sets:0,reps:'20',load_rx:'',load_scaled:'Banded'},
        {name:'Run',sets:0,reps:'800m',load_rx:'',load_scaled:'600m'}
      ],
-     time_cap:25,elite_target:'Sub 16 min',equipment:['kettlebell','pull_up_bar'],
-     combine_note:'Aerobic endurance + pulling strength — mile run and pull up prep'},
-    {id:'g10',name:'The Demeter',tier:'God',format:'EMOM 16',
+     time_cap:25,elite_target:'Sub 18 min',equipment:['sandbag','pull_up_bar'],
+     combine_note:'Aerobic endurance + strongman + strict pulling under fatigue'},
+    {id:'g10',name:'The Demeter',tier:'legend',phoenix_signature:'mixed-modal',format:'EMOM 16',
      movements:[
        {name:'Hang Squat Clean',sets:4,reps:'3',load_rx:'75% 1RM',load_scaled:'65% 1RM'},
        {name:'Toes to Bar',sets:4,reps:'10',load_rx:'',load_scaled:'Knee Raise'},
@@ -9408,11 +9418,11 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:16,elite_target:'All sets complete',equipment:['barbell','pull_up_bar','bike'],
      combine_note:'Mixed modal conditioning — power and capacity'},
-    {id:'g11',name:'The Hades',tier:'God',format:'Death By',
-     movements:[{name:'Burpee Box Jump Over',sets:0,reps:'',load_rx:'60cm',load_scaled:'50cm'}],
+    {id:'g11',name:'The Hades',tier:'legend',phoenix_signature:'throw-jump',format:'Death By',
+     movements:[{name:'Burpee Box Jump Over',sets:0,reps:'',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'}],
      starting_reps:1,time_cap:20,elite_target:'Complete minute 15+',equipment:['box'],
      combine_note:'Explosive conditioning and endurance under fatigue'},
-    {id:'g12',name:'The Persephone',tier:'God',format:'AFAP Chipper',
+    {id:'g12',name:'The Persephone',tier:'legend',phoenix_signature:'skill-density',format:'AFAP Chipper',
      movements:[
        {name:'Calorie Row',sets:0,reps:'50',load_rx:'',load_scaled:'35 cal'},
        {name:'Handstand Push Up',sets:0,reps:'40',load_rx:'',load_scaled:'Pike Push Up'},
@@ -9421,92 +9431,64 @@ var PHOENIX_WOD_LIBRARY = {
        {name:'Pegboard Ascent',sets:0,reps:'10',load_rx:'',load_scaled:'Rope Climb'}
      ],
      time_cap:30,elite_target:'Sub 22 min',equipment:['rower','dumbbells','pull_up_bar'],
-     combine_note:'Upper body pulling and pressing endurance — full capacity test'},
+     combine_note:'Upper body pulling and pressing endurance — full capacity test'}
   ],
 
   // ============================================================
-  // LEGENDS — Longer, endurance-based (Q2-Q3)
+  // BEAST TIER — long endurance + brutal conditioning (was legends + beasts; Murph/Cindy/DT clones retired)
   // ============================================================
 
   legends: [
-    {id:'h01',name:'The Achilles',tier:'Legend',format:'AFAP',
+    // h01 The Achilles retired (v4.7.26) — was Murph clone
+    {id:'h02',name:'The Odysseus',tier:'beast',phoenix_signature:'carry-loaded',format:'AFAP Chipper',
      movements:[
-       {name:'Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'},
-       {name:'100 Pull Up',sets:0,reps:'100',load_rx:'',load_scaled:'50 + 50 ring row'},
-       {name:'200 Push Up',sets:0,reps:'200',load_rx:'',load_scaled:'Knee PU'},
-       {name:'300 Air Squat',sets:0,reps:'300',load_rx:'',load_scaled:'200'},
-       {name:'Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'}
+       {name:'Row',sets:0,reps:'1500m',load_rx:'',load_scaled:'1000m'},
+       {name:'Thruster',sets:0,reps:'40',load_rx:'40kg',load_scaled:'30kg'},
+       {name:'Pull Up',sets:0,reps:'25',load_rx:'',load_scaled:'Banded'},
+       {name:'Farmers Carry',sets:0,reps:'200m',load_rx:'2×32kg',load_scaled:'2×24kg'}
      ],
-     time_cap:60,elite_target:'Sub 40 min',equipment:['pull_up_bar'],
-     combine_note:'The full test — mile run, pull ups, push ups all in one legendary workout'},
-    {id:'h02',name:'The Odysseus',tier:'Legend',format:'AFAP Chipper',
-     movements:[
-       {name:'Row',sets:0,reps:'2000m',load_rx:'',load_scaled:'1500m'},
-       {name:'50 Thruster',sets:0,reps:'50',load_rx:'43kg',load_scaled:'30kg'},
-       {name:'30 Pull Up',sets:0,reps:'30',load_rx:'',load_scaled:'Banded'}
-     ],
-     time_cap:35,elite_target:'Sub 25 min',equipment:['rower','barbell','pull_up_bar'],
-     combine_note:'2km row is a direct Combine test — this is the full version with added work'},
-    {id:'h03',name:'The Perseus',tier:'Legend',format:'AMRAP 30',
-     movements:[
-       {name:'5 Pull Up',sets:0,reps:'5',load_rx:'',load_scaled:'Banded'},
-       {name:'10 Push Up',sets:0,reps:'10',load_rx:'',load_scaled:'Knee'},
-       {name:'15 Air Squat',sets:0,reps:'15',load_rx:'',load_scaled:''}
-     ],
-     time_cap:30,elite_target:'20+ rounds',equipment:['pull_up_bar'],
-     combine_note:'Endurance and consistency — push up and pull up Combine tests in a longer format'},
-    {id:'h04',name:'The Theseus',tier:'Legend',format:'AFAP',
-     movements:[
-       {name:'21 Deadlift',sets:0,reps:'21',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'15 Hang Power Clean',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'9 Push Jerk',sets:0,reps:'9',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'21 Deadlift',sets:0,reps:'21',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'15 Hang Power Clean',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'9 Push Jerk',sets:0,reps:'9',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'21 Deadlift',sets:0,reps:'21',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'15 Hang Power Clean',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'9 Push Jerk',sets:0,reps:'9',load_rx:'102.5kg',load_scaled:'70kg'}
-     ],
-     time_cap:30,elite_target:'Sub 18 min',equipment:['barbell'],
-     combine_note:'Triple barbell complex — power and endurance under fatigue'},
-    {id:'h05',name:'The Leonidas',tier:'Legend',format:'AFAP',
+     time_cap:30,elite_target:'Sub 22 min',equipment:['rower','barbell','pull_up_bar','kettlebell'],
+     combine_note:'Row, push, pull, carry — every major pattern under fatigue with a loaded carry finish'},
+    // h03 The Perseus retired (v4.7.26) — was Cindy clone
+    // h04 The Theseus retired (v4.7.26) — was DT clone
+    {id:'h05',name:'The Leonidas',tier:'beast',phoenix_signature:'mixed-modal',format:'AFAP',
      movements:[
        {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
-       {name:'Max Rep Pull Up',sets:0,reps:'max',load_rx:'',load_scaled:'Ring Row'},
+       {name:'Max Rep Pull Up',sets:0,reps:'max',load_rx:'',load_scaled:'Ring Row'}
      ],
      rounds:5,rest:'none',time_cap:35,elite_target:'100+ total pull ups',equipment:['pull_up_bar'],
      combine_note:'Max pull up test in a fatigued state — harder than the Combine version'},
-    {id:'h06',name:'The Heracles',tier:'Legend',format:'AFAP Chipper',
+    {id:'h06',name:'The Heracles',tier:'beast',phoenix_signature:'mixed-modal',format:'AFAP Chipper',
      movements:[
        {name:'100 Wall Ball',sets:0,reps:'100',load_rx:'9kg',load_scaled:'6kg'},
        {name:'90 Double Under',sets:0,reps:'90',load_rx:'',load_scaled:'180 singles'},
        {name:'80 Sit Up',sets:0,reps:'80',load_rx:'',load_scaled:''},
        {name:'70 KB Swing',sets:0,reps:'70',load_rx:'32kg',load_scaled:'24kg'},
        {name:'60 Pull Up',sets:0,reps:'60',load_rx:'',load_scaled:'Banded'},
-       {name:'50 Box Jump',sets:0,reps:'50',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'50 Box Jump',sets:0,reps:'50',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'},
        {name:'40 DB Snatch',sets:0,reps:'40',load_rx:'22.5kg',load_scaled:'15kg'},
        {name:'30 Burpee',sets:0,reps:'30',load_rx:'',load_scaled:''},
        {name:'20 Thruster',sets:0,reps:'20',load_rx:'43kg',load_scaled:'30kg'},
        {name:'10 Muscle Up',sets:0,reps:'10',load_rx:'',load_scaled:'Pull Up + Dip'}
      ],
      time_cap:45,elite_target:'Sub 35 min',equipment:['wall_ball','kettlebell','pull_up_bar','box','dumbbells','barbell'],
-     combine_note:'The big one — touches every Combine quality in one chipper'},
-    {id:'h07',name:'The Orpheus',tier:'Legend',format:'AMRAP 20',
+     combine_note:'The big one — touches every Combine quality in one descending chipper'},
+    {id:'h07',name:'The Orpheus',tier:'beast',phoenix_signature:'mixed-modal',format:'AMRAP 20',
      movements:[
-       {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
-       {name:'15 OH Squat',sets:0,reps:'15',load_rx:'43kg',load_scaled:'PVC technique'},
-       {name:'15 Pull Up',sets:0,reps:'15',load_rx:'',load_scaled:'Banded'}
+       {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
+       {name:'Front Squat',sets:0,reps:'12',load_rx:'60kg',load_scaled:'40kg'},
+       {name:'Ring Row',sets:0,reps:'12',load_rx:'',load_scaled:'Standard'}
      ],
-     time_cap:20,elite_target:'4+ rounds',equipment:['barbell','pull_up_bar'],
-     combine_note:'OH squat is a direct Combine mobility test — train it under fatigue'},
+     time_cap:20,elite_target:'5+ rounds',equipment:['barbell','rings'],
+     combine_note:'Aerobic capacity with squat strength endurance under fatigue'}
   ],
 
   // ============================================================
-  // MYTHS — Skill/EMOM, technique focus
+  // BEAST TIER (continued) — skill / density (was myths)
   // ============================================================
 
   myths: [
-    {id:'p01',name:'The Socrates',tier:'Myth',format:'EMOM 20',
+    {id:'p01',name:'The Socrates',tier:'beast',phoenix_signature:'skill-density',format:'EMOM 20',
      movements:[
        {name:'3 Snatch',sets:5,reps:'3',load_rx:'70% 1RM',load_scaled:'Technique weight'},
        {name:'3 Clean & Jerk',sets:5,reps:'3',load_rx:'70% 1RM',load_scaled:'Technique weight'},
@@ -9515,16 +9497,16 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'All sets unbroken',equipment:['barbell','pull_up_bar','ghd'],
      combine_note:'Movement quality under fatigue — form is everything'},
-    {id:'p02',name:'The Plato',tier:'Myth',format:'Tabata',
+    {id:'p02',name:'The Plato',tier:'beast',phoenix_signature:'mixed-modal',format:'Tabata',
      movements:[
-       {name:'Squat',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:''},
-       {name:'Push Up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:'Knee'},
-       {name:'Sit Up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:''},
-       {name:'Pull Up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:'Ring Row'}
+       {name:'Calorie Row',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:''},
+       {name:'Goblet Squat',sets:8,reps:'20s on 10s off',load_rx:'24kg',load_scaled:'16kg'},
+       {name:'AbMat Sit-up',sets:8,reps:'20s on 10s off',load_rx:'',load_scaled:''},
+       {name:'Ring Row',sets:8,reps:'20s on 10s off',load_rx:'Feet elevated',load_scaled:'Standard'}
      ],
-     time_cap:16,elite_target:'Maintain 10+ reps each interval',equipment:['pull_up_bar'],
-     combine_note:'Push up and pull up Combine prep in a metabolic format'},
-    {id:'p03',name:'The Aristotle',tier:'Myth',format:'EMOM 15',
+     time_cap:18,elite_target:'Maintain rep count across all rounds — score = lowest round across all movements',equipment:['rower','kettlebell','rings'],
+     combine_note:'Loaded conditioning — Tabata with weighted variations across four energy systems'},
+    {id:'p03',name:'The Aristotle',tier:'beast',phoenix_signature:'single-leg',format:'EMOM 15',
      movements:[
        {name:'5 Turkish Get Up',sets:5,reps:'5 each side',load_rx:'24kg KB',load_scaled:'16kg'},
        {name:'10 Single Leg RDL',sets:5,reps:'10 each',load_rx:'Light DB',load_scaled:'Bodyweight'},
@@ -9532,15 +9514,15 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:15,elite_target:'TGU = 32kg, L-sit 15s+',equipment:['kettlebell'],
      combine_note:'Movement quality and stability — injury prevention and body control'},
-    {id:'p04',name:'The Diogenes',tier:'Myth',format:'EMOM 12',
+    {id:'p04',name:'The Diogenes',tier:'beast',phoenix_signature:'skill-density',format:'EMOM 12',
      movements:[
        {name:'3 Overhead Squat',sets:4,reps:'3',load_rx:'60% snatch 1RM',load_scaled:'PVC technique'},
        {name:'5 Ring Dip',sets:4,reps:'5',load_rx:'Weighted',load_scaled:'Bodyweight'},
-       {name:'8 Box Jump',sets:4,reps:'8',load_rx:'60cm',load_scaled:'50cm'}
+       {name:'8 Box Jump',sets:4,reps:'8',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'}
      ],
      time_cap:12,elite_target:'All sets unbroken',equipment:['barbell','rings','box'],
      combine_note:'OH squat is the Combine mobility screen — practice it'},
-    {id:'p05',name:'The Seneca',tier:'Myth',format:'Skill + Strength',
+    {id:'p05',name:'The Seneca',tier:'beast',phoenix_signature:'single-leg',format:'Skill + Strength',
      movements:[
        {name:'Handstand Walk',sets:5,reps:'10m',load_rx:'',load_scaled:'Wall Walk x5'},
        {name:'Pistol Squat',sets:5,reps:'5 each',load_rx:'Weighted',load_scaled:'Assisted'},
@@ -9548,15 +9530,15 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:25,elite_target:'Unassisted all movements',equipment:['rings'],
      combine_note:'Body control and single leg strength — athletic movement quality'},
-    {id:'p06',name:'The Marcus',tier:'Myth',format:'EMOM 18',
+    {id:'p06',name:'The Marcus',tier:'beast',phoenix_signature:'throw-jump',format:'EMOM 18',
      movements:[
        {name:'3 Power Snatch',sets:6,reps:'3',load_rx:'70% 1RM',load_scaled:'60% 1RM'},
-       {name:'6 Box Jump',sets:6,reps:'6',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'6 Box Jump',sets:6,reps:'6',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'},
        {name:'9 Calorie Assault Bike',sets:6,reps:'9 cal',load_rx:'',load_scaled:'7 cal'}
      ],
      time_cap:18,elite_target:'Complete all',equipment:['barbell','box','bike'],
      combine_note:'Power and conditioning — vertical jump mechanics with conditioning'},
-    {id:'p07',name:'The Epictetus',tier:'Myth',format:'20 Min Skill Work',
+    {id:'p07',name:'The Epictetus',tier:'beast',phoenix_signature:'skill-density',format:'20 Min Skill Work',
      movements:[
        {name:'Rope Climb',sets:0,reps:'10 ascents',load_rx:'',load_scaled:'Ring Row 20'},
        {name:'Handstand Push Up',sets:0,reps:'50 total',load_rx:'',load_scaled:'Pike PU'},
@@ -9564,26 +9546,26 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:20,elite_target:'All unassisted',equipment:['rope','wall'],
      combine_note:'Upper body pulling strength — directly improves pull up Combine score'},
-    {id:'p08',name:'The Zeno',tier:'Myth',format:'EMOM 30',
+    {id:'p08',name:'The Zeno',tier:'beast',phoenix_signature:'mixed-modal',format:'EMOM 30',
      movements:[
        {name:'1 Squat Clean + Jerk',sets:10,reps:'1',load_rx:'80% 1RM',load_scaled:'70% 1RM'},
        {name:'5 Strict HSPU',sets:10,reps:'5',load_rx:'',load_scaled:'Pike PU'},
        {name:'200m Run',sets:10,reps:'200m',load_rx:'',load_scaled:'150m'}
      ],
      time_cap:30,elite_target:'All sets complete',equipment:['barbell'],
-     combine_note:'Power, pressing, and aerobic capacity — three Combine qualities in one'},
+     combine_note:'Power, pressing, and aerobic capacity — three Combine qualities in one'}
   ],
 
   // ============================================================
-  // BEASTS — Brutal conditioning (Q3)
+  // BEAST TIER (continued) — brutal conditioning + new Phoenix signatures
   // ============================================================
 
   beasts: [
-    {id:'c01',name:'The Hydra',tier:'Beast',format:'Death By',
+    {id:'c01',name:'The Hydra',tier:'beast',phoenix_signature:'mixed-modal',format:'Death By',
      movements:[{name:'Thruster',sets:0,reps:'',load_rx:'43kg',load_scaled:'30kg'}],
      starting_reps:1,time_cap:20,elite_target:'Minute 13+',equipment:['barbell'],
      combine_note:'Thruster endurance — same mechanics as your vertical jump test but at high fatigue'},
-    {id:'c02',name:'The Chimera',tier:'Beast',format:'AFAP',
+    {id:'c02',name:'The Chimera',tier:'beast',phoenix_signature:'mixed-modal',format:'AFAP',
      movements:[
        {name:'100 Burpee',sets:0,reps:'100',load_rx:'',load_scaled:'50'},
        {name:'100 Kb Swing',sets:0,reps:'100',load_rx:'32kg',load_scaled:'24kg'},
@@ -9592,23 +9574,23 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:40,elite_target:'Sub 30 min',equipment:['kettlebell','wall_ball'],
      combine_note:'Pure conditioning capacity — improves all time-based Combine tests'},
-    {id:'c03',name:'The Minotaur',tier:'Beast',format:'5 Rounds AFAP',
+    {id:'c03',name:'The Minotaur',tier:'beast',phoenix_signature:'throw-jump',format:'5 Rounds AFAP',
      movements:[
        {name:'400m Run',sets:5,reps:'400m',load_rx:'',load_scaled:'300m'},
-       {name:'30 Box Jump',sets:5,reps:'30',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'30 Box Jump',sets:5,reps:'30',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'},
        {name:'30 Wall Ball',sets:5,reps:'30',load_rx:'9kg',load_scaled:'6kg'}
      ],
      time_cap:45,elite_target:'Sub 35 min',equipment:['box','wall_ball'],
      combine_note:'Running volume and explosive jumping — mile run and broad jump prep'},
-    {id:'c04',name:'The Cerberus',tier:'Beast',format:'AMRAP 30',
+    {id:'c04',name:'The Cerberus',tier:'beast',phoenix_signature:'structural-balance',format:'AMRAP 30',
      movements:[
-       {name:'5 Deadlift',sets:0,reps:'5',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'10 Hang Power Clean',sets:0,reps:'10',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'15 Front Squat',sets:0,reps:'15',load_rx:'102.5kg',load_scaled:'70kg'}
+       {name:'Deadlift',sets:0,reps:'5',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'Hang Clean',sets:0,reps:'10',load_rx:'102.5kg',load_scaled:'70kg'},
+       {name:'Overhead Squat',sets:0,reps:'15',load_rx:'60kg',load_scaled:'40kg'}
      ],
      time_cap:30,elite_target:'5+ rounds',equipment:['barbell'],
-     combine_note:'Barbell endurance — sustained power output across all pulling and squatting patterns'},
-    {id:'c05',name:'The Medusa',tier:'Beast',format:'AFAP',
+     combine_note:'Posterior pull, front-rack catch, and overhead mobility — three planes of strength under fatigue'},
+    {id:'c05',name:'The Medusa',tier:'beast',phoenix_signature:'mixed-modal',format:'AFAP',
      movements:[
        {name:'50 Pull Up',sets:0,reps:'50',load_rx:'',load_scaled:'Banded'},
        {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:''},
@@ -9621,11 +9603,11 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:40,elite_target:'Sub 28 min',equipment:['kettlebell','pull_up_bar'],
      combine_note:'Running, pulling, pushing — three Combine tests in one brutal session'},
-    {id:'c06',name:'The Cyclops',tier:'Beast',format:'EMOM until failure',
+    {id:'c06',name:'The Cyclops',tier:'beast',phoenix_signature:'mixed-modal',format:'EMOM until failure',
      movements:[{name:'Max Calorie Row',sets:0,reps:'12 cal min 1, add 1 each min',load_rx:'',load_scaled:'10 cal + 1'}],
      time_cap:25,elite_target:'Complete minute 15+',equipment:['rower'],
      combine_note:'Row endurance — directly improves your 2km row Combine score'},
-    {id:'c07',name:'The Sphinx',tier:'Beast',format:'4 Rounds AFAP',
+    {id:'c07',name:'The Sphinx',tier:'beast',phoenix_signature:'mixed-modal',format:'4 Rounds AFAP',
      movements:[
        {name:'800m Run',sets:4,reps:'800m',load_rx:'',load_scaled:'600m'},
        {name:'50 Air Squat',sets:4,reps:'50',load_rx:'',load_scaled:'35'},
@@ -9633,25 +9615,66 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:50,elite_target:'Sub 40 min',equipment:['pull_up_bar'],
      combine_note:'Running and pulling endurance — mile run and pull up Combine prep'},
-    {id:'c08',name:'The Scylla',tier:'Beast',format:'AFAP Chipper',
+    {id:'c08',name:'The Scylla',tier:'beast',phoenix_signature:'strongman',format:'AFAP Chipper',
      movements:[
        {name:'2km Row',sets:0,reps:'2000m',load_rx:'',load_scaled:'1500m'},
-       {name:'150 Wall Ball',sets:0,reps:'150',load_rx:'9kg',load_scaled:'6kg'},
+       {name:'100 Wall Ball',sets:0,reps:'100',load_rx:'9kg',load_scaled:'6kg'},
+       {name:'50 Sandbag Clean Over Shoulder',sets:0,reps:'50',load_rx:'40kg',load_scaled:'25kg'},
        {name:'1 Mile Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'}
      ],
-     time_cap:50,elite_target:'Sub 38 min',equipment:['rower','wall_ball'],
-     combine_note:'Row + Karen + Mile — three Combine tests back to back. Your ultimate benchmark.'},
+     time_cap:50,elite_target:'Sub 38 min',equipment:['rower','wall_ball','sandbag'],
+     combine_note:'Row + ball-work + strongman + mile — ultimate capacity benchmark across all energy systems'},
+    // v4.7.26 NEW additions to Beast tier
+    {id:'n01',name:'The Promethean',tier:'beast',phoenix_signature:'carry-loaded',format:'AFAP Chipper',
+     movements:[
+       {name:'Sandbag Carry',sets:0,reps:'100m',load_rx:'60kg',load_scaled:'40kg'},
+       {name:'Farmers Walk',sets:0,reps:'100m',load_rx:'2×32kg',load_scaled:'2×24kg'},
+       {name:'Overhead KB Carry',sets:0,reps:'100m',load_rx:'2×24kg',load_scaled:'2×16kg'},
+       {name:'Sled Drag (sub: Farmers Walk if no sled)',sets:0,reps:'100m',load_rx:'60kg',load_scaled:'40kg'}
+     ],
+     time_cap:25,elite_target:'Sub 14 min unbroken',equipment:['sandbag','kettlebell','sled'],
+     coaching_note:'Reduce all distances to 50m for the scaled version. No sled? Substitute the sled drag for a 100m farmers walk.',
+     combine_note:'Pure loaded carry — grip endurance, brace, and full-body bracing under fatigue'},
+    {id:'n02',name:'The Iolaus',tier:'beast',phoenix_signature:'single-leg',format:'AMRAP 16',
+     movements:[
+       {name:'Bulgarian Split Squat',sets:0,reps:'10 each leg',load_rx:'2×20kg DB',load_scaled:'Bodyweight'},
+       {name:'Step-up',sets:0,reps:'10 each leg',load_rx:'24" (61cm) box',load_scaled:'20" (51cm) box'},
+       {name:'Walking Lunge',sets:0,reps:'20m',load_rx:'',load_scaled:'10m'}
+     ],
+     time_cap:16,elite_target:'5+ rounds',equipment:['dumbbells','box'],
+     coaching_note:'Remove load and reduce step-up height for the scaled version.',
+     combine_note:'Single-leg strength and unilateral capacity — foundational athletic movement'},
+    {id:'n03',name:'The Hephaestion',tier:'beast',phoenix_signature:'posterior-chain',format:'EMOM 20 (5-min cycle × 4)',
+     movements:[
+       {name:'Min 1 — RKC Plank',sets:4,reps:'30 seconds',load_rx:'',load_scaled:'Standard plank'},
+       {name:'Min 2 — Nordic Curl negatives',sets:4,reps:'8',load_rx:'Slow eccentric',load_scaled:'10 GHD sit-up'},
+       {name:'Min 3 — Copenhagen Plank',sets:4,reps:'30s each side',load_rx:'',load_scaled:'Side plank'},
+       {name:'Min 4 — Good Morning',sets:4,reps:'10',load_rx:'40kg',load_scaled:'25kg'},
+       {name:'Min 5 — Rest',sets:4,reps:'',load_rx:'',load_scaled:''}
+     ],
+     time_cap:20,elite_target:'Complete every minute with full quality',equipment:['barbell','ghd'],
+     combine_note:'Posterior chain isometric and eccentric — injury prevention and structural balance'},
+    {id:'n04',name:'The Daedalus',tier:'beast',phoenix_signature:'throw-jump',format:'EMOM 12 (4-min cycle × 3)',
+     movements:[
+       {name:'Min 1 — Med Ball Slam + 20m Sprint',sets:3,reps:'5 slams + 20m sprint',load_rx:'10kg ball',load_scaled:'6kg ball'},
+       {name:'Min 2 — Broad Jump + Box Jump',sets:3,reps:'3 broad + 5 box',load_rx:'24" (61cm) box',load_scaled:'20" (51cm) box'},
+       {name:'Min 3 — Assault Bike Sprint',sets:3,reps:'30s max effort',load_rx:'',load_scaled:''},
+       {name:'Min 4 — Rest',sets:3,reps:'',load_rx:'',load_scaled:''}
+     ],
+     time_cap:12,elite_target:'Maintain output across all 3 cycles',equipment:['med_ball','box','bike'],
+     coaching_note:'Reduce ball weight and box height for the scaled version.',
+     combine_note:'Throw + jump + sprint — alactic power across all three planes of explosive movement'}
   ],
 
   // ============================================================
-  // IMMORTALS — The hardest elite workouts (Q4)
+  // TITAN TIER (continued) — elite hybrid (was immortals; renamed to remove name collisions)
   // ============================================================
 
   immortals: [
-    {id:'i01',name:'The Prometheus',tier:'Immortal',format:'AFAP Chipper',
+    {id:'i01',name:'The Erebus',tier:'titan',phoenix_signature:'mixed-modal',format:'AFAP Chipper',
      movements:[
        {name:'50 Calorie Row',sets:0,reps:'50 cal',load_rx:'',load_scaled:'35 cal'},
-       {name:'50 Box Jump Over',sets:0,reps:'50',load_rx:'60cm',load_scaled:'50cm'},
+       {name:'50 Box Jump Over',sets:0,reps:'50',load_rx:'24" (61cm)',load_scaled:'20" (51cm)'},
        {name:'50 Deadlift',sets:0,reps:'50',load_rx:'60kg',load_scaled:'40kg'},
        {name:'50 Wall Ball',sets:0,reps:'50',load_rx:'9kg',load_scaled:'6kg'},
        {name:'50 Ring Muscle Up',sets:0,reps:'50',load_rx:'',load_scaled:'Pull Up + Dip'},
@@ -9659,7 +9682,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:50,elite_target:'Sub 35 min',equipment:['rower','box','barbell','wall_ball','rings'],
      combine_note:'The ultimate chipper — 300 reps of relentless work across every domain'},
-    {id:'i02',name:'The Kronos',tier:'Immortal',format:'10 Rounds AFAP',
+    {id:'i02',name:'The Tartarus',tier:'titan',phoenix_signature:'mixed-modal',format:'10 Rounds AFAP',
      movements:[
        {name:'200m Run',sets:10,reps:'200m',load_rx:'',load_scaled:''},
        {name:'10 Power Clean',sets:10,reps:'10',load_rx:'61kg',load_scaled:'43kg'},
@@ -9667,19 +9690,18 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:45,elite_target:'Sub 30 min',equipment:['barbell'],
      combine_note:'Ten rounds of pain — sustained power output and mental fortitude'},
-    {id:'i03',name:'The Atlas',tier:'Immortal',format:'AFAP',
+    {id:'i03',name:'The Pontus',tier:'titan',phoenix_signature:'mixed-modal',format:'AFAP',
      movements:[
        {name:'1 Mile Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'},
-       {name:'100 Pull Up',sets:0,reps:'100',load_rx:'',load_scaled:'50 + 50 banded'},
-       {name:'200 Push Up',sets:0,reps:'200',load_rx:'',load_scaled:'Knee PU'},
-       {name:'300 Air Squat',sets:0,reps:'300',load_rx:'',load_scaled:'200'},
-       {name:'1 Mile Run',sets:0,reps:'1 mile',load_rx:'',load_scaled:'800m'},
-       {name:'50 Deadlift',sets:0,reps:'50',load_rx:'102.5kg',load_scaled:'70kg'},
-       {name:'50 Clean',sets:0,reps:'50',load_rx:'61kg',load_scaled:'43kg'}
+       {name:'75 Pull Up',sets:0,reps:'75',load_rx:'',load_scaled:'40 + 35 banded'},
+       {name:'150 Push Up',sets:0,reps:'150',load_rx:'',load_scaled:'Knee'},
+       {name:'225 Air Squat',sets:0,reps:'225',load_rx:'',load_scaled:'150'},
+       {name:'50 Deadlift',sets:0,reps:'50',load_rx:'100kg',load_scaled:'70kg'},
+       {name:'50 Hang Clean',sets:0,reps:'50',load_rx:'60kg',load_scaled:'43kg'}
      ],
      time_cap:75,elite_target:'Sub 55 min',equipment:['pull_up_bar','barbell'],
-     combine_note:'The extended legend — bodyweight endurance plus heavy barbell work. Only for the elite.'},
-    {id:'i04',name:'The Nemesis',tier:'Immortal',format:'AMRAP 40',
+     combine_note:'Bodyweight endurance plus heavy barbell finisher — only for the truly elite'},
+    {id:'i04',name:'The Nemesis',tier:'titan',phoenix_signature:'mixed-modal',format:'AMRAP 40',
      movements:[
        {name:'400m Run',sets:0,reps:'400m',load_rx:'',load_scaled:'300m'},
        {name:'15 Thruster',sets:0,reps:'15',load_rx:'43kg',load_scaled:'30kg'},
@@ -9687,15 +9709,15 @@ var PHOENIX_WOD_LIBRARY = {
        {name:'15 Burpee',sets:0,reps:'15',load_rx:'',load_scaled:''}
      ],
      time_cap:40,elite_target:'8+ rounds',equipment:['barbell','pull_up_bar'],
-     combine_note:'40 minutes of relentless mixed modal — the true test of an immortal engine'},
+     combine_note:'40 minutes of relentless mixed modal — the true test of an elite engine'}
   ],
 
   // ============================================================
-  // THE RISING — Weekly community challenge (all tiers)
+  // DAILY TIER — entry-level community challenges (was rising)
   // ============================================================
 
   rising: [
-    {id:'r01',name:'The Rising',tier:'Rising',format:'AMRAP 15',
+    {id:'r01',name:'The Rising',tier:'daily',phoenix_signature:'mixed-modal',format:'AMRAP 15',
      movements:[
        {name:'10 Push Up',sets:0,reps:'10',load_rx:'',load_scaled:'Knee'},
        {name:'10 Air Squat',sets:0,reps:'10',load_rx:'',load_scaled:''},
@@ -9703,7 +9725,7 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:15,elite_target:'15+ rounds',equipment:[],
      combine_note:'Entry point — build the foundation'},
-    {id:'r02',name:'The Ember',tier:'Rising',format:'AFAP',
+    {id:'r02',name:'The Ember',tier:'daily',phoenix_signature:'mixed-modal',format:'AFAP',
      movements:[
        {name:'Run',sets:0,reps:'400m',load_rx:'',load_scaled:'200m'},
        {name:'21 Push Up',sets:0,reps:'21',load_rx:'',load_scaled:'Knee'},
@@ -9711,18 +9733,18 @@ var PHOENIX_WOD_LIBRARY = {
      ],
      time_cap:15,elite_target:'Sub 8 min',equipment:[],
      combine_note:'Your first step toward the Combine'},
-    {id:'r03',name:'The Spark',tier:'Rising',format:'AMRAP 12',
+    {id:'r03',name:'The Spark',tier:'daily',phoenix_signature:'mixed-modal',format:'AMRAP 12',
      movements:[
        {name:'200m Run',sets:0,reps:'200m',load_rx:'',load_scaled:''},
        {name:'10 Burpee',sets:0,reps:'10',load_rx:'',load_scaled:''},
        {name:'15 Air Squat',sets:0,reps:'15',load_rx:'',load_scaled:''}
      ],
      time_cap:12,elite_target:'5+ rounds',equipment:[],
-     combine_note:'Accessible to all — conditioning and movement'},
+     combine_note:'Accessible to all — conditioning and movement'}
   ],
 
   // ============================================================
-  // QUARTERLY COMBINE BATTERIES
+  // QUARTERLY COMBINE BATTERIES — unchanged
   // ============================================================
 
   combine: {
@@ -9753,7 +9775,7 @@ var PHOENIX_WOD_LIBRARY = {
       subtitle:'Q3 Engine Battery',
       tests:[
         {name:'2km Row',type:'time',equipment:['rower']},
-        {name:'Karen — 150 Wall Balls',type:'time',equipment:['wall_ball']},
+        {name:'150 Wall Balls',type:'time',equipment:['wall_ball']},
         {name:'Max Push Ups',type:'reps',equipment:[]},
         {name:'1 Mile Run',type:'time',equipment:[]},
         {name:'Max Pull Ups',type:'reps',equipment:['pull_up_bar']}
@@ -9772,7 +9794,7 @@ var PHOENIX_WOD_LIBRARY = {
         {name:'40m Sprint',type:'time',equipment:[]},
         {name:'Box Jump Max Height',type:'height',equipment:['box']},
         {name:'2km Row',type:'time',equipment:['rower']},
-        {name:'Karen — 150 Wall Balls',type:'time',equipment:['wall_ball']},
+        {name:'150 Wall Balls',type:'time',equipment:['wall_ball']},
         {name:'Max Push Ups',type:'reps',equipment:[]},
         {name:'Max Pull Ups',type:'reps',equipment:['pull_up_bar']},
         {name:'1 Mile Run',type:'time',equipment:[]},
@@ -9782,12 +9804,8 @@ var PHOENIX_WOD_LIBRARY = {
     }
   },
 
-  // 52-week rolling WOD schedule
-  // Maps week number + day to a WOD ID
-  // Q1: weeks 1-13 (Titans + Gods)
-  // Q2: weeks 14-26 (Gods + Legends)
-  // Q3: weeks 27-39 (Legends + Beasts)
-  // Q4: weeks 40-52 (Mixed + Immortals + The Phoenix)
+  // 52-week rolling WOD schedule. Internal arrays preserved for variety in selection.
+  // Tier display = wod.tier (titan/legend/beast/daily) — see phxWodTierLabel + phxWodTierColour.
 
   getDailyWOD: function(date){
     var d = date || new Date();
@@ -9801,17 +9819,15 @@ var PHOENIX_WOD_LIBRARY = {
 
     // Get pool based on quarter and day
     var pool;
-    if(quarter === 1) pool = [...this.titans, ...this.gods];
-    else if(quarter === 2) pool = [...this.gods, ...this.legends];
-    else if(quarter === 3) pool = [...this.legends, ...this.beasts];
-    else pool = [...this.gods, ...this.legends, ...this.beasts, ...this.titans, ...this.immortals];
+    if(quarter === 1) pool = [].concat(this.titans, this.gods);
+    else if(quarter === 2) pool = [].concat(this.gods, this.legends);
+    else if(quarter === 3) pool = [].concat(this.legends, this.beasts);
+    else pool = [].concat(this.gods, this.legends, this.beasts, this.titans, this.immortals);
 
-    // Sundays = The Rising (accessible to all)
+    // Sundays = the entry-level pool (accessible to all)
     if(dayOfWeek === 0) pool = this.rising;
 
     // v4.7.5 FIX 1: deterministic date-string hash — same WOD all day, changes at midnight local time.
-    // Replaces the old 'phoenix_last_wod_id' guard which mutated state on every call and bounced
-    // the WOD between two values within the same day.
     var dateStr = d.getFullYear() + '-' +
       String(d.getMonth()+1).padStart(2,'0') + '-' +
       String(d.getDate()).padStart(2,'0');
@@ -9821,8 +9837,7 @@ var PHOENIX_WOD_LIBRARY = {
       hash |= 0;
     }
     var idx = Math.abs(hash) % pool.length;
-    var selected = pool[idx];
-    return selected;
+    return pool[idx];
   },
 
   getWeeklyRising: function(weekNumber){
@@ -9841,6 +9856,7 @@ var PHOENIX_WOD_LIBRARY = {
     return this.combine.q4;
   }
 };
+
 
 
 // ====== TODAY SCREEN RENDER ======
@@ -10211,11 +10227,13 @@ function renderDailyWOD(){
   if(!wod) return;
   var nameEl=document.getElementById('wod-name');
   var fmtEl=document.getElementById('wod-format');
+  // v4.7.26: capitalised tier label via phxWodTierLabel (replaces raw lowercase wod.tier).
   if(nameEl) nameEl.textContent=wod.name.toUpperCase();
-  if(fmtEl) fmtEl.textContent=wod.tier+' Tier — '+wod.format;
-  // v4.7.24: swap the WOD tile background image based on the tier of today's WOD.
-  // Tiers in the library: Titan / God / Legend / Beast / Immortal / Rising — only the four below
-  // have bespoke art; everything else falls back to tile-daily.jpg.
+  if(fmtEl){
+    fmtEl.textContent=phxWodTierLabel(wod.tier)+' Tier — '+wod.format;
+    fmtEl.style.color = phxWodTierColour(wod.tier);
+  }
+  // v4.7.26: 4-tier image map (titan / legend / beast / daily — no more god/hero/immortal/rising).
   var tierImageMap = {
     titan:  '/assets/tiles/tile-titan.jpg',
     legend: '/assets/tiles/tile-legend.jpg',
@@ -10230,6 +10248,15 @@ function renderDailyWOD(){
     wodTile.style.backgroundSize = 'cover';
     wodTile.style.backgroundPosition = 'center';
     if(!wodTile.classList.contains('tile-bg')) wodTile.classList.add('tile-bg');
+    // v4.7.26 CHANGE 8: tile border colour reflects the tier.
+    wodTile.style.borderColor = phxWodTierColour(wod.tier);
+  }
+  // v4.7.26 CHANGE 8: in-tile tier badge colour (used by legacy .game-card-tier-badge inside the tile).
+  var tileBadge = wodTile && wodTile.querySelector('.game-card-tier-badge');
+  if(tileBadge){
+    tileBadge.textContent = phxWodTierLabel(wod.tier);
+    tileBadge.style.color = phxWodTierColour(wod.tier);
+    tileBadge.style.borderColor = phxWodTierColour(wod.tier);
   }
 
   // Countdown to midnight
@@ -10807,7 +10834,10 @@ function openPhoenixWOD(wodOverride){
   var existing=document.getElementById('wod-modal');
   if(existing) existing.remove();
 
-  var tierClass='wod-tier-'+(wod.tier||'god').toLowerCase();
+  // v4.7.26 CHANGE 8: tier badge uses inline colour from phxWodTierColour — no more wod-tier-* CSS subclasses.
+  var tierColour = phxWodTierColour(wod.tier);
+  var tierLabel = phxWodTierLabel(wod.tier);
+  var tierBadgeStyle = 'display:inline-block;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;padding:4px 12px;border-radius:20px;border:1px solid '+tierColour+';color:'+tierColour+';background:transparent;';
 
   var modal=document.createElement('div');
   modal.id='wod-modal';
@@ -10857,7 +10887,7 @@ function openPhoenixWOD(wodOverride){
 
     modal.innerHTML='<div class="wod-modal-inner">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
-        '<div class="wod-tier-badge '+tierClass+'">'+(wod.tier||'')+' Tier</div>'+
+        '<div style="'+tierBadgeStyle+'">'+tierLabel+' Tier</div>'+
         '<div class="icon-btn" onclick="window._wodCloseDetail()" style="background:var(--bg2);">'+
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'+
         '</div>'+
@@ -11101,13 +11131,16 @@ function startWODTimer(modalId){
   function _headerHTML(label){
     // v4.7.9 TASK 2: surface the active selection (RX / SCALED / CUSTOM) inside the timer so the user
     // can confirm at a glance which load list the renderer is reading from.
+    // v4.7.26 CHANGE 8: tier badge in the action page header uses the tier colour.
     var sel = (window._wodSelection || 'rx').toUpperCase();
     var selBadge = '<span style="display:inline-block;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;color:var(--gold);background:var(--gold-dim);border:1px solid var(--gold);padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle;">'+sel+'</span>';
+    var tierC = phxWodTierColour(wod.tier);
+    var tierBadge = '<span style="display:inline-block;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;color:'+tierC+';border:1px solid '+tierC+';padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle;">'+phxWodTierLabel(wod.tier)+'</span>';
     return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
-      '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' &mdash; '+wod.format+selBadge+'</div>'+
+      '<div class="wod-timer-label" style="text-align:left;margin:0;">'+wod.name+' &mdash; '+wod.format+tierBadge+selBadge+'</div>'+
       '<div class="icon-btn" onclick="window._wodCloseTimer&&window._wodCloseTimer()" style="background:var(--bg2);">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div></div>'+
-      (label?'<div style="font-size:11px;color:var(--gold);text-align:center;letter-spacing:3px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:6px;">'+label+'</div>':'');
+      (label?'<div style="font-size:11px;color:'+tierC+';text-align:center;letter-spacing:3px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:6px;">'+label+'</div>':'');
   }
 
   // ---------- AFAP renderer ----------

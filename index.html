@@ -1656,7 +1656,8 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     </div>
     <!-- Row 3: Core + Conditioning + Walk/Run (three equal columns) -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-      <div class="game-card game-card-sm" onclick="generateDailyCore()" style="border-left:3px solid var(--blue);">
+      <!-- v4.7.21 FIX 5: stable IDs so the completed-marker helper can find these tiles. -->
+      <div id="card-core" class="game-card game-card-sm" onclick="generateDailyCore()" style="border-left:3px solid var(--blue);position:relative;">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Phoenix Coach</div>
           <div class="game-card-title-sm">Core</div>
@@ -1672,7 +1673,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="game-card-action-sm">Choose →</div>
         </div>
       </div>
-      <div class="game-card game-card-sm" onclick="openWalkLog()" style="border-left:3px solid var(--green,#4CAF50);">
+      <div id="card-walk" class="game-card game-card-sm" onclick="openWalkLog()" style="border-left:3px solid var(--green,#4CAF50);position:relative;">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Phoenix Coach</div>
           <div class="game-card-title-sm">Walk / Run</div>
@@ -2262,8 +2263,15 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">C — Programme target</div>
   <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Do you have a goal you're training toward?</div>
   <div style="display:flex;flex-direction:column;gap:8px;" id="fq-target-list">
+    <!-- v4.7.21 FIX 1: Combine and Agoge are now separate. Combine = July test battery. Agoge = block + The March (246km). -->
+    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('combine',this)">
+      <strong>The Phoenix Combine</strong><span class="q-option-sub">Peak for the annual test battery in July — strength, power and conditioning tests across 2 days</span>
+    </div>
     <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('agoge',this)">
-      <strong>The Phoenix Agoge</strong><span class="q-option-sub">Peak for the annual test in July</span>
+      <strong>The Agoge Challenge</strong><span class="q-option-sub">Complete your full coach-prescribed programme block AND walk/run 246km (the Spartathlon route, Athens to Sparta)</span>
+    </div>
+    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('both',this)">
+      <strong>Both — Combine + Agoge</strong><span class="q-option-sub">The full Phoenix challenge — peak for July tests and complete The March</span>
     </div>
     <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('event',this)">
       <strong>A specific event</strong><span class="q-option-sub">Race, season, competition or challenge</span>
@@ -2315,8 +2323,19 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     </div>
   </div>
 
+  <!-- v4.7.21 FIX 6: weigh-in frequency selector — pill-style, single-select. -->
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">E — Weigh-in frequency</div>
+  <label class="q-label" style="margin-bottom:4px;display:block;">How often would you like to log your weight?</label>
+  <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">For best accuracy, weigh yourself first thing in the morning after toilet, before food or water.</div>
+  <div id="fq-weighin-row" style="display:flex;flex-wrap:wrap;gap:8px;">
+    <div class="q-option-card" onclick="fqSetWeighInFrequency('daily',this)" style="flex:1;min-width:140px;text-align:center;padding:12px 10px;">Daily — morning, same conditions</div>
+    <div class="q-option-card" onclick="fqSetWeighInFrequency('every_few_days',this)" style="flex:1;min-width:140px;text-align:center;padding:12px 10px;">Every few days</div>
+    <div class="q-option-card" onclick="fqSetWeighInFrequency('weekly',this)" style="flex:1;min-width:140px;text-align:center;padding:12px 10px;">Weekly — Sunday morning</div>
+    <div class="q-option-card" onclick="fqSetWeighInFrequency('never',this)" style="flex:1;min-width:140px;text-align:center;padding:12px 10px;">I'd rather not track weight</div>
+  </div>
+
   <!-- v4.7.19 BUILD 1: free-text coach notes — sits at the end of Step 4. Optional. -->
-  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">E — Notes for your coach</div>
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">F — Notes for your coach</div>
   <label class="q-label" style="margin-bottom:4px;display:block;">Anything else your coach should know?</label>
   <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Training goals, upcoming events, life context, injury history not covered above — anything that helps your coach build the right programme.</div>
   <textarea id="fq-coach-notes" class="q-input" rows="4" placeholder="e.g. I want to complete the Phoenix Agoge by July 4th. I travel for work 2 weeks per month. I had a shoulder reconstruction in 2019…" oninput="fqAnswers.coachNotes=this.value" style="resize:vertical;min-height:96px;"></textarea>
@@ -3072,7 +3091,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.20';
+var APP_VERSION='4.7.21';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6290,6 +6309,16 @@ ATHLETE NOTES (read fqCoachNotes)
 The athlete has provided additional context for programme design. Read carefully — this may contain specific goals, events, travel patterns, injury history, or lifestyle factors that should directly influence the programme structure, exercise selection, and timeline. If the notes mention a specific event date, peak the programme to that date. If they mention travel, build in flexible/portable session options for those weeks. If they mention old injuries not captured in the structured injury fields, treat them with the same contraindication weight as the structured entries.
 
 ================================================================
+WEIGH-IN FREQUENCY (read weigh_in_frequency)
+================================================================
+
+Use the athlete's preferred cadence to set expectations around weight tracking and how to interpret the data:
+- daily          → use a 7-day rolling average. Reference weight trends in coach notes when relevant.
+- every_few_days → track trend direction only (up / flat / down). Do not over-interpret single readings.
+- weekly         → single weekly data point (Sunday morning). Reference week-over-week deltas only.
+- never          → do not reference weight in coaching notes. The athlete has opted out of weight tracking.
+
+================================================================
 CONDITIONING AND WOD SELECTION
 ================================================================
 
@@ -6341,27 +6370,35 @@ When next Combine is within 6 weeks:
 PROGRAMME TARGET
 ================================================================
 
-Read fqProgrammeTarget.
+Read fqProgrammeTarget. Possible values: combine / agoge / both / event / quarterly / none.
 
-agoge → programme backward from next July Agoge.
-- >6 months out: full prep cycle, GPP→SPP→Peak→Deload.
-- 3-6 months out: accelerated prep, compress GPP, extend SPP.
-- <8 weeks out: baseline year framing. Coach note week 1: "This July is your first Agoge — we use it to set your baselines. Next year is when we come for the leaderboard." Do not peak, just prepare.
-- 6 weeks out regardless of entry: activate peaking protocol automatically.
+combine → programme backward from July Combine. Peak for the 11 test battery.
+- Prioritise strength (bench/deadlift), power (vertical/broad/sprint), and conditioning (row/bike/run) in the final 6 weeks.
+- Programme length determined by how far out the athlete is from July — coach decides the appropriate block length.
+- 6 weeks out from July: activate peaking protocol automatically.
+
+agoge → The Agoge has TWO components that run simultaneously:
+- Component 1 — The Programme Block: build the athlete through their full coach-prescribed programme. Length is set by the coach based on athlete profile, goals, and training age — NOT fixed at 8 weeks. Progressive overload, periodised, ends when the block is complete.
+- Component 2 — The March: prescribe weekly walking/running distance toward a cumulative 246km total (the Spartathlon route Athens to Sparta). The weekly march distance is part of the programme — typically 20-35km/week depending on availability and current conditioning. The walk sessions in the programme ARE the march. Track cumulative distance. The Agoge is complete when BOTH the programme block AND 246km are achieved.
+- Coach note week 1: "Your Agoge has two goals — complete this programme block and walk/run 246km (the Spartathlon route). Your weekly walk prescription builds toward that total. We track both together."
+
+both → combine + agoge in one. Peak for July Combine tests AND prescribe weekly march distance toward 246km.
+- The Combine preparation IS the training; they align naturally.
+- Programme length set to peak for July Combine.
+- March distance prescribed weekly alongside training.
 
 event → programme backward from fqEventDate.
 - fqEventDescription informs sport/event-specific conditioning.
-- Agoge available as mid-cycle benchmark if it falls before event date.
+- Coach determines appropriate block length and periodisation based on time available.
 - If event is within 6 weeks of programme start: flag in flags array "event_proximity — less than 6 weeks to event, limited preparation time."
 
 quarterly → no periodised peak.
 - Progressive overload as primary driver.
-- Schedule deload week before each quarterly Agoge automatically.
-- Agoge used as benchmark test only — not a peaking target.
+- Coach determines block length based on athlete profile.
 
-none → coach decides.
-- Default: build quietly toward next Agoge without mentioning it.
-- Let athlete discover the Agoge naturally through the app.
+none → coach decides everything.
+- Build the athlete consistently. Programme length based on athlete profile and training age.
+- Default: build quietly toward next Combine without mentioning it. Let the athlete discover it naturally through the app.
 
 ================================================================
 ASSESSMENT SCORE HANDLING
@@ -6706,6 +6743,7 @@ function buildAthleteProfile(trigger, checkIn){
       waiver_accepted: a.fqWaiverAccepted || false,
       // v4.7.19 BUILD 1: free-text notes the athlete wrote during onboarding
       coach_notes: a.fqCoachNotes || '',
+      weigh_in_frequency: a.fqWeighInFrequency || null,
       test_scores: {
         bench_1rm: a.b1rm || 0,
         bench_100kg_reps: a.b100 || 0,
@@ -9639,6 +9677,53 @@ function renderTodayScreen(){
   }
   // v4.7.19 BUILD 2: Sunday → append a Weekly Review card after the session tiles.
   _phxRenderSundayReviewCard();
+  // v4.7.21 FIX 5: query Supabase for today's completed sessions and mark matching tiles.
+  _phxApplyCompletedTileMarkers();
+}
+
+// v4.7.21 FIX 5: completed-today marker on Today tiles.
+// Query Supabase sessions for today's completed rows, then dim + badge any matching tile.
+// Applies to: prescribed AI session, Phoenix WOD, Core tile, Walk tile.
+async function _phxApplyCompletedTileMarkers(){
+  // Wipe any prior badges so re-render doesn't accumulate them.
+  document.querySelectorAll('.phx-completed-badge').forEach(function(b){b.remove();});
+  ['card-today-session','card-phoenix-wod','card-core','card-walk'].forEach(function(id){
+    var t = document.getElementById(id);
+    if(t) t.style.opacity = '';
+  });
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
+  // Today midnight local time → ISO. (User is on Brisbane time per spec; local midnight is correct.)
+  var midnight = new Date(); midnight.setHours(0,0,0,0);
+  try {
+    var res = await sb.from('sessions').select('session_type,status,started_at,details')
+      .eq('user_id', currentSession.user.id)
+      .eq('status', 'completed')
+      .gte('started_at', midnight.toISOString());
+    if(res.error || !res.data) return;
+    var rows = res.data;
+    var did = {strength:false, wod:false, core:false, walk:false, run:false};
+    rows.forEach(function(r){
+      var t = String(r.session_type||'').toLowerCase();
+      if(t in did) did[t] = true;
+    });
+    function mark(id){
+      var tile = document.getElementById(id);
+      if(!tile) return;
+      tile.style.opacity = '0.7';
+      var badge = document.createElement('div');
+      badge.className = 'phx-completed-badge';
+      badge.style.cssText = 'position:absolute;top:8px;right:8px;background:var(--green,#4CAF50);color:#fff;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:3px 8px;border-radius:10px;display:flex;align-items:center;gap:4px;z-index:2;';
+      badge.innerHTML = '&#10003; Completed';
+      // Ensure positioning context exists on the tile
+      var pos = window.getComputedStyle(tile).position;
+      if(pos === 'static') tile.style.position = 'relative';
+      tile.appendChild(badge);
+    }
+    if(did.strength) mark('card-today-session');
+    if(did.wod)      mark('card-phoenix-wod');
+    if(did.core)     mark('card-core');
+    if(did.walk || did.run) mark('card-walk');
+  } catch(e){ console.warn('[PHX] completed-marker query failed:', e); }
 }
 
 function _phxRenderSundayReviewCard(){
@@ -9646,7 +9731,8 @@ function _phxRenderSundayReviewCard(){
   var prior = document.getElementById('card-weekly-review');
   if(prior) prior.remove();
   if(new Date().getDay() !== 0) return; // Sunday only
-  // Anchor: append to the same container the prescribed-session tile lives in.
+  // v4.7.21 FIX 3: insert BEFORE the prescribed-session tile so the review card is the first
+  // thing the athlete sees on Sunday morning. Sessions still render below it.
   var sessionCard = document.getElementById('card-today-session');
   var parent = sessionCard ? sessionCard.parentElement : null;
   if(!parent) return;
@@ -9654,7 +9740,7 @@ function _phxRenderSundayReviewCard(){
   var card = document.createElement('div');
   card.id = 'card-weekly-review';
   card.className = 'game-card';
-  card.style.cssText = 'margin-top:10px;border:1px solid var(--border);border-left:3px solid var(--gold);cursor:pointer;';
+  card.style.cssText = 'margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);cursor:pointer;';
   card.onclick = function(){ openWeeklyCheckin(); };
   card.innerHTML =
     '<div class="game-card-inner">'+
@@ -9662,7 +9748,7 @@ function _phxRenderSundayReviewCard(){
       '<div class="game-card-title" style="font-size:24px;">Week '+weekNum+' Complete</div>'+
       '<div class="game-card-sub" style="margin-top:6px;">Review your week and set up next week →</div>'+
     '</div>';
-  parent.appendChild(card);
+  parent.insertBefore(card, sessionCard);
 }
 
 function submitWeightCheckin(){
@@ -9880,12 +9966,28 @@ async function submitWeeklyCheckin(){
     submitted_at: new Date().toISOString()
   };
   try {
-    // Upsert against (user_id, week_number, week_start_date)
-    var res = await sb.from('weekly_checkins').upsert(row, {onConflict: 'user_id,week_number,week_start_date'});
-    if(res.error){
-      console.error('[PHX] submitWeeklyCheckin failed:', res.error);
-      alert('Submit failed: '+res.error.message);
-      return;
+    // v4.7.21 FIX 2: insert-then-update — works even when the unique constraint isn't installed.
+    var ins = await sb.from('weekly_checkins').insert(row);
+    if(ins.error){
+      var msg = String(ins.error.message||'').toLowerCase();
+      var code = String(ins.error.code||'');
+      var isDup = code === '23505' || msg.indexOf('duplicate') >= 0 || msg.indexOf('unique') >= 0 || msg.indexOf('conflict') >= 0;
+      if(isDup){
+        // A row already exists for this (user_id, week_number, week_start_date) — overwrite it.
+        var upd = await sb.from('weekly_checkins').update(row)
+          .eq('user_id', row.user_id)
+          .eq('week_number', row.week_number)
+          .eq('week_start_date', row.week_start_date);
+        if(upd.error){
+          console.error('[PHX] submitWeeklyCheckin update failed:', upd.error);
+          alert('Submit failed: '+upd.error.message);
+          return;
+        }
+      } else {
+        console.error('[PHX] submitWeeklyCheckin insert failed:', ins.error);
+        alert('Submit failed: '+ins.error.message);
+        return;
+      }
     }
     alert('Check-in submitted. Your coach will review this before building next week.');
     navTo('today');
@@ -11704,7 +11806,7 @@ window.fqResetAnswers = function(){
     // v4.7.4: combine battery extras
     vertJump:0, broadJump:0, sprint40:'', wingate:0,
     // v4.7.19 BUILD 1: free-text coach notes
-    coachNotes:'',
+    coachNotes:'', weighInFrequency:null,
     scheduleMode:null,
     availableSlots:{}, sessionSchedule:null,
     coachTone:null,
@@ -11948,6 +12050,13 @@ window.fqSetSeasonPhase = function(val,el){
   fqAnswers.seasonPhase=val;
   document.querySelectorAll('#fq-season-row .q-option-card').forEach(function(e){e.classList.remove('active');});
   el.classList.add('active');
+};
+
+// v4.7.21 FIX 6: weigh-in frequency selector handler — pill-style single-select, optional.
+window.fqSetWeighInFrequency = function(val, el){
+  fqAnswers.weighInFrequency = val;
+  document.querySelectorAll('#fq-weighin-row .q-option-card').forEach(function(e){e.classList.remove('active');});
+  if(el) el.classList.add('active');
 };
 
 window.fqSetProgrammeTarget = function(val,el){
@@ -12247,6 +12356,7 @@ window.fqNext = function(){
     wingate:fqAnswers.wingate||existing.wingate||0,
     // v4.7.19 BUILD 1: free-text coach notes
     fqCoachNotes:fqAnswers.coachNotes||existing.fqCoachNotes||'',
+    fqWeighInFrequency:fqAnswers.weighInFrequency||existing.fqWeighInFrequency||null,
     // v4.7.4 training-history decision tree fields
     fqCurrentlyTraining:fqAnswers.currentlyTraining,
     fqCurrentStint:fqAnswers.currentStint,
@@ -12451,6 +12561,11 @@ window.fqRestoreProgressUI = function(){
   // v4.7.19 BUILD 1: restore coach notes textarea
   if(fqAnswers.coachNotes){
     var cn=document.getElementById('fq-coach-notes'); if(cn) cn.value=fqAnswers.coachNotes;
+  }
+  // v4.7.21 FIX 6: restore weigh-in frequency selector
+  if(fqAnswers.weighInFrequency){
+    var wfEl=document.querySelector('#fq-weighin-row .q-option-card[onclick*="\''+fqAnswers.weighInFrequency+'\'"]');
+    if(wfEl) wfEl.classList.add('active');
   }
   // Step 5
   if(fqAnswers.scheduleMode){

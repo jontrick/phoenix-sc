@@ -1693,6 +1693,17 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div id="ad-today" class="ad-slot tall" style="display:none;margin:0 0 4px;">
     <div><div class="ad-slot-label">Advertisement</div></div>
   </div>
+  <!-- v4.7.31 BUILD 1: Morning check-in card. Shown only between 5am-10am Brisbane time when
+       fqWeighInFrequency != 'never' AND today's done/skip flags are absent in localStorage.
+       Populated and toggled by _phxMaybeShowMorningCheckin() during renderTodayScreen(). -->
+  <div id="morning-checkin-card" style="display:none;margin:0 16px 10px;background:linear-gradient(135deg,var(--bg2) 0%,#1a1410 100%);border:1px solid var(--gold);border-radius:var(--radius);padding:16px 18px;">
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Morning Check-in</div>
+    <div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);line-height:1.2;margin-bottom:14px;">Log your weight to track progress</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="_phxOpenMorningCheckin()" style="flex:1;padding:12px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Log Now</button>
+      <button onclick="_phxSkipMorningCheckin()" style="flex:0.6;padding:12px;background:transparent;color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Skip</button>
+    </div>
+  </div>
   <div id="weight-checkin-banner" style="display:none;margin:0 16px 10px;background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:14px 16px;">
     <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Weekly Weight Check-in</div>
     <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;">Track your progress — log this week's weight to keep your fat loss on track.</div>
@@ -3308,7 +3319,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.30';
+var APP_VERSION='4.7.31';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5007,14 +5018,36 @@ async function _phxStatsRenderWeight(rangeWeeks){
   if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
   var since = _phxStatsWeekStart(new Date(), rangeWeeks);
   try {
-    var res = await sb.from('weekly_checkins')
+    // v4.7.31: pull from BOTH weekly_checkins and daily_weigh_ins, merge by date.
+    var sinceISO = since.toISOString().split('T')[0];
+    var resW = await sb.from('weekly_checkins')
       .select('week_start_date,weight_kg,submitted_at')
       .eq('user_id', currentSession.user.id)
-      .gte('week_start_date', since.toISOString().split('T')[0])
+      .gte('week_start_date', sinceISO)
       .order('week_start_date', {ascending:true})
       .limit(52);
-    if(res.error){ console.warn('[PHX] stats weight fetch:', res.error); return; }
-    var rows = (res.data||[]).filter(function(r){ return r.weight_kg != null; });
+    if(resW.error){ console.warn('[PHX] stats weight (weekly) fetch:', resW.error); }
+    var weeklyRows = (resW.data||[]).filter(function(r){ return r.weight_kg != null; })
+      .map(function(r){ return {date: r.week_start_date, weight_kg: parseFloat(r.weight_kg), source: 'weekly'}; });
+    var dailyRows = [];
+    try {
+      var resD = await sb.from('daily_weigh_ins')
+        .select('date,weight_kg,logged_at')
+        .eq('user_id', currentSession.user.id)
+        .gte('date', sinceISO)
+        .order('date', {ascending:true})
+        .limit(365);
+      if(resD && !resD.error && resD.data){
+        dailyRows = resD.data.filter(function(r){ return r.weight_kg != null; })
+          .map(function(r){ return {date: r.date, weight_kg: parseFloat(r.weight_kg), source: 'daily'}; });
+      }
+    } catch(_e){ /* table may not exist yet — silently fall back to weekly only */ }
+    // Merge: daily wins over weekly on overlapping dates.
+    var byDate = {};
+    weeklyRows.forEach(function(r){ byDate[r.date] = r; });
+    dailyRows.forEach(function(r){ byDate[r.date] = r; });
+    var rows = Object.keys(byDate).sort().map(function(k){ return byDate[k]; });
+    if(rows.length === 0) rows = [];
     var latestEl = document.getElementById('stats-weight-latest');
     var deltaEl = document.getElementById('stats-weight-delta');
     var wrap = document.getElementById('stats-weight-chart');
@@ -10656,6 +10689,8 @@ function renderTodayScreen(){
     var daysSince=lastCheckin?Math.floor((Date.now()-new Date(lastCheckin).getTime())/(1000*60*60*24)):999;
     checkinBanner.style.display=(isFatLoss&&daysSince>=7)?'block':'none';
   }
+  // v4.7.31 BUILD 1: morning weight check-in card (5am-10am Brisbane).
+  if(typeof _phxMaybeShowMorningCheckin==='function') _phxMaybeShowMorningCheckin();
   // v4.7.19 BUILD 2: Sunday → append a Weekly Review card after the session tiles.
   _phxRenderSundayReviewCard();
   // v4.7.21 FIX 5: query Supabase for today's completed sessions and mark matching tiles.
@@ -10978,6 +11013,213 @@ async function loadWeeklyStats(){
     setText('wci-wods', String(wods));
     setText('wci-distance', (totalDist/1000).toFixed(1)+' km');
   } catch(e){ console.warn('[PHX] loadWeeklyStats failed:', e); }
+}
+
+// ====== v4.7.31 BUILD 1: MORNING WEIGHT + PHOTO CHECK-IN ======
+// Shown on Today between 5am and 10am Brisbane (UTC+10), once per day, when
+// fqWeighInFrequency != 'never' and neither done/skip flag is set in localStorage.
+//
+// Supabase SQL (run once):
+//   create table if not exists daily_weigh_ins (
+//     id uuid default gen_random_uuid() primary key,
+//     user_id uuid references profiles(id) on delete cascade not null,
+//     date date not null,
+//     weight_kg numeric not null,
+//     photo_url text,
+//     notes text,
+//     logged_at timestamptz default now(),
+//     unique(user_id, date)
+//   );
+//   alter table daily_weigh_ins enable row level security;
+//   create policy "Users manage own weigh-ins" on daily_weigh_ins
+//     for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+//   grant all on daily_weigh_ins to authenticated;
+
+window._phxMorning = window._phxMorning || {};
+
+function _phxBrisbaneNow(){
+  // Australia/Brisbane is UTC+10 (no DST). Compute local hour without relying on Intl.
+  var now = new Date();
+  var brisbaneMs = now.getTime() + (now.getTimezoneOffset() * 60000) + (10 * 3600000);
+  var b = new Date(brisbaneMs);
+  return {date: b, hour: b.getHours(), iso: b.getFullYear()+'-'+String(b.getMonth()+1).padStart(2,'0')+'-'+String(b.getDate()).padStart(2,'0')};
+}
+
+function _phxMorningKeys(){
+  var b = _phxBrisbaneNow();
+  return {
+    today: b.iso,
+    doneKey: 'phoenix_morning_done_' + b.iso,
+    skipKey: 'phoenix_morning_skip_' + b.iso,
+    hour: b.hour
+  };
+}
+
+function _phxMaybeShowMorningCheckin(){
+  var card = document.getElementById('morning-checkin-card');
+  if(!card) return;
+  card.style.display = 'none';
+  // Gate by weigh-in frequency setting.
+  var freq = athlete && athlete.fqWeighInFrequency;
+  if(!freq || freq === 'never') return;
+  var keys = _phxMorningKeys();
+  // Window: 5am ≤ hour < 10am Brisbane.
+  if(keys.hour < 5 || keys.hour >= 10) return;
+  // Already actioned today?
+  if(localStorage.getItem(keys.doneKey)) return;
+  if(localStorage.getItem(keys.skipKey)) return;
+  card.style.display = '';
+}
+
+window._phxSkipMorningCheckin = function(){
+  var keys = _phxMorningKeys();
+  try { localStorage.setItem(keys.skipKey, '1'); } catch(_e){}
+  var card = document.getElementById('morning-checkin-card');
+  if(card) card.style.display = 'none';
+};
+
+window._phxOpenMorningCheckin = function(){
+  // Build modal markup once per open. State held on window._phxMorning.photoDataURL.
+  window._phxMorning.photoDataURL = null;
+  var keys = _phxMorningKeys();
+  // Pretty date: "Monday 5 May 2026" (use Brisbane day-of-week to stay consistent with the gate).
+  var b = _phxBrisbaneNow();
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var dateLine = days[b.date.getDay()] + ' ' + b.date.getDate() + ' ' + months[b.date.getMonth()] + ' ' + b.date.getFullYear();
+  // Last logged weight as placeholder.
+  var lastW = '';
+  try {
+    var cached = JSON.parse(localStorage.getItem('phoenix_last_weighin')||'null');
+    if(cached && cached.weight_kg) lastW = String(cached.weight_kg);
+  } catch(_e){}
+  var existing = document.getElementById('phx-morning-modal');
+  if(existing) existing.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-morning-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto;';
+  overlay.innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:24px 20px;width:100%;max-width:380px;">'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Morning Check-in</div>'+
+      '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:4px;">'+dateLine+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:20px;">Same time, same conditions = real progress signal</div>'+
+      // Weight field
+      '<label style="display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Weight</label>'+
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:18px;">'+
+        '<input id="phx-morning-weight" type="number" step="0.1" inputmode="decimal" placeholder="'+(lastW||'kg')+'" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:900;text-align:center;">'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text2);">kg</div>'+
+      '</div>'+
+      // Photo field
+      '<label style="display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:2px;">Progress Photo — Optional</label>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Same time, same conditions each day</div>'+
+      '<div id="phx-morning-photo-wrap" style="margin-bottom:18px;">'+
+        '<label for="phx-morning-photo-input" id="phx-morning-photo-trigger" style="display:flex;align-items:center;justify-content:center;height:88px;background:var(--bg3);border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Tap to take photo</label>'+
+        '<input id="phx-morning-photo-input" type="file" accept="image/*" capture="user" style="display:none;" onchange="_phxMorningPhotoChosen(event)">'+
+      '</div>'+
+      // Notes field
+      '<label style="display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Notes — Optional</label>'+
+      '<input id="phx-morning-notes" type="text" placeholder="How are you feeling this morning?" style="width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:13px;margin-bottom:20px;">'+
+      // Buttons
+      '<div style="display:flex;gap:10px;">'+
+        '<button id="phx-morning-cancel" class="btn-secondary" style="flex:1;padding:12px;margin:0;">Cancel</button>'+
+        '<button id="phx-morning-save" class="btn-primary" style="flex:1.6;padding:12px;">Save</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('phx-morning-cancel').addEventListener('click', function(){ overlay.remove(); });
+  document.getElementById('phx-morning-save').addEventListener('click', _phxMorningSave);
+  setTimeout(function(){ var w = document.getElementById('phx-morning-weight'); if(w) w.focus(); }, 60);
+};
+
+window._phxMorningPhotoChosen = function(ev){
+  var f = ev && ev.target && ev.target.files && ev.target.files[0];
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    window._phxMorning.photoDataURL = e.target.result;
+    var wrap = document.getElementById('phx-morning-photo-wrap');
+    if(!wrap) return;
+    wrap.innerHTML =
+      '<div style="position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--gold);">'+
+        '<img src="'+e.target.result+'" alt="" style="width:100%;display:block;max-height:240px;object-fit:cover;">'+
+        '<button onclick="_phxMorningRetake()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.7);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:var(--radius);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Retake</button>'+
+      '</div>';
+  };
+  reader.readAsDataURL(f);
+};
+
+window._phxMorningRetake = function(){
+  window._phxMorning.photoDataURL = null;
+  var wrap = document.getElementById('phx-morning-photo-wrap');
+  if(!wrap) return;
+  wrap.innerHTML =
+    '<label for="phx-morning-photo-input" id="phx-morning-photo-trigger" style="display:flex;align-items:center;justify-content:center;height:88px;background:var(--bg3);border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Tap to take photo</label>'+
+    '<input id="phx-morning-photo-input" type="file" accept="image/*" capture="user" style="display:none;" onchange="_phxMorningPhotoChosen(event)">';
+};
+
+async function _phxMorningSave(){
+  var wEl = document.getElementById('phx-morning-weight');
+  var nEl = document.getElementById('phx-morning-notes');
+  var saveBtn = document.getElementById('phx-morning-save');
+  var w = wEl ? parseFloat(wEl.value) : NaN;
+  if(!isFinite(w) || w <= 0){
+    if(wEl){ wEl.style.borderColor = 'var(--red,#d96a5e)'; wEl.focus(); }
+    return;
+  }
+  var notes = nEl ? (nEl.value||'').trim() : '';
+  var keys = _phxMorningKeys();
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  // Cache locally first so the UI feels instant even if network is slow.
+  try { localStorage.setItem('phoenix_last_weighin', JSON.stringify({date: keys.today, weight_kg: w})); } catch(_e){}
+  try {
+    if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+      var row = {
+        user_id: currentSession.user.id,
+        date: keys.today,
+        weight_kg: w,
+        notes: notes || null,
+        logged_at: new Date().toISOString()
+      };
+      // UPSERT on (user_id, date) so a re-save on the same day overwrites cleanly.
+      var ins = await sb.from('daily_weigh_ins').upsert(row, {onConflict: 'user_id,date'}).select().single();
+      if(ins.error){ console.warn('[PHX] daily weigh-in insert failed:', ins.error); }
+      // Photo upload (best-effort).
+      var dataURL = window._phxMorning && window._phxMorning.photoDataURL;
+      if(dataURL && typeof _wciDataURLToBlob === 'function'){
+        var blob = _wciDataURLToBlob(dataURL);
+        if(blob){
+          var path = currentSession.user.id + '/daily/' + keys.today + '.jpg';
+          try {
+            var up = await sb.storage.from('checkin-photos').upload(path, blob, {contentType: blob.type||'image/jpeg', upsert: true});
+            if(!up.error){
+              var u = sb.storage.from('checkin-photos').getPublicUrl(path);
+              var photoUrl = (u && u.data && u.data.publicUrl) ? u.data.publicUrl : null;
+              if(photoUrl){
+                await sb.from('daily_weigh_ins').update({photo_url: photoUrl})
+                  .eq('user_id', currentSession.user.id).eq('date', keys.today);
+              }
+            } else {
+              console.warn('[PHX] morning photo upload failed:', up.error);
+            }
+          } catch(e){ console.warn('[PHX] morning photo upload error:', e); }
+        }
+      }
+    }
+  } catch(e){ console.warn('[PHX] _phxMorningSave network error:', e); }
+  // Mark done locally + dismiss UI even if network failed (so the user isn't nagged).
+  try { localStorage.setItem(keys.doneKey, '1'); } catch(_e){}
+  var overlay = document.getElementById('phx-morning-modal');
+  if(overlay) overlay.remove();
+  var card = document.getElementById('morning-checkin-card');
+  if(card) card.style.display = 'none';
+  // If the Stats screen is currently mounted, refresh the body-weight chart.
+  try {
+    var statsScreen = document.getElementById('screen-stats');
+    if(statsScreen && statsScreen.classList && statsScreen.classList.contains('active') && typeof _phxStatsRenderWeight === 'function'){
+      var rangeWeeks = (window._phxStatsState && window._phxStatsState.rangeWeeks) || 8;
+      _phxStatsRenderWeight(Math.max(rangeWeeks, 12));
+    }
+  } catch(_e){}
 }
 
 async function loadLastCheckin(){
@@ -11518,8 +11760,37 @@ function phxExerciseUnitClass(exName){
   var n = String(exName||'').toLowerCase();
   if(/\bbox\s*jump|step[-\s]?up\s+box\b/.test(n)) return 'in';
   if(/\bcarry|farmers|yoke|sandbag\b/.test(n)) return 'm';
-  if(/\bplank|hold|wall\s*sit|bridge|hang\b/.test(n)) return 'sec';
+  // v4.7.31 FIX 2: hard-exclude olympic/strength patterns BEFORE sec detection — "Hang Power Clean",
+  // "Hang Snatch", "Press from Hang" should never be classified as a hold.
+  if(/\b(clean|snatch|jerk|press|squat|deadlift|row|swing|thruster|pull[-\s]?up|chin[-\s]?up|push[-\s]?up|burpee|wall\s*ball)\b/.test(n)) return 'kg';
+  // sec triggers — explicit list only. "hang" alone does NOT count; only "dead hang" / "hang hold".
+  if(/\bplank|wall\s*sit|bridge|l[-\s]?sit|hollow\s*hold|dead\s*hang|hang\s*hold|isometric|rkc\b/.test(n)) return 'sec';
   return 'kg';
+}
+
+// v4.7.31 FIX 3: detect whether a value already carries a unit suffix.
+// Handles common cases: "200m", "50ft", "24in", "2×24kg", "60kg", "30sec", "5 reps".
+// Used to suppress double-labelling in target boxes and set-row labels.
+function phxValueHasUnit(s){
+  if(s == null) return false;
+  var raw = String(s).trim();
+  if(!raw) return false;
+  // Carry notation like "2×24kg" or "100×2" implies a structured value, treat as already-labelled.
+  if(/[×x]/.test(raw) && /\d/.test(raw)) return true;
+  // Trailing-unit suffix: digit (or %) immediately followed by a recognised unit token at end-of-string
+  // (no word-boundary requirement, so "200m" matches).
+  return /(?:\d|%)\s*(?:kg|lb|lbs|kgs|cm|mm|km|m|ft|in|"|'|sec|secs?|s|min|mins?|minute|minutes?|hr|hrs|reps?|rds?|rounds?|cal|cals|calories|%)\s*$/i.test(raw);
+}
+
+// v4.7.31 FIX 3: pull the unit token from a value (or '' if none / not detectable).
+// Used by the set-row label logic to mirror whatever unit the prescription already shows.
+function phxExtractUnit(s){
+  if(s == null) return '';
+  var raw = String(s).trim();
+  if(!raw) return '';
+  var m = raw.match(/(?:\d|%)\s*(kg|lb|lbs|cm|mm|km|m|ft|in|sec|secs?|s|min|mins?|minute|minutes?|reps?|rds?|rounds?|cal|cals|calories)\s*$/i);
+  if(!m) return '';
+  return m[1].toLowerCase();
 }
 
 // v4.7.17: render the two adjacent target boxes (left=load, right=reps).
@@ -11540,8 +11811,9 @@ function phxRenderTargetBoxes(loadStr, repsStr, exName){
   var repsBox = '';
   if(repsStr && repsStr !== '—'){
     var clean = String(repsStr).trim();
-    // If reps already includes a unit (sec, reps, m, etc), don't double it.
-    if(/\b(reps?|sec|seconds?|m|cm|in|min|minutes?)\b/i.test(clean)){
+    // v4.7.31 FIX 3: if the value already has a unit suffix (m, ft, in, kg, sec, ×… ),
+    // render verbatim — do not append a second unit label.
+    if(phxValueHasUnit(clean)){
       repsBox = clean;
     } else {
       repsBox = clean + (isHold ? ' sec' : ' reps');
@@ -13852,6 +14124,18 @@ function openTodaySession(){
     var unitClass = phxExerciseUnitClass(ex.name);
     var loadUnitLabel = unitClass === 'sec' ? '' : unitClass;   // holds: no kg input
     var repsUnitLabel = unitClass === 'sec' ? 'sec' : 'reps';
+    // v4.7.31 FIX 3: if the prescribed reps value already carries a unit (e.g. "200m" carry,
+    // "50ft" sled push), mirror that unit on the set-row label instead of "reps". Pull from the
+    // FIRST set's prescribed reps — uniform-per-exercise is the common case.
+    try {
+      var firstReps = (perSetTargets[0] && perSetTargets[0].reps) || '';
+      var detectedUnit = phxExtractUnit(firstReps);
+      if(detectedUnit){
+        // Normalise common variants to a single short label.
+        var unitMap = {sec:'sec', secs:'sec', s:'sec', min:'min', mins:'min', minute:'min', minutes:'min', rep:'reps', reps:'reps', m:'m', km:'km', cm:'cm', mm:'mm', ft:'ft', in:'in', kg:'kg', lb:'lb', lbs:'lb', cal:'cal', cals:'cal', calories:'cal', rd:'rds', rds:'rds', round:'rds', rounds:'rds'};
+        repsUnitLabel = unitMap[detectedUnit] || detectedUnit;
+      }
+    } catch(_e){}
     // 6-column grid: set# | input | unit | input | unit | tick
     var setsGrid = unitClass === 'sec'
       ? '28px 1fr auto auto'                       // hold: tick is on the right of reps; no load input

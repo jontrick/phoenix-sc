@@ -1701,12 +1701,14 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="game-card-action-sm">Coach generates →</div>
         </div>
       </div>
-      <div class="game-card game-card-sm" onclick="openConditioning()">
+      <!-- v4.7.29 BUILD 5: Conditioning → WOD LIBRARY. Tile mirrors the daily WOD tile's
+           tier image + border colour (applied dynamically in renderDailyWOD). -->
+      <div id="card-wod-library" class="game-card game-card-sm tile-bg" onclick="openWODLibrary()" style="border-left:3px solid var(--gold);position:relative;background-image:url('/assets/tiles/tile-daily.jpg');">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Add on</div>
-          <div class="game-card-title-sm">Conditioning</div>
-          <div class="game-card-sub-sm">Pick or generate</div>
-          <div class="game-card-action-sm">Choose →</div>
+          <div class="game-card-title-sm">WOD Library</div>
+          <div class="game-card-sub-sm" id="card-wod-library-sub">Browse all WODs</div>
+          <div class="game-card-action-sm">Browse →</div>
         </div>
       </div>
       <div id="card-walk" class="game-card game-card-sm tile-bg" onclick="openWalkLog()" style="border-left:3px solid var(--green,#4CAF50);position:relative;background-image:url('/assets/tiles/tile-session.jpg');">
@@ -3163,7 +3165,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.28';
+var APP_VERSION='4.7.29';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3559,6 +3561,8 @@ async function supabaseCompleteSession(updates){
   }
   var sessionId=currentSupabaseSessionId;
   currentSupabaseSessionId=null;
+  // v4.7.29 FIX 3: session done — clear the per-session completed-sets shadow.
+  try { localStorage.removeItem('phoenix_completed_sets_' + sessionId); } catch(_e){}
   try{
     // Merge details: read existing, merge new
     if(patch.details||patch.details_patch_notes){
@@ -3598,10 +3602,15 @@ function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
     if(opts.notes!==undefined) row.notes=opts.notes;
     if(opts.rest_taken_seconds!==undefined) row.rest_taken_seconds=opts.rest_taken_seconds;
   }
-  // Fire-and-forget
-  sb.from('set_logs').insert(row).then(function(res){
+  // v4.7.29 FIX 4: track the in-flight insert promise so the block-RPE Save handler
+  // can await it before issuing its UPDATE — closes the race where the last set
+  // hadn't been INSERTed yet when the user clicked Save.
+  var p = sb.from('set_logs').insert(row).then(function(res){
     if(res.error) console.error('[PHX] supabaseLogSet failed:',res.error);
+    return res;
   });
+  window._phxLastSetInsertP = p;
+  return p;
 }
 
 function computeSessionMetrics(sets){
@@ -4825,7 +4834,7 @@ function showExerciseBlockRPE(exIdx, ex){
     if(next && next.scrollIntoView) next.scrollIntoView({behavior:'smooth',block:'start'});
   }
   document.getElementById('phx-rpe-skip').addEventListener('click', close);
-  document.getElementById('phx-rpe-save').addEventListener('click', function(){
+  document.getElementById('phx-rpe-save').addEventListener('click', async function(){
     var rpe = parseInt(slider ? slider.value : '0') || null;
     var notesEl = document.getElementById('phx-rpe-notes');
     var notes = notesEl ? (notesEl.value||'').trim() : '';
@@ -4833,6 +4842,17 @@ function showExerciseBlockRPE(exIdx, ex){
     if(rpe || notes){
       try {
         if(typeof sb !== 'undefined' && currentSupabaseSessionId && ex && ex.name){
+          // v4.7.29 FIX 4: wait for the most recent INSERT (the just-ticked last set)
+          // to settle so the UPDATE actually covers it. Bound the wait so a hung
+          // network never blocks the UI.
+          if(window._phxLastSetInsertP && typeof window._phxLastSetInsertP.then === 'function'){
+            try {
+              await Promise.race([
+                window._phxLastSetInsertP,
+                new Promise(function(r){ setTimeout(r, 1500); })
+              ]);
+            } catch(_e){}
+          }
           var patch = {};
           if(rpe) patch.rpe = rpe;
           if(notes) patch.notes = notes;
@@ -4862,7 +4882,7 @@ function autoLogSet(row){
   var repsEl=row.querySelector('.set-input[id^="reps-"]');
   var kg=kgEl?kgEl.value:'';
   var reps=repsEl?repsEl.value:'';
-  // Determine sessionId from the session hero
+  // Determine sessionId from the session hero (legacy localStorage compatibility)
   var heroEl=document.querySelector('#screen-session .sh-name');
   var sessionId=heroEl?heroEl.textContent.trim().toLowerCase().replace(/\s+/g,'-'):'unknown';
   var entry={
@@ -4878,6 +4898,20 @@ function autoLogSet(row){
   var logs=JSON.parse(localStorage.getItem('phoenix_session_logs_sets')||'[]');
   logs.push(entry);
   localStorage.setItem('phoenix_session_logs_sets',JSON.stringify(logs));
+  // v4.7.29 FIX 3: per-session completed-sets shadow store, keyed by the Supabase
+  // session id. _phxRestoreSessionVisualState reads this on screen mount so the
+  // visual tick state (and the entered kg/reps) survives navigation away & back.
+  try {
+    var sbSid = (typeof currentSupabaseSessionId !== 'undefined' && currentSupabaseSessionId) ? currentSupabaseSessionId : null;
+    if(sbSid){
+      var k = 'phoenix_completed_sets_' + sbSid;
+      var arr = JSON.parse(localStorage.getItem(k) || '[]');
+      // Replace any prior entry for the same exId+setIdx (so re-ticks update kg/reps).
+      arr = arr.filter(function(e){ return !(e.exId === exId && e.setIdx === setIdx); });
+      arr.push({exId:exId, setIdx:setIdx, exerciseName:exerciseName, kg:kg, reps:reps, ts:Date.now()});
+      localStorage.setItem(k, JSON.stringify(arr));
+    }
+  } catch(e){ console.warn('[PHX] completed-sets shadow write failed:', e); }
   // Supabase real-time set logging
   supabaseLogSet(exerciseName,exId,setIdx,kg,reps);
 }
@@ -10286,7 +10320,8 @@ async function loadWeeklyStats(){
       }).length;
     }
     setText('wci-sessions', done.length+' / '+(planned||done.length||'—'));
-    setText('wci-volume', Math.round(totalVol)+' kg');
+    // v4.7.29 FIX 2: kg with comma thousands separator, never tonnes.
+    setText('wci-volume', Math.round(totalVol).toLocaleString('en-GB')+' kg');
     setText('wci-wods', String(wods));
     setText('wci-distance', (totalDist/1000).toFixed(1)+' km');
   } catch(e){ console.warn('[PHX] loadWeeklyStats failed:', e); }
@@ -10475,6 +10510,21 @@ function renderDailyWOD(){
     tileBadge.textContent = phxWodTierLabel(wod.tier);
     tileBadge.style.color = phxWodTierColour(wod.tier);
     tileBadge.style.borderColor = phxWodTierColour(wod.tier);
+  }
+
+  // v4.7.29 BUILD 5: WOD LIBRARY tile mirrors today's tier image + border accent.
+  var libTile = document.getElementById('card-wod-library');
+  if(libTile){
+    libTile.style.backgroundImage = 'url(\'' + img + '\')';
+    libTile.style.backgroundSize = 'cover';
+    libTile.style.backgroundPosition = 'center';
+    if(!libTile.classList.contains('tile-bg')) libTile.classList.add('tile-bg');
+    libTile.style.borderLeftColor = phxWodTierColour(wod.tier);
+  }
+  var libSub = document.getElementById('card-wod-library-sub');
+  if(libSub){
+    var totalWods = (typeof _wlibAllWods === 'function') ? _wlibAllWods().length : 0;
+    libSub.textContent = totalWods ? ('Browse all ' + totalWods + ' WODs') : 'Browse all WODs';
   }
 
   // Countdown to midnight
@@ -11785,6 +11835,18 @@ var PHOENIX_COACH_SYSTEM_PROMPT = "You are the Phoenix Coach — a world-class s
 "- If fqProgrammeTarget is agoge or both: reference The March progress and weekly walk prescription.\n"+
 "- If fqProgrammeTarget is combine or both: reference Combine test preparation.\n"+
 "- Always be aware of where the athlete is in their programme block.\n\n"+
+// v4.7.29 FIX 1: stop the coach from attributing one weight to every exercise in a session.
+"EXERCISE DATA ACCURACY:\n"+
+"- The context contains exercise_summary[] — one entry per exercise from the last 7 days, with sets, avg_weight_kg, max_weight_kg, total_reps, avg_rpe.\n"+
+"- When you reference a load, ALWAYS match it to the specific exercise from exercise_summary[]. Never assume a weight from one exercise applies to another.\n"+
+"- recent_set_logs[] is the raw per-set data; use it for set-level detail. exercise_summary[] is the aggregated truth.\n"+
+"- If exercise_summary[] doesn't contain an exercise the athlete asks about, say you don't have data for it — do not invent loads.\n"+
+"- Example (correct): 'Your trap bar deadlift hit 102.5 kg max, high pulls were 60 kg.' Example (wrong): 'Your high pulls at 102.5 kg…' (that was the deadlift load).\n\n"+
+// v4.7.29 FIX 2: never express training volume in tonnes.
+"VOLUME DISPLAY:\n"+
+"- Always express total volume in kilograms (kg) with a comma thousands separator. Never use tonnes.\n"+
+"- Correct: '6,800 kg this week'. Wrong: '6.8 tonnes' or '6.8t'.\n"+
+"- Per-exercise volume comes from exercise_summary[].total_volume_kg. Weekly total volume comes from total_volume_kg on the context root.\n\n"+
 "You are not a therapist, doctor, or nutritionist. For medical concerns, always recommend they see a professional.";
 
 // v4.7.22 BUILD 2/3/5: open the chat screen, render history, build context bar.
@@ -11887,8 +11949,9 @@ async function _mcLoadHistory(){
   } catch(e){ return []; }
 }
 
+// v4.7.29 FIX 1+2: per-exercise grouping (no RPE filter), total_volume_kg in kg (not tonnes).
 async function _mcLoadRecentDataForContext(){
-  var out = {lastRpe:null, weightTrend:null, recentSessions:[], recentSetLogs:[], latestCheckin:null};
+  var out = {lastRpe:null, weightTrend:null, recentSessions:[], recentSetLogs:[], exerciseSummary:[], total_volume_kg:0, latestCheckin:null};
   if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return out;
   try {
     var sevenDaysAgo = new Date(Date.now() - 7*86400000).toISOString();
@@ -11899,16 +11962,61 @@ async function _mcLoadRecentDataForContext(){
       .order('started_at', {ascending: false})
       .limit(20);
     if(!sessRes.error && sessRes.data) out.recentSessions = sessRes.data;
+    // v4.7.29 FIX 1: pull ALL set_logs from the last 7 days (no RPE filter — most sets don't have RPE,
+    // only the last set of each exercise block does). Group by exercise_name so the coach can see
+    // per-exercise loads instead of attributing one weight to all exercises in a session.
     var slRes = await sb.from('set_logs')
-      .select('exercise_name,set_number,weight_kg,reps,rpe,notes,logged_at')
+      .select('exercise_name,set_number,weight_kg,reps,rpe,notes,logged_at,session_id')
       .eq('user_id', currentSession.user.id)
       .gte('logged_at', sevenDaysAgo)
-      .not('rpe','is',null)
       .order('logged_at', {ascending: false})
-      .limit(50);
+      .limit(500);
     if(!slRes.error && slRes.data){
       out.recentSetLogs = slRes.data;
-      if(slRes.data.length) out.lastRpe = slRes.data[0].rpe + '/10';
+      // Last RPE: scan top of the list (most recent first) for the first non-null RPE.
+      for(var i=0;i<slRes.data.length;i++){
+        if(slRes.data[i].rpe != null){ out.lastRpe = slRes.data[i].rpe + '/10'; break; }
+      }
+      // v4.7.29 FIX 1: group by exercise_name. For each exercise, compute sets, avg/max weight,
+      // total reps, avg RPE (over the sets that have one), and total volume.
+      var byEx = {};
+      var totalVol = 0;
+      for(var j=0;j<slRes.data.length;j++){
+        var sl = slRes.data[j];
+        var name = sl.exercise_name || 'Unknown';
+        if(!byEx[name]) byEx[name] = {exercise_name:name, sets:0, weights:[], total_reps:0, rpes:[], total_volume_kg:0, last_logged_at:sl.logged_at};
+        var bx = byEx[name];
+        bx.sets += 1;
+        var w = (sl.weight_kg != null) ? Number(sl.weight_kg) : 0;
+        var r = (sl.reps != null) ? Number(sl.reps) : 0;
+        if(w > 0) bx.weights.push(w);
+        bx.total_reps += r;
+        bx.total_volume_kg += (w * r);
+        if(sl.rpe != null) bx.rpes.push(Number(sl.rpe));
+        totalVol += (w * r);
+      }
+      var summary = [];
+      Object.keys(byEx).forEach(function(k){
+        var bx = byEx[k];
+        var avgW = bx.weights.length ? (bx.weights.reduce(function(a,b){return a+b;},0) / bx.weights.length) : 0;
+        var maxW = bx.weights.length ? Math.max.apply(null, bx.weights) : 0;
+        var avgRpe = bx.rpes.length ? (bx.rpes.reduce(function(a,b){return a+b;},0) / bx.rpes.length) : null;
+        summary.push({
+          exercise_name: bx.exercise_name,
+          sets: bx.sets,
+          avg_weight_kg: Math.round(avgW * 10) / 10,
+          max_weight_kg: Math.round(maxW * 10) / 10,
+          total_reps: bx.total_reps,
+          avg_rpe: avgRpe != null ? Math.round(avgRpe * 10) / 10 : null,
+          total_volume_kg: Math.round(bx.total_volume_kg),
+          last_logged_at: bx.last_logged_at
+        });
+      });
+      // Sort by most recent then most sets so the coach sees most-relevant exercises first.
+      summary.sort(function(a,b){ return (a.last_logged_at < b.last_logged_at ? 1 : -1); });
+      out.exerciseSummary = summary;
+      // v4.7.29 FIX 2: total volume in kg (NOT tonnes). Round to whole kg.
+      out.total_volume_kg = Math.round(totalVol);
     }
     var ciRes = await sb.from('weekly_checkins')
       .select('week_number,weight_kg,feeling_score,sleep_score,energy_score,niggle_notes,coach_notes,submitted_at')
@@ -11988,6 +12096,10 @@ async function sendCoachMessage(userMessage){
     current_week: (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1),
     recent_sessions: recent.recentSessions,
     recent_set_logs: recent.recentSetLogs,
+    // v4.7.29 FIX 1+2: per-exercise summary so the coach matches loads to exercises, plus
+    // weekly total volume in kg (NOT tonnes) for VOLUME DISPLAY rule.
+    exercise_summary: recent.exerciseSummary,
+    total_volume_kg: recent.total_volume_kg,
     latest_checkin: recent.latestCheckin,
     // v4.7.23 hotfix: today's date so the chat coach can answer time-sensitive questions correctly.
     today_date: new Date().toISOString().split('T')[0],
@@ -12061,6 +12173,9 @@ async function _mcGenerateOpeningMessage(){
     programme: athlete && athlete.aiProgramme ? athlete.aiProgramme : null,
     recent_sessions: recent.recentSessions,
     recent_set_logs: recent.recentSetLogs,
+    // v4.7.29 FIX 1+2: same fields as the chat context so the opening message follows the same rules.
+    exercise_summary: recent.exerciseSummary,
+    total_volume_kg: recent.total_volume_kg,
     latest_checkin: recent.latestCheckin,
     // v4.7.23 hotfix: today's date so the opening message references the right week / time-to-event.
     today_date: new Date().toISOString().split('T')[0],
@@ -14624,26 +14739,76 @@ document.addEventListener('DOMContentLoaded', function(){
   if(typeof _phxApplyAdGate==='function') setTimeout(_phxApplyAdGate, 100);
 });
 
-// Best-effort visual restore: pull set_logs for the active session id and tag
-// any matching exercise/set DOM nodes as completed. The session screen
-// renders different markup per session type, so we look for common selectors.
+// v4.7.29 FIX 3 (CRITICAL): visual restore for an active session.
+// Step 1 (instant): replay phoenix_completed_sets_[sessionId] from localStorage —
+//   re-tick the done button, restyle the row, and re-populate the kg/reps inputs.
+//   This fires synchronously after the screen mounts so the user sees no flicker.
+// Step 2 (cross-device safety net): query Supabase set_logs and apply the same
+//   restoration for any rows we didn't already see locally.
 async function _phxRestoreSessionVisualState(){
-  if(!currentSupabaseSessionId || typeof sb==='undefined') return;
-  try {
-    var res = await sb.from('set_logs').select('exercise_name, exercise_id, set_number').eq('session_id', currentSupabaseSessionId);
-    if(res.error || !res.data || !res.data.length) return;
-    res.data.forEach(function(row){
-      var selectors = [
-        '[data-ex-id="'+row.exercise_id+'"][data-set-idx="'+row.set_number+'"]',
-        '[data-exercise-id="'+row.exercise_id+'"][data-set="'+row.set_number+'"]',
-        '[data-exercise="'+row.exercise_name+'"][data-set="'+row.set_number+'"]'
-      ];
-      selectors.forEach(function(sel){
-        document.querySelectorAll(sel).forEach(function(el){ el.classList.add('completed'); el.classList.add('logged'); });
+  if(!currentSupabaseSessionId) return;
+  // Helper: tick a single set row+button and restore inputs.
+  function _phxApplySetTick(exId, setIdx, kg, reps){
+    if(exId == null) return;
+    // Done button — uses the AI-session id format (id="done-{exId}-{setIdx}").
+    var btn = document.getElementById('done-' + exId + '-' + setIdx);
+    if(btn) btn.classList.add('done');
+    // Inputs — restore the values the user entered.
+    var kgEl = document.getElementById('kg-' + exId + '-' + setIdx);
+    if(kgEl && kg != null && kg !== '') kgEl.value = kg;
+    var repsEl = document.getElementById('reps-' + exId + '-' + setIdx);
+    if(repsEl && reps != null && reps !== '') repsEl.value = reps;
+    // Row styling — match the in-flight done state from the click handler.
+    var row = document.getElementById('setrow-' + exId + '-' + setIdx);
+    if(row){
+      row.style.background = 'rgba(200,150,62,0.08)';
+      row.style.borderLeft = '3px solid var(--gold)';
+      row.classList.add('completed');
+      row.classList.add('logged');
+    }
+    // Generic data-attribute selectors as a fallback for non-AI session markup.
+    var selectors = [
+      '[data-exid="' + exId + '"][data-setidx="' + setIdx + '"]',
+      '[data-ex-id="' + exId + '"][data-set-idx="' + setIdx + '"]',
+      '[data-exercise-id="' + exId + '"][data-set="' + setIdx + '"]'
+    ];
+    selectors.forEach(function(sel){
+      document.querySelectorAll(sel).forEach(function(el){
+        el.classList.add('completed');
+        el.classList.add('logged');
       });
     });
-    console.log('[PHX] restored visual state for', res.data.length, 'sets');
-  } catch(e){ console.warn('[PHX] restoreSessionVisualState failed:', e); }
+  }
+  var seen = {};
+  // Step 1 — local shadow store (instant).
+  try {
+    var k = 'phoenix_completed_sets_' + currentSupabaseSessionId;
+    var local = JSON.parse(localStorage.getItem(k) || '[]');
+    local.forEach(function(e){
+      _phxApplySetTick(e.exId, e.setIdx, e.kg, e.reps);
+      seen[e.exId + '|' + e.setIdx] = true;
+    });
+    if(local.length) console.log('[PHX] restored', local.length, 'sets from local shadow');
+  } catch(e){ console.warn('[PHX] local shadow restore failed:', e); }
+  // Step 2 — Supabase fallback (cross-device + insurance against localStorage loss).
+  if(typeof sb === 'undefined') return;
+  try {
+    var res = await sb.from('set_logs')
+      .select('exercise_name, exercise_id, set_number, weight_kg, reps')
+      .eq('session_id', currentSupabaseSessionId);
+    if(res.error || !res.data || !res.data.length) return;
+    var applied = 0;
+    res.data.forEach(function(row){
+      var exId = row.exercise_id;
+      var setIdx = row.set_number;
+      var key = exId + '|' + setIdx;
+      if(seen[key]) return; // already restored from local shadow
+      _phxApplySetTick(exId, setIdx, row.weight_kg, row.reps);
+      seen[key] = true;
+      applied++;
+    });
+    if(applied) console.log('[PHX] restored', applied, 'sets from Supabase');
+  } catch(e){ console.warn('[PHX] restoreSessionVisualState supabase fallback failed:', e); }
 }
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}</script>

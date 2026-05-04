@@ -3072,7 +3072,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.19';
+var APP_VERSION='4.7.20';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3325,6 +3325,9 @@ async function _loadProfileAndRouteInner(){
     console.log('[PHX] routing decision:',{hasAthlete:true,fqCompleted:profile.fq_completed,targetScreen:'today'});
     viewWeek=progWeek();
     navTo('today');
+    // v4.7.20: after the athlete profile is loaded and we've routed to Today, check whether
+    // there's an unfinished walk in Supabase. The helper handles the resume / finish / discard prompt.
+    setTimeout(function(){ if(typeof _phxResumeWalk==='function') _phxResumeWalk(); }, 600);
     return;
   }
 
@@ -7589,6 +7592,11 @@ var walkMap=null,walkMarker=null,walkPath=null;
 var walkTracking=false,walkPaused=false,walkMode='walk';
 var walkCoords=[],walkStartTime=0,walkPauseTime=0,walkTotalPause=0;
 var walkWatchId=null,walkTimerInterval=null,walkLeafletLoaded=false;
+// v4.7.20: live persistence so a backgrounded / killed app doesn't lose walk progress.
+var walkSupabaseId=null;     // sessions.id for the in-progress walk
+var walkHeartbeatInterval=null; // 30s heartbeat that pushes distance + elapsed to Supabase
+var PHX_ACTIVE_WALK_KEY='phoenix_active_walk_id';
+var PHX_ACTIVE_WALK_META_KEY='phoenix_active_walk_meta';
 
 function openWalkLog(){
   showScreen('screen-walk');
@@ -7675,11 +7683,27 @@ function initWalkMap(){
   }
 }
 
-function walkStart(){
+async function walkStart(){
   if(walkTracking) return;
   walkTracking=true;walkPaused=false;
   walkCoords=[];walkStartTime=Date.now();walkTotalPause=0;
-  supabaseStartSession(walkMode,walkMode==='run'?'Run':'Walk',walkMode);
+  // v4.7.20: capture the Supabase session id so the heartbeat + resume flows can target this row.
+  // The wrapped supabaseStartSession returns the new id; we store it both in memory and localStorage
+  // so an app kill/refresh can recover it.
+  try {
+    var newId = await supabaseStartSession(walkMode, walkMode==='run'?'Run':'Walk', walkMode);
+    if(newId){
+      walkSupabaseId = newId;
+      try {
+        localStorage.setItem(PHX_ACTIVE_WALK_KEY, newId);
+        localStorage.setItem(PHX_ACTIVE_WALK_META_KEY, JSON.stringify({
+          mode: walkMode,
+          startTime: walkStartTime,
+          totalPause: 0
+        }));
+      } catch(e){}
+    }
+  } catch(e){ console.warn('[PHX] walkStart supabase init failed:', e); }
   var sb=document.getElementById('wt-start-btn');
   var pb=document.getElementById('wt-pause-btn');
   if(sb) sb.style.display='none';
@@ -7691,6 +7715,11 @@ function walkStart(){
   }
   // Timer always starts immediately — doesn't wait for GPS
   walkTimerInterval=setInterval(updateWalkTimer,1000);
+  // v4.7.20: 30-second heartbeat — survives backgrounding, app kills, navigation away.
+  if(walkHeartbeatInterval) clearInterval(walkHeartbeatInterval);
+  walkHeartbeatInterval = setInterval(_phxWalkHeartbeat, 30000);
+  // Fire one heartbeat ~5s in so we have a saved baseline before the first 30s tick.
+  setTimeout(_phxWalkHeartbeat, 5000);
   requestWakeLock();
   // GPS tracking — starts if available
   if(navigator.geolocation){
@@ -7711,6 +7740,42 @@ function walkStart(){
       console.log('GPS watch error:',err.message);
     },{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
   }
+}
+
+// v4.7.20: write the current walk state to the Supabase sessions row. Called on a 30s timer
+// during walkStart and once again right after walkStop so the final pre-completion snapshot is durable.
+function _phxWalkHeartbeat(){
+  if(!walkSupabaseId || !walkTracking) return;
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
+  try {
+    var dist = calcWalkDistance();
+    var elapsed = walkPaused
+      ? Math.floor((walkPauseTime - walkStartTime - walkTotalPause)/1000)
+      : Math.floor((Date.now() - walkStartTime - walkTotalPause)/1000);
+    var coordSnapshot = walkCoords.length > 200 ? walkCoords.slice(-200) : walkCoords.slice();
+    sb.from('sessions').update({
+      status: 'active',
+      total_distance_m: Math.round(dist*1000),
+      duration_seconds: elapsed,
+      details: {
+        session_id: walkMode,
+        mode: walkMode,
+        coords: coordSnapshot,
+        last_heartbeat: new Date().toISOString()
+      },
+      updated_at: new Date().toISOString()
+    }).eq('id', walkSupabaseId).then(function(res){
+      if(res.error) console.warn('[PHX] walk heartbeat failed:', res.error);
+    });
+    // Refresh the saved meta — last known elapsed / pause state — for resume math.
+    try {
+      localStorage.setItem(PHX_ACTIVE_WALK_META_KEY, JSON.stringify({
+        mode: walkMode,
+        startTime: walkStartTime,
+        totalPause: walkTotalPause
+      }));
+    } catch(e){}
+  } catch(e){ console.warn('[PHX] walk heartbeat error:', e); }
 }
 
 function walkPause(){
@@ -7742,6 +7807,13 @@ function walkStop(){
   logs.push(entry);
   localStorage.setItem('phoenix_walk_logs',JSON.stringify(logs));
   supabaseCompleteSession({duration_seconds:elapsed,total_distance_m:Math.round(dist*1000),mood:feel,details:{session_id:walkMode,mode:walkMode,weight:weight,distance:entry.distance}});
+  // v4.7.20: walk completed cleanly — drop the live-walk localStorage keys so the next app
+  // open won't show the "unfinished walk?" resume prompt.
+  try {
+    localStorage.removeItem(PHX_ACTIVE_WALK_KEY);
+    localStorage.removeItem(PHX_ACTIVE_WALK_META_KEY);
+  } catch(e){}
+  walkSupabaseId = null;
   checkFreeTrialUnlock();
   var streak=getWalkStreak();
   var name=getFirstName();
@@ -7760,6 +7832,10 @@ function walkCleanup(){
   walkTracking=false;walkPaused=false;
   if(walkWatchId!==null){navigator.geolocation.clearWatch(walkWatchId);walkWatchId=null;}
   if(walkTimerInterval){clearInterval(walkTimerInterval);walkTimerInterval=null;}
+  // v4.7.20: stop the heartbeat too. NOTE — does NOT clear localStorage keys: walkStop handles that
+  // on a clean finish, and a forced cleanup (e.g. user backed out without finishing) should leave
+  // the keys in place so the next app open can offer to resume.
+  if(walkHeartbeatInterval){clearInterval(walkHeartbeatInterval);walkHeartbeatInterval=null;}
   releaseWakeLock();
   walkCoords=[];
   if(walkPath) walkPath.setLatLngs([]);
@@ -12611,6 +12687,164 @@ if(typeof supabaseCompleteSession==='function'){
     }
   } catch(e){}
 })();
+
+// v4.7.20: walk-session recovery — runs after the user is signed in and the athlete profile is loaded.
+// Reads phoenix_active_walk_id from localStorage. If the corresponding sessions row is still status='active',
+// prompts the user to Resume (restart GPS + timer + heartbeat with restored elapsed/distance), Finish
+// (open the completion flow with pre-filled values), or Discard (mark the row 'abandoned').
+async function _phxResumeWalk(){
+  try {
+    if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
+    var storedId = localStorage.getItem(PHX_ACTIVE_WALK_KEY);
+    if(!storedId) return;
+    var res = await sb.from('sessions').select('id,session_type,status,total_distance_m,duration_seconds,started_at,details').eq('id', storedId).maybeSingle();
+    if(res.error || !res.data){
+      // Row gone or unreadable — drop the orphan keys so we don't keep prompting.
+      localStorage.removeItem(PHX_ACTIVE_WALK_KEY);
+      localStorage.removeItem(PHX_ACTIVE_WALK_META_KEY);
+      return;
+    }
+    var row = res.data;
+    if(row.status !== 'active') return; // Already completed/abandoned — nothing to recover.
+
+    var distM = parseFloat(row.total_distance_m) || 0;
+    var durSec = parseInt(row.duration_seconds) || 0;
+    var meta = {};
+    try { meta = JSON.parse(localStorage.getItem(PHX_ACTIVE_WALK_META_KEY) || '{}') || {}; } catch(e){ meta = {}; }
+    var mode = meta.mode || (row.details && row.details.mode) || row.session_type || 'walk';
+    var distKm = distM / 1000;
+    var durM = Math.floor(durSec/60);
+    var durS = durSec % 60;
+    var prettyDuration = durM+':'+(durS<10?'0':'')+durS;
+
+    // Use a synchronous confirm chain — Resume vs Finish first; Cancel routes to discard with a second prompt.
+    var resume = confirm('You have an unfinished '+(mode==='run'?'run':'walk')+' ('+distKm.toFixed(2)+'km, '+prettyDuration+').\n\nOK = Resume tracking\nCancel = Finish or discard');
+    if(resume){
+      // Pre-load walk vars to the saved state, then open the walk screen and start tracking.
+      walkSupabaseId = row.id;
+      walkMode = mode;
+      // Use Supabase's recorded elapsed to back-date walkStartTime so updateWalkTimer reads correctly.
+      walkStartTime = Date.now() - (durSec*1000);
+      walkTotalPause = (meta.totalPause | 0);
+      walkCoords = (row.details && Array.isArray(row.details.coords)) ? row.details.coords.slice() : [];
+      walkPaused = false;
+      walkTracking = true;
+      // Open the walk screen UI and restart GPS + timer + heartbeat without re-creating a sessions row.
+      showScreen('screen-walk');
+      var streak = getWalkStreak();
+      var badge = document.getElementById('walk-streak-badge');
+      var hdr = document.getElementById('walk-streak-hdr');
+      if(badge && hdr){ badge.style.display = streak>0?'block':'none'; if(streak>0) hdr.textContent = streak+'d'; }
+      updateWalkModeUI();
+      var sBtn = document.getElementById('wt-start-btn');
+      var pBtn = document.getElementById('wt-pause-btn');
+      if(sBtn) sBtn.style.display = 'none';
+      if(pBtn){
+        pBtn.style.display = 'block';
+        pBtn.style.background = walkMode==='run' ? 'var(--orange)' : 'var(--gold)';
+        pBtn.style.color = '#fff';
+        pBtn.textContent = 'Pause';
+      }
+      // Reinit map then plot the recovered route + position
+      if(!walkLeafletLoaded){
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js';
+        script.onload = function(){ walkLeafletLoaded = true; setTimeout(function(){ initWalkMap(); _phxRedrawWalkRoute(); }, 300); };
+        document.head.appendChild(script);
+      } else {
+        setTimeout(function(){ initWalkMap(); _phxRedrawWalkRoute(); }, 300);
+      }
+      // Stats + timer
+      updateWalkStats();
+      updateWalkTimer();
+      if(walkTimerInterval) clearInterval(walkTimerInterval);
+      walkTimerInterval = setInterval(updateWalkTimer, 1000);
+      if(walkHeartbeatInterval) clearInterval(walkHeartbeatInterval);
+      walkHeartbeatInterval = setInterval(_phxWalkHeartbeat, 30000);
+      // Restart GPS watch
+      requestWakeLock();
+      if(navigator.geolocation){
+        walkWatchId = navigator.geolocation.watchPosition(function(pos){
+          if(!walkTracking || walkPaused) return;
+          var lat = pos.coords.latitude, lng = pos.coords.longitude;
+          walkCoords.push([lat,lng]);
+          if(walkPath) walkPath.setLatLngs(walkCoords);
+          if(walkMarker) walkMarker.setLatLng([lat,lng]);
+          else if(walkMap && window.L){
+            var col = walkMode==='run' ? '#e05c2a' : '#c8963e';
+            walkMarker = L.circleMarker([lat,lng],{radius:9,fillColor:col,color:'#fff',weight:2,fillOpacity:1}).addTo(walkMap);
+          }
+          if(walkMap) walkMap.panTo([lat,lng]);
+          updateWalkStats();
+        }, function(err){ console.log('GPS watch error:', err.message); }, {enableHighAccuracy:true,maximumAge:2000,timeout:15000});
+      }
+      // Make currentSupabaseSessionId match so any other v4.7.3 plumbing keeps the right id.
+      window.currentSupabaseSessionId = row.id;
+      console.log('[PHX] resumed walk', row.id, distKm.toFixed(2)+'km', prettyDuration);
+      return;
+    }
+
+    // User chose not to resume — offer Finish vs Discard.
+    var finish = confirm('Finish logging this '+(mode==='run'?'run':'walk')+' as-is ('+distKm.toFixed(2)+'km, '+prettyDuration+')?\n\nOK = Save and finish\nCancel = Discard');
+    if(finish){
+      // Mark the row complete with the values it already has, log a local entry, clear keys.
+      try {
+        var entry = {
+          date: new Date().toISOString(),
+          mode: mode,
+          distance: Math.round(distKm*100)/100,
+          duration: durM,
+          durationSecs: durSec,
+          weight: 0,
+          feel: 3
+        };
+        var logs = JSON.parse(localStorage.getItem('phoenix_walk_logs') || '[]');
+        logs.push(entry);
+        localStorage.setItem('phoenix_walk_logs', JSON.stringify(logs));
+        await sb.from('sessions').update({
+          status: 'completed',
+          duration_seconds: durSec,
+          total_distance_m: Math.round(distKm*1000),
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          details: Object.assign({}, row.details||{}, {recovered_finish: true})
+        }).eq('id', row.id);
+      } catch(e){ console.warn('[PHX] resumed-finish failed:', e); }
+      localStorage.removeItem(PHX_ACTIVE_WALK_KEY);
+      localStorage.removeItem(PHX_ACTIVE_WALK_META_KEY);
+      window.currentSupabaseSessionId = null;
+      console.log('[PHX] resumed walk finished');
+    } else {
+      // Discard
+      try {
+        await sb.from('sessions').update({
+          status: 'abandoned',
+          updated_at: new Date().toISOString()
+        }).eq('id', row.id);
+      } catch(e){ console.warn('[PHX] discard failed:', e); }
+      localStorage.removeItem(PHX_ACTIVE_WALK_KEY);
+      localStorage.removeItem(PHX_ACTIVE_WALK_META_KEY);
+      window.currentSupabaseSessionId = null;
+      console.log('[PHX] unfinished walk discarded');
+    }
+  } catch(e){
+    console.warn('[PHX] _phxResumeWalk error:', e);
+  }
+}
+window._phxResumeWalk = _phxResumeWalk;
+
+// Redraws the recovered route on the freshly-initialised map (leaflet polyline + start marker).
+function _phxRedrawWalkRoute(){
+  if(!walkMap || !window.L || !walkCoords || !walkCoords.length) return;
+  if(walkPath) walkPath.setLatLngs(walkCoords);
+  var last = walkCoords[walkCoords.length-1];
+  if(walkMarker) walkMarker.setLatLng(last);
+  else {
+    var col = walkMode==='run' ? '#e05c2a' : '#c8963e';
+    walkMarker = L.circleMarker(last, {radius:9, fillColor:col, color:'#fff', weight:2, fillOpacity:1}).addTo(walkMap);
+  }
+  walkMap.setView(last, 16);
+}
 
 function _phxIsOnSessionScreen(){
   var s = document.getElementById('screen-session');

@@ -3136,7 +3136,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.26';
+var APP_VERSION='4.7.27';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9032,6 +9032,27 @@ function setupSplashButtons(){
       </div>
     </div>
 
+    <!-- v4.7.27 SECTION 2B — weekly photo (optional). Front + side comparison shots.
+         Storage bucket: checkin-photos (private). Folder: {user_id}/{week_start_date}/{front,side}.jpg.
+         Columns on weekly_checkins: photo_front_url text, photo_side_url text. -->
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Weekly photo</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;font-style:italic;line-height:1.5;">Same time, same lighting, same position each week gives the most useful comparison. Completely optional.</div>
+    <div style="display:flex;gap:8px;margin-bottom:24px;">
+      <div id="wci-photo-front-slot" onclick="document.getElementById('wci-photo-front').click()" style="flex:1;height:160px;border:1px solid var(--border2);background:var(--bg3);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-top:8px;">Front</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">Tap to take photo</div>
+      </div>
+      <div id="wci-photo-side-slot" onclick="document.getElementById('wci-photo-side').click()" style="flex:1;height:160px;border:1px solid var(--border2);background:var(--bg3);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-top:8px;">Side</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">Tap to take photo</div>
+      </div>
+    </div>
+    <input type="file" accept="image/*" capture="environment" id="wci-photo-front" style="display:none;" onchange="window._wciOnPhotoSelect('front', this)">
+    <input type="file" accept="image/*" capture="environment" id="wci-photo-side"  style="display:none;" onchange="window._wciOnPhotoSelect('side',  this)">
+    <div id="wci-photo-warning" style="display:none;font-size:11px;color:var(--orange);margin-top:-16px;margin-bottom:14px;text-align:center;font-style:italic;"></div>
+
     <!-- SECTION 3 — recovery notes -->
     <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Recovery</div>
     <textarea id="wci-niggle" class="q-input" rows="3" placeholder="Note any new pain, tightness or injuries…" style="margin-bottom:24px;resize:vertical;min-height:80px;"></textarea>
@@ -9990,10 +10011,23 @@ function submitWeightCheckin(){
   if(banner) banner.style.display='none';
 }
 
-// ====== v4.7.19 BUILD 2: WEEKLY CHECK-IN ======
+// ====== v4.7.19 BUILD 2 + v4.7.27: WEEKLY CHECK-IN ======
 // Local form state lives on window so the inline button onclicks can read/write it without
 // every handler having to look up DOM nodes.
-window._wciState = {feeling:0, sleep:0, energy:0, weight:0, continueProgramme:null};
+// v4.7.27: photoFront/photoSide hold the base64 data URL until submit, then upload to Supabase Storage.
+//
+// Supabase setup (run once):
+//   -- Storage bucket: checkin-photos (private)
+//   -- RLS: users can only access their own folder
+//   -- Folder structure: {user_id}/{week_start_date}/front.jpg and side.jpg
+//   -- Columns added to weekly_checkins:
+//   alter table weekly_checkins add column if not exists photo_front_url text;
+//   alter table weekly_checkins add column if not exists photo_side_url  text;
+//   -- RLS policy on storage.objects (replace bucket_id reference if needed):
+//   create policy "checkin_photos_owner_rw" on storage.objects
+//     for all using (bucket_id = 'checkin-photos' and auth.uid()::text = (storage.foldername(name))[1])
+//     with check (bucket_id = 'checkin-photos' and auth.uid()::text = (storage.foldername(name))[1]);
+window._wciState = {feeling:0, sleep:0, energy:0, weight:0, continueProgramme:null, photoFront:null, photoSide:null};
 
 function _wciWeekBounds(d){
   // Returns {start, end} where start = Monday 00:00 of the week containing d, end = Sunday 23:59:59.
@@ -10016,7 +10050,15 @@ function _wciFormatDateRange(start, end){
 
 function openWeeklyCheckin(){
   // Reset transient form state
-  window._wciState = {feeling:0, sleep:0, energy:0, weight:0, continueProgramme:null};
+  window._wciState = {feeling:0, sleep:0, energy:0, weight:0, continueProgramme:null, photoFront:null, photoSide:null};
+  // v4.7.27: also reset the photo file inputs + slot UI so a re-open shows blank slots.
+  ['front','side'].forEach(function(side){
+    var input = document.getElementById('wci-photo-'+side);
+    if(input){ try { input.value = ''; } catch(e){} }
+    _wciResetPhotoSlot(side);
+  });
+  var warn = document.getElementById('wci-photo-warning');
+  if(warn){ warn.style.display = 'none'; warn.textContent = ''; }
   var weekNum = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
   var bounds = _wciWeekBounds();
   var titleEl = document.getElementById('wci-title');
@@ -10074,6 +10116,95 @@ window._wciSetContinue = function(yes){
   var ta = document.getElementById('wci-next-requests');
   if(ta) ta.style.display = yes ? 'none' : 'block';
 };
+
+// ====== v4.7.27: weekly photo capture ======
+// Capture path: file input → FileReader.readAsDataURL → base64 stored in window._wciState.photoFront/Side.
+// Submit path: convert base64 → Blob → upload to Supabase Storage at {user_id}/{week_start_date}/{front,side}.jpg.
+// Read-only path (non-Sunday): if photo_front_url / photo_side_url exist on the last submission, render thumbnails.
+
+// Render an in-slot thumbnail with a Retake button. dataURL can be a base64 data URL OR a public URL.
+function _wciRenderPhotoSlot(side, dataURL, opts){
+  var slot = document.getElementById('wci-photo-'+side+'-slot');
+  if(!slot) return;
+  var readOnly = opts && opts.readOnly;
+  slot.innerHTML =
+    '<img src="'+dataURL+'" alt="'+side+' photo" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:var(--radius);">'+
+    (readOnly
+      ? '<div style="position:absolute;bottom:6px;left:6px;right:6px;background:rgba(0,0,0,0.6);color:#fff;font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;padding:3px 6px;border-radius:3px;text-align:center;">'+side+'</div>'
+      : '<button onclick="event.stopPropagation();window._wciRetakePhoto(\''+side+'\')" style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;border:1px solid rgba(255,255,255,0.3);font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:4px 12px;border-radius:14px;cursor:pointer;">Retake</button>'
+    );
+}
+
+// Reset slot back to the empty camera-icon state.
+function _wciResetPhotoSlot(side){
+  var slot = document.getElementById('wci-photo-'+side+'-slot');
+  if(!slot) return;
+  var label = side === 'front' ? 'Front' : 'Side';
+  slot.innerHTML =
+    '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>'+
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-top:8px;">'+label+'</div>'+
+    '<div style="font-size:11px;color:var(--text3);margin-top:2px;">Tap to take photo</div>';
+}
+
+window._wciOnPhotoSelect = function(side, inputEl){
+  if(!inputEl || !inputEl.files || !inputEl.files[0]) return;
+  var file = inputEl.files[0];
+  if(!file.type || file.type.indexOf('image/') !== 0){
+    alert('Please select an image file.');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var dataURL = ev.target && ev.target.result;
+    if(!dataURL) return;
+    if(side === 'front') window._wciState.photoFront = dataURL;
+    else                  window._wciState.photoSide  = dataURL;
+    _wciRenderPhotoSlot(side, dataURL, {readOnly:false});
+  };
+  reader.onerror = function(){ alert('Could not read image. Try again.'); };
+  reader.readAsDataURL(file);
+};
+
+window._wciRetakePhoto = function(side){
+  if(side === 'front') window._wciState.photoFront = null;
+  else                  window._wciState.photoSide  = null;
+  var input = document.getElementById('wci-photo-'+side);
+  if(input){ try { input.value = ''; } catch(e){} }
+  _wciResetPhotoSlot(side);
+};
+
+// Convert a base64 data URL to a Blob for upload. Returns null on failure.
+function _wciDataURLToBlob(dataURL){
+  try {
+    var parts = String(dataURL).split(',');
+    if(parts.length !== 2) return null;
+    var meta = parts[0].match(/^data:([^;]+);base64$/);
+    var mime = meta ? meta[1] : 'image/jpeg';
+    var binary = atob(parts[1]);
+    var len = binary.length;
+    var bytes = new Uint8Array(len);
+    for(var i=0;i<len;i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], {type: mime});
+  } catch(e){ return null; }
+}
+
+// Upload a single side. Returns the public URL on success or null on failure.
+async function _wciUploadPhoto(side, dataURL, userId, weekStartDate){
+  if(!dataURL) return null;
+  if(typeof sb === 'undefined') return null;
+  var blob = _wciDataURLToBlob(dataURL);
+  if(!blob) return null;
+  var path = userId + '/' + weekStartDate + '/' + side + '.jpg';
+  try {
+    var up = await sb.storage.from('checkin-photos').upload(path, blob, {
+      contentType: blob.type || 'image/jpeg',
+      upsert: true
+    });
+    if(up.error){ console.warn('[PHX] photo upload failed ('+side+'):', up.error); return null; }
+    var u = sb.storage.from('checkin-photos').getPublicUrl(path);
+    return (u && u.data && u.data.publicUrl) ? u.data.publicUrl : null;
+  } catch(e){ console.warn('[PHX] photo upload error ('+side+'):', e); return null; }
+}
 
 async function loadWeeklyStats(){
   // Defaults for the offline / not-signed-in case
@@ -10133,7 +10264,7 @@ async function loadLastCheckin(){
   // Pre-fill any persisted "next week requests" / continue choice from the last submitted check-in
   if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
   try {
-    var res = await sb.from('weekly_checkins').select('continue_programme,next_week_requests,coach_notes,niggle_notes,weight_kg,feeling_score,sleep_score,energy_score,submitted_at')
+    var res = await sb.from('weekly_checkins').select('continue_programme,next_week_requests,coach_notes,niggle_notes,weight_kg,feeling_score,sleep_score,energy_score,photo_front_url,photo_side_url,submitted_at')
       .eq('user_id', currentSession.user.id)
       .order('submitted_at', {ascending: false})
       .limit(1)
@@ -10150,6 +10281,9 @@ async function loadLastCheckin(){
       if(last.sleep_score)   _wciSetScore('sleep',   last.sleep_score);
       if(last.energy_score)  _wciSetScore('energy',  last.energy_score);
       if(last.continue_programme != null) _wciSetContinue(!!last.continue_programme);
+      // v4.7.27: read-only photo thumbnails when the last submission has them.
+      if(last.photo_front_url) _wciRenderPhotoSlot('front', last.photo_front_url, {readOnly:true});
+      if(last.photo_side_url)  _wciRenderPhotoSlot('side',  last.photo_side_url,  {readOnly:true});
     }
   } catch(e){ /* no prior check-in — fine */ }
 }
@@ -10213,6 +10347,38 @@ async function submitWeeklyCheckin(){
         alert('Submit failed: '+ins.error.message);
         return;
       }
+    }
+    // v4.7.27: photo upload — runs after the row is durable. Failures are non-blocking.
+    var photoWarn = '';
+    var hasFront = !!s.photoFront;
+    var hasSide  = !!s.photoSide;
+    if(hasFront || hasSide){
+      try {
+        var frontUrl = hasFront ? await _wciUploadPhoto('front', s.photoFront, row.user_id, row.week_start_date) : null;
+        var sideUrl  = hasSide  ? await _wciUploadPhoto('side',  s.photoSide,  row.user_id, row.week_start_date) : null;
+        var anyOk = frontUrl || sideUrl;
+        var anyMissed = (hasFront && !frontUrl) || (hasSide && !sideUrl);
+        if(anyOk){
+          var patch = {};
+          if(frontUrl) patch.photo_front_url = frontUrl;
+          if(sideUrl)  patch.photo_side_url  = sideUrl;
+          var urlUpd = await sb.from('weekly_checkins').update(patch)
+            .eq('user_id', row.user_id)
+            .eq('week_start_date', row.week_start_date);
+          if(urlUpd.error){
+            console.warn('[PHX] photo URL update failed:', urlUpd.error);
+            anyMissed = true;
+          }
+        }
+        if(anyMissed) photoWarn = 'Photos could not be saved — check-in submitted without photos.';
+      } catch(e){
+        console.warn('[PHX] photo flow error:', e);
+        photoWarn = 'Photos could not be saved — check-in submitted without photos.';
+      }
+    }
+    if(photoWarn){
+      var w = document.getElementById('wci-photo-warning');
+      if(w){ w.style.display = 'block'; w.textContent = photoWarn; }
     }
     alert('Check-in submitted. Your coach will review this before building next week.');
     navTo('today');

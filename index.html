@@ -608,6 +608,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 
 /* GAME MENU CARDS */
 .game-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:all 0.15s;position:relative;}
+/* v4.7.24: tile background image + dark readability overlay. Apply alongside inline background-image. */
+.tile-bg{background-size:cover;background-position:center;background-color:var(--bg2);}
+.tile-bg::before{content:'';position:absolute;inset:0;background:rgba(0,0,0,0.65);border-radius:inherit;pointer-events:none;z-index:0;}
+.tile-bg > *{position:relative;z-index:1;}
 .game-card:active{transform:scale(0.98);}
 .game-card-inner{padding:14px 16px;}
 .game-card-wod{background:linear-gradient(135deg,rgba(200,150,62,0.12) 0%,var(--bg2) 60%);border-color:rgba(200,150,62,0.3);}
@@ -1630,7 +1634,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <div style="padding:0 16px 100px;">
     <!-- Row 1: Full width prescribed workout -->
-    <div id="card-today-session" class="game-card" onclick="openTodaySession()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);">
+    <div id="card-today-session" class="game-card tile-bg" onclick="openTodaySession()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);background-image:url('/assets/tiles/tile-session.jpg');">
       <div class="game-card-inner" style="padding:18px;">
         <div class="game-card-eyebrow">
           <span class="game-card-eyebrow-sm">Your Programme</span>
@@ -1651,7 +1655,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="game-card-action-sm">Open chat →</div>
         </div>
       </div>
-      <div id="card-phoenix-wod" class="game-card game-card-wod" onclick="openPhoenixWOD()" style="border:1px solid rgba(200,150,62,0.4);">
+      <div id="card-phoenix-wod" class="game-card game-card-wod tile-bg" onclick="openPhoenixWOD()" style="border:1px solid rgba(200,150,62,0.4);background-image:url('/assets/tiles/tile-daily.jpg');">
         <div class="game-card-inner" style="padding:16px;">
           <div class="game-card-eyebrow">
             <span class="game-card-tier-badge" style="font-size:8px;">Everyone</span>
@@ -1671,7 +1675,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <!-- Row 3: Core + Conditioning + Walk/Run (three equal columns) -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
       <!-- v4.7.21 FIX 5: stable IDs so the completed-marker helper can find these tiles. -->
-      <div id="card-core" class="game-card game-card-sm" onclick="generateDailyCore()" style="border-left:3px solid var(--blue);position:relative;">
+      <div id="card-core" class="game-card game-card-sm tile-bg" onclick="generateDailyCore()" style="border-left:3px solid var(--blue);position:relative;background-image:url('/assets/tiles/tile-session.jpg');">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Phoenix Coach</div>
           <div class="game-card-title-sm">Core</div>
@@ -1687,7 +1691,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="game-card-action-sm">Choose →</div>
         </div>
       </div>
-      <div id="card-walk" class="game-card game-card-sm" onclick="openWalkLog()" style="border-left:3px solid var(--green,#4CAF50);position:relative;">
+      <div id="card-walk" class="game-card game-card-sm tile-bg" onclick="openWalkLog()" style="border-left:3px solid var(--green,#4CAF50);position:relative;background-image:url('/assets/tiles/tile-session.jpg');">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Phoenix Coach</div>
           <div class="game-card-title-sm">Walk / Run</div>
@@ -3136,7 +3140,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.23';
+var APP_VERSION='4.7.24';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6065,6 +6069,26 @@ function acceptWaiver(){
 var PHOENIX_COACHING_PROMPT = `You are the Phoenix Coach — an elite AI strength and conditioning coach built on the methodology of the world's most respected performance coaches.
 
 ================================================================
+CURRENT DATE AND TIME
+================================================================
+
+Read athlete.today_date for today's date in YYYY-MM-DD format (Brisbane time, UTC+10).
+Read athlete.timezone for the athlete's timezone.
+Read athlete.current_day_of_week for today's day name.
+
+ALWAYS use athlete.today_date when:
+- Calculating programme length (count weeks from today_date to any target date)
+- Determining time until the Combine (July 4th 2026 = target date)
+- Determining time until any fqEventDate
+- Setting peaking timelines (6 weeks out from target = activate peaking)
+- Calculating Agoge completion timeline
+- Any date-dependent programme decision
+
+NEVER assume or guess the current date. NEVER use a training cutoff date. ALWAYS read athlete.today_date.
+
+Example: if athlete.today_date is 2026-05-04 and target is 2026-07-04, that is exactly 8 weeks. Build an 8-week programme, not a 64-week programme.
+
+================================================================
 METHODOLOGY FOUNDATION
 ================================================================
 
@@ -6791,6 +6815,11 @@ function buildAthleteProfile(trigger, checkIn){
       // v4.7.19 BUILD 1: free-text notes the athlete wrote during onboarding
       coach_notes: a.fqCoachNotes || '',
       weigh_in_frequency: a.fqWeighInFrequency || null,
+      // v4.7.23 hotfix: today's date + timezone — computed every call so the model never has to
+      // guess. Used for programme length, time-to-Combine, peaking, Agoge timeline, etc.
+      today_date: new Date().toISOString().split('T')[0],
+      timezone: 'Australia/Brisbane',
+      current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()],
       test_scores: {
         bench_1rm: a.b1rm || 0,
         bench_100kg_reps: a.b100 || 0,
@@ -10183,6 +10212,24 @@ function renderDailyWOD(){
   var fmtEl=document.getElementById('wod-format');
   if(nameEl) nameEl.textContent=wod.name.toUpperCase();
   if(fmtEl) fmtEl.textContent=wod.tier+' Tier — '+wod.format;
+  // v4.7.24: swap the WOD tile background image based on the tier of today's WOD.
+  // Tiers in the library: Titan / God / Legend / Beast / Immortal / Rising — only the four below
+  // have bespoke art; everything else falls back to tile-daily.jpg.
+  var tierImageMap = {
+    titan:  '/assets/tiles/tile-titan.jpg',
+    legend: '/assets/tiles/tile-legend.jpg',
+    beast:  '/assets/tiles/tile-beast.jpg',
+    daily:  '/assets/tiles/tile-daily.jpg'
+  };
+  var wodTile = document.getElementById('card-phoenix-wod');
+  if(wodTile){
+    var tierKey = (wod.tier ? String(wod.tier).toLowerCase() : '');
+    var img = tierImageMap[tierKey] || tierImageMap.daily;
+    wodTile.style.backgroundImage = 'url(\'' + img + '\')';
+    wodTile.style.backgroundSize = 'cover';
+    wodTile.style.backgroundPosition = 'center';
+    if(!wodTile.classList.contains('tile-bg')) wodTile.classList.add('tile-bg');
+  }
 
   // Countdown to midnight
   var now=new Date();
@@ -11464,6 +11511,8 @@ function openCombine(){
 // v4.7.22 BUILD 4: system prompt for the conversational coach (separate from PHOENIX_COACHING_PROMPT
 // which generates whole programmes — this one drives 1-1 chat).
 var PHOENIX_COACH_SYSTEM_PROMPT = "You are the Phoenix Coach — a world-class strength and conditioning coach with the combined knowledge of Cal Dietz, Louis Simmons, Charles Poliquin, Christian Thibaudeau, Joe DeFranco, Brett Bartholomew, Sebastian Oreb, Daniel Baker, Les Spellman, Mickey Marotti, and Brad Schoenfeld.\n\n"+
+// v4.7.23 hotfix: tell the chat coach to read today_date instead of guessing.
+"CURRENT DATE: The context object contains today_date (YYYY-MM-DD, Brisbane UTC+10), timezone, and current_day_of_week. Always read these when the athlete asks about programme timing, weeks remaining, days until an event, or any time-sensitive question. Never guess the date.\n\n"+
 "You are having an ongoing coaching conversation with your athlete. You know their full profile, their current programme, their recent training data, and their weekly check-in notes.\n\n"+
 "Your coaching style matches the athlete's chosen tone (challenge / support / facts / adaptive — read from athlete.coach_tone).\n\n"+
 "CONTEXT YOU HAVE ACCESS TO:\n"+
@@ -11687,7 +11736,11 @@ async function sendCoachMessage(userMessage){
     current_week: (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1),
     recent_sessions: recent.recentSessions,
     recent_set_logs: recent.recentSetLogs,
-    latest_checkin: recent.latestCheckin
+    latest_checkin: recent.latestCheckin,
+    // v4.7.23 hotfix: today's date so the chat coach can answer time-sensitive questions correctly.
+    today_date: new Date().toISOString().split('T')[0],
+    timezone: 'Australia/Brisbane',
+    current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]
   };
   // Compose the messages array: a single context preface + the running conversation + this user message.
   var contextPreface = 'CURRENT ATHLETE CONTEXT (read carefully):\n```json\n' + JSON.stringify(context, null, 2) + '\n```';
@@ -11751,7 +11804,17 @@ async function _mcGenerateOpeningMessage(){
   var profileJson = (typeof buildAthleteProfile==='function') ? buildAthleteProfile('chat_opening') : '{}';
   var profile = {}; try { profile = JSON.parse(profileJson); } catch(e){ profile = {}; }
   var recent = await _mcLoadRecentDataForContext();
-  var context = {athlete: profile.athlete||{}, programme: athlete && athlete.aiProgramme ? athlete.aiProgramme : null, recent_sessions: recent.recentSessions, recent_set_logs: recent.recentSetLogs, latest_checkin: recent.latestCheckin};
+  var context = {
+    athlete: profile.athlete||{},
+    programme: athlete && athlete.aiProgramme ? athlete.aiProgramme : null,
+    recent_sessions: recent.recentSessions,
+    recent_set_logs: recent.recentSetLogs,
+    latest_checkin: recent.latestCheckin,
+    // v4.7.23 hotfix: today's date so the opening message references the right week / time-to-event.
+    today_date: new Date().toISOString().split('T')[0],
+    timezone: 'Australia/Brisbane',
+    current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]
+  };
   var openingPrompt = "Generate a brief opening message to your athlete. Review their profile and current programme context. Acknowledge where they are in their programme, reference something specific from their data (recent RPE, weekly check-in, or a training note), and ask one specific question to start the coaching conversation. Keep it to 3 sentences maximum. Be warm but direct — this is a coaching relationship not a customer service interaction.\n\nCONTEXT:\n```json\n"+JSON.stringify(context, null, 2)+"\n```";
   try {
     var resp = await fetch('https://phoenix-coach.jon-d87.workers.dev', {

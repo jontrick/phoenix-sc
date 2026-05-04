@@ -1696,6 +1696,27 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         </div>
       </div>
     </div>
+    <!-- v4.7.23 BUILD 1: The Agoge tile — full-width, only rendered when fqProgrammeTarget is agoge or both.
+         JS: _phxRenderAgogeTile() shows/hides + populates this tile each time renderTodayScreen runs. -->
+    <div id="card-agoge" onclick="openAgoge()" style="display:none;position:relative;margin-bottom:10px;border-radius:var(--radius);border:1px solid #6B2020;border-left:3px solid #6B2020;overflow:hidden;cursor:pointer;background:linear-gradient(135deg,#1a0808 0%,#0a0303 100%);min-height:170px;">
+      <div id="card-agoge-img" style="position:absolute;inset:0;background-image:url('/assets/tiles/tile-agoge.jpg');background-size:cover;background-position:center;filter:brightness(0.3);"></div>
+      <div style="position:relative;padding:18px 18px 16px;color:#fff;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+          <div style="display:inline-block;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;padding:4px 10px;border:1px solid #6B2020;border-radius:10px;color:#c97070;background:rgba(107,32,32,0.15);">The Agoge</div>
+          <div id="card-agoge-week" style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:#c97070;text-transform:uppercase;">Week — / —</div>
+        </div>
+        <div style="font-family:var(--font-d);font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:2px;line-height:1;margin-bottom:14px;">The Agoge</div>
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-bottom:4px;"><span>Block</span><span id="card-agoge-block-pct">0%</span></div>
+          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;"><div id="card-agoge-block-bar" style="height:100%;width:0%;background:#6B2020;transition:width 0.3s;"></div></div>
+        </div>
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-bottom:4px;"><span>The March</span><span id="card-agoge-march-pct">0%</span></div>
+          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;"><div id="card-agoge-march-bar" style="height:100%;width:0%;background:#6B2020;transition:width 0.3s;"></div></div>
+        </div>
+        <div id="card-agoge-line" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-top:10px;">0km of 246km · 0 days elapsed</div>
+      </div>
+    </div>
     <!-- Row 4: Locked feature cards -->
     <div id="card-leaderboard" class="game-card game-card-locked" onclick="openLeaderboard()" style="margin-bottom:10px;">
       <div class="game-card-inner" style="display:flex;align-items:center;gap:14px;">
@@ -3062,6 +3083,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
       <div><div class="sidebar-item-text">My Coach</div><div class="sidebar-item-sub">Chat with your AI coach</div></div>
     </div>
+    <!-- v4.7.23 BUILD 3: The Agoge — only when fqProgrammeTarget is agoge or both. -->
+    <div id="sidebar-item-agoge" class="sidebar-item" onclick="closeSidebar();openAgoge()" style="display:none;">
+      <div class="sidebar-item-icon" style="background:rgba(107,32,32,0.18);color:#c97070;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z"/></svg></div>
+      <div><div class="sidebar-item-text">The Agoge</div><div class="sidebar-item-sub">Block + The March (246km)</div></div>
+    </div>
     <!-- v4.7.19 BUILD 2 -->
     <div class="sidebar-item" onclick="closeSidebar();openWeeklyCheckin()">
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg></div>
@@ -3110,7 +3136,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.22';
+var APP_VERSION='4.7.23';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3857,7 +3883,7 @@ function showScreen(id){
 function navTo(tab){
   // v4.7.19 BUILD 2: weekly-checkin is reachable via navTo('weekly-checkin') so the back button
   // and any other nav surface can route to it the same way as the other screens.
-  var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk','weekly-checkin':'screen-weekly-checkin','my-coach':'screen-my-coach'};
+  var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk','weekly-checkin':'screen-weekly-checkin','my-coach':'screen-my-coach','agoge':'screen-agoge'};
   if(map[tab]){
     showScreen(map[tab]);
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -3870,6 +3896,7 @@ function navTo(tab){
   if(tab==='walk') openWalkLog();
   if(tab==='weekly-checkin') openWeeklyCheckin();
   if(tab==='my-coach') openMyCoach();
+  if(tab==='agoge') openAgoge();
 }
 
 // ====== ONBOARDING ======
@@ -6917,6 +6944,15 @@ function onProgrammeGenerated(programme, trigger){
     aiProgrammeTrigger: trigger,
     currentWeek: 1
   });
+  // v4.7.23 BUILD 4: stamp the Agoge start date when the athlete is on the agoge or both target
+  // and we don't already have one. This is the anchor used for week-counting and march cumulative
+  // distance throughout the Agoge tracker.
+  // SQL (run once if the column is missing):
+  //   alter table profiles add column if not exists agoge_start_date timestamptz;
+  var target = updated.fqProgrammeTarget || (athlete && athlete.fqProgrammeTarget) || null;
+  if((target === 'agoge' || target === 'both') && !updated.agogeStartDate){
+    updated.agogeStartDate = new Date().toISOString();
+  }
   saveAthlete(updated);
   // Show programme reveal screen
   showProgrammeReveal(programme);
@@ -7625,6 +7661,9 @@ function openSidebar(){
   var streak=getWalkStreak();
   var el=document.getElementById('sidebar-streak');
   if(el) el.textContent=streak;
+  // v4.7.23 BUILD 3: show/hide The Agoge entry based on the athlete's target.
+  var agItem = document.getElementById('sidebar-item-agoge');
+  if(agItem) agItem.style.display = (typeof isAgogeActive==='function' && isAgogeActive()) ? 'flex' : 'none';
   document.getElementById('sidebar').classList.add('active');
   document.getElementById('sidebar-overlay').classList.add('active');
 }
@@ -7872,6 +7911,15 @@ function walkStop(){
     localStorage.removeItem(PHX_ACTIVE_WALK_META_KEY);
   } catch(e){}
   walkSupabaseId = null;
+  // v4.7.23 BUILD 5: bump the cached cumulative march distance so the Agoge tile updates instantly
+  // on next Today render (Supabase refresh confirms the value asynchronously after).
+  if(typeof isAgogeActive==='function' && isAgogeActive()){
+    try {
+      var cached = parseFloat(localStorage.getItem('phoenix_march_total_m')||'0') || 0;
+      var addM = Math.round(dist*1000);
+      localStorage.setItem('phoenix_march_total_m', String(cached + addM));
+    } catch(e){}
+  }
   checkFreeTrialUnlock();
   var streak=getWalkStreak();
   var name=getFirstName();
@@ -9042,6 +9090,57 @@ function setupSplashButtons(){
   </div>
 </div>
 
+<!-- v4.7.23 BUILD 2: THE AGOGE TRACKER SCREEN
+  ============================================================
+  Visible only when athlete.fqProgrammeTarget === 'agoge' or 'both'.
+  Tracks two parallel goals:
+    1. The Block — full coach-prescribed programme completion
+    2. The March — 246km cumulative walk/run (Athens → Sparta, the Spartathlon route)
+  All progress data is computed from Supabase sessions on open.
+============================================================ -->
+<div id="screen-agoge" class="screen">
+  <div class="app-header">
+    <div class="icon-btn" onclick="navTo('today')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="header-logo">THE <span style="color:#c97070;">AGOGE</span></div>
+    <div style="width:36px"></div>
+  </div>
+  <div id="ag-subheader" style="padding:8px 16px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;">—</div>
+
+  <!-- Hero -->
+  <div style="position:relative;height:180px;overflow:hidden;border-bottom:1px solid #6B2020;">
+    <div style="position:absolute;inset:0;background-image:url('/assets/tiles/tile-agoge.jpg');background-size:cover;background-position:center;filter:brightness(0.32);background-color:#1a0808;"></div>
+    <div style="position:relative;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#fff;">
+      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;color:#c97070;text-transform:uppercase;margin-bottom:6px;">The Block</div>
+      <div id="ag-hero-week" style="font-family:var(--font-d);font-size:38px;font-weight:900;text-transform:uppercase;letter-spacing:3px;line-height:1;">Week — of —</div>
+      <div id="ag-hero-days" style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-top:8px;">— days elapsed · — remaining</div>
+    </div>
+  </div>
+
+  <div style="padding:20px 16px 100px;">
+    <!-- SECTION 1 — Programme Block -->
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:#c97070;text-transform:uppercase;margin-bottom:10px;">The Block</div>
+    <div id="ag-block-timeline" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:24px;"></div>
+
+    <!-- SECTION 2 — The March -->
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:#c97070;text-transform:uppercase;margin-bottom:4px;">The March — Athens to Sparta</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px;letter-spacing:1px;text-transform:uppercase;font-family:var(--font-d);">246km · The Spartathlon Route</div>
+    <div id="ag-legs" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+    <div id="ag-march-summary" style="font-size:13px;color:var(--text2);text-align:center;line-height:1.7;margin-bottom:24px;">—</div>
+
+    <!-- SECTION 3 — SVG Route map -->
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:#c97070;text-transform:uppercase;margin-bottom:10px;">Route</div>
+    <div style="background:#1a1208;border:1px solid #2a1a10;border-radius:var(--radius);padding:14px 8px;margin-bottom:24px;overflow:hidden;">
+      <svg id="ag-route-svg" viewBox="0 0 350 120" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <!-- SECTION 4 — Weekly grid -->
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:#c97070;text-transform:uppercase;margin-bottom:10px;">Weekly Progress</div>
+    <div id="ag-weekly-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+  </div>
+</div>
+
 <!-- REST TIMER OVERLAY -->
 <div class="rest-overlay" id="rest-overlay">
   <!-- v4.7.15 FIX 3: ad banners hide for Pro accounts; gate enforced in startRestTimer. -->
@@ -9757,6 +9856,8 @@ function renderTodayScreen(){
   _phxApplyCompletedTileMarkers();
   // v4.7.22 BUILD 6: refresh the My Coach tile preview (last coach message or "ready to start").
   if(typeof _phxRefreshMyCoachTile==='function') _phxRefreshMyCoachTile();
+  // v4.7.23 BUILD 1/5: render the Agoge tile (no-op when fqProgrammeTarget isn't agoge/both).
+  if(typeof _phxRenderAgogeTile==='function') _phxRenderAgogeTile();
 }
 
 // v4.7.21 FIX 5: completed-today marker on Today tiles.
@@ -11706,6 +11807,339 @@ async function _phxRefreshMyCoachTile(){
     if(res.error){ _phxUpdateMyCoachTilePreview(''); return; }
     _phxUpdateMyCoachTilePreview(res.data ? res.data.message : '');
   } catch(e){ _phxUpdateMyCoachTilePreview(''); }
+}
+
+// ====== v4.7.23 BUILD 2/5: THE AGOGE TRACKER ======
+// The Agoge has two parallel goals: complete the programme block AND walk/run 246km cumulative
+// (Athens → Sparta, the Spartathlon route). All progress is computed live from Supabase sessions.
+
+var AGOGE_LEGS = [
+  {numeral:'I',   from:'Athens',  to:'Eleusis', km:23, cum:23},
+  {numeral:'II',  from:'Eleusis', to:'Megara',  km:27, cum:50},
+  {numeral:'III', from:'Megara',  to:'Corinth', km:46, cum:96},
+  {numeral:'IV',  from:'Corinth', to:'Nemea',   km:38, cum:134},
+  {numeral:'V',   from:'Nemea',   to:'Lyrkeia', km:52, cum:186},
+  {numeral:'VI',  from:'Lyrkeia', to:'Sparta',  km:60, cum:246}
+];
+var AGOGE_TOTAL_KM = 246;
+var AGOGE_RED = '#6B2020';
+
+// Is the Agoge tracker active for this athlete?
+function isAgogeActive(){
+  var t = athlete && athlete.fqProgrammeTarget;
+  return t === 'agoge' || t === 'both';
+}
+
+// Anchor date for week-counting and cumulative march distance.
+function _agogeStartDate(){
+  if(athlete && athlete.agogeStartDate) return new Date(athlete.agogeStartDate);
+  if(athlete && athlete.aiProgrammeDate) return new Date(athlete.aiProgrammeDate);
+  return new Date();
+}
+
+function _agogeTotalWeeks(){
+  // Prefer programme_summary.total_weeks if present, else infer from week.sessions count or default 12.
+  var p = athlete && athlete.aiProgramme;
+  if(p && p.programme_summary && p.programme_summary.total_weeks) return parseInt(p.programme_summary.total_weeks);
+  if(p && p.programme_length) return parseInt(p.programme_length);
+  return 12;
+}
+
+function _agogeWeekNumber(){
+  var start = _agogeStartDate();
+  var diffMs = Date.now() - start.getTime();
+  var weeks = Math.floor(diffMs / (7*86400000)) + 1;
+  return Math.max(1, Math.min(_agogeTotalWeeks(), weeks));
+}
+
+function _agogeDaysElapsed(){
+  return Math.max(0, Math.floor((Date.now() - _agogeStartDate().getTime()) / 86400000));
+}
+
+// Cached march total in metres — refreshed every time a walk is completed.
+function _agogeMarchTotalCachedM(){
+  var v = parseFloat(localStorage.getItem('phoenix_march_total_m')||'0');
+  return isFinite(v) ? v : 0;
+}
+function _agogeSetMarchCacheM(meters){
+  try { localStorage.setItem('phoenix_march_total_m', String(Math.round(meters||0))); } catch(e){}
+}
+
+// Pull cumulative march distance from Supabase: walk + run sessions since agogeStartDate.
+async function _agogeFetchMarchTotalM(){
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user){
+    return _agogeMarchTotalCachedM();
+  }
+  try {
+    var startIso = _agogeStartDate().toISOString();
+    var res = await sb.from('sessions')
+      .select('total_distance_m,session_type,status,started_at')
+      .eq('user_id', currentSession.user.id)
+      .in('session_type', ['walk','run'])
+      .eq('status','completed')
+      .gte('started_at', startIso);
+    if(res.error){ console.warn('[PHX] agoge march fetch failed:', res.error); return _agogeMarchTotalCachedM(); }
+    var total = (res.data||[]).reduce(function(a,r){ return a + (parseFloat(r.total_distance_m)||0); }, 0);
+    _agogeSetMarchCacheM(total);
+    return total;
+  } catch(e){ return _agogeMarchTotalCachedM(); }
+}
+
+// Group sessions by week-of-block for the Block timeline + Weekly Progress grid.
+async function _agogeFetchWeeklyBuckets(){
+  var totalWeeks = _agogeTotalWeeks();
+  var startMs = _agogeStartDate().getTime();
+  var buckets = [];
+  for(var w=1; w<=totalWeeks; w++){
+    buckets.push({week:w, sessionsDone:0, sessionsPlanned:0, wodsDone:0, marchM:0});
+  }
+  // Planned per week from athlete.aiProgramme.week.sessions if uniform; otherwise leave 0.
+  var planned = 0;
+  if(athlete && athlete.aiProgramme && athlete.aiProgramme.week && Array.isArray(athlete.aiProgramme.week.sessions)){
+    planned = athlete.aiProgramme.week.sessions.filter(function(s){return s.session_type && s.session_type.toLowerCase().indexOf('rest')<0;}).length;
+  }
+  buckets.forEach(function(b){ b.sessionsPlanned = planned; });
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return buckets;
+  try {
+    var res = await sb.from('sessions')
+      .select('session_type,status,started_at,total_distance_m')
+      .eq('user_id', currentSession.user.id)
+      .eq('status','completed')
+      .gte('started_at', new Date(startMs).toISOString());
+    if(res.error || !res.data) return buckets;
+    res.data.forEach(function(r){
+      var ts = new Date(r.started_at).getTime();
+      var weekIdx = Math.floor((ts - startMs)/(7*86400000));
+      if(weekIdx < 0 || weekIdx >= buckets.length) return;
+      var b = buckets[weekIdx];
+      b.sessionsDone++;
+      var t = String(r.session_type||'').toLowerCase();
+      if(t === 'wod') b.wodsDone++;
+      if(t === 'walk' || t === 'run') b.marchM += (parseFloat(r.total_distance_m)||0);
+    });
+  } catch(e){ console.warn('[PHX] agoge weekly fetch failed:', e); }
+  return buckets;
+}
+
+function _agogeFmtKm(m){ return ((m||0)/1000).toFixed(1)+'km'; }
+
+// Today-tile renderer — shows or hides based on athlete target, populates progress bars.
+async function _phxRenderAgogeTile(){
+  var tile = document.getElementById('card-agoge');
+  if(!tile) return;
+  if(!isAgogeActive()){ tile.style.display = 'none'; return; }
+  tile.style.display = 'block';
+  var weekNum = _agogeWeekNumber();
+  var totalWeeks = _agogeTotalWeeks();
+  var daysElapsed = _agogeDaysElapsed();
+  var blockPct = Math.max(0, Math.min(100, Math.round((weekNum/totalWeeks)*100)));
+  var weekEl = document.getElementById('card-agoge-week');
+  var blockBarEl = document.getElementById('card-agoge-block-bar');
+  var blockPctEl = document.getElementById('card-agoge-block-pct');
+  var marchBarEl = document.getElementById('card-agoge-march-bar');
+  var marchPctEl = document.getElementById('card-agoge-march-pct');
+  var lineEl = document.getElementById('card-agoge-line');
+  if(weekEl) weekEl.textContent = 'Week '+weekNum+' / '+totalWeeks;
+  if(blockBarEl) blockBarEl.style.width = blockPct+'%';
+  if(blockPctEl) blockPctEl.textContent = blockPct+'%';
+  // March bar uses cached value first for instant paint, then refreshes from Supabase.
+  var cachedM = _agogeMarchTotalCachedM();
+  var cachedKm = cachedM/1000;
+  var cachedPct = Math.max(0, Math.min(100, Math.round((cachedKm/AGOGE_TOTAL_KM)*100)));
+  if(marchBarEl) marchBarEl.style.width = cachedPct+'%';
+  if(marchPctEl) marchPctEl.textContent = cachedPct+'%';
+  if(lineEl) lineEl.textContent = Math.round(cachedKm)+'km of '+AGOGE_TOTAL_KM+'km · '+daysElapsed+' days elapsed';
+  // Async refresh
+  var freshM = await _agogeFetchMarchTotalM();
+  var freshKm = freshM/1000;
+  var freshPct = Math.max(0, Math.min(100, Math.round((freshKm/AGOGE_TOTAL_KM)*100)));
+  if(marchBarEl) marchBarEl.style.width = freshPct+'%';
+  if(marchPctEl) marchPctEl.textContent = freshPct+'%';
+  if(lineEl) lineEl.textContent = Math.round(freshKm)+'km of '+AGOGE_TOTAL_KM+'km · '+daysElapsed+' days elapsed';
+}
+
+// Open the dedicated Agoge screen and render every section from live data.
+async function openAgoge(){
+  if(!isAgogeActive()){
+    alert('The Agoge is part of the agoge / both programme target. Update your goal in the questionnaire to track it.');
+    return;
+  }
+  showScreen('screen-agoge');
+  var startDate = _agogeStartDate();
+  var totalWeeks = _agogeTotalWeeks();
+  var weekNum = _agogeWeekNumber();
+  var daysElapsed = _agogeDaysElapsed();
+  var totalDays = totalWeeks * 7;
+  var daysRemaining = Math.max(0, totalDays - daysElapsed);
+  // Subheader: start → estimated completion
+  var endEstimate = new Date(startDate.getTime() + totalDays*86400000);
+  var subhead = document.getElementById('ag-subheader');
+  if(subhead) subhead.textContent = _agogeFmtDate(startDate)+' → est. '+_agogeFmtDate(endEstimate);
+  // Hero
+  var heroWeek = document.getElementById('ag-hero-week');
+  var heroDays = document.getElementById('ag-hero-days');
+  if(heroWeek) heroWeek.textContent = 'Week '+weekNum+' of '+totalWeeks;
+  if(heroDays) heroDays.textContent = daysElapsed+' days elapsed · '+daysRemaining+' remaining';
+  // Block timeline
+  var buckets = await _agogeFetchWeeklyBuckets();
+  _agogeRenderBlockTimeline(buckets, weekNum);
+  // March legs + summary
+  var marchM = await _agogeFetchMarchTotalM();
+  var marchKm = marchM/1000;
+  _agogeRenderLegs(marchKm);
+  _agogeRenderMarchSummary(marchKm, weekNum);
+  // SVG route
+  _agogeRenderRouteSVG(marchKm);
+  // Weekly grid (last 6 weeks ending at current)
+  _agogeRenderWeeklyGrid(buckets, weekNum);
+}
+
+function _agogeFmtDate(d){
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+}
+
+function _agogeRenderBlockTimeline(buckets, currentWeek){
+  var el = document.getElementById('ag-block-timeline');
+  if(!el) return;
+  el.innerHTML = buckets.map(function(b, i){
+    var isPast = (b.week < currentWeek);
+    var isCurrent = (b.week === currentWeek);
+    var dotColor = isPast ? AGOGE_RED : (isCurrent ? AGOGE_RED : 'transparent');
+    var dotBorder = isPast ? AGOGE_RED : (isCurrent ? AGOGE_RED : 'var(--border2)');
+    var dotPulse = isCurrent ? 'animation: agPulse 1.6s ease-in-out infinite;' : '';
+    var lineStyle = isPast ? 'background:'+AGOGE_RED+';' : 'background:transparent;border-left:1px dashed var(--border2);';
+    var rowOpacity = isPast ? 1 : (isCurrent ? 1 : 0.45);
+    var statusText = isPast ? 'Week '+b.week+' &#10003;' : (isCurrent ? 'Week '+b.week+' · NOW' : 'Week '+b.week);
+    var statusColor = isPast ? 'var(--gold)' : (isCurrent ? '#c97070' : 'var(--text3)');
+    var sessionsLine = b.sessionsPlanned ? (b.sessionsDone+' / '+b.sessionsPlanned+' sessions') : (b.sessionsDone+' sessions');
+    var wodsLine = b.wodsDone ? (' · '+b.wodsDone+' WOD'+(b.wodsDone>1?'s':'')) : '';
+    return '<div style="display:flex;gap:12px;align-items:flex-start;opacity:'+rowOpacity+';padding:6px 0;">'+
+      '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">'+
+        '<div style="width:14px;height:14px;border-radius:50%;background:'+dotColor+';border:2px solid '+dotBorder+';'+dotPulse+'"></div>'+
+        (i < buckets.length-1 ? '<div style="width:2px;height:28px;'+lineStyle+'"></div>' : '')+
+      '</div>'+
+      '<div style="flex:1;font-size:13px;line-height:1.3;padding-top:2px;">'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:'+statusColor+';font-weight:'+(isCurrent?'900':'700')+';text-transform:uppercase;">'+statusText+'</div>'+
+        '<div style="color:var(--text3);font-size:11px;margin-top:2px;">'+sessionsLine+wodsLine+(b.marchM>0?(' · '+_agogeFmtKm(b.marchM)+' march'):'')+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('') + '<style>@keyframes agPulse{0%,100%{box-shadow:0 0 0 0 rgba(107,32,32,0.6)}50%{box-shadow:0 0 0 6px rgba(107,32,32,0)}}</style>';
+}
+
+function _agogeRenderLegs(marchKm){
+  var el = document.getElementById('ag-legs');
+  if(!el) return;
+  el.innerHTML = AGOGE_LEGS.map(function(leg, i){
+    var prevCum = i === 0 ? 0 : AGOGE_LEGS[i-1].cum;
+    var legDone = Math.max(0, Math.min(leg.km, marchKm - prevCum));
+    var legPct = Math.round((legDone/leg.km)*100);
+    var status = legPct >= 100 ? 'completed' : (legPct > 0 ? 'in_progress' : 'locked');
+    var border = status === 'completed' ? AGOGE_RED : (status === 'in_progress' ? AGOGE_RED : 'var(--border)');
+    var opacity = status === 'locked' ? 0.5 : 1;
+    var badge = status === 'completed'
+      ? '<span style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:#c97070;text-transform:uppercase;">Completed &#10003;</span>'
+      : (status === 'in_progress'
+          ? '<span style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:#c97070;text-transform:uppercase;">'+legDone.toFixed(1)+' / '+leg.km+'km</span>'
+          : '<span style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">'+leg.km+'km</span>');
+    return '<div style="background:var(--bg2);border:1px solid '+border+';border-radius:var(--radius);padding:12px 14px;opacity:'+opacity+';">'+
+      '<div style="display:flex;align-items:center;gap:14px;">'+
+        '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:#c97070;letter-spacing:2px;min-width:36px;">'+leg.numeral+'</div>'+
+        '<div style="flex:1;">'+
+          '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:1px;">'+leg.from+' → '+leg.to+'</div>'+
+          '<div style="margin-top:6px;height:4px;background:rgba(107,32,32,0.15);border-radius:2px;overflow:hidden;"><div style="height:100%;width:'+legPct+'%;background:'+AGOGE_RED+';"></div></div>'+
+        '</div>'+
+        '<div style="text-align:right;min-width:80px;">'+badge+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function _agogeRenderMarchSummary(marchKm, weekNum){
+  var el = document.getElementById('ag-march-summary');
+  if(!el) return;
+  var remaining = Math.max(0, AGOGE_TOTAL_KM - marchKm);
+  var weeksElapsed = Math.max(1, weekNum);
+  var paceKmPerWeek = marchKm / weeksElapsed;
+  var weeksToFinish = paceKmPerWeek > 0 ? Math.ceil(remaining / paceKmPerWeek) : '—';
+  el.innerHTML = '<strong style="color:var(--text);">'+marchKm.toFixed(1)+'km</strong> completed &middot; '+
+    '<strong style="color:var(--text);">'+remaining.toFixed(1)+'km</strong> remaining<br>'+
+    '<span style="color:var(--text3);font-size:11px;letter-spacing:1px;text-transform:uppercase;font-family:var(--font-d);">Est. '+weeksToFinish+' weeks at current pace ('+paceKmPerWeek.toFixed(1)+'km / week)</span>';
+}
+
+function _agogeRenderRouteSVG(marchKm){
+  var svg = document.getElementById('ag-route-svg');
+  if(!svg) return;
+  // S-curve path from Athens (10,80) to Sparta (340,80), with checkpoints at proportional cumulative km positions.
+  var startX = 10, endX = 340, baseY = 60;
+  function xFor(km){ return startX + (km / AGOGE_TOTAL_KM) * (endX - startX); }
+  // S-curve y based on x progress
+  function yFor(km){
+    var t = km / AGOGE_TOTAL_KM;
+    return baseY + Math.sin(t * Math.PI * 1.2) * 22;
+  }
+  // Build smooth path through 60 sample points
+  var fullPathPoints = [];
+  for(var k=0; k<=60; k++){
+    var km = (k/60) * AGOGE_TOTAL_KM;
+    fullPathPoints.push(xFor(km).toFixed(1)+','+yFor(km).toFixed(1));
+  }
+  var fullPathD = 'M ' + fullPathPoints.join(' L ');
+  // Done path subset
+  var donePts = [];
+  for(var k2=0; k2<=60; k2++){
+    var km2 = (k2/60) * AGOGE_TOTAL_KM;
+    if(km2 > marchKm) break;
+    donePts.push(xFor(km2).toFixed(1)+','+yFor(km2).toFixed(1));
+  }
+  // Always include the current position as the last point of the done path
+  donePts.push(xFor(Math.min(marchKm, AGOGE_TOTAL_KM)).toFixed(1)+','+yFor(Math.min(marchKm, AGOGE_TOTAL_KM)).toFixed(1));
+  var donePathD = donePts.length > 1 ? ('M ' + donePts.join(' L ')) : '';
+  var posX = xFor(Math.min(marchKm, AGOGE_TOTAL_KM));
+  var posY = yFor(Math.min(marchKm, AGOGE_TOTAL_KM));
+  // Checkpoints
+  var ckSvg = '';
+  var ALL = [{name:'Athens',cum:0}].concat(AGOGE_LEGS.map(function(l){return {name:l.to, cum:l.cum};}));
+  ALL.forEach(function(c){
+    var x = xFor(c.cum), y = yFor(c.cum);
+    var done = c.cum <= marchKm;
+    ckSvg += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3" fill="'+(done?'#c97070':'#3a2820')+'" stroke="#1a1208" stroke-width="1"/>';
+    var labelY = (y < 60 ? y + 16 : y - 8);
+    ckSvg += '<text x="'+x.toFixed(1)+'" y="'+labelY.toFixed(1)+'" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="8" font-weight="700" letter-spacing="1" fill="'+(done?'#e8a8a8':'#7a5a4a')+'" text-transform="uppercase">'+c.name.toUpperCase()+'</text>';
+    if(c.cum > 0){
+      ckSvg += '<text x="'+x.toFixed(1)+'" y="'+(labelY + (y < 60 ? 10 : -10)).toFixed(1)+'" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="7" fill="'+(done?'#a87070':'#5a3a30')+'">'+c.cum+'km</text>';
+    }
+  });
+  svg.innerHTML =
+    '<path d="'+fullPathD+'" stroke="rgba(107,32,32,0.25)" stroke-width="1.5" fill="none" stroke-dasharray="3 3"/>'+
+    (donePathD ? '<path d="'+donePathD+'" stroke="'+AGOGE_RED+'" stroke-width="2.5" fill="none" stroke-linecap="round"/>' : '')+
+    ckSvg+
+    (marchKm > 0 ? '<circle cx="'+posX.toFixed(1)+'" cy="'+posY.toFixed(1)+'" r="4.5" fill="#fff" stroke="'+AGOGE_RED+'" stroke-width="2"/>' : '');
+}
+
+function _agogeRenderWeeklyGrid(buckets, currentWeek){
+  var el = document.getElementById('ag-weekly-grid');
+  if(!el) return;
+  // Show last 6 weeks ending at current week (clamped to available buckets).
+  var endIdx = Math.min(buckets.length - 1, currentWeek - 1);
+  var startIdx = Math.max(0, endIdx - 5);
+  var slice = buckets.slice(startIdx, endIdx + 1);
+  el.innerHTML = slice.map(function(b){
+    var isPast = b.week < currentWeek;
+    var isCurrent = b.week === currentWeek;
+    var border = isCurrent ? AGOGE_RED : (isPast ? 'var(--gold)' : 'var(--border)');
+    var opacity = (!isPast && !isCurrent) ? 0.55 : 1;
+    var sessionsPct = b.sessionsPlanned > 0 ? Math.min(100, Math.round((b.sessionsDone/b.sessionsPlanned)*100)) : (b.sessionsDone > 0 ? 100 : 0);
+    var marchKm = b.marchM/1000;
+    var marchPct = Math.min(100, Math.round((marchKm/35)*100)); // scale bar against 35km weekly target
+    return '<div style="background:var(--bg2);border:1px solid '+border+';border-radius:var(--radius);padding:10px 12px;opacity:'+opacity+';">'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:'+(isCurrent?'#c97070':'var(--text2)')+';text-transform:uppercase;font-weight:700;margin-bottom:8px;">Week '+b.week+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:3px;">Sessions: <strong style="color:var(--text);">'+b.sessionsDone+(b.sessionsPlanned?' / '+b.sessionsPlanned:'')+'</strong></div>'+
+      '<div style="height:3px;background:rgba(107,32,32,0.15);border-radius:2px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:'+sessionsPct+'%;background:var(--gold);"></div></div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:3px;">March: <strong style="color:var(--text);">'+marchKm.toFixed(1)+'km</strong></div>'+
+      '<div style="height:3px;background:rgba(107,32,32,0.15);border-radius:2px;overflow:hidden;"><div style="height:100%;width:'+marchPct+'%;background:'+AGOGE_RED+';"></div></div>'+
+    '</div>';
+  }).join('');
 }
 
 function openNutrition(){

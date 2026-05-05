@@ -3319,7 +3319,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.31';
+var APP_VERSION='4.7.32';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -11059,13 +11059,14 @@ function _phxMaybeShowMorningCheckin(){
   var card = document.getElementById('morning-checkin-card');
   if(!card) return;
   card.style.display = 'none';
-  // Gate by weigh-in frequency setting.
-  var freq = athlete && athlete.fqWeighInFrequency;
-  if(!freq || freq === 'never') return;
+  // v4.7.32 FIX 3: read fqWeighInFrequency from any of the field-name variants.
+  var freq = (athlete && (athlete.fqWeighInFrequency || athlete.fq_weigh_in_frequency || athlete.weighInFrequency || athlete.weigh_in_frequency)) || null;
+  if(freq === 'never') return;
+  // If the athlete record exists but the field is unset, default to "show" (the user
+  // can still skip). Only suppress when we explicitly know they opted out.
   var keys = _phxMorningKeys();
-  // Window: 5am ≤ hour < 10am Brisbane.
-  if(keys.hour < 5 || keys.hour >= 10) return;
-  // Already actioned today?
+  // v4.7.32 FIX 3: time gate dropped — show ALL DAY until the user actions it.
+  // (Will reinstate the 5–10am Brisbane window once we confirm card+modal are reliable.)
   if(localStorage.getItem(keys.doneKey)) return;
   if(localStorage.getItem(keys.skipKey)) return;
   card.style.display = '';
@@ -13335,6 +13336,8 @@ var _phxWarmupState = {targetSec:0, elapsed:0, interval:null, ticked:[], onProce
 function _phxRenderWarmup(warmup, sess){
   var target = (warmup.targetMin || 5);
   var routine = warmup.routine || [];
+  // v4.7.32 FIX 1: do NOT clobber onProceed here — openWarmupBeforeSession sets
+  // window._phxWarmupOnProceed before calling us, and the buttons read it from window.
   _phxWarmupState = {
     targetSec: target * 60,
     elapsed: 0,
@@ -13362,7 +13365,9 @@ function _phxRenderWarmup(warmup, sess){
   }
   screen.innerHTML =
     '<div class="app-header">'+
-      '<div class="icon-btn" onclick="_phxFinishWarmup(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></div>'+
+      // v4.7.32 FIX 1: back button = clean exit to Today (no proceed callback fired,
+      // no stale state). Skip Warm-up / Start Session use window-scoped helpers.
+      '<div class="icon-btn" onclick="_phxBackFromWarmup()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></div>'+
       '<div class="header-logo">WARM <span>UP</span></div>'+
       '<div style="width:36px"></div>'+
     '</div>'+
@@ -13377,8 +13382,8 @@ function _phxRenderWarmup(warmup, sess){
       '<div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:16px;"><div id="wu-progress-bar" style="height:100%;width:0%;background:var(--gold);transition:width 0.3s;"></div></div>'+
       '<div id="wu-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">'+listHTML+'</div>'+
       '<div style="display:flex;gap:10px;">'+
-        '<button class="btn-secondary" style="flex:1;padding:14px;margin:0;" onclick="_phxFinishWarmup(true)">Skip Warm-up</button>'+
-        '<button id="wu-start-btn" class="btn-primary" style="flex:1.5;padding:14px;" onclick="_phxFinishWarmup(false)">Start Session</button>'+
+        '<button class="btn-secondary" style="flex:1;padding:14px;margin:0;" onclick="window._phxSkipWarmup()">Skip Warm-up</button>'+
+        '<button id="wu-start-btn" class="btn-primary" style="flex:1.5;padding:14px;" onclick="window._phxStartAfterWarmup()">Start Session</button>'+
       '</div>'+
     '</div>';
   // Wire ticks
@@ -13413,18 +13418,37 @@ function _phxRenderWarmup(warmup, sess){
   }, 1000);
 }
 
-window._phxFinishWarmup = function(skipped){
+// v4.7.32 FIX 1: window-scoped finish so the callback survives the screen render
+// (which reassigns _phxWarmupState wholesale). Both buttons funnel through here.
+function _phxFinishWarmupCommon(skipped){
   if(_phxWarmupState.interval){ clearInterval(_phxWarmupState.interval); _phxWarmupState.interval = null; }
   if(typeof releaseWakeLock === 'function') releaseWakeLock();
-  var cb = _phxWarmupState.onProceed;
+  var cb = window._phxWarmupOnProceed || _phxWarmupState.onProceed;
+  window._phxWarmupOnProceed = null;
   _phxWarmupState.onProceed = null;
   if(typeof cb === 'function') cb({skipped: !!skipped});
+}
+window._phxSkipWarmup = function(){ _phxFinishWarmupCommon(true); };
+window._phxStartAfterWarmup = function(){ _phxFinishWarmupCommon(false); };
+// Back-compat: old code paths still call _phxFinishWarmup(bool).
+window._phxFinishWarmup = function(skipped){ _phxFinishWarmupCommon(!!skipped); };
+// Back button: clean exit to Today, do NOT proceed into the session.
+window._phxBackFromWarmup = function(){
+  if(_phxWarmupState.interval){ clearInterval(_phxWarmupState.interval); _phxWarmupState.interval = null; }
+  if(typeof releaseWakeLock === 'function') releaseWakeLock();
+  window._phxWarmupOnProceed = null;
+  _phxWarmupState.onProceed = null;
+  if(typeof navTo === 'function') navTo('today');
+  else if(typeof showScreen === 'function') showScreen('screen-today');
 };
 
 // Public entry point — called from openTodaySession before the main session renders.
 async function openWarmupBeforeSession(sess, onProceed){
   if(!_phxWarmupNeeded(sess)){ if(typeof onProceed === 'function') onProceed({skipped:true}); return; }
   var warmup = await _phxResolveWarmup(sess);
+  // v4.7.32 FIX 1: stash on window BEFORE render — _phxRenderWarmup reassigns
+  // _phxWarmupState and would otherwise wipe out the callback.
+  window._phxWarmupOnProceed = onProceed;
   _phxWarmupState.onProceed = onProceed;
   _phxRenderWarmup(warmup, sess);
 }
@@ -13463,9 +13487,26 @@ var AGOGE_TOTAL_KM = 246;
 var AGOGE_RED = '#6B2020';
 
 // Is the Agoge tracker active for this athlete?
+// v4.7.32 FIX 2: read from any of the field-name variants the data may have been
+// stored under (camelCase / snake_case, with or without the fq prefix). Some users'
+// profiles persisted programme_target / programmeTarget rather than fqProgrammeTarget.
 function isAgogeActive(){
-  var t = athlete && athlete.fqProgrammeTarget;
-  return t === 'agoge' || t === 'both';
+  if(!athlete) return false;
+  var candidates = [
+    athlete.fqProgrammeTarget,
+    athlete.fq_programme_target,
+    athlete.programmeTarget,
+    athlete.programme_target,
+    athlete.programmeType,
+    athlete.programme_type
+  ];
+  for(var i=0;i<candidates.length;i++){
+    var v = candidates[i];
+    if(v == null) continue;
+    var s = String(v).toLowerCase().trim();
+    if(s === 'agoge' || s === 'both') return true;
+  }
+  return false;
 }
 
 // Anchor date for week-counting and cumulative march distance.

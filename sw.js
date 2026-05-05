@@ -1,4 +1,4 @@
-var CACHE_NAME = 'phoenix-v4.7.32';
+var CACHE_NAME = 'phoenix-v4.7.33';
 var CACHE_FILES = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e) {

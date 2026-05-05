@@ -3319,7 +3319,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.32';
+var APP_VERSION='4.7.33';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3351,7 +3351,31 @@ var FIELD_MAP=[
   ['fqParqClear','fq_parq_clear'],['fqCompleted','fq_completed'],
   ['currentWeek','current_week'],['aiProgramme','ai_programme'],
   ['aiProgrammeDate','ai_programme_date'],['aiProgrammeTrigger','ai_programme_trigger'],
-  ['tier','tier'],['tierSource','tier_source'],['theme','theme']
+  ['tier','tier'],['tierSource','tier_source'],['theme','theme'],
+  // v4.7.33 FIX 1b: programme-target + companion fields. Without these, athleteToProfile
+  // silently dropped them on every Supabase save and isAgogeActive could never read them
+  // back. Snake-case names match the Supabase profiles columns already referenced by
+  // buildAthleteProfile() (programme_target / event_date / event_description / etc.).
+  // NOTE: requires the matching columns to exist in the Supabase `profiles` table —
+  // run an ALTER TABLE if your schema doesn't already have them.
+  ['fqProgrammeTarget','programme_target'],
+  ['fqEventDate','event_date'],
+  ['fqEventDescription','event_description'],
+  ['fqScheduleMode','schedule_mode'],
+  ['fqAvailableSlots','available_slots'],
+  ['fqSessionSchedule','session_schedule'],
+  ['fqCoachTone','coach_tone'],
+  ['fqWeighInFrequency','weigh_in_frequency'],
+  ['fqCurrentlyTraining','fq_currently_training'],
+  ['fqCurrentStint','fq_current_stint'],
+  ['fqTimeAway','fq_time_away'],
+  ['fqLifetimeAge','fq_lifetime_age'],
+  ['fqMovementConfidence','fq_movement_confidence'],
+  ['fqOlyLifts','fq_oly_lifts'],
+  ['fqCoachNotes','coach_notes'],
+  ['fqSportRole','sport_role'],
+  ['fqSeasonPhase','season_phase'],
+  ['fqWaiverAccepted','waiver_accepted']
 ];
 function athleteToProfile(a){
   if(!a) return {};
@@ -13488,17 +13512,23 @@ var AGOGE_RED = '#6B2020';
 
 // Is the Agoge tracker active for this athlete?
 // v4.7.32 FIX 2: read from any of the field-name variants the data may have been
-// stored under (camelCase / snake_case, with or without the fq prefix). Some users'
-// profiles persisted programme_target / programmeTarget rather than fqProgrammeTarget.
+// stored under (camelCase / snake_case, with or without the fq prefix).
+// v4.7.32 hotfix: also check fqPath / fq_path (legacy pre-v4.7.21 field name).
+// v4.7.33 FIX 2: programme-summary fallback — existing users whose profile field
+// was lost in the FIELD_MAP gap can still get the tile if their AI programme
+// summary mentions Agoge / 246km / The March.
 function isAgogeActive(){
   if(!athlete) return false;
+  // Direct field check (new users + any user who had the field persisted).
   var candidates = [
     athlete.fqProgrammeTarget,
     athlete.fq_programme_target,
     athlete.programmeTarget,
     athlete.programme_target,
     athlete.programmeType,
-    athlete.programme_type
+    athlete.programme_type,
+    athlete.fqPath,
+    athlete.fq_path
   ];
   for(var i=0;i<candidates.length;i++){
     var v = candidates[i];
@@ -13506,6 +13536,19 @@ function isAgogeActive(){
     var s = String(v).toLowerCase().trim();
     if(s === 'agoge' || s === 'both') return true;
   }
+  // Fallback: scan the AI programme summary for Agoge markers.
+  try {
+    var ps = athlete.aiProgramme && athlete.aiProgramme.programme_summary;
+    if(ps){
+      var phase = ps.current_phase || '';
+      var goal  = ps.phase_goal || '';
+      var note  = ps.coach_note || '';
+      var combined = (phase + ' ' + goal + ' ' + note).toLowerCase();
+      if(combined.indexOf('agoge') >= 0) return true;
+      if(combined.indexOf('246km') >= 0 || combined.indexOf('246 km') >= 0) return true;
+      if(combined.indexOf('the march') >= 0) return true;
+    }
+  } catch(_e){}
   return false;
 }
 
@@ -15068,12 +15111,13 @@ window.fqNext = function(){
     wingate:fqAnswers.wingate||existing.wingate||0,
     // v4.7.19 BUILD 1: free-text coach notes
     fqCoachNotes:fqAnswers.coachNotes||existing.fqCoachNotes||'',
-    fqWeighInFrequency:fqAnswers.weighInFrequency||existing.fqWeighInFrequency||null,
+    // v4.7.33 FIX 1a: weight-in frequency + training-history fallbacks (don't clobber on partial re-run).
+    fqWeighInFrequency: fqAnswers.weighInFrequency || fqAnswers.fqWeighInFrequency || existing.fqWeighInFrequency || null,
     // v4.7.4 training-history decision tree fields
-    fqCurrentlyTraining:fqAnswers.currentlyTraining,
-    fqCurrentStint:fqAnswers.currentStint,
-    fqTimeAway:fqAnswers.timeAway,
-    fqLifetimeAge:fqAnswers.lifetimeAge,
+    fqCurrentlyTraining: fqAnswers.currentlyTraining || existing.fqCurrentlyTraining || null,
+    fqCurrentStint: fqAnswers.currentStint || existing.fqCurrentStint || null,
+    fqTimeAway: fqAnswers.timeAway || existing.fqTimeAway || null,
+    fqLifetimeAge: fqAnswers.lifetimeAge || fqAnswers.fqLifetimeAge || existing.fqLifetimeAge || null,
     fqMovementConfidence:fqAnswers.movementConfidence,
     fqOlyLifts:fqAnswers.olyLifts||[],
     // legacy mirrors (left null intentionally — superseded)
@@ -15086,14 +15130,17 @@ window.fqNext = function(){
     fqSport:fqAnswers.sport,
     fqPosition:fqAnswers.position,
     fqSeasonPhase:fqAnswers.seasonPhase,
-    fqProgrammeTarget:fqAnswers.programmeTarget,
-    fqEventDate:fqAnswers.eventDate,
-    fqEventDescription:fqAnswers.eventDescription,
+    // v4.7.33 FIX 1a: explicit fqAnswers → athlete copies with fallback to the existing
+    // value AND a secondary check on the alt key name. Stops a partial questionnaire
+    // re-run from clobbering a previously-set programme target / coach tone / etc.
+    fqProgrammeTarget: fqAnswers.programmeTarget || fqAnswers.fqProgrammeTarget || existing.fqProgrammeTarget || null,
+    fqEventDate: fqAnswers.eventDate || fqAnswers.fqEventDate || existing.fqEventDate || null,
+    fqEventDescription: fqAnswers.eventDescription || fqAnswers.fqEventDescription || existing.fqEventDescription || null,
     fqEquip:fqAnswers.equip,
-    fqScheduleMode:fqAnswers.scheduleMode,
+    fqScheduleMode: fqAnswers.scheduleMode || fqAnswers.fqScheduleMode || existing.fqScheduleMode || null,
     fqAvailableSlots:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.availableSlots:null,
-    fqSessionSchedule:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.sessionSchedule:null,
-    fqCoachTone:fqAnswers.coachTone,
+    fqSessionSchedule: (fqAnswers.scheduleMode==='user_assigns' ? fqAnswers.sessionSchedule : null) || existing.fqSessionSchedule || null,
+    fqCoachTone: fqAnswers.coachTone || fqAnswers.fqCoachTone || existing.fqCoachTone || null,
     fqInjury:fqAnswers.injury,
     fqInjuryNotes:fqAnswers.injuryNotes,
     fqParqClear:fqAnswers.parqClear,

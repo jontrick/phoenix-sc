@@ -299,8 +299,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .sidebar-item-icon.purple{background:var(--purple-dim);border:1px solid var(--purple);}
 .sidebar-item-text{font-family:var(--font-d);font-size:16px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text);}
 .sidebar-item-sub{font-size:11px;color:var(--text3);margin-top:1px;}
-.hamburger-btn{width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;}
+.hamburger-btn{width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;position:relative;}
 .hamburger-btn span{display:block;width:16px;height:1.5px;background:var(--text2);}
+/* v4.7.34 BUILD 1: notification dot — shown on Sunday when weekly check-in is unsubmitted */
+#hamburger-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#CC3333;display:none;pointer-events:none;}
 
 /* GPS WALK TRACKER */
 .walk-tracker-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
@@ -1677,6 +1679,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 <div class="app-header">
   <div class="hamburger-btn" onclick="openSidebar()">
     <span></span><span></span><span></span>
+    <div id="hamburger-dot"></div>
   </div>
   <div class="header-logo">PHOENIX <span>PLAN</span></div>
   <div class="icon-btn" onclick="navTo('athlete')">
@@ -1781,6 +1784,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="game-card-action-sm">Start →</div>
         </div>
       </div>
+    </div>
+    <!-- v4.7.34 BUILD 5: Plan My Week link — opens the full 7-day session view. -->
+    <div style="text-align:center;margin:6px 0 14px;">
+      <button onclick="openWeekPlan()" style="background:transparent;border:none;color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px;text-decoration:underline;">Plan My Week →</button>
     </div>
     <!-- v4.7.23 BUILD 1: The Agoge tile — full-width, only rendered when fqProgrammeTarget is agoge or both.
          JS: _phxRenderAgogeTile() shows/hides + populates this tile each time renderTodayScreen runs. -->
@@ -2675,6 +2682,22 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
+<!-- v4.7.34 BUILD 5: WEEK PLAN — full 7-day session breakdown -->
+<div id="screen-week-plan" class="screen">
+<div class="app-header">
+  <div class="icon-btn" onclick="navTo('today')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+  <div class="header-logo">WEEK <span id="wp-week-num">—</span></div>
+  <div style="width:36px"></div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:14px 16px 100px;">
+  <div id="wp-range" style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:14px;">—</div>
+  <div id="wp-days" style="display:flex;flex-direction:column;gap:14px;"></div>
+  <button id="wp-confirm" class="btn-primary" style="width:100%;padding:14px;margin-top:18px;">Confirm This Week</button>
+</div>
+</div>
+
 <!-- WALK TRACKER SCREEN -->
 <div id="screen-walk" class="screen">
 <div class="app-header">
@@ -3251,6 +3274,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
       <div><div class="sidebar-item-text">My Profile</div><div class="sidebar-item-sub">Goals, injuries, programme path</div></div>
     </div>
+    <!-- v4.7.34 BUILD 5: This Week plan view -->
+    <div class="sidebar-item" onclick="closeSidebar();openWeekPlan()">
+      <div class="sidebar-item-icon" style="background:rgba(200,150,62,0.16);color:var(--gold);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <div><div class="sidebar-item-text">This Week</div><div class="sidebar-item-sub">Plan your sessions</div></div>
+    </div>
     <!-- v4.7.22 BUILD 7 -->
     <div class="sidebar-item" onclick="closeSidebar();openMyCoach()">
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
@@ -3319,7 +3347,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.33';
+var APP_VERSION='4.7.34';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3351,7 +3379,7 @@ var FIELD_MAP=[
   ['fqParqClear','fq_parq_clear'],['fqCompleted','fq_completed'],
   ['currentWeek','current_week'],['aiProgramme','ai_programme'],
   ['aiProgrammeDate','ai_programme_date'],['aiProgrammeTrigger','ai_programme_trigger'],
-  ['tier','tier'],['tierSource','tier_source'],['theme','theme'],
+  ['tier','tier'],['tierSource','tier_source'],['theme','theme'],['font','font'],
   // v4.7.33 FIX 1b: programme-target + companion fields. Without these, athleteToProfile
   // silently dropped them on every Supabase save and isAgogeActive could never read them
   // back. Snake-case names match the Supabase profiles columns already referenced by
@@ -3593,6 +3621,13 @@ async function _loadProfileAndRouteInner(){
     if(_migrated){saveAthlete(athlete);}else{
       localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
     }
+    // v4.7.34 BUG FIX 1: theme/font live in athlete but `theme` was the only one in FIELD_MAP,
+    // and applySkin/applyFont were never called after hydration — so every reload reverted
+    // to the Phoenix default. Re-apply both explicitly here.
+    try {
+      if(athlete.theme && typeof applySkin==='function') applySkin(athlete.theme);
+      if(athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
+    } catch(_e){}
     console.log('[PHX] routing decision:',{hasAthlete:true,fqCompleted:profile.fq_completed,targetScreen:'today'});
     viewWeek=progWeek();
     navTo('today');
@@ -7419,6 +7454,7 @@ Return ONLY valid JSON, no other text, no markdown fences:
         "day": "Monday",
         "session_type": "ME Lower",
         "duration_min": 60,
+        "priority": "primary",
         "exercises": [
           {
             "name": "Box Squat",
@@ -7434,6 +7470,27 @@ Return ONLY valid JSON, no other text, no markdown fences:
   },
   "flags": []
 }
+
+================================================================
+SESSION PRIORITY (REQUIRED — every session in the week array)
+================================================================
+
+Each session object MUST include a "priority" field with one of these values:
+
+- "primary"  — non-negotiable. Block completion is judged on these. Strength sessions
+               (ME/DE Upper/Lower) and the daily walk for Agoge/Combine athletes are primary.
+- "flexible" — high value, do if possible. WODs, core sessions, conditioning add-ons.
+               Skipping one without penalty is fine.
+- "bonus"    — optional enhancement. Extra walks, active recovery, optional conditioning.
+
+Assignment rules:
+- fqProgrammeTarget agoge / combine / both → all lifts + the prescribed walk = primary.
+- fat_loss in fqGoals → any session that creates a meaningful caloric deficit = primary
+  (long walks, conditioning blocks, high-density WODs).
+- Late in the block (last 3 weeks before Combine / Agoge target date) — promote one
+  flexible session per week to primary as the event approaches.
+- Cap: NEVER assign more than 5 primary sessions in a single week. If goals would push
+  beyond that, demote the least-impactful candidate to flexible.
 
 ================================================================
 WOD SESSION FORMAT (REQUIRED when session_type is "WOD")
@@ -8318,6 +8375,8 @@ function applyFont(font){
   if(font!=='phoenix') document.body.classList.add('font-'+font);
   currentFont=font;
   localStorage.setItem('phoenix_font',font);
+  // v4.7.34 BUG FIX 1: also persist to athlete so it round-trips through Supabase like theme does.
+  if(athlete && typeof saveAthlete==='function'){ athlete.font=font; saveAthlete(athlete); }
   updateFontSwatches();
   updateFqFontPicker(); // v4.7.5 FIX 7: keep the questionnaire Step 1 picker in sync
 }
@@ -8492,7 +8551,350 @@ var walkHeartbeatInterval=null; // 30s heartbeat that pushes distance + elapsed 
 var PHX_ACTIVE_WALK_KEY='phoenix_active_walk_id';
 var PHX_ACTIVE_WALK_META_KEY='phoenix_active_walk_meta';
 
+// v4.7.34 BUILD 4: choose Outdoor vs Treadmill before the existing GPS flow.
+// Last-used mode is remembered in localStorage (phoenix_last_walk_mode). The user can
+// re-pick on each tap. Calling _phxOpenWalkOutdoor() directly skips the modal.
 function openWalkLog(){
+  // If a last mode is set and the modal is suppressed (e.g. autoroute from Today on a walk
+  // session), default to that mode. For a normal Walk-tile tap, always show the chooser so
+  // the user can switch.
+  if(window._phxSkipWalkChooser){
+    window._phxSkipWalkChooser = false;
+    var lastMode = null;
+    try { lastMode = localStorage.getItem('phoenix_last_walk_mode'); } catch(_e){}
+    if(lastMode === 'treadmill'){ _phxOpenTreadmillWalk(); return; }
+    _phxOpenWalkOutdoor(); return;
+  }
+  _phxShowWalkChooser();
+}
+
+window._phxShowWalkChooser = function(){
+  var existing = document.getElementById('phx-walk-chooser');
+  if(existing) existing.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-walk-chooser';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:14px;';
+  overlay.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Walk Setup</div>'+
+    '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);text-align:center;line-height:1.1;margin-bottom:14px;">How are you walking today?</div>'+
+    '<div onclick="window._phxPickWalk(\'outdoor\')" style="width:100%;max-width:340px;background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:18px;cursor:pointer;display:flex;align-items:center;gap:14px;">'+
+      '<div style="width:42px;height:42px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c8963e" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zM12 11.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>'+
+      '</div>'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:1px;">Outdoor</div>'+
+        '<div style="font-size:12px;color:var(--text2);margin-top:2px;">GPS tracked — distance calculated automatically</div>'+
+      '</div>'+
+    '</div>'+
+    '<div onclick="window._phxPickWalk(\'treadmill\')" style="width:100%;max-width:340px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);padding:18px;cursor:pointer;display:flex;align-items:center;gap:14px;">'+
+      '<div style="width:42px;height:42px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c8963e" stroke-width="2"><path d="M3 17h18M5 17V9h14v8M9 13h6M12 7V4"/></svg>'+
+      '</div>'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:1px;">Treadmill</div>'+
+        '<div style="font-size:12px;color:var(--text2);margin-top:2px;">Enter distance manually — no GPS needed</div>'+
+      '</div>'+
+    '</div>'+
+    '<button onclick="document.getElementById(\'phx-walk-chooser\').remove()" style="margin-top:12px;background:transparent;border:none;color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Cancel</button>';
+  document.body.appendChild(overlay);
+};
+
+window._phxPickWalk = function(mode){
+  try { localStorage.setItem('phoenix_last_walk_mode', mode); } catch(_e){}
+  var overlay = document.getElementById('phx-walk-chooser');
+  if(overlay) overlay.remove();
+  if(mode === 'treadmill') _phxOpenTreadmillWalk();
+  else _phxOpenWalkOutdoor();
+};
+
+// v4.7.34 BUILD 4 (revised): treadmill log overlay with Quick Log + Full modes.
+//
+// Default mode = Quick Log: just distance + speed + Save. Optimised for the 1-2 km
+// warm-up walk before lifting sessions — open, type, save, close.
+//
+// Auto-switches to Full mode (adds a Start/Pause count-up timer) when the user types
+// a distance >= 2 km, since that's a dedicated walk session worth timing.
+//
+// On Save → completion screen with summary + OPTIONAL photo of the treadmill display
+// for distance verification. Photo is uploaded to checkin-photos/{user_id}/treadmill/
+// and the session row is patched with photo_url. Photo never blocks saving.
+//
+// All treadmill walks count toward The March: written to sessions table with
+// session_type='walk', total_distance_m=km*1000, details.source='treadmill'.
+window._phxTreadmillState = {timerHandle:null, started:0, elapsedSec:0, running:false, mode:'quick', photoDataURL:null};
+
+function _phxOpenTreadmillWalk(){
+  var existing = document.getElementById('phx-treadmill-screen');
+  if(existing) existing.remove();
+  // Reset state for a fresh open.
+  window._phxTreadmillState = {timerHandle:null, started:0, elapsedSec:0, running:false, mode:'quick', photoDataURL:null};
+  var screen = document.createElement('div');
+  screen.id = 'phx-treadmill-screen';
+  screen.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9000;overflow-y:auto;display:flex;flex-direction:column;';
+  screen.innerHTML =
+    '<div class="app-header" style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);">'+
+      '<div class="icon-btn" id="phx-tm-back" style="cursor:pointer;"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></div>'+
+      '<div style="flex:1;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text);">Treadmill Walk</div>'+
+      '<div style="width:36px;"></div>'+
+    '</div>'+
+    '<div style="padding:20px;flex:1;">'+
+      // Mode pill — clickable to manually flip between Quick and Full.
+      '<div style="display:flex;justify-content:center;margin-bottom:14px;">'+
+        '<div onclick="window._phxToggleTreadmillMode()" id="phx-tm-mode-pill" style="display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:999px;padding:6px 14px;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);cursor:pointer;">'+
+          '<span id="phx-tm-mode-label">Quick Log</span>'+
+          '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>'+
+        '</div>'+
+      '</div>'+
+      // Timer block (Full mode only)
+      '<div id="phx-tm-timer-block" style="display:none;text-align:center;margin-bottom:24px;">'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Duration</div>'+
+        '<div id="phx-tm-time" style="font-family:var(--font-d);font-size:60px;font-weight:900;color:var(--text);line-height:1;">0:00</div>'+
+        '<div style="display:flex;gap:10px;margin-top:14px;justify-content:center;">'+
+          '<button id="phx-tm-start" style="flex:1;max-width:140px;padding:12px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Start</button>'+
+          '<button id="phx-tm-pause" style="flex:1;max-width:140px;padding:12px;background:var(--bg3);color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;display:none;">Pause</button>'+
+        '</div>'+
+      '</div>'+
+      // Distance — primary input, always visible.
+      '<label style="display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Distance</label>'+
+      '<div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;">'+
+        '<input id="phx-tm-distance" type="number" step="0.01" inputmode="decimal" placeholder="0.00" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:28px;font-weight:900;text-align:center;">'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text2);">km</div>'+
+      '</div>'+
+      // Speed — optional, always visible (it\'s a single line so doesn\'t bloat Quick Log).
+      '<label style="display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Speed (optional)</label>'+
+      '<div style="display:flex;gap:10px;align-items:center;margin-bottom:18px;">'+
+        '<input id="phx-tm-speed" type="number" step="0.1" inputmode="decimal" placeholder="—" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;">'+
+        '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--text2);">km/h</div>'+
+      '</div>'+
+      '<div id="phx-tm-quick-hint" style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:18px;font-style:italic;">Quick log mode — type distance and tap Save. No timer needed.</div>'+
+      '<button id="phx-tm-finish" class="btn-primary" style="width:100%;padding:16px;">Save</button>'+
+    '</div>';
+  document.body.appendChild(screen);
+  function fmt(s){ var m = Math.floor(s/60), r = s%60; return m+':'+(r<10?'0':'')+r; }
+  function tick(){
+    window._phxTreadmillState.elapsedSec = Math.floor((Date.now() - window._phxTreadmillState.started) / 1000);
+    var disp = document.getElementById('phx-tm-time');
+    if(disp) disp.textContent = fmt(window._phxTreadmillState.elapsedSec);
+  }
+  document.getElementById('phx-tm-start').addEventListener('click', function(){
+    if(window._phxTreadmillState.running) return;
+    window._phxTreadmillState.running = true;
+    window._phxTreadmillState.started = Date.now() - (window._phxTreadmillState.elapsedSec * 1000);
+    if(window._phxTreadmillState.timerHandle) clearInterval(window._phxTreadmillState.timerHandle);
+    window._phxTreadmillState.timerHandle = setInterval(tick, 1000);
+    this.style.display = 'none';
+    document.getElementById('phx-tm-pause').style.display = 'block';
+    if(typeof requestWakeLock === 'function') requestWakeLock();
+  });
+  document.getElementById('phx-tm-pause').addEventListener('click', function(){
+    if(!window._phxTreadmillState.running) return;
+    window._phxTreadmillState.running = false;
+    if(window._phxTreadmillState.timerHandle){ clearInterval(window._phxTreadmillState.timerHandle); window._phxTreadmillState.timerHandle = null; }
+    this.style.display = 'none';
+    document.getElementById('phx-tm-start').style.display = 'block';
+    document.getElementById('phx-tm-start').textContent = 'Resume';
+  });
+  document.getElementById('phx-tm-back').addEventListener('click', _phxCloseTreadmill);
+  document.getElementById('phx-tm-finish').addEventListener('click', _phxTreadmillFinish);
+  // Auto-switch Quick → Full once the user types ≥2km. Also flip Full → Quick if they
+  // erase back below 2km AND haven\'t started the timer yet.
+  document.getElementById('phx-tm-distance').addEventListener('input', function(){
+    var v = parseFloat(this.value);
+    if(!isFinite(v)) return;
+    var st = window._phxTreadmillState;
+    if(v >= 2 && st.mode === 'quick'){ _phxApplyTreadmillMode('full'); }
+    else if(v < 2 && st.mode === 'full' && !st.running && st.elapsedSec === 0){ _phxApplyTreadmillMode('quick'); }
+  });
+  // Focus distance input straight away so a Quick Log is one tap away from logging.
+  setTimeout(function(){ var el = document.getElementById('phx-tm-distance'); if(el) el.focus(); }, 60);
+}
+
+function _phxApplyTreadmillMode(next){
+  window._phxTreadmillState.mode = next;
+  var label = document.getElementById('phx-tm-mode-label');
+  var timerBlock = document.getElementById('phx-tm-timer-block');
+  var hint = document.getElementById('phx-tm-quick-hint');
+  if(label) label.textContent = (next === 'full') ? 'Full · with timer' : 'Quick Log';
+  if(timerBlock) timerBlock.style.display = (next === 'full') ? 'block' : 'none';
+  if(hint) hint.style.display = (next === 'full') ? 'none' : 'block';
+  var pill = document.getElementById('phx-tm-mode-pill');
+  if(pill) pill.style.borderColor = (next === 'full') ? 'var(--gold)' : 'var(--border2)';
+}
+
+window._phxToggleTreadmillMode = function(){
+  var next = window._phxTreadmillState.mode === 'full' ? 'quick' : 'full';
+  _phxApplyTreadmillMode(next);
+};
+
+function _phxCloseTreadmill(){
+  if(window._phxTreadmillState.timerHandle){ clearInterval(window._phxTreadmillState.timerHandle); window._phxTreadmillState.timerHandle = null; }
+  if(typeof releaseWakeLock === 'function') releaseWakeLock();
+  window._phxTreadmillState = {timerHandle:null, started:0, elapsedSec:0, running:false, mode:'quick', photoDataURL:null};
+  var screen = document.getElementById('phx-treadmill-screen');
+  if(screen) screen.remove();
+}
+
+// Validate distance + show the completion / photo screen. Saving happens after the
+// user picks "Save with Photo" or "Save without Photo" on that screen.
+function _phxTreadmillFinish(){
+  var distEl = document.getElementById('phx-tm-distance');
+  var spdEl  = document.getElementById('phx-tm-speed');
+  var km = distEl ? parseFloat(distEl.value) : NaN;
+  if(!isFinite(km) || km <= 0){
+    if(distEl){ distEl.style.borderColor = 'var(--red,#d96a5e)'; distEl.focus(); }
+    return;
+  }
+  // Pause timer (don't reset elapsedSec — we still want to log it).
+  if(window._phxTreadmillState.timerHandle){ clearInterval(window._phxTreadmillState.timerHandle); window._phxTreadmillState.timerHandle = null; }
+  window._phxTreadmillState.running = false;
+  if(typeof releaseWakeLock === 'function') releaseWakeLock();
+  var sec = window._phxTreadmillState.elapsedSec || 0;
+  var speed = spdEl && spdEl.value ? parseFloat(spdEl.value) : null;
+  _phxRenderTreadmillCompletion(km, sec, speed);
+}
+
+function _phxRenderTreadmillCompletion(km, sec, speed){
+  function fmt(s){ var m = Math.floor(s/60), r = s%60; return m+':'+(r<10?'0':'')+r; }
+  var screen = document.getElementById('phx-treadmill-screen');
+  if(!screen) return;
+  // Hide the input form, render a completion view in its place.
+  screen.querySelector('.app-header + div').innerHTML =
+    '<div style="text-align:center;margin-bottom:24px;">'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Session Logged</div>'+
+      '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">Nice work</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;margin-bottom:22px;">'+
+      '<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;">'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Distance</div>'+
+        '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--gold);">'+(Math.round(km*100)/100)+'<span style="font-size:12px;color:var(--text3);"> km</span></div>'+
+      '</div>'+
+      '<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;">'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Time</div>'+
+        '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--text);">'+(sec>0?fmt(sec):'—')+'</div>'+
+      '</div>'+
+    '</div>'+
+    // Optional photo verification
+    '<label style="display:block;font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Verify Distance — Optional</label>'+
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Take a photo of your treadmill screen so the distance is verifiable later.</div>'+
+    '<div id="phx-tm-photo-wrap" style="margin-bottom:22px;">'+
+      '<label for="phx-tm-photo-input" style="display:flex;align-items:center;justify-content:center;height:88px;background:var(--bg3);border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Tap to take photo</label>'+
+      '<input id="phx-tm-photo-input" type="file" accept="image/*" capture="environment" style="display:none;" onchange="_phxTreadmillPhotoChosen(event)">'+
+    '</div>'+
+    '<button id="phx-tm-save-photo" class="btn-primary" style="width:100%;padding:14px;margin-bottom:10px;display:none;">Save with Photo</button>'+
+    '<button id="phx-tm-save-nophoto" class="btn-secondary" style="width:100%;padding:14px;margin:0;">Save without Photo</button>';
+  // Wire the two save buttons. Both call _phxTreadmillCommit with km/sec/speed +
+  // current photoDataURL (or null).
+  document.getElementById('phx-tm-save-nophoto').addEventListener('click', function(){
+    _phxTreadmillCommit(km, sec, speed, null);
+  });
+  document.getElementById('phx-tm-save-photo').addEventListener('click', function(){
+    _phxTreadmillCommit(km, sec, speed, window._phxTreadmillState.photoDataURL);
+  });
+}
+
+window._phxTreadmillPhotoChosen = function(ev){
+  var f = ev && ev.target && ev.target.files && ev.target.files[0];
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    window._phxTreadmillState.photoDataURL = e.target.result;
+    var wrap = document.getElementById('phx-tm-photo-wrap');
+    if(wrap){
+      wrap.innerHTML =
+        '<div style="position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--gold);">'+
+          '<img src="'+e.target.result+'" alt="" style="width:100%;display:block;max-height:240px;object-fit:cover;">'+
+          '<button onclick="_phxTreadmillRetake()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.7);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:var(--radius);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Retake</button>'+
+        '</div>';
+    }
+    // Now that there's a photo, surface the "Save with Photo" primary button.
+    var withBtn = document.getElementById('phx-tm-save-photo');
+    if(withBtn) withBtn.style.display = 'block';
+  };
+  reader.readAsDataURL(f);
+};
+
+window._phxTreadmillRetake = function(){
+  window._phxTreadmillState.photoDataURL = null;
+  var wrap = document.getElementById('phx-tm-photo-wrap');
+  if(wrap){
+    wrap.innerHTML =
+      '<label for="phx-tm-photo-input" style="display:flex;align-items:center;justify-content:center;height:88px;background:var(--bg3);border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Tap to take photo</label>'+
+      '<input id="phx-tm-photo-input" type="file" accept="image/*" capture="environment" style="display:none;" onchange="_phxTreadmillPhotoChosen(event)">';
+  }
+  var withBtn = document.getElementById('phx-tm-save-photo');
+  if(withBtn) withBtn.style.display = 'none';
+};
+
+async function _phxTreadmillCommit(km, sec, speed, photoDataURL){
+  var withBtn = document.getElementById('phx-tm-save-photo');
+  var noBtn   = document.getElementById('phx-tm-save-nophoto');
+  if(withBtn){ withBtn.disabled = true; }
+  if(noBtn){ noBtn.disabled = true; noBtn.textContent = 'Saving…'; }
+  var meters = Math.round(km * 1000);
+  // Local log so it survives offline.
+  try {
+    var entry = {date:new Date().toISOString(), mode:'treadmill', source:'treadmill', distance_km:km, duration_sec:sec, speed_kmh:speed};
+    var logs = JSON.parse(localStorage.getItem('phoenix_walk_logs') || '[]');
+    logs.push(entry);
+    localStorage.setItem('phoenix_walk_logs', JSON.stringify(logs));
+  } catch(_e){}
+  // Supabase: insert the completed walk session, write back photo URL after upload.
+  try {
+    if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+      var nowISO = new Date().toISOString();
+      var startedISO = sec > 0 ? new Date(Date.now() - sec*1000).toISOString() : nowISO;
+      var row = {
+        user_id: currentSession.user.id,
+        session_type: 'walk',
+        session_name: 'Treadmill Walk',
+        started_at: startedISO,
+        completed_at: nowISO,
+        duration_seconds: sec || null,
+        total_distance_m: meters,
+        status: 'completed',
+        // v4.7.34 hotfix: source='treadmill' makes filtering / distinguishing from outdoor walks
+        // straightforward in The March / Stats queries. mode kept for back-compat.
+        details: {source:'treadmill', mode:'treadmill', speed_kmh: speed, mode_ui: window._phxTreadmillState.mode}
+      };
+      var ins = await sb.from('sessions').insert(row).select('id').single();
+      var sessionId = (ins && ins.data && ins.data.id) || null;
+      if(ins.error) console.warn('[PHX] treadmill walk insert failed:', ins.error);
+      // Photo upload (best-effort, never blocks save).
+      if(photoDataURL && sessionId && typeof _wciDataURLToBlob === 'function'){
+        try {
+          var blob = _wciDataURLToBlob(photoDataURL);
+          if(blob){
+            // YYYY-MM-DD-HHMMSS path — sortable by date and unique within the day.
+            var d = new Date();
+            var pad = function(n){ return (n<10?'0':'')+n; };
+            var stamp = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'-'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds());
+            var path = currentSession.user.id + '/treadmill/' + stamp + '.jpg';
+            var up = await sb.storage.from('checkin-photos').upload(path, blob, {contentType: blob.type||'image/jpeg', upsert: true});
+            if(!up.error){
+              var u = sb.storage.from('checkin-photos').getPublicUrl(path);
+              var photoUrl = (u && u.data && u.data.publicUrl) ? u.data.publicUrl : null;
+              if(photoUrl){
+                // Patch the session row with the photo URL.
+                await sb.from('sessions').update({
+                  details: Object.assign({}, row.details, {photo_url: photoUrl})
+                }).eq('id', sessionId);
+              }
+            } else {
+              console.warn('[PHX] treadmill photo upload failed:', up.error);
+            }
+          }
+        } catch(e){ console.warn('[PHX] treadmill photo error:', e); }
+      }
+    }
+    // Refresh The March cached total so the Agoge tile updates immediately.
+    if(typeof _agogeFetchMarchTotalM === 'function'){ try { await _agogeFetchMarchTotalM(); } catch(_e){} }
+  } catch(e){ console.warn('[PHX] treadmill save error:', e); }
+  // Done — close overlay, return to Today.
+  _phxCloseTreadmill();
+  if(typeof navTo === 'function') navTo('today');
+}
+
+function _phxOpenWalkOutdoor(){
   showScreen('screen-walk');
   var streak=getWalkStreak();
   var badge=document.getElementById('walk-streak-badge');
@@ -9836,6 +10238,12 @@ function setupSplashButtons(){
 
     <!-- SECTION 5 — next week -->
     <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Next week</div>
+    <!-- v4.7.34 BUILD 3: coach-generated recommendation. Populated by _phxLoadCoachWeeklyRecommendation()
+         when the screen opens. Cached in localStorage so it doesn't regenerate on every reopen. -->
+    <div id="wci-coach-rec" style="display:none;background:linear-gradient(135deg,var(--bg2) 0%,#1a1410 100%);border:1px solid var(--gold);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
+      <div id="wci-coach-rec-header" style="font-size:10px;color:var(--gold);letter-spacing:3px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:8px;">Coach Recommendation</div>
+      <div id="wci-coach-rec-body" style="font-size:13px;color:var(--text);line-height:1.6;"></div>
+    </div>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
       <div style="font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:8px;">Last week's structure</div>
       <div id="wci-prev-structure" style="font-size:13px;color:var(--text2);line-height:1.7;"></div>
@@ -10715,6 +11123,8 @@ function renderTodayScreen(){
   }
   // v4.7.31 BUILD 1: morning weight check-in card (5am-10am Brisbane).
   if(typeof _phxMaybeShowMorningCheckin==='function') _phxMaybeShowMorningCheckin();
+  // v4.7.34 BUILD 1: hamburger notification dot for Sunday weekly check-in.
+  if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
   // v4.7.19 BUILD 2: Sunday → append a Weekly Review card after the session tiles.
   _phxRenderSundayReviewCard();
   // v4.7.21 FIX 5: query Supabase for today's completed sessions and mark matching tiles.
@@ -10889,6 +11299,8 @@ function openWeeklyCheckin(){
   loadLastCheckin();
   // Auto-populate this week's stats from Supabase
   loadWeeklyStats();
+  // v4.7.34 BUILD 3: load (or regenerate) the coach's weekly recommendation card.
+  if(typeof _phxLoadCoachWeeklyRecommendation === 'function') _phxLoadCoachWeeklyRecommendation();
   // Sunday → editable submit. Other days → readonly view of the last submitted check-in.
   var isSunday = new Date().getDay() === 0;
   var roNote = document.getElementById('wci-readonly-note');
@@ -11039,6 +11451,79 @@ async function loadWeeklyStats(){
   } catch(e){ console.warn('[PHX] loadWeeklyStats failed:', e); }
 }
 
+// ====== v4.7.34 BUILD 3: COACH WEEKLY RECOMMENDATION ======
+// Generates a 2-3 sentence recommendation for next week. Cached per week-start in
+// localStorage (phoenix_week_rec_[YYYY-MM-DD]) so it doesn't re-fire on every reopen.
+async function _phxLoadCoachWeeklyRecommendation(){
+  var card = document.getElementById('wci-coach-rec');
+  var hdr  = document.getElementById('wci-coach-rec-header');
+  var body = document.getElementById('wci-coach-rec-body');
+  if(!card || !body) return;
+  var weekStart = (typeof _phxBrisbaneMondayISO==='function') ? _phxBrisbaneMondayISO() : new Date().toISOString().split('T')[0];
+  var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  var nextN = weekN + 1;
+  if(hdr) hdr.textContent = 'Coach Recommendation — Week ' + nextN;
+  // Cache hit?
+  var cacheKey = 'phoenix_week_rec_' + weekStart;
+  var cached = null;
+  try { cached = localStorage.getItem(cacheKey); } catch(_e){}
+  if(cached){
+    body.textContent = cached;
+    card.style.display = '';
+    return;
+  }
+  // No cache → show a quick placeholder + try the Anthropic worker.
+  body.textContent = 'Generating recommendation…';
+  card.style.display = '';
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user){ card.style.display = 'none'; return; }
+  try {
+    // Pull last week's set_logs + sessions so the recommendation is data-grounded.
+    var recent = (typeof _mcLoadRecentDataForContext==='function') ? await _mcLoadRecentDataForContext() : {};
+    var totalWeeks = (athlete && athlete.aiProgramme && athlete.aiProgramme.programme_summary && athlete.aiProgramme.programme_summary.total_weeks) || 12;
+    var prog = athlete && athlete.aiProgramme;
+    var sessionsCount = (prog && prog.week && Array.isArray(prog.week.sessions)) ? prog.week.sessions.length : 0;
+    var doneStat = (recent.recentSessions || []).filter(function(s){ return s.status === 'completed'; }).length;
+    var goals = (athlete && athlete.fqGoals) ? athlete.fqGoals.join(', ') : '—';
+    var target = (athlete && (athlete.fqProgrammeTarget || athlete.programmeTarget)) || '—';
+    var ctx = {
+      week_number: weekN,
+      next_week_number: nextN,
+      total_weeks: totalWeeks,
+      sessions_planned: sessionsCount,
+      sessions_completed_recent: doneStat,
+      avg_rpe: recent.lastRpe || null,
+      total_volume_kg: recent.total_volume_kg || 0,
+      exercise_summary: recent.exerciseSummary || [],
+      goals: goals,
+      programme_target: target
+    };
+    var prompt = 'Generate a 2-3 sentence weekly recommendation for the athlete\'s NEXT training week.\n'+
+      'Consider: current week '+weekN+' of '+totalWeeks+', recent RPE/completion data, and proximity to their target.\n'+
+      'Recommend specifically: how many sessions of each type, which are priority, one specific coaching note grounded in their data.\n'+
+      'Be direct. Reference actual numbers from their data — no generic platitudes.\n\n'+
+      'CONTEXT:\n```json\n'+JSON.stringify(ctx, null, 2)+'\n```';
+    var resp = await fetch('https://phoenix-coach.jon-d87.workers.dev', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 240,
+        system: (typeof PHOENIX_COACH_SYSTEM_PROMPT !== 'undefined') ? PHOENIX_COACH_SYSTEM_PROMPT : 'You are the Phoenix Coach.',
+        messages: [{role:'user', content: prompt}]
+      })
+    });
+    if(!resp.ok){ card.style.display = 'none'; return; }
+    var data = await resp.json();
+    var text = String((data.content && data.content[0] && data.content[0].text) || '').trim();
+    if(!text){ card.style.display = 'none'; return; }
+    body.textContent = text;
+    try { localStorage.setItem(cacheKey, text); } catch(_e){}
+  } catch(e){
+    console.warn('[PHX] coach weekly recommendation failed:', e);
+    card.style.display = 'none';
+  }
+}
+
 // ====== v4.7.31 BUILD 1: MORNING WEIGHT + PHOTO CHECK-IN ======
 // Shown on Today between 5am and 10am Brisbane (UTC+10), once per day, when
 // fqWeighInFrequency != 'never' and neither done/skip flag is set in localStorage.
@@ -11095,6 +11580,31 @@ function _phxMaybeShowMorningCheckin(){
   if(localStorage.getItem(keys.skipKey)) return;
   card.style.display = '';
 }
+
+// v4.7.34 BUILD 1: ISO date for the Monday of this Brisbane week — used as the namespace
+// for the weekly check-in done flag.
+function _phxBrisbaneMondayISO(){
+  var b = _phxBrisbaneNow();
+  var d = new Date(b.date.getFullYear(), b.date.getMonth(), b.date.getDate());
+  // getDay(): 0=Sun..6=Sat. Move to Monday (0→-6, 1→0, 2→-1, ...)
+  var dow = d.getDay();
+  var diff = (dow === 0) ? -6 : (1 - dow);
+  d.setDate(d.getDate() + diff);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// v4.7.34 BUILD 1: red dot on the hamburger button when it's Sunday (Brisbane) and the
+// weekly check-in for THIS week hasn't been submitted yet. Cleared after submission.
+window._phxUpdateHamburgerDot = function(){
+  try {
+    var b = _phxBrisbaneNow();
+    var isSunday = b.date.getDay() === 0;
+    var weekStart = _phxBrisbaneMondayISO();
+    var checkinDone = localStorage.getItem('phoenix_weekly_checkin_done_' + weekStart);
+    var dot = document.getElementById('hamburger-dot');
+    if(dot) dot.style.display = (isSunday && !checkinDone) ? 'block' : 'none';
+  } catch(_e){}
+};
 
 window._phxSkipMorningCheckin = function(){
   var keys = _phxMorningKeys();
@@ -11387,6 +11897,13 @@ async function submitWeeklyCheckin(){
       var w = document.getElementById('wci-photo-warning');
       if(w){ w.style.display = 'block'; w.textContent = photoWarn; }
     }
+    // v4.7.34 BUILD 1: clear the hamburger dot — this week's check-in is in.
+    try {
+      if(typeof _phxBrisbaneMondayISO==='function'){
+        localStorage.setItem('phoenix_weekly_checkin_done_' + _phxBrisbaneMondayISO(), '1');
+      }
+      if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
+    } catch(_e){}
     alert('Check-in submitted. Your coach will review this before building next week.');
     navTo('today');
   } catch(e){
@@ -11490,6 +12007,229 @@ function isTodayRestDay(){
   return false;
 }
 
+// ====== v4.7.34 BUILD 2: SESSION PRIORITY ======
+// Each session in the AI programme week has a priority: primary / flexible / bonus.
+// Athletes can override per-session per-week; overrides live in localStorage:
+//   phoenix_priority_override_[weekNumber]_[sessionId]
+// Tap the badge to cycle: primary → flexible → bonus → primary.
+
+function _phxSessionId(sess){
+  if(!sess) return 'unknown';
+  // Build a stable id: day + session_type + slot (am/pm if present).
+  var d = String(sess.day||'').toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  var t = String(sess.session_type||'').toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  var s = sess._slot ? ('-'+sess._slot) : '';
+  return d+'-'+t+s;
+}
+
+function _phxResolvePriority(sess, weekNumber){
+  if(!sess) return 'flexible';
+  var w = weekNumber || (athlete && athlete.currentWeek) || 1;
+  var key = 'phoenix_priority_override_'+w+'_'+_phxSessionId(sess);
+  var override = null;
+  try { override = localStorage.getItem(key); } catch(_e){}
+  if(override === 'primary' || override === 'flexible' || override === 'bonus') return override;
+  var raw = String(sess.priority||'').toLowerCase();
+  if(raw === 'primary' || raw === 'flexible' || raw === 'bonus') return raw;
+  // Default heuristic if the AI didn't assign one: strength + walk (for Agoge) → primary.
+  var t = String(sess.session_type||'').toLowerCase();
+  var isStrength = t.indexOf('me ')>=0 || t.indexOf('de ')>=0 || t.indexOf('strength')>=0 || t==='lift' || t.indexOf('upper')>=0 || t.indexOf('lower')>=0 || t.indexOf('pull')>=0 || t.indexOf('press')>=0;
+  var isWalk = t.indexOf('walk')>=0 || t.indexOf('run')>=0;
+  var isWod = t.indexOf('wod')>=0;
+  var isCore = t.indexOf('core')>=0;
+  if(isStrength) return 'primary';
+  if(isWalk && typeof isAgogeActive==='function' && isAgogeActive()) return 'primary';
+  if(isWod || isCore) return 'flexible';
+  return 'bonus';
+}
+
+function _phxPriorityStyle(p){
+  if(p === 'primary')  return {label:'PRIMARY',  color:'var(--gold)',                 border:'var(--gold)'};
+  if(p === 'flexible') return {label:'FLEXIBLE', color:'var(--text2)',                border:'var(--border2)'};
+  return                       {label:'BONUS',   color:'var(--text3)',                border:'var(--border)'};
+}
+
+// ====== v4.7.34 BUILD 5: WEEK PLAN VIEW ======
+// 7-day breakdown of the AI programme week. Each day section lists its session(s) with
+// priority badge + completed/skipped overlay. Tap = open session. Long-press = options
+// (change priority / swap session / mark skipped). Swaps + skips persist to localStorage.
+
+function _phxWeekStartDate(){
+  // Monday of this Brisbane week.
+  var iso = (typeof _phxBrisbaneMondayISO==='function') ? _phxBrisbaneMondayISO() : null;
+  if(iso){
+    var p = iso.split('-');
+    return new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
+  }
+  var d = new Date();
+  var dow = d.getDay();
+  var diff = (dow === 0) ? -6 : (1 - dow);
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function _phxLoadWeekSwaps(weekStart){
+  try { return JSON.parse(localStorage.getItem('phoenix_week_swaps_'+weekStart) || '{}'); } catch(_e){ return {}; }
+}
+function _phxSaveWeekSwaps(weekStart, swaps){
+  try { localStorage.setItem('phoenix_week_swaps_'+weekStart, JSON.stringify(swaps)); } catch(_e){}
+}
+
+window.openWeekPlan = function(){
+  showScreen('screen-week-plan');
+  _phxRenderWeekPlan();
+};
+
+async function _phxRenderWeekPlan(){
+  var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  var weekNumEl = document.getElementById('wp-week-num');
+  if(weekNumEl) weekNumEl.textContent = weekN;
+  var start = _phxWeekStartDate();
+  var end = new Date(start.getTime() + 6*86400000);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var rangeEl = document.getElementById('wp-range');
+  if(rangeEl){
+    rangeEl.textContent = start.getDate()+' '+months[start.getMonth()]+' — '+end.getDate()+' '+months[end.getMonth()]+' '+end.getFullYear();
+  }
+  // Build session list per weekday name.
+  var byDay = {Monday:[],Tuesday:[],Wednesday:[],Thursday:[],Friday:[],Saturday:[],Sunday:[]};
+  var prog = athlete && athlete.aiProgramme;
+  var weekStartISO = start.getFullYear()+'-'+String(start.getMonth()+1).padStart(2,'0')+'-'+String(start.getDate()).padStart(2,'0');
+  var swaps = _phxLoadWeekSwaps(weekStartISO);
+  if(prog && prog.week && Array.isArray(prog.week.sessions)){
+    prog.week.sessions.forEach(function(s){
+      var dayKey = String(s.day||'').replace(/\s+(am|pm).*$/i,'').trim();
+      // Capitalise: "monday" → "Monday".
+      var canon = dayKey.charAt(0).toUpperCase() + dayKey.slice(1).toLowerCase();
+      if(byDay[canon]){
+        // Expand am/pm nested bundles like the Today renderer does.
+        if(s.am_session || s.pm_session){
+          if(s.am_session){ var am = Object.assign({}, s.am_session, {day:canon, _slot:'am'}); byDay[canon].push(am); }
+          if(s.pm_session){ var pm = Object.assign({}, s.pm_session, {day:canon, _slot:'pm'}); byDay[canon].push(pm); }
+        } else {
+          byDay[canon].push(s);
+        }
+      }
+    });
+  }
+  // Pull completed sessions for this week so we can stamp ✓ on tiles.
+  var completedKeys = {};
+  if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+    try {
+      var cRes = await sb.from('sessions')
+        .select('session_type,session_name,status,started_at,details')
+        .eq('user_id', currentSession.user.id)
+        .gte('started_at', start.toISOString())
+        .lte('started_at', new Date(end.getTime()+86400000).toISOString());
+      if(!cRes.error && cRes.data){
+        cRes.data.forEach(function(r){
+          if(r.status !== 'completed') return;
+          var d = new Date(r.started_at);
+          var dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+          var t = String(r.session_type||'').toLowerCase();
+          completedKeys[dayName+'|'+t] = true;
+        });
+      }
+    } catch(_e){}
+  }
+  var orderedDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  var container = document.getElementById('wp-days');
+  if(!container) return;
+  var html = '';
+  orderedDays.forEach(function(dayName, dayIdx){
+    var daySessions = byDay[dayName] || [];
+    var dayDate = new Date(start.getTime() + dayIdx*86400000);
+    var isToday = (dayName === todayName);
+    html += '<div style="background:var(--bg2);border:1px solid '+(isToday?'var(--gold)':'var(--border)')+';border-radius:var(--radius);padding:12px 14px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:'+(daySessions.length?'10':'2')+'px;">';
+    html += '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:'+(isToday?'var(--gold)':'var(--text)')+';">'+dayName+(isToday?' · Today':'')+'</div>';
+    html += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);">'+dayDate.getDate()+' '+months[dayDate.getMonth()]+'</div>';
+    html += '</div>';
+    if(!daySessions.length){
+      html += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Rest Day</div>';
+    } else {
+      daySessions.forEach(function(sess, sIdx){
+        var prio = _phxResolvePriority(sess, weekN);
+        var ps = _phxPriorityStyle(prio);
+        var sid = _phxSessionId(sess);
+        var isDone = !!completedKeys[dayName+'|'+String(sess.session_type||'').toLowerCase()];
+        var isSkipped = !!swaps[sid+'|skipped'];
+        html += '<div style="position:relative;background:var(--bg3);border-left:3px solid '+ps.border+';border-radius:var(--radius);padding:10px 12px;margin-top:'+(sIdx?'8':'0')+'px;cursor:pointer;" onclick="window._phxWeekTileTap(\''+sid+'\',\''+dayName+'\')">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+        html += '<div style="flex:1;min-width:0;">';
+        html += '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:1px;">'+(sess.session_type||'Training')+'</div>';
+        html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+(sess.duration_min||45)+' min'+(sess._slot?(' · '+sess._slot.toUpperCase()):'')+'</div>';
+        html += '</div>';
+        html += '<div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;color:'+ps.color+';border:1px solid '+ps.border+';padding:3px 6px;border-radius:3px;flex-shrink:0;">'+ps.label+'</div>';
+        html += '</div>';
+        if(isDone){
+          html += '<div style="position:absolute;inset:0;background:rgba(15,30,15,0.55);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5fb96a;pointer-events:none;">✓ Completed</div>';
+        } else if(isSkipped){
+          html += '<div style="position:absolute;inset:0;background:rgba(40,15,15,0.55);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#d96a5e;pointer-events:none;">Skipped</div>';
+        }
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+  });
+  container.innerHTML = html;
+  // Stash for the tap dispatcher
+  window._phxWeekPlanState = {byDay: byDay, weekStartISO: weekStartISO, weekN: weekN};
+  // Confirm button — for now just shows a toast-style alert and returns.
+  var confirmBtn = document.getElementById('wp-confirm');
+  if(confirmBtn) confirmBtn.onclick = function(){
+    alert('Week confirmed. Your priority overrides and swaps have been saved.');
+    navTo('today');
+  };
+}
+
+window._phxWeekTileTap = function(sessionId, dayName){
+  var state = window._phxWeekPlanState || {};
+  var sessions = state.byDay && state.byDay[dayName] ? state.byDay[dayName] : [];
+  var sess = null;
+  for(var i=0;i<sessions.length;i++){ if(_phxSessionId(sessions[i]) === sessionId){ sess = sessions[i]; break; } }
+  if(!sess) return;
+  // Quick action menu: Open / Change Priority / Mark Skipped / Cancel
+  var pick = window.prompt('What would you like to do?\n  1 — Open this session\n  2 — Cycle priority\n  3 — Mark as skipped\n  (Cancel to dismiss)','1');
+  if(pick === '1'){
+    var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+    if(dayName !== todayName){
+      alert('This session is scheduled for '+dayName+'. Open it from the Today screen on the day.');
+      return;
+    }
+    window._todaySession = sess;
+    window._todaySessions = window._todaySessions || [sess];
+    if(typeof openTodaySession === 'function') openTodaySession();
+  } else if(pick === '2'){
+    window._phxCyclePriority(state.weekN, sessionId);
+    _phxRenderWeekPlan();
+  } else if(pick === '3'){
+    var swaps = _phxLoadWeekSwaps(state.weekStartISO);
+    swaps[sessionId+'|skipped'] = true;
+    _phxSaveWeekSwaps(state.weekStartISO, swaps);
+    _phxRenderWeekPlan();
+  }
+};
+
+window._phxCyclePriority = function(weekNumber, sessionId){
+  // Reverse lookup: find sess from window._todaySessions.
+  var sessList = window._todaySessions || [];
+  var sess = null;
+  for(var i=0;i<sessList.length;i++){ if(_phxSessionId(sessList[i]) === sessionId){ sess = sessList[i]; break; } }
+  if(!sess) return;
+  var current = _phxResolvePriority(sess, weekNumber);
+  var next = current === 'primary' ? 'flexible' : (current === 'flexible' ? 'bonus' : 'primary');
+  try { localStorage.setItem('phoenix_priority_override_'+weekNumber+'_'+sessionId, next); } catch(_e){}
+  if(typeof renderTodaySessionCard === 'function') renderTodaySessionCard();
+  // Refresh the week plan view if it's currently mounted.
+  try {
+    var wp = document.getElementById('screen-week-plan');
+    if(wp && wp.classList && wp.classList.contains('active') && typeof _phxRenderWeekPlan === 'function') _phxRenderWeekPlan();
+  } catch(_e){}
+};
+
 function renderTodaySessionCard(){
   var card=document.getElementById('card-today-session');
   if(!card) return;
@@ -11528,10 +12268,41 @@ function renderTodaySessionCard(){
   var now=new Date();
   var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
 
-  // v4.7.9 TASK 3: collect ALL sessions for today's day (was: .find → first match only)
+  // v4.7.9 TASK 3 / v4.7.34 BUG FIX 2: collect ALL sessions for today's day.
+  // Match by day-name substring (case-insensitive) so "Monday" / "Monday AM" / "monday" all match.
+  var dayLow = dayName.toLowerCase();
   var todaySessions = week.sessions.filter(function(s){
-    return s.day && s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;
+    return s.day && String(s.day).toLowerCase().indexOf(dayLow) >= 0;
   });
+  // v4.7.34 BUG FIX 2: handle programmes that pack two sessions into ONE day entry under
+  // nested keys (am_session / pm_session, or sessions:[...]). Expand them into separate tiles.
+  var expanded = [];
+  todaySessions.forEach(function(s){
+    if(s && (s.am_session || s.pm_session)){
+      if(s.am_session){
+        var am = Object.assign({}, s.am_session);
+        if(!am.day) am.day = s.day;
+        if(!am._slot) am._slot = 'am';
+        expanded.push(am);
+      }
+      if(s.pm_session){
+        var pm = Object.assign({}, s.pm_session);
+        if(!pm.day) pm.day = s.day;
+        if(!pm._slot) pm._slot = 'pm';
+        expanded.push(pm);
+      }
+    } else if(s && Array.isArray(s.sessions) && s.sessions.length){
+      s.sessions.forEach(function(sub, k){
+        var copy = Object.assign({}, sub);
+        if(!copy.day) copy.day = s.day;
+        if(!copy._slot) copy._slot = (k===0 ? 'am' : 'pm');
+        expanded.push(copy);
+      });
+    } else {
+      expanded.push(s);
+    }
+  });
+  todaySessions = expanded;
   if(!todaySessions.length) todaySessions = [week.sessions[0]];
 
   // v4.7.9 TASK 3: order AM before PM when the user assigned slots in the questionnaire.
@@ -11544,19 +12315,29 @@ function renderTodaySessionCard(){
     if(t.indexOf('walk')>=0 || t.indexOf('run')>=0) return 'walk';
     return 'strength';
   }
-  if(todaySessions.length>1 && athlete.fqScheduleMode==='user_assigns' && athlete.fqSessionSchedule){
-    var dayKey = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
-    var slot = athlete.fqSessionSchedule[dayKey];
-    if(slot && typeof slot==='object' && (slot.am || slot.pm)){
-      // Sort: sessions matching AM slot come first, then PM. Unmatched fall to the back.
+  // v4.7.34 BUG FIX 2: explicit AM-first ordering. Use sess._slot if present (from
+  // nested am_session/pm_session), else fall back to user-assigned timetable slots.
+  if(todaySessions.length>1){
+    var hasSlot = todaySessions.some(function(s){ return s && (s._slot==='am' || s._slot==='pm'); });
+    if(hasSlot){
       todaySessions.sort(function(a,b){
-        var ka=_slotKindForSession(a), kb=_slotKindForSession(b);
-        var aIsAm = (ka === slot.am), bIsAm = (kb === slot.am);
-        var aIsPm = (ka === slot.pm), bIsPm = (kb === slot.pm);
-        var aRank = aIsAm ? 0 : (aIsPm ? 1 : 2);
-        var bRank = bIsAm ? 0 : (bIsPm ? 1 : 2);
-        return aRank - bRank;
+        var ar = (a && a._slot==='am') ? 0 : (a && a._slot==='pm' ? 1 : 2);
+        var br = (b && b._slot==='am') ? 0 : (b && b._slot==='pm' ? 1 : 2);
+        return ar - br;
       });
+    } else if(athlete.fqScheduleMode==='user_assigns' && athlete.fqSessionSchedule){
+      var dayKey = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
+      var slot = athlete.fqSessionSchedule[dayKey];
+      if(slot && typeof slot==='object' && (slot.am || slot.pm)){
+        todaySessions.sort(function(a,b){
+          var ka=_slotKindForSession(a), kb=_slotKindForSession(b);
+          var aIsAm = (ka === slot.am), bIsAm = (kb === slot.am);
+          var aIsPm = (ka === slot.pm), bIsPm = (kb === slot.pm);
+          var aRank = aIsAm ? 0 : (aIsPm ? 1 : 2);
+          var bRank = bIsAm ? 0 : (bIsPm ? 1 : 2);
+          return aRank - bRank;
+        });
+      }
     }
   }
 
@@ -11570,8 +12351,23 @@ function renderTodaySessionCard(){
     } else if(sess.exercises && sess.exercises.length){
       movementsSummary = sess.exercises.slice(0,3).map(function(e){return e.name;}).join(' · ');
     }
+    // v4.7.34 BUILD 2: priority badge (PRIMARY / FLEXIBLE / BONUS). Tap cycles for this week.
+    var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+    var prio = _phxResolvePriority(sess, weekN);
+    var ps = _phxPriorityStyle(prio);
+    var sid = _phxSessionId(sess);
+    var badgeHTML =
+      '<div onclick="event.stopPropagation();window._phxCyclePriority('+weekN+',\''+sid+'\');" '+
+      'style="position:absolute;top:10px;right:10px;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:'+ps.color+';border:1px solid '+ps.border+';padding:4px 8px;border-radius:4px;background:rgba(0,0,0,0.45);cursor:pointer;z-index:2;">'+
+      ps.label+'</div>';
+    // Update tile border to reflect priority.
+    if(prio === 'primary'){ targetCard.style.borderLeftColor = 'var(--gold)'; }
+    else if(prio === 'flexible'){ targetCard.style.borderLeftColor = 'var(--border2)'; }
+    else { targetCard.style.borderLeftColor = 'var(--border)'; }
+    targetCard.style.position = 'relative';
     var inner = targetCard.querySelector('.game-card-inner');
     inner.innerHTML =
+      badgeHTML+
       '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">'+(slotLabel||'Your Programme')+'</span></div>'+
       '<div class="game-card-title" '+(idx===0?'id="today-session-name"':'')+' style="font-size:28px;">'+(sess.session_type||'Training')+'</div>'+
       '<div class="game-card-sub" '+(idx===0?'id="today-session-detail"':'')+'>'+
@@ -14159,6 +14955,18 @@ function openTodaySession(){
     }
     // If we couldn't build a WOD object from the session, fall through to the strength renderer
     // so the athlete still sees something rather than a blank screen.
+  }
+  // v4.7.34 BUG FIX 3: AI sessions of type "core" route to the Core daily picker so the
+  // user gets a real session screen instead of the empty strength renderer (which expects
+  // sess.exercises[]). Core sessions store movements under sess.core.movements which the
+  // strength path doesn't read.
+  if(sessTypeStr === 'core' || sessTypeStr.indexOf('core')>=0){
+    if(typeof generateDailyCore === 'function'){ generateDailyCore(); return; }
+    if(typeof openCoreSession === 'function'){ openCoreSession(1); return; }
+  }
+  // Walk / Run sessions in the AI programme route to the Walk modal/log screen.
+  if(sessTypeStr === 'walk' || sessTypeStr === 'run' || sessTypeStr.indexOf('walk')>=0 || sessTypeStr.indexOf('run')>=0){
+    if(typeof openWalkLog === 'function'){ openWalkLog(); return; }
   }
   // Render the AI session into the session screen
   var body=document.getElementById('session-body-content');

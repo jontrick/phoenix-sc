@@ -7553,6 +7553,32 @@ Progressive load rules (apply to primary lifts only):
 CRITICAL: use next_week_schedule.days (or fall back to athlete.fqTrainingDays) for the
 sessions in the new week. Never use a day the athlete didn't pick.
 
+BLOCK HISTORY: block_history contains all session data from the start of this block
+(block_history.weeks[] = per-week summary; block_history.trends = aggregates). Read this
+BEFORE generating next week. Decisions:
+
+- Lift stalled (less than 2.5kg progress in 3 weeks per primary_lifts entry) → add an
+  intensification technique on that lift (pause reps, tempo eccentric, drop sets, cluster sets).
+  Do NOT just keep adding load to a stalled lift.
+
+- avg_rpe on a specific lift consistently above 8.5 across 2+ weeks → DO NOT increase load.
+  Add a deload set (back-off set at 80% of working weight) instead.
+
+- Block completion_rate drops below 75% for 2 consecutive weeks → reduce total weekly
+  volume next week (drop 1 session OR drop 1 set per primary lift).
+
+- block_history.trends.injury_flags contains 'elbow' / 'shoulder' / etc. (or
+  elbow_mentions > 0) → check if movements that load that joint are still in the programme
+  and substitute (e.g. elbow → swap dips for floor press, swap close-grip bench for
+  neutral-grip DB press).
+
+- ALWAYS reference actual logged max weights from primary_lifts when prescribing next
+  week's loads. e.g. if Box Squat hit 110kg week 1 and 112.5kg week 2, prescribe next
+  week's working sets from 112.5kg, not from athlete.sq 1RM. Never guess.
+
+- block_history.trends.volume_trend = 'decreasing' → likely fatigue accumulation. Consider
+  a deload week if RPE is also high.
+
 Output format (weekly regeneration only):
 {
   "week": {
@@ -7784,6 +7810,9 @@ function buildAthleteProfile(trigger, checkIn){
     // v4.7.37 FIX 2: weekly-regeneration extras. Surfaced to the prompt's WEEKLY_REGENERATION
     // section so the coach can apply progressive load rules without re-emitting the framework.
     block_framework: (a.aiProgramme && a.aiProgramme.block_framework) || null,
+    // v4.7.37 hotfix: full-block history (every week's sessions, RPE, primary-lift progression,
+    // injury flags). The WEEKLY REGENERATION → BLOCK HISTORY rules use this to ground decisions.
+    block_history: (checkIn && checkIn.block_history) || null,
     last_week_sessions: (checkIn && checkIn.last_week_sessions) || null,
     last_week_rpe: (checkIn && checkIn.last_week_rpe) || null,
     last_week_completion: (checkIn && checkIn.last_week_completion) || null,
@@ -12238,61 +12267,221 @@ async function _phxBuildWeeklyRegenContext(chosenDays){
   var nextN  = weekN + 1;
   var prog   = (athlete && athlete.aiProgramme) || {};
   var lastRow= window._phxLastCheckinRow || null;
-  // Pull last week's session log + RPE summary from Supabase.
-  var lastSessions = [];
-  var avgRpe = null;
-  var completionPct = null;
-  var weeklyRpePerExercise = {};
+  // v4.7.37 hotfix: block-wide history. Anchor = earliest of agogeStartDate / aiProgrammeDate.
+  // Replaces the old 7-day window so the prompt sees the full progression curve, not just last week.
+  var blockStartMs = Date.now();
+  if(athlete && athlete.agogeStartDate){
+    var agogeMs = new Date(athlete.agogeStartDate).getTime();
+    if(isFinite(agogeMs)) blockStartMs = Math.min(blockStartMs, agogeMs);
+  }
+  if(athlete && athlete.aiProgrammeDate){
+    var progMs = new Date(athlete.aiProgrammeDate).getTime();
+    if(isFinite(progMs)) blockStartMs = Math.min(blockStartMs, progMs);
+  }
+  var blockStart = new Date(blockStartMs);
+  var blockStartISO = blockStart.toISOString();
+  function _phxWeekIndex(dateLike){
+    var t = new Date(dateLike).getTime();
+    if(!isFinite(t)) return 1;
+    return Math.max(1, Math.floor((t - blockStartMs) / (7*86400000)) + 1);
+  }
+  // Per-week bucket factory.
+  function _newBucket(n){
+    return {
+      week_number: n,
+      sessions_completed: 0,
+      sessions_planned: (prog.week && prog.week.sessions && prog.week.sessions.length) || null,
+      total_volume_kg: 0,
+      avg_rpe: null,
+      _rpeSum: 0, _rpeN: 0,
+      _exMap: {} // {name: {weights:[], rpes:[], sets:0, totalVol:0}}
+    };
+  }
+  var weeksByN = {};
+  var lastSessions = [];     // back-compat — last 7 days only
+  var sevenDaysAgoMs = Date.now() - 7*86400000;
+  var checkinNiggles = [];   // joined niggle/coach notes across all weekly_checkins
   try {
     if(typeof sb !== 'undefined' && currentSession && currentSession.user){
-      var since = new Date(Date.now() - 7*86400000).toISOString();
+      // 1) Sessions across the WHOLE block.
       var sRes = await sb.from('sessions')
         .select('session_type,session_name,status,started_at,duration_seconds,total_volume_kg,rpe_session,details')
         .eq('user_id', currentSession.user.id)
-        .gte('started_at', since)
+        .gte('started_at', blockStartISO)
         .order('started_at', {ascending:true});
       if(!sRes.error && sRes.data){
-        lastSessions = sRes.data;
-        var done = sRes.data.filter(function(r){ return r.status === 'completed'; }).length;
-        var planned = (prog.week && prog.week.sessions && prog.week.sessions.length) || done;
-        if(planned > 0) completionPct = Math.round((done / planned) * 100);
+        sRes.data.forEach(function(r){
+          var w = _phxWeekIndex(r.started_at);
+          if(!weeksByN[w]) weeksByN[w] = _newBucket(w);
+          if(r.status === 'completed') weeksByN[w].sessions_completed += 1;
+          // Last-7-day window for legacy compat.
+          if(new Date(r.started_at).getTime() >= sevenDaysAgoMs){
+            lastSessions.push(r);
+          }
+        });
       }
+      // 2) Set logs across the WHOLE block — no RPE filter (we need max weights too).
       var slRes = await sb.from('set_logs')
         .select('exercise_name,weight_kg,reps,rpe,logged_at')
         .eq('user_id', currentSession.user.id)
-        .gte('logged_at', since)
-        .not('rpe','is',null);
-      if(!slRes.error && slRes.data && slRes.data.length){
-        var rpeSum = 0, rpeN = 0;
+        .gte('logged_at', blockStartISO);
+      if(!slRes.error && slRes.data){
         slRes.data.forEach(function(r){
-          if(r.rpe == null) return;
-          rpeSum += Number(r.rpe); rpeN++;
-          var k = r.exercise_name || 'unknown';
-          if(!weeklyRpePerExercise[k]) weeklyRpePerExercise[k] = {sum:0, n:0};
-          weeklyRpePerExercise[k].sum += Number(r.rpe);
-          weeklyRpePerExercise[k].n  += 1;
+          var w = _phxWeekIndex(r.logged_at);
+          if(!weeksByN[w]) weeksByN[w] = _newBucket(w);
+          var bucket = weeksByN[w];
+          var name = r.exercise_name || 'Unknown';
+          if(!bucket._exMap[name]) bucket._exMap[name] = {weights:[], rpes:[], sets:0, totalVol:0};
+          var ex = bucket._exMap[name];
+          ex.sets += 1;
+          var kg = (r.weight_kg != null) ? Number(r.weight_kg) : 0;
+          var reps = (r.reps != null) ? Number(r.reps) : 0;
+          if(kg > 0) ex.weights.push(kg);
+          ex.totalVol += (kg * reps);
+          bucket.total_volume_kg += (kg * reps);
+          if(r.rpe != null){
+            var v = Number(r.rpe);
+            ex.rpes.push(v);
+            bucket._rpeSum += v;
+            bucket._rpeN += 1;
+          }
         });
-        if(rpeN > 0) avgRpe = Math.round((rpeSum / rpeN) * 10) / 10;
+      }
+      // 3) Weekly check-ins for niggle / injury detection.
+      var ciRes = await sb.from('weekly_checkins')
+        .select('week_number,niggle_notes,coach_notes,submitted_at')
+        .eq('user_id', currentSession.user.id)
+        .gte('submitted_at', blockStartISO)
+        .order('submitted_at', {ascending:true});
+      if(!ciRes.error && ciRes.data){
+        ciRes.data.forEach(function(c){
+          var combined = ((c.niggle_notes||'') + ' ' + (c.coach_notes||'')).trim();
+          if(combined) checkinNiggles.push({week_number: c.week_number, text: combined});
+        });
       }
     }
-  } catch(_e){ console.warn('[PHX] weekly regen context fetch failed:', _e); }
-  // Compress the per-exercise RPE map down to {exercise: avg}.
-  var rpeByExercise = {};
-  Object.keys(weeklyRpePerExercise).forEach(function(k){
-    var v = weeklyRpePerExercise[k];
-    if(v.n > 0) rpeByExercise[k] = Math.round((v.sum / v.n) * 10) / 10;
+  } catch(_e){ console.warn('[PHX] block history fetch failed:', _e); }
+  // Materialise weeks → array sorted by week_number.
+  var weeks = Object.keys(weeksByN).map(function(k){ return weeksByN[k]; }).sort(function(a,b){ return a.week_number - b.week_number; });
+  weeks.forEach(function(b){
+    b.avg_rpe = b._rpeN > 0 ? Math.round((b._rpeSum / b._rpeN) * 10) / 10 : null;
+    b.total_volume_kg = Math.round(b.total_volume_kg);
+    var exNames = Object.keys(b._exMap);
+    b.exercises = exNames.map(function(n){
+      var ex = b._exMap[n];
+      var maxW = ex.weights.length ? Math.max.apply(null, ex.weights) : 0;
+      var avgR = ex.rpes.length ? (ex.rpes.reduce(function(a,c){return a+c;},0) / ex.rpes.length) : null;
+      return {
+        name: n,
+        max_weight: Math.round(maxW * 10) / 10,
+        avg_rpe: avgR != null ? Math.round(avgR * 10) / 10 : null,
+        sets_completed: ex.sets,
+        total_volume_kg: Math.round(ex.totalVol)
+      };
+    }).sort(function(a,c){ return c.sets_completed - a.sets_completed; });
+    delete b._rpeSum; delete b._rpeN; delete b._exMap;
   });
+  // ---- Trends ----
+  var totalDone = weeks.reduce(function(a,w){ return a + w.sessions_completed; }, 0);
+  var totalPlanned = weeks.reduce(function(a,w){ return a + (w.sessions_planned || 0); }, 0);
+  var completionRate = totalPlanned > 0 ? Math.round((totalDone / totalPlanned) * 100) / 100 : null;
+  // Volume trend: avg of last 2 weeks vs avg of first 2 weeks (or single-week comparison if shorter).
+  var volTrend = 'flat';
+  if(weeks.length >= 2){
+    var firstHalf = weeks.slice(0, Math.max(1, Math.min(2, Math.floor(weeks.length/2))));
+    var lastHalf  = weeks.slice(-Math.max(1, Math.min(2, Math.floor(weeks.length/2))));
+    var firstAvg = firstHalf.reduce(function(a,w){ return a + w.total_volume_kg; }, 0) / firstHalf.length;
+    var lastAvg  = lastHalf.reduce(function(a,w){ return a + w.total_volume_kg; }, 0) / lastHalf.length;
+    if(firstAvg > 0){
+      var pct = (lastAvg - firstAvg) / firstAvg;
+      if(pct >  0.05) volTrend = 'increasing';
+      else if(pct < -0.05) volTrend = 'decreasing';
+    }
+  }
+  // Primary lifts: any exercise that appeared in 2+ weeks. Per-week max weight + progression string.
+  var perExWeekMax = {};
+  weeks.forEach(function(w){
+    w.exercises.forEach(function(ex){
+      if(!ex.max_weight || ex.max_weight <= 0) return;
+      if(!perExWeekMax[ex.name]) perExWeekMax[ex.name] = {};
+      perExWeekMax[ex.name]['week'+w.week_number] = ex.max_weight;
+    });
+  });
+  var primaryLifts = {};
+  Object.keys(perExWeekMax).forEach(function(name){
+    var weekMap = perExWeekMax[name];
+    var keys = Object.keys(weekMap).sort(function(a,b){
+      return parseInt(a.slice(4)) - parseInt(b.slice(4));
+    });
+    if(keys.length < 2) return; // need at least 2 weeks of data to assess progression
+    var firstKey = keys[0];
+    var lastKey  = keys[keys.length-1];
+    var first = weekMap[firstKey];
+    var last  = weekMap[lastKey];
+    var weeksSpan = parseInt(lastKey.slice(4)) - parseInt(firstKey.slice(4));
+    var delta = Math.round((last - first) * 10) / 10;
+    var progression;
+    if(weeksSpan <= 0) progression = (delta>=0?'+':'')+delta+'kg this week';
+    else {
+      var perWeek = Math.round((delta / weeksSpan) * 10) / 10;
+      progression = (delta>=0?'+':'')+delta+'kg over '+weeksSpan+' weeks ('+(perWeek>=0?'+':'')+perWeek+'kg/week)';
+    }
+    var entry = Object.assign({}, weekMap, {progression: progression});
+    primaryLifts[name] = entry;
+  });
+  // Injury flags from niggle/coach notes — token scan across the full block.
+  var INJURY_TOKENS = ['elbow','knee','shoulder','back','wrist','hip','ankle','neck','hamstring','quad','calf','groin','foot'];
+  var injuryFlags = [];
+  var elbowMentions = 0;
+  var seenTokens = {};
+  checkinNiggles.forEach(function(c){
+    var lower = String(c.text).toLowerCase();
+    if(/\belbow\b/.test(lower)) elbowMentions++;
+    INJURY_TOKENS.forEach(function(tok){
+      var re = new RegExp('\\b'+tok+'\\b','i');
+      if(re.test(lower) && !seenTokens[tok]){
+        seenTokens[tok] = true;
+        injuryFlags.push(tok);
+      }
+    });
+  });
+  var blockData = {
+    block_start: blockStartISO,
+    weeks: weeks,
+    trends: {
+      completion_rate: completionRate,
+      volume_trend: volTrend,
+      primary_lifts: primaryLifts,
+      injury_flags: injuryFlags,
+      elbow_mentions: elbowMentions
+    }
+  };
+  // Back-compat last-week summary (kept so the WEEKLY REGENERATION rules that reference
+  // last_week_rpe / last_week_completion still resolve cleanly).
+  var lastWeekBucket = weeks.length ? weeks[weeks.length-1] : null;
+  var lastWeekRpeByExercise = {};
+  if(lastWeekBucket){
+    lastWeekBucket.exercises.forEach(function(ex){
+      if(ex.avg_rpe != null) lastWeekRpeByExercise[ex.name] = ex.avg_rpe;
+    });
+  }
+  var lastWeekCompletionPct = null;
+  if(lastWeekBucket && lastWeekBucket.sessions_planned){
+    lastWeekCompletionPct = Math.round((lastWeekBucket.sessions_completed / lastWeekBucket.sessions_planned) * 100);
+  }
   // Days until July 4 of the relevant year (Combine target).
   var today = new Date();
   var combine = new Date(today.getFullYear(), 6, 4);  // July is month 6 (0-indexed)
   if(combine < today) combine = new Date(today.getFullYear()+1, 6, 4);
   var daysToCombine = Math.ceil((combine - today) / 86400000);
+  console.log('[PHX] weekly regen block_history:', blockData);
   return {
     regeneration_type: 'weekly',
     week_number: nextN,
+    block_history: blockData,
     last_week_sessions: lastSessions,
-    last_week_rpe: {avg: avgRpe, by_exercise: rpeByExercise},
-    last_week_completion: {completion_pct: completionPct},
+    last_week_rpe: lastWeekBucket ? {avg: lastWeekBucket.avg_rpe, by_exercise: lastWeekRpeByExercise} : {avg: null, by_exercise: {}},
+    last_week_completion: {completion_pct: lastWeekCompletionPct},
     checkin_data: lastRow ? {
       feeling: lastRow.feeling_score,
       sleep: lastRow.sleep_score,

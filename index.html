@@ -3349,7 +3349,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.35';
+var APP_VERSION='4.7.37';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7427,11 +7427,27 @@ PRO TIER: Full personalisation. No category — individual programme built from 
 OUTPUT FORMAT
 ================================================================
 
+v4.7.37 architecture: block_framework defines the WHOLE block (12+ weeks). The week
+field carries ONLY the current week. Weekly regeneration calls produce just a new week
+object — the framework is preserved across the block. Initial generation MUST include
+both block_framework and the first week.
+
 Return ONLY valid JSON, no other text, no markdown fences:
 {
+  "block_framework": {
+    "total_weeks": 12,
+    "phases": [
+      {"weeks_start": 1,  "weeks_end": 4,  "focus": "Hypertrophy + base — accumulate volume, refine movement"},
+      {"weeks_start": 5,  "weeks_end": 8,  "focus": "Strength — load progression, intensity rises, volume holds"},
+      {"weeks_start": 9,  "weeks_end": 12, "focus": "Peak / test — taper volume, hit targets, expose 1RMs"}
+    ],
+    "primary_lifts": ["ME Lower", "ME Upper", "DE Lower", "DE Upper"],
+    "weekly_march_km": 28,
+    "training_days": ["Tuesday", "Thursday", "Saturday", "Sunday"]
+  },
   "programme_summary": {
     "total_weeks": 12,
-    "current_phase": "Phase name",
+    "current_phase": "Phase name (matches the phase week 1 falls into)",
     "phase_goal": "What this phase achieves",
     "athlete_profile": "Profile 1/2/3/4 — brief description",
     "methodology_applied": "Which methodology backbone and why",
@@ -7454,7 +7470,7 @@ Return ONLY valid JSON, no other text, no markdown fences:
     "week_number": 1,
     "sessions": [
       {
-        "day": "Monday",
+        "day": "Tuesday",
         "session_type": "ME Lower",
         "duration_min": 60,
         "priority": "primary",
@@ -7473,6 +7489,82 @@ Return ONLY valid JSON, no other text, no markdown fences:
   },
   "flags": []
 }
+
+================================================================
+CRITICAL — SESSION DAYS (REQUIRED)
+================================================================
+
+Use athlete.fqTrainingDays for session scheduling. If athlete trains
+Tuesday / Thursday / Saturday / Sunday — every session in week.sessions MUST fall
+on one of those days. Never assign sessions to days the athlete has not nominated.
+
+- block_framework.training_days MUST equal athlete.fqTrainingDays exactly (same set + order).
+- Map the primary sessions (ME Lower / ME Upper / DE Lower / DE Upper) to the athlete's
+  available days in order. Two-a-days (am+pm) are allowed only if athlete.fqSessionSchedule
+  marks both slots on a day.
+- If fqTrainingDays is empty/missing, fall back to fqDays — but FLAG this in flags array
+  ("training_days_missing — defaulted to fqDays count, ask athlete to confirm").
+- Never default to Mon/Tue/Thu/Fri unless the athlete has nominated exactly those four.
+
+The runtime enforces this on the Today screen: a session whose day doesn't match the
+athlete's nominated days will not render. Honour the contract here.
+
+WORKED EXAMPLES:
+
+athlete.fqTrainingDays = ["Tuesday","Thursday","Saturday","Sunday"]
+  ✓ week.sessions[*].day MUST be one of: Tuesday, Thursday, Saturday, Sunday
+  ✗ NEVER assign Monday, Wednesday, or Friday — those days were not nominated
+
+athlete.fqTrainingDays = ["Monday","Tuesday","Wednesday","Thursday","Friday"]
+  ✓ Sessions only on Mon/Tue/Wed/Thu/Fri. Saturday and Sunday are rest days.
+
+athlete.fqTrainingDays = []  (empty / missing)
+  → Use fqDays as fallback, BUT also add to flags: "training_days_missing — defaulted to fqDays count, ask athlete to confirm"
+
+athlete.fqTrainingDays = ["Monday","Wednesday","Friday"]  (3 days)
+  ✓ Three primary lifts on Mon/Wed/Fri. No 4th primary even if the methodology suggests one.
+  ✓ If 4 primary lifts are required by the framework, double up two on the same day (am+pm) ONLY when fqSessionSchedule allows.
+
+The training_days array IS the schedule. Do not invent additional days. Do not drop days.
+Map sessions in the order primary_lifts appears (e.g. ME Lower → first available day,
+ME Upper → second, DE Lower → third, DE Upper → fourth).
+
+================================================================
+WEEKLY REGENERATION
+================================================================
+
+When the inbound JSON contains regeneration_type === "weekly", you are NOT building a
+new block. Generate ONLY the next week (week_number = N+1) and return a payload with a
+"week" object only. Do NOT re-emit block_framework, programme_summary, or nutrition.
+The app already has those.
+
+Use the inbound block_framework to determine what phase week N+1 falls in and what the
+focus should be (e.g. weeks 5-8 = Strength phase → load progression).
+
+Progressive load rules (apply to primary lifts only):
+- last_week.avg_rpe < 7  → increase load 2.5–5kg on primary lifts (under-stimulated)
+- last_week.avg_rpe 7–8  → keep load, ADD 1 set per primary lift (volume rises)
+- last_week.avg_rpe > 8  → keep load, REMOVE 1 set per primary lift (recovery dominant)
+- last_week.completion_pct < 70%  → reduce total sessions for the new week by 1
+- checkin_data.niggle_notes mentions a body part → remove or substitute movements that load it
+- checkin_data.next_week_requests text → implement the requested change (within reason)
+- checkin_data.continue_programme === false → re-balance the week toward what they're asking for
+
+CRITICAL: use next_week_schedule.days (or fall back to athlete.fqTrainingDays) for the
+sessions in the new week. Never use a day the athlete didn't pick.
+
+Output format (weekly regeneration only):
+{
+  "week": {
+    "week_number": <N+1>,
+    "sessions": [ ... ]
+  },
+  "flags": []
+}
+
+The runtime merges this week into the existing aiProgramme.week and bumps currentWeek.
+Initial generation continues to return the full payload (block_framework + week + summary
++ nutrition).
 
 ================================================================
 SESSION PRIORITY (REQUIRED — every session in the week array)
@@ -7598,8 +7690,23 @@ function buildAthleteProfile(trigger, checkIn){
       return s.am||s.pm;
     }).length || 4;
   }
+  // v4.7.37 FIX 3 (+ hotfix): training_days is REQUIRED by the prompt.
+  // Priority: fqTrainingDays → fqDays → derived from fqAvailableSlots in calendar order
+  // (via the shared _phxComputeTrainingDays helper, NOT Object.keys insertion order).
+  var trainingDays = [];
+  if(Array.isArray(a.fqTrainingDays) && a.fqTrainingDays.length){
+    trainingDays = a.fqTrainingDays.slice();
+  } else if(Array.isArray(a.fqDays) && a.fqDays.length){
+    trainingDays = a.fqDays.slice();
+  } else if(a.fqAvailableSlots && typeof _phxComputeTrainingDays === 'function'){
+    trainingDays = _phxComputeTrainingDays(a.fqAvailableSlots);
+  }
+  console.log('[PHX] buildAthleteProfile training_days resolved to:', trainingDays);
   return JSON.stringify({
     trigger: trigger || 'initial_build',
+    // v4.7.37 FIX 2: regeneration_type drives the WEEKLY_REGENERATION branch in the prompt.
+    // 'weekly' means: return only a week object (no framework/summary/nutrition).
+    regeneration_type: (trigger === 'weekly' || (checkIn && checkIn.regeneration_type === 'weekly')) ? 'weekly' : 'initial',
     athlete: {
       name: a.name || 'Athlete',
       age: a.dob ? (new Date().getFullYear() - parseInt(a.dob)) : (a.age || 30),
@@ -7620,6 +7727,9 @@ function buildAthleteProfile(trigger, checkIn){
       schedule_mode: a.fqScheduleMode || 'coach_assigns',
       available_slots: a.fqAvailableSlots || null,
       session_schedule: a.fqSessionSchedule || null,
+      // v4.7.37 FIX 3: explicit training-day list. The prompt's CRITICAL — SESSION DAYS
+      // section requires this. Empty array → prompt flags "training_days_missing".
+      training_days: trainingDays,
       goal: (a.fqGoals && a.fqGoals[0]) || 'general_fitness',
       goal_secondary: (a.fqGoals && a.fqGoals[1]) || null,
       goals_all: a.fqGoals || [],
@@ -7670,7 +7780,15 @@ function buildAthleteProfile(trigger, checkIn){
     },
     check_in: checkIn || null,
     current_programme_week: a.currentWeek || 0,
-    previous_block: a.previousBlock || null
+    previous_block: a.previousBlock || null,
+    // v4.7.37 FIX 2: weekly-regeneration extras. Surfaced to the prompt's WEEKLY_REGENERATION
+    // section so the coach can apply progressive load rules without re-emitting the framework.
+    block_framework: (a.aiProgramme && a.aiProgramme.block_framework) || null,
+    last_week_sessions: (checkIn && checkIn.last_week_sessions) || null,
+    last_week_rpe: (checkIn && checkIn.last_week_rpe) || null,
+    last_week_completion: (checkIn && checkIn.last_week_completion) || null,
+    next_week_schedule: (checkIn && checkIn.next_week_schedule) || null,
+    days_to_combine: (checkIn && checkIn.days_to_combine) != null ? checkIn.days_to_combine : null
   });
 }
 
@@ -7794,12 +7912,32 @@ async function generateProgramme(trigger, checkIn){
 }
 
 function onProgrammeGenerated(programme, trigger){
-  // Save programme to athlete profile
+  // v4.7.37 FIX 2: weekly regeneration returns a week-only payload. Merge into the existing
+  // programme rather than overwriting framework / summary / nutrition.
+  var isWeekly = (trigger === 'weekly');
+  var existing = (athlete && athlete.aiProgramme) || null;
+  var merged;
+  var nextWeekN;
+  if(isWeekly && existing){
+    merged = Object.assign({}, existing, {
+      week: programme.week || existing.week,
+      // Preserve framework / summary / nutrition from the existing programme.
+      block_framework: existing.block_framework || programme.block_framework || null,
+      programme_summary: existing.programme_summary || programme.programme_summary || null,
+      nutrition: existing.nutrition || programme.nutrition || null,
+      // New flags from the regen response replace previous flags (they're per-week).
+      flags: programme.flags || []
+    });
+    nextWeekN = (programme.week && programme.week.week_number) || ((athlete.currentWeek || 1) + 1);
+  } else {
+    merged = programme;
+    nextWeekN = (programme.week && programme.week.week_number) || 1;
+  }
   var updated = Object.assign({}, athlete, {
-    aiProgramme: programme,
+    aiProgramme: merged,
     aiProgrammeDate: new Date().toISOString(),
     aiProgrammeTrigger: trigger,
-    currentWeek: 1
+    currentWeek: nextWeekN
   });
   // v4.7.23 BUILD 4: stamp the Agoge start date when the athlete is on the agoge or both target
   // and we don't already have one. This is the anchor used for week-counting and march cumulative
@@ -7811,8 +7949,14 @@ function onProgrammeGenerated(programme, trigger){
     updated.agogeStartDate = new Date().toISOString();
   }
   saveAthlete(updated);
-  // Show programme reveal screen
-  showProgrammeReveal(programme);
+  if(isWeekly){
+    // v4.7.37 FIX 2: weekly regen → straight back to Today, no reveal screen.
+    if(typeof renderTodayScreen === 'function') renderTodayScreen();
+    if(typeof navTo === 'function') navTo('today');
+    return;
+  }
+  // Initial generation → show the full reveal screen.
+  showProgrammeReveal(merged);
 }
 
 function onProgrammeError(msg){
@@ -11978,12 +12122,191 @@ async function submitWeeklyCheckin(){
       }
       if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
     } catch(_e){}
+    // v4.7.37 FIX 2: hand off to the schedule-adjustment screen → next-week generation.
+    // Stash the freshly-submitted check-in payload so the regen call can ground the prompt.
+    window._phxLastCheckinRow = row;
+    if(typeof _phxOpenWeeklyScheduleAdjust === 'function'){
+      _phxOpenWeeklyScheduleAdjust();
+      return;
+    }
+    // Fallback (helper missing for some reason) — at least the check-in was saved.
     alert('Check-in submitted. Your coach will review this before building next week.');
     navTo('today');
   } catch(e){
     console.error('[PHX] submitWeeklyCheckin error:', e);
     alert('Submit failed. Try again.');
   }
+}
+
+// ====== v4.7.37 FIX 2: weekly schedule adjustment + next-week regeneration ======
+//
+// Flow: weekly check-in submit → _phxOpenWeeklyScheduleAdjust() shows a tile-based
+// day picker pre-filled with last week's days. User confirms or adjusts → we call
+// generateProgramme('weekly', ctx) where ctx carries last week's metrics + the
+// chosen schedule. The prompt's WEEKLY_REGENERATION section returns just a "week"
+// object which onProgrammeGenerated merges into athlete.aiProgramme.
+
+function _phxAllDays(){ return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']; }
+
+function _phxLastWeekDaysFromProgramme(){
+  var prog = (athlete && athlete.aiProgramme) || {};
+  var sessions = (prog.week && prog.week.sessions) || [];
+  var seen = {};
+  sessions.forEach(function(s){
+    if(!s || !s.day) return;
+    var d = String(s.day).replace(/\s+(am|pm).*$/i,'').trim();
+    var canon = d.charAt(0).toUpperCase()+d.slice(1).toLowerCase();
+    if(_phxAllDays().indexOf(canon) >= 0) seen[canon] = true;
+  });
+  // Fallback: athlete.fqTrainingDays / fqDays.
+  if(!Object.keys(seen).length){
+    var src = (Array.isArray(athlete && athlete.fqTrainingDays) ? athlete.fqTrainingDays
+             : Array.isArray(athlete && athlete.fqDays) ? athlete.fqDays : []);
+    src.forEach(function(d){ if(d){ var c=String(d); seen[c.charAt(0).toUpperCase()+c.slice(1).toLowerCase()] = true; } });
+  }
+  return _phxAllDays().filter(function(d){ return seen[d]; });
+}
+
+window._phxOpenWeeklyScheduleAdjust = function(){
+  var existing = document.getElementById('phx-week-adjust');
+  if(existing) existing.remove();
+  var preselected = {};
+  _phxLastWeekDaysFromProgramme().forEach(function(d){ preselected[d] = true; });
+  window._phxWeekAdjustState = {selected: preselected};
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-week-adjust';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9000;overflow-y:auto;display:flex;flex-direction:column;';
+  var weekN = (athlete && athlete.currentWeek) || 1;
+  var nextN = weekN + 1;
+  overlay.innerHTML =
+    '<div class="app-header" style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);">'+
+      '<div class="icon-btn" onclick="document.getElementById(\'phx-week-adjust\').remove();navTo(\'today\')" style="cursor:pointer;"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></div>'+
+      '<div style="flex:1;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text);">Plan Week '+nextN+'</div>'+
+      '<div style="width:36px;"></div>'+
+    '</div>'+
+    '<div style="padding:24px 20px;flex:1;">'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Schedule Adjustment</div>'+
+      '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:6px;">Which days are you training?</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Tap to toggle. Pre-filled with last week\'s schedule. Your coach uses this to build week '+nextN+'.</div>'+
+      '<div id="phx-wa-tiles" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:24px;"></div>'+
+      '<button id="phx-wa-build" class="btn-primary" style="width:100%;padding:16px;">Build Week '+nextN+' →</button>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  _phxRenderWeekAdjustTiles();
+  document.getElementById('phx-wa-build').addEventListener('click', _phxConfirmWeeklyAdjust);
+};
+
+function _phxRenderWeekAdjustTiles(){
+  var wrap = document.getElementById('phx-wa-tiles');
+  if(!wrap) return;
+  var sel = (window._phxWeekAdjustState||{}).selected || {};
+  var days = _phxAllDays();
+  wrap.innerHTML = days.map(function(d){
+    var on = !!sel[d];
+    var border = on ? 'var(--gold)' : 'var(--border2)';
+    var bg     = on ? 'rgba(200,150,62,0.10)' : 'var(--bg2)';
+    var color  = on ? 'var(--gold)' : 'var(--text2)';
+    return '<div onclick="window._phxToggleWeekAdjustDay(\''+d+'\')" style="cursor:pointer;background:'+bg+';border:1px solid '+border+';border-radius:var(--radius);padding:14px 12px;text-align:center;font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:'+color+';">'+d.slice(0,3)+'</div>';
+  }).join('');
+}
+
+window._phxToggleWeekAdjustDay = function(day){
+  var st = window._phxWeekAdjustState = window._phxWeekAdjustState || {selected:{}};
+  st.selected[day] = !st.selected[day];
+  _phxRenderWeekAdjustTiles();
+};
+
+async function _phxConfirmWeeklyAdjust(){
+  var st = window._phxWeekAdjustState || {selected:{}};
+  var chosen = _phxAllDays().filter(function(d){ return !!st.selected[d]; });
+  if(!chosen.length){
+    alert('Pick at least one training day.');
+    return;
+  }
+  var btn = document.getElementById('phx-wa-build');
+  if(btn){ btn.disabled = true; btn.textContent = 'Building…'; }
+  // Build the regen context from the just-submitted check-in row + Supabase last-week data.
+  var ctx = await _phxBuildWeeklyRegenContext(chosen);
+  // Drop the adjust overlay; generateProgramme shows its own loading screen.
+  var overlay = document.getElementById('phx-week-adjust');
+  if(overlay) overlay.remove();
+  generateProgramme('weekly', ctx);
+}
+
+async function _phxBuildWeeklyRegenContext(chosenDays){
+  var weekN  = (athlete && athlete.currentWeek) || 1;
+  var nextN  = weekN + 1;
+  var prog   = (athlete && athlete.aiProgramme) || {};
+  var lastRow= window._phxLastCheckinRow || null;
+  // Pull last week's session log + RPE summary from Supabase.
+  var lastSessions = [];
+  var avgRpe = null;
+  var completionPct = null;
+  var weeklyRpePerExercise = {};
+  try {
+    if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+      var since = new Date(Date.now() - 7*86400000).toISOString();
+      var sRes = await sb.from('sessions')
+        .select('session_type,session_name,status,started_at,duration_seconds,total_volume_kg,rpe_session,details')
+        .eq('user_id', currentSession.user.id)
+        .gte('started_at', since)
+        .order('started_at', {ascending:true});
+      if(!sRes.error && sRes.data){
+        lastSessions = sRes.data;
+        var done = sRes.data.filter(function(r){ return r.status === 'completed'; }).length;
+        var planned = (prog.week && prog.week.sessions && prog.week.sessions.length) || done;
+        if(planned > 0) completionPct = Math.round((done / planned) * 100);
+      }
+      var slRes = await sb.from('set_logs')
+        .select('exercise_name,weight_kg,reps,rpe,logged_at')
+        .eq('user_id', currentSession.user.id)
+        .gte('logged_at', since)
+        .not('rpe','is',null);
+      if(!slRes.error && slRes.data && slRes.data.length){
+        var rpeSum = 0, rpeN = 0;
+        slRes.data.forEach(function(r){
+          if(r.rpe == null) return;
+          rpeSum += Number(r.rpe); rpeN++;
+          var k = r.exercise_name || 'unknown';
+          if(!weeklyRpePerExercise[k]) weeklyRpePerExercise[k] = {sum:0, n:0};
+          weeklyRpePerExercise[k].sum += Number(r.rpe);
+          weeklyRpePerExercise[k].n  += 1;
+        });
+        if(rpeN > 0) avgRpe = Math.round((rpeSum / rpeN) * 10) / 10;
+      }
+    }
+  } catch(_e){ console.warn('[PHX] weekly regen context fetch failed:', _e); }
+  // Compress the per-exercise RPE map down to {exercise: avg}.
+  var rpeByExercise = {};
+  Object.keys(weeklyRpePerExercise).forEach(function(k){
+    var v = weeklyRpePerExercise[k];
+    if(v.n > 0) rpeByExercise[k] = Math.round((v.sum / v.n) * 10) / 10;
+  });
+  // Days until July 4 of the relevant year (Combine target).
+  var today = new Date();
+  var combine = new Date(today.getFullYear(), 6, 4);  // July is month 6 (0-indexed)
+  if(combine < today) combine = new Date(today.getFullYear()+1, 6, 4);
+  var daysToCombine = Math.ceil((combine - today) / 86400000);
+  return {
+    regeneration_type: 'weekly',
+    week_number: nextN,
+    last_week_sessions: lastSessions,
+    last_week_rpe: {avg: avgRpe, by_exercise: rpeByExercise},
+    last_week_completion: {completion_pct: completionPct},
+    checkin_data: lastRow ? {
+      feeling: lastRow.feeling_score,
+      sleep: lastRow.sleep_score,
+      energy: lastRow.energy_score,
+      weight_kg: lastRow.weight_kg,
+      niggle_notes: lastRow.niggle_notes,
+      coach_notes: lastRow.coach_notes,
+      continue_programme: lastRow.continue_programme,
+      next_week_requests: lastRow.next_week_requests
+    } : null,
+    next_week_schedule: {days: chosenDays},
+    today_date: new Date().toISOString().split('T')[0],
+    days_to_combine: daysToCombine
+  };
 }
 
 function renderDailyWOD(){
@@ -15580,6 +15903,10 @@ window.fqResetAnswers = function(){
     coachNotes:'', weighInFrequency:null,
     scheduleMode:null,
     availableSlots:{}, sessionSchedule:null,
+    // v4.7.37 hotfix: explicit trainingDays array. Computed from availableSlots in
+    // calendar order (Mon→Sun). Persisted to athlete.fqTrainingDays so the prompt
+    // gets a clean list rather than depending on Object.keys insertion order.
+    trainingDays:[],
     coachTone:null,
     injury:[], injuryNotes:'', noInjuries:false,
     parqClear:true,
@@ -15871,7 +16198,10 @@ window.fqSetScheduleMode = function(val,el){
   if(val==='coach_assigns'){
     fqAnswers.sessionSchedule=null;
     fqAnswers.availableSlots={};
+    // v4.7.37 hotfix: clear trainingDays too — coach_assigns means the AI invents the schedule.
+    fqAnswers.trainingDays=[];
   }
+  console.log('[PHX] fqSetScheduleMode →', val, '— trainingDays now:', fqAnswers.trainingDays);
   el.closest('.q-step').querySelectorAll('.q-option-wide').forEach(function(e){e.classList.remove('active');});
   el.classList.add('active');
   fqValidateStep();
@@ -15881,6 +16211,10 @@ window.fqRenderAvailability = function(){
   var grid=document.getElementById('fq-availability-grid');
   if(!grid) return;
   grid.innerHTML='';
+  // v4.7.37 hotfix: keep fqAnswers.trainingDays in sync on every render — covers the path
+  // where state was hydrated from a saved snapshot rather than via fqToggleAvailability.
+  fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
+  console.log('[PHX] fqRenderAvailability — current trainingDays:', fqAnswers.trainingDays, 'from slots:', fqAnswers.availableSlots);
   FQ_DAYS_ORDER.forEach(function(day){
     var slot=fqAnswers.availableSlots[day]||{am:false,pm:false};
     grid.insertAdjacentHTML('beforeend',
@@ -15900,9 +16234,27 @@ window.fqToggleAvailability = function(day,slot){
   if(!fqAnswers.availableSlots[day][slot] && fqAnswers.sessionSchedule && fqAnswers.sessionSchedule[day]){
     delete fqAnswers.sessionSchedule[day][slot];
   }
+  // v4.7.37 hotfix: recompute fqAnswers.trainingDays in calendar order from availableSlots.
+  // Prompt + downstream code reads this directly — never derives from insertion order again.
+  fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
+  console.log('[PHX] fqToggleAvailability', day, slot, '→ trainingDays:', fqAnswers.trainingDays);
   fqRenderAvailability();
   fqValidateStep();
 };
+
+// v4.7.37 hotfix: shared helper. Always returns days in calendar order (Mon→Sun) and
+// always returns capitalised day names matching the prompt's contract.
+function _phxComputeTrainingDays(availableSlots){
+  if(!availableSlots || typeof availableSlots !== 'object') return [];
+  var dayMap = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
+  var ORDER = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+  var out = [];
+  ORDER.forEach(function(k){
+    var s = availableSlots[k];
+    if(s && (s.am || s.pm)) out.push(dayMap[k]);
+  });
+  return out;
+}
 
 window.fqRenderSessionTimetable = function(){
   var container=document.getElementById('fq-session-timetable');
@@ -16164,6 +16516,12 @@ window.fqNext = function(){
     fqScheduleMode: fqAnswers.scheduleMode || fqAnswers.fqScheduleMode || existing.fqScheduleMode || null,
     fqAvailableSlots:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.availableSlots:null,
     fqSessionSchedule: (fqAnswers.scheduleMode==='user_assigns' ? fqAnswers.sessionSchedule : null) || existing.fqSessionSchedule || null,
+    // v4.7.37 hotfix: persist fqTrainingDays so the prompt's CRITICAL — SESSION DAYS section
+    // can read it directly without falling back to deriving from availableSlots (which depends
+    // on Object.keys insertion order). Always recomputed in calendar order at save time.
+    fqTrainingDays: (fqAnswers.scheduleMode === 'user_assigns')
+      ? _phxComputeTrainingDays(fqAnswers.availableSlots)
+      : (Array.isArray(existing.fqTrainingDays) ? existing.fqTrainingDays : []),
     fqCoachTone: fqAnswers.coachTone || fqAnswers.fqCoachTone || existing.fqCoachTone || null,
     fqInjury:fqAnswers.injury,
     fqInjuryNotes:fqAnswers.injuryNotes,
@@ -16172,6 +16530,8 @@ window.fqNext = function(){
     fqPath:'phoenix',
     fqCompleted:new Date().toISOString()
   });
+  // v4.7.37 hotfix: log what's about to be persisted so it's verifiable in the console.
+  console.log('[PHX] fqNext save → fqTrainingDays:', updated.fqTrainingDays, '| fqAvailableSlots:', updated.fqAvailableSlots, '| fqScheduleMode:', updated.fqScheduleMode);
   saveAthlete(updated);
   fqClearProgress(); // v4.7.4 FIX 4: programme generated → drop saved snapshot
   if(hasIgniteAccess()){

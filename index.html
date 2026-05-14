@@ -3459,6 +3459,9 @@ var FIELD_MAP=[
   ['fqAvailableSlots','available_slots'],
   ['fqSessionSchedule','session_schedule'],
   ['fqCoachTone','coach_tone'],
+  // v4.7.39 (next-build): per-day session durations (minutes per nominated day).
+  // SQL: alter table profiles add column if not exists day_durations jsonb;
+  ['fqDayDurations','day_durations'],
   // v4.7.38: weekly check-in day (friday|saturday|sunday|monday).
   // SQL: alter table profiles add column if not exists check_in_day text;
   ['fqCheckInDay','check_in_day'],
@@ -7763,6 +7766,32 @@ Map sessions in the order primary_lifts appears (e.g. ME Lower → first availab
 ME Upper → second, DE Lower → third, DE Upper → fourth).
 
 ================================================================
+SESSION DURATIONS (per-day — REQUIRED when present)
+================================================================
+
+athlete.day_durations is a per-day map of session length in minutes, keyed by the same
+capitalised day names as training_days[]. Four canonical values: 45 / 60 / 75 / 90.
+Example: { "Monday": 45, "Thursday": 90, "Saturday": 60 }.
+
+When day_durations is present, EVERY session emitted in week.sessions MUST set
+duration_min equal to day_durations[session.day]. Do not invent a different duration.
+
+Each duration implies a warm-up length and an exercise budget. Honour both:
+- 45 min → 5 min warm-up · 3 working exercises max (compact session, dense work).
+- 60 min → 8 min warm-up · 4–5 working exercises (standard session).
+- 75 min → 10 min warm-up · 5–6 working exercises (extended session).
+- 90 min → 12 min warm-up · 6–7 working exercises (long session, two-a-day candidate).
+
+For WOD sessions, duration_min still applies to the total slot — split the warm-up
+and the WOD's duration_sec to fit within the day's nominated minutes.
+
+When day_durations is missing or a specific day's duration is absent, default to 60
+and flag it in flags array ("day_duration_missing — defaulted to 60min for [Day]").
+
+Surface durations in the programme_summary.coach_note when they vary across the week
+(e.g. "Tuesday 45 / Thursday 90 — short tight Tuesday, long pull-and-grind Thursday").
+
+================================================================
 WEEKLY REGENERATION
 ================================================================
 
@@ -8007,6 +8036,23 @@ function buildAthleteProfile(trigger, checkIn){
       // v4.7.37 FIX 3: explicit training-day list. The prompt's CRITICAL — SESSION DAYS
       // section requires this. Empty array → prompt flags "training_days_missing".
       training_days: trainingDays,
+      // v4.7.39 (next-build): per-day session duration (minutes). Keyed by capitalised
+      // day name to match training_days[]. Only includes days the athlete nominated.
+      day_durations: (function(){
+        var src = a.fqDayDurations || {};
+        var lowerOrder = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+        var dayMap = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
+        var out = {};
+        lowerOrder.forEach(function(k){
+          // Only include days the athlete nominated as training days, otherwise the model
+          // sees noise. trainingDays[] is already capitalised.
+          var capName = dayMap[k];
+          if(trainingDays.indexOf(capName) >= 0 && src[k]){
+            out[capName] = parseInt(src[k]) || 60;
+          }
+        });
+        return out;
+      })(),
       goal: (a.fqGoals && a.fqGoals[0]) || 'general_fitness',
       goal_secondary: (a.fqGoals && a.fqGoals[1]) || null,
       goals_all: a.fqGoals || [],
@@ -16459,6 +16505,10 @@ window.fqResetAnswers = function(){
     // calendar order (Mon→Sun). Persisted to athlete.fqTrainingDays so the prompt
     // gets a clean list rather than depending on Object.keys insertion order.
     trainingDays:[],
+    // v4.7.39 (next-build): per-day session-duration map (minutes). 4 options: 45/60/75/90.
+    // Defaults to 60 for each day; only shown in the UI when that day has AM or PM active.
+    // Persisted to fqDayDurations on the athlete + day_durations jsonb on Supabase.
+    dayDurations:{monday:60,tuesday:60,wednesday:60,thursday:60,friday:60,saturday:60,sunday:60},
     coachTone:null,
     injury:[], injuryNotes:'', noInjuries:false,
     parqClear:true,
@@ -16776,16 +16826,47 @@ window.fqRenderAvailability = function(){
   // where state was hydrated from a saved snapshot rather than via fqToggleAvailability.
   fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
   console.log('[PHX] fqRenderAvailability — current trainingDays:', fqAnswers.trainingDays, 'from slots:', fqAnswers.availableSlots);
+  // v4.7.39 (next-build): make sure dayDurations exists + has every day.
+  if(!fqAnswers.dayDurations || typeof fqAnswers.dayDurations !== 'object') fqAnswers.dayDurations = {};
+  FQ_DAYS_ORDER.forEach(function(d){ if(!fqAnswers.dayDurations[d]) fqAnswers.dayDurations[d] = 60; });
   FQ_DAYS_ORDER.forEach(function(day){
     var slot=fqAnswers.availableSlots[day]||{am:false,pm:false};
+    var isActive = !!(slot.am || slot.pm);
+    var dur = fqAnswers.dayDurations[day] || 60;
+    // Build the per-day duration pill row HTML, only shown when AM or PM is on.
+    var durRow = '';
+    if(isActive){
+      var opts = [45,60,75,90];
+      var pills = opts.map(function(v){
+        var on = (dur === v);
+        return '<div class="q-option-card'+(on?' active':'')+'" onclick="fqSetDayDuration(\''+day+'\','+v+')" style="flex:1;padding:6px 4px;font-size:11px;text-align:center;border-radius:12px;min-width:0;">'+v+'</div>';
+      }).join('');
+      durRow =
+        '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 8px 58px;border-bottom:1px solid var(--border);">'+
+          '<div style="width:40px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">DUR</div>'+
+          pills+
+          '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
+        '</div>';
+    }
     grid.insertAdjacentHTML('beforeend',
-      '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'+
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;'+(isActive?'':'border-bottom:1px solid var(--border);')+'">'+
       '<div style="width:50px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+FQ_DAY_LABEL[day]+'</div>'+
       '<div class="q-option-card'+(slot.am?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'am\')" style="flex:1;padding:8px;font-size:11px;text-align:center;border-radius:14px;">AM</div>'+
       '<div class="q-option-card'+(slot.pm?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'pm\')" style="flex:1;padding:8px;font-size:11px;text-align:center;border-radius:14px;">PM</div>'+
       '<div style="width:60px;font-size:10px;color:var(--text3);text-align:right;">'+(!slot.am&&!slot.pm?'Rest day':'')+'</div>'+
-      '</div>');
+      '</div>'+
+      durRow);
   });
+};
+
+// v4.7.39 (next-build): per-day session duration handler. Stores into fqAnswers.dayDurations
+// and re-renders the availability grid so the pill flips active state.
+window.fqSetDayDuration = function(day, minutes){
+  if(!fqAnswers.dayDurations) fqAnswers.dayDurations = {};
+  fqAnswers.dayDurations[day] = minutes;
+  console.log('[PHX] fqSetDayDuration', day, '→', minutes, 'min');
+  fqRenderAvailability();
+  if(typeof fqValidateStep === 'function') fqValidateStep();
 };
 
 window.fqToggleAvailability = function(day,slot){
@@ -17080,6 +17161,10 @@ window.fqNext = function(){
     // v4.7.37 hotfix: persist fqTrainingDays so the prompt's CRITICAL — SESSION DAYS section
     // can read it directly without falling back to deriving from availableSlots (which depends
     // on Object.keys insertion order). Always recomputed in calendar order at save time.
+    // v4.7.39 (next-build): per-day session duration map. Default-filled to 60 if missing.
+    fqDayDurations: (fqAnswers.scheduleMode === 'user_assigns')
+      ? (fqAnswers.dayDurations || {})
+      : (existing.fqDayDurations || null),
     fqTrainingDays: (fqAnswers.scheduleMode === 'user_assigns')
       ? _phxComputeTrainingDays(fqAnswers.availableSlots)
       : (Array.isArray(existing.fqTrainingDays) ? existing.fqTrainingDays : []),

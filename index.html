@@ -3729,19 +3729,14 @@ async function _loadProfileAndRouteInner(){
     session=res.data.session;
   }catch(e){session=null;}
   if(!session){
-    // v4.7.38 BUILD 1: route through the invite-code landing first unless we've already
-    // validated a code (phoenix_invite_code) or the device has a saved athlete who
-    // bypasses the gate (existing user). Going directly to screen-auth lets the
-    // "Already have an account?" link on the landing screen reach sign-in cleanly.
+    // v4.7.39 hotfix: landing is the entry point for ANY visitor without an invite code,
+    // including returning users who've cleared their session. Only show screen-auth when
+    // phoenix_invite_code is already in localStorage (set after a successful gate pass,
+    // OR when the user clicks "Already have an account?" on the landing which routes
+    // directly to screen-auth via navTo('auth')).
     var hasInvite = false;
     try { hasInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
-    var hasLocalAthlete = false;
-    try { hasLocalAthlete = !!localStorage.getItem('phoenix_athlete'); } catch(_e){}
-    if(!hasInvite && !hasLocalAthlete){
-      showScreen('screen-landing');
-    } else {
-      showScreen('screen-auth');
-    }
+    showScreen(hasInvite ? 'screen-auth' : 'screen-landing');
     return;
   }
   currentSession=session;
@@ -3758,9 +3753,13 @@ async function _loadProfileAndRouteInner(){
   }catch(e){
     console.warn('Profile fetch failed:',e);
     // Check for 401/403 — session expired
+    // v4.7.39 hotfix: same gate as the no-session branch — landing first unless an
+    // invite code is already in localStorage.
+    var _authFailInvite = false;
+    try { _authFailInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
     if(e&&(e.code==='401'||e.code==='403'||e.message&&e.message.indexOf('JWT')>=0)){
       try{await sb.auth.signOut();}catch(ex){}
-      showScreen('screen-auth');
+      showScreen(_authFailInvite ? 'screen-auth' : 'screen-landing');
       return;
     }
     // Network failure — try local cache
@@ -3780,7 +3779,7 @@ async function _loadProfileAndRouteInner(){
       authOffline.textContent='Connection needed for first-time sign-in';
       authOffline.style.display='block';
     }
-    showScreen('screen-auth');
+    showScreen(_authFailInvite ? 'screen-auth' : 'screen-landing');
     return;
   }
 
@@ -10417,7 +10416,13 @@ sb.auth.onAuthStateChange(function(event,session){
   console.log('[PHX] onAuthStateChange:',event,session&&session.user?session.user.email:null);
   currentSession=session;
   if(event==='SIGNED_IN') loadProfileAndRoute();
-  if(event==='SIGNED_OUT') showScreen('screen-auth');
+  if(event==='SIGNED_OUT'){
+    // v4.7.39 hotfix: sign-out follows the same gate as boot — landing first unless
+    // a valid invite code is still in localStorage.
+    var _signedOutInvite = false;
+    try { _signedOutInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
+    showScreen(_signedOutInvite ? 'screen-auth' : 'screen-landing');
+  }
 });
 
 // ====== AUTH CHECK ======
@@ -10457,7 +10462,10 @@ if(networkError){
 }
 
 if(!session){
-  showScreen('screen-auth');
+  // v4.7.39 hotfix: boot-time entry — landing is the default when there's no invite code.
+  var _bootInvite = false;
+  try { _bootInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
+  showScreen(_bootInvite ? 'screen-auth' : 'screen-landing');
   hideAuthConnectionMessage();
   enableAuthButtons();
   return;

@@ -844,26 +844,29 @@ textarea.q-input{resize:vertical;min-height:60px;}
 <body>
 
 <!-- v4.7.38 BUILD 1: LANDING — invite-code-gated entry point for not-yet-signed-in users. -->
+<!-- v4.7.39 hotfix FIX 2: full-height three-band layout. 15vh top padding, brand sits in
+     the top third, copy in the middle (flex:1 with vertical centring), CTA pinned to
+     the bottom third via margin-top:auto. 32px horizontal padding throughout. -->
 <div id="screen-landing" class="screen" style="align-items:stretch;justify-content:flex-start;background:#0a0707;position:relative;overflow:hidden;">
-  <div style="flex:1;display:flex;flex-direction:column;padding:36px 24px 24px;max-width:480px;margin:0 auto;width:100%;">
-    <!-- Top 40% — emblem + wordmark -->
-    <div style="flex:0 0 38%;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;">
-      <div class="phoenix-emblem" style="width:80px;height:80px;color:#c8963e;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 480 480" width="100%" height="100%"><g transform="translate(0,480) scale(0.1,-0.1)" fill="currentColor"><path d="M2960 4655c0-20 180-325 220-372 5-7 10-15 10-17 0-7 69-121 116-193 19-28 34-54 34-57 0-3 15-27 34-53 18-27 53-82 77-123 24-41 46-77 49-80 8-7 70-110 70-116 0-3 22-37 48-77 27-40 59-92 73-117 13-25 28-49 32-55 7-8 50-78 94-150 73-120 100-162 110-173 7-7 13-18 13-24 0-5 13-28 29-51 15-23 63-98 106-167 43-69 86-137 96-152 11-15 19-30 19-34 0-11 82-139 92-142 4-2 8-8 8-14 0-6 14-30 30-55 17-24 30-46 30-48 0-2 33-56 74-122 41-65 102-164 136-220 65-107 84-131 94-114 4 5-5 22-19 36-19 21-22 31-15 46 7 12 7 20 0 24-5 3-10-2-11-12 0-11-6-6-15 15-8 19-24 43-35 55-11 12-17 27-14 35 2 7 1 11-4 8-4-3-14 7-22 22-8 15-19 30-25 34-7 4-15 20-18 34-4 15-13 33-21 40-8 8-11 22-8 31 4 10 2 14-5 10-9-6-52 41-52 58 0 3-18 32-39 64-28 40-38 66-35 82 2 13 2 18-2 12-8-18-24-16-24 2 0 8-4 15-10 15-5 0-12 11-16 25-3 13-37 70-74 126-44 66-66 108-63 120 4 15 1 18-11 13-11-4-16-1-16 10 0 9-3 16-7 16-14 0-42 60-37 78 5 14 4 15-5 2-9-13-12-12-17 8-4 12-10 22-15 22-5 0-8 3-7 8 5 17-14 52-24 46-7-5-9-1-5 9 4 11 2 14-9 10-8-3-14-2-13 3 3 14-11 45-43 91-15 23-28 46-28 52 0 6-4 11-10 11-5 0-10 9-10 20 0 11-4 20-10 20-5 0-19 17-30 38-43 78-77 133-93 152-9 11-17 23-17 26 0 3-9 17-20 31-25 32-26 44-2 37 14-5 14-4 2 4-8 6-18 8-22 6-5-3-11 8-14 25-4 17-12 31-19 31-6 0-20 17-31 38-10 20-22 39-26 40-5 2-8 8-8 14 0 5-7 16-15 24-8 9-15 27-15 41 0 15-3 23-7 20-10-11-55 63-49 80 4 11 2 14-9 9-8-3-15 0-15 6 0 6-22 43-48 82-27 39-66 103-86 141-21 39-44 75-52 81-8 6-14 15-14 19 0 5-11 23-25 41-14 18-25 40-25 48 0 9-4 16-10 16-5 0-10 4-10 10 0 5-27 50-59 99-32 50-65 104-72 120-8 17-17 31-21 31-4 0-16 19-27 43-16 35-61 88-61 72z"/></g></svg>
-      </div>
-      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:6px;text-transform:uppercase;color:#c8963e;margin-top:18px;">Phoenix</div>
+  <div style="display:flex;flex-direction:column;min-height:100vh;padding:15vh 32px 32px;max-width:480px;margin:0 auto;width:100%;box-sizing:border-box;">
+    <!-- Top — emblem + wordmark -->
+    <div style="text-align:center;flex:0 0 auto;">
+      <!-- v4.7.39 hotfix FIX 1: emblem hydrated at boot from the splash SVG (single source of truth).
+           The data-emblem-clone attribute is the hook for _phxHydrateEmblems() — see bottom of script. -->
+      <div class="phoenix-emblem" data-emblem-clone style="width:96px;height:96px;color:#c8963e;margin:0 auto;"></div>
+      <div style="font-family:var(--font-d);font-size:12px;letter-spacing:8px;text-transform:uppercase;color:#c8963e;margin-top:28px;">Phoenix</div>
     </div>
-    <!-- Middle 40% — headline + body -->
-    <div style="flex:0 0 42%;display:flex;flex-direction:column;justify-content:center;text-align:center;min-height:0;">
-      <div style="font-family:var(--font-h);font-size:22px;font-weight:500;line-height:1.4;color:#fff;margin-bottom:18px;">Your coach. Your programme.<br>Built around you — and rebuilt every week.</div>
-      <div style="font-size:15px;line-height:1.7;color:rgba(255,255,255,0.6);">Most apps give you a plan and leave you to it. Phoenix gives you a coach that reads your data, watches your progress, and adapts what's next. Every week is different because every week you are.</div>
+    <!-- Middle — headline + body. Stretches to fill the space between brand and CTA. -->
+    <div style="flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;text-align:center;padding:40px 0;">
+      <div style="font-family:var(--font-h);font-size:22px;font-weight:500;line-height:1.4;color:#fff;margin-bottom:20px;">Your coach. Your programme.<br>Built around you — and rebuilt every week.</div>
+      <div style="font-size:15px;line-height:1.8;color:rgba(255,255,255,0.6);">Most apps give you a plan and leave you to it. Phoenix gives you a coach that reads your data, watches your progress, and adapts what's next. Every week is different because every week you are.</div>
     </div>
-    <!-- Bottom 20% — invite input + button + error + sign-in link -->
-    <div style="flex:0 0 20%;display:flex;flex-direction:column;justify-content:flex-end;min-height:0;">
-      <input id="landing-invite-input" type="text" placeholder="Enter your invite code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="width:100%;padding:14px 16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:15px;font-weight:600;letter-spacing:3px;text-transform:uppercase;text-align:center;margin-bottom:10px;outline:none;">
-      <button onclick="window._phxLandingEnter()" style="width:100%;padding:15px;background:#c8963e;color:#0a0707;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;cursor:pointer;">Enter →</button>
-      <div id="landing-invite-error" style="display:none;color:#d96a5e;font-size:12px;text-align:center;margin-top:10px;">That code isn't recognised. Check your invite and try again.</div>
-      <div style="text-align:center;margin-top:14px;">
+    <!-- Bottom — input + button + error + sign-in link. margin-top:auto pins it to the bottom. -->
+    <div style="flex:0 0 auto;margin-top:auto;">
+      <input id="landing-invite-input" type="text" placeholder="Enter your invite code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="width:100%;padding:16px 18px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:15px;font-weight:600;letter-spacing:3px;text-transform:uppercase;text-align:center;margin-bottom:12px;outline:none;box-sizing:border-box;">
+      <button onclick="window._phxLandingEnter()" style="width:100%;padding:17px;background:#c8963e;color:#0a0707;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;cursor:pointer;box-sizing:border-box;">Enter →</button>
+      <div id="landing-invite-error" style="display:none;color:#d96a5e;font-size:12px;text-align:center;margin-top:12px;">That code isn't recognised. Check your invite and try again.</div>
+      <div style="text-align:center;margin-top:20px;">
         <a onclick="navTo('auth')" style="color:rgba(255,255,255,0.55);font-size:12px;cursor:pointer;text-decoration:underline;letter-spacing:1px;">Already have an account?</a>
       </div>
     </div>
@@ -874,9 +877,8 @@ textarea.q-input{resize:vertical;min-height:60px;}
 <div id="screen-alpha-welcome" class="screen" style="align-items:stretch;justify-content:flex-start;background:#0a0707;position:relative;overflow:hidden;">
   <div style="flex:1;display:flex;flex-direction:column;padding:36px 24px 24px;max-width:520px;margin:0 auto;width:100%;overflow-y:auto;">
     <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px;">
-      <div class="phoenix-emblem" style="width:68px;height:68px;color:#c8963e;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 480 480" width="100%" height="100%"><g transform="translate(0,480) scale(0.1,-0.1)" fill="currentColor"><path d="M2960 4655c0-20 180-325 220-372 73-120 100-162 110-173 7-7 13-18 13-24 0-5 13-28 29-51 15-23 63-98 106-167 43-69 86-137 96-152 11-15 19-30 19-34 0-11 82-139 92-142 4-2 8-8 8-14 0-6 14-30 30-55 17-24 30-46 30-48 0-2 33-56 74-122 41-65 102-164 136-220 65-107 84-131 94-114z"/></g></svg>
-      </div>
+      <!-- v4.7.39 hotfix FIX 1: alpha welcome emblem also hydrated from the splash SVG. -->
+      <div class="phoenix-emblem" data-emblem-clone style="width:80px;height:80px;color:#c8963e;"></div>
       <div style="font-family:var(--font-d);font-size:10px;letter-spacing:5px;text-transform:uppercase;color:#c8963e;margin-top:14px;">Project Phoenix</div>
     </div>
     <div style="font-family:var(--font-h);font-size:24px;line-height:1.3;color:#fff;font-weight:500;margin-bottom:18px;text-align:center;">Welcome to Project Phoenix.</div>
@@ -4330,6 +4332,11 @@ function showScreen(id){
   var qnav=document.querySelector('.q-nav');
   if(qnav) qnav.style.display=id==='screen-foundation-q'?'flex':'none';
   if(id==='screen-themes'){renderThemesScreen();updateFontSwatches();}
+  // v4.7.39 hotfix FIX 1: ensure the landing / alpha-welcome emblems are populated
+  // before they paint. Cheap no-op if already hydrated.
+  if(id==='screen-landing' || id==='screen-alpha-welcome'){
+    if(typeof _phxHydrateEmblems==='function') _phxHydrateEmblems();
+  }
 }
 function navTo(tab){
   // v4.7.19 BUILD 2: weekly-checkin is reachable via navTo('weekly-checkin') so the back button
@@ -17706,6 +17713,31 @@ if(typeof showScreen==='function'){
 // v4.7.15 FIX 3: also apply on initial load so the splash → today first paint hides ads for Pro accounts.
 document.addEventListener('DOMContentLoaded', function(){
   if(typeof _phxApplyAdGate==='function') setTimeout(_phxApplyAdGate, 100);
+});
+
+// v4.7.39 hotfix FIX 1: hydrate every [data-emblem-clone] container with a clone of the
+// canonical splash Phoenix SVG. Single source of truth — landing and alpha welcome don't
+// need the 500-line path data inlined three times.
+function _phxHydrateEmblems(){
+  try {
+    // The splash screen carries the canonical multi-path SVG. Skip cloning into the
+    // splash emblem itself (it's already populated).
+    var splashEl = document.querySelector('#screen-splash .phoenix-emblem svg');
+    if(!splashEl){
+      // Fall back to any inline emblem SVG in the DOM.
+      splashEl = document.querySelector('.phoenix-emblem svg');
+    }
+    if(!splashEl) return;
+    var markup = splashEl.outerHTML;
+    document.querySelectorAll('[data-emblem-clone]').forEach(function(el){
+      if(el.querySelector('svg')) return; // already hydrated
+      el.innerHTML = markup;
+    });
+  } catch(e){ console.warn('[PHX] _phxHydrateEmblems failed:', e); }
+}
+document.addEventListener('DOMContentLoaded', function(){
+  // Run after the DOM is fully parsed so the splash SVG is present to clone.
+  setTimeout(_phxHydrateEmblems, 0);
 });
 
 // v4.7.29 FIX 3 (CRITICAL): visual restore for an active session.

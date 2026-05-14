@@ -17897,6 +17897,50 @@ async function _phxRestoreSessionVisualState(){
   } catch(e){ console.warn('[PHX] restoreSessionVisualState supabase fallback failed:', e); }
 }
 </script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}</script>
+<script>
+// v4.7.39 hotfix: service-worker registration with automatic update detection.
+//
+// Flow:
+//   1. Register /sw.js. The new SW installs in the background.
+//   2. On 'updatefound' we watch the new worker. When it reaches 'activated' AND the page
+//      is already controlled by a previous SW, the deploy is live — reload once so the
+//      user immediately sees the new build instead of the stale HTML shell.
+//   3. Poll reg.update() every 60s while the tab is open so we don't wait for the next
+//      manual page refresh to discover a new deploy.
+//   4. controllerchange (fires when skipWaiting + clients.claim hand control to a new SW)
+//      also triggers a one-shot reload. Guarded so a single deploy doesn't reload twice.
+(function(){
+  if(!('serviceWorker' in navigator)) return;
+  var reloading = false;
+  function reloadOnce(){
+    if(reloading) return;
+    reloading = true;
+    // Tiny delay so any in-flight fetches finish, then hard reload to the fresh shell.
+    setTimeout(function(){ window.location.reload(); }, 50);
+  }
+  navigator.serviceWorker.register('/sw.js').then(function(reg){
+    // Active update poll — every 60s while the tab is open.
+    setInterval(function(){ try { reg.update(); } catch(_e){} }, 60000);
+    reg.addEventListener('updatefound', function(){
+      var newWorker = reg.installing;
+      if(!newWorker) return;
+      newWorker.addEventListener('statechange', function(){
+        if(newWorker.state === 'activated' && navigator.serviceWorker.controller){
+          // New version activated AND a previous SW was already controlling this page →
+          // it's a real update, not the first install. Reload to pick it up.
+          console.log('[PHX] new service worker activated — reloading');
+          reloadOnce();
+        }
+      });
+    });
+  }).catch(function(e){ console.warn('[PHX] sw.register failed:', e); });
+  // controllerchange fires when clients.claim() in the new SW takes over. Belt-and-braces
+  // for the case where statechange already fired before our listener attached.
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    console.log('[PHX] controller changed — reloading');
+    reloadOnce();
+  });
+})();
+</script>
 </body>
 </html>

@@ -843,6 +843,64 @@ textarea.q-input{resize:vertical;min-height:60px;}
 </head>
 <body>
 
+<!-- v4.7.38 BUILD 1: LANDING — invite-code-gated entry point for not-yet-signed-in users. -->
+<div id="screen-landing" class="screen" style="align-items:stretch;justify-content:flex-start;background:#0a0707;position:relative;overflow:hidden;">
+  <div style="flex:1;display:flex;flex-direction:column;padding:36px 24px 24px;max-width:480px;margin:0 auto;width:100%;">
+    <!-- Top 40% — emblem + wordmark -->
+    <div style="flex:0 0 38%;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;">
+      <div class="phoenix-emblem" style="width:80px;height:80px;color:#c8963e;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 480 480" width="100%" height="100%"><g transform="translate(0,480) scale(0.1,-0.1)" fill="currentColor"><path d="M2960 4655c0-20 180-325 220-372 5-7 10-15 10-17 0-7 69-121 116-193 19-28 34-54 34-57 0-3 15-27 34-53 18-27 53-82 77-123 24-41 46-77 49-80 8-7 70-110 70-116 0-3 22-37 48-77 27-40 59-92 73-117 13-25 28-49 32-55 7-8 50-78 94-150 73-120 100-162 110-173 7-7 13-18 13-24 0-5 13-28 29-51 15-23 63-98 106-167 43-69 86-137 96-152 11-15 19-30 19-34 0-11 82-139 92-142 4-2 8-8 8-14 0-6 14-30 30-55 17-24 30-46 30-48 0-2 33-56 74-122 41-65 102-164 136-220 65-107 84-131 94-114 4 5-5 22-19 36-19 21-22 31-15 46 7 12 7 20 0 24-5 3-10-2-11-12 0-11-6-6-15 15-8 19-24 43-35 55-11 12-17 27-14 35 2 7 1 11-4 8-4-3-14 7-22 22-8 15-19 30-25 34-7 4-15 20-18 34-4 15-13 33-21 40-8 8-11 22-8 31 4 10 2 14-5 10-9-6-52 41-52 58 0 3-18 32-39 64-28 40-38 66-35 82 2 13 2 18-2 12-8-18-24-16-24 2 0 8-4 15-10 15-5 0-12 11-16 25-3 13-37 70-74 126-44 66-66 108-63 120 4 15 1 18-11 13-11-4-16-1-16 10 0 9-3 16-7 16-14 0-42 60-37 78 5 14 4 15-5 2-9-13-12-12-17 8-4 12-10 22-15 22-5 0-8 3-7 8 5 17-14 52-24 46-7-5-9-1-5 9 4 11 2 14-9 10-8-3-14-2-13 3 3 14-11 45-43 91-15 23-28 46-28 52 0 6-4 11-10 11-5 0-10 9-10 20 0 11-4 20-10 20-5 0-19 17-30 38-43 78-77 133-93 152-9 11-17 23-17 26 0 3-9 17-20 31-25 32-26 44-2 37 14-5 14-4 2 4-8 6-18 8-22 6-5-3-11 8-14 25-4 17-12 31-19 31-6 0-20 17-31 38-10 20-22 39-26 40-5 2-8 8-8 14 0 5-7 16-15 24-8 9-15 27-15 41 0 15-3 23-7 20-10-11-55 63-49 80 4 11 2 14-9 9-8-3-15 0-15 6 0 6-22 43-48 82-27 39-66 103-86 141-21 39-44 75-52 81-8 6-14 15-14 19 0 5-11 23-25 41-14 18-25 40-25 48 0 9-4 16-10 16-5 0-10 4-10 10 0 5-27 50-59 99-32 50-65 104-72 120-8 17-17 31-21 31-4 0-16 19-27 43-16 35-61 88-61 72z"/></g></svg>
+      </div>
+      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:6px;text-transform:uppercase;color:#c8963e;margin-top:18px;">Phoenix</div>
+    </div>
+    <!-- Middle 40% — headline + body -->
+    <div style="flex:0 0 42%;display:flex;flex-direction:column;justify-content:center;text-align:center;min-height:0;">
+      <div style="font-family:var(--font-h);font-size:22px;font-weight:500;line-height:1.4;color:#fff;margin-bottom:18px;">Your coach. Your programme.<br>Built around you — and rebuilt every week.</div>
+      <div style="font-size:15px;line-height:1.7;color:rgba(255,255,255,0.6);">Most apps give you a plan and leave you to it. Phoenix gives you a coach that reads your data, watches your progress, and adapts what's next. Every week is different because every week you are.</div>
+    </div>
+    <!-- Bottom 20% — invite input + button + error + sign-in link -->
+    <div style="flex:0 0 20%;display:flex;flex-direction:column;justify-content:flex-end;min-height:0;">
+      <input id="landing-invite-input" type="text" placeholder="Enter your invite code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="width:100%;padding:14px 16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:15px;font-weight:600;letter-spacing:3px;text-transform:uppercase;text-align:center;margin-bottom:10px;outline:none;">
+      <button onclick="window._phxLandingEnter()" style="width:100%;padding:15px;background:#c8963e;color:#0a0707;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;cursor:pointer;">Enter →</button>
+      <div id="landing-invite-error" style="display:none;color:#d96a5e;font-size:12px;text-align:center;margin-top:10px;">That code isn't recognised. Check your invite and try again.</div>
+      <div style="text-align:center;margin-top:14px;">
+        <a onclick="navTo('auth')" style="color:rgba(255,255,255,0.55);font-size:12px;cursor:pointer;text-decoration:underline;letter-spacing:1px;">Already have an account?</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- v4.7.38 BUILD 3: ALPHA WELCOME — shown once after first sign-up (phoenix_alpha_welcomed flag). -->
+<div id="screen-alpha-welcome" class="screen" style="align-items:stretch;justify-content:flex-start;background:#0a0707;position:relative;overflow:hidden;">
+  <div style="flex:1;display:flex;flex-direction:column;padding:36px 24px 24px;max-width:520px;margin:0 auto;width:100%;overflow-y:auto;">
+    <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px;">
+      <div class="phoenix-emblem" style="width:68px;height:68px;color:#c8963e;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="60 0 480 480" width="100%" height="100%"><g transform="translate(0,480) scale(0.1,-0.1)" fill="currentColor"><path d="M2960 4655c0-20 180-325 220-372 73-120 100-162 110-173 7-7 13-18 13-24 0-5 13-28 29-51 15-23 63-98 106-167 43-69 86-137 96-152 11-15 19-30 19-34 0-11 82-139 92-142 4-2 8-8 8-14 0-6 14-30 30-55 17-24 30-46 30-48 0-2 33-56 74-122 41-65 102-164 136-220 65-107 84-131 94-114z"/></g></svg>
+      </div>
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:5px;text-transform:uppercase;color:#c8963e;margin-top:14px;">Project Phoenix</div>
+    </div>
+    <div style="font-family:var(--font-h);font-size:24px;line-height:1.3;color:#fff;font-weight:500;margin-bottom:18px;text-align:center;">Welcome to Project Phoenix.</div>
+    <div style="font-size:14px;line-height:1.8;color:rgba(255,255,255,0.78);">
+      <p style="margin:0 0 14px;">You're one of fifty people who got here before the door opened.</p>
+      <p style="margin:0 0 14px;">Project Phoenix exists because someone needed it to. It's still becoming what it's meant to be — as are the people who are a part of it. You're here while it's still being forged.</p>
+      <p style="margin:0 0 14px;">You are now part of <strong style="color:#c8963e;">Phoenix Pro. For life.</strong> Not a trial, not a beta perk, lifetime. As long as Phoenix exists, your access doesn't expire. The next eight weeks are yours to put it through its paces and tell us what you find.</p>
+      <p style="margin:0 0 14px;">It's being shaped in real time. If something feels wrong or needs rethinking, that's why you're here.</p>
+      <p style="margin:0 0 6px;color:#fff;font-weight:600;">Three things from you:</p>
+      <p style="margin:0 0 6px;">— Train. Use the app the way you'd actually use it. Don't be careful with it.</p>
+      <p style="margin:0 0 6px;">— Tell us when it breaks. Bugs, confusion, anything off. No detail too small.</p>
+      <p style="margin:0 0 14px;">— Tell us what's missing. If a feature should exist and doesn't, say so.</p>
+      <p style="margin:0 0 6px;color:#fff;font-weight:600;">When the eight weeks are up, we'll ask you three questions:</p>
+      <p style="margin:0 0 6px;">— If you weren't getting this free — would Phoenix be worth $14.99/month to you?</p>
+      <p style="margin:0 0 6px;">— Would you genuinely recommend this to someone who'd benefit?</p>
+      <p style="margin:0 0 14px;">— What would make you cancel?</p>
+      <p style="margin:0 0 14px;">We're asking for honest answers, not kind ones.</p>
+      <p style="margin:0 0 22px;">When the public launch happens later this year, what you helped build will be Project Phoenix.</p>
+      <p style="margin:0;font-family:var(--font-d);letter-spacing:3px;text-transform:uppercase;color:#c8963e;font-size:14px;text-align:center;">Let's Rise…</p>
+    </div>
+    <button id="phx-alpha-begin" style="width:100%;padding:16px;margin-top:26px;margin-bottom:20px;background:#c8963e;color:#0a0707;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:4px;text-transform:uppercase;cursor:pointer;opacity:0;transition:opacity 0.6s ease;pointer-events:none;">Begin</button>
+  </div>
+</div>
+
 <!-- AUTH SCREEN -->
 <div id="screen-auth" class="screen">
 <div class="auth-bg"></div>
@@ -1709,14 +1767,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <button onclick="_phxSkipMorningCheckin()" style="flex:0.6;padding:12px;background:transparent;color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Skip</button>
     </div>
   </div>
-  <div id="weight-checkin-banner" style="display:none;margin:0 16px 10px;background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:14px 16px;">
-    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Weekly Weight Check-in</div>
-    <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;">Track your progress — log this week's weight to keep your fat loss on track.</div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <input id="weight-checkin-input" type="number" step="0.1" placeholder="kg" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--font-d);">
-      <button onclick="submitWeightCheckin()" style="padding:10px 16px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Log</button>
-    </div>
-  </div>
+  <!-- v4.7.38 FIX 4: Today's weekly-weight banner removed. Daily weight = morning check-in
+       card above; weekly weight is captured in the Sunday check-in flow. The hidden stub is
+       left as a no-op div so any code that still queries '#weight-checkin-banner' is a no-op. -->
+  <div id="weight-checkin-banner" style="display:none;"></div>
   <div style="padding:0 16px 100px;">
     <!-- Row 1: Full width prescribed workout -->
     <div id="card-today-session" class="game-card tile-bg" onclick="openTodaySession()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);background-image:url('/assets/tiles/tile-session.jpg');">
@@ -2551,8 +2605,19 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div class="q-option-card" onclick="fqSetWeighInFrequency('never',this)" style="flex:1;min-width:140px;text-align:center;padding:12px 10px;">I'd rather not track weight</div>
   </div>
 
+  <!-- v4.7.38: weekly check-in day. Single-select pill picker, persists to fqCheckInDay. -->
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">F — Weekly check-in day</div>
+  <label class="q-label" style="margin-bottom:4px;display:block;">When would you like your weekly check-in?</label>
+  <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Your coach reviews your week and builds next week's programme on this day.</div>
+  <div style="display:flex;flex-direction:column;gap:8px;" id="fq-checkin-day-row">
+    <div class="q-option-card q-option-wide" onclick="fqSetCheckInDay('friday',this)"><strong>Friday</strong><span class="q-option-sub">Plan your weekend + next week ahead (default)</span></div>
+    <div class="q-option-card q-option-wide" onclick="fqSetCheckInDay('saturday',this)"><strong>Saturday</strong><span class="q-option-sub">Review the week, set up Sunday onwards</span></div>
+    <div class="q-option-card q-option-wide" onclick="fqSetCheckInDay('sunday',this)"><strong>Sunday</strong><span class="q-option-sub">Traditional end of week review</span></div>
+    <div class="q-option-card q-option-wide" onclick="fqSetCheckInDay('monday',this)"><strong>Monday</strong><span class="q-option-sub">Start the week with intention</span></div>
+  </div>
+
   <!-- v4.7.19 BUILD 1: free-text coach notes — sits at the end of Step 4. Optional. -->
-  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">F — Notes for your coach</div>
+  <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">G — Notes for your coach</div>
   <label class="q-label" style="margin-bottom:4px;display:block;">Anything else your coach should know?</label>
   <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Training goals, upcoming events, life context, injury history not covered above — anything that helps your coach build the right programme.</div>
   <textarea id="fq-coach-notes" class="q-input" rows="4" placeholder="e.g. I want to complete the Phoenix Agoge by July 4th. I travel for work 2 weeks per month. I had a shoulder reconstruction in 2019…" oninput="fqAnswers.coachNotes=this.value" style="resize:vertical;min-height:96px;"></textarea>
@@ -3349,7 +3414,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.37';
+var APP_VERSION='4.7.38';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3395,6 +3460,9 @@ var FIELD_MAP=[
   ['fqAvailableSlots','available_slots'],
   ['fqSessionSchedule','session_schedule'],
   ['fqCoachTone','coach_tone'],
+  // v4.7.38: weekly check-in day (friday|saturday|sunday|monday).
+  // SQL: alter table profiles add column if not exists check_in_day text;
+  ['fqCheckInDay','check_in_day'],
   ['fqWeighInFrequency','weigh_in_frequency'],
   ['fqCurrentlyTraining','fq_currently_training'],
   ['fqCurrentStint','fq_current_stint'],
@@ -3426,6 +3494,114 @@ function profileToAthlete(p){
 
 // ====== AUTH HANDLERS ======
 var currentSession=null;
+
+// ====== v4.7.38 BUILD 2: INVITE CODE GATE ======
+// Supabase SQL (run once):
+//   create table if not exists invite_codes (
+//     id uuid default gen_random_uuid() primary key,
+//     code text unique not null,
+//     assigned_to text,
+//     used boolean default false,
+//     used_at timestamptz,
+//     used_by_user_id uuid references profiles(id),
+//     created_at timestamptz default now()
+//   );
+//   alter table invite_codes enable row level security;
+//   create policy "Anyone can check invite codes" on invite_codes for select using (true);
+//   create policy "System can update invite codes" on invite_codes for update using (true);
+//   grant select, update on invite_codes to anon, authenticated;
+//
+// Insert codes:
+//   insert into invite_codes (code, assigned_to) values ('PHOENIXTAM', 'Tammy');
+//   insert into invite_codes (code, assigned_to) values ('PHOENIXJON', 'Jon');
+
+// Landing-screen "ENTER" handler. Verifies the invite code against Supabase, stores it in
+// localStorage, and routes to the sign-up tab. Already-used codes show the error.
+window._phxLandingEnter = async function(){
+  var input = document.getElementById('landing-invite-input');
+  var errEl = document.getElementById('landing-invite-error');
+  if(!input) return;
+  var code = String(input.value||'').trim().toUpperCase();
+  if(errEl) errEl.style.display = 'none';
+  if(!code){
+    if(errEl){ errEl.textContent = "Enter your invite code to continue."; errEl.style.display = 'block'; }
+    input.focus();
+    return;
+  }
+  // Verify against Supabase. RLS allows anon SELECT.
+  var valid = false;
+  try {
+    if(typeof sb !== 'undefined'){
+      var res = await sb.from('invite_codes')
+        .select('code,used')
+        .eq('code', code)
+        .eq('used', false)
+        .maybeSingle();
+      if(!res.error && res.data && res.data.code) valid = true;
+    }
+  } catch(e){ console.warn('[PHX] invite code check error:', e); }
+  if(!valid){
+    if(errEl){ errEl.textContent = "That code isn't recognised. Check your invite and try again."; errEl.style.display = 'block'; }
+    return;
+  }
+  try { localStorage.setItem('phoenix_invite_code', code); } catch(_e){}
+  console.log('[PHX] invite code accepted →', code);
+  // Route into the sign-up screen.
+  showScreen('screen-auth');
+  if(typeof switchAuthTab === 'function') switchAuthTab('signup');
+};
+
+// Called after a successful first-time sign-up. Marks the stored invite code as used,
+// tags the new account as pro, and triggers the alpha welcome screen once.
+async function _phxConsumeInviteCode(userId){
+  var code = null;
+  try { code = localStorage.getItem('phoenix_invite_code'); } catch(_e){}
+  if(!code || !userId || typeof sb === 'undefined') return;
+  try {
+    await sb.from('invite_codes').update({
+      used: true,
+      used_at: new Date().toISOString(),
+      used_by_user_id: userId
+    }).eq('code', code).eq('used', false);
+  } catch(e){ console.warn('[PHX] invite code consume failed:', e); }
+  // Tag the athlete record with Pro tier on the device immediately. The Supabase
+  // profile row is upserted via saveAthlete elsewhere; tier rides through FIELD_MAP.
+  try {
+    if(athlete){
+      athlete.tier = 'pro';
+      athlete.tierSource = 'alpha_invite_' + code;
+      if(typeof saveAthlete === 'function') saveAthlete(athlete);
+      else localStorage.setItem('phoenix_athlete', JSON.stringify(athlete));
+    } else {
+      localStorage.setItem('phoenix_user_tier', 'pro');
+      localStorage.setItem('phoenix_tier_source', 'alpha_invite_' + code);
+    }
+  } catch(_e){}
+}
+
+// v4.7.38 BUILD 3: alpha welcome — show once per device. Stores phoenix_alpha_welcomed=1
+// so it never reappears on this device after the athlete has begun the questionnaire.
+function _phxAlphaWelcomeNeeded(){
+  try { return !localStorage.getItem('phoenix_alpha_welcomed'); } catch(_e){ return true; }
+}
+window._phxShowAlphaWelcome = function(){
+  showScreen('screen-alpha-welcome');
+  var btn = document.getElementById('phx-alpha-begin');
+  if(btn){
+    btn.style.opacity = '0';
+    btn.style.pointerEvents = 'none';
+    btn.onclick = function(){
+      try { localStorage.setItem('phoenix_alpha_welcomed', '1'); } catch(_e){}
+      if(typeof openFoundationQ === 'function') openFoundationQ();
+      else if(typeof showScreen === 'function') showScreen('screen-foundation-q');
+    };
+    // Reveal the BEGIN button after 4s so the user has time to read.
+    setTimeout(function(){
+      var b = document.getElementById('phx-alpha-begin');
+      if(b){ b.style.opacity = '1'; b.style.pointerEvents = 'auto'; }
+    }, 4000);
+  }
+};
 
 function switchAuthTab(tab){
   document.getElementById('auth-tab-signin').classList.toggle('active',tab==='signin');
@@ -3471,9 +3647,15 @@ async function handleSignUp(){
     if(res.data.session){
       setAuthMsg('auth-msg-su','Account created. Welcome.',false);
       currentSession=res.data.session;
+      // v4.7.38 BUILD 2: redeem invite code (mark used, tag tier=pro). Fire-and-forget;
+      // the routing still proceeds even if the consume call fails — code is in localStorage.
+      try { _phxConsumeInviteCode(res.data.user && res.data.user.id); } catch(_e){}
       setTimeout(function(){loadProfileAndRoute();},500);
     }else{
       setAuthMsg('auth-msg-su','Check your email to confirm your account.',false);
+      // Still consume the invite code for email-confirm flows so the code is reserved
+      // to this email — the user_id will be wired on their first sign-in instead.
+      try { _phxConsumeInviteCode(res.data.user && res.data.user.id); } catch(_e){}
     }
   }catch(e){
     setAuthMsg('auth-msg-su',e.message||'Sign up failed.',true);
@@ -3550,7 +3732,19 @@ async function _loadProfileAndRouteInner(){
     session=res.data.session;
   }catch(e){session=null;}
   if(!session){
-    showScreen('screen-auth');
+    // v4.7.38 BUILD 1: route through the invite-code landing first unless we've already
+    // validated a code (phoenix_invite_code) or the device has a saved athlete who
+    // bypasses the gate (existing user). Going directly to screen-auth lets the
+    // "Already have an account?" link on the landing screen reach sign-in cleanly.
+    var hasInvite = false;
+    try { hasInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
+    var hasLocalAthlete = false;
+    try { hasLocalAthlete = !!localStorage.getItem('phoenix_athlete'); } catch(_e){}
+    if(!hasInvite && !hasLocalAthlete){
+      showScreen('screen-landing');
+    } else {
+      showScreen('screen-auth');
+    }
     return;
   }
   currentSession=session;
@@ -3651,6 +3845,16 @@ async function _loadProfileAndRouteInner(){
     athlete=profileToAthlete(profile);
     if(!athlete||Object.keys(athlete).length===0) athlete={id:profile.id};
     localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+  }
+  // v4.7.38 BUILD 3: first-time alpha tester → show the alpha welcome screen ONCE.
+  // Heuristic: invite code is in localStorage AND alpha welcome flag is unset AND the
+  // athlete hasn't completed the questionnaire yet. Falls through to splash if not.
+  var inviteCode = null; try { inviteCode = localStorage.getItem('phoenix_invite_code'); } catch(_e){}
+  var fqDone = athlete && athlete.fqCompleted;
+  if(inviteCode && _phxAlphaWelcomeNeeded() && !fqDone){
+    console.log('[PHX] routing decision: alpha-welcome (first-time invite redemption)');
+    _phxShowAlphaWelcome();
+    return;
   }
   console.log('[PHX] routing decision:',{hasAthlete:!!athlete,fqCompleted:athlete?athlete.fqCompleted:null,targetScreen:'screen-splash'});
   setupSplashButtons();
@@ -4134,7 +4338,9 @@ function showScreen(id){
 function navTo(tab){
   // v4.7.19 BUILD 2: weekly-checkin is reachable via navTo('weekly-checkin') so the back button
   // and any other nav surface can route to it the same way as the other screens.
-  var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk','weekly-checkin':'screen-weekly-checkin','my-coach':'screen-my-coach','agoge':'screen-agoge','wod-library':'screen-wod-library'};
+  var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk','weekly-checkin':'screen-weekly-checkin','my-coach':'screen-my-coach','agoge':'screen-agoge','wod-library':'screen-wod-library',
+    // v4.7.38 BUILD 1: landing + auth + alpha-welcome reachable via navTo.
+    'auth':'screen-auth','landing':'screen-landing','alpha-welcome':'screen-alpha-welcome'};
   if(map[tab]){
     showScreen(map[tab]);
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -5325,13 +5531,12 @@ function startRestTimer(secs,nextLabel,nextKg,nextReps,cue,isPrescribed){
       nextInfo.innerHTML = '';
     }
   }
-  // Technique cue (≤8 words). Hide if empty.
+  // v4.7.38 FIX 6: full coaching note — no word-clamp, no ellipsis. The element wraps naturally.
   var cueEl=document.getElementById('rt-cue');
   if(cueEl){
-    var clamped = cue ? String(cue).split(/\s+/).slice(0,8).join(' ') : '';
-    if(clamped && cue && cue.split(/\s+/).length > 8) clamped += '…';
-    cueEl.textContent = clamped;
-    cueEl.style.display = clamped ? 'block' : 'none';
+    var cueText = cue ? String(cue).trim() : '';
+    cueEl.textContent = cueText;
+    cueEl.style.display = cueText ? 'block' : 'none';
   }
   // Pro tier hides the two ad banners + the "remove ads" upgrade link
   var pro = (typeof hasProAccess==='function') && hasProAccess();
@@ -7553,6 +7758,24 @@ Progressive load rules (apply to primary lifts only):
 CRITICAL: use next_week_schedule.days (or fall back to athlete.fqTrainingDays) for the
 sessions in the new week. Never use a day the athlete didn't pick.
 
+CHECK-IN DAY AWARENESS (athlete.check_in_day):
+The check-in fires on the athlete's chosen day (friday / saturday / sunday / monday).
+That changes how much of the *current* week is already logged when you regenerate, and
+what "next week" means:
+
+- friday   → sessions logged Mon–Thu only. Current week's Fri–Sun are still ahead.
+             Generate the WEEKEND (Fri/Sat/Sun) plus the FULL next week. The athlete is
+             planning the weekend AND the week ahead in one go.
+- saturday → sessions logged Mon–Fri. Generate Sunday plus the full next week.
+- sunday   → full week logged. Generate next week only (Mon–Sun).
+- monday   → full previous week logged. Generate THIS week (Mon–Sun) — current Monday
+             is the start of the new week.
+
+When friday/saturday/monday-style check-ins are active, prefer to ship a slightly
+longer "week" object that covers the in-progress remainder + the full next 7 days,
+labelled with concrete day-of-week values that fall within next_week_schedule.days.
+Sunday check-ins remain the cleanest case.
+
 BLOCK HISTORY: block_history contains all session data from the start of this block
 (block_history.weeks[] = per-week summary; block_history.trends = aggregates). Read this
 BEFORE generating next week. Decisions:
@@ -7779,6 +8002,9 @@ function buildAthleteProfile(trigger, checkIn){
       // v4.7.19 BUILD 1: free-text notes the athlete wrote during onboarding
       coach_notes: a.fqCoachNotes || '',
       weigh_in_frequency: a.fqWeighInFrequency || null,
+      // v4.7.38: weekly check-in day (friday/saturday/sunday/monday). Drives WEEKLY_REGENERATION
+      // timing so the model knows how much of the current week is already in the bank.
+      check_in_day: a.fqCheckInDay || 'friday',
       // v4.7.23 hotfix: today's date + timezone — computed every call so the model never has to
       // guess. Used for programme length, time-to-Combine, peaking, Agoge timeline, etc.
       today_date: new Date().toISOString().split('T')[0],
@@ -10579,7 +10805,8 @@ function setupSplashButtons(){
   <div id="rt-next" style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-top:14px;">Set 2</div>
   <!-- v4.7.17 FIX 2: rest-timer next-set preview now uses the same two-box layout as movement cards -->
   <div id="rt-next-info" style="margin-bottom:4px;margin-top:6px;display:none;"></div>
-  <div id="rt-cue" style="font-size:12px;color:var(--text3);font-style:italic;text-align:center;margin-bottom:12px;max-width:280px;line-height:1.4;display:none;"></div>
+  <!-- v4.7.38 FIX 6: coaching note wraps naturally — no ellipsis / nowrap. Allow full text. -->
+  <div id="rt-cue" style="font-size:13px;color:var(--text2);font-style:italic;text-align:center;margin-bottom:12px;max-width:340px;line-height:1.5;display:none;white-space:normal;overflow:visible;word-wrap:break-word;padding:0 8px;"></div>
   <div class="rest-timer-bar-wrap"><div class="rest-timer-bar" id="rt-bar" style="width:100%"></div></div>
   <!-- v4.7.16 FIX 3: two control modes. Both default hidden; startRestTimer reveals one or the other. -->
   <div id="rt-rest-selector" style="display:none;align-items:center;gap:8px;margin-bottom:16px;">
@@ -11360,14 +11587,11 @@ function renderTodayScreen(){
   // Session info
   renderTodaySessionCard();
 
-  // Weekly weight check-in for fat loss goals
+  // v4.7.38 FIX 4: weekly weight check-in banner removed from Today.
+  // Daily weight = morning check-in card; weekly weight = Sunday check-in flow.
+  // Force-hidden in case any stale DOM has it visible.
   var checkinBanner=document.getElementById('weight-checkin-banner');
-  if(checkinBanner){
-    var isFatLoss=athlete&&athlete.fqGoals&&athlete.fqGoals.indexOf('fat_loss')>=0;
-    var lastCheckin=athlete&&athlete.lastWeightCheckin;
-    var daysSince=lastCheckin?Math.floor((Date.now()-new Date(lastCheckin).getTime())/(1000*60*60*24)):999;
-    checkinBanner.style.display=(isFatLoss&&daysSince>=7)?'block':'none';
-  }
+  if(checkinBanner) checkinBanner.style.display='none';
   // v4.7.31 BUILD 1: morning weight check-in card (5am-10am Brisbane).
   if(typeof _phxMaybeShowMorningCheckin==='function') _phxMaybeShowMorningCheckin();
   // v4.7.34 BUILD 1: hamburger notification dot for Sunday weekly check-in.
@@ -11431,7 +11655,8 @@ function _phxRenderSundayReviewCard(){
   // Idempotent: remove any prior render so re-running doesn't duplicate the card.
   var prior = document.getElementById('card-weekly-review');
   if(prior) prior.remove();
-  if(new Date().getDay() !== 0) return; // Sunday only
+  // v4.7.38: was Sunday-only — now gated by athlete.fqCheckInDay (default friday).
+  if(new Date().getDay() !== _phxCheckInDayIndex()) return;
   // v4.7.21 FIX 3: insert BEFORE the prescribed-session tile so the review card is the first
   // thing the athlete sees on Sunday morning. Sessions still render below it.
   var sessionCard = document.getElementById('card-today-session');
@@ -11548,10 +11773,10 @@ function openWeeklyCheckin(){
   loadWeeklyStats();
   // v4.7.34 BUILD 3: load (or regenerate) the coach's weekly recommendation card.
   if(typeof _phxLoadCoachWeeklyRecommendation === 'function') _phxLoadCoachWeeklyRecommendation();
-  // Sunday → editable submit. Other days → readonly view of the last submitted check-in.
-  var isSunday = new Date().getDay() === 0;
+  // v4.7.38: editable on the athlete's chosen check-in day (default friday). Readonly otherwise.
+  var isCheckInDay = new Date().getDay() === _phxCheckInDayIndex();
   var roNote = document.getElementById('wci-readonly-note');
-  if(roNote) roNote.style.display = isSunday ? 'none' : 'block';
+  if(roNote) roNote.style.display = isCheckInDay ? 'none' : 'block';
   showScreen('screen-weekly-checkin');
 }
 
@@ -11840,16 +12065,22 @@ function _phxBrisbaneMondayISO(){
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
-// v4.7.34 BUILD 1: red dot on the hamburger button when it's Sunday (Brisbane) and the
-// weekly check-in for THIS week hasn't been submitted yet. Cleared after submission.
+// v4.7.34 BUILD 1: red dot on the hamburger button on the athlete's check-in day when the
+// weekly check-in for THIS week hasn't been submitted yet. v4.7.38: day comes from
+// athlete.fqCheckInDay (friday/saturday/sunday/monday); defaults to friday.
+var CHECK_IN_DAYS = {friday:5, saturday:6, sunday:0, monday:1};
+function _phxCheckInDayIndex(){
+  var v = (athlete && athlete.fqCheckInDay) || 'friday';
+  return CHECK_IN_DAYS[v] != null ? CHECK_IN_DAYS[v] : 5;
+}
 window._phxUpdateHamburgerDot = function(){
   try {
     var b = _phxBrisbaneNow();
-    var isSunday = b.date.getDay() === 0;
+    var isCheckInDay = b.date.getDay() === _phxCheckInDayIndex();
     var weekStart = _phxBrisbaneMondayISO();
     var checkinDone = localStorage.getItem('phoenix_weekly_checkin_done_' + weekStart);
     var dot = document.getElementById('hamburger-dot');
-    if(dot) dot.style.display = (isSunday && !checkinDone) ? 'block' : 'none';
+    if(dot) dot.style.display = (isCheckInDay && !checkinDone) ? 'block' : 'none';
   } catch(_e){}
 };
 
@@ -13190,6 +13421,12 @@ function phxFormatHeight(s){
 //   default           → 'kg'
 function phxExerciseUnitClass(exName){
   var n = String(exName||'').toLowerCase();
+  // v4.7.38 FIX 5: machine cardio with calorie scoring — Assault / Air / Echo bike + Ski Erg.
+  // Detected BEFORE the strength catch so a 'Calorie Row' / 'Cal Bike' lands on 'cal', not 'kg'.
+  if(/\bcal(?:orie)?s?\b/.test(n)) return 'cal';
+  if(/\b(assault\s*bike|air\s*bike|echo\s*bike|schwinn\s*bike|bike\s*erg|skierg|ski[-\s]?erg)\b/.test(n)) return 'cal';
+  // Bare "bike" alone (not "spin bike" etc.) — every WOD-style bike movement is calorie-scored.
+  if(/\bbike\b/.test(n) && !/\bspin\s*bike|stationary\s*bike|exercise\s*bike\b/.test(n)) return 'cal';
   if(/\bbox\s*jump|step[-\s]?up\s+box\b/.test(n)) return 'in';
   if(/\bcarry|farmers|yoke|sandbag\b/.test(n)) return 'm';
   // v4.7.31 FIX 2: hard-exclude olympic/strength patterns BEFORE sec detection — "Hang Power Clean",
@@ -16090,6 +16327,8 @@ window.fqResetAnswers = function(){
     vertJump:0, broadJump:0, sprint40:'', wingate:0,
     // v4.7.19 BUILD 1: free-text coach notes
     coachNotes:'', weighInFrequency:null,
+    // v4.7.38: weekly check-in day preference. Default = friday. Fed to fqCheckInDay on save.
+    checkInDay:'friday',
     scheduleMode:null,
     availableSlots:{}, sessionSchedule:null,
     // v4.7.37 hotfix: explicit trainingDays array. Computed from availableSlots in
@@ -16344,6 +16583,15 @@ window.fqSetWeighInFrequency = function(val, el){
   fqAnswers.weighInFrequency = val;
   document.querySelectorAll('#fq-weighin-row .q-option-card').forEach(function(e){e.classList.remove('active');});
   if(el) el.classList.add('active');
+};
+
+// v4.7.38: weekly check-in day handler. Mutually exclusive across the four pills.
+window.fqSetCheckInDay = function(val, el){
+  fqAnswers.checkInDay = val;
+  document.querySelectorAll('#fq-checkin-day-row .q-option-wide').forEach(function(e){e.classList.remove('active');});
+  if(el) el.classList.add('active');
+  console.log('[PHX] fqSetCheckInDay →', val);
+  if(typeof fqValidateStep === 'function') fqValidateStep();
 };
 
 window.fqSetProgrammeTarget = function(val,el){
@@ -16712,6 +16960,8 @@ window.fqNext = function(){
       ? _phxComputeTrainingDays(fqAnswers.availableSlots)
       : (Array.isArray(existing.fqTrainingDays) ? existing.fqTrainingDays : []),
     fqCoachTone: fqAnswers.coachTone || fqAnswers.fqCoachTone || existing.fqCoachTone || null,
+    // v4.7.38: weekly check-in day preference. Default friday if user never picked.
+    fqCheckInDay: fqAnswers.checkInDay || existing.fqCheckInDay || 'friday',
     fqInjury:fqAnswers.injury,
     fqInjuryNotes:fqAnswers.injuryNotes,
     fqParqClear:fqAnswers.parqClear,
@@ -16899,6 +17149,10 @@ window.fqRestoreProgressUI = function(){
     var wfEl=document.querySelector('#fq-weighin-row .q-option-card[onclick*="\''+fqAnswers.weighInFrequency+'\'"]');
     if(wfEl) wfEl.classList.add('active');
   }
+  // v4.7.38: restore weekly check-in day selector. Default to friday if unset.
+  var cidVal = fqAnswers.checkInDay || 'friday';
+  var cidEl = document.querySelector('#fq-checkin-day-row .q-option-wide[onclick*="\''+cidVal+'\'"]');
+  if(cidEl) cidEl.classList.add('active');
   // Step 5
   if(fqAnswers.scheduleMode){
     var smEl=document.querySelector('#fq-step-schedulemode .q-option-wide[onclick*="\''+fqAnswers.scheduleMode+'\'"]');

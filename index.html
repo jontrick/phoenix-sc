@@ -1845,9 +1845,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div style="text-align:center;margin:6px 0 14px;">
       <button onclick="openWeekPlan()" style="background:transparent;border:none;color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px;text-decoration:underline;">Plan My Week →</button>
     </div>
-    <!-- v4.7.23 BUILD 1: The Agoge tile — full-width, only rendered when fqProgrammeTarget is agoge or both.
-         JS: _phxRenderAgogeTile() shows/hides + populates this tile each time renderTodayScreen runs. -->
-    <div id="card-agoge" onclick="openAgoge()" style="display:none;position:relative;margin-bottom:10px;border-radius:var(--radius);border:1px solid #6B2020;border-left:3px solid #6B2020;overflow:hidden;cursor:pointer;background:linear-gradient(135deg,#1a0808 0%,#0a0303 100%);min-height:170px;">
+    <!-- v4.7.23 BUILD 1 / v4.7.39 CHANGE 3: The Agoge tile is always visible. Non-Agoge
+         athletes get a "JOIN THE AGOGE" overlay (added by _phxRenderAgogeTile); active
+         athletes get the progress bars + week + km line. -->
+    <div id="card-agoge" onclick="openAgoge()" style="position:relative;margin-bottom:10px;border-radius:var(--radius);border:1px solid #6B2020;border-left:3px solid #6B2020;overflow:hidden;cursor:pointer;background:linear-gradient(135deg,#1a0808 0%,#0a0303 100%);min-height:170px;">
       <div id="card-agoge-img" style="position:absolute;inset:0;background-image:url('/assets/tiles/tile-agoge.jpg');background-size:cover;background-position:center;filter:brightness(0.3);"></div>
       <div style="position:relative;padding:18px 18px 16px;color:#fff;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
@@ -2534,15 +2535,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin:24px 0 6px;">C — Programme target</div>
   <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Do you have a goal you're training toward?</div>
   <div style="display:flex;flex-direction:column;gap:8px;" id="fq-target-list">
-    <!-- v4.7.21 FIX 1: Combine and Agoge are now separate. Combine = July test battery. Agoge = block + The March (246km). -->
+    <!-- v4.7.39 CHANGE 1: Agoge removed as a programme target. It's now an opt-in challenge
+         available to all users via the Agoge tile on the Today screen. -->
     <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('combine',this)">
       <strong>The Phoenix Combine</strong><span class="q-option-sub">Peak for the annual test battery in July — strength, power and conditioning tests across 2 days</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('agoge',this)">
-      <strong>The Agoge Challenge</strong><span class="q-option-sub">Complete your full coach-prescribed programme block AND walk/run 246km (the Spartathlon route, Athens to Sparta)</span>
-    </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('both',this)">
-      <strong>Both — Combine + Agoge</strong><span class="q-option-sub">The full Phoenix challenge — peak for July tests and complete The March</span>
     </div>
     <div class="q-option-card q-option-wide" onclick="fqSetProgrammeTarget('event',this)">
       <strong>A specific event</strong><span class="q-option-sub">Race, season, competition or challenge</span>
@@ -3351,8 +3347,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
       <div><div class="sidebar-item-text">My Coach</div><div class="sidebar-item-sub">Chat with your AI coach</div></div>
     </div>
-    <!-- v4.7.23 BUILD 3: The Agoge — only when fqProgrammeTarget is agoge or both. -->
-    <div id="sidebar-item-agoge" class="sidebar-item" onclick="closeSidebar();openAgoge()" style="display:none;">
+    <!-- v4.7.23 BUILD 3 / v4.7.39: The Agoge — always visible. openAgoge() routes to the
+         intro screen for opt-in or the tracker for active athletes. -->
+    <div id="sidebar-item-agoge" class="sidebar-item" onclick="closeSidebar();openAgoge()">
       <div class="sidebar-item-icon" style="background:rgba(107,32,32,0.18);color:#c97070;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z"/></svg></div>
       <div><div class="sidebar-item-text">The Agoge</div><div class="sidebar-item-sub">Block + The March (246km)</div></div>
     </div>
@@ -3414,7 +3411,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.38';
+var APP_VERSION='4.7.39';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4340,7 +4337,9 @@ function navTo(tab){
   // and any other nav surface can route to it the same way as the other screens.
   var map={today:'screen-today',programme:'screen-programme',stats:'screen-stats',athlete:'screen-athlete',coming:'screen-coming',feedback:'screen-feedback',walk:'screen-walk','weekly-checkin':'screen-weekly-checkin','my-coach':'screen-my-coach','agoge':'screen-agoge','wod-library':'screen-wod-library',
     // v4.7.38 BUILD 1: landing + auth + alpha-welcome reachable via navTo.
-    'auth':'screen-auth','landing':'screen-landing','alpha-welcome':'screen-alpha-welcome'};
+    'auth':'screen-auth','landing':'screen-landing','alpha-welcome':'screen-alpha-welcome',
+    // v4.7.39 CHANGE 2: Agoge intro (opt-in explanation) reachable via navTo.
+    'agoge-intro':'screen-agoge-intro'};
   if(map[tab]){
     showScreen(map[tab]);
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -7451,23 +7450,16 @@ When next Combine is within 6 weeks:
 PROGRAMME TARGET
 ================================================================
 
-Read fqProgrammeTarget. Possible values: combine / agoge / both / event / quarterly / none.
+Read fqProgrammeTarget. Possible values: combine / event / quarterly / none.
+
+(v4.7.39: agoge and "both" are no longer programme targets. The Agoge is an opt-in
+challenge the athlete can join from the Today screen at any time during their block —
+it sits on top of whatever programme target is active. See AGOGE OPT-IN below.)
 
 combine → programme backward from July Combine. Peak for the 11 test battery.
 - Prioritise strength (bench/deadlift), power (vertical/broad/sprint), and conditioning (row/bike/run) in the final 6 weeks.
 - Programme length determined by how far out the athlete is from July — coach decides the appropriate block length.
 - 6 weeks out from July: activate peaking protocol automatically.
-
-agoge → The Agoge has TWO components that run simultaneously:
-- Component 1 — The Programme Block: build the athlete through their full coach-prescribed programme. Length is set by the coach based on athlete profile, goals, and training age — NOT fixed at 8 weeks. Progressive overload, periodised, ends when the block is complete.
-- Component 2 — The March: prescribe weekly walking/running distance toward a cumulative 246km total (the Spartathlon route Athens to Sparta). The weekly march distance is part of the programme — typically 20-35km/week depending on availability and current conditioning. The walk sessions in the programme ARE the march. Track cumulative distance. The Agoge is complete when BOTH the programme block AND 246km are achieved.
-- Running inside WODs ALSO counts toward The March. Any "Run" movement in a prescribed WOD (e.g. 5 rounds × 400m run = 2km) accumulates toward the 246km total. When prescribing WODs for agoge/both athletes, name the running contribution explicitly in the WOD's coaching_note (e.g. "This WOD includes 2km of running — counts toward your weekly march target."). Do NOT count rowing, biking, or carries — only foot-running.
-- Coach note week 1: "Your Agoge has two goals — complete this programme block and walk/run 246km (the Spartathlon route). Your weekly walk prescription builds toward that total. We track both together."
-
-both → combine + agoge in one. Peak for July Combine tests AND prescribe weekly march distance toward 246km.
-- The Combine preparation IS the training; they align naturally.
-- Programme length set to peak for July Combine.
-- March distance prescribed weekly alongside training.
 
 event → programme backward from fqEventDate.
 - fqEventDescription informs sport/event-specific conditioning.
@@ -7481,6 +7473,36 @@ quarterly → no periodised peak.
 none → coach decides everything.
 - Build the athlete consistently. Programme length based on athlete profile and training age.
 - Default: build quietly toward next Combine without mentioning it. Let the athlete discover it naturally through the app.
+
+================================================================
+AGOGE OPT-IN (orthogonal to programme target)
+================================================================
+
+The Agoge is an opt-in challenge that sits ON TOP of whatever programme target is
+active. The runtime signals it via athlete.agogeStartDate (timestamp when the athlete
+joined) and isAgogeActive() = true. The legacy fqProgrammeTarget values 'agoge' and
+'both' may still appear on older accounts — treat both as "Agoge active" for back-compat.
+
+When Agoge is active:
+- The Agoge has TWO components that run simultaneously alongside the existing programme
+  target (combine / event / quarterly / none — whichever the athlete picked in the FQ).
+- Component 1 — The Programme Block: keep building the athlete through their full
+  coach-prescribed programme as you would anyway. Agoge does NOT replace the target,
+  it overlays a march goal.
+- Component 2 — The March: prescribe weekly walking/running distance toward a
+  cumulative 246km total (the Spartathlon route Athens to Sparta). Typically 20-35km/week
+  depending on availability and current conditioning. The walk sessions in the programme
+  ARE the march. The Agoge is complete when BOTH the programme block AND 246km are achieved.
+- Running inside WODs ALSO counts toward The March. Any "Run" movement in a prescribed
+  WOD (e.g. 5 rounds × 400m run = 2km) accumulates toward the 246km total. When
+  prescribing WODs for Agoge athletes, name the running contribution explicitly in the
+  WOD's coaching_note (e.g. "This WOD includes 2km of running — counts toward your
+  weekly march target."). Do NOT count rowing, biking, or carries — only foot-running.
+- First week after joining: include the line "Your march starts this week — your walks
+  and any WOD running build the 246km total." in the relevant coaching notes.
+
+When Agoge is NOT active: do not prescribe march mileage, do not mention 246km. Walks
+and conditioning are programmed purely for their training value.
 
 ================================================================
 ASSESSMENT SCORE HANDLING
@@ -8919,9 +8941,10 @@ function openSidebar(){
   var streak=getWalkStreak();
   var el=document.getElementById('sidebar-streak');
   if(el) el.textContent=streak;
-  // v4.7.23 BUILD 3: show/hide The Agoge entry based on the athlete's target.
+  // v4.7.39 CHANGE 3: The Agoge sidebar entry is always visible. openAgoge() routes
+  // through the intro screen when the athlete hasn't joined yet.
   var agItem = document.getElementById('sidebar-item-agoge');
-  if(agItem) agItem.style.display = (typeof isAgogeActive==='function' && isAgogeActive()) ? 'flex' : 'none';
+  if(agItem) agItem.style.display = 'flex';
   document.getElementById('sidebar').classList.add('active');
   document.getElementById('sidebar-overlay').classList.add('active');
 }
@@ -10726,6 +10749,39 @@ function setupSplashButtons(){
     2. The March — 246km cumulative walk/run (Athens → Sparta, the Spartathlon route)
   All progress data is computed from Supabase sessions on open.
 ============================================================ -->
+<!-- v4.7.39 CHANGE 2: AGOGE INTRO — opt-in explanation screen. Shown when a non-Agoge
+     athlete taps the Agoge tile or the sidebar entry. Reached via openAgoge() routing. -->
+<div id="screen-agoge-intro" class="screen" style="background:#0a0303;">
+  <div class="app-header" style="background:rgba(0,0,0,0.5);">
+    <div class="icon-btn" onclick="navTo('today')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="header-logo">THE <span>AGOGE</span></div>
+    <div style="width:36px"></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;">
+    <div style="position:relative;height:200px;overflow:hidden;background:#1a0808;">
+      <div style="position:absolute;inset:0;background-image:url('/assets/tiles/tile-agoge.jpg');background-size:cover;background-position:center;filter:brightness(0.35);"></div>
+      <div style="position:relative;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;">
+        <div style="font-family:var(--font-d);font-size:11px;letter-spacing:5px;text-transform:uppercase;color:#c97070;margin-bottom:6px;">Optional Challenge</div>
+        <div style="font-family:var(--font-d);font-size:34px;font-weight:900;text-transform:uppercase;color:#fff;letter-spacing:4px;line-height:1;">The Agoge</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-top:8px;line-height:1.5;max-width:320px;">The hardest thing Phoenix asks of you.</div>
+      </div>
+    </div>
+    <div style="padding:24px 20px;max-width:520px;margin:0 auto;color:rgba(255,255,255,0.85);font-size:14px;line-height:1.8;">
+      <p style="margin:0 0 16px;">The Agoge is a two-part challenge.</p>
+      <p style="margin:0 0 16px;"><strong style="color:#c97070;">The March</strong> — walk or run 246 km. The distance from Athens to Sparta. The route the Spartans marched before their greatest battles. You accumulate every kilometre from your daily walks and WOD runs.</p>
+      <p style="margin:0 0 16px;"><strong style="color:#c97070;">The Block</strong> — complete your full coach-prescribed training block without breaking the chain.</p>
+      <p style="margin:0 0 16px;">Both together. That's The Agoge.</p>
+      <p style="margin:0 0 16px;">It has no fixed timeline. Your coach prescribes your weekly march distance alongside your training. You finish when you finish.</p>
+      <p style="margin:0 0 16px;">When you complete The Agoge, you earn the <strong style="color:#c97070;font-family:'Times New Roman',serif;font-size:18px;">Λ</strong> — the Spartan lambda. It appears on your profile. It never goes away.</p>
+      <p style="margin:0 0 28px;color:rgba(255,255,255,0.65);font-style:italic;">This is optional. It is not for everyone. But if you're here, you're probably considering it.</p>
+      <button id="agoge-intro-join" style="width:100%;padding:16px;background:#6B2020;color:#fff;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:4px;text-transform:uppercase;cursor:pointer;margin-bottom:10px;">Join the Agoge</button>
+      <button onclick="navTo('today')" style="width:100%;padding:14px;background:transparent;color:rgba(255,255,255,0.5);border:none;font-family:var(--font-d);font-size:12px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;">Not yet</button>
+    </div>
+  </div>
+</div>
+
 <div id="screen-agoge" class="screen">
   <div class="app-header">
     <div class="icon-btn" onclick="navTo('today')">
@@ -15408,8 +15464,27 @@ function _agogeFmtKm(m){ return ((m||0)/1000).toFixed(1)+'km'; }
 async function _phxRenderAgogeTile(){
   var tile = document.getElementById('card-agoge');
   if(!tile) return;
-  if(!isAgogeActive()){ tile.style.display = 'none'; return; }
+  // v4.7.39 CHANGE 3: tile always visible. Non-Agoge athletes see a "JOIN THE AGOGE"
+  // overlay state; the click routes through openAgoge() → intro screen.
   tile.style.display = 'block';
+  if(!isAgogeActive()){
+    var prior = document.getElementById('card-agoge-join-overlay');
+    if(prior) prior.remove();
+    // Build a single-shot overlay covering the tracker progress bars.
+    var overlay = document.createElement('div');
+    overlay.id = 'card-agoge-join-overlay';
+    overlay.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;z-index:5;background:linear-gradient(180deg,rgba(10,3,3,0.25) 0%,rgba(10,3,3,0.75) 100%);';
+    overlay.innerHTML =
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:5px;text-transform:uppercase;color:#c97070;margin-bottom:6px;">Optional Challenge</div>'+
+      '<div style="font-family:var(--font-d);font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#fff;line-height:1;margin-bottom:12px;">The Agoge</div>'+
+      '<div style="font-size:12px;color:rgba(255,255,255,0.7);line-height:1.6;max-width:280px;margin-bottom:18px;">Walk 246km + complete your block. Earn the Λ.</div>'+
+      '<div style="display:inline-block;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#fff;background:#6B2020;padding:10px 22px;border-radius:var(--radius);">Join the Agoge →</div>';
+    tile.appendChild(overlay);
+    return;
+  }
+  // Active athlete — clear any join overlay and render the progress bars below.
+  var dropOverlay = document.getElementById('card-agoge-join-overlay');
+  if(dropOverlay) dropOverlay.remove();
   var weekNum = _agogeWeekNumber();
   var totalWeeks = _agogeTotalWeeks();
   var daysElapsed = _agogeDaysElapsed();
@@ -15439,10 +15514,44 @@ async function _phxRenderAgogeTile(){
   if(lineEl) lineEl.textContent = Math.round(freshKm)+'km of '+AGOGE_TOTAL_KM+'km · '+daysElapsed+' days elapsed';
 }
 
+// v4.7.39 CHANGE 2: opt-in intro screen + Join handler.
+function _phxOpenAgogeIntro(){
+  showScreen('screen-agoge-intro');
+  var btn = document.getElementById('agoge-intro-join');
+  if(btn) btn.onclick = _phxJoinAgoge;
+}
+
+async function _phxJoinAgoge(){
+  var btn = document.getElementById('agoge-intro-join');
+  if(btn){ btn.disabled = true; btn.textContent = 'Joining…'; }
+  var now = new Date().toISOString();
+  try {
+    // Local first so the UI reflects the change immediately even if Supabase is slow.
+    if(!athlete) athlete = {};
+    athlete.fqProgrammeTarget = athlete.fqProgrammeTarget || 'combine';
+    athlete.agogeStartDate = now;
+    athlete.agogeJoined = true;
+    if(typeof saveAthlete === 'function') saveAthlete(athlete);
+    else localStorage.setItem('phoenix_athlete', JSON.stringify(athlete));
+    // Direct Supabase patch for agoge_start_date (sits outside FIELD_MAP for now —
+    // SQL: alter table profiles add column if not exists agoge_start_date timestamptz;)
+    if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+      try {
+        await sb.from('profiles').update({agoge_start_date: now, updated_at: now})
+          .eq('id', currentSession.user.id);
+      } catch(_e){ console.warn('[PHX] agoge_start_date upsert failed:', _e); }
+    }
+  } catch(e){ console.warn('[PHX] _phxJoinAgoge error:', e); }
+  alert('The Agoge has begun. Your march starts today.');
+  showScreen('screen-agoge');
+  // Reset the join button so a re-entry to the intro works if the athlete ever leaves.
+  if(btn){ btn.disabled = false; btn.textContent = 'Join the Agoge'; }
+}
+
 // Open the dedicated Agoge screen and render every section from live data.
 async function openAgoge(){
   if(!isAgogeActive()){
-    alert('The Agoge is part of the agoge / both programme target. Update your goal in the questionnaire to track it.');
+    _phxOpenAgogeIntro();
     return;
   }
   showScreen('screen-agoge');

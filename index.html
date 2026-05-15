@@ -3305,7 +3305,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.40';
+var APP_VERSION='4.7.41';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3618,6 +3618,22 @@ async function loadProfileAndRoute(){
   _routingInFlight=true;
   try{return await _loadProfileAndRouteInner();}finally{_routingInFlight=false;}
 }
+// v4.7.41 hotfix: single source of truth for "this user is fully onboarded".
+// Used by the fast-path at the top of _loadProfileAndRouteInner and by the
+// onAuthStateChange handler so neither one can re-route a fully-onboarded user
+// back to splash / questionnaire on token refresh, tab focus, or transient
+// Supabase errors.
+function _phxIsFullyOnboardedAthlete(a){
+  return !!(a && a.fqCompleted && a.aiProgramme);
+}
+function _phxLoadLocalAthlete(){
+  try {
+    var raw = localStorage.getItem('phoenix_athlete');
+    if(!raw) return null;
+    return JSON.parse(raw);
+  } catch(_e){ return null; }
+}
+
 async function _loadProfileAndRouteInner(){
   console.log('[PHX] loadProfileAndRoute start');
   var session;
@@ -3637,6 +3653,44 @@ async function _loadProfileAndRouteInner(){
     return;
   }
   currentSession=session;
+  // ===== v4.7.41 hotfix FAST-PATH =====
+  // Fully-onboarded user (fqCompleted + aiProgramme in local cache) → straight to Today.
+  // Skips the full Supabase-profile branch chain entirely. Stops every "Begin Programme"
+  // regression caused by:
+  //   - SIGNED_IN firing on tab focus / token refresh → re-routing
+  //   - Supabase profile fetch returning a sparse row (transient or older account)
+  //   - profile.fq_completed not being set on the server even though the user IS onboarded
+  // The Supabase profile is still refreshed in the background to keep the local cache
+  // current, but it does NOT decide routing for an already-onboarded athlete.
+  var _localAth = _phxLoadLocalAthlete();
+  if(_phxIsFullyOnboardedAthlete(_localAth)){
+    console.log('[PHX] routing decision: FAST-PATH (fully onboarded locally) → today');
+    athlete = _localAth;
+    try {
+      if(athlete.theme && typeof applySkin==='function') applySkin(athlete.theme);
+      if(athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
+    } catch(_e){}
+    if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
+    navTo('today');
+    // Background profile refresh — non-blocking, never re-routes.
+    try {
+      sb.from('profiles').select('*').eq('id', session.user.id).single().then(function(pRes){
+        if(pRes && pRes.data && !pRes.error){
+          var fresh = profileToAthlete(pRes.data);
+          // Merge server fields onto local without losing local-only state. If the server
+          // somehow lost fqCompleted / aiProgramme, keep the local versions — local is
+          // authoritative for "am I onboarded".
+          var merged = Object.assign({}, athlete, fresh);
+          if(_localAth.fqCompleted && !merged.fqCompleted) merged.fqCompleted = _localAth.fqCompleted;
+          if(_localAth.aiProgramme && !merged.aiProgramme) merged.aiProgramme = _localAth.aiProgramme;
+          athlete = merged;
+          try { localStorage.setItem('phoenix_athlete', JSON.stringify(athlete)); } catch(_e){}
+        }
+      }).catch(function(_e){ /* offline-tolerant */ });
+    } catch(_e){}
+    setTimeout(function(){ if(typeof _phxResumeWalk==='function') _phxResumeWalk(); }, 600);
+    return;
+  }
   // Try fetch profile from Supabase
   var profile=null;
   try{
@@ -3753,6 +3807,25 @@ async function _loadProfileAndRouteInner(){
     athlete=profileToAthlete(profile);
     if(!athlete||Object.keys(athlete).length===0) athlete={id:profile.id};
     localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+  }
+  // v4.7.41 hotfix: belt-and-braces. The fast-path at the top should have caught this,
+  // but if a stale localStorage write somehow surfaces a fully-onboarded athlete only
+  // here (after the Supabase profile merge), still route to Today. Never bounce a
+  // fully-onboarded user to splash / questionnaire.
+  if(_phxIsFullyOnboardedAthlete(athlete) || _phxIsFullyOnboardedAthlete(localAthlete)){
+    if(_phxIsFullyOnboardedAthlete(localAthlete) && !_phxIsFullyOnboardedAthlete(athlete)){
+      // Local has it, server doesn't — hydrate from local + persist server-side.
+      athlete = Object.assign({}, athlete||{}, localAthlete);
+      try { saveAthlete(athlete); } catch(_e){}
+    }
+    console.log('[PHX] routing decision: late-stage fully-onboarded guard → today');
+    try {
+      if(athlete.theme && typeof applySkin==='function') applySkin(athlete.theme);
+      if(athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
+    } catch(_e){}
+    if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
+    navTo('today');
+    return;
   }
   // v4.7.38 BUILD 3: first-time alpha tester → show the alpha welcome screen ONCE.
   // Heuristic: invite code is in localStorage AND alpha welcome flag is unset AND the
@@ -10275,7 +10348,27 @@ renderVersionDisplays();
 sb.auth.onAuthStateChange(function(event,session){
   console.log('[PHX] onAuthStateChange:',event,session&&session.user?session.user.email:null);
   currentSession=session;
-  if(event==='SIGNED_IN') loadProfileAndRoute();
+  if(event==='SIGNED_IN'){
+    // v4.7.41 hotfix: SIGNED_IN fires not just at actual sign-in but also on every
+    // token refresh and (in some browsers) when the tab regains focus. Re-running
+    // loadProfileAndRoute() in those cases would walk every routing branch — and any
+    // transient Supabase hiccup in that walk would bounce a fully-onboarded user back
+    // to splash / Begin Programme. Hard rule: a fully-onboarded user never re-routes
+    // on a SIGNED_IN refresh. We just refresh the session and re-render Today.
+    if(_phxIsFullyOnboardedAthlete(athlete)){
+      console.log('[PHX] SIGNED_IN ignored for routing — user already onboarded; refreshing Today');
+      try { if(typeof renderTodayScreen==='function') renderTodayScreen(); } catch(_e){}
+      return;
+    }
+    loadProfileAndRoute();
+  }
+  // v4.7.41 hotfix: explicitly ignore TOKEN_REFRESHED / USER_UPDATED — they have no
+  // routing implications. Supabase fires these silently; the previous code didn't
+  // handle them but if they ever did fire SIGNED_IN paths, the guard above also covers it.
+  if(event==='TOKEN_REFRESHED' || event==='USER_UPDATED'){
+    console.log('[PHX] '+event+' — no routing action');
+    return;
+  }
   if(event==='SIGNED_OUT'){
     // v4.7.39 hotfix: sign-out follows the same gate as boot — landing first unless
     // a valid invite code is still in localStorage.
@@ -10284,6 +10377,12 @@ sb.auth.onAuthStateChange(function(event,session){
     showScreen(_signedOutInvite ? 'screen-auth' : 'screen-landing');
   }
 });
+
+// v4.7.41 hotfix: NO visibilitychange listener exists in this app, and none should be
+// added that re-routes. Token refresh is handled by Supabase internally; the
+// onAuthStateChange guard above ignores those refreshes for routing purposes. If a
+// future visibility hook is added, it MUST follow the same rule: fully-onboarded
+// athletes only ever get a renderTodayScreen() refresh — never a re-route.
 
 // ====== AUTH CHECK ======
 var session=null;

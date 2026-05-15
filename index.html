@@ -3302,10 +3302,23 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 // ====== SUPABASE CLIENT ======
 var SUPABASE_URL='https://mxtowhccuqarszcwpbkq.supabase.co';
 var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
-var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+// v4.7.42 hotfix: every auth setting explicit so we don't rely on SDK defaults that can
+// shift between Supabase JS versions or behave differently in PWA standalone mode (where
+// some browsers — iOS Safari especially — get aggressive with storage). The default
+// storageKey (`sb-{project-ref}-auth-token`) is intentionally left alone so existing
+// users' sessions survive this upgrade.
+var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
+  auth:{
+    persistSession:true,
+    storage:(typeof window!=='undefined' && window.localStorage) ? window.localStorage : undefined,
+    autoRefreshToken:true,
+    detectSessionInUrl:true,
+    flowType:'pkce'
+  }
+});
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.41';
+var APP_VERSION='4.7.42';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3570,6 +3583,10 @@ async function handleForgotPassword(){
 }
 
 async function handleSignOut(){
+  // v4.7.42 hotfix: flag this as a user-initiated sign-out so the auth state listener
+  // routes to landing instead of treating SIGNED_OUT as a token-expiry/network glitch
+  // and silently keeping the user on Today.
+  window._phxIntentionalSignOut = true;
   try{await sb.auth.signOut();}catch(e){console.warn('Sign out error:',e);}
   location.reload();
 }
@@ -4371,6 +4388,8 @@ function editProfile(){
 }
 function resetApp(){
   if(confirm('Reset all data? This cannot be undone.')){
+    // v4.7.42 hotfix: full data wipe is intentional — same flag as handleSignOut.
+    window._phxIntentionalSignOut = true;
     sb.auth.signOut().catch(function(e){console.warn('Sign out during reset:',e);}).finally(function(){
       for(var i=localStorage.length-1;i>=0;i--){
         var key=localStorage.key(i);
@@ -10370,8 +10389,34 @@ sb.auth.onAuthStateChange(function(event,session){
     return;
   }
   if(event==='SIGNED_OUT'){
-    // v4.7.39 hotfix: sign-out follows the same gate as boot — landing first unless
-    // a valid invite code is still in localStorage.
+    // v4.7.42 hotfix: distinguish a user-initiated sign-out (handleSignOut / resetApp set
+    // the flag) from a spurious SIGNED_OUT (token refresh failed, network blip, storage
+    // race). For spurious events, if the local athlete is fully onboarded, attempt a
+    // silent refreshSession() and KEEP THE USER ON TODAY. Only intentional sign-outs route
+    // to landing. This is the fix for "users signed out overnight" — when Supabase fails
+    // a background refresh it fires SIGNED_OUT; without this guard the user lands on the
+    // landing page even though their data is intact.
+    if(!window._phxIntentionalSignOut){
+      var _localOnboarded = _phxIsFullyOnboardedAthlete(athlete) || _phxIsFullyOnboardedAthlete(_phxLoadLocalAthlete());
+      if(_localOnboarded){
+        console.warn('[PHX] spurious SIGNED_OUT — keeping user on Today, attempting silent session refresh');
+        // Best-effort silent refresh. We don't await — if it fails, the user keeps using
+        // the app offline-style; cached data is intact and the next manual action will
+        // either succeed (refresh recovered) or surface a real error.
+        try {
+          sb.auth.refreshSession().then(function(refreshed){
+            if(refreshed && refreshed.data && refreshed.data.session){
+              console.log('[PHX] silent refreshSession recovered — session restored');
+              currentSession = refreshed.data.session;
+            } else {
+              console.warn('[PHX] silent refreshSession returned no session — staying offline');
+            }
+          }).catch(function(e){ console.warn('[PHX] silent refreshSession failed:', e); });
+        } catch(_e){}
+        return;
+      }
+    }
+    // Intentional sign-out OR no local data to anchor to → land normally.
     var _signedOutInvite = false;
     try { _signedOutInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
     showScreen(_signedOutInvite ? 'screen-auth' : 'screen-landing');
@@ -10385,6 +10430,29 @@ sb.auth.onAuthStateChange(function(event,session){
 // athletes only ever get a renderTodayScreen() refresh — never a re-route.
 
 // ====== AUTH CHECK ======
+// v4.7.42 hotfix: reset intentional-signout flag at every boot so it can't leak across
+// reloads (it's only read once during the SIGNED_OUT handler immediately after a sign-out).
+window._phxIntentionalSignOut = false;
+
+// v4.7.42 hotfix BOOT FAST-PAINT: if the local cache shows a fully-onboarded athlete,
+// paint Today immediately. The auth check + Supabase profile fetch then continue
+// asynchronously and silently. The user never sees the landing page just because the
+// network is slow, the access token expired, or Supabase is briefly unreachable.
+var _bootLocalAth = null;
+try { _bootLocalAth = JSON.parse(localStorage.getItem('phoenix_athlete') || 'null'); } catch(_e){}
+var _bootFastPainted = false;
+if(_phxIsFullyOnboardedAthlete(_bootLocalAth)){
+  athlete = _bootLocalAth;
+  try {
+    if(athlete.theme && typeof applySkin==='function') applySkin(athlete.theme);
+    if(athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
+  } catch(_e){}
+  if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
+  navTo('today');
+  _bootFastPainted = true;
+  console.log('[PHX] boot fast-paint → today (local fully-onboarded athlete)');
+}
+
 var session=null;
 var networkError=false;
 try{
@@ -10402,18 +10470,48 @@ try{
   }
 }
 
+// v4.7.42 hotfix RECOVERY: getSession() can return null for transient reasons (storage
+// momentarily inaccessible, access token expired and not yet refreshed, etc.). Before
+// giving up on a known-onboarded user, try refreshSession() once. Only fall through to
+// landing if the refresh also fails AND there's no local data to keep them on Today.
+if(!session && !networkError && _phxIsFullyOnboardedAthlete(_bootLocalAth)){
+  console.log('[PHX] getSession returned null but local user is fully onboarded — attempting refreshSession');
+  try {
+    var refreshed = await sb.auth.refreshSession();
+    if(refreshed && refreshed.data && refreshed.data.session){
+      session = refreshed.data.session;
+      console.log('[PHX] refreshSession recovered — session restored');
+    } else {
+      console.warn('[PHX] refreshSession returned no session');
+    }
+  } catch(e){
+    console.warn('[PHX] refreshSession failed:', e);
+    // Network-style errors are treated as offline so we keep the user on Today below.
+    var rmsg = (e&&e.message)||'';
+    if(!navigator.onLine||/fetch|network|failed to fetch/i.test(rmsg)) networkError = true;
+  }
+}
+
 if(networkError&&localStorage.getItem('phoenix_athlete')){
   var localData=localStorage.getItem('phoenix_athlete');
   try{athlete=JSON.parse(localData);}catch(ex){}
   if(athlete){
     showOfflineBanner();
     setupSplashButtons();
-    viewWeek=progWeek();
-    navTo('today');
+    if(!_bootFastPainted){
+      viewWeek=progWeek();
+      navTo('today');
+    }
     return;
   }
 }
 if(networkError){
+  // v4.7.42 hotfix: if we already painted Today via the fast-paint above, don't yank
+  // the user away just because Supabase is unreachable. Show the offline banner instead.
+  if(_bootFastPainted){
+    if(typeof showOfflineBanner==='function') showOfflineBanner();
+    return;
+  }
   showScreen('screen-auth');
   showAuthConnectionMessage();
   disableAuthButtons();
@@ -10421,6 +10519,14 @@ if(networkError){
 }
 
 if(!session){
+  // v4.7.42 hotfix: a fully-onboarded local user with NO recoverable session is treated
+  // as offline rather than thrown to the landing page. They keep using the app with
+  // cached data; any real auth failure surfaces on next manual sync.
+  if(_phxIsFullyOnboardedAthlete(_bootLocalAth)){
+    console.warn('[PHX] no session after refresh attempt — user stays on Today (offline mode)');
+    if(typeof showOfflineBanner==='function') showOfflineBanner();
+    return;
+  }
   // v4.7.39 hotfix: boot-time entry — landing is the default when there's no invite code.
   var _bootInvite = false;
   try { _bootInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}

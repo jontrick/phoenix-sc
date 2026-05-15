@@ -377,9 +377,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 /* ONBOARDING */
 .progress-bar{height:2px;background:var(--border);}
 .progress-fill{height:100%;background:var(--gold);transition:width 0.4s ease;}
-.onboard-body{flex:1;padding:24px 20px 40px;overflow-y:auto;}
-.onboard-step{display:none;animation:fadeUp 0.4s ease both;}
-.onboard-step.active{display:block;}
+/* v4.7.40: .onboard-* CSS retained as no-op fallback for any third-party DOM that may
+   still query these classes — cheap to keep, and covers any deep-linked legacy URL. */
 .step-tag{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:8px;}
 .step-title{font-family:var(--font-d);font-size:36px;font-weight:900;letter-spacing:1px;color:var(--text);text-transform:uppercase;line-height:1.1;margin-bottom:6px;}
 .step-desc{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:28px;}
@@ -1624,117 +1623,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
 </div>
 
-<!-- ONBOARDING -->
-<div id="screen-onboard" class="screen">
-<div class="progress-bar"><div class="progress-fill" id="ob-progress" style="width:33%"></div></div>
-<div class="app-header">
-  <div class="header-logo">PHOENIX <span>PLAN</span></div>
-  <span id="ob-step-lbl" style="font-family:var(--font-d);font-size:12px;letter-spacing:2px;color:var(--text3)">1 / 3</span>
-</div>
-<div class="onboard-body">
-  <div class="onboard-step active" id="step-1">
-    <div class="step-tag">Step 1 of 3</div>
-    <div class="step-title">Your<br>Details</div>
-    <div class="step-desc">Just the basics. These personalise your programme and community experience.</div>
-    <div class="field-group"><label class="field-label">Your Name</label><input type="text" class="field-input" id="f-name" placeholder="First name" autocomplete="off"></div>
-    <div class="field-row">
-      <div class="field-group"><label class="field-label">Age</label><input type="number" class="field-input" id="f-age" placeholder="35" inputmode="numeric"><div class="field-hint">years</div></div>
-      <div class="field-group"><label class="field-label">Bodyweight</label><input type="number" class="field-input" id="f-bw" placeholder="85" inputmode="decimal"><div class="field-hint">kg</div></div>
-    </div>
-    <div class="field-group">
-      <label class="field-label">Country</label>
-      <select class="field-input" id="f-country">
-        <option value="">Select country</option>
-        <option value="AU">Australia</option>
-        <option value="NZ">New Zealand</option>
-        <option value="GB">United Kingdom</option>
-        <option value="US">United States</option>
-        <option value="CA">Canada</option>
-        <option value="IE">Ireland</option>
-        <option value="ZA">South Africa</option>
-        <option value="SG">Singapore</option>
-        <option value="other">Other</option>
-      </select>
-    </div>
-    <div class="field-group">
-      <label class="field-label">Sex</label>
-      <div style="display:flex;gap:10px;margin-top:4px;">
-        <div id="sex-male" onclick="selectSex('male')" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Male</div>
-        <div id="sex-female" onclick="selectSex('female')" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Female</div>
-      </div>
-      <div class="field-hint">Used to personalise programming and community comparisons</div>
-    </div>
-    <div id="cycle-section" style="display:none;">
-      <div class="field-group">
-        <label class="field-label">Cycle-synced training</label>
-        <div style="background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.7;">Research shows training intensity synced to your menstrual cycle can improve results. Follicular phase — push harder. Luteal phase — moderate and recover. Optional, change anytime.</div>
-        <div style="display:flex;gap:10px;">
-          <div id="cycle-yes" onclick="selectCycle('yes')" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">Yes, sync it</div>
-          <div id="cycle-no" onclick="selectCycle('no')" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:all 0.2s;">No thanks</div>
-        </div>
-      </div>
-    </div>
-    <div class="field-group"><label class="field-label">Programme Start Date</label><input type="date" class="field-input" id="f-start"></div>
-  </div>
-  <div class="onboard-step" id="step-2">
-    <div class="step-tag">Step 2 of 3</div>
-    <div class="step-title">Strength<br>Numbers</div>
-    <div class="step-desc">These calculate your working loads automatically. Enter 0 if unknown — you can update anytime from your profile.</div>
-    <div class="divider-label">Bench Press</div>
-    <div class="field-row">
-      <div class="field-group"><label class="field-label">1RM</label><input type="number" class="field-input" id="f-b1rm" placeholder="120" inputmode="decimal"><div class="field-hint">kg</div></div>
-      <div class="field-group"><label class="field-label">Max Reps @ 100kg</label><input type="number" class="field-input" id="f-b100" placeholder="8" inputmode="decimal"><div class="field-hint">reps</div></div>
-    </div>
-    <div class="divider-label">Pull Ups</div>
-    <div class="field-row">
-      <div class="field-group"><label class="field-label">1RM Added</label><input type="number" class="field-input" id="f-p1rm" placeholder="40" inputmode="decimal"><div class="field-hint">kg added</div></div>
-      <div class="field-group"><label class="field-label">Max Reps BW</label><input type="number" class="field-input" id="f-pbw" placeholder="15" inputmode="decimal"><div class="field-hint">reps</div></div>
-    </div>
-    <div class="divider-label">Lower Body</div>
-    <div class="field-row">
-      <div class="field-group"><label class="field-label">Back Squat 1RM</label><input type="number" class="field-input" id="f-sq" placeholder="140" inputmode="decimal"><div class="field-hint">kg</div></div>
-      <div class="field-group"><label class="field-label">Deadlift 1RM</label><input type="number" class="field-input" id="f-dl" placeholder="180" inputmode="decimal"><div class="field-hint">kg</div></div>
-    </div>
-  </div>
-  <div class="onboard-step" id="step-3">
-    <div class="step-tag">Step 3 of 3 — Optional</div>
-    <div class="step-title">Your<br>Baseline</div>
-    <div class="step-desc">These set your starting point and become your first Combine scores. Leave anything blank — you can test anytime from the Self-Assessment in the menu. There's no rush.</div>
-    <div class="field-group" style="margin-top:4px">
-      <label class="field-label">500m Row Time</label>
-      <input type="text" class="field-input" id="f-row500" placeholder="e.g. 2:10" inputmode="text">
-      <div class="field-hint">mm:ss — on any rowing machine</div>
-    </div>
-    <div class="field-group">
-      <label class="field-label">1 Mile Run Time</label>
-      <input type="text" class="field-input" id="f-mile" placeholder="e.g. 8:30" inputmode="text">
-      <div class="field-hint">mm:ss — 1.6km, any surface</div>
-    </div>
-    <div class="field-group">
-      <label class="field-label">Plank Hold</label>
-      <input type="number" class="field-input" id="f-plank" placeholder="e.g. 90" inputmode="decimal">
-      <div class="field-hint">seconds — forearm plank, hips level</div>
-    </div>
-    <div class="field-group">
-      <label class="field-label">Overhead Squat</label>
-      <select class="field-input" id="f-ohsq">
-        <option value="">Not tested yet</option>
-        <option value="pass">Pass — full depth, arms locked</option>
-        <option value="partial">Partial — some limitations</option>
-        <option value="fail">Not there yet — mobility needed</option>
-      </select>
-      <div class="field-hint">Bodyweight only — full depth, arms locked overhead</div>
-    </div>
-    <div style="background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-top:16px;font-size:12px;color:var(--text2);line-height:1.7;">
-      Not sure yet? Leave it blank. When your programme tells you to test, or when you're ready — open the menu and tap Self-Assessment. These numbers will be waiting for you.
-    </div>
-  </div>
-</div>
-<div class="step-nav">
-  <button class="btn-secondary" id="ob-back" style="display:none;margin:0">Back</button>
-  <button class="btn-primary" id="ob-next">Next →</button>
-</div>
-</div>
+<!-- v4.7.40: legacy screen-onboard (Your Details / Strength Numbers / Your Baseline) REMOVED.
+     All these inputs are now captured inline by the foundation questionnaire (fqB1rm, fqSq,
+     fqDl, fqRow500, fqMile, fqPlank, fqOhsq, etc) and fed straight to the AI coach. There
+     is no separate pre-AI assessment flow — the FQ + programme generation IS the onboarding. -->
 
 <!-- TODAY SCREEN -->
 <div id="screen-today" class="screen">
@@ -3413,7 +3305,7 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.39';
+var APP_VERSION='4.7.40';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4398,103 +4290,11 @@ function navTo(tab){
   if(tab==='wod-library') openWODLibrary();
 }
 
-// ====== ONBOARDING ======
-var obStep=1;
-var selectedSex='',selectedCycle='';
-function selectSex(sex){
-  selectedSex=sex;
-  var male=document.getElementById('sex-male');
-  var female=document.getElementById('sex-female');
-  var active='border-color:var(--gold);background:var(--gold-dim);color:var(--gold)';
-  var inactive='border:1px solid var(--border2);background:var(--bg3);color:var(--text2)';
-  if(male) male.style.cssText=male.style.cssText.replace(/border[^;]+;/,'')+';'+(sex==='male'?active:inactive);
-  if(female) female.style.cssText=female.style.cssText.replace(/border[^;]+;/,'')+';'+(sex==='female'?active:inactive);
-  // Show cycle section for female
-  var cs=document.getElementById('cycle-section');
-  if(cs) cs.style.display=sex==='female'?'block':'none';
-}
-function selectCycle(val){
-  selectedCycle=val;
-  var yes=document.getElementById('cycle-yes');
-  var no=document.getElementById('cycle-no');
-  var active='border-color:var(--gold);background:var(--gold-dim);color:var(--gold)';
-  var inactive='border:1px solid var(--border2);background:var(--bg3);color:var(--text2)';
-  if(yes) yes.style.cssText=yes.style.cssText+';'+(val==='yes'?active:inactive);
-  if(no) no.style.cssText=no.style.cssText+';'+(val==='no'?active:inactive);
-}
-function updateOB(){
-  for(var i=1;i<=3;i++){
-    var el=document.getElementById('step-'+i);
-    if(el) el.classList.toggle('active',i===obStep);
-  }
-  // When entering from waiver (step 2 first), show 1/2 and 2/2
-  var startStep=2; // details now captured in questionnaire
-  var visibleStep=obStep-startStep+1;
-  var totalVisible=3-startStep+1;
-  document.getElementById('ob-progress').style.width=(visibleStep/totalVisible*100)+'%';
-  document.getElementById('ob-step-lbl').textContent=visibleStep+' / '+totalVisible;
-  document.getElementById('ob-back').style.display=obStep>startStep?'block':'none';
-  document.getElementById('ob-next').textContent=obStep===3?'Begin Programme':'Next \u2192';
-}
-document.getElementById('ob-next').addEventListener('click',function(){
-  if(obStep<3){obStep++;updateOB();}else{finishOB();}
-});
-document.getElementById('ob-back').addEventListener('click',function(){
-  if(obStep>1){obStep--;updateOB();}
-});
-function finishOB(){
-  var g=function(id){var el=document.getElementById(id);return el?el.value:'';};
-  var d={
-    name:athlete&&athlete.name?athlete.name:(g('f-name')||''),
-    sex:selectedSex||'',
-    cycleSync:selectedCycle==='yes',
-    bw:parseFloat(g('f-bw'))||0,
-    startDate:g('f-start')||new Date().toISOString().split('T')[0],
-    b1rm:parseFloat(g('f-b1rm'))||0,
-    b100:parseFloat(g('f-b100'))||0,
-    p1rm:parseFloat(g('f-p1rm'))||0,
-    pbw:parseFloat(g('f-pbw'))||0,
-    sq:parseFloat(g('f-sq'))||0,
-    dl:parseFloat(g('f-dl'))||0,
-    row500:g('f-row500'),
-    mile:g('f-mile'),
-    plank:parseFloat(g('f-plank'))||0,
-    ohsq:g('f-ohsq')
-  };
-  if(athlete) d=Object.assign({},athlete,d);
-  saveAthlete(d);
-  viewWeek=progWeek();
-  navTo('today');
-}
+// v4.7.40: legacy screen-onboard removed. The questionnaire (FQ) is the single
+// source of truth for athlete details + strength numbers + baseline scores.
+// `editProfile()` now re-opens the FQ so the athlete can revise anything inline.
 function editProfile(){
-  if(athlete){
-    var s=function(id,val){var el=document.getElementById(id);if(el) el.value=val||'';};
-    s('f-name',athlete.name);
-    s('f-age',athlete.age);
-    s('f-country',athlete.country);
-    s('f-bw',athlete.bw);
-    s('f-start',athlete.startDate);
-    s('f-b1rm',athlete.b1rm);
-    s('f-b100',athlete.b100);
-    s('f-p1rm',athlete.p1rm);
-    s('f-pbw',athlete.pbw);
-    s('f-sq',athlete.sq);
-    s('f-dl',athlete.dl);
-    s('f-row500',athlete.row500);
-    s('f-mile',athlete.mile);
-    s('f-plank',athlete.plank);
-    s('f-ohsq',athlete.ohsq);
-    // Restore sex/cycle selections
-    if(athlete.sex){
-      selectedSex=athlete.sex;
-      setTimeout(function(){selectSex(athlete.sex);},50);
-    }
-    if(athlete.cycleSync){
-      selectedCycle='yes';
-      setTimeout(function(){selectCycle('yes');},50);
-    }
-  }
-  obStep=1;updateOB();showScreen('screen-onboard');
+  if(typeof openFoundationQ === 'function') openFoundationQ();
 }
 function resetApp(){
   if(confirm('Reset all data? This cannot be undone.')){
@@ -8347,105 +8147,39 @@ function onProgrammeGenerated(programme, trigger){
     updated.agogeStartDate = new Date().toISOString();
   }
   saveAthlete(updated);
-  if(isWeekly){
-    // v4.7.37 FIX 2: weekly regen → straight back to Today, no reveal screen.
-    if(typeof renderTodayScreen === 'function') renderTodayScreen();
-    if(typeof navTo === 'function') navTo('today');
-    return;
-  }
-  // Initial generation → show the full reveal screen.
-  showProgrammeReveal(merged);
+  // v4.7.40: route DIRECTLY to Today on every outcome. No reveal screen, no intermediate
+  // assessment, no bounce. The Today screen now reads the freshly-saved aiProgramme so
+  // the session tile shows the prescribed work straight away. Force a renderTodayScreen()
+  // BEFORE navTo so the tile is populated when the screen mounts (fixes the
+  // "No programme — start questionnaire" flash where the tile rendered before save landed).
+  athlete = updated; // belt-and-braces: ensure the global is current before render reads it
+  try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e){}
+  if(typeof navTo === 'function') navTo('today');
 }
 
 function onProgrammeError(msg){
-  // Graceful fallback — go to onboarding without AI programme
-  console.warn('Programme generation failed, using fallback:', msg);
-  var el = document.getElementById('coach-loading-msg');
-  if(el) el.textContent = 'Setting up your profile...';
-  var title = document.getElementById('coach-loading-title');
-  if(title) title.textContent = 'Almost There';
-  setTimeout(function(){
-    obStep=2;updateOB();showScreen('screen-onboard');
-  }, 1500);
+  // v4.7.40: legacy fallback used to bounce to screen-onboard. That screen no longer
+  // exists. Show the failure on the loading screen with a Retry button so the athlete
+  // can re-fire generateProgramme without losing their questionnaire answers.
+  console.warn('Programme generation failed:', msg);
+  var titleEl = document.getElementById('coach-loading-title');
+  var msgEl = document.getElementById('coach-loading-msg');
+  var dotsEl = document.getElementById('coach-loading-dots');
+  if(titleEl) titleEl.textContent = 'Coach Couldn\'t Build Your Programme';
+  if(msgEl){
+    msgEl.style.color = 'var(--text2)';
+    msgEl.innerHTML = (msg ? String(msg).replace(/[<>]/g,'') : 'Network or coach service error.') +
+      '<br><br><button class="btn-primary" style="padding:12px 22px;font-size:13px;letter-spacing:2px;" onclick="if(typeof generateProgramme===&quot;function&quot;) generateProgramme(&quot;initial_build&quot;);">Try Again</button>'+
+      '<br><button class="btn-secondary" style="margin-top:10px;padding:10px 22px;font-size:11px;letter-spacing:2px;" onclick="navTo(&quot;today&quot;)">Continue without programme</button>';
+  }
+  if(dotsEl) dotsEl.style.display = 'none';
 }
 
-function showProgrammeReveal(programme){
-  var s = programme.programme_summary || {};
-  var n = programme.nutrition || {};
-  var w = programme.week || {};
-  var sessions = w.sessions || [];
-  showScreen('screen-foundation-q');
-  var container = document.querySelector('#screen-foundation-q .q-screen');
-  if(!container) return;
-
-  var sessHTML = sessions.map(function(sess){
-    var exHTML = (sess.exercises||[]).map(function(ex){
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
-        <div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:1px;">${ex.name}</div>
-        <div style="font-size:12px;color:var(--gold);margin:2px 0;">${ex.sets} sets × ${ex.reps} — ${ex.load_guidance}</div>
-        ${ex.coaching_note ? `<div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:4px;">${ex.coaching_note}</div>` : ''}
-      </div>`;
-    }).join('');
-    return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);">${sess.day}</div>
-        <div style="font-size:11px;color:var(--text2);">${sess.session_type} · ${sess.duration_min}min</div>
-      </div>
-      ${exHTML}
-    </div>`;
-  }).join('');
-
-  container.innerHTML = `
-    <div style="padding:24px 0 120px;">
-      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Your Programme is Ready</div>
-      <div style="font-family:var(--font-d);font-size:32px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:16px;">${s.current_phase||'Phase 1'}</div>
-
-      <div style="background:var(--bg3);border-left:3px solid var(--gold);border-radius:4px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:var(--text2);line-height:1.7;">
-        ${s.coach_note||'Your programme has been built. Let\'s get to work.'}
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
-        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">
-          <div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">${s.total_weeks||10}</div>
-          <div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Weeks</div>
-        </div>
-        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">
-          <div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">${sessions.length}</div>
-          <div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Sessions/wk</div>
-        </div>
-        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;">
-          <div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">${n.protein_g||0}g</div>
-          <div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Protein/day</div>
-        </div>
-      </div>
-
-      <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Week 1 — ${w.week_type||'Training'}</div>
-      ${sessHTML}
-
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:8px;">
-        <div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Daily Nutrition Target</div>
-        ${n.maintenance_calories ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Estimated maintenance: <strong style="color:var(--text2);">${n.maintenance_calories} kcal</strong> · Deficit target: <strong style="color:var(--text2);">${n.daily_calories||0} kcal</strong></div>` : ''}
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
-          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.daily_calories||0}</div><div style="font-size:10px;color:var(--text3);">kcal</div></div>
-          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.protein_g||0}g</div><div style="font-size:10px;color:var(--text3);">protein</div></div>
-          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.carbs_g||0}g</div><div style="font-size:10px;color:var(--text3);">carbs</div></div>
-          <div><div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">${n.fat_g||0}g</div><div style="font-size:10px;color:var(--text3);">fat</div></div>
-        </div>
-        ${n.timing_notes ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6;">${n.timing_notes}</div>` : ''}
-      </div>
-
-      <button class="btn-primary" style="width:100%;padding:16px;margin-top:16px;" onclick="beginProgramme()">
-        Start Training →
-      </button>
-    </div>`;
-
-  document.querySelector('.q-nav').style.display='none';
-}
-
-function beginProgramme(){
-  if(typeof renderTodayScreen==='function') renderTodayScreen();
-  navTo('today');
-}
+// v4.7.40: showProgrammeReveal + beginProgramme removed. The intermediate "Your Programme
+// is Ready" screen + "Start Training" button were redundant — the athlete now lands
+// directly on Today after generation, where the prescribed session tile reads from
+// athlete.aiProgramme. The reveal screen was the source of the "no programme — start
+// questionnaire" flash because it briefly rendered before the save landed.
 
 
 // ====== DEV NOTES ======

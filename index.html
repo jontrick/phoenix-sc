@@ -10259,7 +10259,11 @@ function emblemTap(){
 document.addEventListener("DOMContentLoaded", async function() {
 console.log('[PHX] DOMContentLoaded start');
 // ====== INIT ======
-document.getElementById('f-start').value=new Date().toISOString().split('T')[0];
+// v4.7.40 hotfix: the legacy `document.getElementById('f-start').value=…` line that
+// pre-filled the date input inside screen-onboard was here. screen-onboard was removed
+// in v4.7.40, so this line crashed boot (`Cannot set properties of null`) — taking down
+// every subsequent loadSkin/loadFont/loadState/auth-check call. The field is gone; the
+// questionnaire captures start date independently. Removed.
 loadSkin();
 loadFont();
 loadBandProfile();

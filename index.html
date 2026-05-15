@@ -3834,11 +3834,26 @@ async function _loadProfileAndRouteInner(){
     return;
   }
 
-  // Profile exists but questionnaire NOT completed — check for local migration
-  if(localAthlete&&localAthlete.fqCompleted){
+  // v4.7.39 hotfix: migration screen guards. We were re-prompting the user on every
+  // reload because the flag was never set after a successful sync (and never set after
+  // a failed sync either, so failures became infinite loops). Three guards now:
+  //   1) If the Supabase profile already has fq_completed, the athlete IS migrated —
+  //      skip even if localAthlete looks "newer". The first branch above usually catches
+  //      this, but if profile is sparse for any reason, this safety-net stops the modal.
+  //   2) If phoenix_sessions_migrated is set, never show again.
+  //   3) Otherwise show the modal — it now sets the flag on every outcome.
+  var _migrationDone = false;
+  try { _migrationDone = !!localStorage.getItem('phoenix_sessions_migrated'); } catch(_e){}
+  var _profileFqDone = !!(profile && profile.fq_completed);
+  if(localAthlete && localAthlete.fqCompleted && !_migrationDone && !_profileFqDone){
     console.log('[PHX] routing decision:',{hasAthlete:false,fqCompleted:null,targetScreen:'migration-modal'});
     showMigrationModal(localAthlete,session);
     return;
+  }
+  // Belt-and-braces: if profile already has fq_completed, treat the local data as
+  // already-synced and stamp the flag so we never enter this branch again.
+  if(_profileFqDone){
+    try { localStorage.setItem('phoenix_sessions_migrated','1'); } catch(_e){}
   }
 
   // Profile exists but sparse (fq not completed), or no profile — new user, show splash
@@ -3884,19 +3899,35 @@ function showMigrationModal(localAthlete,session){
     msgEl.textContent='Syncing...';msgEl.style.color='var(--text2)';
     // v4.6.4: route through saveAthleteToSupabase — uses currentSession.user.id,
     // coerces empty strings to null via athleteToProfile(), and has full error logging.
+    var syncOk = false;
     try{
       await saveAthleteToSupabase(localAthlete);
-      localStorage.removeItem(PHX_AUTH_PENDING_KEY);
-      overlay.remove();
-      athlete=localAthlete;
-      viewWeek=progWeek();
-      navTo('today');
+      syncOk = true;
     }catch(e){
       console.error('[PHX] Migration sync failed:',e);
-      msgEl.textContent='Sync failed. Please try again.';
-      msgEl.style.color='var(--red)';
-      this.disabled=false;
     }
+    // v4.7.39 hotfix BUG 1: set the flag on EVERY outcome so the modal never reappears.
+    // Failure shows a one-time error then routes through to Today rather than infinite-looping.
+    try { localStorage.setItem('phoenix_sessions_migrated','1'); } catch(_e){}
+    localStorage.removeItem(PHX_AUTH_PENDING_KEY);
+    if(!syncOk){
+      msgEl.textContent='Sync failed — your local data is kept on this device. You can continue.';
+      msgEl.style.color='var(--orange,#e0a050)';
+      // Brief pause so the user sees the message, then route to Today with whatever we have.
+      var btn = this;
+      setTimeout(function(){
+        overlay.remove();
+        athlete = localAthlete;
+        if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
+        navTo('today');
+        btn.disabled = false;
+      }, 1500);
+      return;
+    }
+    overlay.remove();
+    athlete = localAthlete;
+    if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
+    navTo('today');
   });
 
   document.getElementById('migration-fresh-btn').addEventListener('click',function(){
@@ -3905,6 +3936,8 @@ function showMigrationModal(localAthlete,session){
       localStorage.removeItem('phoenix_athlete');
       localStorage.removeItem('phoenix_v2');
       localStorage.removeItem(PHX_AUTH_PENDING_KEY);
+      // v4.7.39 hotfix BUG 1: stamp the migration flag here too — never re-prompt.
+      try { localStorage.setItem('phoenix_sessions_migrated','1'); } catch(_e){}
       athlete=null;
       overlay.remove();
       showScreen('screen-splash');
@@ -7771,10 +7804,22 @@ SESSION DURATIONS (per-day — REQUIRED when present)
 
 athlete.day_durations is a per-day map of session length in minutes, keyed by the same
 capitalised day names as training_days[]. Four canonical values: 45 / 60 / 75 / 90.
-Example: { "Monday": 45, "Thursday": 90, "Saturday": 60 }.
+
+Each entry is one of:
+- A NUMBER  → single-session day. Apply to whichever slot the athlete trains in.
+- An OBJECT { am: number, pm: number } → two-a-day. AM session uses am, PM uses pm.
+
+Example: { "Monday": 45, "Tuesday": { "am": 60, "pm": 45 }, "Thursday": 90 }.
 
 When day_durations is present, EVERY session emitted in week.sessions MUST set
-duration_min equal to day_durations[session.day]. Do not invent a different duration.
+duration_min equal to the matching value:
+- For a single-session day: duration_min = day_durations[day].
+- For a two-a-day, emit two session objects (same day) with duration_min set to
+  day_durations[day].am and day_durations[day].pm respectively. Tag each session
+  with am/pm in any way the renderer expects (e.g. session.day = "Tuesday AM"
+  is acceptable, or use a session._slot field).
+
+Do not invent a different duration.
 
 Each duration implies a warm-up length and an exercise budget. Honour both:
 - 45 min → 5 min warm-up · 3 working exercises max (compact session, dense work).
@@ -8038,17 +8083,41 @@ function buildAthleteProfile(trigger, checkIn){
       training_days: trainingDays,
       // v4.7.39 (next-build): per-day session duration (minutes). Keyed by capitalised
       // day name to match training_days[]. Only includes days the athlete nominated.
+      // v4.7.39 hotfix: each entry is either a number (single-session day) OR a
+      // {am,pm} object (two-a-day with separate slot durations). Capitalised day keys
+      // align with training_days[]. Rest days are excluded.
       day_durations: (function(){
         var src = a.fqDayDurations || {};
+        var slots = a.fqAvailableSlots || {};
         var lowerOrder = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
         var dayMap = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
         var out = {};
         lowerOrder.forEach(function(k){
-          // Only include days the athlete nominated as training days, otherwise the model
-          // sees noise. trainingDays[] is already capitalised.
           var capName = dayMap[k];
-          if(trainingDays.indexOf(capName) >= 0 && src[k]){
-            out[capName] = parseInt(src[k]) || 60;
+          if(trainingDays.indexOf(capName) < 0) return;
+          var v = src[k];
+          var slot = slots[k] || {};
+          var bothSlots = !!(slot.am && slot.pm);
+          if(v == null){
+            out[capName] = 60;
+            return;
+          }
+          if(bothSlots){
+            // Always emit {am,pm}. If src is a number, both slots get that number.
+            if(typeof v === 'object'){
+              out[capName] = {am: parseInt(v.am)||60, pm: parseInt(v.pm)||60};
+            } else {
+              var n = parseInt(v) || 60;
+              out[capName] = {am: n, pm: n};
+            }
+          } else {
+            // Single-session day — flat number. If src is {am,pm}, pick whichever slot is on.
+            if(typeof v === 'object'){
+              var pick = slot.am ? v.am : v.pm;
+              out[capName] = parseInt(pick) || 60;
+            } else {
+              out[capName] = parseInt(v) || 60;
+            }
           }
         });
         return out;
@@ -11687,9 +11756,16 @@ function renderTodayScreen(){
   var dateEl=document.getElementById('t-datestr');
   if(dateEl) dateEl.textContent=now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear();
 
-  // Week badge
+  // Week badge — v4.7.39 hotfix FIX 4: prefer aiProgramme.week.week_number when present
+  // (that's the live, coach-generated week number). Falls back to athlete.currentWeek
+  // then to 1 for brand-new accounts.
   var weekBadge=document.getElementById('t-weekbadge');
-  if(weekBadge) weekBadge.textContent='Week '+(athlete&&athlete.currentWeek||1);
+  if(weekBadge){
+    var wkNum = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.week_number)
+             || (athlete && athlete.currentWeek)
+             || 1;
+    weekBadge.textContent = 'Week '+wkNum;
+  }
 
   // Phoenix WOD
   renderDailyWOD();
@@ -11768,26 +11844,51 @@ async function _phxApplyCompletedTileMarkers(){
   } catch(e){ console.warn('[PHX] completed-marker query failed:', e); }
 }
 
-function _phxRenderSundayReviewCard(){
+async function _phxRenderSundayReviewCard(){
   // Idempotent: remove any prior render so re-running doesn't duplicate the card.
   var prior = document.getElementById('card-weekly-review');
   if(prior) prior.remove();
   // v4.7.38: was Sunday-only — now gated by athlete.fqCheckInDay (default friday).
   if(new Date().getDay() !== _phxCheckInDayIndex()) return;
+  // v4.7.39 hotfix FIX 3: don't surface the review card on the check-in day if the athlete
+  // has done fewer than 3 completed sessions this Brisbane week. No data to review yet.
+  try {
+    if(typeof sb !== 'undefined' && currentSession && currentSession.user && typeof _phxBrisbaneMondayISO==='function'){
+      var weekStartISO = _phxBrisbaneMondayISO();
+      var weekStart = new Date(weekStartISO + 'T00:00:00');
+      var sRes = await sb.from('sessions')
+        .select('status,started_at')
+        .eq('user_id', currentSession.user.id)
+        .eq('status','completed')
+        .gte('started_at', weekStart.toISOString())
+        .limit(50);
+      var completedThisWeek = (sRes && sRes.data) ? sRes.data.length : 0;
+      console.log('[PHX] _phxRenderSundayReviewCard — completed this week:', completedThisWeek);
+      if(completedThisWeek < 3){
+        console.log('[PHX] suppressing weekly review card (need ≥3 completed sessions, have', completedThisWeek+')');
+        return;
+      }
+    }
+  } catch(e){ console.warn('[PHX] weekly review session count failed:', e); /* render anyway on fetch error */ }
   // v4.7.21 FIX 3: insert BEFORE the prescribed-session tile so the review card is the first
   // thing the athlete sees on Sunday morning. Sessions still render below it.
   var sessionCard = document.getElementById('card-today-session');
   var parent = sessionCard ? sessionCard.parentElement : null;
   if(!parent) return;
-  var weekNum = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  // v4.7.39 hotfix FIX 4: pull week_number from the AI programme first.
+  var weekNum = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.week_number)
+             || (athlete && athlete.currentWeek)
+             || (typeof progWeek==='function' ? progWeek() : 1);
   var card = document.createElement('div');
   card.id = 'card-weekly-review';
   card.className = 'game-card';
   card.style.cssText = 'margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);cursor:pointer;';
   card.onclick = function(){ openWeeklyCheckin(); };
+  // v4.7.39 hotfix: eyebrow reflects today's actual day-of-week, not always "Sunday".
+  var dayLabel = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
   card.innerHTML =
     '<div class="game-card-inner">'+
-      '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Sunday</span></div>'+
+      '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">'+dayLabel+'</span></div>'+
       '<div class="game-card-title" style="font-size:24px;">Week '+weekNum+' Complete</div>'+
       '<div class="game-card-sub" style="margin-top:6px;">Review your week and set up next week →</div>'+
     '</div>';
@@ -16507,7 +16608,9 @@ window.fqResetAnswers = function(){
     trainingDays:[],
     // v4.7.39 (next-build): per-day session-duration map (minutes). 4 options: 45/60/75/90.
     // Defaults to 60 for each day; only shown in the UI when that day has AM or PM active.
-    // Persisted to fqDayDurations on the athlete + day_durations jsonb on Supabase.
+    // Two-a-day support: dayDurations[day] can be a number (single-session day, applies to
+    // whichever slot is active) OR an object {am,pm} when both slots are on. Persisted as-is
+    // to fqDayDurations on the athlete + day_durations jsonb on Supabase.
     dayDurations:{monday:60,tuesday:60,wednesday:60,thursday:60,friday:60,saturday:60,sunday:60},
     coachTone:null,
     injury:[], injuryNotes:'', noInjuries:false,
@@ -16832,21 +16935,41 @@ window.fqRenderAvailability = function(){
   FQ_DAYS_ORDER.forEach(function(day){
     var slot=fqAnswers.availableSlots[day]||{am:false,pm:false};
     var isActive = !!(slot.am || slot.pm);
-    var dur = fqAnswers.dayDurations[day] || 60;
-    // Build the per-day duration pill row HTML, only shown when AM or PM is on.
+    var bothSlots = !!(slot.am && slot.pm);
+    // v4.7.39 hotfix: single value or {am, pm} object. Pull whichever slot is active.
+    function _getDur(d, sl){ return _phxGetDayDuration(fqAnswers.dayDurations[d], sl); }
+    function _renderPills(d, sl){
+      var cur = _getDur(d, sl);
+      return [45,60,75,90].map(function(v){
+        var on = (cur === v);
+        return '<div class="q-option-card'+(on?' active':'')+'" onclick="fqSetDayDuration(\''+d+'\','+v+',\''+sl+'\')" style="flex:1;padding:6px 4px;font-size:11px;text-align:center;border-radius:12px;min-width:0;">'+v+'</div>';
+      }).join('');
+    }
     var durRow = '';
     if(isActive){
-      var opts = [45,60,75,90];
-      var pills = opts.map(function(v){
-        var on = (dur === v);
-        return '<div class="q-option-card'+(on?' active':'')+'" onclick="fqSetDayDuration(\''+day+'\','+v+')" style="flex:1;padding:6px 4px;font-size:11px;text-align:center;border-radius:12px;min-width:0;">'+v+'</div>';
-      }).join('');
-      durRow =
-        '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 8px 58px;border-bottom:1px solid var(--border);">'+
-          '<div style="width:40px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">DUR</div>'+
-          pills+
-          '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
-        '</div>';
+      if(bothSlots){
+        // Two rows — one for AM, one for PM.
+        durRow =
+          '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 4px 58px;">'+
+            '<div style="width:60px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">AM DUR</div>'+
+            _renderPills(day,'am')+
+            '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;gap:8px;padding:4px 0 8px 58px;border-bottom:1px solid var(--border);">'+
+            '<div style="width:60px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">PM DUR</div>'+
+            _renderPills(day,'pm')+
+            '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
+          '</div>';
+      } else {
+        // Single-session day — one row, slot is whichever is active.
+        var activeSlot = slot.am ? 'am' : 'pm';
+        durRow =
+          '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 8px 58px;border-bottom:1px solid var(--border);">'+
+            '<div style="width:40px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">DUR</div>'+
+            _renderPills(day, activeSlot)+
+            '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
+          '</div>';
+      }
     }
     grid.insertAdjacentHTML('beforeend',
       '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;'+(isActive?'':'border-bottom:1px solid var(--border);')+'">'+
@@ -16859,12 +16982,38 @@ window.fqRenderAvailability = function(){
   });
 };
 
-// v4.7.39 (next-build): per-day session duration handler. Stores into fqAnswers.dayDurations
-// and re-renders the availability grid so the pill flips active state.
-window.fqSetDayDuration = function(day, minutes){
+// v4.7.39 hotfix: read a slot's duration from a value that may be either a number (single
+// session day) or {am,pm} (two-a-day). Returns 60 as the safe default.
+function _phxGetDayDuration(val, slot){
+  if(val == null) return 60;
+  if(typeof val === 'number') return val;
+  if(typeof val === 'object'){
+    var v = val[slot];
+    return (typeof v === 'number') ? v : 60;
+  }
+  return 60;
+}
+
+// v4.7.39 (next-build) + hotfix: per-day per-slot duration handler. Mutates the dayDurations
+// entry in place: if the day already had both slots picked, store as {am,pm}; otherwise
+// store as a flat number for back-compat.
+window.fqSetDayDuration = function(day, minutes, slot){
   if(!fqAnswers.dayDurations) fqAnswers.dayDurations = {};
-  fqAnswers.dayDurations[day] = minutes;
-  console.log('[PHX] fqSetDayDuration', day, '→', minutes, 'min');
+  var avail = (fqAnswers.availableSlots && fqAnswers.availableSlots[day]) || {am:false,pm:false};
+  var bothSlots = !!(avail.am && avail.pm);
+  // Default slot to whichever is active when the caller didn't pass one (back-compat with
+  // the old single-arg signature).
+  if(!slot) slot = avail.am ? 'am' : 'pm';
+  if(bothSlots){
+    var cur = fqAnswers.dayDurations[day];
+    var obj = (cur && typeof cur === 'object') ? Object.assign({}, cur) : {am: (typeof cur === 'number' ? cur : 60), pm: (typeof cur === 'number' ? cur : 60)};
+    obj[slot] = minutes;
+    fqAnswers.dayDurations[day] = obj;
+  } else {
+    // Single-session day — store as a flat number so older readers keep working.
+    fqAnswers.dayDurations[day] = minutes;
+  }
+  console.log('[PHX] fqSetDayDuration', day, slot, '→', minutes, 'min · stored:', fqAnswers.dayDurations[day]);
   fqRenderAvailability();
   if(typeof fqValidateStep === 'function') fqValidateStep();
 };

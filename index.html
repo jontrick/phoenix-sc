@@ -3318,7 +3318,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.45';
+var APP_VERSION='4.7.46';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3635,6 +3635,48 @@ async function handleSignOut(){
   location.reload();
 }
 
+// ====== OFFLINE DETECTION ======
+// v4.7.46 hotfix: navigator.onLine is famously unreliable on iOS Safari / PWAs —
+// it can return false even when the device has full connectivity (PWA backgrounded,
+// SW cache hits, captive-portal probes, etc). Every offline check now uses a REAL
+// probe to Supabase REST instead. 3s timeout via AbortController. Resolves true on
+// any HTTP response (even 401 = the server is reachable, just the auth was rejected).
+async function _phxProbeSupabase(){
+  if(typeof SUPABASE_URL !== 'string' || !SUPABASE_URL) return false;
+  var ctrl;
+  try { ctrl = new AbortController(); } catch(_e){ ctrl = null; }
+  var timer = ctrl ? setTimeout(function(){ try { ctrl.abort(); } catch(_e){} }, 3000) : null;
+  try {
+    // HEAD to the REST root. anon key passed so PostgREST doesn't 401 us, but even a
+    // 401/403 response would still prove the server is reachable.
+    var res = await fetch(SUPABASE_URL + '/rest/v1/', {
+      method: 'HEAD',
+      mode: 'cors',
+      cache: 'no-store',
+      headers: (typeof SUPABASE_KEY === 'string' && SUPABASE_KEY) ? {apikey: SUPABASE_KEY} : {},
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    if(timer) clearTimeout(timer);
+    // Any HTTP response = server reachable = we are online.
+    console.log('[PHX] _phxProbeSupabase: online (status', res.status+')');
+    return true;
+  } catch(e){
+    if(timer) clearTimeout(timer);
+    console.warn('[PHX] _phxProbeSupabase: offline —', (e && e.message) || e);
+    return false;
+  }
+}
+// Convenience helper: if navigator.onLine is true OR a probe just succeeded, treat as online.
+// Use _phxProbeSupabase() directly when you can await; this one is only for the boot path's
+// sync check (kept for one-line replacement sites). Tracks the last probe result.
+var _phxLastProbeOk = null; // null = unknown, true/false = last probe outcome
+function _phxIsProbablyOnline(){
+  if(_phxLastProbeOk === true) return true;
+  if(_phxLastProbeOk === false) return false;
+  // Unknown — fall through to navigator.onLine as a weak signal.
+  return !!navigator.onLine;
+}
+
 // ====== OFFLINE BANNER ======
 function showOfflineBanner(){
   var banner=document.getElementById('offline-banner');
@@ -3779,7 +3821,12 @@ async function _loadProfileAndRouteInner(){
     if(localData){
       try{athlete=JSON.parse(localData);}catch(ex){}
       if(athlete){
-        showOfflineBanner();
+        // v4.7.46 hotfix: probe Supabase before declaring offline. If the probe succeeds,
+        // the profile-fetch error was Supabase-side (or transient) — keep the user on Today
+        // WITHOUT the offline banner so writes/reads continue to attempt normally.
+        var pfOnline = await _phxProbeSupabase();
+        _phxLastProbeOk = pfOnline;
+        if(!pfOnline) showOfflineBanner();
         viewWeek=progWeek();
         navTo('today');
         return;
@@ -4344,6 +4391,14 @@ async function migrateSessionsToSupabase(){
 
 // Background sync — fetch fresh profile and update local cache
 async function backgroundSync(){
+  // v4.7.46 hotfix: even when currentSession is missing, probe to find out if a stale
+  // offline banner from boot can be dismissed. Banner is purely a connectivity signal,
+  // not an auth signal.
+  try {
+    var probe = await _phxProbeSupabase();
+    _phxLastProbeOk = probe;
+    if(probe) hideOfflineBanner();
+  } catch(_e){}
   if(!currentSession) return;
   try{
     var res=await sb.from('profiles').select('*').eq('id',currentSession.user.id).single();
@@ -10593,10 +10648,20 @@ try{
   console.log('[PHX] getSession result:',session);
 }catch(e){
   var msg=(e&&e.message)||'';
-  if(!navigator.onLine||/fetch|network|failed to fetch/i.test(msg)){
-    networkError=true;
-    console.warn('Supabase offline:',e);
-  }else{
+  // v4.7.46 hotfix: navigator.onLine alone was tagging us offline when we weren't.
+  // If the error LOOKS like a network failure, confirm with a real probe before
+  // marking networkError. A successful probe means the error was Supabase-side, not
+  // local connectivity — boot should continue normally so writes can land.
+  if(/fetch|network|failed to fetch|aborted|timeout/i.test(msg)){
+    var probeOk = await _phxProbeSupabase();
+    _phxLastProbeOk = probeOk;
+    if(!probeOk){
+      networkError=true;
+      console.warn('Supabase offline (probe confirmed):',e);
+    } else {
+      console.warn('Supabase init threw a network-shape error, but probe says we are online. Continuing.', e);
+    }
+  } else {
     console.error('Supabase init error (non-network):',e);
   }
 }
@@ -10617,9 +10682,14 @@ if(!session && !networkError && _phxIsFullyOnboardedAthlete(_bootLocalAth)){
     }
   } catch(e){
     console.warn('[PHX] refreshSession failed:', e);
-    // Network-style errors are treated as offline so we keep the user on Today below.
+    // v4.7.46 hotfix: same probe-confirm pattern as the getSession catch above.
+    // navigator.onLine alone is unreliable on iOS Safari / PWAs.
     var rmsg = (e&&e.message)||'';
-    if(!navigator.onLine||/fetch|network|failed to fetch/i.test(rmsg)) networkError = true;
+    if(/fetch|network|failed to fetch|aborted|timeout/i.test(rmsg)){
+      var rOnline = await _phxProbeSupabase();
+      _phxLastProbeOk = rOnline;
+      if(!rOnline) networkError = true;
+    }
   }
 }
 
@@ -10633,6 +10703,11 @@ if(networkError&&localStorage.getItem('phoenix_athlete')){
       viewWeek=progWeek();
       navTo('today');
     }
+    // v4.7.46 hotfix: schedule backgroundSync even on the offline early-return so the
+    // probe keeps re-checking and can auto-clear the banner the moment connectivity
+    // returns. Without this, a single phantom offline at boot pins the banner forever.
+    setTimeout(backgroundSync, 3000);
+    setTimeout(backgroundSync, 15000);
     return;
   }
 }
@@ -10641,6 +10716,9 @@ if(networkError){
   // the user away just because Supabase is unreachable. Show the offline banner instead.
   if(_bootFastPainted){
     if(typeof showOfflineBanner==='function') showOfflineBanner();
+    // Same re-probe schedule as the local-athlete offline branch above.
+    setTimeout(backgroundSync, 3000);
+    setTimeout(backgroundSync, 15000);
     return;
   }
   showScreen('screen-auth');

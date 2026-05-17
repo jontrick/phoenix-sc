@@ -3318,7 +3318,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.42';
+var APP_VERSION='4.7.43';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3382,20 +3382,65 @@ var FIELD_MAP=[
   ['fqSeasonPhase','season_phase'],
   ['fqWaiverAccepted','waiver_accepted']
 ];
+// v4.7.43 hotfix: type-coercion table for the FIELD_MAP transforms. The Supabase column
+// for `fq_completed` is timestamptz (NOT boolean) — silently rejecting every boolean
+// write made by older versions of this app. To keep `athlete.fqCompleted` boolean
+// (back-compat with every truthy check in the routing code), we coerce at the boundary:
+//   write side: athlete.fqCompleted true → now ISO string; false → null
+//   read side:  profile.fq_completed ISO string → true; null → false
+//
+// fq_parq_clear and waiver_accepted are listed defensively — same pattern (event-like
+// names that could plausibly be timestamptz columns rather than boolean). If they ARE
+// boolean columns the coercion is a no-op for writes (Supabase accepts ISO strings into
+// jsonb / text and we never read a non-null boolean here as a falsy timestamp).
+var BOOL_TO_TIMESTAMP_COLS = {
+  fq_completed: true,
+  waiver_accepted: true,
+  fq_parq_clear: true
+};
+
+function _phxToTimestampOrNull(v){
+  // Already a string (timestamp) → leave alone. Boolean true → now. Anything else → null.
+  if(typeof v === 'string' && v.length > 0) return v;
+  if(v === true) return new Date().toISOString();
+  return null;
+}
+function _phxTimestampToBool(v){
+  // Truthy non-empty string → true. Already boolean → boolean. null/undefined → false.
+  if(typeof v === 'boolean') return v;
+  if(typeof v === 'string') return v.length > 0;
+  return !!v;
+}
+
 function athleteToProfile(a){
   if(!a) return {};
   var p={};
   FIELD_MAP.forEach(function(pair){
-    var val=a[pair[0]];
+    var col = pair[1];
+    var val = a[pair[0]];
     if(val===''||val===undefined) val=null;
-    p[pair[1]]=val;
+    // v4.7.43 hotfix: boolean → timestamp coercion for known timestamptz columns.
+    if(BOOL_TO_TIMESTAMP_COLS[col]){
+      val = _phxToTimestampOrNull(val);
+    }
+    p[col]=val;
   });
   return p;
 }
 function profileToAthlete(p){
   if(!p) return {};
   var a={};
-  FIELD_MAP.forEach(function(pair){if(p[pair[1]]!==undefined) a[pair[0]]=p[pair[1]];});
+  FIELD_MAP.forEach(function(pair){
+    var col = pair[1];
+    if(p[col]===undefined) return;
+    var val = p[col];
+    // v4.7.43 hotfix: timestamp → boolean coercion for known timestamptz columns so
+    // every downstream truthy check (`if(athlete.fqCompleted)`) keeps working unchanged.
+    if(BOOL_TO_TIMESTAMP_COLS[col]){
+      val = _phxTimestampToBool(val);
+    }
+    a[pair[0]] = val;
+  });
   return a;
 }
 
@@ -3934,13 +3979,62 @@ async function saveAthleteToSupabase(data){
   profileData.id=currentSession.user.id;
   profileData.updated_at=new Date().toISOString();
   console.log('[PHX] saveAthleteToSupabase payload:',profileData);
-  var res=await sb.from('profiles').upsert(profileData);
-  if(res.error){
-    console.error('[PHX] Supabase save failed:',res.error);
-    console.error('[PHX] Payload that failed:',profileData);
-    throw res.error;
+  // v4.7.43 hotfix: explicit try/catch + error.message logging so silent type-mismatch
+  // failures (like the fq_completed timestamptz-vs-boolean bug) surface immediately
+  // instead of being swallowed by a fire-and-forget upsert.
+  try {
+    var res=await sb.from('profiles').upsert(profileData);
+    if(res.error){
+      console.error('[PHX] write failed:', res.error.message || res.error, '— payload:', profileData);
+      throw res.error;
+    }
+    console.log('[PHX] Supabase save succeeded');
+  } catch(e){
+    console.error('[PHX] write failed (exception):', (e && e.message) ? e.message : e);
+    throw e;
   }
-  console.log('[PHX] Supabase save succeeded');
+}
+
+// v4.7.43 hotfix: write the profile AND read it back. Returns true only when the server
+// confirms the persisted fq_completed is a truthy timestamp (when the local athlete has
+// fqCompleted=true). Used by fqNext so a silent type-rejected upsert can no longer mark
+// the questionnaire "done" on the device while Supabase actually rejected the row.
+async function _phxSaveProfileVerified(data){
+  try {
+    await saveAthleteToSupabase(data);
+  } catch(e){
+    console.error('[PHX] _phxSaveProfileVerified: write step failed:', (e && e.message) ? e.message : e);
+    return false;
+  }
+  // Read-back. The .single() call returns the row directly.
+  try {
+    var verify = await sb.from('profiles')
+      .select('fq_completed,ai_programme,updated_at')
+      .eq('id', currentSession && currentSession.user && currentSession.user.id)
+      .single();
+    if(verify && verify.error){
+      console.error('[PHX] _phxSaveProfileVerified: read-back failed:', verify.error.message || verify.error);
+      return false;
+    }
+    var server = verify && verify.data;
+    if(!server){
+      console.error('[PHX] _phxSaveProfileVerified: server returned no row after upsert');
+      return false;
+    }
+    // If local says fqCompleted=true, server fq_completed MUST be a truthy timestamp.
+    if(data && data.fqCompleted){
+      var srvFq = server.fq_completed;
+      if(!srvFq || (typeof srvFq === 'string' && srvFq.length === 0)){
+        console.error('[PHX] _phxSaveProfileVerified: server fq_completed is empty/null — write silently rejected. server=', server);
+        return false;
+      }
+      console.log('[PHX] _phxSaveProfileVerified OK — server fq_completed =', srvFq);
+    }
+    return true;
+  } catch(e){
+    console.error('[PHX] _phxSaveProfileVerified: read-back exception:', (e && e.message) ? e.message : e);
+    return false;
+  }
 }
 
 // ====== SUPABASE SESSION + SET SYNC (Phase 2) ======
@@ -15641,10 +15735,16 @@ async function _phxJoinAgoge(){
     // Direct Supabase patch for agoge_start_date (sits outside FIELD_MAP for now —
     // SQL: alter table profiles add column if not exists agoge_start_date timestamptz;)
     if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+      // v4.7.43 hotfix: explicit error logging on direct profile patches too.
       try {
-        await sb.from('profiles').update({agoge_start_date: now, updated_at: now})
+        var aRes = await sb.from('profiles').update({agoge_start_date: now, updated_at: now})
           .eq('id', currentSession.user.id);
-      } catch(_e){ console.warn('[PHX] agoge_start_date upsert failed:', _e); }
+        if(aRes && aRes.error){
+          console.error('[PHX] write failed:', aRes.error.message || aRes.error, '— agoge_start_date');
+        }
+      } catch(e){
+        console.error('[PHX] write failed (exception):', (e && e.message) ? e.message : e, '— agoge_start_date');
+      }
     }
   } catch(e){ console.warn('[PHX] _phxJoinAgoge error:', e); }
   alert('The Agoge has begun. Your march starts today.');
@@ -17184,7 +17284,8 @@ window.updateFQStep = function(){
   } catch(e){}
 };
 
-window.fqNext = function(){
+// v4.7.43 hotfix: async because the final-step save now awaits a verified Supabase write.
+window.fqNext = async function(){
   if(fqStep<fqTotalSteps){
     fqStep++;
     if(fqStep===6 && fqAnswers.scheduleMode==='coach_assigns'){
@@ -17266,13 +17367,31 @@ window.fqNext = function(){
     fqInjury:fqAnswers.injury,
     fqInjuryNotes:fqAnswers.injuryNotes,
     fqParqClear:fqAnswers.parqClear,
+    // v4.7.43 hotfix: local fields stay BOOLEAN. The athleteToProfile transform converts
+    // them to ISO timestamps on write (timestamptz columns) and back to booleans on read.
     fqWaiverAccepted:true,
     fqPath:'phoenix',
-    fqCompleted:new Date().toISOString()
+    fqCompleted:true
   });
   // v4.7.37 hotfix: log what's about to be persisted so it's verifiable in the console.
   console.log('[PHX] fqNext save → fqTrainingDays:', updated.fqTrainingDays, '| fqAvailableSlots:', updated.fqAvailableSlots, '| fqScheduleMode:', updated.fqScheduleMode);
-  saveAthlete(updated);
+  // v4.7.43 hotfix: await the Supabase write + read-back verification. If the upsert
+  // doesn't actually land a truthy fq_completed timestamp on the server, alert the user
+  // and DO NOT route to Today — the questionnaire isn't really saved.
+  try {
+    athlete = updated;
+    localStorage.setItem('phoenix_athlete', JSON.stringify(updated));
+    var writeOk = await _phxSaveProfileVerified(updated);
+    if(!writeOk){
+      alert('Save failed — your questionnaire didn\'t reach the server. Check your connection and tap Build my plan again.');
+      console.error('[PHX] fqNext: verified save failed — NOT routing to Today');
+      return;
+    }
+  } catch(e){
+    console.error('[PHX] fqNext save error:', e);
+    alert('Save failed — your questionnaire didn\'t reach the server. Error: ' + (e && e.message ? e.message : e));
+    return;
+  }
   fqClearProgress(); // v4.7.4 FIX 4: programme generated → drop saved snapshot
   if(hasIgniteAccess()){
     generateProgramme('initial_build');

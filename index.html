@@ -3318,7 +3318,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.43';
+var APP_VERSION='4.7.44';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3389,14 +3389,13 @@ var FIELD_MAP=[
 //   write side: athlete.fqCompleted true → now ISO string; false → null
 //   read side:  profile.fq_completed ISO string → true; null → false
 //
-// fq_parq_clear and waiver_accepted are listed defensively — same pattern (event-like
-// names that could plausibly be timestamptz columns rather than boolean). If they ARE
-// boolean columns the coercion is a no-op for writes (Supabase accepts ISO strings into
-// jsonb / text and we never read a non-null boolean here as a falsy timestamp).
+// v4.7.44 hotfix: schema confirmed by direct Postgres type errors —
+//   fq_completed     IS  timestamptz → keep coercion
+//   waiver_accepted  IS  boolean     → REMOVED (coercion was rejected by Postgres)
+//   fq_parq_clear    IS  boolean     → REMOVED (coercion was rejected by Postgres)
+// Both boolean columns now pass through the FIELD_MAP transform untouched.
 var BOOL_TO_TIMESTAMP_COLS = {
-  fq_completed: true,
-  waiver_accepted: true,
-  fq_parq_clear: true
+  fq_completed: true
 };
 
 function _phxToTimestampOrNull(v){

@@ -3318,7 +3318,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.44';
+var APP_VERSION='4.7.45';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3972,6 +3972,36 @@ function showMigrationModal(localAthlete,session){
 }
 
 // ====== SUPABASE WRITE HELPER ======
+// v4.7.45 hotfix DIAGNOSTIC: every Supabase write failure now snapshots the full error
+// + the payload to localStorage under key `phx_last_write_error`. The user can recover
+// it later from Safari's URL bar by typing `javascript:alert(phxLastError())` — useful
+// when Mac/iPhone Safari web inspector isn't available.
+function _phxRecordWriteError(context, err, payload){
+  try {
+    var snap = {
+      ts: new Date().toISOString(),
+      context: context || '',
+      message: (err && err.message) || String(err || ''),
+      code: (err && err.code) || null,
+      details: (err && err.details) || null,
+      hint: (err && err.hint) || null,
+      payload_preview: (function(){
+        try {
+          var s = JSON.stringify(payload);
+          return s.length > 2000 ? s.slice(0, 2000) + '…(truncated)' : s;
+        } catch(_e){ return '[unserialisable payload]'; }
+      })()
+    };
+    localStorage.setItem('phx_last_write_error', JSON.stringify(snap, null, 2));
+  } catch(_e){}
+}
+// v4.7.45 hotfix: helper the user can call from Safari's URL bar to retrieve the
+// last write-failure snapshot. Type `javascript:alert(phxLastError())` in the address bar.
+window.phxLastError = function(){
+  try { return localStorage.getItem('phx_last_write_error') || '(no recorded error)'; }
+  catch(_e){ return '(localStorage unavailable)'; }
+};
+
 async function saveAthleteToSupabase(data){
   if(!currentSession||!currentSession.user||!currentSession.user.id) return;
   var profileData=athleteToProfile(data);
@@ -3985,11 +4015,14 @@ async function saveAthleteToSupabase(data){
     var res=await sb.from('profiles').upsert(profileData);
     if(res.error){
       console.error('[PHX] write failed:', res.error.message || res.error, '— payload:', profileData);
+      // v4.7.45 hotfix: persist the failure so it survives the alert dismissal and any reload.
+      _phxRecordWriteError('saveAthleteToSupabase.upsert', res.error, profileData);
       throw res.error;
     }
     console.log('[PHX] Supabase save succeeded');
   } catch(e){
     console.error('[PHX] write failed (exception):', (e && e.message) ? e.message : e);
+    _phxRecordWriteError('saveAthleteToSupabase.exception', e, profileData);
     throw e;
   }
 }
@@ -4003,6 +4036,7 @@ async function _phxSaveProfileVerified(data){
     await saveAthleteToSupabase(data);
   } catch(e){
     console.error('[PHX] _phxSaveProfileVerified: write step failed:', (e && e.message) ? e.message : e);
+    // saveAthleteToSupabase already records the error snapshot — no double-record here.
     return false;
   }
   // Read-back. The .single() call returns the row directly.
@@ -4013,11 +4047,13 @@ async function _phxSaveProfileVerified(data){
       .single();
     if(verify && verify.error){
       console.error('[PHX] _phxSaveProfileVerified: read-back failed:', verify.error.message || verify.error);
+      _phxRecordWriteError('_phxSaveProfileVerified.readBack', verify.error, {id: currentSession && currentSession.user && currentSession.user.id});
       return false;
     }
     var server = verify && verify.data;
     if(!server){
       console.error('[PHX] _phxSaveProfileVerified: server returned no row after upsert');
+      _phxRecordWriteError('_phxSaveProfileVerified.noRow', {message:'Server returned no row after upsert', code:'NO_ROW'}, data);
       return false;
     }
     // If local says fqCompleted=true, server fq_completed MUST be a truthy timestamp.
@@ -4025,6 +4061,7 @@ async function _phxSaveProfileVerified(data){
       var srvFq = server.fq_completed;
       if(!srvFq || (typeof srvFq === 'string' && srvFq.length === 0)){
         console.error('[PHX] _phxSaveProfileVerified: server fq_completed is empty/null — write silently rejected. server=', server);
+        _phxRecordWriteError('_phxSaveProfileVerified.fqCompletedEmpty', {message:'Server fq_completed is empty/null after upsert — write silently rejected', code:'SILENT_REJECT', details: JSON.stringify(server)}, data);
         return false;
       }
       console.log('[PHX] _phxSaveProfileVerified OK — server fq_completed =', srvFq);
@@ -4032,6 +4069,7 @@ async function _phxSaveProfileVerified(data){
     return true;
   } catch(e){
     console.error('[PHX] _phxSaveProfileVerified: read-back exception:', (e && e.message) ? e.message : e);
+    _phxRecordWriteError('_phxSaveProfileVerified.readBackException', e, data);
     return false;
   }
 }
@@ -17382,13 +17420,23 @@ window.fqNext = async function(){
     localStorage.setItem('phoenix_athlete', JSON.stringify(updated));
     var writeOk = await _phxSaveProfileVerified(updated);
     if(!writeOk){
-      alert('Save failed — your questionnaire didn\'t reach the server. Check your connection and tap Build my plan again.');
-      console.error('[PHX] fqNext: verified save failed — NOT routing to Today');
+      // v4.7.45 hotfix DIAGNOSTIC: surface the actual Postgres error + code so the user
+      // can read it on screen (Mac/iPhone Safari web inspector unavailable).
+      var snap = null;
+      try { snap = JSON.parse(localStorage.getItem('phx_last_write_error')||'null'); } catch(_e){}
+      var errMsg = (snap && snap.message) || 'Unknown error (no snapshot captured)';
+      var errCode = (snap && snap.code) || 'unknown';
+      alert('Save failed.\n\nError: '+errMsg+'\n\nCode: '+errCode+'\n\nTap Build my plan again, or contact support.');
+      console.error('[PHX] fqNext: verified save failed — NOT routing to Today. Snapshot:', snap);
       return;
     }
   } catch(e){
     console.error('[PHX] fqNext save error:', e);
-    alert('Save failed — your questionnaire didn\'t reach the server. Error: ' + (e && e.message ? e.message : e));
+    var snap2 = null;
+    try { snap2 = JSON.parse(localStorage.getItem('phx_last_write_error')||'null'); } catch(_e){}
+    var emsg = (e && e.message) || (snap2 && snap2.message) || String(e);
+    var ecode = (e && e.code) || (snap2 && snap2.code) || 'exception';
+    alert('Save failed.\n\nError: '+emsg+'\n\nCode: '+ecode+'\n\nTap Build my plan again, or contact support.');
     return;
   }
   fqClearProgress(); // v4.7.4 FIX 4: programme generated → drop saved snapshot

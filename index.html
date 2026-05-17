@@ -3352,7 +3352,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.47';
+var APP_VERSION='4.7.48';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3611,7 +3611,20 @@ async function handleSignIn(){
   try{
     var res=await sb.auth.signInWithPassword({email:email,password:pass});
     if(res.error) throw res.error;
+    // v4.7.48 hotfix: log + record when Supabase returns success but no session.
+    // Previously this silently set currentSession=null and the user appeared signed in
+    // while every write short-circuited at the auth guard.
+    if(!res.data || !res.data.session){
+      console.error('[PHX] handleSignIn: Supabase returned success but no session — auth payload:', res.data);
+      if(typeof _phxRecordWriteError === 'function'){
+        _phxRecordWriteError('handleSignIn.nullSession', {message:'signInWithPassword returned no session', code:'AUTH_NULL_SESSION'}, res.data);
+      }
+      setAuthMsg('auth-msg-si','Sign in succeeded but session is missing. Please retry.',true);
+      document.getElementById('auth-submit-si').disabled=false;
+      return;
+    }
     currentSession=res.data.session;
+    console.log('[PHX] handleSignIn OK — session user:', currentSession.user && currentSession.user.email);
     setTimeout(function(){loadProfileAndRoute();},500);
   }catch(e){
     setAuthMsg('auth-msg-si',e.message||'Sign in failed.',true);
@@ -3632,14 +3645,18 @@ async function handleSignUp(){
     if(res.data.session){
       setAuthMsg('auth-msg-su','Account created. Welcome.',false);
       currentSession=res.data.session;
+      console.log('[PHX] handleSignUp OK — session user:', currentSession.user && currentSession.user.email);
       // v4.7.38 BUILD 2: redeem invite code (mark used, tag tier=pro). Fire-and-forget;
       // the routing still proceeds even if the consume call fails — code is in localStorage.
       try { _phxConsumeInviteCode(res.data.user && res.data.user.id); } catch(_e){}
       setTimeout(function(){loadProfileAndRoute();},500);
     }else{
+      // v4.7.48 hotfix: email-confirm flow is legitimate (session arrives later via the
+      // SIGNED_IN event after the user clicks the confirmation link). Log it but don't
+      // treat as an error. If it happens unexpectedly (no email-confirm policy on the
+      // project) the log will help diagnose.
+      console.warn('[PHX] handleSignUp: no session in response (likely email-confirm flow). user:', res.data && res.data.user && res.data.user.email);
       setAuthMsg('auth-msg-su','Check your email to confirm your account.',false);
-      // Still consume the invite code for email-confirm flows so the code is reserved
-      // to this email — the user_id will be wired on their first sign-in instead.
       try { _phxConsumeInviteCode(res.data.user && res.data.user.id); } catch(_e){}
     }
   }catch(e){
@@ -3693,10 +3710,15 @@ async function _phxProbeSupabase(){
     if(timer) clearTimeout(timer);
     // Any HTTP response = server reachable = we are online.
     console.log('[PHX] _phxProbeSupabase: online (status', res.status+')');
+    // v4.7.48 hotfix: probe success is authoritative — always clear the banner here so
+    // no caller can forget to. Also update the cached state for sync code paths.
+    _phxLastProbeOk = true;
+    try { if(typeof hideOfflineBanner === 'function') hideOfflineBanner(); } catch(_e){}
     return true;
   } catch(e){
     if(timer) clearTimeout(timer);
     console.warn('[PHX] _phxProbeSupabase: offline —', (e && e.message) || e);
+    _phxLastProbeOk = false;
     return false;
   }
 }
@@ -3852,6 +3874,16 @@ async function _phxDiagTestWrite(){
 
 // ====== OFFLINE BANNER ======
 function showOfflineBanner(){
+  // v4.7.48 hotfix: refuse to show the banner when the last probe confirmed we're
+  // online. The user reported "_phxLastProbeOk = true but banner still visible" \u2014
+  // some path was re-showing the banner after backgroundSync hid it. Guarding HERE
+  // means it doesn't matter which path tries to show; if probe says online, no banner.
+  if(_phxLastProbeOk === true){
+    console.log('[PHX] showOfflineBanner suppressed \u2014 probe says online');
+    var existing = document.getElementById('offline-banner');
+    if(existing) existing.style.display = 'none';
+    return;
+  }
   var banner=document.getElementById('offline-banner');
   if(!banner){
     banner=document.createElement('div');
@@ -10724,8 +10756,29 @@ renderVersionDisplays();
 
 // ====== AUTH STATE LISTENER ======
 sb.auth.onAuthStateChange(function(event,session){
-  console.log('[PHX] onAuthStateChange:',event,session&&session.user?session.user.email:null);
-  currentSession=session;
+  console.log('[PHX] onAuthStateChange:',event,session&&session.user?session.user.email:null,'session?',!!session);
+  // v4.7.48 hotfix: ALL session-bearing events MUST update currentSession. Previously
+  // SIGNED_IN / TOKEN_REFRESHED / USER_UPDATED would early-return for fully-onboarded
+  // users without confirming currentSession was actually populated, which meant if any
+  // earlier path nulled it, writes silently failed forever.
+  if(event==='SIGNED_IN' || event==='TOKEN_REFRESHED' || event==='USER_UPDATED'){
+    if(session){
+      currentSession = session;
+      console.log('[PHX] '+event+' — currentSession set to user:', session.user && session.user.email);
+    } else {
+      // Empty session on these events is a Supabase quirk — log it loudly so we can
+      // distinguish "session lost" from "everything is fine".
+      console.error('[PHX] '+event+' fired with EMPTY session payload — currentSession unchanged');
+      if(typeof _phxRecordWriteError === 'function'){
+        _phxRecordWriteError('onAuthStateChange.emptySession.'+event, {message:event+' fired with no session', code:'AUTH_EVENT_NULL_SESSION'}, {event:event});
+      }
+    }
+  } else if(event === 'SIGNED_OUT'){
+    currentSession = null;
+  } else {
+    // Unknown event — still try to keep state in sync if a session is offered.
+    if(session) currentSession = session;
+  }
   if(event==='SIGNED_IN'){
     // v4.7.41 hotfix: SIGNED_IN fires not just at actual sign-in but also on every
     // token refresh and (in some browsers) when the tab regains focus. Re-running
@@ -10733,7 +10786,7 @@ sb.auth.onAuthStateChange(function(event,session){
     // transient Supabase hiccup in that walk would bounce a fully-onboarded user back
     // to splash / Begin Programme. Hard rule: a fully-onboarded user never re-routes
     // on a SIGNED_IN refresh. We just refresh the session and re-render Today.
-    if(_phxIsFullyOnboardedAthlete(athlete)){
+    if(_phxIsFullyOnboardedAthlete(athlete) && currentSession){
       console.log('[PHX] SIGNED_IN ignored for routing — user already onboarded; refreshing Today');
       try { if(typeof renderTodayScreen==='function') renderTodayScreen(); } catch(_e){}
       return;
@@ -10748,37 +10801,19 @@ sb.auth.onAuthStateChange(function(event,session){
     return;
   }
   if(event==='SIGNED_OUT'){
-    // v4.7.42 hotfix: distinguish a user-initiated sign-out (handleSignOut / resetApp set
-    // the flag) from a spurious SIGNED_OUT (token refresh failed, network blip, storage
-    // race). For spurious events, if the local athlete is fully onboarded, attempt a
-    // silent refreshSession() and KEEP THE USER ON TODAY. Only intentional sign-outs route
-    // to landing. This is the fix for "users signed out overnight" — when Supabase fails
-    // a background refresh it fires SIGNED_OUT; without this guard the user lands on the
-    // landing page even though their data is intact.
-    if(!window._phxIntentionalSignOut){
-      var _localOnboarded = _phxIsFullyOnboardedAthlete(athlete) || _phxIsFullyOnboardedAthlete(_phxLoadLocalAthlete());
-      if(_localOnboarded){
-        console.warn('[PHX] spurious SIGNED_OUT — keeping user on Today, attempting silent session refresh');
-        // Best-effort silent refresh. We don't await — if it fails, the user keeps using
-        // the app offline-style; cached data is intact and the next manual action will
-        // either succeed (refresh recovered) or surface a real error.
-        try {
-          sb.auth.refreshSession().then(function(refreshed){
-            if(refreshed && refreshed.data && refreshed.data.session){
-              console.log('[PHX] silent refreshSession recovered — session restored');
-              currentSession = refreshed.data.session;
-            } else {
-              console.warn('[PHX] silent refreshSession returned no session — staying offline');
-            }
-          }).catch(function(e){ console.warn('[PHX] silent refreshSession failed:', e); });
-        } catch(_e){}
-        return;
-      }
-    }
-    // Intentional sign-out OR no local data to anchor to → land normally.
+    // v4.7.48 hotfix: the previous "keep on Today after spurious SIGNED_OUT" path was
+    // the THIRD silent-write trap. It set currentSession=null silently and the user
+    // stayed on Today thinking everything was fine while every write short-circuited.
+    // New rule: a SIGNED_OUT event ALWAYS routes to sign-in (or landing for brand-new
+    // visitors). If the token refresh genuinely failed, the user signs back in and
+    // re-lands on Today via the SIGNED_IN flow — no data is lost (local athlete cache
+    // is intact and survives sign-out). The previous attempt to detect "intentional"
+    // vs "spurious" using window._phxIntentionalSignOut was unreliable on iOS Safari
+    // — Supabase doesn't surface that distinction, so we treat them identically.
     var _signedOutInvite = false;
     try { _signedOutInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
-    showScreen(_signedOutInvite ? 'screen-auth' : 'screen-landing');
+    var _hasLocalAth = !!localStorage.getItem('phoenix_athlete');
+    showScreen((_signedOutInvite || _hasLocalAth) ? 'screen-auth' : 'screen-landing');
   }
 });
 
@@ -10793,24 +10828,17 @@ sb.auth.onAuthStateChange(function(event,session){
 // reloads (it's only read once during the SIGNED_OUT handler immediately after a sign-out).
 window._phxIntentionalSignOut = false;
 
-// v4.7.42 hotfix BOOT FAST-PAINT: if the local cache shows a fully-onboarded athlete,
-// paint Today immediately. The auth check + Supabase profile fetch then continue
-// asynchronously and silently. The user never sees the landing page just because the
-// network is slow, the access token expired, or Supabase is briefly unreachable.
+// v4.7.48 hotfix: BOOT FAST-PAINT REMOVED. Previous behaviour was to paint Today as
+// soon as local cache showed a fully-onboarded athlete, BEFORE getSession() ran. That
+// hid every auth failure: the user landed on Today with currentSession=null, every
+// Supabase write short-circuited at the auth guard, and no row ever wrote — exactly
+// the persistence bug the user reported via the v4.7.47 diagnostic.
+// New rule (per spec): Today is shown ONLY after currentSession is confirmed by
+// getSession() OR refreshSession(). If both fail → sign-in screen. No exceptions.
+// Local cache is still used by _loadProfileAndRouteInner's fast-path AFTER auth
+// confirms; it just isn't used here to skip auth.
 var _bootLocalAth = null;
 try { _bootLocalAth = JSON.parse(localStorage.getItem('phoenix_athlete') || 'null'); } catch(_e){}
-var _bootFastPainted = false;
-if(_phxIsFullyOnboardedAthlete(_bootLocalAth)){
-  athlete = _bootLocalAth;
-  try {
-    if(athlete.theme && typeof applySkin==='function') applySkin(athlete.theme);
-    if(athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
-  } catch(_e){}
-  if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
-  navTo('today');
-  _bootFastPainted = true;
-  console.log('[PHX] boot fast-paint → today (local fully-onboarded athlete)');
-}
 
 var session=null;
 var networkError=false;
@@ -10866,53 +10894,48 @@ if(!session && !networkError && _phxIsFullyOnboardedAthlete(_bootLocalAth)){
   }
 }
 
-if(networkError&&localStorage.getItem('phoenix_athlete')){
-  var localData=localStorage.getItem('phoenix_athlete');
-  try{athlete=JSON.parse(localData);}catch(ex){}
-  if(athlete){
-    showOfflineBanner();
-    setupSplashButtons();
-    if(!_bootFastPainted){
-      viewWeek=progWeek();
-      navTo('today');
-    }
-    // v4.7.46 hotfix: schedule backgroundSync even on the offline early-return so the
-    // probe keeps re-checking and can auto-clear the banner the moment connectivity
-    // returns. Without this, a single phantom offline at boot pins the banner forever.
-    setTimeout(backgroundSync, 3000);
-    setTimeout(backgroundSync, 15000);
-    return;
-  }
-}
+// v4.7.48 hotfix: confirmed-offline path. We still need a way to recover from a true
+// network failure WITHOUT pretending the user is authenticated. Route to the auth
+// screen with an offline banner so the user can see the state and retry. We DO NOT
+// paint Today with currentSession=null — that's the bug we're fixing.
 if(networkError){
-  // v4.7.42 hotfix: if we already painted Today via the fast-paint above, don't yank
-  // the user away just because Supabase is unreachable. Show the offline banner instead.
-  if(_bootFastPainted){
-    if(typeof showOfflineBanner==='function') showOfflineBanner();
-    // Same re-probe schedule as the local-athlete offline branch above.
-    setTimeout(backgroundSync, 3000);
-    setTimeout(backgroundSync, 15000);
-    return;
-  }
   showScreen('screen-auth');
+  showOfflineBanner();
   showAuthConnectionMessage();
   disableAuthButtons();
+  // Re-probe so the user automatically gets back to a usable state when connectivity returns.
+  setTimeout(function(){ _phxProbeSupabase().then(function(ok){
+    if(ok){
+      _phxLastProbeOk = true;
+      hideOfflineBanner();
+      hideAuthConnectionMessage();
+      enableAuthButtons();
+    }
+  }); }, 3000);
+  setTimeout(function(){ _phxProbeSupabase().then(function(ok){
+    if(ok){
+      _phxLastProbeOk = true;
+      hideOfflineBanner();
+      hideAuthConnectionMessage();
+      enableAuthButtons();
+    }
+  }); }, 15000);
   return;
 }
 
 if(!session){
-  // v4.7.42 hotfix: a fully-onboarded local user with NO recoverable session is treated
-  // as offline rather than thrown to the landing page. They keep using the app with
-  // cached data; any real auth failure surfaces on next manual sync.
-  if(_phxIsFullyOnboardedAthlete(_bootLocalAth)){
-    console.warn('[PHX] no session after refresh attempt — user stays on Today (offline mode)');
-    if(typeof showOfflineBanner==='function') showOfflineBanner();
-    return;
-  }
-  // v4.7.39 hotfix: boot-time entry — landing is the default when there's no invite code.
+  // v4.7.48 hotfix: no session → sign-in. Period. The previous "stay on Today with
+  // local cache" branch was the second silent-write trap: user appeared signed in
+  // but currentSession was null so every Supabase write was discarded. If the local
+  // athlete is fully onboarded but the session has expired, the user signs back in
+  // and immediately lands on Today via the SIGNED_IN handler — no data is lost.
+  console.warn('[PHX] boot: no session after refresh attempt — routing to sign-in (was Today with null session in v4.7.47).');
   var _bootInvite = false;
   try { _bootInvite = !!localStorage.getItem('phoenix_invite_code'); } catch(_e){}
-  showScreen(_bootInvite ? 'screen-auth' : 'screen-landing');
+  // Returning user (local athlete cache present, even if not fully onboarded) goes
+  // to sign-in; brand-new visitor goes to landing for the invite gate.
+  var _hasLocalAth = !!localStorage.getItem('phoenix_athlete');
+  showScreen((_bootInvite || _hasLocalAth) ? 'screen-auth' : 'screen-landing');
   hideAuthConnectionMessage();
   enableAuthButtons();
   return;

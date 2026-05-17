@@ -2784,6 +2784,35 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
+<!-- v4.7.47 DIAGNOSTIC SCREEN — visible-text readouts + live test write. Always reachable. -->
+<div id="screen-diagnostic" class="screen">
+<div class="app-header">
+  <div class="icon-btn" onclick="navTo('today')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+  <div class="header-logo">DIAG<span>NOSTIC</span></div>
+  <div style="width:36px"></div>
+</div>
+<div style="flex:1;overflow-y:auto;padding:20px 18px 100px;">
+  <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#d96a5e;margin-bottom:6px;">Connectivity + persistence check</div>
+  <div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:18px;">App state snapshot</div>
+
+  <!-- Snapshot table -->
+  <div id="diag-snapshot" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-family:var(--font-d);font-size:11px;color:var(--text);">Loading…</div>
+
+  <!-- Last write error -->
+  <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin:8px 0 6px;">Last write error (phx_last_write_error)</div>
+  <pre id="diag-last-error" style="background:#0d0a08;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 18px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:11px;color:#d96a5e;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow-y:auto;">(loading)</pre>
+
+  <!-- Live test write button -->
+  <button id="diag-test-write" class="btn-primary" style="width:100%;padding:14px;margin-bottom:10px;">Run live test write to Supabase</button>
+  <pre id="diag-test-result" style="display:none;background:#0d0a08;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 12px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;"></pre>
+
+  <button onclick="_phxOpenDiagnostic()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Refresh snapshot</button>
+  <button onclick="try{localStorage.removeItem('phx_last_write_error');_phxOpenDiagnostic();}catch(e){}" class="btn-secondary" style="width:100%;padding:12px;">Clear last write error</button>
+</div>
+</div>
+
 <!-- FEEDBACK SCREEN -->
 <div id="screen-feedback" class="screen">
 <div class="app-header">
@@ -3274,6 +3303,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
       <div><div class="sidebar-item-text">Feedback</div><div class="sidebar-item-sub">Help shape Phoenix</div></div>
     </div>
+    <!-- v4.7.47 diagnostic: always reachable, never gated by online/offline state. -->
+    <div class="sidebar-item" onclick="closeSidebar();_phxOpenDiagnostic()">
+      <div class="sidebar-item-icon" style="background:rgba(217,106,94,0.18);color:#d96a5e;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></div>
+      <div><div class="sidebar-item-text">Diagnostic</div><div class="sidebar-item-sub">Connectivity + write check</div></div>
+    </div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Walk streak</div>
@@ -3318,7 +3352,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.46';
+var APP_VERSION='4.7.47';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3675,6 +3709,145 @@ function _phxIsProbablyOnline(){
   if(_phxLastProbeOk === false) return false;
   // Unknown — fall through to navigator.onLine as a weak signal.
   return !!navigator.onLine;
+}
+
+// ====== v4.7.47 DIAGNOSTIC SCREEN ======
+// Visible-on-screen state inspector + live test-write button. Reachable from the sidebar
+// (sidebar Diagnostic entry) and always allowed regardless of online/offline state.
+function _esc(s){ try { return String(s).replace(/[&<>]/g, function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); } catch(_e){ return ''; } }
+
+window._phxOpenDiagnostic = async function(){
+  showScreen('screen-diagnostic');
+  var snap = document.getElementById('diag-snapshot');
+  var lastErr = document.getElementById('diag-last-error');
+  var resultEl = document.getElementById('diag-test-result');
+  if(resultEl){ resultEl.style.display = 'none'; resultEl.textContent = ''; }
+  // Fire a fresh probe on every open so the row reflects the current network state.
+  var probeNow = false;
+  try { probeNow = await _phxProbeSupabase(); _phxLastProbeOk = probeNow; } catch(_e){}
+  // Build the snapshot rows.
+  var local = null;
+  try { local = JSON.parse(localStorage.getItem('phoenix_athlete')||'null'); } catch(_e){}
+  var rows = [
+    ['navigator.onLine', String(!!navigator.onLine)],
+    ['_phxLastProbeOk (just probed)', String(_phxLastProbeOk)],
+    ['SUPABASE_URL', (typeof SUPABASE_URL==='string') ? SUPABASE_URL : '(undefined)'],
+    ['currentSession exists', String(!!(currentSession && currentSession.user))],
+    ['currentSession.user.id', (currentSession && currentSession.user && currentSession.user.id) ? currentSession.user.id : '(none)'],
+    ['localStorage.phoenix_athlete present', String(!!local)],
+    ['athlete.fqCompleted', local ? String(local.fqCompleted) : '(no local athlete)'],
+    ['athlete.aiProgramme exists', local ? String(!!local.aiProgramme) : '(no local athlete)'],
+    ['athlete.aiProgramme.week.week_number', (local && local.aiProgramme && local.aiProgramme.week) ? String(local.aiProgramme.week.week_number||'(unset)') : '(none)'],
+    ['phoenix_invite_code', (function(){ try { return localStorage.getItem('phoenix_invite_code')||'(none)'; } catch(_e){ return '(unavail)'; } })()],
+    ['phoenix_sessions_migrated', (function(){ try { return localStorage.getItem('phoenix_sessions_migrated')||'(none)'; } catch(_e){ return '(unavail)'; } })()],
+    ['APP_VERSION', (typeof APP_VERSION==='string') ? APP_VERSION : '(unknown)']
+  ];
+  if(snap){
+    snap.innerHTML = rows.map(function(r){
+      var v = _esc(r[1]);
+      var bad = (r[1] === 'false' || r[1] === '(none)' || r[1] === '(no local athlete)' || r[1] === 'null');
+      var col = bad ? '#d96a5e' : '#5fb96a';
+      return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'+
+        '<span style="color:var(--text2);">'+_esc(r[0])+'</span>'+
+        '<span style="color:'+col+';text-align:right;word-break:break-all;">'+v+'</span>'+
+        '</div>';
+    }).join('');
+  }
+  if(lastErr){
+    var raw = '(none)';
+    try { raw = localStorage.getItem('phx_last_write_error') || '(none)'; } catch(_e){ raw = '(localStorage unavailable)'; }
+    lastErr.textContent = raw;
+  }
+  // Wire the test-write button (idempotent — re-bind every open).
+  var btn = document.getElementById('diag-test-write');
+  if(btn){
+    btn.disabled = false;
+    btn.textContent = 'Run live test write to Supabase';
+    btn.onclick = _phxDiagTestWrite;
+  }
+};
+
+async function _phxDiagTestWrite(){
+  var btn = document.getElementById('diag-test-write');
+  var out = document.getElementById('diag-test-result');
+  if(!out) return;
+  out.style.display = 'block';
+  out.style.color = 'var(--text)';
+  out.textContent = 'Running…';
+  if(btn){ btn.disabled = true; btn.textContent = 'Writing…'; }
+  // Step 1: confirm we have a session at all.
+  if(!currentSession || !currentSession.user || !currentSession.user.id){
+    out.style.color = '#d96a5e';
+    out.textContent = 'FAILED: currentSession is missing.\n\nThe app has no authenticated session — every write short-circuits on the guard in saveAthleteToSupabase.\n\nFix path: sign out and sign back in, or reload the app on a fresh wifi connection.';
+    if(btn){ btn.disabled = false; btn.textContent = 'Run live test write to Supabase'; }
+    return;
+  }
+  // Step 2: re-probe so the snapshot above is current.
+  var probeOk = false;
+  try { probeOk = await _phxProbeSupabase(); _phxLastProbeOk = probeOk; } catch(_e){}
+  // Step 3: attempt the actual write of the local athlete.
+  var local = null;
+  try { local = JSON.parse(localStorage.getItem('phoenix_athlete')||'null'); } catch(_e){}
+  if(!local){
+    out.style.color = '#d96a5e';
+    out.textContent = 'FAILED: no local athlete to write.\n\nlocalStorage.phoenix_athlete is empty — there is nothing to send. Complete the questionnaire first.';
+    if(btn){ btn.disabled = false; btn.textContent = 'Run live test write to Supabase'; }
+    return;
+  }
+  var payload;
+  try {
+    payload = athleteToProfile(local);
+    payload.id = currentSession.user.id;
+    payload.updated_at = new Date().toISOString();
+  } catch(e){
+    out.style.color = '#d96a5e';
+    out.textContent = 'FAILED at payload build:\n\n' + ((e && e.message) || String(e));
+    if(btn){ btn.disabled = false; btn.textContent = 'Run live test write to Supabase'; }
+    return;
+  }
+  // Direct .upsert with .select() so we get the row back AND surface the precise error.
+  var t0 = Date.now();
+  var writeErr = null, writeData = null;
+  try {
+    var res = await sb.from('profiles').upsert(payload).select().single();
+    if(res && res.error){ writeErr = res.error; }
+    else { writeData = res && res.data; }
+  } catch(e){
+    writeErr = e;
+  }
+  var elapsed = Date.now() - t0;
+  if(writeErr){
+    out.style.color = '#d96a5e';
+    var msg = (writeErr.message) || String(writeErr);
+    var code = writeErr.code || '(no code)';
+    var details = writeErr.details || '(no details)';
+    var hint = writeErr.hint || '(no hint)';
+    out.textContent =
+      'WRITE FAILED ('+elapsed+'ms)\n\n'+
+      'Probe says: '+(probeOk ? 'ONLINE' : 'OFFLINE')+'\n\n'+
+      'message: '+msg+'\n'+
+      'code:    '+code+'\n'+
+      'details: '+details+'\n'+
+      'hint:    '+hint+'\n\n'+
+      '--- payload (first 1500 chars) ---\n'+
+      JSON.stringify(payload, null, 2).slice(0, 1500);
+    // Persist for phxLastError() recovery.
+    try {
+      if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('diagnostic.testWrite', writeErr, payload);
+    } catch(_e){}
+  } else {
+    // Confirm the row by reading back fq_completed.
+    var srvFq = (writeData && writeData.fq_completed) || null;
+    out.style.color = '#5fb96a';
+    out.textContent =
+      'WRITE OK ('+elapsed+'ms)\n\n'+
+      'Probe says: '+(probeOk ? 'ONLINE' : 'OFFLINE')+'\n'+
+      'Returned row id: '+((writeData && writeData.id) || '(no id)')+'\n'+
+      'Server fq_completed: '+(srvFq || '(null — column may be unwritten)')+'\n\n'+
+      'Row landed in profiles table. If the app was previously showing 0 rows, refresh\n'+
+      'your curl check now — this write just committed.';
+  }
+  if(btn){ btn.disabled = false; btn.textContent = 'Run live test write to Supabase'; }
 }
 
 // ====== OFFLINE BANNER ======

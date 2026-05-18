@@ -2813,9 +2813,12 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
-<!-- v4.7.49 POST-COACH BUILD ANALYSIS SCREEN. Shown once after initial programme
-     generation completes (NOT on weekly regen). The body is populated by
-     _phxShowPostBuildAnalysis() before showScreen() is called. -->
+<!-- v4.7.50 POST-COACH BUILD ANALYSIS SCREEN. Shown once after initial programme
+     generation completes (NOT on weekly regen). Body populated by
+     _phxShowPostBuildAnalysis() before showScreen() is called.
+     Sections rendered in order: A hero · B coach philosophy · C 12-week overview ·
+     D week 1 day-by-day · E primary lifts · F weekly volume · G injury (conditional) ·
+     H targets locked (conditional) · I start button. -->
 <div id="screen-post-build" class="screen">
   <div class="app-header">
     <div style="width:36px"></div>
@@ -2823,34 +2826,67 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div style="width:36px"></div>
   </div>
   <div style="flex:1;overflow-y:auto;padding:24px 18px 32px;">
-    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Your coach built</div>
-    <div id="pb-athlete-name" style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:18px;">—</div>
 
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
-      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Programme target</div>
-      <div id="pb-target" style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">—</div>
+    <!-- A. HERO -->
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Your coach built</div>
+    <div id="pb-athlete-name" style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:14px;">—</div>
+    <div id="pb-hero" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:120px;">
+          <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Programme target</div>
+          <div id="pb-target" style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">—</div>
+        </div>
+        <div style="flex:1;min-width:120px;">
+          <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Current phase</div>
+          <div id="pb-phase" style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">—</div>
+        </div>
+      </div>
+      <div id="pb-generated" style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-top:8px;">Generated —</div>
     </div>
 
+    <!-- B. COACH PHILOSOPHY -->
+    <div id="pb-philosophy-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);border-left:3px solid var(--gold);padding:14px 16px;margin-bottom:14px;display:none;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Coach philosophy</div>
+      <div id="pb-philosophy" style="font-size:13px;color:var(--text);line-height:1.6;">—</div>
+    </div>
+
+    <!-- C. 12-WEEK OVERVIEW -->
+    <div id="pb-block-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">12-week overview</div>
+      <div id="pb-blocks" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- D. WEEK 1 -->
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
       <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Week 1 — day by day</div>
       <div id="pb-week1" style="font-size:13px;color:var(--text);line-height:1.7;">—</div>
     </div>
 
+    <!-- E. PRIMARY LIFTS -->
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
-      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Primary lifts</div>
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Primary lifts this block</div>
       <div id="pb-lifts" style="font-size:13px;color:var(--text);line-height:1.7;">—</div>
     </div>
 
+    <!-- F. WEEKLY VOLUME -->
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
-      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Weekly volume estimate</div>
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Weekly volume — Week 1</div>
       <div id="pb-volume" style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">—</div>
     </div>
 
-    <div id="pb-injury-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:22px;display:none;">
+    <!-- G. INJURY (only when non-empty) -->
+    <div id="pb-injury-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;display:none;">
       <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Injury accommodations noted</div>
       <div id="pb-injury" style="font-size:13px;color:var(--text);line-height:1.6;">—</div>
     </div>
 
+    <!-- H. TARGETS LOCKED (only when fqEventDate or agogeStartDate present) -->
+    <div id="pb-targets-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);border-left:3px solid var(--gold);padding:14px 16px;margin-bottom:22px;display:none;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Targets locked</div>
+      <div id="pb-targets" style="font-size:13px;color:var(--text);line-height:1.6;">—</div>
+    </div>
+
+    <!-- I. START TRAINING -->
     <button class="btn-primary" id="pb-start-btn" style="width:100%;padding:16px;font-size:14px;letter-spacing:3px;">Start Training &rarr;</button>
   </div>
 </div>
@@ -3402,7 +3438,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.49';
+var APP_VERSION='4.7.50';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8740,95 +8776,375 @@ function onProgrammeGenerated(programme, trigger){
   }
 }
 
-// v4.7.49 POST-COACH BUILD ANALYSIS — populates #screen-post-build with what the coach
+// v4.7.50 POST-COACH BUILD ANALYSIS — populates #screen-post-build with what the coach
 // built and shows it. Only invoked on initial generation (onProgrammeGenerated decides).
+//
+// v4.7.49 → v4.7.50 fixes:
+//   - parser was reading non-existent fields (session_name/title/focus/type); AI emits
+//     session_type → every day rendered as "Rest". Now reads session_type first.
+//   - parser walked sessions[] as if it were days[], assigning Mon/Tue/Wed via index;
+//     real shape is sessions with capitalised day strings (sometimes "Saturday AM" /
+//     "Saturday PM"). Now groups by canonical day and orders by athlete.fqTrainingDays.
+//   - injury card showed "Flagged: " when fqInjury was an empty array (truthy in JS).
+//     Now checks length and renders structured area/side/detail entries.
+//   - weekly volume was a bare totalMin sum with no context. Now reports minutes,
+//     hours, and session count from per-day buckets (so two-a-days aren't double-summed).
+//
+// Output schema reference (block_framework + programme_summary + week.sessions[*]) — see
+// the AI prompt at the top of this file. No dedicated coach_intro / philosophy narrative
+// field is emitted today; section B stitches programme_summary.{coach_note, phase_goal,
+// methodology_applied} as a fallback. See TODO inside section B.
 function _phxShowPostBuildAnalysis(ath, programme){
   ath = ath || athlete || {};
   programme = programme || (ath && ath.aiProgramme) || {};
+  var byId = function(id){ return document.getElementById(id); };
+  var safe = function(s){ return String(s == null ? '' : s).replace(/[<>]/g, ''); };
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var CANON_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  function canonDay(d){
+    var s = String(d == null ? '' : d).toLowerCase().replace(/\s+(am|pm)\b.*$/, '').trim();
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  }
 
-  // Athlete name
-  var nameEl = document.getElementById('pb-athlete-name');
-  if(nameEl) nameEl.textContent = (ath.name || 'Your athlete').toString();
+  var summary   = (programme && programme.programme_summary) || {};
+  var framework = (programme && programme.block_framework)   || {};
+  var weekObj   = (programme && programme.week) || (programme && programme.weeks && programme.weeks[0]) || null;
+  var currentWeek = parseInt(ath.currentWeek || (weekObj && weekObj.week_number) || 1, 10) || 1;
 
-  // Programme target
-  var targetEl = document.getElementById('pb-target');
-  var targetMap = {agoge:'Agoge', combine:'Combine', both:'Agoge + Combine'};
-  var rawTarget = (ath.fqProgrammeTarget || '').toString().toLowerCase();
-  if(targetEl) targetEl.textContent = targetMap[rawTarget] || (rawTarget ? rawTarget.charAt(0).toUpperCase()+rawTarget.slice(1) : 'Not set');
+  // ===== A. HERO =====
+  try {
+    var nameEl = byId('pb-athlete-name');
+    if(nameEl) nameEl.textContent = (ath.name || 'Your athlete').toString();
+  } catch(_e){ console.warn('[PHX postbuild] hero name:', _e); }
 
-  // Week 1 day-by-day
-  var week1El = document.getElementById('pb-week1');
-  var week = programme.week || (programme.weeks && programme.weeks[0]) || null;
-  var days = (week && (week.days || week.sessions)) || [];
-  var liftSet = {};
-  var totalMin = 0;
-  if(Array.isArray(days) && days.length){
-    var lines = [];
-    var dayOrder = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-    days.forEach(function(d, idx){
-      if(!d) return;
-      var dayName = (d.day || d.day_name || d.name || dayOrder[idx] || ('Day '+(idx+1))).toString();
-      var sessName = (d.session_name || d.title || d.focus || d.type || 'Rest');
-      var dur = parseInt(d.duration_min || d.duration || d.minutes || 0, 10);
-      if(!isNaN(dur) && dur > 0) totalMin += dur;
-      lines.push('<div><span style="color:var(--gold);font-family:var(--font-d);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;">'+(dayName.charAt(0).toUpperCase()+dayName.slice(1))+'</span> — '+String(sessName).replace(/[<>]/g,'')+'</div>');
-      // Collect primary lifts from blocks/exercises
-      var blocks = d.blocks || d.exercises || d.items || [];
-      if(Array.isArray(blocks)){
-        blocks.forEach(function(b){
-          var nm = b && (b.name || b.exercise || b.lift || b.movement);
-          if(nm && /(squat|deadlift|bench|press|clean|snatch|jerk)/i.test(String(nm))){
-            liftSet[String(nm)] = true;
-          }
-        });
+  try {
+    var targetEl = byId('pb-target');
+    var targetMap = {agoge:'Agoge', combine:'Combine', both:'Agoge + Combine', event:'Event', quarterly:'Quarterly'};
+    var rawTarget = (ath.fqProgrammeTarget || '').toString().toLowerCase();
+    if(targetEl) targetEl.textContent = targetMap[rawTarget] || (rawTarget ? rawTarget.charAt(0).toUpperCase()+rawTarget.slice(1) : 'Not set');
+  } catch(_e){ console.warn('[PHX postbuild] target:', _e); }
+
+  // Determine which block (1/2/3) currentWeek lives in, for hero "phase" label and for
+  // highlighting the current block in the 12-week grid.
+  var phases = Array.isArray(framework.phases) ? framework.phases : [];
+  var totalWeeks = parseInt(summary.total_weeks || framework.total_weeks || 12, 10) || 12;
+  var blockIdx = 0;
+  if(phases.length){
+    for(var pi = 0; pi < phases.length; pi++){
+      var ws = parseInt(phases[pi].weeks_start, 10) || (pi * 4 + 1);
+      var we = parseInt(phases[pi].weeks_end,   10) || (pi * 4 + 4);
+      if(currentWeek >= ws && currentWeek <= we){ blockIdx = pi; break; }
+    }
+  } else {
+    blockIdx = Math.min(2, Math.floor((currentWeek - 1) / 4));
+  }
+  var blocksTotal = Math.max(3, phases.length || 3);
+
+  try {
+    var phaseEl = byId('pb-phase');
+    if(phaseEl){
+      var phaseName = (phases[blockIdx] && phases[blockIdx].focus) || summary.current_phase || 'Foundation';
+      var label = String(phaseName).split('—')[0].split(/[—\-:]/)[0].trim();
+      phaseEl.textContent = label + ' — Block ' + (blockIdx + 1) + ' of ' + blocksTotal;
+    }
+  } catch(_e){ console.warn('[PHX postbuild] phase:', _e); }
+
+  try {
+    var genEl = byId('pb-generated');
+    var iso = ath.aiProgrammeDate || (programme && programme.generated_at) || null;
+    if(genEl){
+      if(iso){
+        var gd = new Date(iso);
+        if(!isNaN(gd.getTime())){
+          genEl.textContent = 'Generated ' + gd.getDate() + ' ' + MONTHS[gd.getMonth()] + ' ' + gd.getFullYear();
+        } else {
+          genEl.textContent = 'Generated —';
+        }
+      } else {
+        genEl.textContent = 'Generated —';
       }
+    }
+  } catch(_e){ console.warn('[PHX postbuild] generated:', _e); }
+
+  // ===== B. COACH PHILOSOPHY =====
+  // TODO(coach-prompt): No dedicated coach intro / "why this programme" narrative field
+  // is emitted today. We stitch programme_summary.{coach_note, phase_goal,
+  // methodology_applied}. Next coach-prompt update should add a richer first-person
+  // "approach" / "coach_intro" field (1–2 paragraphs in the coach's voice explaining the
+  // reasoning behind the plan) so this section can speak in the coach's voice instead of
+  // patched-together fragments.
+  try {
+    var philoCard = byId('pb-philosophy-card');
+    var philoEl   = byId('pb-philosophy');
+    var explicitIntro = '';
+    if(programme){
+      explicitIntro = String(programme.coach_intro || programme.coachIntro || (summary && (summary.coach_intro || summary.coachIntro)) || '').trim();
+    }
+    var coachNote = String(summary.coach_note || '').trim();
+    var phaseGoal = String(summary.phase_goal || '').trim();
+    var method    = String(summary.methodology_applied || '').trim();
+    var paragraphs = [];
+    if(explicitIntro) paragraphs.push(safe(explicitIntro));
+    if(coachNote)     paragraphs.push(safe(coachNote));
+    if(phaseGoal && paragraphs.length < 2) paragraphs.push('This phase: ' + safe(phaseGoal));
+    if(method    && paragraphs.length < 2) paragraphs.push('Approach: '   + safe(method));
+    if(paragraphs.length){
+      if(philoCard) philoCard.style.display = '';
+      if(philoEl)   philoEl.innerHTML = paragraphs.map(function(p){ return '<div style="margin-bottom:8px;">'+p+'</div>'; }).join('');
+    } else {
+      console.warn('[PHX postbuild] no coachIntro / coach_note / phase_goal in AI output — section B omitted. Update coach prompt to emit a narrative field.');
+      if(philoCard) philoCard.style.display = 'none';
+    }
+  } catch(_e){ console.warn('[PHX postbuild] philosophy:', _e); }
+
+  // ===== C. 12-WEEK OVERVIEW =====
+  // Always render a 3-block grid. If the AI emitted phases, use them; otherwise synthesise
+  // blank rows so the athlete sees the full arc and the prompt can be improved later.
+  try {
+    var blockHost = byId('pb-blocks');
+    var defaultBlockSize = Math.max(1, Math.round(totalWeeks / 3));
+    var deloadWeeks = [5, 10, 15];
+    var rows = [];
+    for(var bi = 0; bi < 3; bi++){
+      var hasPhase = !!phases[bi];
+      var rws = hasPhase ? (parseInt(phases[bi].weeks_start, 10) || (bi * defaultBlockSize + 1)) : (bi * defaultBlockSize + 1);
+      var rwe = hasPhase ? (parseInt(phases[bi].weeks_end,   10) || (rws + defaultBlockSize - 1)) : (rws + defaultBlockSize - 1);
+      if(bi === 2 && rwe < totalWeeks) rwe = totalWeeks;
+      var rfocus = hasPhase ? String(phases[bi].focus || '').trim() : '';
+      var deloadIn = deloadWeeks.filter(function(w){ return w >= rws && w <= rwe; });
+      rows.push({idx: bi, ws: rws, we: rwe, focus: rfocus, isCurrent: bi === blockIdx, deload: deloadIn});
+    }
+    if(blockHost){
+      blockHost.innerHTML = rows.map(function(r){
+        var weeksLine = 'Weeks ' + r.ws + '–' + r.we;
+        var deloadLine = r.deload.length ? (' · deload wk ' + r.deload.join(', ')) : '';
+        var focusLine = r.focus ? safe(r.focus) : '<span style="color:var(--text3);font-style:italic;">Focus TBC</span>';
+        var border = r.isCurrent ? 'var(--gold)' : 'var(--border)';
+        var labelHdr = r.isCurrent ? '<span style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--gold);margin-left:8px;">CURRENT</span>' : '';
+        return '<div style="background:var(--bg3);border:1px solid '+border+';border-radius:var(--radius);padding:10px 12px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">'
+          +   '<div style="font-family:var(--font-d);font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:'+(r.isCurrent?'var(--gold)':'var(--text)')+';">Block '+(r.idx+1)+labelHdr+'</div>'
+          +   '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:1.5px;color:var(--text3);">'+weeksLine+deloadLine+'</div>'
+          + '</div>'
+          + '<div style="font-size:12px;color:var(--text2);line-height:1.5;">'+focusLine+'</div>'
+          + '</div>';
+      }).join('');
+    }
+  } catch(_e){ console.warn('[PHX postbuild] blocks overview:', _e); }
+
+  // ===== D. WEEK 1 DAY BY DAY + collect lifts + sum volume =====
+  var liftSet = {};
+  var week1TotalMin = 0;
+  var week1SessionCount = 0;
+  try {
+    var week1El = byId('pb-week1');
+    var trainingDays = [];
+    if(Array.isArray(ath.fqTrainingDays) && ath.fqTrainingDays.length) trainingDays = ath.fqTrainingDays.slice();
+    else if(Array.isArray(framework.training_days) && framework.training_days.length) trainingDays = framework.training_days.slice();
+    else if(Array.isArray(ath.fqDays) && ath.fqDays.length) trainingDays = ath.fqDays.slice();
+    var trainingDayCanonSet = {};
+    trainingDays.forEach(function(d){ var c = canonDay(d); if(c) trainingDayCanonSet[c] = true; });
+
+    var sessions = (weekObj && Array.isArray(weekObj.sessions)) ? weekObj.sessions
+                  : (weekObj && Array.isArray(weekObj.days))    ? weekObj.days
+                  : [];
+
+    // Bucket sessions by canonical day. Sessions may arrive as flat per-slot entries with
+    // day "Saturday AM" / "Saturday PM", or as a single entry with am_session/pm_session
+    // nested children — match what the Programme tab + week-plan view already do.
+    var perDay = {};
+    sessions.forEach(function(sess){
+      if(!sess) return;
+      var slots = [];
+      if(sess.am_session){
+        slots.push(Object.assign({}, sess.am_session, {day: sess.am_session.day || sess.day, _slot: 'AM'}));
+      }
+      if(sess.pm_session){
+        slots.push(Object.assign({}, sess.pm_session, {day: sess.pm_session.day || sess.day, _slot: 'PM'}));
+      }
+      if(!slots.length) slots.push(sess);
+      slots.forEach(function(s){
+        var c = canonDay(s.day);
+        if(!c) return;
+        var rawDay = String(s.day || '');
+        var slot = s._slot || (/\bam\b/i.test(rawDay) ? 'AM' : (/\bpm\b/i.test(rawDay) ? 'PM' : ''));
+        var dur = parseInt(s.duration_min || s.duration || s.minutes || 0, 10) || 0;
+        var exes = Array.isArray(s.exercises) ? s.exercises
+                  : Array.isArray(s.blocks)   ? s.blocks
+                  : Array.isArray(s.items)    ? s.items
+                  : [];
+        if(!perDay[c]) perDay[c] = [];
+        perDay[c].push({
+          type: String(s.session_type || s.type || s.focus || s.session_name || s.title || 'Training'),
+          duration: dur,
+          slot: slot,
+          exercises: exes
+        });
+      });
     });
-    week1El.innerHTML = lines.join('');
-  } else if(programme.programme_summary){
-    week1El.textContent = String(programme.programme_summary).slice(0, 360);
-  } else {
-    week1El.textContent = 'Week 1 plan not detailed — open Programme to view.';
-  }
 
-  // Primary lifts
-  var liftsEl = document.getElementById('pb-lifts');
-  var lifts = Object.keys(liftSet);
-  if(!lifts.length){
-    // Fall back to athlete-declared primaries
-    if(ath.sq) lifts.push('Back Squat');
-    if(ath.dl) lifts.push('Deadlift');
-    if(ath.b1rm) lifts.push('Bench Press');
-    if(ath.ohp) lifts.push('Overhead Press');
-  }
-  if(liftsEl) liftsEl.textContent = lifts.length ? lifts.join(', ') : 'Coach will pick primaries as the block progresses.';
+    // Render order: athlete's nominated training days first (in their order), then any
+    // remaining days, in canonical week order — so a "Tue/Thu/Sat/Sun" athlete sees their
+    // training days at the top and the rest days last.
+    var orderedDays = [];
+    var seen = {};
+    trainingDays.forEach(function(d){
+      var c = canonDay(d);
+      if(c && CANON_ORDER.indexOf(c) >= 0 && !seen[c]){ seen[c] = true; orderedDays.push(c); }
+    });
+    CANON_ORDER.forEach(function(c){ if(!seen[c]){ seen[c] = true; orderedDays.push(c); } });
 
-  // Weekly volume estimate
-  var volumeEl = document.getElementById('pb-volume');
-  var summaryVol = programme.weekly_volume || (week && (week.total_minutes || week.volume_min));
-  if(!summaryVol && totalMin > 0) summaryVol = totalMin + ' min';
-  else if(typeof summaryVol === 'number') summaryVol = summaryVol + ' min';
-  if(volumeEl) volumeEl.textContent = summaryVol ? String(summaryVol) : (days.length ? (days.length + ' sessions this week') : 'TBC');
+    var lines = [];
+    orderedDays.forEach(function(c){
+      var buckets = perDay[c] || [];
+      var isTrainingDay = !!trainingDayCanonSet[c];
+      if(!buckets.length){
+        if(isTrainingDay){
+          lines.push('<div><span style="color:var(--gold);font-family:var(--font-d);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;">'+c.toUpperCase()+'</span> — Session TBC</div>');
+        } else {
+          lines.push('<div><span style="color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;">'+c.toUpperCase()+'</span> — Rest</div>');
+        }
+        return;
+      }
+      buckets.forEach(function(b){
+        var primaryEx = '';
+        if(Array.isArray(b.exercises) && b.exercises.length){
+          var firstEx = b.exercises[0];
+          var pName = firstEx && (firstEx.name || firstEx.exercise || firstEx.lift || firstEx.movement);
+          if(pName) primaryEx = ' (' + safe(pName) + ')';
+        }
+        var durStr  = b.duration > 0 ? (' · ' + b.duration + 'min') : '';
+        var slotStr = b.slot ? (' ' + b.slot) : '';
+        lines.push('<div><span style="color:var(--gold);font-family:var(--font-d);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;">'+c.toUpperCase()+slotStr+'</span> — '+safe(b.type)+primaryEx+durStr+'</div>');
+        if(b.duration > 0) week1TotalMin += b.duration;
+        week1SessionCount++;
+        if(Array.isArray(b.exercises)){
+          b.exercises.forEach(function(ex){
+            var nm = ex && (ex.name || ex.exercise || ex.lift || ex.movement);
+            if(nm && /(squat|deadlift|bench|press|clean|snatch|jerk|row|chin|pull[- ]?up)/i.test(String(nm))){
+              liftSet[String(nm).trim()] = true;
+            }
+          });
+        }
+      });
+    });
 
-  // Injury accommodations
-  var injuryCard = document.getElementById('pb-injury-card');
-  var injuryEl = document.getElementById('pb-injury');
-  var injuryNote = (ath.fqInjuryNotes || '').toString().trim();
-  var injuryFlag = ath.fqInjury;
-  if(injuryNote || (injuryFlag && injuryFlag !== 'none' && injuryFlag !== false)){
-    if(injuryCard) injuryCard.style.display = 'block';
-    if(injuryEl) injuryEl.textContent = injuryNote || ('Flagged: ' + String(injuryFlag));
-  } else {
-    if(injuryCard) injuryCard.style.display = 'none';
-  }
+    if(week1El){
+      if(lines.length){
+        week1El.innerHTML = lines.join('');
+      } else if(summary && summary.coach_note){
+        week1El.textContent = String(summary.coach_note).slice(0, 360);
+      } else {
+        week1El.textContent = 'Week 1 plan not detailed — open Programme to view.';
+      }
+    }
+  } catch(_e){ console.warn('[PHX postbuild] week1:', _e); }
 
-  // Start Training button
-  var btn = document.getElementById('pb-start-btn');
-  if(btn){
-    btn.onclick = function(){
-      try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e){}
-      if(typeof navTo === 'function') navTo('today');
-    };
-  }
+  // ===== E. PRIMARY LIFTS =====
+  try {
+    var liftsEl = byId('pb-lifts');
+    var lifts = Object.keys(liftSet);
+    if(!lifts.length){
+      if(Array.isArray(framework.primary_lifts) && framework.primary_lifts.length){
+        lifts = framework.primary_lifts.slice();
+      } else {
+        if(ath.sq)   lifts.push('Back Squat');
+        if(ath.dl)   lifts.push('Deadlift');
+        if(ath.b1rm) lifts.push('Bench Press');
+        if(ath.ohp) lifts.push('Overhead Press');
+      }
+    }
+    if(liftsEl) liftsEl.textContent = lifts.length ? lifts.join(' · ') : 'Coach will pick primaries as the block progresses.';
+  } catch(_e){ console.warn('[PHX postbuild] lifts:', _e); }
+
+  // ===== F. WEEKLY VOLUME =====
+  try {
+    var volumeEl = byId('pb-volume');
+    if(volumeEl){
+      if(week1TotalMin > 0){
+        var hrs = Math.round((week1TotalMin / 60) * 10) / 10;
+        volumeEl.textContent = week1TotalMin + ' min (~' + hrs + ' hrs) across ' + week1SessionCount + ' session' + (week1SessionCount === 1 ? '' : 's');
+      } else if(week1SessionCount > 0){
+        volumeEl.textContent = week1SessionCount + ' session' + (week1SessionCount === 1 ? '' : 's');
+      } else {
+        volumeEl.textContent = 'TBC';
+      }
+    }
+  } catch(_e){ console.warn('[PHX postbuild] volume:', _e); }
+
+  // ===== G. INJURY ACCOMMODATIONS =====
+  // fqInjury is an array of {area, side, detail} (sometimes strings). Empty array is
+  // truthy in JS — the v4.7.49 parser tripped on this and rendered "Flagged: " with no
+  // value. Now we check length and render structured entries only when present.
+  try {
+    var injuryCard = byId('pb-injury-card');
+    var injuryEl   = byId('pb-injury');
+    var injuryNote = (ath.fqInjuryNotes || '').toString().trim();
+    var injuryList = Array.isArray(ath.fqInjury) ? ath.fqInjury.filter(Boolean) : [];
+    var parts = [];
+    if(injuryNote) parts.push(safe(injuryNote));
+    if(injuryList.length){
+      var listLines = injuryList.map(function(it){
+        if(typeof it === 'string') return safe(it);
+        if(!it || typeof it !== 'object') return '';
+        var area = safe(it.area || '');
+        var side = it.side ? ' (' + safe(it.side) + ')' : '';
+        var detail = it.detail ? ' — ' + safe(it.detail) : '';
+        return area ? (area + side + detail) : (detail ? detail.replace(/^ — /, '') : '');
+      }).filter(function(s){ return s && s.length; });
+      if(listLines.length) parts.push(listLines.join('<br>'));
+    }
+    if(parts.length){
+      if(injuryCard) injuryCard.style.display = '';
+      if(injuryEl)   injuryEl.innerHTML = parts.join('<br><br>');
+    } else {
+      if(injuryCard) injuryCard.style.display = 'none';
+    }
+  } catch(_e){ console.warn('[PHX postbuild] injury:', _e); }
+
+  // ===== H. TARGETS LOCKED =====
+  try {
+    var targetsCard = byId('pb-targets-card');
+    var targetsEl   = byId('pb-targets');
+    var targetLines = [];
+    var rawTgt = (ath.fqProgrammeTarget || '').toString().toLowerCase();
+    var ev = ath.fqEventDate || null;
+    if(ev){
+      var evDate = new Date(ev);
+      if(!isNaN(evDate.getTime())){
+        var now = new Date();
+        var weeksOut = Math.max(0, Math.round((evDate.getTime() - now.getTime()) / (7 * 86400000)));
+        var evLabel = (rawTgt === 'combine') ? 'Combine'
+                    : (rawTgt === 'agoge')   ? 'Agoge'
+                    : (rawTgt === 'both')    ? 'Combine'
+                    : 'Event';
+        targetLines.push(safe(evLabel) + ': ' + evDate.getDate() + ' ' + MONTHS[evDate.getMonth()] + ' ' + evDate.getFullYear() + ' — ' + weeksOut + ' week' + (weeksOut === 1 ? '' : 's') + ' out');
+      }
+    }
+    if((rawTgt === 'agoge' || rawTgt === 'both') && ath.agogeStartDate){
+      var aDate = new Date(ath.agogeStartDate);
+      if(!isNaN(aDate.getTime())){
+        targetLines.push('Agoge start: ' + aDate.getDate() + ' ' + MONTHS[aDate.getMonth()] + ' ' + aDate.getFullYear());
+      }
+    }
+    if(targetLines.length){
+      if(targetsCard) targetsCard.style.display = '';
+      if(targetsEl)   targetsEl.innerHTML = targetLines.map(function(l){ return '<div>'+l+'</div>'; }).join('');
+    } else {
+      if(targetsCard) targetsCard.style.display = 'none';
+    }
+  } catch(_e){ console.warn('[PHX postbuild] targets:', _e); }
+
+  // ===== I. START TRAINING =====
+  try {
+    var btn = byId('pb-start-btn');
+    if(btn){
+      btn.onclick = function(){
+        try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e){}
+        if(typeof navTo === 'function') navTo('today');
+      };
+    }
+  } catch(_e){ console.warn('[PHX postbuild] start btn:', _e); }
 
   if(typeof showScreen === 'function') showScreen('screen-post-build');
 }

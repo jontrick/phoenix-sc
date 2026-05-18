@@ -2084,7 +2084,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button class="edit-btn" onclick="handleSignOut()" style="margin-top:12px;color:var(--text2);border-color:var(--border2);">Sign Out</button>
   <div style="text-align:center;padding:24px 16px 40px;font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">
     <div style="margin-bottom:4px;">PROJECT PHOENIX</div>
-    <div id="settings-version-display">Version —</div>
+    <div id="settings-version-display" onclick="_phxDiagTapVersion()" style="cursor:pointer;">Version —</div>
   </div>
 </div>
 <div class="bottom-nav">
@@ -2813,6 +2813,48 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
+<!-- v4.7.49 POST-COACH BUILD ANALYSIS SCREEN. Shown once after initial programme
+     generation completes (NOT on weekly regen). The body is populated by
+     _phxShowPostBuildAnalysis() before showScreen() is called. -->
+<div id="screen-post-build" class="screen">
+  <div class="app-header">
+    <div style="width:36px"></div>
+    <div class="header-logo">YOUR <span>PROGRAMME</span></div>
+    <div style="width:36px"></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:24px 18px 32px;">
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Your coach built</div>
+    <div id="pb-athlete-name" style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:18px;">—</div>
+
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Programme target</div>
+      <div id="pb-target" style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">—</div>
+    </div>
+
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Week 1 — day by day</div>
+      <div id="pb-week1" style="font-size:13px;color:var(--text);line-height:1.7;">—</div>
+    </div>
+
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Primary lifts</div>
+      <div id="pb-lifts" style="font-size:13px;color:var(--text);line-height:1.7;">—</div>
+    </div>
+
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Weekly volume estimate</div>
+      <div id="pb-volume" style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">—</div>
+    </div>
+
+    <div id="pb-injury-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:22px;display:none;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Injury accommodations noted</div>
+      <div id="pb-injury" style="font-size:13px;color:var(--text);line-height:1.6;">—</div>
+    </div>
+
+    <button class="btn-primary" id="pb-start-btn" style="width:100%;padding:16px;font-size:14px;letter-spacing:3px;">Start Training &rarr;</button>
+  </div>
+</div>
+
 <!-- FEEDBACK SCREEN -->
 <div id="screen-feedback" class="screen">
 <div class="app-header">
@@ -3303,8 +3345,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
       <div><div class="sidebar-item-text">Feedback</div><div class="sidebar-item-sub">Help shape Phoenix</div></div>
     </div>
-    <!-- v4.7.47 diagnostic: always reachable, never gated by online/offline state. -->
-    <div class="sidebar-item" onclick="closeSidebar();_phxOpenDiagnostic()">
+    <!-- v4.7.49: Diagnostic hidden by default. Revealed for the current session by
+         tapping the Settings version number 5 times in quick succession. -->
+    <div id="sidebar-diag-item" class="sidebar-item" style="display:none;" onclick="closeSidebar();_phxOpenDiagnostic()">
       <div class="sidebar-item-icon" style="background:rgba(217,106,94,0.18);color:#d96a5e;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></div>
       <div><div class="sidebar-item-text">Diagnostic</div><div class="sidebar-item-sub">Connectivity + write check</div></div>
     </div>
@@ -3341,6 +3384,13 @@ var SUPABASE_KEY='sb_publishable_5iC8tqmf4TqhlbCwq7JYdg_QfJ4aDAV';
 // some browsers — iOS Safari especially — get aggressive with storage). The default
 // storageKey (`sb-{project-ref}-auth-token`) is intentionally left alone so existing
 // users' sessions survive this upgrade.
+// v4.7.49: persistSession + autoRefreshToken VERIFIED. Session token persists in
+// localStorage and auto-restores on boot; expired access tokens silently refresh via
+// the refresh token. Boot routing (loadProfileAndRoute / DOMContentLoaded handler)
+// uses getSession() → refreshSession() fallback so a returning user lands directly on
+// Today without ever seeing landing or sign-in. Sign-in screen only shows when:
+// never signed in on this device, explicit Sign Out, or refresh token itself expired.
+// v5+: optional biometric gate on app open for sensitive operations.
 var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
   auth:{
     persistSession:true,
@@ -3352,7 +3402,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.48';
+var APP_VERSION='4.7.49';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3371,6 +3421,48 @@ function renderVersionDisplays(){
     // Preserve user data keys, just flag version update
   }
 })();
+
+// v4.7.49: Diagnostic menu reveal — tap the Settings version number 5 times within
+// 3 seconds to unhide the sidebar Diagnostic entry. Persists in sessionStorage so the
+// item stays visible until the tab is closed.
+var _phxDiagTapTimes = [];
+function _phxDiagApplyVisibility(){
+  var revealed = false;
+  try { revealed = sessionStorage.getItem('phx_diag_revealed') === '1'; } catch(_e){}
+  var item = document.getElementById('sidebar-diag-item');
+  if(item) item.style.display = revealed ? '' : 'none';
+}
+function _phxDiagTapVersion(){
+  try {
+    if(sessionStorage.getItem('phx_diag_revealed') === '1') return;
+  } catch(_e){}
+  var now = Date.now();
+  _phxDiagTapTimes.push(now);
+  // Keep only taps within the last 3 seconds
+  _phxDiagTapTimes = _phxDiagTapTimes.filter(function(t){ return now - t <= 3000; });
+  if(_phxDiagTapTimes.length >= 5){
+    _phxDiagTapTimes = [];
+    try { sessionStorage.setItem('phx_diag_revealed','1'); } catch(_e){}
+    _phxDiagApplyVisibility();
+    try {
+      var el = document.getElementById('settings-version-display');
+      if(el){
+        var orig = el.textContent;
+        el.textContent = 'Diagnostic unlocked';
+        setTimeout(function(){ el.textContent = orig; }, 1400);
+      }
+    } catch(_e){}
+  }
+}
+window._phxDiagTapVersion = _phxDiagTapVersion;
+// Apply current visibility on boot in case the tab was reloaded mid-session.
+if(typeof document !== 'undefined'){
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', _phxDiagApplyVisibility);
+  } else {
+    _phxDiagApplyVisibility();
+  }
+}
 
 // ====== FIELD MAPPING ======
 var FIELD_MAP=[
@@ -8630,14 +8722,115 @@ function onProgrammeGenerated(programme, trigger){
     updated.agogeStartDate = new Date().toISOString();
   }
   saveAthlete(updated);
-  // v4.7.40: route DIRECTLY to Today on every outcome. No reveal screen, no intermediate
-  // assessment, no bounce. The Today screen now reads the freshly-saved aiProgramme so
-  // the session tile shows the prescribed work straight away. Force a renderTodayScreen()
-  // BEFORE navTo so the tile is populated when the screen mounts (fixes the
-  // "No programme — start questionnaire" flash where the tile rendered before save landed).
   athlete = updated; // belt-and-braces: ensure the global is current before render reads it
-  try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e){}
-  if(typeof navTo === 'function') navTo('today');
+  // v4.7.49: weekly regen routes straight to Today (no analysis screen). Initial build
+  // routes through the post-coach analysis screen so the athlete sees exactly what the
+  // coach built before stepping in. The Start Training button on that screen calls
+  // renderTodayScreen() + navTo('today').
+  if(isWeekly){
+    try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e){}
+    if(typeof navTo === 'function') navTo('today');
+    return;
+  }
+  try { _phxShowPostBuildAnalysis(updated, merged); }
+  catch(_e){
+    console.warn('[PHX] post-build analysis render failed, falling back to Today:', _e);
+    try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e2){}
+    if(typeof navTo === 'function') navTo('today');
+  }
+}
+
+// v4.7.49 POST-COACH BUILD ANALYSIS — populates #screen-post-build with what the coach
+// built and shows it. Only invoked on initial generation (onProgrammeGenerated decides).
+function _phxShowPostBuildAnalysis(ath, programme){
+  ath = ath || athlete || {};
+  programme = programme || (ath && ath.aiProgramme) || {};
+
+  // Athlete name
+  var nameEl = document.getElementById('pb-athlete-name');
+  if(nameEl) nameEl.textContent = (ath.name || 'Your athlete').toString();
+
+  // Programme target
+  var targetEl = document.getElementById('pb-target');
+  var targetMap = {agoge:'Agoge', combine:'Combine', both:'Agoge + Combine'};
+  var rawTarget = (ath.fqProgrammeTarget || '').toString().toLowerCase();
+  if(targetEl) targetEl.textContent = targetMap[rawTarget] || (rawTarget ? rawTarget.charAt(0).toUpperCase()+rawTarget.slice(1) : 'Not set');
+
+  // Week 1 day-by-day
+  var week1El = document.getElementById('pb-week1');
+  var week = programme.week || (programme.weeks && programme.weeks[0]) || null;
+  var days = (week && (week.days || week.sessions)) || [];
+  var liftSet = {};
+  var totalMin = 0;
+  if(Array.isArray(days) && days.length){
+    var lines = [];
+    var dayOrder = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    days.forEach(function(d, idx){
+      if(!d) return;
+      var dayName = (d.day || d.day_name || d.name || dayOrder[idx] || ('Day '+(idx+1))).toString();
+      var sessName = (d.session_name || d.title || d.focus || d.type || 'Rest');
+      var dur = parseInt(d.duration_min || d.duration || d.minutes || 0, 10);
+      if(!isNaN(dur) && dur > 0) totalMin += dur;
+      lines.push('<div><span style="color:var(--gold);font-family:var(--font-d);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;">'+(dayName.charAt(0).toUpperCase()+dayName.slice(1))+'</span> — '+String(sessName).replace(/[<>]/g,'')+'</div>');
+      // Collect primary lifts from blocks/exercises
+      var blocks = d.blocks || d.exercises || d.items || [];
+      if(Array.isArray(blocks)){
+        blocks.forEach(function(b){
+          var nm = b && (b.name || b.exercise || b.lift || b.movement);
+          if(nm && /(squat|deadlift|bench|press|clean|snatch|jerk)/i.test(String(nm))){
+            liftSet[String(nm)] = true;
+          }
+        });
+      }
+    });
+    week1El.innerHTML = lines.join('');
+  } else if(programme.programme_summary){
+    week1El.textContent = String(programme.programme_summary).slice(0, 360);
+  } else {
+    week1El.textContent = 'Week 1 plan not detailed — open Programme to view.';
+  }
+
+  // Primary lifts
+  var liftsEl = document.getElementById('pb-lifts');
+  var lifts = Object.keys(liftSet);
+  if(!lifts.length){
+    // Fall back to athlete-declared primaries
+    if(ath.sq) lifts.push('Back Squat');
+    if(ath.dl) lifts.push('Deadlift');
+    if(ath.b1rm) lifts.push('Bench Press');
+    if(ath.ohp) lifts.push('Overhead Press');
+  }
+  if(liftsEl) liftsEl.textContent = lifts.length ? lifts.join(', ') : 'Coach will pick primaries as the block progresses.';
+
+  // Weekly volume estimate
+  var volumeEl = document.getElementById('pb-volume');
+  var summaryVol = programme.weekly_volume || (week && (week.total_minutes || week.volume_min));
+  if(!summaryVol && totalMin > 0) summaryVol = totalMin + ' min';
+  else if(typeof summaryVol === 'number') summaryVol = summaryVol + ' min';
+  if(volumeEl) volumeEl.textContent = summaryVol ? String(summaryVol) : (days.length ? (days.length + ' sessions this week') : 'TBC');
+
+  // Injury accommodations
+  var injuryCard = document.getElementById('pb-injury-card');
+  var injuryEl = document.getElementById('pb-injury');
+  var injuryNote = (ath.fqInjuryNotes || '').toString().trim();
+  var injuryFlag = ath.fqInjury;
+  if(injuryNote || (injuryFlag && injuryFlag !== 'none' && injuryFlag !== false)){
+    if(injuryCard) injuryCard.style.display = 'block';
+    if(injuryEl) injuryEl.textContent = injuryNote || ('Flagged: ' + String(injuryFlag));
+  } else {
+    if(injuryCard) injuryCard.style.display = 'none';
+  }
+
+  // Start Training button
+  var btn = document.getElementById('pb-start-btn');
+  if(btn){
+    btn.onclick = function(){
+      try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e){}
+      if(typeof navTo === 'function') navTo('today');
+    };
+  }
+
+  if(typeof showScreen === 'function') showScreen('screen-post-build');
 }
 
 function onProgrammeError(msg){
@@ -17694,23 +17887,18 @@ window.fqNext = async function(){
     localStorage.setItem('phoenix_athlete', JSON.stringify(updated));
     var writeOk = await _phxSaveProfileVerified(updated);
     if(!writeOk){
-      // v4.7.45 hotfix DIAGNOSTIC: surface the actual Postgres error + code so the user
-      // can read it on screen (Mac/iPhone Safari web inspector unavailable).
+      // v4.7.49: friendly user-facing message. The full Postgres error is already
+      // recorded into phx_last_write_error by _phxSaveProfileVerified — the Diagnostic
+      // page reads it for support.
       var snap = null;
       try { snap = JSON.parse(localStorage.getItem('phx_last_write_error')||'null'); } catch(_e){}
-      var errMsg = (snap && snap.message) || 'Unknown error (no snapshot captured)';
-      var errCode = (snap && snap.code) || 'unknown';
-      alert('Save failed.\n\nError: '+errMsg+'\n\nCode: '+errCode+'\n\nTap Build my plan again, or contact support.');
       console.error('[PHX] fqNext: verified save failed — NOT routing to Today. Snapshot:', snap);
+      alert('Something went wrong saving your details. Check your connection and tap Build my plan again. If it keeps happening, open the Diagnostic page from the menu.');
       return;
     }
   } catch(e){
     console.error('[PHX] fqNext save error:', e);
-    var snap2 = null;
-    try { snap2 = JSON.parse(localStorage.getItem('phx_last_write_error')||'null'); } catch(_e){}
-    var emsg = (e && e.message) || (snap2 && snap2.message) || String(e);
-    var ecode = (e && e.code) || (snap2 && snap2.code) || 'exception';
-    alert('Save failed.\n\nError: '+emsg+'\n\nCode: '+ecode+'\n\nTap Build my plan again, or contact support.');
+    alert('Something went wrong saving your details. Check your connection and tap Build my plan again. If it keeps happening, open the Diagnostic page from the menu.');
     return;
   }
   fqClearProgress(); // v4.7.4 FIX 4: programme generated → drop saved snapshot

@@ -1749,9 +1749,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         </div>
       </div>
     </div>
-    <!-- v4.7.34 BUILD 5: Plan My Week link — opens the full 7-day session view. -->
+    <!-- v4.7.34 BUILD 5 / v4.7.56 RENAME: This Week's Schedule link — opens the full 7-day session view. -->
     <div style="text-align:center;margin:6px 0 14px;">
-      <button onclick="openWeekPlan()" style="background:transparent;border:none;color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px;text-decoration:underline;">Plan My Week →</button>
+      <button onclick="openWeekPlan()" style="background:transparent;border:none;color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px;text-decoration:underline;">This Week's Schedule →</button>
     </div>
     <!-- v4.7.23 BUILD 1 / v4.7.39 CHANGE 3: The Agoge tile is always visible. Non-Agoge
          athletes get a "JOIN THE AGOGE" overlay (added by _phxRenderAgogeTile); active
@@ -2669,13 +2669,14 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
-<!-- v4.7.34 BUILD 5: WEEK PLAN — full 7-day session breakdown -->
+<!-- v4.7.34 BUILD 5 / v4.7.56 RENAME: This Week's Schedule — full 7-day session breakdown -->
 <div id="screen-week-plan" class="screen">
 <div class="app-header">
   <div class="icon-btn" onclick="navTo('today')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
   </div>
-  <div class="header-logo">WEEK <span id="wp-week-num">—</span></div>
+  <div class="header-logo">THIS WEEK'S <span>SCHEDULE</span></div>
+  <span id="wp-week-num" style="display:none">—</span>
   <div style="width:36px"></div>
 </div>
 <div style="flex:1;overflow-y:auto;padding:14px 16px 100px;">
@@ -3368,10 +3369,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
       <div><div class="sidebar-item-text">My Profile</div><div class="sidebar-item-sub">Goals, injuries, programme path</div></div>
     </div>
-    <!-- v4.7.34 BUILD 5: This Week plan view -->
+    <!-- v4.7.34 BUILD 5 / v4.7.56 RENAME: This Week's Schedule -->
     <div class="sidebar-item" onclick="closeSidebar();openWeekPlan()">
       <div class="sidebar-item-icon" style="background:rgba(200,150,62,0.16);color:var(--gold);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-      <div><div class="sidebar-item-text">This Week</div><div class="sidebar-item-sub">Plan your sessions</div></div>
+      <div><div class="sidebar-item-text">This Week's Schedule</div><div class="sidebar-item-sub">Your 7-day session breakdown</div></div>
     </div>
     <!-- v4.7.22 BUILD 7 -->
     <div class="sidebar-item" onclick="closeSidebar();openMyCoach()">
@@ -3495,7 +3496,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.55';
+var APP_VERSION='4.7.56';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4333,6 +4334,17 @@ async function _loadProfileAndRouteInner(){
   if(inviteCode && _phxAlphaWelcomeNeeded() && !fqDone){
     console.log('[PHX] routing decision: alpha-welcome (first-time invite redemption)');
     _phxShowAlphaWelcome();
+    return;
+  }
+  // v4.7.56: saved questionnaire progress trumps splash. If phoenix_fq_progress exists and
+  // the athlete hasn't completed onboarding, the user almost certainly bounced here mid-FQ
+  // (e.g. auth timeout). Route straight to openFoundationQ() — its built-in resume gate is
+  // the primary CTA the user sees. Splash's generic "Begin Programme" used to bury this.
+  var _fqProgressSaved = false;
+  try { _fqProgressSaved = !!localStorage.getItem('phoenix_fq_progress'); } catch(_e){}
+  if(_fqProgressSaved && !fqDone && typeof openFoundationQ === 'function'){
+    console.log('[PHX] routing decision: phoenix_fq_progress present → openFoundationQ (resume gate)');
+    openFoundationQ();
     return;
   }
   console.log('[PHX] routing decision:',{hasAthlete:!!athlete,fqCompleted:athlete?athlete.fqCompleted:null,targetScreen:'screen-splash'});
@@ -9992,7 +10004,13 @@ function updateFqFontPicker(){
 }
 
 function loadFont(){
-  var saved=localStorage.getItem('phoenix_font')||'phoenix';
+  // v4.7.56: read font from BOTH phoenix_font (legacy) AND phoenix_athlete.font (server-synced)
+  // so a returning user's font survives even if the standalone key was cleared (or never set
+  // on this device). Runs at the very top of boot, BEFORE any auth check, so we never flash
+  // the default font on auth-timeout bounces.
+  var savedAth=null;
+  try { savedAth=JSON.parse(localStorage.getItem('phoenix_athlete')||'null'); } catch(_e){}
+  var saved=localStorage.getItem('phoenix_font')||(savedAth&&savedAth.font)||'phoenix';
   applyFont(saved);
 }
 
@@ -10051,7 +10069,13 @@ function updateSwatchStates(){
 }
 
 function loadSkin(){
-  var saved=(athlete&&athlete.theme)||localStorage.getItem('phoenix_skin')||'phoenix';
+  // v4.7.56: read theme from BOTH phoenix_skin (legacy) AND phoenix_athlete.theme (server-synced)
+  // so a returning user's skin survives even if the standalone key was cleared (or never set
+  // on this device). Runs at the very top of boot, BEFORE any auth check, so we never flash
+  // the default Phoenix skin on auth-timeout bounces.
+  var savedAth=null;
+  try { savedAth=JSON.parse(localStorage.getItem('phoenix_athlete')||'null'); } catch(_e){}
+  var saved=(athlete&&athlete.theme)||localStorage.getItem('phoenix_skin')||(savedAth&&savedAth.theme)||'phoenix';
   var tier=getSkinTier(saved);
   var canUse=tier==='free'||(tier==='adfree'&&hasRisingAccess())||(tier==='pro'&&hasProAccess());
   if(canUse){

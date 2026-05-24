@@ -569,6 +569,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .core-ex-reps{font-family:var(--font-d);font-size:13px;font-weight:600;color:var(--gold);}
 .modal-close{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:3px;text-transform:uppercase;padding:14px;cursor:pointer;border-radius:var(--radius);margin-top:12px;}
 
+/* v4.7.57 SHARED BOTTOM SHEET — reused by training-days duration picker, session-timetable
+   dropdown, and the This Week's Schedule "Add Session" CTA. Single component, single CSS. */
+.bsheet-option{display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s, background 0.15s;}
+.bsheet-option:active{border-color:var(--gold);background:var(--bg2);}
+.bsheet-option.active{border-color:var(--gold);background:rgba(200,150,62,0.08);}
+.bsheet-option-label{font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:1.5px;}
+.bsheet-option-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+.bsheet-check{font-family:var(--font-d);font-size:18px;color:var(--gold);font-weight:700;}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
@@ -2153,7 +2162,15 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <div class="q-field">
     <label class="q-label">Date of birth</label>
-    <input class="q-input" type="date" id="fq-dob" onchange="fqAnswers.dob=this.value;fqValidateStep()" style="color-scheme:dark;cursor:pointer;">
+    <!-- v4.7.57: separate year / month / day selectors. Year + month changes reset the day
+         to 1 so picking a birth month doesn't leave today's day-of-month stuck in the field.
+         Hidden #fq-dob preserves the canonical ISO value the rest of the app already reads. -->
+    <div style="display:grid;grid-template-columns:1.1fr 1.3fr 0.9fr;gap:8px;margin-top:6px;">
+      <select id="fq-dob-year" class="q-input" onchange="_phxDobChange('year')" style="cursor:pointer;color-scheme:dark;padding:14px 10px;"></select>
+      <select id="fq-dob-month" class="q-input" onchange="_phxDobChange('month')" style="cursor:pointer;color-scheme:dark;padding:14px 10px;"></select>
+      <select id="fq-dob-day" class="q-input" onchange="_phxDobChange('day')" style="cursor:pointer;color-scheme:dark;padding:14px 10px;"></select>
+    </div>
+    <input type="hidden" id="fq-dob">
   </div>
   <div class="q-field">
     <label class="q-label">Bodyweight (kg)</label>
@@ -2542,7 +2559,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div class="q-tag">Step 5 — Training days</div>
   <div class="q-title">Pick Your<br>Training Days</div>
   <div style="font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.6;">Choose your training days — pick between <strong style="color:var(--text);">3 and 6 days</strong>, any combination. Your coach builds entirely around your schedule.</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Tap a day to switch it on, then tap <strong>AM</strong>, <strong>PM</strong>, or both for that day. Sessions go in the slots you pick.</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Tap <strong>AM</strong> or <strong>PM</strong> on any day to add a session — pick the duration from the popup. Tap an active slot again to remove it.</div>
   <div style="display:flex;flex-direction:column;gap:6px;" id="fq-availability-grid"></div>
   <div id="fq-availability-summary" style="margin-top:12px;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;"></div>
 </div>
@@ -2570,7 +2587,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 <div class="q-step" id="fq-step-sessionschedule">
   <div class="q-tag">Step 7 — Your timetable</div>
   <div class="q-title">Session<br>Timetable</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Assign a session type to each available slot. Use &ldquo;&mdash;&rdquo; for no session.</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Tap any slot to pick what your coach should program. Leave it as <strong>Coach decides</strong> and the AI picks the best fit for that day.</div>
   <div id="fq-session-warning" style="display:none;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--orange);line-height:1.5;"></div>
   <div style="display:flex;flex-direction:column;gap:6px;" id="fq-session-timetable"></div>
 </div>
@@ -3469,6 +3486,17 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
+<!-- v4.7.57 SHARED BOTTOM SHEET — driven by _phxOpenBottomSheet({title, subtitle, options, current, onSelect, cancelLabel}).
+     Used by: training-days duration picker, session-timetable type dropdown, week-plan Add Session. -->
+<div class="modal-overlay" id="phx-bsheet" onclick="_phxBsheetOverlayClick(event)">
+<div class="modal-sheet" onclick="event.stopPropagation()">
+  <div id="phx-bsheet-title" class="modal-title">—</div>
+  <div id="phx-bsheet-subtitle" class="modal-subtitle">—</div>
+  <div id="phx-bsheet-options"></div>
+  <button class="modal-close" id="phx-bsheet-cancel" onclick="_phxCloseBottomSheet()">Cancel</button>
+</div>
+</div>
+
 <script>
 // ====== SUPABASE CLIENT ======
 var SUPABASE_URL='https://mxtowhccuqarszcwpbkq.supabase.co';
@@ -3496,7 +3524,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.56';
+var APP_VERSION='4.7.57';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5051,12 +5079,58 @@ async function _phxResetUpdateGoals(){
   fqStep = 1;
   showScreen('screen-foundation-q');
   updateFQStep();
+  // v4.7.57: explicit Step 1 prefill after a 50ms delay so the DOM exists before we
+  // poke #fq-name / #fq-dob* / #fq-bw / #fq-sex-row. Without the delay, showScreen has
+  // just toggled .active but the browser hasn't laid out the step's inputs yet, so the
+  // value assignments land on stale references and the fields render blank.
   setTimeout(function(){
     if(typeof renderFQSkinGrid === 'function') renderFQSkinGrid();
     if(typeof updateFqFontPicker === 'function') updateFqFontPicker();
+    if(typeof _phxPrefillStep1UI === 'function') _phxPrefillStep1UI();
     if(typeof fqRestoreProgressUI === 'function') fqRestoreProgressUI();
     if(typeof fqValidateStep === 'function') fqValidateStep();
   }, 50);
+}
+
+// v4.7.57: explicit Step 1 prefill. Fires after the 50ms post-openFoundationQ delay in
+// _phxResetUpdateGoals so the DOM is guaranteed to exist. Idempotent — safe if also called
+// by fqRestoreProgressUI (which it duplicates intentionally for the Update-Goals path).
+function _phxPrefillStep1UI(){
+  var f = window.fqAnswers || {};
+  // Name
+  var nameEl = document.getElementById('fq-name');
+  if(nameEl && f.name) nameEl.value = f.name;
+  // DOB — populate Y/M/D selects + the hidden ISO field via the existing init helpers
+  if(typeof _phxDobInit === 'function') _phxDobInit();
+  if(f.dob){
+    var parts = String(f.dob).split('-');
+    if(parts.length === 3){
+      var yy = parseInt(parts[0],10), mm = parseInt(parts[1],10), dd = parseInt(parts[2],10);
+      var ySel=document.getElementById('fq-dob-year');
+      var mSel=document.getElementById('fq-dob-month');
+      var dSel=document.getElementById('fq-dob-day');
+      var hidden=document.getElementById('fq-dob');
+      if(ySel) ySel.value = String(yy);
+      if(mSel) mSel.value = String(mm);
+      if(typeof _phxDobRebuildDays === 'function') _phxDobRebuildDays(_phxDaysInMonth(yy,mm), dd);
+      if(dSel) dSel.value = String(dd);
+      if(hidden) hidden.value = f.dob;
+    }
+  }
+  // Bodyweight
+  var bwEl = document.getElementById('fq-bw');
+  if(bwEl && f.bw) bwEl.value = f.bw;
+  // Sex card
+  if(f.sex){
+    var sexEl = document.querySelector('#fq-sex-row .q-option-card[onclick*="\''+f.sex+'\'"]');
+    if(sexEl){
+      sexEl.classList.add('active');
+      var cycleRow = document.getElementById('fq-cycle-row');
+      if(cycleRow) cycleRow.style.display = f.sex === 'female' ? 'block' : 'none';
+    }
+  }
+  // Units (handled via skin/theme application elsewhere — no separate Step 1 control today)
+  console.log('[PHX] prefill: step 1 values set', {name: f.name, dob: f.dob, bw: f.bw, sex: f.sex});
 }
 
 // Copies every fq* field on the athlete into the live fqAnswers shape. The questionnaire
@@ -5320,6 +5394,55 @@ function openCoreModal(){
   document.getElementById('core-modal').classList.add('active');
 }
 function closeCoreModal(){document.getElementById('core-modal').classList.remove('active');}
+
+// ====== v4.7.57 SHARED BOTTOM SHEET ======
+// Opts: {title, subtitle, options:[{value, label, sub}], current, onSelect(value), cancelLabel}
+// Single component reused across the questionnaire (duration picker, session-type dropdown)
+// and This Week's Schedule ("+ Add Session"). Keeps the UI consistent and the markup DRY.
+window._phxBsheetState = null;
+window._phxOpenBottomSheet = function(opts){
+  var overlay = document.getElementById('phx-bsheet');
+  if(!overlay) return;
+  var titleEl = document.getElementById('phx-bsheet-title');
+  var subtitleEl = document.getElementById('phx-bsheet-subtitle');
+  var optsEl = document.getElementById('phx-bsheet-options');
+  var cancelEl = document.getElementById('phx-bsheet-cancel');
+  if(titleEl) titleEl.textContent = opts.title || 'Pick';
+  if(subtitleEl) subtitleEl.textContent = opts.subtitle || '';
+  if(cancelEl) cancelEl.textContent = opts.cancelLabel || 'Cancel';
+  if(optsEl){
+    optsEl.innerHTML = (opts.options||[]).map(function(o, idx){
+      var isActive = (opts.current != null && String(o.value) === String(opts.current));
+      var sub = o.sub ? '<div class="bsheet-option-sub">'+o.sub+'</div>' : '';
+      return '<div class="bsheet-option'+(isActive?' active':'')+'" data-bsheet-idx="'+idx+'">'+
+               '<div><div class="bsheet-option-label">'+o.label+'</div>'+sub+'</div>'+
+               (isActive?'<div class="bsheet-check">&#10003;</div>':'')+
+             '</div>';
+    }).join('');
+    // Wire selections — store the option list on state, look up by index when tapped.
+    Array.prototype.forEach.call(optsEl.querySelectorAll('.bsheet-option'), function(el){
+      el.onclick = function(){
+        var idx = parseInt(el.getAttribute('data-bsheet-idx'), 10);
+        var state = window._phxBsheetState;
+        if(!state) return;
+        var picked = state.options[idx];
+        _phxCloseBottomSheet();
+        try { if(typeof state.onSelect === 'function') state.onSelect(picked.value, picked); }
+        catch(e){ console.warn('[PHX] bsheet onSelect threw:', e); }
+      };
+    });
+  }
+  window._phxBsheetState = opts;
+  overlay.classList.add('active');
+};
+window._phxCloseBottomSheet = function(){
+  var overlay = document.getElementById('phx-bsheet');
+  if(overlay) overlay.classList.remove('active');
+  window._phxBsheetState = null;
+};
+window._phxBsheetOverlayClick = function(ev){
+  if(ev && ev.target && ev.target.id === 'phx-bsheet') _phxCloseBottomSheet();
+};
 
 // ====== GENERATE DAILY CORE (AI) ======
 function generateDailyCore(){
@@ -14323,6 +14446,36 @@ function _phxSaveWeekSwaps(weekStart, swaps){
   try { localStorage.setItem('phoenix_week_swaps_'+weekStart, JSON.stringify(swaps)); } catch(_e){}
 }
 
+// v4.7.57 ATHLETE-ADDED SESSIONS — supplement a week with custom slots from the schedule view.
+// Stored per-week in localStorage as {Monday:[{slot,sessionType,addedAt}], ...} so they don't
+// bleed into other weeks; mirrored best-effort to weekly_checkins.next_week_requests as JSON
+// so the coach prompt can read them at next rebuild.
+function _phxLoadWeekCustomSessions(weekStart){
+  try {
+    var raw = localStorage.getItem('phoenix_week_custom_sessions_'+weekStart);
+    if(!raw) return {};
+    var parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch(_e){ return {}; }
+}
+function _phxSaveWeekCustomSessions(weekStart, byDay){
+  try { localStorage.setItem('phoenix_week_custom_sessions_'+weekStart, JSON.stringify(byDay||{})); } catch(_e){}
+}
+async function _phxMirrorWeekCustomToSupabase(weekStart, byDay, weekNumber){
+  if(!sb || !currentSession || !currentSession.user) return;
+  try {
+    var payload = {
+      user_id: currentSession.user.id,
+      week_number: weekNumber || 1,
+      week_start_date: weekStart,
+      next_week_requests: JSON.stringify({custom_sessions: byDay || {}})
+    };
+    // weekly_checkins has a UNIQUE (user_id, week_number, week_start_date) — upsert on it.
+    var res = await sb.from('weekly_checkins').upsert(payload, {onConflict:'user_id,week_number,week_start_date'});
+    if(res && res.error) console.warn('[PHX] custom session mirror error:', res.error.message || res.error);
+  } catch(e){ console.warn('[PHX] custom session mirror failed:', e); }
+}
+
 window.openWeekPlan = function(){
   showScreen('screen-week-plan');
   _phxRenderWeekPlan();
@@ -14384,30 +14537,66 @@ async function _phxRenderWeekPlan(){
   var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
   var container = document.getElementById('wp-days');
   if(!container) return;
+  // v4.7.57: pull any athlete-added custom sessions for this week and merge them in. Stored
+  // per-week so they don't bleed into next week's view.
+  var customByDay = _phxLoadWeekCustomSessions(weekStartISO);
+  Object.keys(customByDay).forEach(function(dayName){
+    if(!byDay[dayName]) byDay[dayName] = [];
+    (customByDay[dayName]||[]).forEach(function(c){
+      // Shape matches programme sessions enough that the priority + completion paths just work.
+      byDay[dayName].push({
+        session_type: c.sessionType,
+        duration_min: c.duration_min || 45,
+        day: dayName,
+        _slot: c.slot,
+        _custom: true
+      });
+    });
+  });
   var html = '';
   orderedDays.forEach(function(dayName, dayIdx){
     var daySessions = byDay[dayName] || [];
     var dayDate = new Date(start.getTime() + dayIdx*86400000);
     var isToday = (dayName === todayName);
+    // Bucket sessions by slot so we can show one AM tile + one PM tile (and an Add Session
+    // placeholder for whichever slot is empty). Anything without an explicit slot lands in AM.
+    var amSessions = [];
+    var pmSessions = [];
+    daySessions.forEach(function(s){
+      var slot = (s._slot || '').toLowerCase();
+      if(slot === 'pm') pmSessions.push(s); else amSessions.push(s);
+    });
     html += '<div style="background:var(--bg2);border:1px solid '+(isToday?'var(--gold)':'var(--border)')+';border-radius:var(--radius);padding:12px 14px;">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:'+(daySessions.length?'10':'2')+'px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">';
     html += '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:'+(isToday?'var(--gold)':'var(--text)')+';">'+dayName+(isToday?' · Today':'')+'</div>';
     html += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);">'+dayDate.getDate()+' '+months[dayDate.getMonth()]+'</div>';
     html += '</div>';
-    if(!daySessions.length){
-      html += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Rest Day</div>';
-    } else {
-      daySessions.forEach(function(sess, sIdx){
+    // Render each slot. Empty slots get the "+ Add Session" affordance.
+    ['am','pm'].forEach(function(slotKey, sIdx){
+      var slotSessions = (slotKey === 'am') ? amSessions : pmSessions;
+      var slotLabel = slotKey.toUpperCase();
+      if(!slotSessions.length){
+        html += '<div onclick="window._phxOpenAddSessionSheet(\''+dayName+'\',\''+slotKey+'\')" style="background:var(--bg3);border:1px dashed var(--border2);border-radius:var(--radius);padding:12px;margin-top:'+(sIdx?'8':'0')+'px;cursor:pointer;display:flex;align-items:center;gap:10px;color:var(--text3);transition:border-color 0.15s;">'+
+                '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);width:30px;">'+slotLabel+'</div>'+
+                '<div style="font-family:var(--font-d);font-size:12px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);">+ Add Session</div>'+
+              '</div>';
+        return;
+      }
+      slotSessions.forEach(function(sess){
         var prio = _phxResolvePriority(sess, weekN);
         var ps = _phxPriorityStyle(prio);
         var sid = _phxSessionId(sess);
         var isDone = !!completedKeys[dayName+'|'+String(sess.session_type||'').toLowerCase()];
         var isSkipped = !!swaps[sid+'|skipped'];
+        var isCustom = !!sess._custom;
         html += '<div style="position:relative;background:var(--bg3);border-left:3px solid '+ps.border+';border-radius:var(--radius);padding:10px 12px;margin-top:'+(sIdx?'8':'0')+'px;cursor:pointer;" onclick="window._phxWeekTileTap(\''+sid+'\',\''+dayName+'\')">';
         html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
         html += '<div style="flex:1;min-width:0;">';
-        html += '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:1px;">'+(sess.session_type||'Training')+'</div>';
-        html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+(sess.duration_min||45)+' min'+(sess._slot?(' · '+sess._slot.toUpperCase()):'')+'</div>';
+        html += '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);letter-spacing:1px;">'+(sess.session_type||'Training')+(isCustom?' <span style="font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--gold);background:rgba(200,150,62,0.15);border:1px solid var(--gold);padding:1px 5px;border-radius:3px;vertical-align:middle;margin-left:4px;">Custom</span>':'')+'</div>';
+        html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+(sess.duration_min||45)+' min · '+slotLabel+'</div>';
+        if(isCustom){
+          html += '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.4;font-style:italic;">Added by you &mdash; your coach will factor this in next week</div>';
+        }
         html += '</div>';
         html += '<div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;color:'+ps.color+';border:1px solid '+ps.border+';padding:3px 6px;border-radius:3px;flex-shrink:0;">'+ps.label+'</div>';
         html += '</div>';
@@ -14418,7 +14607,7 @@ async function _phxRenderWeekPlan(){
         }
         html += '</div>';
       });
-    }
+    });
     html += '</div>';
   });
   container.innerHTML = html;
@@ -14431,6 +14620,42 @@ async function _phxRenderWeekPlan(){
     navTo('today');
   };
 }
+
+// v4.7.57: open the bottom sheet for the empty-slot "+ Add Session" CTA. Picking writes the
+// custom session to localStorage + best-effort to Supabase, then re-renders the week.
+window._phxOpenAddSessionSheet = function(dayName, slotKey){
+  var state = window._phxWeekPlanState || {};
+  var weekStartISO = state.weekStartISO;
+  if(!weekStartISO){
+    var ws = _phxWeekStartDate();
+    weekStartISO = ws.getFullYear()+'-'+String(ws.getMonth()+1).padStart(2,'0')+'-'+String(ws.getDate()).padStart(2,'0');
+  }
+  _phxOpenBottomSheet({
+    title: dayName+' '+slotKey.toUpperCase(),
+    subtitle: 'Add a session',
+    options: [
+      {value:'Strength', label:'Strength', sub:'Heavy compound lifts + accessories'},
+      {value:'WOD',      label:'WOD',      sub:'Mixed-modal conditioning'},
+      {value:'Core',     label:'Core',     sub:'Trunk + bracing work'},
+      {value:'Walk',     label:'Walk',     sub:'Zone 2 / recovery walk'}
+    ],
+    onSelect: function(sessionType){
+      var byDay = _phxLoadWeekCustomSessions(weekStartISO);
+      if(!byDay[dayName]) byDay[dayName] = [];
+      byDay[dayName].push({
+        slot: slotKey,
+        sessionType: sessionType,
+        duration_min: sessionType === 'Walk' ? 45 : 60,
+        addedAt: new Date().toISOString()
+      });
+      _phxSaveWeekCustomSessions(weekStartISO, byDay);
+      console.log('[PHX] week-plan custom add:', dayName, slotKey, sessionType);
+      // Mirror to Supabase (best-effort; doesn't block UI).
+      _phxMirrorWeekCustomToSupabase(weekStartISO, byDay, state.weekN);
+      _phxRenderWeekPlan();
+    }
+  });
+};
 
 window._phxWeekTileTap = function(sessionId, dayName){
   var state = window._phxWeekPlanState || {};
@@ -18190,63 +18415,32 @@ window.fqRenderAvailability = function(){
   // v4.7.39 (next-build): make sure dayDurations exists + has every day.
   if(!fqAnswers.dayDurations || typeof fqAnswers.dayDurations !== 'object') fqAnswers.dayDurations = {};
   FQ_DAYS_ORDER.forEach(function(d){ if(!fqAnswers.dayDurations[d]) fqAnswers.dayDurations[d] = 60; });
+  // v4.7.57: inline duration pills removed. AM/PM tap opens the shared bottom sheet for duration;
+  // an active slot shows the chosen duration as a small "AM · 90" badge inside the button itself.
   FQ_DAYS_ORDER.forEach(function(day){
     var slot=fqAnswers.availableSlots[day]||{am:false,pm:false};
     var isActive = !!(slot.am || slot.pm);
     var bothSlots = !!(slot.am && slot.pm);
-    // v4.7.39 hotfix: single value or {am, pm} object. Pull whichever slot is active.
-    function _getDur(d, sl){ return _phxGetDayDuration(fqAnswers.dayDurations[d], sl); }
-    function _renderPills(d, sl){
-      var cur = _getDur(d, sl);
-      return [45,60,75,90].map(function(v){
-        var on = (cur === v);
-        return '<div class="q-option-card'+(on?' active':'')+'" onclick="fqSetDayDuration(\''+d+'\','+v+',\''+sl+'\')" style="flex:1;padding:6px 4px;font-size:11px;text-align:center;border-radius:12px;min-width:0;">'+v+'</div>';
-      }).join('');
-    }
-    var durRow = '';
-    if(isActive){
-      if(bothSlots){
-        // Two rows — one for AM, one for PM.
-        durRow =
-          '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 4px 58px;">'+
-            '<div style="width:60px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">AM DUR</div>'+
-            _renderPills(day,'am')+
-            '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
-          '</div>'+
-          '<div style="display:flex;align-items:center;gap:8px;padding:4px 0 8px 58px;border-bottom:1px solid var(--border);">'+
-            '<div style="width:60px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">PM DUR</div>'+
-            _renderPills(day,'pm')+
-            '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
-          '</div>';
-      } else {
-        // Single-session day — one row, slot is whichever is active.
-        var activeSlot = slot.am ? 'am' : 'pm';
-        durRow =
-          '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 8px 58px;border-bottom:1px solid var(--border);">'+
-            '<div style="width:40px;font-size:9px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1.5px;">DUR</div>'+
-            _renderPills(day, activeSlot)+
-            '<div style="width:30px;font-size:10px;color:var(--text3);text-align:right;">min</div>'+
-          '</div>';
-      }
-    }
-    // v4.7.51: clearer day pill. Active days get a gold fill + bold label so they pop against
-    // rest days at a glance. AM/PM toggles also get a stronger active treatment via the same
-    // .q-option-card.active style.
     var dayLabelStyle = isActive
       ? 'width:50px;font-size:13px;font-weight:900;color:var(--gold);font-family:var(--font-d);letter-spacing:1.5px;'
       : 'width:50px;font-size:12px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1px;';
     var slotBoxStyle = 'flex:1;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;border-radius:14px;letter-spacing:2px;';
+    function _slotLabel(sl){
+      var on = !!slot[sl];
+      if(!on) return sl.toUpperCase();
+      var dur = _phxGetDayDuration(fqAnswers.dayDurations[day], sl);
+      return sl.toUpperCase()+' &middot; '+dur;
+    }
     var trailing = isActive
       ? '<div style="width:60px;font-size:10px;color:var(--gold);text-align:right;font-family:var(--font-d);letter-spacing:1px;font-weight:600;">'+(bothSlots?'AM+PM':(slot.am?'AM':'PM'))+'</div>'
       : '<div style="width:60px;font-size:10px;color:var(--text3);text-align:right;">Rest day</div>';
     grid.insertAdjacentHTML('beforeend',
-      '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;'+(isActive?'':'border-bottom:1px solid var(--border);')+'">'+
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'+
       '<div style="'+dayLabelStyle+'">'+FQ_DAY_LABEL[day]+'</div>'+
-      '<div class="q-option-card'+(slot.am?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'am\')" style="'+slotBoxStyle+'">AM</div>'+
-      '<div class="q-option-card'+(slot.pm?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'pm\')" style="'+slotBoxStyle+'">PM</div>'+
+      '<div class="q-option-card'+(slot.am?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'am\')" style="'+slotBoxStyle+'">'+_slotLabel('am')+'</div>'+
+      '<div class="q-option-card'+(slot.pm?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'pm\')" style="'+slotBoxStyle+'">'+_slotLabel('pm')+'</div>'+
       trailing+
-      '</div>'+
-      durRow);
+      '</div>');
   });
   // v4.7.51: live day-count summary. Calls out the 3-6 valid range and turns gold once met.
   var sum = document.getElementById('fq-availability-summary');
@@ -18301,17 +18495,43 @@ window.fqSetDayDuration = function(day, minutes, slot){
 
 window.fqToggleAvailability = function(day,slot){
   if(!fqAnswers.availableSlots[day]) fqAnswers.availableSlots[day]={am:false,pm:false};
-  fqAnswers.availableSlots[day][slot]=!fqAnswers.availableSlots[day][slot];
-  // If we toggle off a slot, drop any existing session-type for that slot
-  if(!fqAnswers.availableSlots[day][slot] && fqAnswers.sessionSchedule && fqAnswers.sessionSchedule[day]){
-    delete fqAnswers.sessionSchedule[day][slot];
+  var wasOn = !!fqAnswers.availableSlots[day][slot];
+  if(wasOn){
+    // v4.7.57: tapping an active slot deactivates it (replaces the old "—" affordance).
+    fqAnswers.availableSlots[day][slot] = false;
+    if(fqAnswers.sessionSchedule && fqAnswers.sessionSchedule[day]){
+      delete fqAnswers.sessionSchedule[day][slot];
+    }
+    fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
+    console.log('[PHX] fqToggleAvailability deactivated', day, slot, '→ trainingDays:', fqAnswers.trainingDays);
+    fqRenderAvailability();
+    fqValidateStep();
+    return;
   }
-  // v4.7.37 hotfix: recompute fqAnswers.trainingDays in calendar order from availableSlots.
-  // Prompt + downstream code reads this directly — never derives from insertion order again.
-  fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
-  console.log('[PHX] fqToggleAvailability', day, slot, '→ trainingDays:', fqAnswers.trainingDays);
-  fqRenderAvailability();
-  fqValidateStep();
+  // v4.7.57: activating a slot pops the duration bottom sheet first. Slot only becomes
+  // active once a duration is picked — Cancel leaves the slot untouched.
+  var current = _phxGetDayDuration(fqAnswers.dayDurations[day], slot) || 60;
+  var slotLabel = slot.toUpperCase();
+  _phxOpenBottomSheet({
+    title: FQ_DAY_LABEL[day]+' '+slotLabel,
+    subtitle: 'How long is this session?',
+    options: [
+      {value:45, label:'45 min', sub:'Short — focus or skill work'},
+      {value:60, label:'60 min', sub:'Standard session'},
+      {value:75, label:'75 min', sub:'Longer — more accessories'},
+      {value:90, label:'90 min', sub:'Full build — strength + conditioning'}
+    ],
+    current: current,
+    onSelect: function(minutes){
+      fqAnswers.availableSlots[day][slot] = true;
+      // Store duration via the existing handler so {am,pm} object shape is honoured for two-a-days.
+      fqSetDayDuration(day, minutes, slot);
+      fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
+      console.log('[PHX] fqToggleAvailability activated', day, slot, '→ duration:', minutes, '· trainingDays:', fqAnswers.trainingDays);
+      fqRenderAvailability();
+      fqValidateStep();
+    }
+  });
 };
 
 // v4.7.37 hotfix: shared helper. Always returns days in calendar order (Mon→Sun) and
@@ -18328,6 +18548,22 @@ function _phxComputeTrainingDays(availableSlots){
   return out;
 }
 
+// v4.7.57 SESSION TIMETABLE — dropdown per slot. Each available AM/PM gets a single
+// selector button (defaults to "Coach decides"); tapping opens the shared bottom sheet with
+// Strength / WOD / Core / Walk / Coach decides. REST and "—" removed — rest days are days
+// with no slots (handled in the training-days step).
+var FQ_SESSION_TYPES = [
+  {value:'strength', label:'Strength', sub:'Heavy compound lifts + accessories'},
+  {value:'wod',      label:'WOD',      sub:'Mixed-modal conditioning'},
+  {value:'core',     label:'Core',     sub:'Trunk + bracing work'},
+  {value:'walk',     label:'Walk',     sub:'Zone 2 / recovery walk'},
+  {value:'coach',    label:'Coach decides', sub:'AI picks the best fit (default)'}
+];
+function _phxSessionTypeLabel(v){
+  if(!v || v === 'coach') return 'Coach decides';
+  for(var i=0;i<FQ_SESSION_TYPES.length;i++){ if(FQ_SESSION_TYPES[i].value === v) return FQ_SESSION_TYPES[i].label; }
+  return 'Coach decides';
+}
 window.fqRenderSessionTimetable = function(){
   var container=document.getElementById('fq-session-timetable');
   if(!container) return;
@@ -18338,26 +18574,28 @@ window.fqRenderSessionTimetable = function(){
     var slot=fqAnswers.availableSlots[day]||{am:false,pm:false};
     if(!slot.am && !slot.pm){
       container.insertAdjacentHTML('beforeend',
-        '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;color:var(--text3);font-size:11px;font-family:var(--font-d);letter-spacing:1px;">'+
-        '<div style="width:44px;">'+FQ_DAY_LABEL[day]+'</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--text3);font-size:11px;font-family:var(--font-d);letter-spacing:1px;border-bottom:1px solid var(--border);">'+
+        '<div style="width:50px;">'+FQ_DAY_LABEL[day]+'</div>'+
         '<div style="flex:1;">Rest day</div></div>');
       return;
     }
     anyAvailable=true;
     ['am','pm'].forEach(function(sl){
       if(!slot[sl]) return;
-      var cur=(fqAnswers.sessionSchedule[day]||{})[sl];
-      var labels=[['strength','Strength'],['wod','WOD'],['core','Core'],['walk','Walk'],['rest','Rest'],[null,'—']];
-      var pillsHtml=labels.map(function(p){
-        var active=(cur===p[0])?' active':'';
-        var jsArg=p[0]===null?'null':"'"+p[0]+"'";
-        return '<div class="q-option-card fq-sched-pill'+active+'" onclick="fqSetSessionDay(\''+day+'\',\''+sl+'\','+jsArg+',this)" style="padding:8px 6px;font-size:10px;border-radius:14px;flex:1;text-align:center;">'+p[1]+'</div>';
-      }).join('');
+      var raw=(fqAnswers.sessionSchedule[day]||{})[sl];
+      // Treat null / undefined / legacy 'rest' / legacy null as "Coach decides".
+      var current = (raw && raw !== 'rest') ? raw : 'coach';
+      var label = _phxSessionTypeLabel(current);
+      var isDefault = (current === 'coach');
+      var labelColor = isDefault ? 'var(--text3)' : 'var(--text)';
       container.insertAdjacentHTML('beforeend',
-        '<div class="fq-sched-row" data-day="'+day+'" data-slot="'+sl+'" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
-        '<div style="width:44px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+(sl==='am'?FQ_DAY_LABEL[day]:'')+'</div>'+
-        '<div style="width:24px;font-size:10px;color:var(--text3);font-weight:600;">'+sl.toUpperCase()+'</div>'+
-        pillsHtml+
+        '<div class="fq-sched-row" data-day="'+day+'" data-slot="'+sl+'" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">'+
+        '<div style="width:50px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+(sl==='am'?FQ_DAY_LABEL[day]:'')+'</div>'+
+        '<div style="width:32px;font-size:10px;color:var(--gold);font-weight:700;font-family:var(--font-d);letter-spacing:1.5px;">'+sl.toUpperCase()+'</div>'+
+        '<div onclick="fqOpenSessionPicker(\''+day+'\',\''+sl+'\')" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:1px;color:'+labelColor+';">'+
+          '<span>'+label+'</span>'+
+          '<span style="font-size:18px;color:var(--text3);line-height:1;">&#9662;</span>'+
+        '</div>'+
         '</div>');
     });
   });
@@ -18367,15 +18605,52 @@ window.fqRenderSessionTimetable = function(){
   fqEvaluateConsecutiveStrength();
 };
 
-window.fqSetSessionDay = function(day,slot,type,el){
+window.fqOpenSessionPicker = function(day, sl){
+  if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule={};
+  var raw = (fqAnswers.sessionSchedule[day]||{})[sl];
+  var current = (raw && raw !== 'rest') ? raw : 'coach';
+  _phxOpenBottomSheet({
+    title: FQ_DAY_LABEL[day]+' '+sl.toUpperCase(),
+    subtitle: 'Pick your session',
+    options: FQ_SESSION_TYPES,
+    current: current,
+    onSelect: function(value){
+      if(!fqAnswers.sessionSchedule[day]) fqAnswers.sessionSchedule[day]={};
+      // Store 'coach' explicitly so the choice is preserved and inspectable.
+      fqAnswers.sessionSchedule[day][sl] = value;
+      console.log('[PHX] fqOpenSessionPicker', day, sl, '→', value);
+      fqRenderSessionTimetable();
+      if(typeof fqValidateStep === 'function') fqValidateStep();
+    }
+  });
+};
+
+// Back-compat: any legacy callers (saved snapshots restored via fqRestoreProgressUI, etc.)
+// still call fqSetSessionDay. Route through the new sessionSchedule + re-render path.
+window.fqSetSessionDay = function(day,slot,type){
   if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule={};
   if(!fqAnswers.sessionSchedule[day]) fqAnswers.sessionSchedule[day]={};
   fqAnswers.sessionSchedule[day][slot]=type;
-  el.closest('.fq-sched-row').querySelectorAll('.fq-sched-pill').forEach(function(e){e.classList.remove('active');});
-  el.classList.add('active');
+  fqRenderSessionTimetable();
   fqEvaluateConsecutiveStrength();
   fqValidateStep();
 };
+
+// v4.7.57: 'coach' is a UI sentinel — the downstream prompt expects null for "AI decides"
+// alongside the strength/wod/core/walk values. Normalise before persisting to the athlete.
+function _phxNormaliseSessionSchedule(sched){
+  if(!sched || typeof sched !== 'object') return sched || null;
+  var out = {};
+  Object.keys(sched).forEach(function(day){
+    var slots = sched[day] || {};
+    out[day] = {};
+    ['am','pm'].forEach(function(sl){
+      var v = slots[sl];
+      out[day][sl] = (v === 'coach' || v === 'rest' || v == null || v === '') ? null : v;
+    });
+  });
+  return out;
+}
 
 window.fqEvaluateConsecutiveStrength = function(){
   var warn=document.getElementById('fq-session-warning');
@@ -18605,7 +18880,7 @@ window.fqNext = async function(){
     // trainingDays, and dayDurations are ALWAYS persisted (no longer gated on scheduleMode). The
     // session timetable (per-slot session_type) is still manual-mode only.
     fqAvailableSlots: fqAnswers.availableSlots || existing.fqAvailableSlots || null,
-    fqSessionSchedule: (fqAnswers.coachMode==='manual' ? fqAnswers.sessionSchedule : null) || existing.fqSessionSchedule || null,
+    fqSessionSchedule: (fqAnswers.coachMode==='manual' ? _phxNormaliseSessionSchedule(fqAnswers.sessionSchedule) : null) || existing.fqSessionSchedule || null,
     fqDayDurations: fqAnswers.dayDurations || existing.fqDayDurations || null,
     fqTrainingDays: _phxComputeTrainingDays(fqAnswers.availableSlots),
     // v4.7.51: new athlete-level field. 'auto' (AI assigns session types) or 'manual' (athlete
@@ -18703,11 +18978,95 @@ window.fqLoadProgress = function(){
   } catch(e){ return null; }
 };
 
+// v4.7.57 DOB selectors. Three native selects feeding a hidden ISO date string so the rest
+// of the app keeps reading athlete.dob as YYYY-MM-DD. Year/month change resets day to 1 to
+// avoid the "selected June → day defaults to today (e.g. 25)" bug, which forced the user to
+// scroll back. Day list is bounded by the days-in-month of the picked year+month.
+var FQ_MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+window._phxDobInit = function(){
+  var ySel = document.getElementById('fq-dob-year');
+  var mSel = document.getElementById('fq-dob-month');
+  var dSel = document.getElementById('fq-dob-day');
+  if(!ySel || !mSel || !dSel) return;
+  if(!ySel.options.length){
+    var thisYear = new Date().getFullYear();
+    var yHtml = '<option value="">Year</option>';
+    // 100-year window: 14 years old up to 100 years old, descending so recent years are at top.
+    for(var y = thisYear - 14; y >= thisYear - 100; y--){ yHtml += '<option value="'+y+'">'+y+'</option>'; }
+    ySel.innerHTML = yHtml;
+  }
+  if(!mSel.options.length){
+    var mHtml = '<option value="">Month</option>';
+    FQ_MONTH_NAMES.forEach(function(name, i){ mHtml += '<option value="'+(i+1)+'">'+name+'</option>'; });
+    mSel.innerHTML = mHtml;
+  }
+  if(!dSel.options.length) _phxDobRebuildDays(31);
+};
+window._phxDobRebuildDays = function(maxDay, keepValue){
+  var dSel = document.getElementById('fq-dob-day');
+  if(!dSel) return;
+  var prev = keepValue != null ? keepValue : (parseInt(dSel.value,10) || '');
+  var html = '<option value="">Day</option>';
+  for(var d = 1; d <= maxDay; d++){ html += '<option value="'+d+'">'+d+'</option>'; }
+  dSel.innerHTML = html;
+  if(prev && prev >= 1 && prev <= maxDay) dSel.value = String(prev);
+};
+function _phxDaysInMonth(y, m){
+  // m is 1-12. JS Date with day=0 returns last day of the previous month.
+  if(!y || !m) return 31;
+  return new Date(y, m, 0).getDate();
+}
+window._phxDobChange = function(which){
+  var ySel = document.getElementById('fq-dob-year');
+  var mSel = document.getElementById('fq-dob-month');
+  var dSel = document.getElementById('fq-dob-day');
+  var hidden = document.getElementById('fq-dob');
+  if(!ySel || !mSel || !dSel) return;
+  var y = parseInt(ySel.value, 10);
+  var m = parseInt(mSel.value, 10);
+  // v4.7.57: when year or month changes, day MUST reset to 1 (or empty if year/month missing)
+  // — never leave the previous day value sitting on a now-invalid range. The spec called this
+  // out explicitly: picking June shouldn't strand today's day-of-month in the field.
+  if(which === 'year' || which === 'month'){
+    var maxDay = _phxDaysInMonth(y, m);
+    _phxDobRebuildDays(maxDay, null);
+    if(y && m){
+      dSel.value = '1';
+    } else {
+      dSel.value = '';
+    }
+  }
+  var d = parseInt(dSel.value, 10);
+  if(y && m && d){
+    var iso = y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    if(hidden) hidden.value = iso;
+    fqAnswers.dob = iso;
+  } else {
+    if(hidden) hidden.value = '';
+    fqAnswers.dob = '';
+  }
+  if(typeof fqValidateStep === 'function') fqValidateStep();
+};
+
 // Re-paint UI from restored answers: re-tick option cards, re-fill inputs, expand conditional blocks
 window.fqRestoreProgressUI = function(){
   // Step 1
   if(fqAnswers.name){var n=document.getElementById('fq-name');if(n)n.value=fqAnswers.name;}
-  if(fqAnswers.dob){var d=document.getElementById('fq-dob');if(d)d.value=fqAnswers.dob;}
+  _phxDobInit();
+  if(fqAnswers.dob){
+    var d=document.getElementById('fq-dob'); if(d) d.value=fqAnswers.dob;
+    var parts = String(fqAnswers.dob).split('-');
+    if(parts.length === 3){
+      var yy = parseInt(parts[0],10), mm = parseInt(parts[1],10), dd = parseInt(parts[2],10);
+      var ySel=document.getElementById('fq-dob-year');
+      var mSel=document.getElementById('fq-dob-month');
+      var dSel=document.getElementById('fq-dob-day');
+      if(ySel) ySel.value = String(yy);
+      if(mSel) mSel.value = String(mm);
+      _phxDobRebuildDays(_phxDaysInMonth(yy,mm), dd);
+      if(dSel) dSel.value = String(dd);
+    }
+  }
   if(fqAnswers.bw){var b=document.getElementById('fq-bw');if(b)b.value=fqAnswers.bw;}
   if(fqAnswers.sex){
     var sexEl=document.querySelector('#fq-sex-row .q-option-card[onclick*="\''+fqAnswers.sex+'\'"]');
@@ -18894,6 +19253,7 @@ window.openFoundationQ = function(){
         setTimeout(function(){
           if(typeof renderFQSkinGrid==='function') renderFQSkinGrid();
           if(typeof updateFqFontPicker==='function') updateFqFontPicker(); // v4.7.5 FIX 7
+          if(typeof _phxDobInit==='function') _phxDobInit(); // v4.7.57
         },50);
       };
     }
@@ -18908,6 +19268,7 @@ window.openFoundationQ = function(){
   setTimeout(function(){
     if(typeof renderFQSkinGrid==='function') renderFQSkinGrid();
     if(typeof updateFqFontPicker==='function') updateFqFontPicker(); // v4.7.5 FIX 7
+    if(typeof _phxDobInit==='function') _phxDobInit(); // v4.7.57: populate Y/M/D selects on fresh open
   },50);
 };
 

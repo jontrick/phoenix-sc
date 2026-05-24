@@ -3495,7 +3495,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.54';
+var APP_VERSION='4.7.55';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8385,6 +8385,40 @@ EXPERIENCED (Profile 3-4, under 1 year away or consistent):
 PRO TIER: Full personalisation. No category — individual programme built from all inputs.
 
 ================================================================
+METHODOLOGY SELECTION — FINAL CHECK BEFORE OUTPUT
+================================================================
+
+Before generating the JSON output, confirm:
+
+1. What is athlete.fqGoals.primary?
+2. Which methodology did you select from GOAL-BASED METHODOLOGY section?
+3. Do your session_type values in week.sessions reflect that methodology?
+
+IF primary goal is fat_loss OR recomposition:
+- Sessions MUST be: Strength Lower / Strength Upper / Metabolic Circuit / Conditioning
+- REP RANGES: 5-8 primary compound, 10-15 accessory, conditioning finishers
+- NO ME/DE sessions unless athlete is also competing in strength sport
+- Every session has a conditioning component or superset structure
+
+IF primary goal is hypertrophy OR body_composition:
+- Sessions MUST be: Hypertrophy Lower / Hypertrophy Upper variants
+- Rep ranges 6-12 primary, tempo prescribed, supersets encouraged
+- NO pure ME/DE structure
+
+IF primary goal is strength OR power:
+- ME/DE conjugate is correct — proceed
+
+IF primary goal is athletic OR combine:
+- Power + conditioning balance — Power Lower / Power Upper / Conditioning / Speed
+- NOT pure ME/DE
+
+IF primary goal is general_fitness OR health:
+- Full Body A/B/C rotation
+- NOT ME/DE
+
+The output format example uses ME/DE for illustration only. Your session_type values MUST match the methodology you selected. The example JSON does not override these rules.
+
+================================================================
 OUTPUT FORMAT
 ================================================================
 
@@ -8402,7 +8436,13 @@ Return ONLY valid JSON, no other text, no markdown fences:
       {"weeks_start": 5,  "weeks_end": 8,  "focus": "Strength — load progression, intensity rises, volume holds"},
       {"weeks_start": 9,  "weeks_end": 12, "focus": "Peak / test — taper volume, hit targets, expose 1RMs"}
     ],
-    "primary_lifts": ["ME Lower", "ME Upper", "DE Lower", "DE Upper"],
+    // PRIMARY_LIFTS MUST reflect the methodology selected for the athlete's primary goal — see GOAL-BASED METHODOLOGY section. Do NOT default to ME/DE. Examples by goal:
+    // - Strength/Power → ["ME Lower", "ME Upper", "DE Lower", "DE Upper"]
+    // - Fat Loss/Recomp → ["Strength Lower", "Strength Upper", "Metabolic Circuit", "Conditioning"]
+    // - Hypertrophy → ["Hypertrophy Lower", "Hypertrophy Upper", "Hypertrophy Lower B", "Hypertrophy Upper B"]
+    // - Athletic → ["Power Lower", "Power Upper", "Conditioning", "Speed/Agility"]
+    // - General Fitness → ["Full Body A", "Full Body B", "Full Body C", "Conditioning"]
+    "primary_lifts": ["<session_type_1>", "<session_type_2>", "<session_type_3>", "<session_type_4>"],
     "weekly_march_km": 28,
     "training_days": ["Tuesday", "Thursday", "Saturday", "Sunday"]
   },
@@ -8432,7 +8472,7 @@ Return ONLY valid JSON, no other text, no markdown fences:
     "sessions": [
       {
         "day": "Tuesday",
-        "session_type": "ME Lower",
+        "session_type": "<methodology_appropriate_session_type — e.g. ME Lower for strength, Strength Lower for fat loss, Hypertrophy Lower for hypertrophy>",
         "duration_min": 60,
         "priority": "primary",
         "exercises": [

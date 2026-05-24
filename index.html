@@ -538,6 +538,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .edit-btn{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:3px;text-transform:uppercase;padding:14px;cursor:pointer;border-radius:var(--radius);transition:all 0.2s;margin-top:8px;}
 .danger-btn{width:100%;background:transparent;border:1px solid var(--red);color:var(--red);font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:3px;text-transform:uppercase;padding:14px;cursor:pointer;border-radius:var(--radius);margin-top:8px;}
 
+/* v4.7.52 RESET MY PROGRAMME — subtle card on Athlete screen; muted, smaller text, feels like a settings action. */
+.reset-prog-card{margin-top:28px;padding:14px 16px;background:transparent;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color 0.2s;}
+.reset-prog-card:active{border-color:var(--text3);}
+.reset-prog-card-label{font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;}
+.reset-prog-card-sub{font-size:11px;color:var(--text3);line-height:1.5;}
+
+/* v4.7.52 RESET MODAL — three option cards, dismissible via tap-outside or close button. */
+.reset-modal-option{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.2s, background 0.2s;}
+.reset-modal-option:active{border-color:var(--gold);background:var(--bg2);}
+.reset-modal-option-label{font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;}
+.reset-modal-option-sub{font-size:12px;color:var(--text2);line-height:1.55;}
+.reset-modal-option.full-reset{border-color:rgba(200,80,80,0.3);}
+.reset-modal-option.full-reset .reset-modal-option-label{color:var(--red);}
+
 /* CORE PICKER MODAL */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:500;display:none;flex-direction:column;justify-content:flex-end;}
 .modal-overlay.active{display:flex;}
@@ -2082,6 +2096,12 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <button class="danger-btn" onclick="resetApp()">Reset App Data</button>
   <button class="edit-btn" onclick="handleSignOut()" style="margin-top:12px;color:var(--text2);border-color:var(--border2);">Sign Out</button>
+  <!-- v4.7.52 RESET MY PROGRAMME — subtle settings-style card. Opens a modal with three options.
+       Sits below the existing buttons so it doesn't compete with primary actions. -->
+  <div class="reset-prog-card" onclick="_phxOpenResetModal()">
+    <div class="reset-prog-card-label">⚠ Reset My Programme</div>
+    <div class="reset-prog-card-sub">Update goals, start fresh, or do a full reset of your plan.</div>
+  </div>
   <div style="text-align:center;padding:24px 16px 40px;font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">
     <div style="margin-bottom:4px;">PROJECT PHOENIX</div>
     <div id="settings-version-display" onclick="_phxDiagTapVersion()" style="cursor:pointer;">Version —</div>
@@ -3411,6 +3431,33 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div style="text-align:center;padding:16px;font-family:var(--font-d);font-size:10px;font-weight:600;letter-spacing:2px;color:var(--text3);" id="sidebar-version-display">v—</div>
 </div>
 
+<!-- v4.7.52 RESET MY PROGRAMME MODAL — three options. Tap outside (overlay) or X button dismisses. -->
+<div class="modal-overlay" id="reset-prog-modal" onclick="_phxCloseResetModal(event)">
+<div class="modal-sheet" onclick="event.stopPropagation()">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+    <div>
+      <div class="modal-title">Reset</div>
+      <div class="modal-subtitle">My Programme</div>
+    </div>
+    <div onclick="_phxCloseResetModal()" style="cursor:pointer;padding:4px 8px;color:var(--text3);font-size:24px;line-height:1;" aria-label="Close">&times;</div>
+  </div>
+  <div style="font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:16px;">Pick the option that fits where you are now. Your training history is always kept.</div>
+  <div class="reset-modal-option" onclick="_phxResetUpdateGoals()">
+    <div class="reset-modal-option-label">Update Goals or Schedule</div>
+    <div class="reset-modal-option-sub">Changed your goals, training days, or picked up an injury? Update what's different and your coach will rebuild your plan.</div>
+  </div>
+  <div class="reset-modal-option" onclick="_phxResetFreshStart()">
+    <div class="reset-modal-option-label">Fresh Start, New Programme</div>
+    <div class="reset-modal-option-sub">New training phase or completely new direction — wipe your current plan and start fresh. Your history stays intact.</div>
+  </div>
+  <div class="reset-modal-option full-reset" onclick="_phxResetFullReset()">
+    <div class="reset-modal-option-label">Full Reset</div>
+    <div class="reset-modal-option-sub">Start completely from scratch with a clean slate. Your training history is preserved so your coach still knows your foundation.</div>
+  </div>
+  <button class="modal-close" onclick="_phxCloseResetModal()">Cancel</button>
+</div>
+</div>
+
 <!-- CORE PICKER MODAL -->
 <div class="modal-overlay" id="core-modal">
 <div class="modal-sheet">
@@ -3448,7 +3495,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.51';
+var APP_VERSION='4.7.52';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4927,6 +4974,184 @@ function resetApp(){
       athlete=null;location.reload();
     });
   }
+}
+
+// ====== v4.7.52 RESET MY PROGRAMME ======
+// Modal-driven flow with three options: Update Goals/Schedule, Fresh Start, Full Reset.
+// All three KEEP the Supabase auth session (no signOut) and DO NOT touch training-history
+// tables (sessions, set_logs, weekly_checkins, daily_weigh_ins, coach_conversations) — only
+// the profile row and / or localStorage are mutated. Coach uses the preserved history as
+// the foundation for the rebuilt programme.
+
+function _phxOpenResetModal(){
+  var m = document.getElementById('reset-prog-modal');
+  if(m) m.classList.add('active');
+}
+
+function _phxCloseResetModal(e){
+  // Called via overlay click (tap-outside) AND from the X / Cancel buttons. The overlay
+  // handler passes the event; we only dismiss when the target is the overlay itself.
+  if(e && e.target && e.currentTarget && e.target !== e.currentTarget) return;
+  var m = document.getElementById('reset-prog-modal');
+  if(m) m.classList.remove('active');
+}
+
+// ---- Option 1: Update Goals or Schedule -----------------------------------
+// Pre-fill fqAnswers from the current athlete, open the questionnaire from step 1, and let
+// the athlete change whatever they want. The standard fqNext save path rebuilds the plan.
+function _phxResetUpdateGoals(){
+  if(!athlete){ alert('No profile loaded yet — try again in a moment.'); return; }
+  if(!confirm('Update your goals or schedule? Your coach will rebuild your plan using your latest answers. Training history is kept.')) return;
+  console.log('[PHX] reset: update_goals_schedule');
+  _phxCloseResetModal();
+  // Hydrate fqAnswers from athlete BEFORE openFoundationQ runs (it would otherwise reset
+  // the answers object when fqCompleted is truthy). Then bypass the normal entry point.
+  _phxPrefillFqAnswersFromAthlete(athlete);
+  // Drop any stale resume snapshot — the athlete is editing the live profile, not resuming.
+  if(typeof fqClearProgress === 'function') fqClearProgress();
+  fqStep = 1;
+  updateFQStep();
+  showScreen('screen-foundation-q');
+  setTimeout(function(){
+    if(typeof renderFQSkinGrid === 'function') renderFQSkinGrid();
+    if(typeof updateFqFontPicker === 'function') updateFqFontPicker();
+    if(typeof fqRestoreProgressUI === 'function') fqRestoreProgressUI();
+    if(typeof fqValidateStep === 'function') fqValidateStep();
+  }, 50);
+}
+
+// Copies every fq* field on the athlete into the live fqAnswers shape. The questionnaire
+// keys (camelCase, no fq prefix) are paired with the corresponding athlete keys (fq prefix
+// where applicable). Top-level metrics like bw / b1rm / mile live on the athlete root.
+function _phxPrefillFqAnswersFromAthlete(a){
+  if(typeof fqResetAnswers === 'function') fqResetAnswers();
+  if(!a) return;
+  var f = window.fqAnswers;
+  // Step 1 — personal
+  if(a.name!=null) f.name = a.name;
+  if(a.dob!=null) f.dob = a.dob;
+  if(a.bw!=null) f.bw = a.bw;
+  if(a.sex!=null) f.sex = a.sex;
+  if(a.cycleSync!=null) f.cycleSync = !!a.cycleSync;
+  // Step 2 — health / injuries
+  if(Array.isArray(a.fqInjury)) f.injury = a.fqInjury.slice();
+  if(a.fqInjuryNotes!=null) f.injuryNotes = a.fqInjuryNotes;
+  if(a.fqParqClear!=null) f.parqClear = !!a.fqParqClear;
+  // Step 3 — training history + equipment
+  if(a.fqCurrentlyTraining!=null) f.currentlyTraining = a.fqCurrentlyTraining;
+  if(a.fqCurrentStint!=null) f.currentStint = a.fqCurrentStint;
+  if(a.fqTimeAway!=null) f.timeAway = a.fqTimeAway;
+  if(a.fqLifetimeAge!=null) f.lifetimeAge = a.fqLifetimeAge;
+  if(a.fqMovementConfidence && typeof a.fqMovementConfidence === 'object') f.movementConfidence = Object.assign({}, f.movementConfidence, a.fqMovementConfidence);
+  if(Array.isArray(a.fqOlyLifts)) f.olyLifts = a.fqOlyLifts.slice();
+  if(a.fqBackground!=null) f.background = a.fqBackground;
+  if(a.fqHistoricalAge!=null) f.historicalAge = a.fqHistoricalAge;
+  if(a.fqAway!=null) f.away = a.fqAway;
+  if(a.fqEquip!=null) f.equip = a.fqEquip;
+  // Step 4 — goals + sport + target + assessment scores
+  if(Array.isArray(a.fqGoals)) f.goals = a.fqGoals.slice();
+  if(a.fqGoal!=null) f.goal = a.fqGoal;
+  if(a.fqSportRole!=null) f.sportRole = a.fqSportRole;
+  if(a.fqSport!=null) f.sport = a.fqSport;
+  if(a.fqPosition!=null) f.position = a.fqPosition;
+  if(a.fqSeasonPhase!=null) f.seasonPhase = a.fqSeasonPhase;
+  if(a.fqProgrammeTarget!=null) f.programmeTarget = a.fqProgrammeTarget;
+  if(a.fqEventDate!=null) f.eventDate = a.fqEventDate;
+  if(a.fqEventDescription!=null) f.eventDescription = a.fqEventDescription;
+  ['b1rm','sq','dl','pbw','mile','row500','ohp','b100','wpu','karen','plank','ohsq','vertJump','broadJump','sprint40','wingate'].forEach(function(k){
+    if(a[k]!=null && a[k]!=='') f[k] = a[k];
+  });
+  if(a.fqCoachNotes!=null) f.coachNotes = a.fqCoachNotes;
+  if(a.fqWeighInFrequency!=null) f.weighInFrequency = a.fqWeighInFrequency;
+  if(a.fqCheckInDay!=null) f.checkInDay = a.fqCheckInDay;
+  // Steps 5-7 — schedule + coach mode + manual timetable
+  if(a.fqAvailableSlots && typeof a.fqAvailableSlots === 'object') f.availableSlots = a.fqAvailableSlots;
+  if(a.fqSessionSchedule!=null) f.sessionSchedule = a.fqSessionSchedule;
+  if(a.fqDayDurations && typeof a.fqDayDurations === 'object') f.dayDurations = Object.assign({}, f.dayDurations, a.fqDayDurations);
+  if(Array.isArray(a.fqTrainingDays)) f.trainingDays = a.fqTrainingDays.slice();
+  if(a.fqCoachMode!=null) f.coachMode = a.fqCoachMode;
+  if(a.fqScheduleMode!=null) f.scheduleMode = a.fqScheduleMode;
+  // Step 8 — coach tone
+  if(a.fqCoachTone!=null) f.coachTone = a.fqCoachTone;
+  // Step 9 — waiver (already accepted; just mirror it)
+  if(a.fqWaiverAccepted!=null) f.waiverAccepted = !!a.fqWaiverAccepted;
+  if(a.fqPath!=null) f.path = a.fqPath;
+}
+
+// ---- Option 2: Fresh Start, New Programme ---------------------------------
+// Clear fqCompleted / aiProgramme / every fq* answer from the live athlete + Supabase
+// profiles row, then route into a blank questionnaire. Training history is untouched.
+async function _phxResetFreshStart(){
+  if(!confirm('Wipe your current plan and start fresh? Your training history (sessions, set logs, weigh-ins, streaks) is kept.')) return;
+  console.log('[PHX] reset: fresh_start');
+  _phxCloseResetModal();
+  // Build a stripped athlete object — keep account-linked identity (theme/font/tier/bands)
+  // and physical baseline (bw + 1RMs) so the next programme still has a foundation, but
+  // clear every questionnaire answer + the programme itself.
+  var fresh = Object.assign({}, athlete || {});
+  // Programme + completion flags
+  fresh.fqCompleted = null;
+  fresh.aiProgramme = null;
+  fresh.aiProgrammeDate = null;
+  fresh.aiProgrammeTrigger = null;
+  fresh.currentWeek = null;
+  // Every fq* answer field
+  ['fqGoal','fqGoals','fqSport','fqPosition','fqSeason','fqEquip','fqDays','fqTrainingDays','fqAmPm',
+   'fqInjury','fqInjuryNotes','fqPath','fqParqClear','fqDuration','fqBackground','fqAway',
+   'fqProgrammeTarget','fqEventDate','fqEventDescription','fqScheduleMode','fqAvailableSlots',
+   'fqSessionSchedule','fqCoachTone','fqDayDurations','fqCheckInDay','fqWeighInFrequency',
+   'fqCurrentlyTraining','fqCurrentStint','fqTimeAway','fqLifetimeAge','fqMovementConfidence',
+   'fqOlyLifts','fqCoachNotes','fqSportRole','fqSeasonPhase','fqCoachMode','fqWaiverAccepted'
+  ].forEach(function(k){ fresh[k] = null; });
+  athlete = fresh;
+  try { localStorage.setItem('phoenix_athlete', JSON.stringify(fresh)); } catch(_e){}
+  // Drop any in-progress questionnaire snapshot
+  if(typeof fqClearProgress === 'function') fqClearProgress();
+  // Push to Supabase. saveAthleteToSupabase translates null → null on every fq_* column.
+  try { await saveAthleteToSupabase(fresh); } catch(e){ console.warn('[PHX] reset fresh_start: Supabase write failed:', e); }
+  // Open a blank questionnaire — fqResetAnswers via openFoundationQ.
+  if(typeof openFoundationQ === 'function') openFoundationQ();
+}
+
+// ---- Option 3: Full Reset --------------------------------------------------
+// Hardest reset. Clears all phoenix_* localStorage, explicitly NULLs the questionnaire +
+// programme columns on the profiles row, but does NOT delete the auth user and does NOT
+// touch sessions / set_logs / weekly_checkins / daily_weigh_ins / coach_conversations.
+// Auth session is preserved so the athlete stays signed in.
+async function _phxResetFullReset(){
+  if(!confirm('Full Reset — start completely from scratch?')) return;
+  if(!confirm('Are you sure? This will clear your current programme and all your settings. Your training history is kept so your coach still has your foundation.')) return;
+  console.log('[PHX] reset: full_reset');
+  _phxCloseResetModal();
+  var uid = currentSession && currentSession.user && currentSession.user.id;
+  // Supabase update — explicit column list as specified. Note: schema column is fq_injury
+  // (singular) per FIELD_MAP; the spec said fq_injuries which appears to be a typo.
+  if(uid){
+    try {
+      var res = await sb.from('profiles').update({
+        fq_completed: null,
+        ai_programme: null,
+        current_week: null,
+        fq_goals: null,
+        fq_training_days: null,
+        fq_injury: null,
+        fq_coach_mode: null
+      }).eq('id', uid);
+      if(res && res.error) console.warn('[PHX] full_reset: Supabase update returned error:', res.error.message || res.error);
+    } catch(e){ console.warn('[PHX] full_reset: Supabase update failed:', e); }
+  }
+  // Wipe every phoenix_* localStorage key. Preserves Supabase's own sb-* auth tokens, so
+  // the user stays signed in across the reload below.
+  try {
+    for(var i = localStorage.length - 1; i >= 0; i--){
+      var key = localStorage.key(i);
+      if(key && key.indexOf('phoenix_') === 0) localStorage.removeItem(key);
+    }
+  } catch(_e){}
+  athlete = null;
+  // Route to a fresh questionnaire. Reload keeps the auth session and re-runs the boot
+  // flow, which sees a profile with fq_completed=null and lands on the questionnaire.
+  location.reload();
 }
 
 // ====== TODAY ======

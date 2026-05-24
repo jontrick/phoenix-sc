@@ -2513,30 +2513,40 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <textarea id="fq-coach-notes" class="q-input" rows="4" placeholder="e.g. I want to complete the Phoenix Agoge by July 4th. I travel for work 2 weeks per month. I had a shoulder reconstruction in 2019…" oninput="fqAnswers.coachNotes=this.value" style="resize:vertical;min-height:96px;"></textarea>
 </div>
 
-<!-- STEP 5: Schedule mode gateway -->
+<!-- STEP 5: Training days — pick any 3-6 days, AM / PM slots per day.
+     v4.7.51: promoted from old "Step 6 — Availability" to the lead schedule step. Copy spells
+     out the 3-6 day range + flexibility (Tammy hit this in alpha). Always shown — every athlete
+     declares their days here, regardless of whether the coach or the athlete picks session types
+     downstream (that's now a separate step). -->
+<div class="q-step" id="fq-step-availability">
+  <div class="q-tag">Step 5 — Training days</div>
+  <div class="q-title">Pick Your<br>Training Days</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.6;">Choose your training days — pick between <strong style="color:var(--text);">3 and 6 days</strong>, any combination. Your coach builds entirely around your schedule.</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Tap a day to switch it on, then tap <strong>AM</strong>, <strong>PM</strong>, or both for that day. Sessions go in the slots you pick.</div>
+  <div style="display:flex;flex-direction:column;gap:6px;" id="fq-availability-grid"></div>
+  <div id="fq-availability-summary" style="margin-top:12px;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;"></div>
+</div>
+
+<!-- STEP 6: Coach mode — auto vs manual session-type assignment.
+     v4.7.51: replaces the legacy "schedule mode" gate. Both options still generate via AI (manual
+     just passes the athlete's per-slot session preferences into the coach prompt — full bespoke
+     manual build is TODO). Stored to athlete.fqCoachMode + mirrored to fqScheduleMode for the
+     downstream code that already branches on coach_assigns / user_assigns. -->
 <div class="q-step" id="fq-step-schedulemode">
-  <div class="q-tag">Step 5 — Your schedule</div>
-  <div class="q-title">Schedule<br>Mode</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">How do you want to set up your training schedule?</div>
+  <div class="q-tag">Step 6 — Coach mode</div>
+  <div class="q-title">Who Picks<br>The Sessions?</div>
+  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">You've locked in your training days. Now decide who decides what each day's session is.</div>
   <div style="display:flex;flex-direction:column;gap:8px;">
-    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('coach_assigns',this)">
-      <strong>Build it for me</strong><span class="q-option-sub">Tell me your available days, I assign the sessions</span>
+    <div class="q-option-card q-option-wide" onclick="fqSetCoachMode('auto',this)">
+      <strong>Let my coach decide</strong><span class="q-option-sub">AI builds your sessions based on your goals + schedule (recommended)</span>
     </div>
-    <div class="q-option-card q-option-wide" onclick="fqSetScheduleMode('user_assigns',this)">
-      <strong>I'll set my schedule</strong><span class="q-option-sub">I choose which days are for what</span>
+    <div class="q-option-card q-option-wide" onclick="fqSetCoachMode('manual',this)">
+      <strong>I'll choose my sessions</strong><span class="q-option-sub">Pick the session type for each day slot (strength / hypertrophy / conditioning / mixed)</span>
     </div>
   </div>
 </div>
 
-<!-- STEP 6: Day & slot availability (only if user_assigns) -->
-<div class="q-step" id="fq-step-availability">
-  <div class="q-tag">Step 6 — Availability</div>
-  <div class="q-title">When Can<br>You Train?</div>
-  <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6;">Tap each slot you have available. We'll only ask you to assign sessions to slots you mark here.</div>
-  <div style="display:flex;flex-direction:column;gap:6px;" id="fq-availability-grid"></div>
-</div>
-
-<!-- STEP 7: Session timetable (only if user_assigns) -->
+<!-- STEP 7: Session timetable (only if coachMode === 'manual') -->
 <div class="q-step" id="fq-step-sessionschedule">
   <div class="q-tag">Step 7 — Your timetable</div>
   <div class="q-title">Session<br>Timetable</div>
@@ -3438,7 +3448,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.50';
+var APP_VERSION='4.7.51';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -11848,8 +11858,9 @@ function setupSplashButtons(){
   <div id="rt-next" style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-top:14px;">Set 2</div>
   <!-- v4.7.17 FIX 2: rest-timer next-set preview now uses the same two-box layout as movement cards -->
   <div id="rt-next-info" style="margin-bottom:4px;margin-top:6px;display:none;"></div>
-  <!-- v4.7.38 FIX 6: coaching note wraps naturally — no ellipsis / nowrap. Allow full text. -->
-  <div id="rt-cue" style="font-size:13px;color:var(--text2);font-style:italic;text-align:center;margin-bottom:12px;max-width:340px;line-height:1.5;display:none;white-space:normal;overflow:visible;word-wrap:break-word;padding:0 8px;"></div>
+  <!-- v4.7.51: coaching note wraps to a natural 2 lines max. Explicitly remove every form of
+       truncation (no nowrap, no ellipsis, no clip) so the renderer can hand it the full string. -->
+  <div id="rt-cue" style="font-size:13px;color:var(--text2);font-style:italic;text-align:center;margin-bottom:12px;max-width:340px;line-height:1.5;display:none;white-space:normal;overflow:visible;text-overflow:clip;word-wrap:break-word;overflow-wrap:break-word;padding:0 8px;"></div>
   <div class="rest-timer-bar-wrap"><div class="rest-timer-bar" id="rt-bar" style="width:100%"></div></div>
   <!-- v4.7.16 FIX 3: two control modes. Both default hidden; startRestTimer reveals one or the other. -->
   <div id="rt-rest-selector" style="display:none;align-items:center;gap:8px;margin-bottom:16px;">
@@ -14639,7 +14650,9 @@ function phxExtractTargetReps(reps){
 }
 
 // v4.7.15 FIX 2: a technique cue for the rest-timer subtext — extracted from coaching_note or
-// the long part of load_guidance after the weight. Clamped to 8 words.
+// the long part of load_guidance after the weight.
+// v4.7.51: dropped the 8-word "… " truncation — rest-timer cue now wraps naturally up to 2 lines
+// via CSS (white-space:normal; overflow:visible; no text-overflow:ellipsis on #rt-cue).
 function phxTechniqueCue(ex){
   if(!ex) return '';
   // Prefer coaching_note when present
@@ -14655,9 +14668,6 @@ function phxTechniqueCue(ex){
   if(!src) return '';
   // Drop trailing "x N reps" tail if present
   src = String(src).replace(/\s*[x×]\s*\d+\s*reps?\s*$/i,'').trim();
-  // Clamp to 8 words
-  var words = src.split(/\s+/).filter(Boolean);
-  if(words.length > 8) src = words.slice(0,8).join(' ') + '…';
   return src;
 }
 
@@ -17127,24 +17137,37 @@ function openTodaySession(){
         repsUnitLabel = unitMap[detectedUnit] || detectedUnit;
       }
     } catch(_e){}
-    // 6-column grid: set# | input | unit | input | unit | tick
+    // v4.7.51: fixed-width grid columns so every set row lines up identically — same input width,
+    // same unit-label column width, same tick column width across every set in the block. The
+    // earlier `auto` columns let the unit labels ("kg" vs "reps") drift the inputs sideways.
+    // 6-column grid: set# | kg input (fixed) | kg unit (fixed) | reps input (fixed) | reps unit (fixed) | tick (fixed)
     var setsGrid = unitClass === 'sec'
-      ? '28px 1fr auto auto'                       // hold: tick is on the right of reps; no load input
-      : '28px 90px auto 90px auto auto';
+      ? '28px 1fr 40px 36px'                       // hold: reps input | reps unit | tick (no load input)
+      : '28px 88px 40px 88px 40px 36px';
 
     for(var s=0;s<setsCount;s++){
       var setId='ai-'+i+'-'+s;
       var t = perSetTargets[s];
+      // v4.7.51: pre-fill each set's kg + reps input with the coach's prescribed target so the
+      // athlete can just tick to confirm. perSetTargets[s] is built above from per-set %1RM /
+      // load_guidance and per-set reps array — exactly the same data the "Coach Target" boxes
+      // above the rows surface. phxStripUnit() pulls just the numeric portion (e.g. "95kg"→"95",
+      // "AMRAP"→"", "—"→""), leaving the input numeric-only and the unit shown by the adjacent
+      // label cell.
+      var kgPrefill   = phxStripUnit(t.kg);
+      var repsPrefill = phxStripUnit(t.reps);
+      var kgValAttr   = kgPrefill   ? (' value="'+String(kgPrefill).replace(/"/g,'&quot;')+'"')   : ' value=""';
+      var repsValAttr = repsPrefill ? (' value="'+String(repsPrefill).replace(/"/g,'&quot;')+'"') : ' value=""';
       var loadInputHTML = unitClass === 'sec' ? '' :
-        '<input type="number" class="set-input" id="kg-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="decimal" style="text-align:center;width:100%;">' +
-        '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:0 8px;">'+loadUnitLabel+'</div>';
-      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+setsGrid+';align-items:center;" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(t.kg).replace(/"/g,'&quot;')+'" data-target-reps="'+String(t.reps).replace(/"/g,'&quot;')+'">'+
+        '<input type="number" class="set-input"'+kgValAttr+' id="kg-ai-'+i+'-'+s+'" placeholder="—" inputmode="decimal" style="text-align:center;width:100%;font-size:22px;font-weight:900;padding:10px 0;box-sizing:border-box;">' +
+        '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);text-align:center;align-self:center;">'+loadUnitLabel+'</div>';
+      setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+setsGrid+';align-items:center;gap:6px;" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(t.kg).replace(/"/g,'&quot;')+'" data-target-reps="'+String(t.reps).replace(/"/g,'&quot;')+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-swipe-bg-right">DONE</div>'+
         '<div class="set-num">'+(s+1)+'</div>'+
         loadInputHTML+
-        '<input type="number" class="set-input reps" id="reps-ai-'+i+'-'+s+'" value="" placeholder="—" inputmode="numeric" style="text-align:center;width:100%;">'+
-        '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);padding:0 8px;">'+repsUnitLabel+'</div>'+
+        '<input type="number" class="set-input reps"'+repsValAttr+' id="reps-ai-'+i+'-'+s+'" placeholder="—" inputmode="numeric" style="text-align:center;width:100%;font-size:22px;font-weight:900;padding:10px 0;box-sizing:border-box;">'+
+        '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);text-align:center;align-self:center;">'+repsUnitLabel+'</div>'+
         '<button class="set-done-btn" id="done-ai-'+i+'-'+s+'" data-exidx="'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">&#10003;</button>'+
         '</div>';
     }
@@ -17418,7 +17441,10 @@ window.phxParsePctArray = function(load, setsCount){
 // ---------- 1. QUESTIONNAIRE OVERRIDES ----------
 var fqStep = 1;
 var fqTotalSteps = 9;
-var fqStepMap = ['fq-step-1','fq-step-2','fq-step-3','fq-step-4','fq-step-schedulemode','fq-step-availability','fq-step-sessionschedule','fq-step-coachtone','fq-step-9'];
+// v4.7.51: training-days step now precedes the coach-mode step. Step 5 = pick days (always shown,
+// 3-6 day range), Step 6 = coach decides vs I decide (fqCoachMode), Step 7 = manual session
+// timetable (shown only when fqCoachMode==='manual', i.e. legacy scheduleMode==='user_assigns').
+var fqStepMap = ['fq-step-1','fq-step-2','fq-step-3','fq-step-4','fq-step-availability','fq-step-schedulemode','fq-step-sessionschedule','fq-step-coachtone','fq-step-9'];
 
 var FQ_DAYS_ORDER = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 var FQ_DAY_LABEL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
@@ -17464,6 +17490,13 @@ window.fqResetAnswers = function(){
     // v4.7.38: weekly check-in day preference. Default = friday. Fed to fqCheckInDay on save.
     checkInDay:'friday',
     scheduleMode:null,
+    // v4.7.51: coach mode replaces the old schedule-mode gate.
+    //   'auto'   → AI assigns the session type for each day slot (mirrors legacy 'coach_assigns')
+    //   'manual' → athlete picks the session type per slot       (mirrors legacy 'user_assigns')
+    // Both paths still generate the programme via AI for now. Manual mode passes the athlete's
+    // per-slot session preferences into the coach prompt. TODO(v4.8): full bespoke manual build
+    // — skip AI, hydrate the week directly from fqSessionSchedule + a curated movement library.
+    coachMode:null,
     availableSlots:{}, sessionSchedule:null,
     // v4.7.37 hotfix: explicit trainingDays array. Computed from availableSlots in
     // calendar order (Mon→Sun). Persisted to athlete.fqTrainingDays so the prompt
@@ -17770,17 +17803,44 @@ window.fqSetCoachTone = function(val,el){
   fqValidateStep();
 };
 
+// v4.7.51: legacy schedule-mode handler. Kept callable in case a saved-progress snapshot from
+// a previous build still references it, but no q-option-card calls it in the current DOM — the
+// new flow uses fqSetCoachMode below.
 window.fqSetScheduleMode = function(val,el){
   fqAnswers.scheduleMode=val;
   if(val==='coach_assigns'){
     fqAnswers.sessionSchedule=null;
-    fqAnswers.availableSlots={};
-    // v4.7.37 hotfix: clear trainingDays too — coach_assigns means the AI invents the schedule.
-    fqAnswers.trainingDays=[];
   }
-  console.log('[PHX] fqSetScheduleMode →', val, '— trainingDays now:', fqAnswers.trainingDays);
-  el.closest('.q-step').querySelectorAll('.q-option-wide').forEach(function(e){e.classList.remove('active');});
-  el.classList.add('active');
+  console.log('[PHX] fqSetScheduleMode (legacy) →', val);
+  if(el){
+    el.closest('.q-step').querySelectorAll('.q-option-wide').forEach(function(e){e.classList.remove('active');});
+    el.classList.add('active');
+  }
+  fqValidateStep();
+};
+
+// v4.7.51: coach-mode handler.
+//   'auto'   → AI assigns session types (mirrors legacy scheduleMode='coach_assigns'). The
+//              athlete-picked availableSlots / trainingDays / dayDurations are kept — coach uses
+//              them to place sessions, but the per-slot session_type comes from the model.
+//   'manual' → athlete picks session type per slot (mirrors legacy 'user_assigns'). Routes into
+//              fq-step-sessionschedule on Next.
+// Both modes preserve the days the athlete just picked on the availability step — clearing them
+// here would defeat the whole reason this step now sits AFTER the days step.
+window.fqSetCoachMode = function(val,el){
+  fqAnswers.coachMode = val;
+  // Keep scheduleMode mirrored so the rest of the codebase (profile builder, prompt assembly,
+  // today-screen branching) keeps working without a downstream rewrite.
+  fqAnswers.scheduleMode = (val === 'manual') ? 'user_assigns' : 'coach_assigns';
+  if(val === 'auto'){
+    // Auto mode → no per-slot timetable; drop any leftover schedule from a prior pass.
+    fqAnswers.sessionSchedule = null;
+  }
+  console.log('[PHX] fqSetCoachMode →', val, '· mirrored scheduleMode:', fqAnswers.scheduleMode);
+  if(el){
+    el.closest('.q-step').querySelectorAll('.q-option-wide').forEach(function(e){e.classList.remove('active');});
+    el.classList.add('active');
+  }
   fqValidateStep();
 };
 
@@ -17834,15 +17894,38 @@ window.fqRenderAvailability = function(){
           '</div>';
       }
     }
+    // v4.7.51: clearer day pill. Active days get a gold fill + bold label so they pop against
+    // rest days at a glance. AM/PM toggles also get a stronger active treatment via the same
+    // .q-option-card.active style.
+    var dayLabelStyle = isActive
+      ? 'width:50px;font-size:13px;font-weight:900;color:var(--gold);font-family:var(--font-d);letter-spacing:1.5px;'
+      : 'width:50px;font-size:12px;font-weight:600;color:var(--text3);font-family:var(--font-d);letter-spacing:1px;';
+    var slotBoxStyle = 'flex:1;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;border-radius:14px;letter-spacing:2px;';
+    var trailing = isActive
+      ? '<div style="width:60px;font-size:10px;color:var(--gold);text-align:right;font-family:var(--font-d);letter-spacing:1px;font-weight:600;">'+(bothSlots?'AM+PM':(slot.am?'AM':'PM'))+'</div>'
+      : '<div style="width:60px;font-size:10px;color:var(--text3);text-align:right;">Rest day</div>';
     grid.insertAdjacentHTML('beforeend',
       '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;'+(isActive?'':'border-bottom:1px solid var(--border);')+'">'+
-      '<div style="width:50px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+FQ_DAY_LABEL[day]+'</div>'+
-      '<div class="q-option-card'+(slot.am?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'am\')" style="flex:1;padding:8px;font-size:11px;text-align:center;border-radius:14px;">AM</div>'+
-      '<div class="q-option-card'+(slot.pm?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'pm\')" style="flex:1;padding:8px;font-size:11px;text-align:center;border-radius:14px;">PM</div>'+
-      '<div style="width:60px;font-size:10px;color:var(--text3);text-align:right;">'+(!slot.am&&!slot.pm?'Rest day':'')+'</div>'+
+      '<div style="'+dayLabelStyle+'">'+FQ_DAY_LABEL[day]+'</div>'+
+      '<div class="q-option-card'+(slot.am?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'am\')" style="'+slotBoxStyle+'">AM</div>'+
+      '<div class="q-option-card'+(slot.pm?' active':'')+'" onclick="fqToggleAvailability(\''+day+'\',\'pm\')" style="'+slotBoxStyle+'">PM</div>'+
+      trailing+
       '</div>'+
       durRow);
   });
+  // v4.7.51: live day-count summary. Calls out the 3-6 valid range and turns gold once met.
+  var sum = document.getElementById('fq-availability-summary');
+  if(sum){
+    var n = (fqAnswers.trainingDays||[]).length;
+    var inRange = (n >= 3 && n <= 6);
+    var msg;
+    if(n === 0)      msg = 'Pick at least 3 training days';
+    else if(n < 3)   msg = n+' selected — pick '+(3-n)+' more (3 min)';
+    else if(n > 6)   msg = n+' selected — drop '+(n-6)+' (6 max)';
+    else             msg = n+' training days locked in';
+    sum.style.color = inRange ? 'var(--gold)' : 'var(--text3)';
+    sum.textContent = msg;
+  }
 };
 
 // v4.7.39 hotfix: read a slot's duration from a value that may be either a number (single
@@ -18012,14 +18095,14 @@ window.fqValidateStep = function(){
       var targetOk=!!fqAnswers.programmeTarget && (fqAnswers.programmeTarget!=='event' || (fqAnswers.eventDate && fqAnswers.eventDescription));
       valid=goalsOk && !!fqAnswers.sportRole && sportOk && targetOk;
       break;
-    case 5: valid=!!fqAnswers.scheduleMode; break;
+    // v4.7.51: step 5 is now the training-days step (was step 6). Require 3-6 days picked.
+    case 5:
+      var dayCount = (fqAnswers.trainingDays||[]).length;
+      valid = (dayCount >= 3 && dayCount <= 6);
+      break;
+    // v4.7.51: step 6 is now the coach-mode step (was step 5). Either auto or manual is valid.
     case 6:
-      var anySlot=false;
-      Object.keys(fqAnswers.availableSlots||{}).forEach(function(d){
-        var s=fqAnswers.availableSlots[d];
-        if(s && (s.am||s.pm)) anySlot=true;
-      });
-      valid=anySlot;
+      valid = !!fqAnswers.coachMode;
       break;
     case 7:
       var sched=fqAnswers.sessionSchedule||{};
@@ -18069,7 +18152,8 @@ window.renderFQSummary = function(){
     ['Lifetime experience', fqAnswers.lifetimeAge?fqAnswers.lifetimeAge.replace(/_/g,' '):'-'],
     ['Olympic lifts', olyLabel],
     ['Equipment', fqAnswers.equip?fqAnswers.equip.replace(/_/g,' '):'-'],
-    ['Schedule', fqAnswers.scheduleMode==='coach_assigns'?'Coach assigns':(fqAnswers.scheduleMode==='user_assigns'?'You set':'-')],
+    ['Training days', ((fqAnswers.trainingDays||[]).length ? (fqAnswers.trainingDays.length+' days · '+fqAnswers.trainingDays.map(function(d){return d.slice(0,3);}).join(' ')) : '-')],
+    ['Coach mode', fqAnswers.coachMode==='auto'?'Coach assigns sessions':(fqAnswers.coachMode==='manual'?'You assign sessions':'-')],
     ['Injuries', (fqAnswers.injury && fqAnswers.injury.length)?fqAnswers.injury.map(function(i){return i.area+(i.side&&i.side!=='N/A'?' ('+i.side+')':'');}).join(', '):'None reported']
   ];
   el.innerHTML=lines.map(function(l){
@@ -18091,7 +18175,8 @@ window.updateFQStep = function(){
   var backBtn=document.getElementById('fq-back-btn');
   if(backBtn) backBtn.style.display=fqStep>1?'block':'none';
   if(fqStep===2 && typeof buildInjurySelector==='function') buildInjurySelector();
-  if(fqStep===6) fqRenderAvailability();
+  // v4.7.51: availability moved to step 5; session timetable stays at step 7.
+  if(fqStep===5) fqRenderAvailability();
   if(fqStep===7) fqRenderSessionTimetable();
   fqValidateStep();
   // v4.7.25 FIX 3: scroll to top of the questionnaire on every step transition so each step
@@ -18108,7 +18193,9 @@ window.updateFQStep = function(){
 window.fqNext = async function(){
   if(fqStep<fqTotalSteps){
     fqStep++;
-    if(fqStep===6 && fqAnswers.scheduleMode==='coach_assigns'){
+    // v4.7.51: when leaving the coach-mode step (now step 6), 'auto' skips the manual session
+    // timetable (step 7) and lands on coach tone (step 8).
+    if(fqStep===7 && fqAnswers.coachMode==='auto'){
       fqStep=8;
     }
     updateFQStep();
@@ -18169,18 +18256,16 @@ window.fqNext = async function(){
     fqEventDescription: fqAnswers.eventDescription || fqAnswers.fqEventDescription || existing.fqEventDescription || null,
     fqEquip:fqAnswers.equip,
     fqScheduleMode: fqAnswers.scheduleMode || fqAnswers.fqScheduleMode || existing.fqScheduleMode || null,
-    fqAvailableSlots:fqAnswers.scheduleMode==='user_assigns'?fqAnswers.availableSlots:null,
-    fqSessionSchedule: (fqAnswers.scheduleMode==='user_assigns' ? fqAnswers.sessionSchedule : null) || existing.fqSessionSchedule || null,
-    // v4.7.37 hotfix: persist fqTrainingDays so the prompt's CRITICAL — SESSION DAYS section
-    // can read it directly without falling back to deriving from availableSlots (which depends
-    // on Object.keys insertion order). Always recomputed in calendar order at save time.
-    // v4.7.39 (next-build): per-day session duration map. Default-filled to 60 if missing.
-    fqDayDurations: (fqAnswers.scheduleMode === 'user_assigns')
-      ? (fqAnswers.dayDurations || {})
-      : (existing.fqDayDurations || null),
-    fqTrainingDays: (fqAnswers.scheduleMode === 'user_assigns')
-      ? _phxComputeTrainingDays(fqAnswers.availableSlots)
-      : (Array.isArray(existing.fqTrainingDays) ? existing.fqTrainingDays : []),
+    // v4.7.51: training days are now picked on step 5 regardless of coach mode — so availableSlots,
+    // trainingDays, and dayDurations are ALWAYS persisted (no longer gated on scheduleMode). The
+    // session timetable (per-slot session_type) is still manual-mode only.
+    fqAvailableSlots: fqAnswers.availableSlots || existing.fqAvailableSlots || null,
+    fqSessionSchedule: (fqAnswers.coachMode==='manual' ? fqAnswers.sessionSchedule : null) || existing.fqSessionSchedule || null,
+    fqDayDurations: fqAnswers.dayDurations || existing.fqDayDurations || null,
+    fqTrainingDays: _phxComputeTrainingDays(fqAnswers.availableSlots),
+    // v4.7.51: new athlete-level field. 'auto' (AI assigns session types) or 'manual' (athlete
+    // assigns via the session timetable step). Mirrors scheduleMode 1:1 for now.
+    fqCoachMode: fqAnswers.coachMode || existing.fqCoachMode || null,
     fqCoachTone: fqAnswers.coachTone || fqAnswers.fqCoachTone || existing.fqCoachTone || null,
     // v4.7.38: weekly check-in day preference. Default friday if user never picked.
     fqCheckInDay: fqAnswers.checkInDay || existing.fqCheckInDay || 'friday',
@@ -18235,8 +18320,10 @@ window.fqBack = function(){
   }
   if(fqStep>1){
     fqStep--;
-    if(fqStep===7 && fqAnswers.scheduleMode==='coach_assigns'){
-      fqStep=5;
+    // v4.7.51: reverse path for the auto skip — going back from coach tone (step 8) in auto
+    // mode jumps over the manual timetable (step 7) straight to coach mode (step 6).
+    if(fqStep===7 && fqAnswers.coachMode==='auto'){
+      fqStep=6;
     }
     updateFQStep();
     fqPersistProgress(); // v4.7.4 FIX 4
@@ -18398,12 +18485,12 @@ window.fqRestoreProgressUI = function(){
   var cidVal = fqAnswers.checkInDay || 'friday';
   var cidEl = document.querySelector('#fq-checkin-day-row .q-option-wide[onclick*="\''+cidVal+'\'"]');
   if(cidEl) cidEl.classList.add('active');
-  // Step 5
-  if(fqAnswers.scheduleMode){
-    var smEl=document.querySelector('#fq-step-schedulemode .q-option-wide[onclick*="\''+fqAnswers.scheduleMode+'\'"]');
-    if(smEl) smEl.classList.add('active');
+  // v4.7.51: step 6 is now the coach-mode step (auto / manual). Step 5 (availability) + step 7
+  // (manual timetable) are dynamic — updateFQStep() rebuilds them from fqAnswers each time.
+  if(fqAnswers.coachMode){
+    var cmEl=document.querySelector('#fq-step-schedulemode .q-option-wide[onclick*="\''+fqAnswers.coachMode+'\'"]');
+    if(cmEl) cmEl.classList.add('active');
   }
-  // Steps 6 + 7 are dynamic — updateFQStep() will rebuild them from fqAnswers
   // Step 8
   if(fqAnswers.coachTone){
     var ctEl2=document.querySelector('#fq-step-coachtone .q-option-wide[onclick*="\''+fqAnswers.coachTone+'\'"]');

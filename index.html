@@ -3495,7 +3495,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.52';
+var APP_VERSION='4.7.53';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4999,11 +4999,32 @@ function _phxCloseResetModal(e){
 // ---- Option 1: Update Goals or Schedule -----------------------------------
 // Pre-fill fqAnswers from the current athlete, open the questionnaire from step 1, and let
 // the athlete change whatever they want. The standard fqNext save path rebuilds the plan.
-function _phxResetUpdateGoals(){
+//
+// v4.7.53 hotfix: must null fqCompleted + aiProgramme on the in-memory athlete AND in
+// localStorage AND in Supabase BEFORE opening the questionnaire. Otherwise the boot-flow
+// fast-path in _loadProfileAndRouteInner (_phxIsFullyOnboardedAthlete check on the cached
+// localStorage.phoenix_athlete) routes the user straight back to Today on the next reload,
+// and any in-flight code reading athlete.fqCompleted treats the questionnaire as already
+// done. Clearing in memory + storage stops the fast-path; the Supabase write keeps the
+// profile row in sync so a future reload doesn't re-hydrate the completed flag from there.
+async function _phxResetUpdateGoals(){
   if(!athlete){ alert('No profile loaded yet — try again in a moment.'); return; }
   if(!confirm('Update your goals or schedule? Your coach will rebuild your plan using your latest answers. Training history is kept.')) return;
   console.log('[PHX] reset: update_goals_schedule');
   _phxCloseResetModal();
+  // Clear the completion flags BEFORE anything else. False (not null) on fqCompleted so
+  // every truthy `if(athlete.fqCompleted)` check downstream short-circuits. aiProgramme
+  // → null so _phxIsFullyOnboardedAthlete fails the boot-time fast-path on next reload.
+  athlete.fqCompleted = false;
+  athlete.aiProgramme = null;
+  try { localStorage.setItem('phoenix_athlete', JSON.stringify(athlete)); } catch(_e){}
+  var uid = currentSession && currentSession.user && currentSession.user.id;
+  if(uid){
+    try {
+      var res = await sb.from('profiles').update({fq_completed: null, ai_programme: null}).eq('id', uid);
+      if(res && res.error) console.warn('[PHX] update_goals_schedule: Supabase update returned error:', res.error.message || res.error);
+    } catch(e){ console.warn('[PHX] update_goals_schedule: Supabase update failed:', e); }
+  }
   // Hydrate fqAnswers from athlete BEFORE openFoundationQ runs (it would otherwise reset
   // the answers object when fqCompleted is truthy). Then bypass the normal entry point.
   _phxPrefillFqAnswersFromAthlete(athlete);

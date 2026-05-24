@@ -3495,7 +3495,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.53';
+var APP_VERSION='4.7.54';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5030,9 +5030,15 @@ async function _phxResetUpdateGoals(){
   _phxPrefillFqAnswersFromAthlete(athlete);
   // Drop any stale resume snapshot — the athlete is editing the live profile, not resuming.
   if(typeof fqClearProgress === 'function') fqClearProgress();
+  // v4.7.54 hotfix: arm prefill mode so every subsequent updateFQStep() call re-runs
+  // fqRestoreProgressUI AFTER the step's DOM has been (re)built. Without this, navigating
+  // forward through the questionnaire wipes restored state on dynamically-rebuilt steps
+  // (step 2 injury selector, step 5 availability, step 7 timetable). Cleared in fqNext on
+  // successful save and in fqBack when the athlete exits step 1.
+  window._phxFqPrefillActive = true;
   fqStep = 1;
-  updateFQStep();
   showScreen('screen-foundation-q');
+  updateFQStep();
   setTimeout(function(){
     if(typeof renderFQSkinGrid === 'function') renderFQSkinGrid();
     if(typeof updateFqFontPicker === 'function') updateFqFontPicker();
@@ -5139,6 +5145,14 @@ async function _phxResetFreshStart(){
 // programme columns on the profiles row, but does NOT delete the auth user and does NOT
 // touch sessions / set_logs / weekly_checkins / daily_weigh_ins / coach_conversations.
 // Auth session is preserved so the athlete stays signed in.
+//
+// v4.7.54 hotfix: the Supabase UPDATE must FULLY resolve before location.reload() fires.
+// If we reload while the UPDATE is in flight, the boot fast-path re-hydrates the cached
+// localStorage athlete (already cleared below) but Supabase still has the old row, so a
+// later read pulls fq_completed back as a valid timestamp and routes to Today — the reset
+// looks like it did nothing. Only reload after a verified successful UPDATE. If the UPDATE
+// errors or throws, alert the user and bail out — do NOT reload (that would leave the user
+// in a half-reset state where local storage is wiped but the Supabase row is intact).
 async function _phxResetFullReset(){
   if(!confirm('Full Reset — start completely from scratch?')) return;
   if(!confirm('Are you sure? This will clear your current programme and all your settings. Your training history is kept so your coach still has your foundation.')) return;
@@ -5147,6 +5161,7 @@ async function _phxResetFullReset(){
   var uid = currentSession && currentSession.user && currentSession.user.id;
   // Supabase update — explicit column list as specified. Note: schema column is fq_injury
   // (singular) per FIELD_MAP; the spec said fq_injuries which appears to be a typo.
+  // MUST await this AND check for errors before touching anything else — see header comment.
   if(uid){
     try {
       var res = await sb.from('profiles').update({
@@ -5158,9 +5173,19 @@ async function _phxResetFullReset(){
         fq_injury: null,
         fq_coach_mode: null
       }).eq('id', uid);
-      if(res && res.error) console.warn('[PHX] full_reset: Supabase update returned error:', res.error.message || res.error);
-    } catch(e){ console.warn('[PHX] full_reset: Supabase update failed:', e); }
+      if(res && res.error){
+        console.error('[PHX] full_reset: Supabase update returned error:', res.error.message || res.error);
+        alert('Reset failed — please try again.');
+        return;
+      }
+      console.log('[PHX] full_reset: Supabase update OK');
+    } catch(e){
+      console.error('[PHX] full_reset: Supabase update threw:', e);
+      alert('Reset failed — please try again.');
+      return;
+    }
   }
+  // Supabase write confirmed (or no uid). Now safe to wipe local state and reload.
   // Wipe every phoenix_* localStorage key. Preserves Supabase's own sb-* auth tokens, so
   // the user stays signed in across the reload below.
   try {
@@ -18424,6 +18449,16 @@ window.updateFQStep = function(){
   // v4.7.51: availability moved to step 5; session timetable stays at step 7.
   if(fqStep===5) fqRenderAvailability();
   if(fqStep===7) fqRenderSessionTimetable();
+  // v4.7.54 hotfix: when prefill mode is armed (entered via Update Goals or Schedule),
+  // re-run fqRestoreProgressUI AFTER the step's DOM has been built/rebuilt. Step 2 calls
+  // buildInjurySelector which wipes injury card active state; step 5 (fqRenderAvailability)
+  // and step 7 (fqRenderSessionTimetable) self-restore from fqAnswers, but step 2 doesn't —
+  // and static steps' inputs may have been wiped by earlier renders too. fqRestoreProgressUI
+  // is idempotent (guards on active class for click()-based restores, .value assignment for
+  // inputs is naturally idempotent) so calling it on every step transition is safe.
+  if(window._phxFqPrefillActive && typeof fqRestoreProgressUI === 'function'){
+    setTimeout(function(){ try { fqRestoreProgressUI(); fqValidateStep(); } catch(e){ console.warn('[PHX] prefill restore failed:', e); } }, 0);
+  }
   fqValidateStep();
   // v4.7.25 FIX 3: scroll to top of the questionnaire on every step transition so each step
   // opens at the top, not mid-page where the previous step left off.
@@ -18549,6 +18584,7 @@ window.fqNext = async function(){
     return;
   }
   fqClearProgress(); // v4.7.4 FIX 4: programme generated → drop saved snapshot
+  window._phxFqPrefillActive = false; // v4.7.54: disarm prefill mode on successful save
   if(hasIgniteAccess()){
     generateProgramme('initial_build');
   } else {
@@ -18574,6 +18610,7 @@ window.fqBack = function(){
     updateFQStep();
     fqPersistProgress(); // v4.7.4 FIX 4
   } else {
+    window._phxFqPrefillActive = false; // v4.7.54: bailing out of step 1 → disarm prefill mode
     showScreen('screen-splash');
   }
 };

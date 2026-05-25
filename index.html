@@ -574,7 +574,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .bsheet-option{display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s, background 0.15s;}
 .bsheet-option:active{border-color:var(--gold);background:var(--bg2);}
 .bsheet-option.active{border-color:var(--gold);background:rgba(200,150,62,0.08);}
+.bsheet-option.danger{border-color:rgba(217,106,94,0.45);background:rgba(217,106,94,0.06);}
+.bsheet-option.danger:active{border-color:#d96a5e;background:rgba(217,106,94,0.12);}
 .bsheet-option-label{font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:1.5px;}
+.bsheet-option.danger .bsheet-option-label{color:#d96a5e;}
 .bsheet-option-sub{font-size:11px;color:var(--text3);margin-top:3px;}
 .bsheet-check{font-family:var(--font-d);font-size:18px;color:var(--gold);font-weight:700;}
 
@@ -1758,9 +1761,16 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         </div>
       </div>
     </div>
-    <!-- v4.7.34 BUILD 5 / v4.7.56 RENAME: This Week's Schedule link — opens the full 7-day session view. -->
-    <div style="text-align:center;margin:6px 0 14px;">
-      <button onclick="openWeekPlan()" style="background:transparent;border:none;color:var(--text3);font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;padding:6px;text-decoration:underline;">This Week's Schedule →</button>
+    <!-- v4.7.59: This Week's Schedule tile — replaces the underlined text link. Body is
+         populated by _phxRenderWeekScheduleTile() during renderTodayScreen(). -->
+    <div id="card-this-week" class="game-card tile-bg" onclick="openWeekPlan()" style="margin:6px 0 14px;border:1px solid var(--border);border-left:3px solid var(--gold);background-image:url('/assets/tiles/tile-session.jpg');cursor:pointer;">
+      <div class="game-card-inner" style="padding:16px 18px;">
+        <div class="game-card-eyebrow">
+          <span class="game-card-eyebrow-sm">This Week's Schedule</span>
+        </div>
+        <div id="card-this-week-body" style="margin-top:8px;">Loading…</div>
+        <div class="game-card-action" style="font-size:11px;margin-top:10px;">View full week →</div>
+      </div>
     </div>
     <!-- v4.7.23 BUILD 1 / v4.7.39 CHANGE 3: The Agoge tile is always visible. Non-Agoge
          athletes get a "JOIN THE AGOGE" overlay (added by _phxRenderAgogeTile); active
@@ -3524,7 +3534,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.58';
+var APP_VERSION='4.7.59';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5426,7 +5436,9 @@ window._phxOpenBottomSheet = function(opts){
     optsEl.innerHTML = (opts.options||[]).map(function(o, idx){
       var isActive = (opts.current != null && String(o.value) === String(opts.current));
       var sub = o.sub ? '<div class="bsheet-option-sub">'+o.sub+'</div>' : '';
-      return '<div class="bsheet-option'+(isActive?' active':'')+'" data-bsheet-idx="'+idx+'">'+
+      // v4.7.59: optional `danger:true` flag tints the option red for destructive actions.
+      var cls = 'bsheet-option' + (isActive?' active':'') + (o.danger?' danger':'');
+      return '<div class="'+cls+'" data-bsheet-idx="'+idx+'">'+
                '<div><div class="bsheet-option-label">'+o.label+'</div>'+sub+'</div>'+
                (isActive?'<div class="bsheet-check">&#10003;</div>':'')+
              '</div>';
@@ -13169,6 +13181,8 @@ function renderTodayScreen(){
   if(typeof _phxRefreshMyCoachTile==='function') _phxRefreshMyCoachTile();
   // v4.7.23 BUILD 1/5: render the Agoge tile (no-op when fqProgrammeTarget isn't agoge/both).
   if(typeof _phxRenderAgogeTile==='function') _phxRenderAgogeTile();
+  // v4.7.59: populate the "This Week's Schedule" tile with the next 2 upcoming sessions.
+  if(typeof _phxRenderWeekScheduleTile==='function') _phxRenderWeekScheduleTile();
 }
 
 // v4.7.21 FIX 5: completed-today marker on Today tiles.
@@ -14527,6 +14541,65 @@ window.openWeekPlan = function(){
   _phxRenderWeekPlan();
 };
 
+// v4.7.59 — Today screen "This Week's Schedule" tile body. Shows the next 2 upcoming
+// sessions (today onward), merging programme + athlete-added customs. Tapping the tile
+// itself opens the full week plan.
+window._phxRenderWeekScheduleTile = function(){
+  var bodyEl = document.getElementById('card-this-week-body');
+  if(!bodyEl) return;
+  var prog = athlete && athlete.aiProgramme;
+  var start = _phxWeekStartDate();
+  var weekStartISO = start.getFullYear()+'-'+String(start.getMonth()+1).padStart(2,'0')+'-'+String(start.getDate()).padStart(2,'0');
+  var byDay = {Monday:[],Tuesday:[],Wednesday:[],Thursday:[],Friday:[],Saturday:[],Sunday:[]};
+  if(prog && prog.week && Array.isArray(prog.week.sessions)){
+    prog.week.sessions.forEach(function(s){
+      var dayKey = String(s.day||'').replace(/\s+(am|pm).*$/i,'').trim();
+      var canon = dayKey.charAt(0).toUpperCase() + dayKey.slice(1).toLowerCase();
+      if(!byDay[canon]) return;
+      if(s.am_session || s.pm_session){
+        if(s.am_session) byDay[canon].push(Object.assign({}, s.am_session, {_slot:'am'}));
+        if(s.pm_session) byDay[canon].push(Object.assign({}, s.pm_session, {_slot:'pm'}));
+      } else {
+        byDay[canon].push(s);
+      }
+    });
+  }
+  var customByDay = _phxLoadWeekCustomSessions(weekStartISO);
+  Object.keys(customByDay).forEach(function(dayName){
+    if(!byDay[dayName]) return;
+    (customByDay[dayName]||[]).forEach(function(c){
+      byDay[dayName].push({session_type: c.sessionType, _slot: c.slot});
+    });
+  });
+  var orderedDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  var startIdx = orderedDays.indexOf(todayName);
+  if(startIdx < 0) startIdx = 0;
+  var upcoming = [];
+  for(var i=0; i<orderedDays.length && upcoming.length<2; i++){
+    var d = orderedDays[(startIdx + i) % orderedDays.length];
+    var amList = byDay[d].filter(function(s){ return (String(s._slot||'').toLowerCase() !== 'pm'); });
+    var pmList = byDay[d].filter(function(s){ return (String(s._slot||'').toLowerCase() === 'pm'); });
+    amList.concat(pmList).forEach(function(s){
+      if(upcoming.length<2) upcoming.push({day:d, sess:s, slot:(String(s._slot||'').toLowerCase()==='pm'?'pm':'am')});
+    });
+  }
+  if(!upcoming.length){
+    bodyEl.innerHTML = '<div style="font-size:13px;color:rgba(255,255,255,0.7);line-height:1.5;">No sessions scheduled this week — tap to plan your week.</div>';
+    return;
+  }
+  bodyEl.innerHTML = upcoming.map(function(u, idx){
+    var dayShort = u.day.substring(0,3).toUpperCase();
+    var slot = u.slot.toUpperCase();
+    var type = String(u.sess.session_type || 'Training');
+    var borderRule = (idx === upcoming.length-1) ? '' : 'border-bottom:1px solid rgba(255,255,255,0.08);';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;'+borderRule+'">'+
+             '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:1.5px;color:rgba(255,255,255,0.95);text-transform:uppercase;">'+dayShort+' · '+type+'</div>'+
+             '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);">'+slot+'</div>'+
+           '</div>';
+  }).join('');
+};
+
 async function _phxRenderWeekPlan(){
   var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
   var weekNumEl = document.getElementById('wp-week-num');
@@ -14656,7 +14729,14 @@ async function _phxRenderWeekPlan(){
           }
         }
         html += '</div>';
-        html += '<div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;color:'+ps.color+';border:1px solid '+ps.border+';padding:3px 6px;border-radius:3px;flex-shrink:0;">'+ps.label+'</div>';
+        // v4.7.59: stack the priority badge with a × remove button on custom tiles. The
+        // remove button stops propagation so it doesn't also fire the tile-tap handler.
+        html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">';
+        if(isCustom){
+          html += '<button onclick="event.stopPropagation();window._phxRequestRemoveCustom(\''+sid+'\',\''+dayName+'\')" aria-label="Remove session" style="background:transparent;border:1px solid var(--border2);color:var(--text3);font-size:14px;line-height:1;width:22px;height:22px;border-radius:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">&times;</button>';
+        }
+        html += '<div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;color:'+ps.color+';border:1px solid '+ps.border+';padding:3px 6px;border-radius:3px;">'+ps.label+'</div>';
+        html += '</div>';
         html += '</div>';
         if(isDone){
           html += '<div style="position:absolute;inset:0;background:rgba(15,30,15,0.55);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5fb96a;pointer-events:none;">✓ Completed</div>';
@@ -14706,9 +14786,17 @@ function _phxRecoveryNoteForAdd(dayName, sessionType, byDay){
   if(!_phxIsStrengthSessionType(sessionType)){
     return {kind:'ok', text:'Good addition. Your week is balanced.'};
   }
+  // v4.7.59: same-day check first. Two strength sessions on one day — regardless of AM/PM
+  // split — counts as a conflict because the second hit lands on the same recovery window.
+  var sameDay = (byDay && byDay[dayName]) || [];
+  for(var i=0;i<sameDay.length;i++){
+    if(_phxIsStrengthSessionType(sameDay[i].session_type)){
+      return {kind:'warn', text:'Heads up — two strength sessions on the same day may affect recovery. Consider swapping one to a WOD or Core instead.'};
+    }
+  }
   var adj = _phxAdjacentDayNames(dayName);
-  for(var i=0;i<adj.length;i++){
-    var others = (byDay && byDay[adj[i]]) || [];
+  for(var a=0;a<adj.length;a++){
+    var others = (byDay && byDay[adj[a]]) || [];
     for(var j=0;j<others.length;j++){
       if(_phxIsStrengthSessionType(others[j].session_type)){
         return {kind:'warn', text:'Heads up — back-to-back strength sessions may affect recovery. Consider swapping to a WOD or Core instead.'};
@@ -14780,32 +14868,79 @@ window._phxOpenAddSessionSheet = function(dayName, slotKey){
   _openMainPicker();
 };
 
+// v4.7.59: Replaced the native window.prompt() quick-action menu with a bottom sheet.
+// Custom (athlete-added) tiles get a Open / Remove sheet; coach-built tiles open directly.
 window._phxWeekTileTap = function(sessionId, dayName){
   var state = window._phxWeekPlanState || {};
   var sessions = state.byDay && state.byDay[dayName] ? state.byDay[dayName] : [];
   var sess = null;
   for(var i=0;i<sessions.length;i++){ if(_phxSessionId(sessions[i]) === sessionId){ sess = sessions[i]; break; } }
   if(!sess) return;
-  // Quick action menu: Open / Change Priority / Mark Skipped / Cancel
-  var pick = window.prompt('What would you like to do?\n  1 — Open this session\n  2 — Cycle priority\n  3 — Mark as skipped\n  (Cancel to dismiss)','1');
-  if(pick === '1'){
-    var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
-    if(dayName !== todayName){
-      alert('This session is scheduled for '+dayName+'. Open it from the Today screen on the day.');
-      return;
-    }
-    window._todaySession = sess;
-    window._todaySessions = window._todaySessions || [sess];
-    if(typeof openTodaySession === 'function') openTodaySession();
-  } else if(pick === '2'){
-    window._phxCyclePriority(state.weekN, sessionId);
-    _phxRenderWeekPlan();
-  } else if(pick === '3'){
-    var swaps = _phxLoadWeekSwaps(state.weekStartISO);
-    swaps[sessionId+'|skipped'] = true;
-    _phxSaveWeekSwaps(state.weekStartISO, swaps);
-    _phxRenderWeekPlan();
+  if(sess._custom){
+    _phxOpenBottomSheet({
+      title: 'Custom session',
+      subtitle: dayName+' · '+(sess.session_type||'Training'),
+      options: [
+        {value:'open',   label:'Open Session',   sub:'Open this session now'},
+        {value:'remove', label:'Remove Session', sub:'Take this off your week', danger:true}
+      ],
+      onSelect: function(value){
+        if(value === 'open') _phxOpenSessionFromWeekTile(sess, dayName);
+        else if(value === 'remove') window._phxRequestRemoveCustom(sessionId, dayName);
+      }
+    });
+    return;
   }
+  // Coach-built tile — just open it directly.
+  _phxOpenSessionFromWeekTile(sess, dayName);
+};
+
+function _phxOpenSessionFromWeekTile(sess, dayName){
+  var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  if(dayName !== todayName){
+    _phxOpenBottomSheet({
+      title: 'Not today',
+      subtitle: 'This session is scheduled for '+dayName+'. Open it from the Today screen on the day.',
+      options: [{value:'ok', label:'OK'}]
+    });
+    return;
+  }
+  window._todaySession = sess;
+  window._todaySessions = window._todaySessions || [sess];
+  if(typeof openTodaySession === 'function') openTodaySession();
+}
+
+// v4.7.59: Confirm-then-remove for custom (athlete-added) sessions. Replaces the native
+// confirm() — uses the existing bottom sheet so it's consistent with the rest of the flow.
+window._phxRequestRemoveCustom = function(sessionId, dayName){
+  _phxOpenBottomSheet({
+    title: 'Remove this session?',
+    subtitle: dayName+' — this can\'t be undone.',
+    options: [
+      {value:'yes', label:'Yes, remove', sub:'Take this session off your week', danger:true},
+      {value:'no',  label:'No, keep it'}
+    ],
+    onSelect: function(value){
+      if(value === 'yes') window._phxRemoveCustomSession(sessionId, dayName);
+    }
+  });
+};
+
+window._phxRemoveCustomSession = function(sessionId, dayName){
+  var state = window._phxWeekPlanState || {};
+  var weekStartISO = state.weekStartISO;
+  if(!weekStartISO) return;
+  var byDay = _phxLoadWeekCustomSessions(weekStartISO);
+  var dayList = byDay[dayName] || [];
+  // Custom entries store {sessionType, slot, ...} — rebuild the same id the tile renders with.
+  byDay[dayName] = dayList.filter(function(c){
+    var fakeSess = {day: dayName, session_type: c.sessionType, _slot: c.slot};
+    return _phxSessionId(fakeSess) !== sessionId;
+  });
+  if(!byDay[dayName].length) delete byDay[dayName];
+  _phxSaveWeekCustomSessions(weekStartISO, byDay);
+  _phxMirrorWeekCustomToSupabase(weekStartISO, byDay, state.weekN);
+  _phxRenderWeekPlan();
 };
 
 window._phxCyclePriority = function(weekNumber, sessionId){

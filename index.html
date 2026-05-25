@@ -1742,12 +1742,12 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div class="game-card-action-sm">Coach generates →</div>
         </div>
       </div>
-      <!-- v4.7.29 BUILD 5: Conditioning → WOD LIBRARY. Tile mirrors the daily WOD tile's
-           tier image + border colour (applied dynamically in renderDailyWOD). -->
+      <!-- v4.7.60: Conditioning tile (renamed from WOD Library to match the locked Row 3 spec:
+           Core / Conditioning / Walk-Run). Still opens the WOD library on tap. -->
       <div id="card-wod-library" class="game-card game-card-sm tile-bg" onclick="openWODLibrary()" style="border-left:3px solid var(--gold);position:relative;background-image:url('/assets/tiles/tile-daily.jpg');">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Add on</div>
-          <div class="game-card-title-sm">WOD Library</div>
+          <div class="game-card-title-sm">Conditioning</div>
           <div class="game-card-sub-sm" id="card-wod-library-sub">Browse all WODs</div>
           <div class="game-card-action-sm">Browse →</div>
         </div>
@@ -1807,6 +1807,8 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div style="opacity:0.4;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M8 21h8M12 17v4M17 4V2H7v2M17 4h2a2 2 0 012 2v1a4 4 0 01-4 4h-1M7 4H5a2 2 0 00-2 2v1a4 4 0 004 4h1M7 4h10v5a5 5 0 01-10 0V4z"/></svg></div>
       </div>
     </div>
+    <!-- v4.7.60: Combine paired with Recovery (50/50) so Nutrition can take its own full-width
+         row below for maximum prominence. -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <div id="card-combine" class="game-card game-card-sm game-card-locked" onclick="openCombine()">
         <div class="game-card-inner">
@@ -1816,22 +1818,50 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
           <div style="opacity:0.35;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
         </div>
       </div>
-      <div id="card-nutrition" class="game-card game-card-sm game-card-locked" onclick="openNutrition()">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span></div>
-          <div class="game-card-title-sm">Nutrition</div>
-          <div class="game-card-sub-sm" id="nutrition-sub">Daily targets</div>
-          <div style="opacity:0.35;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><path d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3"/></svg></div>
-        </div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       <div class="game-card game-card-sm" onclick="openRecovery()">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">All tiers</div>
           <div class="game-card-title-sm">Recovery</div>
           <div class="game-card-sub-sm">Sleep and meditation</div>
           <div style="opacity:0.5;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- v4.7.60: Nutrition — promoted to full-width, expanded tile. Coach-generated macros
+         live on athlete.aiProgramme.nutrition (daily_calories, protein_g, carbs_g, fat_g,
+         timing_notes). Pro-gated; free users see a blurred preview + unlock CTA. Body is
+         populated dynamically in updateCardAccess(). -->
+    <div id="card-nutrition" class="game-card game-card-locked" onclick="openNutrition()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);position:relative;overflow:hidden;">
+      <div class="game-card-inner" style="padding:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+          <div class="game-card-eyebrow-sm">Coach Nutrition</div>
+          <span id="nutrition-lock-badge" class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span>
+        </div>
+        <div class="game-card-title" style="font-size:22px;margin-bottom:4px;">Nutrition</div>
+        <!-- Calories — large + prominent. Filled by _phxRenderNutritionTile(). -->
+        <div id="nutrition-calories" style="font-family:var(--font-d);font-size:36px;font-weight:900;color:var(--gold);line-height:1;margin:8px 0 2px;">— <span style="font-size:12px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-weight:600;">kcal/day</span></div>
+        <!-- Macros — 3 equal columns: protein / carbs / fat -->
+        <div id="nutrition-macros" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;">
+          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 8px;text-align:center;">
+            <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Protein</div>
+            <div id="nutrition-protein" style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">— g</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 8px;text-align:center;">
+            <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Carbs</div>
+            <div id="nutrition-carbs" style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">— g</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 8px;text-align:center;">
+            <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Fat</div>
+            <div id="nutrition-fat" style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">— g</div>
+          </div>
+        </div>
+        <div id="nutrition-note" style="display:none;font-size:12px;color:var(--text2);line-height:1.6;margin-top:12px;font-style:italic;border-top:1px solid var(--border);padding-top:10px;"></div>
+        <!-- Free-tier lock overlay — shown by _phxRenderNutritionTile() when !hasProAccess(). -->
+        <div id="nutrition-lock-overlay" style="display:none;position:absolute;inset:0;background:rgba(10,3,3,0.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;z-index:2;">
+          <div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Pro only</div>
+          <div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Unlock with Pro</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.5;max-width:240px;">Personalised macros built from your goals, bodyweight and training load.</div>
         </div>
       </div>
     </div>
@@ -3534,7 +3564,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.59';
+var APP_VERSION='4.7.60';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -12104,6 +12134,24 @@ function setupSplashButtons(){
     <div style="font-family:var(--font-d);font-size:34px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.05;margin-bottom:4px;" id="wci-title">Week 1 Review</div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:24px;" id="wci-daterange">—</div>
 
+    <!-- v4.7.60: Same as last week — quick-confirm. Locks all fields to last week's values and
+         jumps to the notes/submit step. Populated/wired by _phxWciPrefillLastWeek(). -->
+    <div id="wci-same-as-last" style="display:none;background:linear-gradient(135deg,var(--bg2) 0%,#1a1410 100%);border:1px solid var(--gold);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Quick confirm</div>
+      <div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:10px;">Same as last week?</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:12px;" id="wci-same-as-last-sub">Confirm last week's training and skip straight to your coach notes.</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-primary" style="flex:1;padding:11px;margin:0;font-size:11px;" onclick="window._wciSameAsLastWeek()">Yes — same as last week</button>
+      </div>
+    </div>
+
+    <!-- v4.7.60: Last week's training — read-only summary of days/session types/RPE. -->
+    <div id="wci-last-week-block" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:24px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Last week's training</div>
+      <div id="wci-last-week-list" style="font-size:13px;color:var(--text2);line-height:1.7;"></div>
+      <div id="wci-last-week-rpe" style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;"></div>
+    </div>
+
     <!-- SECTION 1 — auto stats -->
     <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">This week</div>
     <div id="wci-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px;">
@@ -12166,7 +12214,9 @@ function setupSplashButtons(){
     <div id="wci-photo-warning" style="display:none;font-size:11px;color:var(--orange);margin-top:-16px;margin-bottom:14px;text-align:center;font-style:italic;"></div>
 
     <!-- SECTION 3 — recovery notes -->
-    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Recovery</div>
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Recovery</div>
+    <!-- v4.7.60: hint shown only when current fqInjury entries pre-fill the textarea. -->
+    <div id="wci-niggle-hint" style="display:none;font-size:11px;color:var(--text3);margin-bottom:6px;font-style:italic;">Pre-filled from your current injury notes — edit anything that's changed.</div>
     <textarea id="wci-niggle" class="q-input" rows="3" placeholder="Note any new pain, tightness or injuries…" style="margin-bottom:24px;resize:vertical;min-height:80px;"></textarea>
 
     <!-- SECTION 4 — coach notes -->
@@ -13375,6 +13425,8 @@ function openWeeklyCheckin(){
   loadLastCheckin();
   // Auto-populate this week's stats from Supabase
   loadWeeklyStats();
+  // v4.7.60: pre-fill from last week's data — training days, session types, RPE, weight, injuries.
+  if(typeof _phxWciPrefillLastWeek === 'function') _phxWciPrefillLastWeek();
   // v4.7.34 BUILD 3: load (or regenerate) the coach's weekly recommendation card.
   if(typeof _phxLoadCoachWeeklyRecommendation === 'function') _phxLoadCoachWeeklyRecommendation();
   // v4.7.38: editable on the athlete's chosen check-in day (default friday). Readonly otherwise.
@@ -13526,6 +13578,153 @@ async function loadWeeklyStats(){
     setText('wci-distance', (totalDist/1000).toFixed(1)+' km');
   } catch(e){ console.warn('[PHX] loadWeeklyStats failed:', e); }
 }
+
+// ====== v4.7.60: WEEKLY CHECK-IN PRE-FILL ======
+// Pre-fills the form with last week's data so the athlete only changes what's different.
+// - Training days + session types come from athlete.aiProgramme.week.sessions (the live coach plan)
+// - Average RPE per session comes from Supabase sessions table (avg of completed sessions last week)
+// - Weight: most recent daily_weigh_ins entry, falling back to last weekly_checkins.weight_kg
+// - Injuries: athlete.fqInjury entries joined into the recovery textarea
+// - Renders a "Last week's training" read-only block + a "Same as last week" quick-confirm card.
+async function _phxWciPrefillLastWeek(){
+  // 1) Pre-fill injuries into the niggle textarea (only if it's empty so we don't overwrite the
+  //    saved-on-reopen value loadLastCheckin() already wrote there).
+  try {
+    var niggleEl = document.getElementById('wci-niggle');
+    var hintEl   = document.getElementById('wci-niggle-hint');
+    if(niggleEl && !(niggleEl.value||'').trim() && athlete){
+      var lines = [];
+      if(Array.isArray(athlete.fqInjury)){
+        athlete.fqInjury.forEach(function(inj){
+          if(!inj) return;
+          if(typeof inj === 'string'){ lines.push(inj); return; }
+          var area = inj.area || '';
+          var side = inj.side ? ' ('+inj.side+')' : '';
+          var detail = inj.detail ? ' — '+inj.detail : '';
+          if(area) lines.push(area+side+detail);
+        });
+      }
+      if(athlete.fqInjuryNotes && String(athlete.fqInjuryNotes).trim()){
+        lines.push(String(athlete.fqInjuryNotes).trim());
+      }
+      if(lines.length){
+        niggleEl.value = lines.join('\n');
+        if(hintEl) hintEl.style.display = 'block';
+      }
+    }
+  } catch(_e){ /* non-fatal */ }
+
+  // 2) Pre-fill weight from most recent daily_weigh_in (cached locally as phoenix_last_weighin).
+  try {
+    var wEl = document.getElementById('wci-weight');
+    if(wEl && !wEl.value){
+      var cached = localStorage.getItem('phoenix_last_weighin');
+      if(cached){
+        var parsed = JSON.parse(cached);
+        if(parsed && parsed.weight_kg) wEl.value = parsed.weight_kg;
+      }
+    }
+  } catch(_e){}
+
+  // 3) Render "Last week's training" + fetch avg RPE per session from Supabase.
+  var block = document.getElementById('wci-last-week-block');
+  var listEl = document.getElementById('wci-last-week-list');
+  var rpeEl  = document.getElementById('wci-last-week-rpe');
+  if(!block || !listEl) return;
+
+  // Pull last week's sessions from the live programme. (The same data renderTodayScreen
+  // / loadLastCheckin already use — single source of truth.)
+  var sessions = [];
+  if(athlete && athlete.aiProgramme && athlete.aiProgramme.week && Array.isArray(athlete.aiProgramme.week.sessions)){
+    sessions = athlete.aiProgramme.week.sessions.filter(function(s){
+      return s && s.day && (s.session_type || (s.exercises && s.exercises.length));
+    });
+  }
+  if(!sessions.length){
+    block.style.display = 'none';
+    return;
+  }
+
+  // Initial render with placeholders for RPE — filled in once Supabase responds.
+  var rowsHtml = sessions.map(function(s, i){
+    var day = s.day || '';
+    var type = s.session_type || 'Training';
+    return '<div data-wci-prev-idx="'+i+'"><strong style="color:var(--text);">'+day+':</strong> '+type+
+           ' <span class="wci-prev-rpe" style="color:var(--text3);font-size:11px;"></span></div>';
+  }).join('');
+  listEl.innerHTML = rowsHtml;
+  block.style.display = 'block';
+
+  // 4) Surface the "Same as last week" quick-confirm card.
+  var sameCard = document.getElementById('wci-same-as-last');
+  if(sameCard) sameCard.style.display = 'block';
+
+  // 5) Fetch avg RPE per session_type for last week from Supabase. Best-effort.
+  if(typeof sb === 'undefined' || !currentSession || !currentSession.user) return;
+  try {
+    var bounds = _wciWeekBounds();
+    // Last week = the week BEFORE the current one. Shift by 7 days.
+    var lwStart = new Date(bounds.start); lwStart.setDate(lwStart.getDate() - 7);
+    var lwEnd   = new Date(bounds.end);   lwEnd.setDate(lwEnd.getDate() - 7);
+    var res = await sb.from('sessions').select('session_type,session_name,rpe_session,started_at')
+      .eq('user_id', currentSession.user.id)
+      .eq('status', 'completed')
+      .gte('started_at', lwStart.toISOString())
+      .lte('started_at', lwEnd.toISOString());
+    if(res.error){ console.warn('[PHX] wci prefill rpe error:', res.error); return; }
+    var rows = res.data || [];
+    if(!rows.length){
+      if(rpeEl) rpeEl.textContent = 'No completed sessions logged last week.';
+      return;
+    }
+    // Aggregate RPE by session_type (case-insensitive). Also keep a global average.
+    var byType = {};
+    var globalSum = 0, globalN = 0;
+    rows.forEach(function(r){
+      var rpe = parseFloat(r.rpe_session);
+      if(!isFinite(rpe) || rpe <= 0) return;
+      var key = String(r.session_type||'').toLowerCase().trim() || 'training';
+      if(!byType[key]) byType[key] = {sum:0, n:0};
+      byType[key].sum += rpe; byType[key].n++;
+      globalSum += rpe; globalN++;
+    });
+    // Patch each row's RPE span with the matching session_type bucket.
+    listEl.querySelectorAll('[data-wci-prev-idx]').forEach(function(row, i){
+      var sess = sessions[i];
+      var key = String(sess.session_type||'').toLowerCase().trim() || 'training';
+      var b = byType[key];
+      if(b && b.n > 0){
+        var avg = Math.round((b.sum / b.n) * 10) / 10;
+        var span = row.querySelector('.wci-prev-rpe');
+        if(span) span.textContent = '· RPE '+avg;
+      }
+    });
+    if(rpeEl && globalN > 0){
+      rpeEl.textContent = 'Average RPE last week: '+(Math.round((globalSum/globalN)*10)/10);
+    }
+  } catch(e){ console.warn('[PHX] wci prefill failed:', e); }
+}
+
+// "Same as last week" — locks fields to last week's structure (Yes, continue) + scrolls the
+// user past stats/body/photo straight to the coach-notes block. Doesn't auto-submit; the
+// athlete still hits Submit to Coach so they can add notes.
+window._wciSameAsLastWeek = function(){
+  // Default to continue=yes when confirming "same as last week".
+  if(typeof window._wciSetContinue === 'function') window._wciSetContinue(true);
+  // Scroll to the coach-notes textarea so the user lands on the only remaining input.
+  var target = document.getElementById('wci-coach-notes');
+  if(target && typeof target.scrollIntoView === 'function'){
+    target.scrollIntoView({behavior:'smooth', block:'start'});
+    setTimeout(function(){ try { target.focus(); } catch(_e){} }, 350);
+  }
+  // Visual feedback on the quick-confirm card.
+  var card = document.getElementById('wci-same-as-last');
+  if(card){
+    card.style.borderColor = 'var(--green,#4CAF50)';
+    var sub = document.getElementById('wci-same-as-last-sub');
+    if(sub) sub.textContent = 'Locked in. Add any coach notes below then submit.';
+  }
+};
 
 // ====== v4.7.34 BUILD 3: COACH WEEKLY RECOMMENDATION ======
 // Generates a 2-3 sentence recommendation for next week. Cached per week-start in
@@ -14588,13 +14787,21 @@ window._phxRenderWeekScheduleTile = function(){
     bodyEl.innerHTML = '<div style="font-size:13px;color:rgba(255,255,255,0.7);line-height:1.5;">No sessions scheduled this week — tap to plan your week.</div>';
     return;
   }
+  // v4.7.60: figure out current programme week so we can flag customised sessions.
+  var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
   bodyEl.innerHTML = upcoming.map(function(u, idx){
     var dayShort = u.day.substring(0,3).toUpperCase();
     var slot = u.slot.toUpperCase();
     var type = String(u.sess.session_type || 'Training');
     var borderRule = (idx === upcoming.length-1) ? '' : 'border-bottom:1px solid rgba(255,255,255,0.08);';
+    // v4.7.60: "Customised" badge when this session has stored swaps/supersets.
+    var sidForBadge = (typeof _phxSessionId === 'function') ? _phxSessionId(u.sess) : '';
+    var hasCust = sidForBadge && (typeof _phxHasCustomisations === 'function') && _phxHasCustomisations(sidForBadge, weekN);
+    var customBadge = hasCust
+      ? '<span style="display:inline-block;margin-left:6px;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);padding:1px 5px;border-radius:3px;">Customised</span>'
+      : '';
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;'+borderRule+'">'+
-             '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:1.5px;color:rgba(255,255,255,0.95);text-transform:uppercase;">'+dayShort+' · '+type+'</div>'+
+             '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:1.5px;color:rgba(255,255,255,0.95);text-transform:uppercase;">'+dayShort+' · '+type+customBadge+'</div>'+
              '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);">'+slot+'</div>'+
            '</div>';
   }).join('');
@@ -15111,11 +15318,16 @@ function renderTodaySessionCard(){
       titleText = 'Week ' + weekN + ' · ' + dayName + ' · ' + sigPretty;
       titleStyle = 'font-size:18px;letter-spacing:1px;line-height:1.2;';
     }
+    // v4.7.60: "Customised" badge inline with the title when this session has stored swaps/supersets.
+    var customisedHTML = '';
+    if(typeof _phxHasCustomisations === 'function' && _phxHasCustomisations(sid, weekN)){
+      customisedHTML = '<span style="display:inline-block;margin-left:8px;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);padding:2px 6px;border-radius:3px;vertical-align:middle;">Customised</span>';
+    }
     var inner = targetCard.querySelector('.game-card-inner');
     inner.innerHTML =
       badgeHTML+
       '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">'+eyebrowText+'</span></div>'+
-      '<div class="game-card-title" '+(idx===0?'id="today-session-name"':'')+' style="'+titleStyle+'">'+titleText+'</div>'+
+      '<div class="game-card-title" '+(idx===0?'id="today-session-name"':'')+' style="'+titleStyle+'">'+titleText+customisedHTML+'</div>'+
       '<div class="game-card-sub" '+(idx===0?'id="today-session-detail"':'')+'>'+
         ((sess.duration_min||45)+'min')+
         (movementsSummary?' · '+movementsSummary:'')+
@@ -15276,15 +15488,49 @@ function updateCardAccess(){
     }
   }
 
-  // Nutrition — Pro only
-  var nutritionCard=document.getElementById('card-nutrition');
-  if(nutritionCard&&isPro){
-    nutritionCard.classList.remove('game-card-locked');
-    if(athlete&&athlete.aiProgramme&&athlete.aiProgramme.nutrition){
-      var n=athlete.aiProgramme.nutrition;
-      var nutSub=document.getElementById('nutrition-sub');
-      if(nutSub) nutSub.textContent=n.protein_g+'g protein · '+n.daily_calories+' kcal';
+  // v4.7.60: Nutrition tile — Pro only. Renders expanded layout (calories prominent, P/C/F
+  // columns, coach timing note). Free users see a blurred overlay with an unlock CTA.
+  if(typeof _phxRenderNutritionTile === 'function') _phxRenderNutritionTile();
+}
+
+// v4.7.60: render the expanded Nutrition tile. Reads athlete.aiProgramme.nutrition for
+// daily_calories / protein_g / carbs_g / fat_g / timing_notes. Pro-gated: free tier
+// gets the blurred lock overlay over otherwise-rendered macro values.
+function _phxRenderNutritionTile(){
+  var card = document.getElementById('card-nutrition');
+  if(!card) return;
+  var lockBadge = document.getElementById('nutrition-lock-badge');
+  var overlay   = document.getElementById('nutrition-lock-overlay');
+  var calEl     = document.getElementById('nutrition-calories');
+  var proEl     = document.getElementById('nutrition-protein');
+  var carbEl    = document.getElementById('nutrition-carbs');
+  var fatEl     = document.getElementById('nutrition-fat');
+  var noteEl    = document.getElementById('nutrition-note');
+  var n = athlete && athlete.aiProgramme && athlete.aiProgramme.nutrition;
+  if(n){
+    if(calEl)  calEl.innerHTML  = (n.daily_calories||'—')+' <span style="font-size:12px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-weight:600;">kcal/day</span>';
+    if(proEl)  proEl.textContent  = (n.protein_g||'—')+' g';
+    if(carbEl) carbEl.textContent = (n.carbs_g||'—')+' g';
+    if(fatEl)  fatEl.textContent  = (n.fat_g||'—')+' g';
+    // Pull timing notes off programme_summary.nutrition first (coach narrative), then fall
+    // back to nutrition.timing_notes.
+    var ps = athlete.aiProgramme.programme_summary;
+    var timingFromSummary = ps && ps.nutrition && ps.nutrition.timing_notes;
+    var note = (timingFromSummary && String(timingFromSummary).trim()) || (n.timing_notes && String(n.timing_notes).trim()) || '';
+    if(noteEl){
+      if(note){ noteEl.style.display='block'; noteEl.textContent = note; }
+      else { noteEl.style.display='none'; }
     }
+  }
+  var isPro = (typeof hasProAccess === 'function') ? hasProAccess() : false;
+  if(isPro){
+    card.classList.remove('game-card-locked');
+    if(lockBadge){ lockBadge.textContent = 'Pro'; lockBadge.classList.remove('game-card-tier-locked'); }
+    if(overlay) overlay.style.display = 'none';
+  } else {
+    card.classList.add('game-card-locked');
+    if(lockBadge){ lockBadge.textContent = 'Pro only'; lockBadge.classList.add('game-card-tier-locked'); }
+    if(overlay) overlay.style.display = 'flex';
   }
 }
 
@@ -17836,6 +18082,228 @@ function closeCondModal(){
   if(window._condModal) window._condModal.remove();
 }
 
+// ====== v4.7.60: SESSION CUSTOMISATION ======
+// Per-session, per-week customisations let an athlete swap exercises within the same
+// movement pattern or stack a superset partner. Persisted to localStorage under
+// phoenix_session_customisations_w{weekN}_{sessionId}. Applied at session render. v5
+// will replace these hard-coded alternatives with AI-generated picks.
+window.PHX_MOVEMENT_PATTERNS = {
+  squat:           ['Back Squat','Front Squat','Box Squat','Goblet Squat','Bulgarian Split Squat','Hack Squat','Safety Bar Squat'],
+  hinge:           ['Conventional Deadlift','Romanian Deadlift','Trap Bar Deadlift','Sumo Deadlift','Good Morning','Nordic Curl','Kettlebell Swing'],
+  horizontal_push: ['Barbell Bench Press','Dumbbell Bench Press','Floor Press','Incline Dumbbell Press','Push-up Variation','Landmine Press'],
+  horizontal_pull: ['Barbell Row','Dumbbell Row','Cable Row','Chest-Supported Row','Inverted Row','Meadows Row'],
+  vertical_pull:   ['Pull-up','Chin-up','Lat Pulldown','Neutral Grip Pull-up','Cable Pullover'],
+  vertical_push:   ['Overhead Press','Push Press','Dumbbell Shoulder Press','Landmine Press','Arnold Press'],
+  core:            ['Pallof Press','Ab Wheel','RKC Plank','Dead Bug','Hanging Leg Raise','Cable Crunch'],
+  carry:           ['Farmers Walk','Suitcase Carry','Yoke Carry','Sandbag Carry','Waiter Carry'],
+  conditioning:    ['Assault Bike','Row','Run','Ski Erg','Jump Rope','Box Jump','Burpee']
+};
+
+// Antagonist pairing for superset partners. Push → pull, squat → core, etc.
+window.PHX_SUPERSET_PAIRS = {
+  squat:           'core',
+  hinge:           'core',
+  horizontal_push: 'horizontal_pull',
+  horizontal_pull: 'horizontal_push',
+  vertical_push:   'vertical_pull',
+  vertical_pull:   'vertical_push',
+  core:            'carry',
+  carry:           'core',
+  conditioning:    'core'
+};
+
+// Classify an exercise name into a movement pattern key. Returns null if unmatched.
+function _phxClassifyMovement(name){
+  var n = String(name||'').toLowerCase();
+  if(!n) return null;
+  // Order matters: more specific matches first (e.g. "front squat" must not fall through
+  // into a generic "squat" bucket that gets overwritten).
+  if(/squat|lunge|split|step.?up|leg.press|hack/.test(n)) return 'squat';
+  if(/deadlift|rdl|good.?morning|hip.?thrust|swing|nordic|glute.?ham/.test(n)) return 'hinge';
+  if(/bench|push.?up|floor.?press|dip\b|chest.?press|landmine press/.test(n)) return 'horizontal_push';
+  if(/\brow\b|inverted.row|meadows|chest.?supported/.test(n)) return 'horizontal_pull';
+  if(/pull.?up|chin.?up|pulldown|lat.?down|pullover/.test(n)) return 'vertical_pull';
+  if(/overhead|ohp|shoulder.?press|push.?press|arnold|military/.test(n)) return 'vertical_push';
+  if(/carry|farmer|suitcase|yoke|waiter/.test(n)) return 'carry';
+  if(/plank|ab.?wheel|pallof|dead.?bug|leg.?raise|crunch|sit.?up|hollow|v.?up/.test(n)) return 'core';
+  if(/bike|run\b|row\b|erg|burpee|jump|rope|skip/.test(n)) return 'conditioning';
+  return null;
+}
+
+// localStorage key per session per week. Customisations don't bleed across weeks.
+function _phxCustomKey(sessionId, weekN){
+  return 'phoenix_session_customisations_w'+weekN+'_'+sessionId;
+}
+
+function _phxLoadCustomisations(sessionId, weekN){
+  try {
+    var raw = localStorage.getItem(_phxCustomKey(sessionId, weekN));
+    if(!raw) return null;
+    var parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed !== 'object') return null;
+    if(!parsed.swaps) parsed.swaps = {};
+    if(!parsed.supersets) parsed.supersets = {};
+    return parsed;
+  } catch(_e){ return null; }
+}
+
+function _phxSaveCustomisations(sessionId, weekN, data){
+  try {
+    var hasAny = data && ((data.swaps && Object.keys(data.swaps).length) || (data.supersets && Object.keys(data.supersets).length));
+    if(!hasAny){ localStorage.removeItem(_phxCustomKey(sessionId, weekN)); return; }
+    localStorage.setItem(_phxCustomKey(sessionId, weekN), JSON.stringify(data));
+  } catch(_e){ /* quota / private mode — fail silently */ }
+}
+
+function _phxHasCustomisations(sessionId, weekN){
+  var c = _phxLoadCustomisations(sessionId, weekN);
+  return !!(c && ((c.swaps && Object.keys(c.swaps).length) || (c.supersets && Object.keys(c.supersets).length)));
+}
+
+// Return a new exercises[] array with swaps applied and superset partners injected
+// immediately after their parent exercise. Does not mutate the source array.
+function _phxApplyCustomisations(exercises, customs){
+  if(!Array.isArray(exercises)) return exercises;
+  if(!customs) return exercises.slice();
+  var swaps = customs.swaps || {};
+  var supers = customs.supersets || {};
+  var out = [];
+  exercises.forEach(function(ex){
+    if(!ex || !ex.name){ out.push(ex); return; }
+    var clone = Object.assign({}, ex);
+    if(swaps[ex.name]){
+      clone.name = swaps[ex.name];
+      clone._wasSwapped = true;
+      clone._originalName = ex.name;
+    }
+    out.push(clone);
+    if(supers[ex.name]){
+      out.push({
+        name: supers[ex.name],
+        sets: ex.sets || 3,
+        reps: '10-12',
+        rest_sec: ex.rest_sec || 60,
+        load_guidance: 'Light — superset partner',
+        coaching_note: 'Superset with '+ (clone.name || ex.name) +'. Pair tempo, mind the pump.',
+        _isSuperset: true,
+        _supersetParent: ex.name
+      });
+    }
+  });
+  return out;
+}
+
+// Bottom sheet for swap / superset alternatives. Reuses the shared sheet if available,
+// otherwise builds a lightweight modal so this still works in older surfaces that
+// haven't loaded _phxOpenBottomSheet.
+function _phxOpenCustomiseSheet(opts){
+  // opts: {title, subtitle, options:[{label,key}], onSelect}
+  if(typeof _phxOpenBottomSheet === 'function'){
+    _phxOpenBottomSheet({
+      title: opts.title,
+      subtitle: opts.subtitle,
+      options: opts.options.map(function(o){ return {key:o.label, label:o.label}; }),
+      current: null,
+      onSelect: function(key){ opts.onSelect(key); },
+      cancelLabel: 'Cancel'
+    });
+    return;
+  }
+  // Fallback: simple full-screen overlay.
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  var panel = document.createElement('div');
+  panel.style.cssText = 'background:var(--bg2);border-top:1px solid var(--border);border-radius:12px 12px 0 0;padding:20px;width:100%;max-width:520px;max-height:80vh;overflow-y:auto;';
+  panel.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">'+opts.title+'</div>'+
+    '<div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5;">'+(opts.subtitle||'')+'</div>'+
+    '<div id="phx-customise-options" style="display:flex;flex-direction:column;gap:8px;"></div>'+
+    '<button id="phx-customise-cancel" class="btn-secondary" style="width:100%;padding:12px;margin-top:14px;">Cancel</button>';
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  var optsList = panel.querySelector('#phx-customise-options');
+  opts.options.forEach(function(o){
+    var btn = document.createElement('button');
+    btn.className = 'btn-secondary';
+    btn.style.cssText = 'width:100%;padding:14px;margin:0;text-align:left;';
+    btn.textContent = o.label;
+    btn.addEventListener('click', function(){ overlay.remove(); opts.onSelect(o.label); });
+    optsList.appendChild(btn);
+  });
+  panel.querySelector('#phx-customise-cancel').addEventListener('click', function(){ overlay.remove(); });
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+}
+
+// Toggle the session-wide customise mode. Re-renders the session body via openTodaySession()
+// so the buttons appear/disappear cleanly.
+window._phxToggleCustomiseMode = function(){
+  window._phxCustomiseMode = !window._phxCustomiseMode;
+  // Re-render: openTodaySession reads window._todaySession + window._phxCustomiseMode.
+  window._phxWarmupSkipNext = true;
+  try { openTodaySession(); } finally { window._phxWarmupSkipNext = false; }
+};
+
+window._phxSwapExercise = function(originalName){
+  var pattern = _phxClassifyMovement(originalName);
+  if(!pattern || !window.PHX_MOVEMENT_PATTERNS[pattern]){
+    alert('No swap alternatives available for "'+originalName+'".');
+    return;
+  }
+  var alts = window.PHX_MOVEMENT_PATTERNS[pattern]
+    .filter(function(a){ return a.toLowerCase() !== String(originalName).toLowerCase(); })
+    .slice(0, 5);
+  _phxOpenCustomiseSheet({
+    title: 'Swap exercise',
+    subtitle: 'Pick a same-pattern alternative for "'+originalName+'".',
+    options: alts.map(function(a){ return {label: a}; }),
+    onSelect: function(newName){
+      var sess = window._todaySession;
+      if(!sess) return;
+      var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+      var sid = _phxSessionId(sess);
+      var customs = _phxLoadCustomisations(sid, weekN) || {swaps:{}, supersets:{}};
+      customs.swaps[originalName] = newName;
+      _phxSaveCustomisations(sid, weekN, customs);
+      window._phxWarmupSkipNext = true;
+      try { openTodaySession(); } finally { window._phxWarmupSkipNext = false; }
+    }
+  });
+};
+
+window._phxAddSuperset = function(originalName){
+  var pattern = _phxClassifyMovement(originalName);
+  var pairKey = pattern ? window.PHX_SUPERSET_PAIRS[pattern] : null;
+  // If we can't classify, offer a generic core list as the safe default partner.
+  var alts = (pairKey && window.PHX_MOVEMENT_PATTERNS[pairKey]) || window.PHX_MOVEMENT_PATTERNS.core;
+  alts = alts.slice(0, 5);
+  _phxOpenCustomiseSheet({
+    title: 'Add superset partner',
+    subtitle: 'Pair "'+originalName+'" with a complementary movement.',
+    options: alts.map(function(a){ return {label: a}; }),
+    onSelect: function(partnerName){
+      var sess = window._todaySession;
+      if(!sess) return;
+      var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+      var sid = _phxSessionId(sess);
+      var customs = _phxLoadCustomisations(sid, weekN) || {swaps:{}, supersets:{}};
+      customs.supersets[originalName] = partnerName;
+      _phxSaveCustomisations(sid, weekN, customs);
+      window._phxWarmupSkipNext = true;
+      try { openTodaySession(); } finally { window._phxWarmupSkipNext = false; }
+    }
+  });
+};
+
+window._phxResetCustomisations = function(){
+  if(!confirm('Reset this session to the coach plan? Your swaps and supersets will be removed.')) return;
+  var sess = window._todaySession;
+  if(!sess) return;
+  var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  try { localStorage.removeItem(_phxCustomKey(_phxSessionId(sess), weekN)); } catch(_e){}
+  window._phxWarmupSkipNext = true;
+  try { openTodaySession(); } finally { window._phxWarmupSkipNext = false; }
+};
+
 function openTodaySession(){
   // v4.7.8 BUG 1 hardening: every tile-tap entry kills any stale count-in overlay before doing anything,
   // so a leftover overlay from a previous session can never appear before the detail screen renders.
@@ -17898,13 +18366,30 @@ function openTodaySession(){
   // Render the AI session into the session screen
   var body=document.getElementById('session-body-content');
   body.innerHTML='';
+  // v4.7.60: load + apply per-session-per-week customisations (swaps + supersets).
+  var _weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  var _sid = _phxSessionId(sess);
+  var _customs = _phxLoadCustomisations(_sid, _weekN);
+  var _hasCustoms = !!(_customs && ((_customs.swaps && Object.keys(_customs.swaps).length) || (_customs.supersets && Object.keys(_customs.supersets).length)));
+  var _customiseMode = !!window._phxCustomiseMode;
   var hero=document.createElement('div');
   hero.className='session-hero';
-  hero.innerHTML='<div class="sh-tag">'+(sess.day||'Today')+' &middot; '+(sess.session_type||'Training')+'</div>'+
-    '<div class="sh-name">'+(sess.session_type||'Training')+'</div>'+
+  hero.style.position = 'relative';
+  // v4.7.60: Customise button in the session header. Toggles _phxCustomiseMode and re-renders.
+  var customiseBtnLabel = _customiseMode ? 'Done' : 'Customise';
+  var customiseBtnColor = _customiseMode ? 'var(--gold)' : 'var(--text2)';
+  var customiseBtnHTML =
+    '<button onclick="event.stopPropagation();window._phxToggleCustomiseMode()" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.55);color:'+customiseBtnColor+';border:1px solid var(--border2);font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:6px 12px;border-radius:14px;cursor:pointer;z-index:2;">'+customiseBtnLabel+'</button>';
+  var customisedBadgeHTML = _hasCustoms
+    ? '<span style="display:inline-block;margin-left:8px;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);padding:2px 6px;border-radius:3px;vertical-align:middle;">Customised</span>'
+    : '';
+  hero.innerHTML=customiseBtnHTML+
+    '<div class="sh-tag">'+(sess.day||'Today')+' &middot; '+(sess.session_type||'Training')+'</div>'+
+    '<div class="sh-name">'+(sess.session_type||'Training')+customisedBadgeHTML+'</div>'+
     '<div class="sh-detail">'+(sess.exercises||[]).length+' exercises &middot; '+(sess.duration_min||45)+'min</div>';
   body.appendChild(hero);
-  var exercises=sess.exercises||[];
+  // Apply swaps + inject superset partners before rendering the exercise blocks.
+  var exercises = _phxApplyCustomisations(sess.exercises||[], _customs);
   exercises.forEach(function(ex,i){
     var block=document.createElement('div');
     block.className='ex-block';
@@ -18023,12 +18508,35 @@ function openTodaySession(){
           '</div>'+
         '</div>';
     }
+    // v4.7.60: in customise mode, render swap (↔) + add-superset (+) buttons next to the
+    // exercise name. The swap targets the ORIGINAL coach-prescribed name (if this row was
+    // already swapped) so re-swapping is a single click. Superset rows themselves can't
+    // be re-customised — that prevents nested supersets.
+    var customiseControlsHTML = '';
+    if(_customiseMode && !ex._isSuperset){
+      var swapTarget = ex._originalName || ex.name;
+      var swapTargetEsc = String(swapTarget).replace(/'/g, "\\'");
+      customiseControlsHTML =
+        '<div style="display:flex;gap:8px;margin-top:8px;">'+
+          '<button onclick="window._phxSwapExercise(\''+swapTargetEsc+'\')" style="flex:1;padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">&#8646; Swap</button>'+
+          '<button onclick="window._phxAddSuperset(\''+swapTargetEsc+'\')" style="flex:1;padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;">+ Superset</button>'+
+        '</div>';
+    }
+    // v4.7.60: badge swapped/superset rows so the athlete can see at a glance what changed
+    // from the coach plan. Doesn't render anything when ex is unmodified.
+    var customiseBadgeHTML = '';
+    if(ex._wasSwapped){
+      customiseBadgeHTML = '<span style="display:inline-block;margin-left:6px;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);padding:1px 5px;border-radius:3px;vertical-align:middle;">Swapped</span>';
+    } else if(ex._isSuperset){
+      customiseBadgeHTML = '<span style="display:inline-block;margin-left:6px;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);padding:1px 5px;border-radius:3px;vertical-align:middle;">Superset</span>';
+    }
     block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
-      '<div class="ex-name">'+ex.name+'</div>'+
+      '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
       '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
       targetSection+
+      customiseControlsHTML+
       '</div></div>'+
       setsHTML;
     body.appendChild(block);
@@ -18076,6 +18584,37 @@ function openTodaySession(){
   notesBlock.className='session-notes-block';
   notesBlock.innerHTML='<div class="section-hdr">Session Notes</div><textarea class="session-notes-input" id="session-notes-field" rows="3" placeholder="How did it feel? Any modifications..."></textarea>';
   body.appendChild(notesBlock);
+  // v4.7.60: "Reset to coach plan" \u2014 only rendered when this session has stored customisations.
+  // Lives below the notes block, above the finish button.
+  if(_hasCustoms){
+    var resetBlock = document.createElement('div');
+    resetBlock.style.cssText = 'margin:0 20px 12px;';
+    var resetBtn = document.createElement('button');
+    resetBtn.className = 'btn-secondary';
+    resetBtn.style.cssText = 'width:100%;padding:12px;margin:0;font-size:12px;letter-spacing:1px;';
+    resetBtn.textContent = 'Reset to coach plan';
+    resetBtn.addEventListener('click', function(){ window._phxResetCustomisations(); });
+    resetBlock.appendChild(resetBtn);
+    body.appendChild(resetBlock);
+  }
+  // v4.7.60: "Fuel for recovery" \u2014 surface today's protein target right above the finish button
+  // so the athlete sees the next-step nutrition reminder before they leave the session screen.
+  // Pro-gated; free users don't see this block.
+  try {
+    var nut = athlete && athlete.aiProgramme && athlete.aiProgramme.nutrition;
+    var isPro = (typeof hasProAccess === 'function') ? hasProAccess() : false;
+    if(nut && isPro && (nut.protein_g || nut.daily_calories)){
+      var fuelBlock = document.createElement('div');
+      fuelBlock.style.cssText = 'margin:0 20px 12px;padding:14px 16px;background:linear-gradient(135deg,var(--bg2) 0%,#1a1410 100%);border:1px solid var(--gold);border-radius:var(--radius);';
+      var proteinTxt = nut.protein_g ? (nut.protein_g + 'g protein') : '';
+      var calTxt = nut.daily_calories ? (nut.daily_calories + ' kcal') : '';
+      var stats = [proteinTxt, calTxt].filter(Boolean).join(' \u00b7 ');
+      fuelBlock.innerHTML =
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Fuel for recovery</div>'+
+        '<div style="font-size:13px;color:var(--text);line-height:1.6;">Hit your daily protein target \u2014 <strong style="color:var(--gold);">'+stats+'</strong>. Get a meal in within the next 90 minutes.</div>';
+      body.appendChild(fuelBlock);
+    }
+  } catch(_e){ /* non-fatal */ }
   var finBtn=document.createElement('button');
   finBtn.className='finish-btn';
   finBtn.textContent='Complete Session \u2713';

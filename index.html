@@ -1738,8 +1738,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Phoenix Coach</div>
           <div class="game-card-title-sm">Core</div>
-          <div class="game-card-sub-sm">AI Generated</div>
-          <div class="game-card-action-sm">Coach generates →</div>
+          <!-- v4.7.61: format badge populated by _phxRenderCoreTileFormat() during renderTodayScreen.
+               Reflects today's coach-assigned format (CIRCUIT/STRENGTH). -->
+          <div class="game-card-sub-sm" id="card-core-sub">AI Generated</div>
+          <div class="game-card-action-sm" id="card-core-action">Coach generates →</div>
+          <div id="card-core-fmt-badge" style="position:absolute;top:8px;right:8px;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:3px 6px;border-radius:3px;border:1px solid var(--gold);color:var(--gold);background:rgba(0,0,0,0.4);display:none;">CIRCUIT</div>
         </div>
       </div>
       <!-- v4.7.60: Conditioning tile (renamed from WOD Library to match the locked Row 3 spec:
@@ -3516,12 +3519,21 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
-<!-- CORE PICKER MODAL -->
+<!-- v4.7.61 CORE PICKER MODAL — two-tab layout (Circuit / Strength).
+     The tab strip switches the visible session list; each tab has its own
+     "Generate today's …" AI button at the bottom. -->
 <div class="modal-overlay" id="core-modal">
 <div class="modal-sheet">
-  <div class="modal-title">Select Session</div>
-  <div class="modal-subtitle">Core Training</div>
+  <div class="modal-title">Core Session</div>
+  <div class="modal-subtitle">Pick a format</div>
+  <div id="core-tab-strip" style="display:flex;gap:6px;padding:4px 20px 12px;">
+    <button type="button" id="core-tab-circuit" class="core-tab active" onclick="switchCoreTab('circuit')" style="flex:1;padding:10px 6px;background:var(--gold);border:1px solid var(--gold);border-radius:var(--radius);color:var(--bg);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Circuit</button>
+    <button type="button" id="core-tab-strength" class="core-tab" onclick="switchCoreTab('strength')" style="flex:1;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Strength</button>
+  </div>
   <div id="core-options-container"></div>
+  <div style="padding:8px 20px 4px;">
+    <button id="core-tab-ai-btn" type="button" onclick="generateDailyCoreForCurrentTab()" style="width:100%;padding:12px;background:transparent;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Generate today's Circuit</button>
+  </div>
   <button class="modal-close" onclick="closeCoreModal()">Cancel</button>
 </div>
 </div>
@@ -3564,7 +3576,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.60';
+var APP_VERSION='4.7.61';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4888,47 +4900,157 @@ async function backgroundSync(){
 // ====== DATA ======
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-const CORE_SESSIONS = [
-  {num:1, exercises:[
-    {name:'Hanging Knee Raise',reps:'10',load:'BW'},
-    {name:'Med Ball Russian Twist',reps:'12',load:'20kg'},
-    {name:'Explosive Sit Up',reps:'12',load:'BW'},
-    {name:'Front Plank',reps:'30 sec',load:'BW'}
+// v4.7.61 — Core session redesign. Two libraries instead of one mixed pool:
+//   CORE_CIRCUIT_SESSIONS  — AMRAP/Chipper format, metabolic, rotational-heavy
+//   CORE_STRENGTH_SESSIONS — Sets × Reps, loaded movements, superset pairings
+// Coach assigns one or the other per day; athlete can switch via the picker.
+const CORE_CIRCUIT_SESSIONS = [
+  {num:1, name:'Rotational AMRAP', format:'AMRAP 20', duration_min:20, exercises:[
+    {name:'Med Ball Russian Twist', reps:'20', load:'8kg', cue:'Heel-to-floor, rotate through ribs not shoulders.'},
+    {name:'Mountain Climber',       reps:'30', load:'BW',  cue:'Hips low — drive knees, don\'t bounce.'},
+    {name:'Pallof Press',           reps:'10/side', load:'Band/cable', cue:'Anti-rotation — fight the pull.'},
+    {name:'Hollow Rock',            reps:'15', load:'BW',  cue:'Low back glued to floor.'},
+    {name:'Cable/Band Twist',       reps:'12/side', load:'Light cable', cue:'Drive from the hip, not the arms.'}
   ]},
-  {num:2, exercises:[
-    {name:'Hanging Leg Raise',reps:'10',load:'BW'},
-    {name:'Med Ball Slam',reps:'10',load:'20kg'},
-    {name:'Box Jumps',reps:'10',load:'18"'},
-    {name:'Explosive Sit Ups',reps:'12',load:'BW'}
+  {num:2, name:'Chipper Core',     format:'Chipper', duration_min:18, exercises:[
+    {name:'Hanging Knee Raise',         reps:'30 total', load:'BW',   cue:'Curl pelvis up — don\'t swing.'},
+    {name:'Woodchop (Cable, high→low)', reps:'20/side',  load:'Light cable', cue:'Eyes follow the hands.'},
+    {name:'Med Ball Rotational Slam',   reps:'20 total', load:'6kg',  cue:'Pivot back foot — full rotation.'},
+    {name:'V-Up',                       reps:'25 total', load:'BW',   cue:'Reach long before the crunch.'},
+    {name:'Side Plank w/ Rotation',     reps:'15/side',  load:'BW',   cue:'Thread the needle, square hips back.'},
+    {name:'Burpee',                     reps:'20 total', load:'BW',   cue:'Chest to floor, full extension up.'}
   ]},
-  {num:3, exercises:[
-    {name:'KB Swing',reps:'15',load:'24kg'},
-    {name:'Wall Ball Sit Ups',reps:'15',load:'15kg'},
-    {name:'OH Plate Carry',reps:'1 length',load:'20kg'},
-    {name:'Cherry Picker',reps:'10',load:'BW'}
+  {num:3, name:'Power Circuit',    format:'AMRAP 15', duration_min:15, exercises:[
+    {name:'KB Swing',                reps:'15', load:'20kg', cue:'Hinge — let the hips throw the bell.'},
+    {name:'Med Ball Rotational Slam',reps:'10/side', load:'6kg', cue:'Wind up — generate hip torque.'},
+    {name:'Tuck-Up',                 reps:'12', load:'BW',  cue:'Knees and chest meet over the middle.'},
+    {name:'Landmine Rotation',       reps:'10/side', load:'15kg bar', cue:'Hips pivot, arms stay long.'}
   ]},
-  {num:4, exercises:[
-    {name:'Ab Roll Out',reps:'10',load:'BW'},
-    {name:'Shoulder Stand',reps:'10',load:'BW'},
-    {name:'Side Plank Twists',reps:'20',load:'BW'},
-    {name:'Reverse Hypers',reps:'10',load:'BW'}
+  {num:4, name:'Anti-Rotation Engine', format:'AMRAP 20', duration_min:20, exercises:[
+    {name:'Pallof Press',            reps:'12/side', load:'Cable/band', cue:'Press straight from sternum, ribs down.'},
+    {name:'Copenhagen Plank',        reps:'20 sec/side', load:'BW',     cue:'Top leg drives down — squeeze adductors.'},
+    {name:'Oblique Crunch',          reps:'15/side', load:'BW',         cue:'Slow on the way down.'},
+    {name:'Box Jump',                reps:'10', load:'24"',              cue:'Soft landing — step down, don\'t jump down.'},
+    {name:'Hollow Hold',             reps:'30 sec', load:'BW',           cue:'Press low back into floor.'}
+  ]},
+  {num:5, name:'Gymnastics Chipper', format:'Chipper', duration_min:20, exercises:[
+    {name:'Jump Rope',          reps:'50', load:'BW', cue:'Wrists drive the rope — not the arms.'},
+    {name:'Hollow Rock',        reps:'25', load:'BW', cue:'Maintain banana shape.'},
+    {name:'V-Up',               reps:'20', load:'BW', cue:'Touch toes at the top.'},
+    {name:'Russian Twist',      reps:'40 total', load:'6kg', cue:'Twist through the trunk, not the arms.'},
+    {name:'Plank to Side Plank',reps:'10/side', load:'BW', cue:'Stack hips — no rotation hunt.'},
+    {name:'Dead Bug',           reps:'10/side', load:'BW', cue:'Low back stays flat the whole rep.'}
+  ]},
+  {num:6, name:'Hinge & Rotate', format:'AMRAP 18', duration_min:18, exercises:[
+    {name:'KB Swing',             reps:'20', load:'24kg', cue:'Snap the hips — not a squat-swing.'},
+    {name:'Cable/Band Twist',     reps:'10/side', load:'Light cable', cue:'Steady tempo — no momentum.'},
+    {name:'Mountain Climber',     reps:'40 total', load:'BW',       cue:'Knees drive forward, not side-to-side.'},
+    {name:'Side Plank w/ Rotation', reps:'12/side', load:'BW',      cue:'Reach long before threading under.'},
+    {name:'Burpee',               reps:'8', load:'BW',              cue:'Cycle smooth — preserve breathing.'}
   ]}
 ];
 
-// v4.7.7 FIX 4: deterministic daily core selection — same date-hash pattern as PHOENIX_WOD_LIBRARY.getDailyWOD.
-// Returns the same core session for the entire local calendar day; rotates at midnight.
-function getDailyCore(date){
+const CORE_STRENGTH_SESSIONS = [
+  {num:1, name:'Loaded Core A', format:'4 × 8-12', duration_min:25, exercises:[
+    {name:'Ab Wheel Rollout',          sets:4, reps:'8-10', load:'BW',     rest_sec:90,  cue:'Ribs down, full extension at the bottom.'},
+    {name:'Weighted Cable Crunch',     sets:4, reps:'12',   load:'30-40kg',rest_sec:75,  cue:'Curl the spine — hips stay back.'},
+    {name:'Hanging Leg Raise',         sets:3, reps:'8-10', load:'BW',     rest_sec:90,  cue:'Toes to bar — control the descent.'},
+    {name:'Pallof Press',              sets:3, reps:'10/side', load:'Cable',rest_sec:60, cue:'Press slow, hold for 2 sec at end range.'}
+  ]},
+  {num:2, name:'Rotational Strength', format:'4 × 6-8/side', duration_min:28, exercises:[
+    {name:'Landmine Rotation',         sets:4, reps:'8/side', load:'15-20kg bar', rest_sec:75, cue:'Pivot back foot — drive from the hip.'},
+    {name:'Cable Woodchop (high→low)', sets:3, reps:'10/side',load:'Cable',       rest_sec:60, cue:'Brace before each pull.'},
+    {name:'Med Ball Rotational Throw', sets:3, reps:'6/side', load:'6-8kg',       rest_sec:90, cue:'Throw with intent — full hip turn.'},
+    {name:'Copenhagen Plank',          sets:3, reps:'20 sec/side', load:'BW',     rest_sec:45, cue:'Top leg actively pulls down.'}
+  ]},
+  {num:3, name:'Superset Engine', format:'3 × superset', duration_min:25, exercises:[
+    {name:'A1: Ab Wheel Rollout',      sets:3, reps:'8', load:'BW',     rest_sec:0,  cue:'Slow eccentric, drive elbows back to thighs.'},
+    {name:'A2: Face Pull',             sets:3, reps:'15', load:'Cable', rest_sec:90, cue:'External rotation at the end range — pair sets back-to-back.'},
+    {name:'B1: Hanging Leg Raise',     sets:3, reps:'10', load:'BW',    rest_sec:0,  cue:'Curl pelvis — no swing.'},
+    {name:'B2: Band Pull-Apart',       sets:3, reps:'20', load:'Light band', rest_sec:75, cue:'Squeeze rear delts at the end.'}
+  ]},
+  {num:4, name:'Heavy Holds & Carries', format:'4 × 30-45 sec', duration_min:25, exercises:[
+    {name:'RKC Plank',                 sets:4, reps:'30 sec', load:'BW',        rest_sec:60, cue:'Squeeze everything — fists, glutes, quads.'},
+    {name:'Suitcase Carry',            sets:4, reps:'30m/side', load:'24-32kg KB', rest_sec:75, cue:'Don\'t lean — stand tall under the load.'},
+    {name:'Pallof Press (Tall Kneeling)', sets:3, reps:'10/side', load:'Cable', rest_sec:60, cue:'Anti-rotation hold for 2 sec.'},
+    {name:'Weighted Sit-Up',           sets:3, reps:'10',     load:'10-15kg plate', rest_sec:75, cue:'Plate held at chest — control the curl.'}
+  ]},
+  {num:5, name:'Advanced Core Strength', format:'5 × 5-8', duration_min:30, exercises:[
+    {name:'Dragon Flag (Negative)',    sets:5, reps:'5',  load:'BW',     rest_sec:120, cue:'5 sec eccentric — body in one line.'},
+    {name:'Toes to Bar',               sets:4, reps:'6-8',load:'BW',     rest_sec:90,  cue:'No kip — strict only.'},
+    {name:'Weighted Cable Crunch',     sets:4, reps:'10', load:'40-50kg',rest_sec:75,  cue:'Curl into a ball — slow on the eccentric.'},
+    {name:'Landmine Rotation',         sets:3, reps:'8/side', load:'20kg bar', rest_sec:75, cue:'Drive from the hip — arms are levers.'}
+  ]},
+  {num:6, name:'GHD & Loaded Twists', format:'4 × 10-12', duration_min:25, exercises:[
+    {name:'GHD Sit-Up',                sets:4, reps:'10-12', load:'BW',         rest_sec:90, cue:'Touch the floor behind, sit straight up — no whip.'},
+    {name:'Weighted Russian Twist',    sets:4, reps:'20 total', load:'10-15kg plate', rest_sec:60, cue:'Tap the plate each side — controlled.'},
+    {name:'Cable Woodchop (low→high)', sets:3, reps:'10/side',  load:'Cable',   rest_sec:60, cue:'Drive from the floor up through the trunk.'},
+    {name:'Hollow Body Hold',          sets:3, reps:'30-45 sec', load:'BW',     rest_sec:60, cue:'Lower back pressed flat — no daylight.'}
+  ]}
+];
+
+// v4.7.61 — backwards-compat alias for any code that still reads CORE_SESSIONS.
+// The new picker uses the split libraries; this fallback lets legacy paths render the
+// circuit set (the closest match to the historic AMRAP-only behaviour).
+const CORE_SESSIONS = CORE_CIRCUIT_SESSIONS;
+
+// v4.7.7 FIX 4 / v4.7.61: deterministic daily core selection. Now format-aware —
+// returns a session from the matching library based on `format` ('circuit' | 'strength').
+// Same date-hash model as PHOENIX_WOD_LIBRARY.getDailyWOD, rotates at midnight.
+function getDailyCore(date, format){
+  var fmt = (format === 'strength') ? 'strength' : 'circuit';
+  var lib = (fmt === 'strength') ? CORE_STRENGTH_SESSIONS : CORE_CIRCUIT_SESSIONS;
   var d = date || new Date();
   var dateStr = d.getFullYear()+'-'+
     String(d.getMonth()+1).padStart(2,'0')+'-'+
-    String(d.getDate()).padStart(2,'0')+'-core'; // suffix so the daily WOD and daily core don't share a hash
+    String(d.getDate()).padStart(2,'0')+'-core-'+fmt; // suffix keeps daily WOD / circuit / strength hashes independent
   var hash = 0;
   for(var i=0;i<dateStr.length;i++){
     hash = ((hash<<5)-hash) + dateStr.charCodeAt(i);
     hash |= 0;
   }
-  var idx = Math.abs(hash) % CORE_SESSIONS.length;
-  return CORE_SESSIONS[idx];
+  var idx = Math.abs(hash) % lib.length;
+  var pick = lib[idx];
+  // Annotate the returned session with its format so downstream renderers (preview sheet,
+  // session screen, logger) can branch without re-deriving it.
+  return Object.assign({}, pick, {_format: fmt});
+}
+
+// v4.7.61 — pick today's coach-assigned core format. Reads athlete.aiProgramme.week.sessions
+// for a "Core" entry on today; falls back to a context-derived default (strength after lifting
+// day, circuit after/around conditioning day, alternating otherwise).
+function getTodayCoreFormat(){
+  try {
+    var prog = athlete && athlete.aiProgramme;
+    var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+    if(prog && prog.week && Array.isArray(prog.week.sessions)){
+      // Prefer an explicit core_session_type from the coach if present.
+      var todays = prog.week.sessions.filter(function(s){
+        var dayKey = String(s.day||'').replace(/\s+(am|pm).*$/i,'').trim();
+        var canon = dayKey.charAt(0).toUpperCase() + dayKey.slice(1).toLowerCase();
+        return canon === todayName;
+      });
+      for(var i=0;i<todays.length;i++){
+        var sess = todays[i];
+        var t = sess && sess.core_session_type;
+        if(t === 'circuit' || t === 'strength') return t;
+        var st = String(sess && sess.session_type || '').toLowerCase();
+        if(st === 'core'){
+          // No explicit core_session_type — look at the day's other sessions for context.
+          for(var j=0;j<todays.length;j++){
+            var st2 = String(todays[j].session_type||'').toLowerCase();
+            if(st2.indexOf('lift')>=0 || st2.indexOf('strength')>=0) return 'circuit';
+            if(st2 === 'wod' || st2.indexOf('condition')>=0) return 'strength';
+          }
+        }
+      }
+    }
+    // No programme info — fall back to date parity so the default still rotates.
+    var d = new Date();
+    return (d.getDate() % 2 === 0) ? 'strength' : 'circuit';
+  } catch(e){
+    return 'circuit';
+  }
 }
 
 const CF_SAT = ['Base','Cindy','Danny','Fran'];
@@ -5419,24 +5541,80 @@ function makeTile(timeLabel,s){
 }
 
 // ====== CORE MODAL ======
-function openCoreModal(){
-  var container=document.getElementById('core-options-container');
-  container.innerHTML='';
-  CORE_SESSIONS.forEach(function(c){
-    var div=document.createElement('div');
-    div.className='core-option';
-    var rows=c.exercises.map(function(e){
-      return '<div class="core-ex-row"><span class="core-ex-name">'+e.name+'</span><span class="core-ex-reps">'+e.reps+' &middot; '+e.load+'</span></div>';
-    }).join('');
-    div.innerHTML='<div class="core-option-header"><div class="core-option-name">Core '+c.num+'</div><div class="core-option-badge">20 min AMRAP</div></div>'+rows;
-    div.addEventListener('click',function(){
-      openCoreSessionFromPicker(c.num);
+// v4.7.61 — two-tab picker. `currentCoreTab` is the active library being displayed.
+var currentCoreTab = 'circuit';
+
+function openCoreModal(preferFormat){
+  // Reset the modal sheet to the picker layout (fresh open after AI/preview overrides).
+  var overlay = document.getElementById('core-modal');
+  var sheet   = overlay.querySelector('.modal-sheet');
+  sheet.innerHTML =
+    '<div class="modal-title">Core Session</div>'+
+    '<div class="modal-subtitle">Pick a format</div>'+
+    '<div id="core-tab-strip" style="display:flex;gap:6px;padding:4px 20px 12px;">'+
+      '<button type="button" id="core-tab-circuit" class="core-tab" onclick="switchCoreTab(\'circuit\')" style="flex:1;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Circuit</button>'+
+      '<button type="button" id="core-tab-strength" class="core-tab" onclick="switchCoreTab(\'strength\')" style="flex:1;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Strength</button>'+
+    '</div>'+
+    '<div id="core-options-container"></div>'+
+    '<div style="padding:8px 20px 4px;">'+
+      '<button id="core-tab-ai-btn" type="button" onclick="generateDailyCoreForCurrentTab()" style="width:100%;padding:12px;background:transparent;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Generate today\'s Circuit</button>'+
+    '</div>'+
+    '<button class="modal-close" onclick="closeCoreModal()">Cancel</button>';
+
+  var initial = (preferFormat === 'strength') ? 'strength' : 'circuit';
+  currentCoreTab = initial;
+  renderCoreTab(initial);
+  overlay.classList.add('active');
+}
+
+function switchCoreTab(fmt){
+  currentCoreTab = (fmt === 'strength') ? 'strength' : 'circuit';
+  renderCoreTab(currentCoreTab);
+}
+
+function renderCoreTab(fmt){
+  var circuitBtn = document.getElementById('core-tab-circuit');
+  var strengthBtn= document.getElementById('core-tab-strength');
+  var aiBtn      = document.getElementById('core-tab-ai-btn');
+  function setActive(btn, active){
+    if(!btn) return;
+    btn.style.background = active ? 'var(--gold)' : 'var(--bg)';
+    btn.style.borderColor= active ? 'var(--gold)' : 'var(--border)';
+    btn.style.color      = active ? 'var(--bg)'   : 'var(--text2)';
+  }
+  setActive(circuitBtn,  fmt === 'circuit');
+  setActive(strengthBtn, fmt === 'strength');
+  if(aiBtn) aiBtn.textContent = (fmt === 'strength') ? "Generate today's Strength session" : "Generate today's Circuit";
+
+  var lib = (fmt === 'strength') ? CORE_STRENGTH_SESSIONS : CORE_CIRCUIT_SESSIONS;
+  var container = document.getElementById('core-options-container');
+  if(!container) return;
+  container.innerHTML = '';
+  lib.forEach(function(c){
+    var div = document.createElement('div');
+    div.className = 'core-option';
+    // Show 2-3 exercise names as a preview rather than a full row dump — keeps the picker scannable.
+    var previewNames = (c.exercises||[]).slice(0,3).map(function(e){ return e.name; });
+    var preview = previewNames.length
+      ? '<div class="core-ex-row"><span class="core-ex-name" style="font-size:11px;color:var(--text3);text-transform:none;letter-spacing:0;">'+previewNames.join(' · ')+'</span></div>'
+      : '';
+    div.innerHTML =
+      '<div class="core-option-header">'+
+        '<div class="core-option-name">'+c.name+'</div>'+
+        '<div class="core-option-badge">'+c.format+' · '+c.duration_min+' min</div>'+
+      '</div>'+ preview;
+    div.addEventListener('click', function(){
+      openCoreSessionFromPicker(c.num, fmt);
     });
     container.appendChild(div);
   });
-  document.getElementById('core-modal').classList.add('active');
 }
+
 function closeCoreModal(){document.getElementById('core-modal').classList.remove('active');}
+
+function generateDailyCoreForCurrentTab(){
+  generateDailyCore(currentCoreTab);
+}
 
 // ====== v4.7.57 SHARED BOTTOM SHEET ======
 // Opts: {title, subtitle, options:[{value, label, sub}], current, onSelect(value), cancelLabel}
@@ -5529,45 +5707,58 @@ window._phxOpenWodTypePicker = function(o){
 };
 
 // ====== GENERATE DAILY CORE (AI) ======
-function generateDailyCore(){
-  // v4.7.7 FIX 4: default daily core is now a date-hash pick from the static library (same model as WODs).
-  // Shows the picked session in a preview sheet with Start / Switch / AI Generate.
+// v4.7.61 — accepts a format argument: 'circuit' (AMRAP/Chipper) or 'strength' (sets × reps).
+// When called with no argument we fall back to the coach-assigned format for today, so the
+// Core tile (which calls generateDailyCore()) still gives the athlete a single-tap entry.
+function generateDailyCore(format){
+  var fmt = (format === 'strength' || format === 'circuit') ? format : getTodayCoreFormat();
   var overlay=document.getElementById('core-modal');
   var sheet=overlay.querySelector('.modal-sheet');
-  var todayCore = getDailyCore();
+  var todayCore = getDailyCore(undefined, fmt);
   if(todayCore){
+    var isStrength = (fmt === 'strength');
     var rows = todayCore.exercises.map(function(e){
+      // Strength sessions render sets × reps × load; circuit renders reps × load.
+      var right;
+      if(isStrength){
+        right = (e.sets ? e.sets+' × ' : '') + (e.reps||'') + (e.load ? ' · '+e.load : '');
+      } else {
+        right = (e.reps||'') + ' · ' + phxFormatHeight(e.load||'BW');
+      }
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">'+
         '<div style="font-family:var(--font-d);font-size:14px;color:var(--text);text-transform:uppercase;">'+e.name+'</div>'+
-        '<div style="font-size:12px;color:var(--text2);">'+e.reps+' · '+phxFormatHeight(e.load)+'</div>'+
+        '<div style="font-size:12px;color:var(--text2);text-align:right;">'+right+'</div>'+
       '</div>';
     }).join('');
-    sheet.innerHTML='<div class="modal-title">Today\'s Core</div><div class="modal-subtitle">Core '+todayCore.num+' — AMRAP 20</div>'+
+    var subtitle = todayCore.name+' — '+(isStrength?'STRENGTH':'CIRCUIT')+' · '+todayCore.format+' · '+todayCore.duration_min+' min';
+    sheet.innerHTML='<div class="modal-title">Today\'s Core</div><div class="modal-subtitle">'+subtitle+'</div>'+
       '<div style="padding:10px 20px;">'+rows+'</div>'+
       '<div style="padding:10px 20px 16px;display:flex;gap:10px;">'+
         '<button onclick="closeCoreModal()" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Cancel</button>'+
-        '<button onclick="closeCoreModal();openCoreModal();" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Switch / Library</button>'+
+        '<button onclick="closeCoreModal();openCoreModal(\''+fmt+'\');" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Switch / Library</button>'+
         '<button id="core-today-start" style="flex:1.2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:var(--bg);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Start Session</button>'+
       '</div>'+
       '<div style="padding:0 20px 16px;text-align:center;">'+
-        '<button onclick="_generateCoreFromAI()" style="background:none;border:none;color:var(--text3);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;">Or generate a fresh AI session</button>'+
+        '<button onclick="_generateCoreFromAI(\''+fmt+'\')" style="background:none;border:none;color:var(--text3);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;">Or generate a fresh AI '+(isStrength?'Strength':'Circuit')+' session</button>'+
       '</div>';
     overlay.classList.add('active');
     var startBtn=document.getElementById('core-today-start');
     if(startBtn) startBtn.addEventListener('click',function(){
       closeCoreModal();
-      openCoreSessionFromPicker(todayCore.num);
+      openCoreSessionFromPicker(todayCore.num, fmt);
     });
     return;
   }
-  // No library available — fall back to AI generation
-  _generateCoreFromAI();
+  // No library available — fall back to AI generation for the resolved format.
+  _generateCoreFromAI(fmt);
 }
 
-function _generateCoreFromAI(){
+function _generateCoreFromAI(format){
+  var fmt = (format === 'strength') ? 'strength' : 'circuit';
+  var isStrength = (fmt === 'strength');
   var overlay=document.getElementById('core-modal');
   var sheet=overlay.querySelector('.modal-sheet');
-  sheet.innerHTML='<div class="modal-title">Generating Session</div><div class="modal-subtitle">Core Training</div>'+
+  sheet.innerHTML='<div class="modal-title">Generating Session</div><div class="modal-subtitle">'+(isStrength?'Core Strength':'Core Circuit')+'</div>'+
     '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;">'+
     '<div class="core-gen-spinner" style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px;"></div>'+
     '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:2px;color:var(--text2);text-transform:uppercase;">Building your session...</div>'+
@@ -5578,13 +5769,35 @@ function _generateCoreFromAI(){
   var today=new Date();
   var dateStr=today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 
+  // v4.7.61 \u2014 two prompts, one per format. Both demand JSON-only output so the response is parseable.
+  var prompt;
+  if(isStrength){
+    prompt = 'Generate a core STRENGTH session (sets x reps, loaded movements, quality over speed) for '+dateStr+'. '+
+      'Duration 20-30 minutes, no AMRAP/chipper format - strict sets and rest between sets. '+
+      'Include at least one loaded movement (Ab Wheel Rollout, Hanging Leg Raise, Weighted Cable Crunch, Dragon Flag, GHD Sit-Up, Toes to Bar, RKC Plank, Copenhagen Plank), '+
+      'at least one rotational strength movement (Landmine Rotation, Pallof Press, Cable Woodchop, Weighted Russian Twist, Med Ball Rotational Throw), '+
+      'and at least one superset pairing (label A1/A2 or B1/B2 in the exercise name; pair push/pull patterns with core - examples: Ab Wheel + Face Pull, Hanging Leg Raise + Band Pull-Apart). '+
+      'Return ONLY valid JSON, no commentary, in this exact shape: '+
+      '{"name":"<session name>","format":"4 x 8-12","duration_min":25,"exercises":[{"name":"<exercise>","sets":<int>,"reps":"<reps>","load":"<load>","rest_sec":<int>,"coaching_note":"<one short cue>"}]}. '+
+      '4-6 exercises total. Use "BW" for bodyweight load.';
+  } else {
+    prompt = 'Generate a core CIRCUIT session (AMRAP or Chipper, metabolic, higher rep, rotational-heavy) for '+dateStr+'. '+
+      'Duration 15-20 minutes. Pick exactly one format value: "AMRAP 15", "AMRAP 18", "AMRAP 20", or "Chipper". '+
+      'Include AT LEAST 2 rotational movements (Russian Twist, Woodchop, Pallof Press, Med Ball Rotational Slam, Landmine Rotation, Copenhagen Plank, Oblique Crunch, Side Plank with Rotation, Cable/Band Twist). '+
+      'May include dynamic movements (Mountain Climber, V-Up, Hollow Rock, Tuck-Up, Burpee, Box Jump, Jump Rope) and holds (Hollow Hold, L-Sit, Plank variation, Dead Bug). '+
+      'Scoring: AMRAP score = rounds.reps; Chipper score = time to completion. '+
+      'Return ONLY valid JSON, no commentary, in this exact shape: '+
+      '{"name":"<session name>","format":"AMRAP 20","duration_min":20,"score_format":"<rounds.reps or time>","exercises":[{"name":"<exercise>","reps":"<reps>","load":"<load>","coaching_note":"<one short cue>"}]}. '+
+      '4-6 exercises total. Use "BW" for bodyweight load.';
+  }
+
   fetch('https://phoenix-coach.jon-d87.workers.dev',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
       model:'claude-sonnet-4-5',
-      max_tokens:1000,
-      messages:[{role:'user',content:'Generate a daily 20-minute AMRAP core and gymnastics session for '+dateStr+'. Return ONLY valid JSON with no explanation, in this exact format: {"name":"<session name>","format":"AMRAP 20","exercises":[{"name":"<exercise>","reps":"<reps>","load":"<load>"}]}. Include 4-5 exercises mixing core strength, gymnastics holds, and dynamic movements. Vary difficulty and use equipment like kettlebells, med balls, ab wheel, rings where appropriate. Use bodyweight (BW) for load when no equipment is needed.'}]
+      max_tokens:1200,
+      messages:[{role:'user',content:prompt}]
     })
   })
   .then(function(res){
@@ -5596,14 +5809,21 @@ function _generateCoreFromAI(){
     var jsonMatch=text.match(/\{[\s\S]*\}/);
     if(!jsonMatch) throw new Error('No JSON in response');
     var session=JSON.parse(jsonMatch[0]);
-    // Show preview modal with exercises
+    // Render preview rows \u2014 strength shows sets \u00d7 reps \u00d7 load, circuit shows reps + load.
     var rows=session.exercises.map(function(e){
+      var right;
+      if(isStrength){
+        right = (e.sets ? e.sets+' \u00d7 ' : '') + (e.reps||'') + (e.load ? ' \u00b7 '+e.load : '');
+      } else {
+        right = (e.reps||'') + ' \u00b7 ' + (e.load||'BW');
+      }
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">'+
         '<div style="font-family:var(--font-d);font-size:14px;color:var(--text);text-transform:uppercase;">'+e.name+'</div>'+
-        '<div style="font-size:12px;color:var(--text2);">'+e.reps+' \u00b7 '+e.load+'</div>'+
+        '<div style="font-size:12px;color:var(--text2);text-align:right;">'+right+'</div>'+
         '</div>';
     }).join('');
-    sheet.innerHTML='<div class="modal-title">'+session.name+'</div><div class="modal-subtitle">Core Training \u2014 AMRAP 20</div>'+
+    var subtitle = (isStrength?'Core Strength':'Core Circuit')+' \u2014 '+(session.format||(isStrength?'Sets x Reps':'AMRAP'));
+    sheet.innerHTML='<div class="modal-title">'+session.name+'</div><div class="modal-subtitle">'+subtitle+'</div>'+
       '<div style="padding:10px 20px;">'+rows+'</div>'+
       '<div style="padding:10px 20px 20px;display:flex;gap:10px;">'+
       '<button onclick="closeCoreModal()" style="flex:1;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Cancel</button>'+
@@ -5611,7 +5831,7 @@ function _generateCoreFromAI(){
       '</div>';
     document.getElementById('core-preview-start').addEventListener('click',function(){
       closeCoreModal();
-      coreSession={num:'AI',exercises:session.exercises};
+      coreSession=Object.assign({num:'AI', _format:fmt, name:session.name, format:session.format, duration_min:session.duration_min||(isStrength?25:20)}, {exercises:session.exercises});
       coreLog=[];
       coreExIdx=0;
       coreRepIdx=0;
@@ -5619,12 +5839,8 @@ function _generateCoreFromAI(){
     });
   })
   .catch(function(err){
-    console.warn('Core generation failed, falling back to static:',err);
-    // Restore modal to normal picker
-    sheet.innerHTML='<div class="modal-title">Select Session</div><div class="modal-subtitle">Core Training</div>'+
-      '<div id="core-options-container"></div>'+
-      '<button class="modal-close" onclick="closeCoreModal()">Cancel</button>';
-    openCoreModal();
+    console.warn('Core generation failed, falling back to library:',err);
+    openCoreModal(fmt);
   });
 }
 
@@ -7202,13 +7418,18 @@ var coreSession=null;
 var coreLog=[];
 var corePrepInterval=null;
 
-function openCoreSessionFromPicker(coreNum){
+function openCoreSessionFromPicker(coreNum, format){
   closeCoreModal();
-  coreSession=CORE_SESSIONS[coreNum-1];
+  // v4.7.61 — pick from the matching library and remember the format on coreSession._format.
+  var fmt = (format === 'strength') ? 'strength' : 'circuit';
+  var lib = (fmt === 'strength') ? CORE_STRENGTH_SESSIONS : CORE_CIRCUIT_SESSIONS;
+  var picked = lib[(coreNum||1)-1] || lib[0];
+  coreSession = Object.assign({}, picked, {_format: fmt});
   coreLog=[];
   coreExIdx=0;
   coreRepIdx=0;
-  supabaseStartSession('core','Core '+coreNum,'core',{coreNum:coreNum});
+  var sessionType = (fmt === 'strength') ? 'core_strength' : 'core_circuit';
+  supabaseStartSession(sessionType, coreSession.name||('Core '+coreNum), 'core', {coreNum:coreNum, core_format:fmt});
   startCorePrepCountdown();
 }
 
@@ -7222,12 +7443,19 @@ function startCorePrepCountdown(){
   };
   buildWarmupBlocks('core',body);
   showCountIn(function(){
-    startCoreAMRAP();
+    // v4.7.61 — strength sessions skip the AMRAP timer and render the set tracker instead.
+    if(coreSession && coreSession._format === 'strength'){
+      renderCoreStrengthScreen();
+    } else {
+      startCoreAMRAP();
+    }
   });
 }
 
 function startCoreAMRAP(){
-  coreSecsLeft=20*60;
+  // Circuit duration may be specified per session; default 20 min when missing.
+  var dur = (coreSession && coreSession.duration_min) ? coreSession.duration_min : 20;
+  coreSecsLeft = dur*60;
   requestWakeLock();
   renderCoreScreen();
   if(coreTimerInterval)clearInterval(coreTimerInterval);
@@ -7260,7 +7488,7 @@ function renderCoreScreen(){
 
   body.innerHTML=
     '<div class="session-hero" style="padding:16px 20px;">'+
-    '<div class="sh-tag">Core '+coreSession.num+' - 20 min AMRAP</div>'+
+    '<div class="sh-tag">'+(coreSession.name||('Core '+coreSession.num))+' · '+(coreSession.format||'AMRAP 20')+'</div>'+
     '<div id="core-timer" style="font-family:var(--font-d);font-size:64px;font-weight:900;color:var(--gold);line-height:1;">'+
     m+':'+(s<10?'0':'')+s+'</div>'+
     '<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+Math.ceil(coreExIdx/exs.length)+' rounds+ completed</div>'+
@@ -7333,8 +7561,8 @@ function showCoreEndPrompt(){
   body.innerHTML=
     '<div class="session-hero">'+
     '<div class="sh-tag">Time Up!</div>'+
-    '<div class="sh-name">Core '+coreSession.num+'</div>'+
-    '<div class="sh-detail">'+fullRounds+' full rounds + '+partialEx+' exercises</div>'+
+    '<div class="sh-name">'+(coreSession.name||('Core '+coreSession.num))+'</div>'+
+    '<div class="sh-detail">'+fullRounds+'.'+partialEx+' (rounds.reps)</div>'+
     '</div>'+
     '<div style="padding:24px 20px;">'+
     '<div style="font-family:var(--font-d);font-size:16px;color:var(--text);margin-bottom:20px;">How many reps did you complete on <span style="color:var(--gold);">'+cur.name+'</span> before time ran out?</div>'+
@@ -7344,26 +7572,193 @@ function showCoreEndPrompt(){
 }
 
 function logCoreSession(){
+  // v4.7.61 — circuit AMRAP/Chipper logger. Strength sessions use logCoreStrengthSession() below.
   var finalReps=parseInt(document.getElementById('final-reps-input').value)||0;
   var exs=getCoreExercises();
   var fullRounds=Math.floor(coreExIdx/exs.length);
+  var partialEx=coreExIdx%exs.length;
+  // Score in AMRAP rounds.reps shape (e.g. "4.2" = 4 full rounds plus 2 exercises completed).
+  var amrapScore = fullRounds + '.' + partialEx;
   var totalReps=coreLog.reduce(function(sum,e){
     var r=parseInt(String(e.reps).replace(/[^0-9]/g,''))||0;
     return sum+r;
   },0)+finalReps;
 
-  // Save to localStorage
+  // Save to localStorage — keep coreNum for back-compat with older readers.
   var logs=JSON.parse(localStorage.getItem('phoenix_core_logs')||'[]');
   logs.push({
     date:new Date().toISOString(),
     coreNum:coreSession.num,
+    core_format:'circuit',
+    session_name:coreSession.name,
+    format:coreSession.format,
+    score:amrapScore,
     fullRounds:fullRounds,
     totalReps:totalReps,
     finalPartialReps:finalReps,
     log:coreLog
   });
   localStorage.setItem('phoenix_core_logs',JSON.stringify(logs));
-  supabaseCompleteSession({total_reps:totalReps,details:{session_id:'core',coreNum:coreSession.num,fullRounds:fullRounds,finalPartialReps:finalReps,log:coreLog}});
+  // v4.7.61 — session_type is now 'core_circuit' so the coach can distinguish formats in history.
+  supabaseCompleteSession({
+    total_reps:totalReps,
+    details:{
+      session_id:'core',
+      session_type:'core_circuit',
+      core_format:'circuit',
+      session_name:coreSession.name,
+      format:coreSession.format,
+      coreNum:coreSession.num,
+      score:amrapScore,
+      fullRounds:fullRounds,
+      partialEx:partialEx,
+      finalPartialReps:finalReps,
+      log:coreLog
+    }
+  });
+  navTo('today');
+}
+
+// v4.7.61 — Strength session render: list of exercises, each with a set counter the athlete
+// taps to mark a set complete. Optional inline load entry per exercise; notes textarea at
+// the bottom; "Complete Session" persists the log.
+function renderCoreStrengthScreen(){
+  var body=document.getElementById('session-body-content');
+  if(!body) return;
+  var exs = coreSession.exercises || [];
+  // Initialise per-exercise state on the session if absent.
+  if(!Array.isArray(coreSession._strengthState)){
+    coreSession._strengthState = exs.map(function(e){
+      return {
+        name:e.name,
+        targetSets:parseInt(e.sets)||3,
+        reps:e.reps||'',
+        load:e.load||'',
+        rest_sec:e.rest_sec||60,
+        cue:e.cue||e.coaching_note||'',
+        completedSets:0,
+        loggedLoad:''
+      };
+    });
+  }
+  var state = coreSession._strengthState;
+  var rows = state.map(function(s, i){
+    var dots = '';
+    for(var k=0;k<s.targetSets;k++){
+      var filled = k<s.completedSets;
+      dots += '<span class="cs-set-dot" data-cs-ex="'+i+'" data-cs-set="'+k+'" style="display:inline-block;width:22px;height:22px;border-radius:50%;margin-right:6px;border:1.5px solid var(--gold);background:'+(filled?'var(--gold)':'transparent')+';cursor:pointer;"></span>';
+    }
+    var cue = s.cue ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.4;">'+s.cue+'</div>' : '';
+    return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:10px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">'+
+          '<div style="flex:1;">'+
+            '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:3px;">Exercise '+(i+1)+'</div>'+
+            '<div style="font-family:var(--font-d);font-size:17px;font-weight:700;color:var(--text);text-transform:uppercase;">'+s.name+'</div>'+
+          '</div>'+
+          '<div style="text-align:right;">'+
+            '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--gold);">'+s.targetSets+' × '+s.reps+'</div>'+
+            '<div style="font-family:var(--font-d);font-size:11px;color:var(--text2);">'+s.load+(s.rest_sec?(' · '+s.rest_sec+'s rest'):'')+'</div>'+
+          '</div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;">'+
+          '<div>'+dots+'</div>'+
+          '<input type="text" class="cs-load-input" data-cs-ex="'+i+'" placeholder="Load used" value="'+(s.loggedLoad||'')+'" style="flex:0 0 110px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--font-d);font-size:12px;text-align:right;">'+
+        '</div>'+
+        cue+
+      '</div>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="session-hero" style="padding:16px 20px;">'+
+      '<div class="sh-tag">'+(coreSession.name||'Core Strength')+' · '+(coreSession.format||'Sets × Reps')+'</div>'+
+      '<div class="sh-name" style="margin-top:4px;">CORE STRENGTH</div>'+
+      '<div class="sh-detail">Tap a dot to mark a set complete. Quality over speed.</div>'+
+    '</div>'+
+    '<div style="padding:16px 20px 8px;">'+rows+'</div>'+
+    '<div class="session-notes-block"><div class="section-hdr">Session Notes</div>'+
+      '<textarea id="core-strength-notes" class="session-notes-input" rows="3" placeholder="How it felt, what you loaded, anything to remember..."></textarea>'+
+    '</div>'+
+    '<button class="finish-btn" onclick="logCoreStrengthSession()">Complete Session</button>';
+
+  // Wire the set dots — tap-to-increment / tap-again-to-decrement for the last filled.
+  setTimeout(function(){
+    Array.prototype.forEach.call(document.querySelectorAll('.cs-set-dot'), function(dot){
+      dot.addEventListener('click', function(){
+        var exIdx = parseInt(dot.getAttribute('data-cs-ex'),10);
+        var setIdx= parseInt(dot.getAttribute('data-cs-set'),10);
+        var s = coreSession._strengthState[exIdx];
+        if(!s) return;
+        // If tapping a filled dot at the current edge → decrement; otherwise set to setIdx+1.
+        if(s.completedSets === setIdx+1) s.completedSets = setIdx;
+        else s.completedSets = setIdx+1;
+        renderCoreStrengthScreen();
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.cs-load-input'), function(inp){
+      inp.addEventListener('change', function(){
+        var exIdx = parseInt(inp.getAttribute('data-cs-ex'),10);
+        var s = coreSession._strengthState[exIdx];
+        if(s) s.loggedLoad = inp.value;
+      });
+      inp.addEventListener('blur', function(){
+        var exIdx = parseInt(inp.getAttribute('data-cs-ex'),10);
+        var s = coreSession._strengthState[exIdx];
+        if(s) s.loggedLoad = inp.value;
+      });
+    });
+  }, 0);
+}
+
+function logCoreStrengthSession(){
+  var state = (coreSession && coreSession._strengthState) || [];
+  // Sync any pending load-input text values before persisting.
+  Array.prototype.forEach.call(document.querySelectorAll('.cs-load-input'), function(inp){
+    var exIdx = parseInt(inp.getAttribute('data-cs-ex'),10);
+    if(state[exIdx]) state[exIdx].loggedLoad = inp.value;
+  });
+  var notesEl = document.getElementById('core-strength-notes');
+  var notes = notesEl ? notesEl.value : '';
+  var totalSets = state.reduce(function(sum,s){ return sum + (parseInt(s.completedSets)||0); }, 0);
+  var exerciseLog = state.map(function(s){
+    return {
+      name:s.name,
+      target_sets:s.targetSets,
+      completed_sets:s.completedSets,
+      reps:s.reps,
+      prescribed_load:s.load,
+      logged_load:s.loggedLoad||null,
+      rest_sec:s.rest_sec
+    };
+  });
+
+  var logs = JSON.parse(localStorage.getItem('phoenix_core_logs')||'[]');
+  logs.push({
+    date:new Date().toISOString(),
+    coreNum:coreSession.num,
+    core_format:'strength',
+    session_name:coreSession.name,
+    format:coreSession.format,
+    totalSets:totalSets,
+    exercises:exerciseLog,
+    notes:notes
+  });
+  localStorage.setItem('phoenix_core_logs',JSON.stringify(logs));
+  // v4.7.61 — session_type 'core_strength'. total_reps is repurposed as sets completed for
+  // the strength branch so the existing aggregate query still has a numeric volume to read.
+  supabaseCompleteSession({
+    total_reps:totalSets,
+    notes:notes,
+    details:{
+      session_id:'core',
+      session_type:'core_strength',
+      core_format:'strength',
+      session_name:coreSession.name,
+      format:coreSession.format,
+      coreNum:coreSession.num,
+      totalSets:totalSets,
+      exercises:exerciseLog
+    }
+  });
   navTo('today');
 }
 
@@ -8233,8 +8628,8 @@ Timing is the athlete's domain — prescribe sessions, not schedules.
 
 4 DAYS: Optimal starting point for returning athletes
 - Day 1: ME Lower (squat or hinge variation, work to RPE 8-9)
-- Day 2: ME Upper (push or pull variation, work to RPE 8-9)
-- Day 3: Conditioning + core (Phoenix WOD + core session)
+- Day 2: ME Upper (push or pull variation, work to RPE 8-9) → if pairing with core, prefer core_session_type "strength"
+- Day 3: Conditioning + core (Phoenix WOD + core_session_type "circuit" — metabolic, rotational)
 - Day 4: DE/RE day (speed or volume work, accessory focus)
 - Daily walk recommended
 
@@ -8958,29 +9353,76 @@ Do not write "60cm box" — write "24" box". Do not write "3m wall ball target" 
 CORE SESSION FORMAT (REQUIRED when session_type is "Core")
 ================================================================
 
-Same model as WODs. When session_type is "Core", include a structured "core" field. The "exercises" array stays empty.
+v4.7.61 — core sessions now come in TWO distinct formats. You MUST set
+core_session_type for every Core session in the week:
 
+- core_session_type: "circuit"  → AMRAP/Chipper, 15-20 min, metabolic, rotational-heavy
+- core_session_type: "strength" → Sets × Reps, 20-30 min, loaded, quality over speed, no time pressure
+
+When to assign which (based on the week's training context):
+- After a heavy lower body day        → core_session_type: "circuit"  (active recovery, metabolic, no axial load)
+- After an upper body day             → core_session_type: "strength" (complementary loading, posterior chain support)
+- Standalone core day with light week → core_session_type: "strength" (push the loaded work)
+- Standalone core day with heavy week → core_session_type: "circuit"  (preserve recovery)
+- Day already paired with a WOD       → core_session_type: "strength" (avoid back-to-back metabolic)
+
+CIRCUIT schema (when core_session_type === "circuit"):
 {
   "day": "Wednesday",
   "session_type": "Core",
+  "core_session_type": "circuit",
   "duration_min": 20,
   "core": {
-    "name": "Phoenix Core 3",
+    "name": "Rotational AMRAP",
     "format": "amrap",
     "duration_sec": 1200,
     "movements": [
-      {"name": "Hanging Leg Raise", "reps": 10, "load_rx": "BW", "load_scale": "Knee tucks"},
-      {"name": "Med Ball Slam", "reps": 10, "load_rx": "20kg", "load_scale": "12kg"},
-      {"name": "OH Plate Carry", "reps": "1 length", "load_rx": "20kg", "load_scale": "10kg"},
-      {"name": "Cherry Picker", "reps": 10, "load_rx": "BW", "load_scale": "BW"}
+      {"name": "Med Ball Russian Twist", "reps": 20, "load_rx": "8kg", "load_scale": "BW"},
+      {"name": "Pallof Press", "reps": "10/side", "load_rx": "Cable", "load_scale": "Band"},
+      {"name": "Mountain Climber", "reps": 30, "load_rx": "BW", "load_scale": "BW"},
+      {"name": "Hollow Rock", "reps": 15, "load_rx": "BW", "load_scale": "Hollow hold 20 sec"}
     ],
-    "score_format": "rounds.movements.reps",
+    "score_format": "rounds.reps",
     "coaching_note": "Brace before every rep. Quality over speed."
   },
   "exercises": []
 }
 
-If you don't have a specific core session in mind, leave the core field null and the app will pick today's date-hashed core session from the static library automatically.`;
+Circuit must include AT LEAST 2 rotational movements (Russian Twist, Woodchop, Pallof Press,
+Med Ball Rotational Slam, Landmine Rotation, Copenhagen Plank, Oblique Crunch, Side Plank
+with Rotation, Cable/Band Twist). Format value: "amrap" or "chipper". Score format: "rounds.reps"
+(AMRAP) or "time" (Chipper).
+
+STRENGTH schema (when core_session_type === "strength"):
+{
+  "day": "Friday",
+  "session_type": "Core",
+  "core_session_type": "strength",
+  "duration_min": 25,
+  "core": {
+    "name": "Loaded Core A",
+    "format": "sets_reps",
+    "movements": [
+      {"name": "Ab Wheel Rollout",      "sets": 4, "reps": "8-10",    "load_rx": "BW",          "rest_sec": 90, "coaching_note": "Ribs down, full extension."},
+      {"name": "Weighted Cable Crunch", "sets": 4, "reps": "12",      "load_rx": "30-40kg",     "rest_sec": 75, "coaching_note": "Curl the spine, hips stay back."},
+      {"name": "Landmine Rotation",     "sets": 3, "reps": "8/side",  "load_rx": "15-20kg bar", "rest_sec": 75, "coaching_note": "Drive from the hip."},
+      {"name": "Pallof Press",          "sets": 3, "reps": "10/side", "load_rx": "Cable",       "rest_sec": 60, "coaching_note": "Anti-rotation hold 2 sec at end range."}
+    ],
+    "score_format": "sets_completed"
+  },
+  "exercises": []
+}
+
+Strength must include at least one loaded movement (Ab Wheel Rollout, Hanging Leg Raise,
+Weighted Cable Crunch, Dragon Flag, GHD Sit-Up, Toes to Bar, RKC Plank, Copenhagen Plank),
+at least one rotational strength movement (Landmine Rotation, Pallof Press, Cable Woodchop,
+Weighted Russian Twist, Med Ball Rotational Throw), and prefer superset pairings labelled
+A1/A2 or B1/B2 when time allows (e.g. Ab Wheel + Face Pull, Hanging Leg Raise + Band Pull-Apart).
+Format value: "sets_reps". Score format: "sets_completed". Always include rest_sec per movement.
+
+If you don't have a specific core session in mind, leave the core field null but STILL set
+core_session_type — the app will pick today's date-hashed session from the matching static
+library automatically.`;
 
 function buildAthleteProfile(trigger, checkIn){
   var a = athlete || {};
@@ -13233,7 +13675,31 @@ function renderTodayScreen(){
   if(typeof _phxRenderAgogeTile==='function') _phxRenderAgogeTile();
   // v4.7.59: populate the "This Week's Schedule" tile with the next 2 upcoming sessions.
   if(typeof _phxRenderWeekScheduleTile==='function') _phxRenderWeekScheduleTile();
+  // v4.7.61: show today's core format badge (CIRCUIT / STRENGTH) on the Core tile.
+  if(typeof _phxRenderCoreTileFormat==='function') _phxRenderCoreTileFormat();
 }
+
+// v4.7.61 — populate the Core tile's format badge + sub-text + click handler from the
+// coach-assigned format for today. Defaults to 'circuit' when no programme info is present.
+window._phxRenderCoreTileFormat = function(){
+  var card = document.getElementById('card-core');
+  if(!card) return;
+  var fmt = (typeof getTodayCoreFormat === 'function') ? getTodayCoreFormat() : 'circuit';
+  var isStrength = (fmt === 'strength');
+  var badge = document.getElementById('card-core-fmt-badge');
+  if(badge){
+    badge.textContent = isStrength ? 'STRENGTH' : 'CIRCUIT';
+    badge.style.display = 'inline-block';
+    badge.style.borderColor = isStrength ? 'var(--orange,#FF6B35)' : 'var(--gold)';
+    badge.style.color       = isStrength ? 'var(--orange,#FF6B35)' : 'var(--gold)';
+  }
+  var sub = document.getElementById('card-core-sub');
+  if(sub) sub.textContent = isStrength ? 'Sets × Reps · Loaded' : 'AMRAP · Rotational';
+  var action = document.getElementById('card-core-action');
+  if(action) action.textContent = isStrength ? 'Strength session →' : 'Circuit session →';
+  // Override the inline onclick so the tile opens the picker pre-filtered to today's format.
+  card.onclick = function(){ generateDailyCore(fmt); };
+};
 
 // v4.7.21 FIX 5: completed-today marker on Today tiles.
 // Query Supabase sessions for today's completed rows, then dim + badge any matching tile.
@@ -13258,6 +13724,8 @@ async function _phxApplyCompletedTileMarkers(){
     var did = {strength:false, wod:false, core:false, walk:false, run:false};
     rows.forEach(function(r){
       var t = String(r.session_type||'').toLowerCase();
+      // v4.7.61: collapse the new format-aware core types back to 'core' for tile marking.
+      if(t === 'core_circuit' || t === 'core_strength') t = 'core';
       if(t in did) did[t] = true;
     });
     function mark(id){

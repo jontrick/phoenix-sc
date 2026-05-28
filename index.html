@@ -584,6 +584,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+@keyframes phxCorePulse{0%,100%{box-shadow:0 0 0 0 rgba(91,140,220,0.55);}50%{box-shadow:0 0 0 8px rgba(91,140,220,0);}}
+.phx-core-generating{animation:phxCorePulse 1.4s ease-in-out infinite;pointer-events:none;}
 
 /* ══ SESSION SCREEN ══ */
 #screen-session{background:var(--bg);}
@@ -1734,7 +1736,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <!-- Row 3: Core + Conditioning + Walk/Run (three equal columns) -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
       <!-- v4.7.21 FIX 5: stable IDs so the completed-marker helper can find these tiles. -->
-      <div id="card-core" class="game-card game-card-sm tile-bg" onclick="generateDailyCore()" style="border-left:3px solid var(--blue);position:relative;background-image:url('/assets/tiles/tile-session.jpg');">
+      <div id="card-core" class="game-card game-card-sm tile-bg" onclick="phxStandaloneCoreTap()" style="border-left:3px solid var(--blue);position:relative;background-image:url('/assets/tiles/tile-session.jpg');">
         <div class="game-card-inner">
           <div class="game-card-eyebrow-sm">Phoenix Coach</div>
           <div class="game-card-title-sm">Core</div>
@@ -3576,7 +3578,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.61';
+var APP_VERSION='4.7.62';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4612,6 +4614,9 @@ function mapSessionType(rawSessionId){
   if(id==='walk') return 'walk';
   if(id==='run') return 'run';
   if(id==='core') return 'core';
+  // v4.7.62 — coach-assigned core sessions render through the standard flow but must be
+  // logged with the format-aware session_type so history/analytics stay clean.
+  if(id==='ai-core_circuit'||id==='ai-core_strength') return id.replace(/^ai-/,'');
   if(id.indexOf('cf-')===0||id==='karen-core') return 'wod';
   // All lift sessions: me-upper-press, me-lower-sq, me-pull, de-total, tbbs, ai-*
   return 'strength';
@@ -5753,6 +5758,159 @@ function generateDailyCore(format){
   _generateCoreFromAI(fmt);
 }
 
+// v4.7.62 — shared AI core prompt builder. Pulled out of _generateCoreFromAI so the standalone
+// Funnel 1 tile can fetch a session without the preview modal.
+function _phxBuildCorePrompt(fmt){
+  var isStrength = (fmt === 'strength');
+  var today=new Date();
+  var dateStr=today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  if(isStrength){
+    return 'Generate a core STRENGTH session (sets x reps, loaded movements, quality over speed) for '+dateStr+'. '+
+      'Duration 20-30 minutes, no AMRAP/chipper format - strict sets and rest between sets. '+
+      'Include at least one loaded movement (Ab Wheel Rollout, Hanging Leg Raise, Weighted Cable Crunch, Dragon Flag, GHD Sit-Up, Toes to Bar, RKC Plank, Copenhagen Plank), '+
+      'at least one rotational strength movement (Landmine Rotation, Pallof Press, Cable Woodchop, Weighted Russian Twist, Med Ball Rotational Throw), '+
+      'and at least one superset pairing (label A1/A2 or B1/B2 in the exercise name; pair push/pull patterns with core - examples: Ab Wheel + Face Pull, Hanging Leg Raise + Band Pull-Apart). '+
+      'Return ONLY valid JSON, no commentary, in this exact shape: '+
+      '{"name":"<session name>","format":"4 x 8-12","duration_min":25,"exercises":[{"name":"<exercise>","sets":<int>,"reps":"<reps>","load":"<load>","rest_sec":<int>,"coaching_note":"<one short cue>"}]}. '+
+      '4-6 exercises total. Use "BW" for bodyweight load.';
+  }
+  return 'Generate a core CIRCUIT session (AMRAP or Chipper, metabolic, higher rep, rotational-heavy) for '+dateStr+'. '+
+    'Duration 15-20 minutes. Pick exactly one format value: "AMRAP 15", "AMRAP 18", "AMRAP 20", or "Chipper". '+
+    'Include AT LEAST 2 rotational movements (Russian Twist, Woodchop, Pallof Press, Med Ball Rotational Slam, Landmine Rotation, Copenhagen Plank, Oblique Crunch, Side Plank with Rotation, Cable/Band Twist). '+
+    'May include dynamic movements (Mountain Climber, V-Up, Hollow Rock, Tuck-Up, Burpee, Box Jump, Jump Rope) and holds (Hollow Hold, L-Sit, Plank variation, Dead Bug). '+
+    'Scoring: AMRAP score = rounds.reps; Chipper score = time to completion. '+
+    'Return ONLY valid JSON, no commentary, in this exact shape: '+
+    '{"name":"<session name>","format":"AMRAP 20","duration_min":20,"score_format":"<rounds.reps or time>","exercises":[{"name":"<exercise>","reps":"<reps>","load":"<load>","coaching_note":"<one short cue>"}]}. '+
+    '4-6 exercises total. Use "BW" for bodyweight load.';
+}
+
+// v4.7.62 — promise-based core session fetcher. Used by both the preview modal and the
+// Funnel 1 direct-start tile flow. Rejects on non-OK responses or unparseable JSON.
+function _phxFetchAICore(fmt){
+  return fetch('https://phoenix-coach.jon-d87.workers.dev',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-5',
+      max_tokens:1200,
+      messages:[{role:'user',content:_phxBuildCorePrompt(fmt)}]
+    })
+  }).then(function(res){
+    if(!res.ok) throw new Error('API error '+res.status);
+    return res.json();
+  }).then(function(data){
+    var text=(data.content&&data.content[0]&&data.content[0].text)||'';
+    var jsonMatch=text.match(/\{[\s\S]*\}/);
+    if(!jsonMatch) throw new Error('No JSON in response');
+    return JSON.parse(jsonMatch[0]);
+  });
+}
+
+// v4.7.62 — kick off an AI-generated core session straight into the count-in/timer/strength flow.
+// Both the preview-modal "Start Session" button and the Funnel 1 direct-start tile call this.
+function _phxStartAICoreSession(session, fmt){
+  var isStrength = (fmt === 'strength');
+  coreSession = Object.assign(
+    { num:'AI', _format:fmt, _isStandaloneAI:true,
+      name:session.name, format:session.format, duration_min:session.duration_min||(isStrength?25:20) },
+    { exercises:session.exercises }
+  );
+  coreLog=[];
+  coreExIdx=0;
+  coreRepIdx=0;
+  var sessionType = isStrength ? 'core_strength' : 'core_circuit';
+  supabaseStartSession(sessionType, coreSession.name||'AI Core', 'core', {coreNum:'AI', core_format:fmt, source:'standalone_ai'});
+  startCorePrepCountdown();
+}
+
+// v4.7.62 — Funnel 1 entry point. Bound to #card-core onclick by _phxRenderCoreTileFormat.
+// Cache key shape: phoenix_core_today_{fmt}_{YYYY-MM-DD}. Cache hit skips the API entirely.
+// On cache miss, animate the tile (pulse) while we call the worker; an 8-second timeout falls
+// back to the static two-tab picker with a banner explaining the failure.
+function phxStandaloneCoreTap(){
+  var fmt = (typeof getTodayCoreFormat === 'function') ? getTodayCoreFormat() : 'circuit';
+  if(fmt !== 'strength') fmt = 'circuit';
+  var d = new Date();
+  var dateISO = d.getFullYear()+'-'+
+    String(d.getMonth()+1).padStart(2,'0')+'-'+
+    String(d.getDate()).padStart(2,'0');
+  var cacheKey = 'phoenix_core_today_'+fmt+'_'+dateISO;
+
+  // Cache hit — start immediately, no API call.
+  try {
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){
+      var parsed = JSON.parse(cached);
+      if(parsed && parsed.exercises && parsed.exercises.length){
+        _phxStartAICoreSession(parsed, fmt);
+        return;
+      }
+    }
+  } catch(_e){ /* fall through to fetch */ }
+
+  // Pulse the tile while we wait. Restore on resolve / reject / timeout.
+  var tile = document.getElementById('card-core');
+  var actionEl = document.getElementById('card-core-action');
+  var origAction = actionEl ? actionEl.textContent : '';
+  if(tile){ tile.classList.add('phx-core-generating'); }
+  if(actionEl){ actionEl.textContent = 'Coach is building your session...'; }
+  function restoreTile(){
+    if(tile){ tile.classList.remove('phx-core-generating'); }
+    if(actionEl){ actionEl.textContent = origAction; }
+  }
+
+  var settled = false;
+  var timeoutId = setTimeout(function(){
+    if(settled) return;
+    settled = true;
+    restoreTile();
+    openCoreModal(fmt);
+    _phxAddCoreFallbackBanner("Couldn't reach your coach — pick a session below");
+  }, 8000);
+
+  _phxFetchAICore(fmt).then(function(session){
+    if(settled) return;
+    settled = true;
+    clearTimeout(timeoutId);
+    restoreTile();
+    try { localStorage.setItem(cacheKey, JSON.stringify(session)); } catch(_e){}
+    _phxStartAICoreSession(session, fmt);
+  }).catch(function(err){
+    if(settled) return;
+    settled = true;
+    clearTimeout(timeoutId);
+    restoreTile();
+    console.warn('[PHX] standalone core generation failed:', err);
+    openCoreModal(fmt);
+    _phxAddCoreFallbackBanner("Couldn't reach your coach — pick a session below");
+  });
+}
+
+// v4.7.62 — "Browse all sessions" link inside any standalone AI core session. Stops the timer
+// + nav back to Today, then opens the two-tab picker pre-filtered to the current format.
+function _phxBrowseAllCore(){
+  try { if(coreTimerInterval) clearInterval(coreTimerInterval); } catch(_e){}
+  try { if(corePrepInterval) clearInterval(corePrepInterval); } catch(_e){}
+  try { releaseWakeLock(); } catch(_e){}
+  var fmt = (coreSession && coreSession._format === 'strength') ? 'strength' : 'circuit';
+  navTo('today');
+  setTimeout(function(){ openCoreModal(fmt); }, 50);
+}
+
+function _phxAddCoreFallbackBanner(msg){
+  var overlay = document.getElementById('core-modal');
+  if(!overlay) return;
+  var sheet = overlay.querySelector('.modal-sheet');
+  if(!sheet) return;
+  var prior = sheet.querySelector('#phx-core-fallback-banner');
+  if(prior) prior.remove();
+  var banner = document.createElement('div');
+  banner.id = 'phx-core-fallback-banner';
+  banner.style.cssText = 'margin:0 20px 8px;padding:8px 12px;background:rgba(214,90,68,0.12);border:1px solid rgba(214,90,68,0.4);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;text-align:center;';
+  banner.textContent = msg;
+  sheet.insertBefore(banner, sheet.children[2] || null);
+}
+
 function _generateCoreFromAI(format){
   var fmt = (format === 'strength') ? 'strength' : 'circuit';
   var isStrength = (fmt === 'strength');
@@ -5766,49 +5924,7 @@ function _generateCoreFromAI(format){
     '<button class="modal-close" onclick="closeCoreModal()">Cancel</button>';
   overlay.classList.add('active');
 
-  var today=new Date();
-  var dateStr=today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-
-  // v4.7.61 \u2014 two prompts, one per format. Both demand JSON-only output so the response is parseable.
-  var prompt;
-  if(isStrength){
-    prompt = 'Generate a core STRENGTH session (sets x reps, loaded movements, quality over speed) for '+dateStr+'. '+
-      'Duration 20-30 minutes, no AMRAP/chipper format - strict sets and rest between sets. '+
-      'Include at least one loaded movement (Ab Wheel Rollout, Hanging Leg Raise, Weighted Cable Crunch, Dragon Flag, GHD Sit-Up, Toes to Bar, RKC Plank, Copenhagen Plank), '+
-      'at least one rotational strength movement (Landmine Rotation, Pallof Press, Cable Woodchop, Weighted Russian Twist, Med Ball Rotational Throw), '+
-      'and at least one superset pairing (label A1/A2 or B1/B2 in the exercise name; pair push/pull patterns with core - examples: Ab Wheel + Face Pull, Hanging Leg Raise + Band Pull-Apart). '+
-      'Return ONLY valid JSON, no commentary, in this exact shape: '+
-      '{"name":"<session name>","format":"4 x 8-12","duration_min":25,"exercises":[{"name":"<exercise>","sets":<int>,"reps":"<reps>","load":"<load>","rest_sec":<int>,"coaching_note":"<one short cue>"}]}. '+
-      '4-6 exercises total. Use "BW" for bodyweight load.';
-  } else {
-    prompt = 'Generate a core CIRCUIT session (AMRAP or Chipper, metabolic, higher rep, rotational-heavy) for '+dateStr+'. '+
-      'Duration 15-20 minutes. Pick exactly one format value: "AMRAP 15", "AMRAP 18", "AMRAP 20", or "Chipper". '+
-      'Include AT LEAST 2 rotational movements (Russian Twist, Woodchop, Pallof Press, Med Ball Rotational Slam, Landmine Rotation, Copenhagen Plank, Oblique Crunch, Side Plank with Rotation, Cable/Band Twist). '+
-      'May include dynamic movements (Mountain Climber, V-Up, Hollow Rock, Tuck-Up, Burpee, Box Jump, Jump Rope) and holds (Hollow Hold, L-Sit, Plank variation, Dead Bug). '+
-      'Scoring: AMRAP score = rounds.reps; Chipper score = time to completion. '+
-      'Return ONLY valid JSON, no commentary, in this exact shape: '+
-      '{"name":"<session name>","format":"AMRAP 20","duration_min":20,"score_format":"<rounds.reps or time>","exercises":[{"name":"<exercise>","reps":"<reps>","load":"<load>","coaching_note":"<one short cue>"}]}. '+
-      '4-6 exercises total. Use "BW" for bodyweight load.';
-  }
-
-  fetch('https://phoenix-coach.jon-d87.workers.dev',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-5',
-      max_tokens:1200,
-      messages:[{role:'user',content:prompt}]
-    })
-  })
-  .then(function(res){
-    if(!res.ok) throw new Error('API error '+res.status);
-    return res.json();
-  })
-  .then(function(data){
-    var text=(data.content&&data.content[0]&&data.content[0].text)||'';
-    var jsonMatch=text.match(/\{[\s\S]*\}/);
-    if(!jsonMatch) throw new Error('No JSON in response');
-    var session=JSON.parse(jsonMatch[0]);
+  _phxFetchAICore(fmt).then(function(session){
     // Render preview rows \u2014 strength shows sets \u00d7 reps \u00d7 load, circuit shows reps + load.
     var rows=session.exercises.map(function(e){
       var right;
@@ -5831,14 +5947,9 @@ function _generateCoreFromAI(format){
       '</div>';
     document.getElementById('core-preview-start').addEventListener('click',function(){
       closeCoreModal();
-      coreSession=Object.assign({num:'AI', _format:fmt, name:session.name, format:session.format, duration_min:session.duration_min||(isStrength?25:20)}, {exercises:session.exercises});
-      coreLog=[];
-      coreExIdx=0;
-      coreRepIdx=0;
-      startCorePrepCountdown();
+      _phxStartAICoreSession(session, fmt);
     });
-  })
-  .catch(function(err){
+  }).catch(function(err){
     console.warn('Core generation failed, falling back to library:',err);
     openCoreModal(fmt);
   });
@@ -7486,6 +7597,14 @@ function renderCoreScreen(){
   var nxt=exs[(coreExIdx+1)%exs.length];
   var m=Math.floor(coreSecsLeft/60),s=coreSecsLeft%60;
 
+  // v4.7.62 — Funnel 1 standalone AI sessions get a "Browse all sessions" escape hatch at the
+  // bottom of the screen. Coach-assigned core sessions never show this link.
+  var browseLink = (coreSession && coreSession._isStandaloneAI)
+    ? '<div style="padding:16px 20px 24px;text-align:center;">'+
+        '<button onclick="_phxBrowseAllCore()" style="background:none;border:none;color:var(--text3);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;">Browse all sessions &rarr;</button>'+
+      '</div>'
+    : '';
+
   body.innerHTML=
     '<div class="session-hero" style="padding:16px 20px;">'+
     '<div class="sh-tag">'+(coreSession.name||('Core '+coreSession.num))+' · '+(coreSession.format||'AMRAP 20')+'</div>'+
@@ -7503,13 +7622,14 @@ function renderCoreScreen(){
     '<div style="font-family:var(--font-d);font-size:22px;font-weight:600;color:var(--gold);margin-top:6px;">'+cur.reps+' <span style="color:var(--text2);font-size:16px;">'+cur.load+'</span></div>'+
     '</div>'+
 
-    // Next exercise tile  
+    // Next exercise tile
     '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;color:var(--text2);text-transform:uppercase;margin-bottom:8px;">Next</div>'+
     '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:16px;opacity:0.6;">'+
     '<div style="font-family:var(--font-d);font-size:22px;font-weight:700;color:var(--text);text-transform:uppercase;">'+nxt.name+'</div>'+
     '<div style="font-family:var(--font-d);font-size:18px;color:var(--text2);margin-top:4px;">'+nxt.reps+' '+nxt.load+'</div>'+
     '</div>'+
-    '</div>';
+    '</div>'+
+    browseLink;
 
   // Wire up swipe
   setTimeout(function(){
@@ -7668,6 +7788,13 @@ function renderCoreStrengthScreen(){
       '</div>';
   }).join('');
 
+  // v4.7.62 — same Funnel 1 escape hatch as the circuit screen.
+  var browseLink = (coreSession && coreSession._isStandaloneAI)
+    ? '<div style="padding:6px 20px 20px;text-align:center;">'+
+        '<button onclick="_phxBrowseAllCore()" style="background:none;border:none;color:var(--text3);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;">Browse all sessions &rarr;</button>'+
+      '</div>'
+    : '';
+
   body.innerHTML =
     '<div class="session-hero" style="padding:16px 20px;">'+
       '<div class="sh-tag">'+(coreSession.name||'Core Strength')+' · '+(coreSession.format||'Sets × Reps')+'</div>'+
@@ -7678,7 +7805,8 @@ function renderCoreStrengthScreen(){
     '<div class="session-notes-block"><div class="section-hdr">Session Notes</div>'+
       '<textarea id="core-strength-notes" class="session-notes-input" rows="3" placeholder="How it felt, what you loaded, anything to remember..."></textarea>'+
     '</div>'+
-    '<button class="finish-btn" onclick="logCoreStrengthSession()">Complete Session</button>';
+    '<button class="finish-btn" onclick="logCoreStrengthSession()">Complete Session</button>'+
+    browseLink;
 
   // Wire the set dots — tap-to-increment / tap-again-to-decrement for the last filled.
   setTimeout(function(){
@@ -13679,8 +13807,11 @@ function renderTodayScreen(){
   if(typeof _phxRenderCoreTileFormat==='function') _phxRenderCoreTileFormat();
 }
 
-// v4.7.61 — populate the Core tile's format badge + sub-text + click handler from the
-// coach-assigned format for today. Defaults to 'circuit' when no programme info is present.
+// v4.7.62 — populate the Core tile's format badge + sub-text + click handler. The tile is the
+// standalone Core add-on (Funnel 1) — tapping it AI-generates today's session by default,
+// caches the result in localStorage, and falls back to the static picker on timeout/failure.
+// This funnel is independent of coach-assigned core sessions, which live on athlete.aiProgramme
+// and render through the standard session flow (see openTodaySession core_circuit / core_strength).
 window._phxRenderCoreTileFormat = function(){
   var card = document.getElementById('card-core');
   if(!card) return;
@@ -13697,8 +13828,7 @@ window._phxRenderCoreTileFormat = function(){
   if(sub) sub.textContent = isStrength ? 'Sets × Reps · Loaded' : 'AMRAP · Rotational';
   var action = document.getElementById('card-core-action');
   if(action) action.textContent = isStrength ? 'Strength session →' : 'Circuit session →';
-  // Override the inline onclick so the tile opens the picker pre-filtered to today's format.
-  card.onclick = function(){ generateDailyCore(fmt); };
+  card.onclick = function(){ phxStandaloneCoreTap(); };
 };
 
 // v4.7.21 FIX 5: completed-today marker on Today tiles.
@@ -18819,11 +18949,40 @@ function openTodaySession(){
     // If we couldn't build a WOD object from the session, fall through to the strength renderer
     // so the athlete still sees something rather than a blank screen.
   }
-  // v4.7.34 BUG FIX 3: AI sessions of type "core" route to the Core daily picker so the
-  // user gets a real session screen instead of the empty strength renderer (which expects
-  // sess.exercises[]). Core sessions store movements under sess.core.movements which the
-  // strength path doesn't read.
-  if(sessTypeStr === 'core' || sessTypeStr.indexOf('core')>=0){
+  // v4.7.62 — coach-assigned core sessions (Funnel 2). The standalone Core add-on tile lives
+  // separately (see phxStandaloneCoreTap); coach-assigned ones are part of the weekly programme
+  // and must render through the standard session flow with the format-appropriate UI:
+  //   core_circuit  → AMRAP timer + swipe-to-complete (existing core circuit renderer)
+  //   core_strength → standard sets/reps/RPE strength renderer (fall through)
+  //   core (bare)   → legacy fallback to the standalone picker for older programmes
+  if(sessTypeStr === 'core_circuit'){
+    coreSession = {
+      num:'coach',
+      _format:'circuit',
+      _isStandaloneAI:false,
+      name: sess.name || sess.session_name || sess.session_type || 'Core Circuit',
+      format: sess.format || 'AMRAP 20',
+      duration_min: sess.duration_min || 20,
+      exercises: (sess.exercises || []).map(function(e){
+        return {
+          name: e.name,
+          reps: e.reps || '',
+          load: e.load || 'BW',
+          coaching_note: e.coaching_note || e.cue || ''
+        };
+      })
+    };
+    coreLog=[]; coreExIdx=0; coreRepIdx=0;
+    supabaseStartSession('core_circuit', coreSession.name, 'core', {coreNum:'coach', core_format:'circuit', source:'coach_assigned'});
+    startCorePrepCountdown();
+    return;
+  }
+  if(sessTypeStr === 'core_strength'){
+    // Fall through to the standard renderer below. It handles sess.exercises[] with sets/reps,
+    // per-set RPE logging, coaching notes, customisation — exactly the same UX as every other
+    // coach-assigned strength session.
+  } else if(sessTypeStr === 'core' || sessTypeStr.indexOf('core')>=0){
+    // Legacy/bare 'core' — keep the old behaviour of routing to the standalone picker.
     if(typeof generateDailyCore === 'function'){ generateDailyCore(); return; }
     if(typeof openCoreSession === 'function'){ openCoreSession(1); return; }
   }

@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.0';
+var APP_VERSION='4.8.1';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14337,12 +14337,12 @@ function _phxMaybeShowMorningCheckin(){
 // v4.7.34 BUILD 1: ISO date for the Monday of this Brisbane week — used as the namespace
 // for the weekly check-in done flag.
 function _phxBrisbaneMondayISO(){
-  var b = _phxBrisbaneNow();
-  var d = new Date(b.date.getFullYear(), b.date.getMonth(), b.date.getDate());
-  // getDay(): 0=Sun..6=Sat. Move to Monday (0→-6, 1→0, 2→-1, ...)
-  var dow = d.getDay();
-  var diff = (dow === 0) ? -6 : (1 - dow);
-  d.setDate(d.getDate() + diff);
+  // v4.8.0: delegates to _phxWeekStartDate() so all week-start logic is in one place.
+  // Name kept for backwards compat with callers (hamburger dot, check-in done key, etc).
+  var d = (typeof _phxWeekStartDate === 'function') ? _phxWeekStartDate() : (function(){
+    var b = _phxBrisbaneNow(); var r = new Date(b.date.getFullYear(), b.date.getMonth(), b.date.getDate());
+    var dow = r.getDay(); r.setDate(r.getDate() - ((dow===0)?6:(dow-1))); return r;
+  })();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
@@ -15161,19 +15161,22 @@ function _phxPriorityStyle(p){
 // priority badge + completed/skipped overlay. Tap = open session. Long-press = options
 // (change priority / swap session / mark skipped). Swaps + skips persist to localStorage.
 
+// v4.8.0: week starts the day AFTER the athlete's check-in day (spec locked).
+// e.g. check-in=Friday → week starts Saturday. check-in=Sunday → week starts Monday.
+// Falls back to Monday if fqCheckInDay is unset (maintains legacy behaviour).
 function _phxWeekStartDate(){
-  // Monday of this Brisbane week.
-  var iso = (typeof _phxBrisbaneMondayISO==='function') ? _phxBrisbaneMondayISO() : null;
-  if(iso){
-    var p = iso.split('-');
-    return new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
-  }
-  var d = new Date();
-  var dow = d.getDay();
-  var diff = (dow === 0) ? -6 : (1 - dow);
-  d.setDate(d.getDate() + diff);
-  d.setHours(0,0,0,0);
-  return d;
+  var b = (typeof _phxBrisbaneNow === 'function') ? _phxBrisbaneNow() : {date: new Date()};
+  var today = new Date(b.date.getFullYear(), b.date.getMonth(), b.date.getDate());
+  var ciIdx = (typeof _phxCheckInDayIndex === 'function') ? _phxCheckInDayIndex() : 5; // 5=Friday default
+  // Week start = day after check-in day (0=Sun..6=Sat)
+  var weekStartDow = (ciIdx + 1) % 7;
+  // Walk back from today to find the most recent weekStartDow
+  var dow = today.getDay();
+  var diff = (dow - weekStartDow + 7) % 7; // days since last weekStartDow
+  var start = new Date(today);
+  start.setDate(today.getDate() - diff);
+  start.setHours(0,0,0,0);
+  return start;
 }
 
 function _phxLoadWeekSwaps(weekStart){
@@ -15372,11 +15375,37 @@ async function _phxRenderWeekPlan(){
       var slot = (s._slot || '').toLowerCase();
       if(slot === 'pm') pmSessions.push(s); else amSessions.push(s);
     });
+    // v4.8.0: determine whether this day is a programme rest day BEFORE rendering slots.
+    var isProgrammeRestDay = false;
+    if(daySessions.length === 0){
+      if(athlete && athlete.fqScheduleMode === 'user_assigns' && athlete.fqSessionSchedule){
+        var _dsCheck = athlete.fqSessionSchedule[dayName.toLowerCase()] || {};
+        var _amOk = _dsCheck.am && _dsCheck.am !== 'rest';
+        var _pmOk = _dsCheck.pm && _dsCheck.pm !== 'rest';
+        isProgrammeRestDay = !_amOk && !_pmOk;
+      } else if(prog && prog.week && Array.isArray(prog.week.sessions)){
+        var _hasEntry = prog.week.sessions.some(function(s){
+          return s.day && String(s.day).toLowerCase().indexOf(dayName.toLowerCase()) >= 0;
+        });
+        isProgrammeRestDay = !_hasEntry;
+      } else {
+        isProgrammeRestDay = true;
+      }
+    }
     html += '<div style="background:var(--bg2);border:1px solid '+(isToday?'var(--gold)':'var(--border)')+';border-radius:var(--radius);padding:12px 14px;">';
     html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">';
     html += '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:'+(isToday?'var(--gold)':'var(--text)')+';">'+dayName+(isToday?' · Today':'')+'</div>';
     html += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);">'+dayDate.getDate()+' '+months[dayDate.getMonth()]+'</div>';
     html += '</div>';
+    // Rest day: show a quiet indicator + optional add, not two empty + Add slots
+    if(isProgrammeRestDay){
+      html += '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;">';
+      html += '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Rest Day</div>';
+      html += '<div onclick="window._phxOpenAddSessionSheet(\''+dayName+'\',\'am\')" style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);opacity:0.6;cursor:pointer;">+ Add</div>';
+      html += '</div>';
+      html += '</div>';
+      return;
+    }
     // Render each slot. Empty slots get the "+ Add Session" affordance.
     ['am','pm'].forEach(function(slotKey, sIdx){
       var slotSessions = (slotKey === 'am') ? amSessions : pmSessions;
@@ -15718,7 +15747,29 @@ function renderTodaySessionCard(){
     }
   });
   todaySessions = expanded;
-  if(!todaySessions.length) todaySessions = [week.sessions[0]];
+  // v4.8.0 FIX: don't fall back to sessions[0] when today has no session.
+  // isTodayRestDay() already handles the no-session case but fqScheduleMode='user_assigns'
+  // can bypass that check. If we have no sessions for today after expansion, treat as rest.
+  if(!todaySessions.length){
+    // Render rest card inline and bail out.
+    var _c2=document.getElementById('card-today-session');
+    if(_c2){
+      _c2.style.borderColor='var(--border)';
+      _c2.style.borderLeftColor='var(--border2)';
+      _c2.style.cursor='default';
+      _c2.setAttribute('onclick','');
+      _c2.querySelector('.game-card-inner').innerHTML=
+        '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm" style="color:var(--text3);">Today</span></div>'+
+        '<div class="game-card-title" style="font-size:26px;color:var(--text2);">Rest Day</div>'+
+        '<div class="game-card-sub" style="color:var(--text3);margin-top:6px;line-height:1.6;font-size:13px;">Recovery is training. Your body is adapting right now.</div>'+
+        '<div style="display:flex;gap:10px;margin-top:16px;">'+
+          '<div onclick="event.stopPropagation();openWalkLog();" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Log a Walk</div>'+
+          '<div onclick="event.stopPropagation();openActiveRecovery();" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);">Active Recovery</div>'+
+        '</div>';
+      window._todaySession=null;
+    }
+    return;
+  }
 
   // v4.7.9 TASK 3: order AM before PM when the user assigned slots in the questionnaire.
   // fqSessionSchedule[dayKey] = {am:'strength'|'wod'|'core'|'walk'|'rest'|null, pm:...}

@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.9';
+var APP_VERSION='4.9.10';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9999,7 +9999,13 @@ Allowed wod.format values (9 total):
 - "afap"      → AFAP / For Time: tick off each movement; score = elapsed time
 - "emom"      → EMOM: movements array = one per minute slot (repeats if fewer movements than minutes); score = completion
 - "chipper"   → Chipper: complete all reps of each movement in order; score = time to finish; use for high-rep single-pass workouts
-- "interval"  → Interval: N sets × work/rest cycles. Set wod.sets, wod.work_sec, wod.rest_sec. Score = sets completed + times
+- "interval"  → Interval: N sets × work/rest cycles. Set wod.sets, wod.rest_sec. Score = sets completed + times.
+                   TWO MODES — set EITHER work_sec OR distance_m/reps on the movement, not both:
+                   TIMED mode (assault bike, ski erg): set wod.work_sec (timer counts DOWN, auto-flips to rest).
+                   TASK mode (500m row, 400m run, pull-up sets): set distance_m or reps on the movement, NO work_sec.
+                   Timer counts UP in task mode so athlete sees their split. They tap Done to start rest.
+                   Example task interval: {format:"interval", sets:4, rest_sec:120, movements:[{name:"Row", distance_m:500}]}
+                   Example timed interval: {format:"interval", sets:6, work_sec:30, rest_sec:90, movements:[{name:"Assault Bike"}]}
 - "tabata"    → Tabata: 20 sec work / 10 sec rest × 8 rounds per movement. Auto-cycles movements. Score = completion
 - "death_by"  → Death By: Minute 1 = 1 rep, Minute 2 = 2 reps, etc. Score = last minute completed. Use for pull-ups, burpees, box jumps
 - "forload"   → For Load: sets × reps building to max. movements have sets+reps+load. Score = heaviest set
@@ -16680,11 +16686,22 @@ function _phxShowSessionPreview(sess, dayName, isToday){
       // Blocks format — show each block
       if(wod.blocks && wod.blocks.length){
         wod.blocks.forEach(function(block, bi){
+          // Format rest/work label clearly for preview
+          var _bFmt = String(block.format||'').toLowerCase();
+          var _bMeta = '';
+          if(block.sets) _bMeta += ' · '+block.sets+' sets';
+          if(block.work_sec && _bFmt === 'interval'){
+            _bMeta += ' · '+Math.round(block.work_sec/60)+'min work / '+Math.round((block.rest_sec||60)/60)+'min rest';
+          } else if(!block.work_sec && block.rest_sec && _bFmt === 'interval'){
+            // Task mode: distance/reps, just show rest
+            var _restLabel = block.rest_sec >= 60 ? Math.round(block.rest_sec/60)+' min rest' : block.rest_sec+'s rest';
+            _bMeta += ' · Complete task, then '+_restLabel;
+          } else if(block.work_sec){
+            _bMeta += ' · '+block.work_sec+'s / '+block.rest_sec+'s';
+          }
           contentHTML += '<div style="margin-bottom:12px;">' +
             '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">' +
-              (block.label||'Block '+(bi+1))+' · '+(block.format||'').toUpperCase() +
-              (block.sets ? ' · '+block.sets+' sets' : '') +
-              (block.work_sec ? ' · '+block.work_sec+'s work / '+block.rest_sec+'s rest' : '') +
+              (block.label||'Block '+(bi+1))+' · '+(block.format||'').toUpperCase() + _bMeta +
             '</div>';
           (block.movements||[]).forEach(function(m){
             contentHTML += _phxPreviewMovRow(m);
@@ -18387,35 +18404,111 @@ function startWODTimer(modalId){
   function _renderINTERVAL(){
     var t = window._wodTimer;
     var totalSets = wod.sets || t.intervalSets || 5;
-    var workSec   = wod.work_sec  || t.intervalWork || 60;
+    var workSec   = wod.work_sec  || t.intervalWork || 0;
     var restSec   = wod.rest_sec  || t.intervalRest || 60;
     var setNum    = t.intervalSetNum || 1;
-    var phase     = t.intervalPhase || 'work'; // 'work' | 'rest' | 'done'
-    var phaseSec  = t.intervalPhaseSec !== undefined ? t.intervalPhaseSec : workSec;
+    var phase     = t.intervalPhase || 'work';
     var isWork    = (phase === 'work');
-    var movHTML   = movements.map(function(m, i){
+    var isRest    = (phase === 'rest');
+
+    // Detect interval mode:
+    // TASK mode  — movement has distance_m or reps (e.g. 500m row, 10 pull-ups).
+    //              Timer counts UP during work so athlete sees their split.
+    //              Athlete taps "Done" to end the work period and start rest.
+    // TIMED mode — movement has work_sec (e.g. 30s assault bike sprint).
+    //              Timer counts DOWN automatically, flips to rest when it hits 0.
+    var firstMov = movements[0] || {};
+    var isTaskMode = !!(firstMov.distance_m || (firstMov.reps && !workSec));
+    if(workSec > 0) isTaskMode = false; // explicit work_sec overrides
+
+    var phaseSec = t.intervalPhaseSec !== undefined ? t.intervalPhaseSec :
+                   (isWork ? (isTaskMode ? 0 : workSec) : restSec);
+
+    // ── Work phase ──
+    var movHTML = movements.map(function(m, i){
       var loadStr = phxFormatHeight(phxMovementLoad(m, window._wodSelection, i));
-      var boxes   = phxRenderTargetBoxes(loadStr, m.reps || (m.distance_m ? m.distance_m+'m' : ''), m.name);
-      return '<div style="background:var(--bg2);border:1px solid '+(isWork?'var(--orange)':'var(--border)')+';border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;">' +
-        '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>' +
+      var taskStr = m.distance_m ? m.distance_m+'m' : (m.reps ? String(m.reps) : '');
+      var boxes   = phxRenderTargetBoxes(loadStr, taskStr, m.name);
+      return '<div style="background:var(--bg2);border:1px solid var(--orange);border-radius:var(--radius);padding:16px;margin-bottom:8px;">' +
+        '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:6px;">'+m.name+'</div>' +
         boxes +
+        (m.coaching_note ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;">'+m.coaching_note+'</div>' : '') +
       '</div>';
     }).join('');
+
+    // ── Rest phase ──
+    var restMin = Math.round(restSec / 60);
+    var restLabel = restSec >= 60 ? restMin+' min rest' : restSec+'s rest';
+    var nextSetHTML = (setNum < totalSets)
+      ? '<div style="font-family:var(--font-d);font-size:13px;color:var(--text2);text-align:center;margin-top:8px;">Set '+(setNum+1)+' of '+totalSets+' up next</div>'
+      : '<div style="font-family:var(--font-d);font-size:13px;color:var(--gold);text-align:center;margin-top:8px;">Last set complete</div>';
+
+    // ── Timer display ──
+    var timerColor = isWork ? 'var(--orange)' : 'var(--blue,#4A90D9)';
+    var timerLabel, timerDisplay;
+    if(isWork && isTaskMode){
+      timerDisplay = formatTime(t.elapsed - (t.intervalElapsedAtSetStart||0));
+      timerLabel   = 'ELAPSED — SET '+setNum;
+    } else if(isWork){
+      timerDisplay = formatTime(Math.max(0, phaseSec));
+      timerLabel   = 'WORK TIME REMAINING';
+    } else {
+      timerDisplay = formatTime(Math.max(0, phaseSec));
+      timerLabel   = 'REST — NEXT SET IN';
+    }
+
+    // ── Set tracker dots ──
+    var dots = '';
+    for(var d=1; d<=totalSets; d++){
+      var done = d < setNum || (d === setNum && !isWork);
+      var current = (d === setNum && isWork);
+      dots += '<div style="width:10px;height:10px;border-radius:50%;background:'+(done?'var(--gold)':(current?'var(--orange)':'var(--border2)'))+';margin:0 3px;display:inline-block;"></div>';
+    }
+
     inner.innerHTML='<div style="padding-top:20px;">' +
-      _headerHTML(isWork ? 'SET '+setNum+' OF '+totalSets+' — WORK' : 'REST') +
-      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:'+(isWork?'var(--orange)':'var(--blue,#4A90D9)')+';">'+formatTime(phaseSec)+'</div>' +
-      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">'+(isWork?'WORK TIME REMAINING':'REST — NEXT SET IN')+'</div>' +
-      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">' +
-        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Set</div>' +
-        '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+setNum+' / '+totalSets+'</div>' +
-      '</div>' +
-      (isWork ? movHTML : '<div style="font-family:var(--font-d);font-size:16px;color:var(--text2);text-align:center;padding:20px 0;">Recover. Breathe. Next set starts automatically.</div>') +
+      _headerHTML(isWork ? 'SET '+setNum+' OF '+totalSets : restLabel.toUpperCase()+' — RECOVER') +
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:'+timerColor+';">'+timerDisplay+'</div>' +
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:14px;">'+timerLabel+'</div>' +
+      '<div style="text-align:center;margin-bottom:16px;">'+dots+'</div>' +
+      (isWork
+        ? movHTML +
+          (isTaskMode
+            ? '<button class="btn-primary" style="width:100%;padding:16px;margin-top:8px;font-size:16px;font-weight:900;letter-spacing:2px;" onclick="window._wodIntervalDone()">Done — Start Rest</button>'
+            : '')
+        : '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);padding:20px;text-align:center;margin-bottom:10px;">' +
+            '<div style="font-family:var(--font-d);font-size:42px;font-weight:900;color:var(--blue,#4A90D9);" id="wod-timer-num-rest">'+formatTime(Math.max(0,phaseSec))+'</div>' +
+            '<div style="font-size:12px;color:var(--text3);margin-top:4px;letter-spacing:2px;text-transform:uppercase;">'+restLabel+'</div>' +
+          '</div>' +
+          nextSetHTML
+      ) +
       '<div style="display:flex;gap:10px;margin-top:14px;">' +
         '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>' +
-        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>' +
+        '<button class="btn-secondary" style="flex:0 0 90px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>' +
       '</div>' +
     '</div>';
   }
+
+  // "Done" tap in task-mode interval — athlete finished the task, start rest countdown
+  window._wodIntervalDone = function(){
+    var t = window._wodTimer;
+    if(!t || t.intervalPhase !== 'work') return;
+    var workSec   = wod.work_sec  || t.intervalWork || 0;
+    var restSec   = wod.rest_sec  || t.intervalRest || 60;
+    var totalSets = wod.sets || t.intervalSets || 5;
+    // Record split time for this set
+    var setElapsed = t.elapsed - (t.intervalElapsedAtSetStart||0);
+    if(!t.intervalSplits) t.intervalSplits = [];
+    t.intervalSplits.push(setElapsed);
+    // Transition to rest
+    if(t.intervalSetNum >= totalSets){
+      // Last set done — finish
+      finishWOD();
+      return;
+    }
+    t.intervalPhase    = 'rest';
+    t.intervalPhaseSec = restSec;
+    _renderINTERVAL();
+  };
 
   // ── TABATA renderer ─────────────────────────────────────────────────────────
   // 20 sec on / 10 sec off × 8 rounds per movement. Multiple movements cycle.
@@ -18763,24 +18856,51 @@ function startWODTimer(modalId){
 
         // ── INTERVAL (work/rest cycles, N sets) ──
         } else if(t.fmt==='interval'){
-          var workSec = wod.work_sec || 60;
-          var restSec = wod.rest_sec || 60;
+          var workSec   = wod.work_sec  || 0;
+          var restSec   = wod.rest_sec  || 60;
           var totalSets = wod.sets || 5;
-          // initialise state on first tick
-          if(t.intervalSetNum === undefined){ t.intervalSetNum=1; t.intervalPhase='work'; t.intervalPhaseSec=workSec; t.intervalWork=workSec; t.intervalRest=restSec; t.intervalSets=totalSets; }
-          t.intervalPhaseSec = (t.intervalPhaseSec||1) - 1;
-          if(el) el.textContent = formatTime(Math.max(0, t.intervalPhaseSec));
-          if(t.intervalPhaseSec <= 0){
-            if(t.intervalPhase === 'work'){
-              if(t.intervalSetNum >= totalSets){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
-              t.intervalPhase = 'rest';
-              t.intervalPhaseSec = restSec;
+          // Detect task mode: distance or reps but no explicit work_sec
+          var firstMov = movements[0] || {};
+          var isTaskMode = !!(firstMov.distance_m || (firstMov.reps && !workSec));
+          if(workSec > 0) isTaskMode = false;
+          // Initialise state on first tick
+          if(t.intervalSetNum === undefined){
+            t.intervalSetNum = 1;
+            t.intervalPhase  = 'work';
+            t.intervalPhaseSec = isTaskMode ? 0 : workSec;
+            t.intervalElapsedAtSetStart = t.elapsed - 1;
+            t.intervalWork = workSec;
+            t.intervalRest = restSec;
+            t.intervalSets = totalSets;
+            t.intervalSplits = [];
+          }
+          if(t.intervalPhase === 'work'){
+            if(isTaskMode){
+              // Task mode: count up — tick handled by elapsed; Done button ends work phase
+              var setElapsed = t.elapsed - (t.intervalElapsedAtSetStart||0);
+              if(el) el.textContent = formatTime(setElapsed);
             } else {
+              // Timed mode: count down from work_sec
+              t.intervalPhaseSec = (t.intervalPhaseSec||1) - 1;
+              if(el) el.textContent = formatTime(Math.max(0, t.intervalPhaseSec));
+              if(t.intervalPhaseSec <= 0){
+                if(t.intervalSetNum >= totalSets){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
+                t.intervalPhase    = 'rest';
+                t.intervalPhaseSec = restSec;
+                _renderRouter();
+              }
+            }
+          } else {
+            // Rest phase: always counts down regardless of mode
+            t.intervalPhaseSec = (t.intervalPhaseSec||1) - 1;
+            if(el) el.textContent = formatTime(Math.max(0, t.intervalPhaseSec));
+            if(t.intervalPhaseSec <= 0){
               t.intervalSetNum++;
               t.intervalPhase = 'work';
-              t.intervalPhaseSec = workSec;
+              t.intervalPhaseSec = isTaskMode ? 0 : workSec;
+              t.intervalElapsedAtSetStart = t.elapsed;
+              _renderRouter();
             }
-            _renderRouter();
           }
 
         // ── BLOCKS (multi-block sequencer with auto-rest transition) ──

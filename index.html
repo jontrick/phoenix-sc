@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.15';
+var APP_VERSION='4.9.16';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17383,19 +17383,21 @@ function updateCardAccess(){
   var isPro=hasProAccess();
   var isIgnite=hasIgniteAccess();
 
-  // Leaderboard — Ignite+
+  // Leaderboard — Ignite+ (card may be in sidebar now — guard all references)
   var lbBadge=document.getElementById('leaderboard-lock-badge');
-  if(isIgnite){
-    lbCard.classList.remove('game-card-locked');
-    if(lbBadge){lbBadge.textContent='Leaderboard';lbBadge.classList.remove('game-card-tier-locked');}
-    var lbTitle=document.getElementById('leaderboard-title');
-    if(lbTitle) lbTitle.textContent='Leaderboard';
-    var lbSub=document.getElementById('leaderboard-sub');
-    if(lbSub) lbSub.textContent='See where you rank globally';
-    var lbIcon=document.getElementById('leaderboard-lock-icon');
-    if(lbIcon) lbIcon.style.opacity='1';
-  } else {
-    if(lbBadge) lbBadge.textContent='Ignite unlocks this';
+  if(lbCard){
+    if(isIgnite){
+      lbCard.classList.remove('game-card-locked');
+      if(lbBadge){lbBadge.textContent='Leaderboard';lbBadge.classList.remove('game-card-tier-locked');}
+      var lbTitle=document.getElementById('leaderboard-title');
+      if(lbTitle) lbTitle.textContent='Leaderboard';
+      var lbSub=document.getElementById('leaderboard-sub');
+      if(lbSub) lbSub.textContent='See where you rank globally';
+      var lbIcon=document.getElementById('leaderboard-lock-icon');
+      if(lbIcon) lbIcon.style.opacity='1';
+    } else {
+      if(lbBadge) lbBadge.textContent='Ignite unlocks this';
+    }
   }
 
   // Combine — Ignite+

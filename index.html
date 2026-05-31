@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.17';
+var APP_VERSION='4.9.18';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18708,50 +18708,86 @@ function startWODTimer(modalId){
       '</div>';
       return;
     }
-    // Active block — render a mini version appropriate to block format
+    // Active block — delegate to the correct format renderer.
+    // Temporarily patch wod.movements/format/timing fields to match this block,
+    // call the renderer, then the progress bar + Next Block button are injected after.
     var blockFmt = String(block.format||'afap').toLowerCase();
-    var blockMovs = block.movements || [];
     var blockLabel = block.label || ('Block '+(blockIdx+1));
-    var progressBar = '<div style="display:flex;gap:4px;margin-bottom:14px;">' +
+
+    // Progress bar — always shown at top
+    var progressBar = '<div style="display:flex;gap:4px;margin:0 0 10px;">' +
       blocks.map(function(b,i){
         return '<div style="flex:1;height:4px;border-radius:2px;background:'+(i<blockIdx?'var(--gold)':(i===blockIdx?'var(--orange)':'var(--border2)'))+';"></div>';
       }).join('') +
     '</div>';
-    var movHTML = blockMovs.map(function(m,i){
-      var loadStr = phxFormatHeight(m.load_rx || m.load_scaled || '');
-      var repStr = m.distance_m ? m.distance_m+'m' : (m.reps ? String(m.reps) : '');
-      return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;">' +
-        '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>' +
-        '<div style="font-size:12px;color:var(--gold);margin-top:4px;">'+(repStr?(repStr+' '):'')+loadStr+'</div>' +
-        (m.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:4px;font-style:italic;">'+m.coaching_note+'</div>':'')+
-      '</div>';
-    }).join('');
-    // Timer display — blocks use their own timing
+
+    // Patch wod fields to match this block so format renderers work correctly
+    var _savedMovements  = movements;
+    var _savedFmt        = fmt;
+    var _savedTotalSecs  = t.totalSecs;
+    var _savedWodSets    = wod.sets;
+    var _savedWodWorkSec = wod.work_sec;
+    var _savedWodRestSec = wod.rest_sec;
+
+    // Override with block values
+    movements = block.movements || [];
+    fmt = blockFmt;
     var blockWorkSec = block.work_sec || block.duration_sec || (block.duration_min ? block.duration_min*60 : 0);
-    var phaseSec = t.blockPhaseSec !== undefined ? t.blockPhaseSec : blockWorkSec;
-    var timerDisplay = blockWorkSec > 0
-      ? '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:var(--orange);">'+formatTime(phaseSec)+'</div>' +
-        '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:14px;">'+(blockFmt==='amrap'?'TIME REMAINING':'ELAPSED')+'</div>'
-      : '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(t.elapsed)+'</div>' +
-        '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:14px;">ELAPSED</div>';
-    // Sets indicator for interval blocks
-    var setsBar = (block.sets && block.sets > 1)
-      ? '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">' +
-          '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Set</div>' +
-          '<div id="wod-block-setnum" style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+(t.blockSetNum||1)+' / '+block.sets+'</div>' +
-        '</div>'
-      : '';
-    inner.innerHTML='<div style="padding-top:20px;">' +
-      _headerHTML(blockLabel.toUpperCase()+' · '+(blockFmt.toUpperCase())) +
-      progressBar +
-      timerDisplay +
-      setsBar +
-      movHTML +
-      '<div style="display:flex;gap:10px;margin-top:10px;">' +
-        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start':(t.running?'PAUSE':'RESUME'))+'</button>' +
-        '<button class="btn-secondary" style="padding:18px;width:auto;max-width:none;margin:0;" onclick="window._wodBlocksNextBlock()">Next Block &rsaquo;</button>' +
+    var blockRestSec = block.rest_sec || 60;
+    wod.sets     = block.sets     || wod.sets;
+    wod.work_sec = block.work_sec || wod.work_sec;
+    wod.rest_sec = block.rest_sec || wod.rest_sec;
+    if(blockWorkSec > 0) t.totalSecs = blockWorkSec;
+
+    // Sync block-specific timer state into the interval/amrap state slots
+    if(blockFmt === 'amrap'){
+      if(t.blockPhaseSec === undefined) t.blockPhaseSec = blockWorkSec;
+      t.totalSecs = t.blockPhaseSec;
+    } else if(blockFmt === 'interval'){
+      // Preserve interval sub-state keyed to this block
+      if(t.intervalSetNum === undefined || t._lastBlockIdx !== blockIdx){
+        t.intervalSetNum  = 1;
+        t.intervalPhase   = 'work';
+        t.intervalPhaseSec = block.work_sec ? block.work_sec : 0;
+        t.intervalElapsedAtSetStart = t.elapsed;
+        t.intervalWork = block.work_sec || 0;
+        t.intervalRest = block.rest_sec || 60;
+        t.intervalSets = block.sets || 4;
+        t.intervalSplits = [];
+        t._lastBlockIdx = blockIdx;
+      }
+    }
+
+    // Call the format renderer — renders into inner directly
+    _renderRouter();
+
+    // Restore patched wod fields
+    movements  = _savedMovements;
+    fmt        = _savedFmt;
+    t.totalSecs = _savedTotalSecs;
+    wod.sets     = _savedWodSets;
+    wod.work_sec = _savedWodWorkSec;
+    wod.rest_sec = _savedWodRestSec;
+
+    // Inject progress bar at top + block label header + Next Block button
+    // The renderer has already set inner.innerHTML — we prepend/append to it
+    var existing = inner.innerHTML;
+    // Strip the outermost padding div wrapper the renderers add, inject progress bar inside
+    inner.innerHTML = '<div style="padding-top:4px;">' +
+      '<div style="padding:10px 16px 0;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' +
+        blockLabel.toUpperCase()+' · '+blockFmt.toUpperCase() +
       '</div>' +
+      progressBar +
+      existing +
     '</div>';
+
+    // Replace the standard finish/pause button row with Next Block alongside it
+    // Find and replace the Finish button with Next Block
+    inner.innerHTML = inner.innerHTML
+      .replace(
+        /<button[^>]*onclick="finishWOD\(\)"[^>]*>Finish<\/button>/g,
+        '<button class="btn-secondary" style="padding:18px;width:auto;max-width:none;margin:0;" onclick="window._wodBlocksNextBlock()">Next Block &rsaquo;</button>'
+      );
   }
   window._wodBlocksNextBlock = function(){
     var t = window._wodTimer;
@@ -18761,6 +18797,33 @@ function startWODTimer(modalId){
     var restSec = wod.rest_between_sec || 60;
     t.blockPhase = 'rest';
     t.blockPhaseSec = restSec;
+    // Ensure timer is running during rest (auto-counts down without athlete needing to tap)
+    if(!t.running && t.started){
+      t.running = true;
+      if(t.interval) clearInterval(t.interval);
+      t.interval = setInterval(function(){
+        if(!t.running) return;
+        t.elapsed++;
+        if(t.blockPhase === 'rest'){
+          t.blockPhaseSec = Math.max(0, (t.blockPhaseSec||0) - 1);
+          var el = document.getElementById('wod-timer-num');
+          if(el) el.textContent = formatTime(t.blockPhaseSec);
+          if(t.blockPhaseSec <= 0){
+            t.blockPhase = 'active';
+            var activeBlock = (wod.blocks||[])[t.blockIdx||0];
+            t.blockPhaseSec = activeBlock ? (activeBlock.work_sec||activeBlock.duration_sec||(activeBlock.duration_min?activeBlock.duration_min*60:0)) : 0;
+            t._lastBlockIdx = undefined; // force re-init of interval state for new block
+            _renderBLOCKS();
+            clearInterval(t.interval);
+            t.running = false;
+            // Restart the main timer loop via toggleWODTimer
+            if(typeof window._wodPrimaryAction === 'function') window._wodPrimaryAction();
+          }
+        }
+      }, 1000);
+    } else if(!t.started){
+      // Timer not started yet — just render
+    }
     _renderBLOCKS();
   };
   window._wodBlocksSkipRest = function(){
@@ -18769,6 +18832,9 @@ function startWODTimer(modalId){
     var blocks = wod.blocks || [];
     var block = blocks[t.blockIdx || 0];
     t.blockPhaseSec = block ? (block.work_sec || block.duration_sec || (block.duration_min ? block.duration_min*60 : 0)) : 0;
+    t._lastBlockIdx = undefined; // force re-init of interval/amrap state for new block
+    t.intervalSetNum = undefined;
+    t.totalSecs = t.blockPhaseSec;
     _renderBLOCKS();
   };
 

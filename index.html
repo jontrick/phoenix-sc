@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.0';
+var APP_VERSION='4.9.1';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9699,6 +9699,10 @@ Progressive load rules (apply to primary lifts only):
 - checkin_data.niggle_notes mentions a body part → remove or substitute movements that load it
 - checkin_data.next_week_requests text → implement the requested change (within reason)
 - checkin_data.continue_programme === false → re-balance the week toward what they're asking for
+- pre_session_adjustments (array of notes) → athlete made these exercise swaps BEFORE training this week.
+  This tells you what movements they avoided or preferred. Honour these preferences in next week's build
+  unless there is a strong programming reason not to (e.g. the swapped movement is a structural balance
+  priority). Always acknowledge pre-adjustments in the coach_note: "I noticed you swapped X for Y...".
 
 CRITICAL: use next_week_schedule.days (or fall back to athlete.fqTrainingDays) for the
 sessions in the new week. Never use a day the athlete didn't pick.
@@ -15556,7 +15560,16 @@ async function _phxBuildWeeklyRegenContext(chosenDays){
     } : null,
     next_week_schedule: {days: chosenDays},
     today_date: new Date().toISOString().split('T')[0],
-    days_to_combine: daysToCombine
+    days_to_combine: daysToCombine,
+    // v4.9.1: pre-session adjustments made by athlete via the session preview (swaps, supersets).
+    // These are changes the athlete made BEFORE training, giving the coach context on preferences.
+    pre_session_adjustments: (function(){
+      try {
+        var adjKey = 'phoenix_pre_adjustments_w'+weekN;
+        var adj = JSON.parse(localStorage.getItem(adjKey)||'[]');
+        return adj.length ? adj.map(function(a){ return a.note; }) : null;
+      } catch(_e){ return null; }
+    })()
   };
 }
 
@@ -16319,14 +16332,32 @@ function _phxShowSessionPreview(sess, dayName, isToday){
   contentHTML += '</div>'; // end padding wrapper
 
   // ── Action bar ──
-  var actionHTML =
-    '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);">';
+  // Determine if session has adjustable exercises
+  var hasExercises = !!(
+    (sess.exercises && sess.exercises.length) ||
+    (sess.wod && sess.wod.movements && sess.wod.movements.length) ||
+    (sess.core && sess.core.movements && sess.core.movements.length)
+  );
+
+  var actionHTML = '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);">';
+
   if(isToday){
+    // Today: Start + Test Run (side by side) + Adjust below
     actionHTML +=
-      '<button onclick="_phxPreviewStartSession()" style="width:100%;padding:16px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Start Session →</button>';
+      '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
+        '<button onclick="_phxPreviewStartSession()" style="flex:1;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Start →</button>' +
+        '<button onclick="_phxPreviewTestRun()" style="flex:0 0 100px;padding:14px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);cursor:pointer;">Test Run</button>' +
+      '</div>';
+    if(hasExercises){
+      actionHTML += '<button onclick="_phxPreviewAdjust()" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Adjust Session</button>';
+    }
   } else {
+    // Future day: Adjust available, no Start
     actionHTML +=
-      '<div style="text-align:center;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Scheduled for '+dayName+' — available to start on the day</div>';
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:10px;">Scheduled for '+dayName+' — starts on the day</div>';
+    if(hasExercises){
+      actionHTML += '<button onclick="_phxPreviewAdjust()" style="width:100%;padding:14px;background:transparent;border:1px solid var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--gold);cursor:pointer;">Adjust Session</button>';
+    }
   }
   actionHTML += '</div>';
 
@@ -16389,6 +16420,130 @@ window._phxPreviewStartSession = function(){
   window._todaySessions = window._todaySessions || [sess];
   if(typeof openTodaySession === 'function') openTodaySession();
 };
+
+// ── TEST RUN — starts session without Supabase logging ──────────────────────
+// Timer works, sets tracked, RPE can be noted — but nothing written to DB.
+// Useful for QA testing new formats and athlete session rehearsal.
+window._phxPreviewTestRun = function(){
+  var sess = window._phxPreviewSess;
+  var overlay = document.getElementById('phx-session-preview');
+  if(overlay) overlay.remove();
+  if(!sess) return;
+  window._todaySession = sess;
+  window._todaySessions = [sess];
+  // Patch supabaseStartSession to no-op for this session only
+  window._phxTestRunActive = true;
+  var _origStart = window.supabaseStartSession;
+  var _origLog = window.supabaseLogSet;
+  var _origFinish = window.supabaseFinishSession;
+  window.supabaseStartSession = function(){ console.log('[PHX] TEST RUN — session start suppressed'); };
+  window.supabaseLogSet = function(){ console.log('[PHX] TEST RUN — set log suppressed'); };
+  window.supabaseFinishSession = function(){ console.log('[PHX] TEST RUN — session finish suppressed'); };
+  // Show a persistent "TEST RUN" banner
+  setTimeout(function(){
+    var banner = document.createElement('div');
+    banner.id = 'phx-test-run-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#CC3333;color:#fff;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;text-align:center;padding:6px;pointer-events:none;';
+    banner.textContent = 'TEST RUN — not logged';
+    document.body.appendChild(banner);
+  }, 300);
+  if(typeof openTodaySession === 'function') openTodaySession();
+  // Restore real functions after 2 seconds (enough for session to init)
+  setTimeout(function(){
+    if(_origStart) window.supabaseStartSession = _origStart;
+    if(_origLog)   window.supabaseLogSet = _origLog;
+    if(_origFinish)window.supabaseFinishSession = _origFinish;
+    window._phxTestRunActive = false;
+  }, 2000);
+};
+
+// Clean up test run banner when leaving session screen
+(function(){
+  var _origNavTo = window.navTo;
+  if(typeof _origNavTo === 'function'){
+    window.navTo = function(tab){
+      var b = document.getElementById('phx-test-run-banner');
+      if(b) b.remove();
+      _origNavTo(tab);
+    };
+  }
+})();
+
+// ── ADJUST SESSION — pre-session customisation from preview ─────────────────
+// Works for any day (not just today). Saves to same localStorage keys as the
+// live session customise flow — changes persist and apply when session starts.
+// Also writes an adjustment note to weekly_checkins so the coach sees it.
+window._phxPreviewAdjust = function(){
+  var sess = window._phxPreviewSess;
+  var day  = window._phxPreviewDay;
+  if(!sess) return;
+  // Temporarily set _todaySession so the existing swap/superset machinery works
+  var _prev = window._todaySession;
+  window._todaySession = sess;
+  var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);
+  var sid   = _phxSessionId(sess);
+  var customs = _phxLoadCustomisations(sid, weekN) || {swaps:{}, supersets:{}};
+  // Build the adjust bottom sheet
+  var exercises = sess.exercises || (sess.wod && sess.wod.movements) || (sess.core && sess.core.movements) || [];
+  if(!exercises.length){
+    alert('No exercises to adjust for this session type.');
+    window._todaySession = _prev;
+    return;
+  }
+  // Show a simple sheet: list exercises, tap to swap
+  _phxOpenCustomiseSheet({
+    title: 'Adjust Session',
+    subtitle: (day||'') + ' · Tap an exercise to swap it',
+    options: exercises.map(function(e){ return {label: e.name, sub: 'Tap to swap'}; }),
+    onSelect: function(exName){
+      window._todaySession = sess; // ensure still set
+      _phxSwapExercise(exName);
+      // After swap: record adjustment for coach awareness
+      _phxRecordPreAdjustment(sess, day, weekN);
+    }
+  });
+};
+
+// ── COACH AWARENESS — record pre-session adjustments ─────────────────────────
+// Saves a human-readable summary of adjustments to localStorage + mirrors to
+// Supabase weekly_checkins.next_week_requests so the coach reads it at regen.
+function _phxRecordPreAdjustment(sess, dayName, weekN){
+  try {
+    var sid = _phxSessionId(sess);
+    var customs = _phxLoadCustomisations(sid, weekN) || {swaps:{}, supersets:{}};
+    var swapEntries = Object.keys(customs.swaps||{}).map(function(orig){
+      return orig + ' → ' + customs.swaps[orig];
+    });
+    var superEntries = Object.keys(customs.supersets||{}).map(function(orig){
+      return orig + ' superset with ' + customs.supersets[orig];
+    });
+    var all = swapEntries.concat(superEntries);
+    if(!all.length) return;
+    var note = 'Pre-session adjustments ('+dayName+' Week '+weekN+'): '+all.join(', ')+'.';
+    // 1) Store locally for the regen context
+    var adjKey = 'phoenix_pre_adjustments_w'+weekN;
+    var existing = [];
+    try { existing = JSON.parse(localStorage.getItem(adjKey)||'[]'); } catch(_e){}
+    // Deduplicate by session id
+    existing = existing.filter(function(a){ return a.sid !== sid; });
+    existing.push({sid:sid, day:dayName, week:weekN, note:note, ts:new Date().toISOString()});
+    localStorage.setItem(adjKey, JSON.stringify(existing));
+    // 2) Mirror to Supabase weekly_checkins if signed in
+    if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+      var weekStartISO = (typeof _phxBrisbaneMondayISO === 'function') ? _phxBrisbaneMondayISO() : new Date().toISOString().split('T')[0];
+      sb.from('weekly_checkins').upsert({
+        user_id: currentSession.user.id,
+        week_number: weekN,
+        week_start_date: weekStartISO,
+        next_week_requests: note
+      }, {onConflict:'user_id,week_number,week_start_date'}).then(function(r){
+        if(r && r.error) console.warn('[PHX] pre-adjust mirror failed:', r.error.message||r.error);
+        else console.log('[PHX] pre-adjustment note saved to Supabase');
+      }).catch(function(e){ console.warn('[PHX] pre-adjust mirror threw:', e); });
+    }
+    console.log('[PHX] pre-adjustment recorded:', note);
+  } catch(e){ console.warn('[PHX] _phxRecordPreAdjustment failed:', e); }
+}
 
 // v4.7.59: Confirm-then-remove for custom (athlete-added) sessions. Replaces the native
 // confirm() — uses the existing bottom sheet so it's consistent with the rest of the flow.

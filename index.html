@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.1';
+var APP_VERSION='4.8.2';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5300,14 +5300,37 @@ async function _phxResetFullReset(){
   // MUST await this AND check for errors before touching anything else — see header comment.
   if(uid){
     try {
+      // v4.8.2 FIX: removed invalid fq_coach_mode column; expanded to null all FQ fields.
       var res = await sb.from('profiles').update({
         fq_completed: null,
         ai_programme: null,
+        ai_programme_date: null,
+        ai_programme_trigger: null,
         current_week: null,
+        fq_goal: null,
         fq_goals: null,
         fq_training_days: null,
+        fq_days: null,
         fq_injury: null,
-        fq_coach_mode: null
+        fq_injury_notes: null,
+        fq_path: null,
+        fq_parq_clear: null,
+        fq_duration: null,
+        fq_background: null,
+        fq_away: null,
+        fq_sport: null,
+        programme_target: null,
+        event_date: null,
+        event_description: null,
+        schedule_mode: null,
+        session_schedule: null,
+        available_slots: null,
+        coach_tone: null,
+        fq_currently_training: null,
+        fq_current_stint: null,
+        fq_time_away: null,
+        fq_lifetime_age: null,
+        fq_movement_confidence: null
       }).eq('id', uid);
       if(res && res.error){
         console.error('[PHX] full_reset: Supabase update returned error:', res.error.message || res.error);

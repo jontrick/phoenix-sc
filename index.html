@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.14';
+var APP_VERSION='4.9.15';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17160,8 +17160,7 @@ function renderTodaySessionCard(){
   });
   todaySessions = expanded;
   // v4.8.0 FIX: don't fall back to sessions[0] when today has no session.
-  // isTodayRestDay() already handles the no-session case but fqScheduleMode='user_assigns'
-  // can bypass that check. If we have no sessions for today after expansion, treat as rest.
+  console.log('[PHX] renderTodaySessionCard: dayName='+dayName+', sessions found='+todaySessions.length, todaySessions.map(function(s){return s&&(s.session_type||s.day);}));
   if(!todaySessions.length){
     // Render rest card inline and bail out.
     var _c2=document.getElementById('card-today-session');
@@ -20798,8 +20797,11 @@ function openTodaySession(){
   }
   var sess=window._todaySession;
   if(!sess){
-    navTo('programme');
-    return;
+    console.warn('[PHX] openTodaySession: _todaySession is null — todaySessions:', window._todaySessions, 'programme:', !!(athlete&&athlete.aiProgramme));
+    // Don't nav away — stay on Today screen. Likely renderTodaySessionCard hasn't run yet.
+    if(typeof renderTodaySessionCard === 'function') renderTodaySessionCard();
+    sess = window._todaySession;
+    if(!sess){ navTo('today'); return; }
   }
   // v4.7.25 BUILD 4: show the warm-up screen first (if applicable). The continuation runs on Start/Skip.
   // Re-entry guard so the warm-up doesn't loop when the post-warmup callback fires openTodaySession again.

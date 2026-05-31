@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.2';
+var APP_VERSION='4.8.3';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5345,13 +5345,19 @@ async function _phxResetFullReset(){
     }
   }
   // Supabase write confirmed (or no uid). Now safe to wipe local state and reload.
-  // Wipe every phoenix_* localStorage key. Preserves Supabase's own sb-* auth tokens, so
-  // the user stays signed in across the reload below.
+  // v4.8.3 FIX: explicitly null phoenix_athlete FIRST so the fast-path can't resurrect
+  // a stale onboarded state. Then sweep all phoenix_* keys. Collect keys first to avoid
+  // index-shift bugs when removing during iteration.
   try {
-    for(var i = localStorage.length - 1; i >= 0; i--){
-      var key = localStorage.key(i);
-      if(key && key.indexOf('phoenix_') === 0) localStorage.removeItem(key);
+    // Step 1: kill the fast-path cache immediately
+    localStorage.removeItem('phoenix_athlete');
+    // Step 2: collect all phoenix_* keys then remove (safe — no live iteration)
+    var _keysToRemove = [];
+    for(var i = 0; i < localStorage.length; i++){
+      var _k = localStorage.key(i);
+      if(_k && _k.indexOf('phoenix_') === 0) _keysToRemove.push(_k);
     }
+    _keysToRemove.forEach(function(k){ localStorage.removeItem(k); });
   } catch(_e){}
   athlete = null;
   // Route to a fresh questionnaire. Reload keeps the auth session and re-runs the boot
@@ -15250,7 +15256,12 @@ window.openWeekPlan = function(){
 window._phxRenderWeekScheduleTile = function(){
   var bodyEl = document.getElementById('card-this-week-body');
   if(!bodyEl) return;
+  // v4.8.3: show a clear CTA when no programme exists instead of leaving "Loading..."
   var prog = athlete && athlete.aiProgramme;
+  if(!prog){
+    bodyEl.innerHTML = '<div style="font-size:13px;color:var(--text2);line-height:1.5;">No programme yet — complete the questionnaire to get started.</div>';
+    return;
+  }
   var start = _phxWeekStartDate();
   var weekStartISO = start.getFullYear()+'-'+String(start.getMonth()+1).padStart(2,'0')+'-'+String(start.getDate()).padStart(2,'0');
   var byDay = {Monday:[],Tuesday:[],Wednesday:[],Thursday:[],Friday:[],Saturday:[],Sunday:[]};
@@ -15728,7 +15739,21 @@ function renderTodaySessionCard(){
   // v4.7.9 TASK 3: clear any previously-rendered extra-session tiles before re-rendering.
   document.querySelectorAll('.card-today-extra').forEach(function(n){ n.remove(); });
 
-  if(!athlete||!athlete.aiProgramme) return;
+  // v4.8.3: no programme yet — show a build CTA instead of the static placeholder
+  if(!athlete||!athlete.aiProgramme){
+    var _nc = document.getElementById('card-today-session');
+    if(_nc){
+      _nc.style.borderLeftColor = 'var(--gold)';
+      _nc.style.cursor = 'pointer';
+      _nc.setAttribute('onclick','openFoundationQ()');
+      _nc.querySelector('.game-card-inner').innerHTML =
+        '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Your Programme</span></div>'+
+        '<div class="game-card-title" style="font-size:26px;">Build Your Programme</div>'+
+        '<div class="game-card-sub" style="margin-top:6px;">Answer a few questions and your coach will generate your personalised plan.</div>'+
+        '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Get started →</div>';
+    }
+    return;
+  }
   var prog=athlete.aiProgramme;
   var week=prog.week;
   if(!week||!week.sessions||!week.sessions.length) return;

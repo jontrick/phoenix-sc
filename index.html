@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.16';
+var APP_VERSION='4.9.17';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23148,10 +23148,15 @@ async function _phxRestoreSessionVisualState(){
       if(!newWorker) return;
       newWorker.addEventListener('statechange', function(){
         if(newWorker.state === 'activated' && navigator.serviceWorker.controller){
-          // New version activated AND a previous SW was already controlling this page →
-          // it's a real update, not the first install. Reload to pick it up.
           console.log('[PHX] new service worker activated — reloading');
-          reloadOnce();
+          // Show a brief update banner before reload so the user isn't confused
+          var banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--gold,#C89630);color:#000;font-family:var(--font-d,"Arial");font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:8px;cursor:pointer;';
+          banner.textContent = 'Phoenix updated — tap to reload';
+          banner.addEventListener('click', function(){ window.location.reload(); });
+          document.body.appendChild(banner);
+          // Auto reload after 3 seconds
+          setTimeout(function(){ reloadOnce(); }, 3000);
         }
       });
     });

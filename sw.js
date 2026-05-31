@@ -1,4 +1,4 @@
-var CACHE_NAME = 'phoenix-v4.9.16';
+var CACHE_NAME = 'phoenix-v4.9.17';
 var CACHE_FILES = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e) {
@@ -20,7 +20,17 @@ self.addEventListener('activate', function(e) {
         names.filter(function(name) { return name !== CACHE_NAME; })
              .map(function(name) { return caches.delete(name); })
       );
-    }).then(function() { return self.clients.claim(); })
+    }).then(function() {
+      return self.clients.claim();
+    }).then(function() {
+      // Tell all open tabs to reload now that the new SW has taken control.
+      // This is what makes deploys instant for PWA users — no manual cache clear needed.
+      return self.clients.matchAll({type:'window'}).then(function(clients) {
+        clients.forEach(function(client) {
+          client.postMessage({type:'SW_UPDATED', version: CACHE_NAME});
+        });
+      });
+    })
   );
 });
 

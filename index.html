@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.8';
+var APP_VERSION='4.9.9';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16773,12 +16773,14 @@ function _phxShowSessionPreview(sess, dayName, isToday){
       actionHTML += '<button onclick="_phxPreviewAdjust()" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Adjust Session</button>';
     }
   } else {
-    // Future day: Adjust available, no Start
+    // Future day: Test Run for QA + Adjust available, no real Start
     actionHTML +=
       '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:10px;">Scheduled for '+dayName+' — starts on the day</div>';
-    if(hasExercises){
-      actionHTML += '<button onclick="_phxPreviewAdjust()" style="width:100%;padding:14px;background:transparent;border:1px solid var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--gold);cursor:pointer;">Adjust Session</button>';
-    }
+    actionHTML +=
+      '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
+        (hasExercises ? '<button onclick="_phxPreviewAdjust()" style="flex:1;padding:14px;background:transparent;border:1px solid var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--gold);cursor:pointer;">Adjust</button>' : '') +
+        '<button onclick="_phxPreviewTestRun()" style="flex:0 0 100px;padding:14px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);cursor:pointer;">Test Run</button>' +
+      '</div>';
   }
   actionHTML += '</div>';
 

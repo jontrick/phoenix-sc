@@ -1695,7 +1695,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div id="weight-checkin-banner" style="display:none;"></div>
   <div style="padding:0 16px 100px;">
     <!-- Row 1: Full width prescribed workout -->
-    <div id="card-today-session" class="game-card tile-bg" onclick="openTodaySession()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);background-image:url('/assets/tiles/tile-session.jpg');">
+    <div id="card-today-session" class="game-card" onclick="openTodaySession()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);">
       <div class="game-card-inner" style="padding:18px;">
         <div class="game-card-eyebrow">
           <span class="game-card-eyebrow-sm">Your Programme</span>
@@ -1705,70 +1705,20 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
       </div>
     </div>
-    <!-- Row 2: My Coach (left) + WOD (right) -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-      <!-- v4.7.22 BUILD 6: tile no longer locked — free users see read-only chat history; Pro users chat. -->
-      <div id="card-my-coach" class="game-card game-card-sm" onclick="openMyCoach()" style="border-left:3px solid var(--gold);position:relative;">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm">Phoenix Coach</div>
-          <div class="game-card-title-sm">My Coach</div>
-          <div class="game-card-sub-sm" id="coach-sub">Your coach is ready — tap to start</div>
-          <div class="game-card-action-sm">Open chat →</div>
+    <!-- Walk / Run — full width standalone tile -->
+    <div id="card-walk" class="game-card" onclick="openWalkLog()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--green,#4CAF50);">
+      <div class="game-card-inner" style="padding:18px;">
+        <div class="game-card-eyebrow">
+          <span class="game-card-eyebrow-sm">Add On</span>
         </div>
-      </div>
-      <div id="card-phoenix-wod" class="game-card game-card-wod tile-bg" onclick="openPhoenixWOD()" style="border:1px solid var(--gold);background-image:url('/assets/tiles/tile-daily.jpg');">
-        <div class="game-card-inner" style="padding:16px;">
-          <div class="game-card-eyebrow">
-            <span class="game-card-tier-badge" style="font-size:8px;">Everyone</span>
-            <span id="wod-countdown" class="game-card-countdown">24h 00m</span>
-          </div>
-          <div class="game-card-title" id="wod-name" style="font-size:22px;letter-spacing:1px;">THE ZEUS</div>
-          <div class="game-card-sub" id="wod-format" style="color:var(--gold);font-weight:600;font-size:11px;">God Tier — AMRAP 12</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
-            <div class="game-card-streak" id="wod-streak">
-              <span id="wod-streak-text" style="display:flex;align-items:center;gap:5px;font-size:10px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="var(--gold)" stroke="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z"/></svg> 0 day streak</span>
-            </div>
-            <div class="game-card-action-sm">View WOD →</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Row 3: Core + Conditioning + Walk/Run (three equal columns) -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
-      <!-- v4.7.21 FIX 5: stable IDs so the completed-marker helper can find these tiles. -->
-      <div id="card-core" class="game-card game-card-sm tile-bg" onclick="phxStandaloneCoreTap()" style="border-left:3px solid var(--blue);position:relative;background-image:url('/assets/tiles/tile-session.jpg');">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm">Phoenix Coach</div>
-          <div class="game-card-title-sm">Core</div>
-          <!-- v4.7.61: format badge populated by _phxRenderCoreTileFormat() during renderTodayScreen.
-               Reflects today's coach-assigned format (CIRCUIT/STRENGTH). -->
-          <div class="game-card-sub-sm" id="card-core-sub">AI Generated</div>
-          <div class="game-card-action-sm" id="card-core-action">Coach generates →</div>
-          <div id="card-core-fmt-badge" style="position:absolute;top:8px;right:8px;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:3px 6px;border-radius:3px;border:1px solid var(--gold);color:var(--gold);background:rgba(0,0,0,0.4);display:none;">CIRCUIT</div>
-        </div>
-      </div>
-      <!-- v4.7.60: Conditioning tile (renamed from WOD Library to match the locked Row 3 spec:
-           Core / Conditioning / Walk-Run). Still opens the WOD library on tap. -->
-      <div id="card-wod-library" class="game-card game-card-sm tile-bg" onclick="openWODLibrary()" style="border-left:3px solid var(--gold);position:relative;background-image:url('/assets/tiles/tile-daily.jpg');">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm">Add on</div>
-          <div class="game-card-title-sm">Conditioning</div>
-          <div class="game-card-sub-sm" id="card-wod-library-sub">Browse all WODs</div>
-          <div class="game-card-action-sm">Browse →</div>
-        </div>
-      </div>
-      <div id="card-walk" class="game-card game-card-sm tile-bg" onclick="openWalkLog()" style="border-left:3px solid var(--green,#4CAF50);position:relative;background-image:url('/assets/tiles/tile-session.jpg');">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm">Phoenix Coach</div>
-          <div class="game-card-title-sm">Walk / Run</div>
-          <div class="game-card-sub-sm">GPS tracked session</div>
-          <div class="game-card-action-sm">Start →</div>
-        </div>
+        <div class="game-card-title" style="font-size:24px;">Walk / Run</div>
+        <div class="game-card-sub">GPS tracked session</div>
+        <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
       </div>
     </div>
     <!-- v4.7.59: This Week's Schedule tile — replaces the underlined text link. Body is
          populated by _phxRenderWeekScheduleTile() during renderTodayScreen(). -->
-    <div id="card-this-week" class="game-card tile-bg" onclick="openWeekPlan()" style="margin:6px 0 14px;border:1px solid var(--border);border-left:3px solid var(--gold);background-image:url('/assets/tiles/tile-session.jpg');cursor:pointer;">
+    <div id="card-this-week" class="game-card" onclick="openWeekPlan()" style="margin:6px 0 14px;border:1px solid var(--border);border-left:3px solid var(--gold);cursor:pointer;">
       <div class="game-card-inner" style="padding:16px 18px;">
         <div class="game-card-eyebrow">
           <span class="game-card-eyebrow-sm">This Week's Schedule</span>
@@ -1776,105 +1726,6 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div id="card-this-week-body" style="margin-top:8px;">Loading…</div>
         <div class="game-card-action" style="font-size:11px;margin-top:10px;">View full week →</div>
       </div>
-    </div>
-    <!-- v4.7.23 BUILD 1 / v4.7.39 CHANGE 3: The Agoge tile is always visible. Non-Agoge
-         athletes get a "JOIN THE AGOGE" overlay (added by _phxRenderAgogeTile); active
-         athletes get the progress bars + week + km line. -->
-    <div id="card-agoge" onclick="openAgoge()" style="position:relative;margin-bottom:10px;border-radius:var(--radius);border:1px solid #6B2020;border-left:3px solid #6B2020;overflow:hidden;cursor:pointer;background:linear-gradient(135deg,#1a0808 0%,#0a0303 100%);min-height:170px;">
-      <div id="card-agoge-img" style="position:absolute;inset:0;background-image:url('/assets/tiles/tile-agoge.jpg');background-size:cover;background-position:center;filter:brightness(0.3);"></div>
-      <div style="position:relative;padding:18px 18px 16px;color:#fff;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-          <div style="display:inline-block;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;padding:4px 10px;border:1px solid #6B2020;border-radius:10px;color:#c97070;background:rgba(107,32,32,0.15);">The Agoge</div>
-          <div id="card-agoge-week" style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:#c97070;text-transform:uppercase;">Week — / —</div>
-        </div>
-        <div style="font-family:var(--font-d);font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:2px;line-height:1;margin-bottom:14px;">The Agoge</div>
-        <div style="margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-bottom:4px;"><span>Block</span><span id="card-agoge-block-pct">0%</span></div>
-          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;"><div id="card-agoge-block-bar" style="height:100%;width:0%;background:#6B2020;transition:width 0.3s;"></div></div>
-        </div>
-        <div style="margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-bottom:4px;"><span>The March</span><span id="card-agoge-march-pct">0%</span></div>
-          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;"><div id="card-agoge-march-bar" style="height:100%;width:0%;background:#6B2020;transition:width 0.3s;"></div></div>
-        </div>
-        <div id="card-agoge-line" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-top:10px;">0km of 246km · 0 days elapsed</div>
-      </div>
-    </div>
-    <!-- Row 4: Locked feature cards -->
-    <div id="card-leaderboard" class="game-card game-card-locked" onclick="openLeaderboard()" style="margin-bottom:10px;">
-      <div class="game-card-inner" style="display:flex;align-items:center;gap:14px;">
-        <div style="flex:1;">
-          <div class="game-card-eyebrow">
-            <span id="leaderboard-lock-badge" class="game-card-tier-badge game-card-tier-locked">Ignite unlocks this</span>
-          </div>
-          <div class="game-card-title" id="leaderboard-title">Leaderboard</div>
-          <div class="game-card-sub" id="leaderboard-sub">See where you rank globally</div>
-        </div>
-        <div style="opacity:0.4;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.5"><path d="M8 21h8M12 17v4M17 4V2H7v2M17 4h2a2 2 0 012 2v1a4 4 0 01-4 4h-1M7 4H5a2 2 0 00-2 2v1a4 4 0 004 4h1M7 4h10v5a5 5 0 01-10 0V4z"/></svg></div>
-      </div>
-    </div>
-    <!-- v4.7.60: Combine paired with Recovery (50/50) so Nutrition can take its own full-width
-         row below for maximum prominence. -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-      <div id="card-combine" class="game-card game-card-sm game-card-locked" onclick="openCombine()">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm"><span class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Ignite+</span></div>
-          <div class="game-card-title-sm">Combine</div>
-          <div class="game-card-sub-sm" id="combine-sub">Q1 Strength Battery</div>
-          <div style="opacity:0.35;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
-        </div>
-      </div>
-      <div class="game-card game-card-sm" onclick="openRecovery()">
-        <div class="game-card-inner">
-          <div class="game-card-eyebrow-sm">All tiers</div>
-          <div class="game-card-title-sm">Recovery</div>
-          <div class="game-card-sub-sm">Sleep and meditation</div>
-          <div style="opacity:0.5;margin-top:6px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- v4.7.60: Nutrition — promoted to full-width, expanded tile. Coach-generated macros
-         live on athlete.aiProgramme.nutrition (daily_calories, protein_g, carbs_g, fat_g,
-         timing_notes). Pro-gated; free users see a blurred preview + unlock CTA. Body is
-         populated dynamically in updateCardAccess(). -->
-    <div id="card-nutrition" class="game-card game-card-locked" onclick="openNutrition()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);position:relative;overflow:hidden;">
-      <div class="game-card-inner" style="padding:18px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-          <div class="game-card-eyebrow-sm">Coach Nutrition</div>
-          <span id="nutrition-lock-badge" class="game-card-tier-badge game-card-tier-locked" style="font-size:8px;">Pro only</span>
-        </div>
-        <div class="game-card-title" style="font-size:22px;margin-bottom:4px;">Nutrition</div>
-        <!-- Calories — large + prominent. Filled by _phxRenderNutritionTile(). -->
-        <div id="nutrition-calories" style="font-family:var(--font-d);font-size:36px;font-weight:900;color:var(--gold);line-height:1;margin:8px 0 2px;">— <span style="font-size:12px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-weight:600;">kcal/day</span></div>
-        <!-- Macros — 3 equal columns: protein / carbs / fat -->
-        <div id="nutrition-macros" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;">
-          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 8px;text-align:center;">
-            <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Protein</div>
-            <div id="nutrition-protein" style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">— g</div>
-          </div>
-          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 8px;text-align:center;">
-            <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Carbs</div>
-            <div id="nutrition-carbs" style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">— g</div>
-          </div>
-          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 8px;text-align:center;">
-            <div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Fat</div>
-            <div id="nutrition-fat" style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">— g</div>
-          </div>
-        </div>
-        <div id="nutrition-note" style="display:none;font-size:12px;color:var(--text2);line-height:1.6;margin-top:12px;font-style:italic;border-top:1px solid var(--border);padding-top:10px;"></div>
-        <!-- Free-tier lock overlay — shown by _phxRenderNutritionTile() when !hasProAccess(). -->
-        <div id="nutrition-lock-overlay" style="display:none;position:absolute;inset:0;background:rgba(10,3,3,0.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:20px;z-index:2;">
-          <div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Pro only</div>
-          <div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Unlock with Pro</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.5;max-width:240px;">Personalised macros built from your goals, bodyweight and training load.</div>
-        </div>
-      </div>
-    </div>
-    <div class="coming-card shimmer-card" onclick="showScreen('screen-coming')" style="margin-top:10px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;position:relative;overflow:hidden;cursor:pointer;">
-      <div style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Coming Soon</div>
-      <div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:4px;">More Features Dropping</div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.5;">Challenges, community leaderboards, nutrition tracking, and more. Stay tuned.</div>
-      <div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-top:8px;">See what’s coming →</div>
     </div>
   </div>
 </div>
@@ -3447,7 +3298,14 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon" style="background:rgba(107,32,32,0.18);color:#c97070;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z"/></svg></div>
       <div><div class="sidebar-item-text">The Agoge</div><div class="sidebar-item-sub">Block + The March (246km)</div></div>
     </div>
-    <!-- v4.7.28 BUILD 2: WOD Library browser -->
+    <div class="sidebar-item" onclick="closeSidebar();openPhoenixWOD()">
+      <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div><div class="sidebar-item-text">Daily WOD</div><div class="sidebar-item-sub">Today's Phoenix challenge</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();phxStandaloneCoreTap()">
+      <div class="sidebar-item-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <div><div class="sidebar-item-text">Core Session</div><div class="sidebar-item-sub">AI-generated · circuit or strength</div></div>
+    </div>
     <div class="sidebar-item" onclick="closeSidebar();openWODLibrary()">
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
       <div><div class="sidebar-item-text">WOD Library</div><div class="sidebar-item-sub">Browse every Phoenix WOD</div></div>
@@ -3479,6 +3337,28 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div id="sidebar-diag-item" class="sidebar-item" style="display:none;" onclick="closeSidebar();_phxOpenDiagnostic()">
       <div class="sidebar-item-icon" style="background:rgba(217,106,94,0.18);color:#d96a5e;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg></div>
       <div><div class="sidebar-item-text">Diagnostic</div><div class="sidebar-item-sub">Connectivity + write check</div></div>
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Community</div>
+    <div class="sidebar-item" onclick="closeSidebar();openLeaderboard()">
+      <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M8 21h8M12 17v4M17 4V2H7v2M17 4h2a2 2 0 012 2v1a4 4 0 01-4 4h-1M7 4H5a2 2 0 00-2 2v1a4 4 0 004 4h1M7 4h10v5a5 5 0 01-10 0V4z"/></svg></div>
+      <div><div class="sidebar-item-text">Leaderboard</div><div class="sidebar-item-sub">See where you rank globally</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();openCombine()">
+      <div class="sidebar-item-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div><div class="sidebar-item-text">Combine</div><div class="sidebar-item-sub">Annual strength test battery</div></div>
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Lifestyle</div>
+    <div class="sidebar-item" onclick="closeSidebar();openNutrition()">
+      <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10A10 10 0 0 1 2 12C2 6.48 6.48 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+      <div><div class="sidebar-item-text">Nutrition</div><div class="sidebar-item-sub">Coach macros + daily targets</div></div>
+    </div>
+    <div class="sidebar-item" onclick="closeSidebar();openRecovery()">
+      <div class="sidebar-item-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></div>
+      <div><div class="sidebar-item-text">Recovery</div><div class="sidebar-item-sub">Sleep · meditation · breathwork</div></div>
     </div>
   </div>
   <div class="sidebar-section">
@@ -3578,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.7.62';
+var APP_VERSION='4.8.0';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16037,8 +15917,7 @@ function openActiveRecovery(){
 
 function updateCardAccess(){
   var lbCard=document.getElementById('card-leaderboard');
-  if(!lbCard) return;
-
+  // v4.8.0: tiles may have moved to sidebar — don't early-return if lbCard is absent
   var isPro=hasProAccess();
   var isIgnite=hasIgniteAccess();
 

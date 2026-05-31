@@ -3386,16 +3386,16 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <div style="font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:16px;">Pick the option that fits where you are now. Your training history is always kept.</div>
   <div class="reset-modal-option" onclick="_phxResetUpdateGoals()">
-    <div class="reset-modal-option-label">Update Goals or Schedule</div>
-    <div class="reset-modal-option-sub">Changed your goals, training days, or picked up an injury? Update what's different and your coach will rebuild your plan.</div>
+    <div class="reset-modal-option-label">Rebuild My Programme</div>
+    <div class="reset-modal-option-sub">Keep all your personal data, goals and schedule — just generate a fresh programme. Use this if your current plan isn't working or you want a new phase.</div>
   </div>
   <div class="reset-modal-option" onclick="_phxResetFreshStart()">
-    <div class="reset-modal-option-label">Fresh Start, New Programme</div>
-    <div class="reset-modal-option-sub">New training phase or completely new direction — wipe your current plan and start fresh. Your history stays intact.</div>
+    <div class="reset-modal-option-label">New Programme + Update Profile</div>
+    <div class="reset-modal-option-sub">Re-run the full questionnaire to update your goals, training days, injuries or schedule. Your name, body stats, and training history are kept.</div>
   </div>
   <div class="reset-modal-option full-reset" onclick="_phxResetFullReset()">
-    <div class="reset-modal-option-label">Full Reset</div>
-    <div class="reset-modal-option-sub">Start completely from scratch with a clean slate. Your training history is preserved so your coach still knows your foundation.</div>
+    <div class="reset-modal-option-label">Full Reset — Wipe Everything</div>
+    <div class="reset-modal-option-sub">Nuclear option. Clears your programme, all settings and questionnaire answers. Your session history is preserved. Use only if starting completely from scratch.</div>
   </div>
   <button class="modal-close" onclick="_phxCloseResetModal()">Cancel</button>
 </div>
@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.4';
+var APP_VERSION='4.8.5';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8709,6 +8709,14 @@ SESSION DURATION SCALING
 - 75-90 min: 6-8 exercises, 4-5 sets, 3-4 accessories
 - Never exceed the session duration — always err shorter
 - A completed shorter session beats an abandoned longer one
+
+STRENGTH SESSION MINIMUM:
+- Strength sessions require a minimum of 60 minutes to complete safely with warm-up,
+  working sets, and adequate rest. If a strength session is assigned to a slot with
+  duration_min < 60, round up to 60 and note it in flags.
+- WOD / conditioning / core sessions can run from 30 minutes upward.
+- A 45-minute slot on a strength day = acceptable minimum; coach should prioritise
+  compound primary lifts only, cut accessories entirely.
 
 ================================================================
 RETURN-TO-TRAINING PROTOCOL
@@ -20144,10 +20152,18 @@ window.fqEvaluateConsecutiveStrength = function(){
   var warn=document.getElementById('fq-session-warning');
   if(!warn) return;
   var sched=fqAnswers.sessionSchedule||{};
+  // v4.8.5 FIX: rest days (no available slots) must BREAK the run, not be skipped.
+  // Build seq with a sentinel 'rest' entry for days that have no slots.
   var seq=[];
   FQ_DAYS_ORDER.forEach(function(day){
+    var slot=fqAnswers.availableSlots[day]||{};
+    var dayHasAnySlot = slot.am || slot.pm;
+    if(!dayHasAnySlot){
+      // Full rest day — breaks any consecutive run
+      seq.push({day:day,slot:'rest',type:'rest'});
+      return;
+    }
     ['am','pm'].forEach(function(sl){
-      var slot=fqAnswers.availableSlots[day]||{};
       if(slot[sl]){
         seq.push({day:day,slot:sl,type:(sched[day]||{})[sl]});
       }
@@ -20159,7 +20175,7 @@ window.fqEvaluateConsecutiveStrength = function(){
       if(run===0) runStart=i;
       run++;
       if(run>worst.count) worst={count:run,start:runStart,end:i};
-    } else { run=0; runStart=null; }
+    } else { run=0; runStart=null; } // rest day OR non-strength breaks the run
   }
   if(worst.count>=3){
     var s=seq[worst.start], e=seq[worst.end];

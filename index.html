@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.6';
+var APP_VERSION='4.8.7';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5750,16 +5750,17 @@ window._phxOpenWodTypePicker = function(o){
 // When called with no argument we fall back to the coach-assigned format for today, so the
 // Core tile (which calls generateDailyCore()) still gives the athlete a single-tap entry.
 function generateDailyCore(format){
-  var fmt = (format === 'strength' || format === 'circuit') ? format : getTodayCoreFormat();
+  var fmt = (format && ['circuit','strength','anti_rotation','rotational_power','endurance'].indexOf(format) >= 0)
+    ? format : getTodayCoreFormat();
   var overlay=document.getElementById('core-modal');
   var sheet=overlay.querySelector('.modal-sheet');
   var todayCore = getDailyCore(undefined, fmt);
   if(todayCore){
-    var isStrength = (fmt === 'strength');
+    var usesStrengthRenderer = _phxCoreUsesStrengthRenderer(fmt);
     var rows = todayCore.exercises.map(function(e){
-      // Strength sessions render sets × reps × load; circuit renders reps × load.
+      // Strength-renderer types show sets × reps × load; circuit-renderer shows reps × load.
       var right;
-      if(isStrength){
+      if(usesStrengthRenderer){
         right = (e.sets ? e.sets+' × ' : '') + (e.reps||'') + (e.load ? ' · '+e.load : '');
       } else {
         right = (e.reps||'') + ' · ' + phxFormatHeight(e.load||'BW');
@@ -5769,7 +5770,8 @@ function generateDailyCore(format){
         '<div style="font-size:12px;color:var(--text2);text-align:right;">'+right+'</div>'+
       '</div>';
     }).join('');
-    var subtitle = todayCore.name+' — '+(isStrength?'STRENGTH':'CIRCUIT')+' · '+todayCore.format+' · '+todayCore.duration_min+' min';
+    var fmtLabel = (typeof CORE_TYPE_META !== 'undefined' && CORE_TYPE_META[fmt]) ? CORE_TYPE_META[fmt].label.toUpperCase() : fmt.toUpperCase().replace(/_/g,' ');
+    var subtitle = todayCore.name+' — '+fmtLabel+' · '+todayCore.format+' · '+todayCore.duration_min+' min';
     sheet.innerHTML='<div class="modal-title">Today\'s Core</div><div class="modal-subtitle">'+subtitle+'</div>'+
       '<div style="padding:10px 20px;">'+rows+'</div>'+
       '<div style="padding:10px 20px 16px;display:flex;gap:10px;">'+
@@ -5778,7 +5780,7 @@ function generateDailyCore(format){
         '<button id="core-today-start" style="flex:1.2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:var(--bg);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">Start Session</button>'+
       '</div>'+
       '<div style="padding:0 20px 16px;text-align:center;">'+
-        '<button onclick="_generateCoreFromAI(\''+fmt+'\')" style="background:none;border:none;color:var(--text3);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;">Or generate a fresh AI '+(isStrength?'Strength':'Circuit')+' session</button>'+
+        '<button onclick="_generateCoreFromAI(\''+fmt+'\')" style="background:none;border:none;color:var(--text3);font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;text-decoration:underline;">Or generate a fresh AI session</button>'+
       '</div>';
     overlay.classList.add('active');
     var startBtn=document.getElementById('core-today-start');
@@ -5795,22 +5797,35 @@ function generateDailyCore(format){
 // v4.7.62 — shared AI core prompt builder. Pulled out of _generateCoreFromAI so the standalone
 // Funnel 1 tile can fetch a session without the preview modal.
 function _phxBuildCorePrompt(fmt){
-  var isStrength = (fmt === 'strength');
   var today=new Date();
   var dateStr=today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  if(isStrength){
-    return 'Generate a core STRENGTH session (sets x reps, loaded movements, quality over speed) for '+dateStr+'. '+
-      'Duration 20-30 minutes, no AMRAP/chipper format - strict sets and rest between sets. '+
-      'Include at least one loaded movement (Ab Wheel Rollout, Hanging Leg Raise, Weighted Cable Crunch, Dragon Flag, GHD Sit-Up, Toes to Bar, RKC Plank, Copenhagen Plank), '+
-      'at least one rotational strength movement (Landmine Rotation, Pallof Press, Cable Woodchop, Weighted Russian Twist, Med Ball Rotational Throw), '+
-      'and at least one superset pairing (label A1/A2 or B1/B2 in the exercise name; pair push/pull patterns with core - examples: Ab Wheel + Face Pull, Hanging Leg Raise + Band Pull-Apart). '+
-      'Return ONLY valid JSON, no commentary, in this exact shape: '+
-      '{"name":"<session name>","format":"4 x 8-12","duration_min":25,"exercises":[{"name":"<exercise>","sets":<int>,"reps":"<reps>","load":"<load>","rest_sec":<int>,"coaching_note":"<one short cue>"}]}. '+
-      '4-6 exercises total. Use "BW" for bodyweight load.';
+  var setsShape = '{"name":"<session name>","format":"4 x 8-12","duration_min":25,"exercises":[{"name":"<exercise>","sets":<int>,"reps":"<reps>","load":"<load>","rest_sec":<int>,"coaching_note":"<one short cue>"}]}';
+  var circuitShape = '{"name":"<session name>","format":"AMRAP 20","duration_min":20,"exercises":[{"name":"<exercise>","reps":"<reps>","load":"<load>","cue":"<one short cue>"}]}';
+  if(fmt === 'strength'){
+    return 'Generate a core STRENGTH session (sets x reps, loaded movements, progressive overload) for '+dateStr+'. '+
+      'Duration 20-30 minutes. Include: loaded movements (Ab Wheel, Cable Crunch, Dragon Flag, GHD Sit-Up, Toes to Bar), '+
+      'rotational strength (Landmine Rotation, Pallof Press, Cable Woodchop), superset pairings labelled A1/A2 or B1/B2. '+
+      'Return ONLY valid JSON: '+setsShape+'. 4-6 exercises. "BW" for bodyweight.';
   }
-  return 'Generate a core CIRCUIT session (AMRAP or Chipper, metabolic, higher rep, rotational-heavy) for '+dateStr+'. '+
-    'Duration 15-20 minutes. Pick exactly one format value: "AMRAP 15", "AMRAP 18", "AMRAP 20", or "Chipper". '+
-    'Include AT LEAST 2 rotational movements (Russian Twist, Woodchop, Pallof Press, Med Ball Rotational Slam, Landmine Rotation, Copenhagen Plank, Oblique Crunch, Side Plank with Rotation, Cable/Band Twist). '+
+  if(fmt === 'anti_rotation'){
+    return 'Generate a core ANTI-ROTATION session (carries, Pallof press, stability, anti-lateral-flexion) for '+dateStr+'. '+
+      'Duration 20-25 minutes. Include: loaded carries (Farmer, Suitcase, Waiter), Pallof Press variations, Copenhagen Plank, Dead Bug, Single-Leg RDL. '+
+      'Sets x reps format with rest periods. Return ONLY valid JSON: '+setsShape+'. 4-5 exercises. Full rest_sec per exercise.';
+  }
+  if(fmt === 'rotational_power'){
+    return 'Generate a core ROTATIONAL POWER session (explosive, med ball, landmine) for '+dateStr+'. '+
+      'Duration 20-25 minutes. Include: Landmine Rotation, Med Ball Side Throw, Med Ball Rotational Slam, Cable Woodchop. '+
+      'Low reps (5-8/side), full rest between sets (90-120 sec), explosive intent. Return ONLY valid JSON: '+setsShape+'. 3-5 exercises.';
+  }
+  if(fmt === 'endurance'){
+    return 'Generate a core ENDURANCE session (high rep, minimal rest, gut-check chipper or EMOM) for '+dateStr+'. '+
+      'Duration 15-20 minutes. Include: Sit-Up, Flutter Kick, V-Up, Hollow Rock, Mountain Climber, Plank holds. '+
+      'Pick AMRAP or Chipper format. Return ONLY valid JSON: '+circuitShape+'. 5-7 exercises, high rep counts.';
+  }
+  // Default: circuit
+  return 'Generate a core CIRCUIT session (AMRAP or Chipper, metabolic, rotational-heavy) for '+dateStr+'. '+
+    'Duration 15-20 minutes. Format: "AMRAP 15", "AMRAP 18", "AMRAP 20", or "Chipper". '+
+    'Include AT LEAST 2 rotational movements (Russian Twist, Woodchop, Pallof Press, Med Ball Rotational Slam, Landmine Rotation). '+
     'May include dynamic movements (Mountain Climber, V-Up, Hollow Rock, Tuck-Up, Burpee, Box Jump, Jump Rope) and holds (Hollow Hold, L-Sit, Plank variation, Dead Bug). '+
     'Scoring: AMRAP score = rounds.reps; Chipper score = time to completion. '+
     'Return ONLY valid JSON, no commentary, in this exact shape: '+
@@ -5843,16 +5858,16 @@ function _phxFetchAICore(fmt){
 // v4.7.62 — kick off an AI-generated core session straight into the count-in/timer/strength flow.
 // Both the preview-modal "Start Session" button and the Funnel 1 direct-start tile call this.
 function _phxStartAICoreSession(session, fmt){
-  var isStrength = (fmt === 'strength');
+  var _usesStrRender = (typeof _phxCoreUsesStrengthRenderer === 'function') ? _phxCoreUsesStrengthRenderer(fmt) : (fmt==='strength');
   coreSession = Object.assign(
     { num:'AI', _format:fmt, _isStandaloneAI:true,
-      name:session.name, format:session.format, duration_min:session.duration_min||(isStrength?25:20) },
+      name:session.name, format:session.format, duration_min:session.duration_min||(_usesStrRender?25:20) },
     { exercises:session.exercises }
   );
   coreLog=[];
   coreExIdx=0;
   coreRepIdx=0;
-  var sessionType = isStrength ? 'core_strength' : 'core_circuit';
+  var sessionType = 'core_'+fmt;
   supabaseStartSession(sessionType, coreSession.name||'AI Core', 'core', {coreNum:'AI', core_format:fmt, source:'standalone_ai'});
   startCorePrepCountdown();
 }
@@ -5863,7 +5878,7 @@ function _phxStartAICoreSession(session, fmt){
 // back to the static two-tab picker with a banner explaining the failure.
 function phxStandaloneCoreTap(){
   var fmt = (typeof getTodayCoreFormat === 'function') ? getTodayCoreFormat() : 'circuit';
-  if(fmt !== 'strength') fmt = 'circuit';
+  // v4.8.6: all 5 types valid — no forced fallback to circuit
   var d = new Date();
   var dateISO = d.getFullYear()+'-'+
     String(d.getMonth()+1).padStart(2,'0')+'-'+
@@ -5946,11 +5961,12 @@ function _phxAddCoreFallbackBanner(msg){
 }
 
 function _generateCoreFromAI(format){
-  var fmt = (format === 'strength') ? 'strength' : 'circuit';
-  var isStrength = (fmt === 'strength');
+  var fmt = (format && ['circuit','strength','anti_rotation','rotational_power','endurance'].indexOf(format) >= 0) ? format : 'circuit';
+  var usesStrRender = _phxCoreUsesStrengthRenderer(fmt);
+  var fmtLabel = (typeof CORE_TYPE_META !== 'undefined' && CORE_TYPE_META[fmt]) ? CORE_TYPE_META[fmt].label : fmt;
   var overlay=document.getElementById('core-modal');
   var sheet=overlay.querySelector('.modal-sheet');
-  sheet.innerHTML='<div class="modal-title">Generating Session</div><div class="modal-subtitle">'+(isStrength?'Core Strength':'Core Circuit')+'</div>'+
+  sheet.innerHTML='<div class="modal-title">Generating Session</div><div class="modal-subtitle">'+fmtLabel+'</div>'+
     '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;">'+
     '<div class="core-gen-spinner" style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px;"></div>'+
     '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:2px;color:var(--text2);text-transform:uppercase;">Building your session...</div>'+
@@ -5962,7 +5978,7 @@ function _generateCoreFromAI(format){
     // Render preview rows \u2014 strength shows sets \u00d7 reps \u00d7 load, circuit shows reps + load.
     var rows=session.exercises.map(function(e){
       var right;
-      if(isStrength){
+      if(usesStrRender){
         right = (e.sets ? e.sets+' \u00d7 ' : '') + (e.reps||'') + (e.load ? ' \u00b7 '+e.load : '');
       } else {
         right = (e.reps||'') + ' \u00b7 ' + (e.load||'BW');
@@ -5972,7 +5988,7 @@ function _generateCoreFromAI(format){
         '<div style="font-size:12px;color:var(--text2);text-align:right;">'+right+'</div>'+
         '</div>';
     }).join('');
-    var subtitle = (isStrength?'Core Strength':'Core Circuit')+' \u2014 '+(session.format||(isStrength?'Sets x Reps':'AMRAP'));
+    var subtitle = fmtLabel+' \u2014 '+(session.format||(usesStrRender?'Sets x Reps':'AMRAP'));
     sheet.innerHTML='<div class="modal-title">'+session.name+'</div><div class="modal-subtitle">'+subtitle+'</div>'+
       '<div style="padding:10px 20px;">'+rows+'</div>'+
       '<div style="padding:10px 20px 20px;display:flex;gap:10px;">'+
@@ -7563,17 +7579,24 @@ var coreSession=null;
 var coreLog=[];
 var corePrepInterval=null;
 
+// v4.8.6: which core types use the strength renderer (sets×reps+rest) vs circuit renderer (timer+swipe)
+function _phxCoreUsesStrengthRenderer(fmt){
+  // Anti-rotation and rotational power = sets × reps with rest — use strength renderer
+  // Endurance = AMRAP/EMOM/Chipper with countdown — use circuit renderer
+  return (fmt === 'strength' || fmt === 'anti_rotation' || fmt === 'rotational_power');
+}
+
 function openCoreSessionFromPicker(coreNum, format){
   closeCoreModal();
-  // v4.7.61 — pick from the matching library and remember the format on coreSession._format.
-  var fmt = (format === 'strength') ? 'strength' : 'circuit';
-  var lib = (fmt === 'strength') ? CORE_STRENGTH_SESSIONS : CORE_CIRCUIT_SESSIONS;
+  var fmt = (format && ['circuit','strength','anti_rotation','rotational_power','endurance'].indexOf(format) >= 0)
+    ? format : 'circuit';
+  var lib = _phxCoreLibForType(fmt);
   var picked = lib[(coreNum||1)-1] || lib[0];
   coreSession = Object.assign({}, picked, {_format: fmt});
   coreLog=[];
   coreExIdx=0;
   coreRepIdx=0;
-  var sessionType = (fmt === 'strength') ? 'core_strength' : 'core_circuit';
+  var sessionType = 'core_'+fmt;
   supabaseStartSession(sessionType, coreSession.name||('Core '+coreNum), 'core', {coreNum:coreNum, core_format:fmt});
   startCorePrepCountdown();
 }
@@ -7588,8 +7611,8 @@ function startCorePrepCountdown(){
   };
   buildWarmupBlocks('core',body);
   showCountIn(function(){
-    // v4.7.61 — strength sessions skip the AMRAP timer and render the set tracker instead.
-    if(coreSession && coreSession._format === 'strength'){
+    // v4.8.6 — route to correct renderer based on session type
+    if(coreSession && _phxCoreUsesStrengthRenderer(coreSession._format)){
       renderCoreStrengthScreen();
     } else {
       startCoreAMRAP();

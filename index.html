@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.5';
+var APP_VERSION='4.8.6';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4874,6 +4874,81 @@ const CORE_STRENGTH_SESSIONS = [
   ]}
 ];
 
+
+// v4.8.6 — ANTI-ROTATION sessions: carries, Pallof, stability, anti-lateral-flexion
+const CORE_ANTI_ROTATION_SESSIONS = [
+  {num:1, name:'Carry & Brace', format:'4 sets', duration_min:25, exercises:[
+    {name:'Suitcase Carry',              sets:4, reps:'30m/side', load:'24-32kg KB', rest_sec:75, cue:"Don't lean — rib cage stacked over hips."},
+    {name:'Pallof Press',                sets:4, reps:'10/side',  load:'Cable/band', rest_sec:60, cue:'Press slow, hold 2 sec at lockout.'},
+    {name:'Copenhagen Plank',            sets:3, reps:'20 sec/side', load:'BW',      rest_sec:45, cue:'Top leg active — pull it down into the bench.'},
+    {name:'Single-Arm Farmer Carry',     sets:3, reps:'20m/side', load:'32-40kg KB', rest_sec:60, cue:'Anti-lean — stand tall, brace hard.'}
+  ]},
+  {num:2, name:'Anti-Rotation Circuit', format:'AMRAP 18', duration_min:18, exercises:[
+    {name:'Pallof Press (half-kneeling)',  reps:'10/side', load:'Cable/band', cue:'Kneeling hip stays square — fight the rotation.'},
+    {name:'Copenhagen Plank',             reps:'25 sec/side', load:'BW',     cue:'Adductors squeeze — don't let hips drop.'},
+    {name:'Single-Leg RDL (KB)',          reps:'8/side',  load:'16-24kg',    cue:'Hip hinge — maintain spinal line.'},
+    {name:'Dead Bug',                     reps:'8/side',  load:'BW',         cue:'Low back glued to floor throughout.'},
+    {name:'Waiter Carry',                 reps:'20m/side',load:'12-16kg KB', cue:'Elbow locked — don't let the bell tip.'}
+  ]},
+  {num:3, name:'Stability Supersets', format:'3 × superset', duration_min:22, exercises:[
+    {name:'A1: Pallof Press',             sets:3, reps:'12/side', load:'Cable',    rest_sec:0,  cue:'3-second press — fight the cable.'},
+    {name:'A2: Suitcase Carry',           sets:3, reps:'25m/side',load:'28kg KB',  rest_sec:90, cue:'Ribs down — no side-bend.'},
+    {name:'B1: Single-Leg Glute Bridge',  sets:3, reps:'12/side', load:'BW',       rest_sec:0,  cue:'Drive the hip — hold top 1 sec.'},
+    {name:'B2: Copenhagen Plank',         sets:3, reps:'20 sec/side', load:'BW',   rest_sec:75, cue:'Stack your hips.'}
+  ]},
+  {num:4, name:'Loaded Carry Block', format:'5 rounds', duration_min:20, exercises:[
+    {name:'Farmers Carry (both arms)',    sets:5, reps:'40m', load:'2×24kg KB', rest_sec:90, cue:'Pack the shoulder blades — breathe shallow.'},
+    {name:'Yoke Walk or Trap Bar Carry',  sets:3, reps:'20m', load:'60-80% BW', rest_sec:120,cue:'Eyes forward — short, stiff steps.'},
+    {name:'Pallof Press',                 sets:3, reps:'10/side', load:'Cable',  rest_sec:60, cue:'Full exhale at end range — resist the pull back.'}
+  ]}
+];
+
+// v4.8.6 — ROTATIONAL POWER sessions: explosive, med ball, landmine
+const CORE_ROTATIONAL_SESSIONS = [
+  {num:1, name:'Power Rotation', format:'4 × 6/side', duration_min:22, exercises:[
+    {name:'Landmine Rotation',            sets:4, reps:'6/side', load:'15-25kg bar', rest_sec:90, cue:'Pivot back foot — drive from the hip, not the arms.'},
+    {name:'Med Ball Rotational Slam',     sets:4, reps:'6/side', load:'6-8kg',       rest_sec:90, cue:'Full wind-up — release at the wall with intent.'},
+    {name:'Cable Woodchop (high→low)',    sets:3, reps:'8/side', load:'Cable',        rest_sec:75, cue:'Brace before each pull — rotate don't flex.'},
+    {name:'Pallof Press (tall kneeling)', sets:3, reps:'10/side',load:'Cable',        rest_sec:60, cue:'Anti-rotation finish — contrast to the power work.'}
+  ]},
+  {num:2, name:'Med Ball Power Circuit', format:'AMRAP 15', duration_min:15, exercises:[
+    {name:'Med Ball Side Throw',         reps:'8/side', load:'6-8kg', cue:'Full hip turn — generate from the ground up.'},
+    {name:'Med Ball Rotational Slam',    reps:'10 total',load:'6kg',  cue:'Pivot and drive — slam with the hip not the shoulder.'},
+    {name:'Landmine Rotation',           reps:'6/side', load:'20kg bar', cue:'Slow tempo — load the back hip, explode through.'},
+    {name:'Med Ball Overhead Slam',      reps:'10',     load:'6-8kg',cue:'Full extension up, violent pull-down — brace on contact.'}
+  ]},
+  {num:3, name:'Rotational Strength Build', format:'5 × 5/side', duration_min:25, exercises:[
+    {name:'Landmine Rotation (heavy)',    sets:5, reps:'5/side', load:'20-30kg bar', rest_sec:120,cue:'Load the glute — this is a hip exercise, not a shoulder one.'},
+    {name:'Cable Woodchop (low→high)',    sets:4, reps:'8/side', load:'Cable',       rest_sec:90, cue:'Drive from the floor through the trunk and out the fingertips.'},
+    {name:'Med Ball Chest Pass',         sets:3, reps:'8',      load:'6-8kg',       rest_sec:75, cue:'Explosive — chest and core fire together.'},
+    {name:'Copenhagen Plank w/Hip Dip', sets:3, reps:'10/side', load:'BW',          rest_sec:60, cue:'Controlled dip — don't collapse.'}
+  ]}
+];
+
+// v4.8.6 — ENDURANCE GRIND sessions: high rep, minimal rest, gut-check
+const CORE_ENDURANCE_SESSIONS = [
+  {num:1, name:'The Grind', format:'Chipper', duration_min:20, exercises:[
+    {name:'Sit-Up',                reps:'50 total', load:'BW',    cue:'Full ROM — shoulder blades touch the floor.'},
+    {name:'Flutter Kick',          reps:'100 total',load:'BW',    cue:'Low back pressed flat — legs just above the floor.'},
+    {name:'Russian Twist',         reps:'60 total', load:'BW',    cue:'Feet up — rotate, don't rock.'},
+    {name:'Hollow Rock',           reps:'40 total', load:'BW',    cue:'Maintain the banana — no collapsing.'},
+    {name:'Plank',                 reps:'2 min',    load:'BW',    cue:'Squeeze everything — breathe shallow.'},
+    {name:'V-Up',                  reps:'30 total', load:'BW',    cue:'Reach long — meet in the middle.'}
+  ]},
+  {num:2, name:'Gut Check EMOM', format:'EMOM 16', duration_min:16, exercises:[
+    {name:'Min 1: Toes to Bar',     reps:'8',      load:'BW',    cue:'No kip — strict pull-down with straight legs.'},
+    {name:'Min 2: V-Up',            reps:'12',     load:'BW',    cue:'Reach to toes — control both halves.'},
+    {name:'Min 3: Mountain Climber',reps:'20 total',load:'BW',   cue:'Drive the knees — hips level.'},
+    {name:'Min 4: Hollow Rock',     reps:'15',     load:'BW',    cue:'No breaking position — stay tight.'}
+  ]},
+  {num:3, name:'Long Core Endurance', format:'3 × 90 sec', duration_min:22, exercises:[
+    {name:'Plank (90 sec)',          sets:3, reps:'90 sec', load:'BW',      rest_sec:30,  cue:'Count breaths — brace harder every 10th breath.'},
+    {name:'Flutter Kick (90 sec)',   sets:3, reps:'90 sec', load:'BW',      rest_sec:30,  cue:'4 inches off the floor — don't let the heels drop.'},
+    {name:'Side Plank (90 sec)',     sets:3, reps:'45 sec/side', load:'BW', rest_sec:30,  cue:'Hip doesn't sag — squeeze the oblique.'},
+    {name:'Dead Bug (90 sec)',       sets:3, reps:'90 sec', load:'BW',      rest_sec:45,  cue:'Slow and deliberate — low back stays sealed.'}
+  ]}
+];
+
 // v4.7.61 — backwards-compat alias for any code that still reads CORE_SESSIONS.
 // The new picker uses the split libraries; this fallback lets legacy paths render the
 // circuit set (the closest match to the historic AMRAP-only behaviour).
@@ -4882,34 +4957,42 @@ const CORE_SESSIONS = CORE_CIRCUIT_SESSIONS;
 // v4.7.7 FIX 4 / v4.7.61: deterministic daily core selection. Now format-aware —
 // returns a session from the matching library based on `format` ('circuit' | 'strength').
 // Same date-hash model as PHOENIX_WOD_LIBRARY.getDailyWOD, rotates at midnight.
+function _phxCoreLibForType(fmt){
+  if(fmt === 'strength')        return CORE_STRENGTH_SESSIONS;
+  if(fmt === 'anti_rotation')   return CORE_ANTI_ROTATION_SESSIONS;
+  if(fmt === 'rotational_power')return CORE_ROTATIONAL_SESSIONS;
+  if(fmt === 'endurance')       return CORE_ENDURANCE_SESSIONS;
+  return CORE_CIRCUIT_SESSIONS; // default: circuit
+}
+
 function getDailyCore(date, format){
-  var fmt = (format === 'strength') ? 'strength' : 'circuit';
-  var lib = (fmt === 'strength') ? CORE_STRENGTH_SESSIONS : CORE_CIRCUIT_SESSIONS;
+  var fmt = (format && ['circuit','strength','anti_rotation','rotational_power','endurance'].indexOf(format) >= 0)
+    ? format : 'circuit';
+  var lib = _phxCoreLibForType(fmt);
   var d = date || new Date();
   var dateStr = d.getFullYear()+'-'+
     String(d.getMonth()+1).padStart(2,'0')+'-'+
-    String(d.getDate()).padStart(2,'0')+'-core-'+fmt; // suffix keeps daily WOD / circuit / strength hashes independent
+    String(d.getDate()).padStart(2,'0')+'-core-'+fmt;
   var hash = 0;
   for(var i=0;i<dateStr.length;i++){
     hash = ((hash<<5)-hash) + dateStr.charCodeAt(i);
     hash |= 0;
   }
   var idx = Math.abs(hash) % lib.length;
-  var pick = lib[idx];
-  // Annotate the returned session with its format so downstream renderers (preview sheet,
-  // session screen, logger) can branch without re-deriving it.
-  return Object.assign({}, pick, {_format: fmt});
+  return Object.assign({}, lib[idx], {_format: fmt});
 }
 
 // v4.7.61 — pick today's coach-assigned core format. Reads athlete.aiProgramme.week.sessions
 // for a "Core" entry on today; falls back to a context-derived default (strength after lifting
 // day, circuit after/around conditioning day, alternating otherwise).
+// v4.8.6: all 5 core types. Returns the coach-recommended type for today.
+var CORE_TYPES = ['circuit','strength','anti_rotation','rotational_power','endurance'];
+
 function getTodayCoreFormat(){
   try {
     var prog = athlete && athlete.aiProgramme;
     var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
     if(prog && prog.week && Array.isArray(prog.week.sessions)){
-      // Prefer an explicit core_session_type from the coach if present.
       var todays = prog.week.sessions.filter(function(s){
         var dayKey = String(s.day||'').replace(/\s+(am|pm).*$/i,'').trim();
         var canon = dayKey.charAt(0).toUpperCase() + dayKey.slice(1).toLowerCase();
@@ -4918,24 +5001,36 @@ function getTodayCoreFormat(){
       for(var i=0;i<todays.length;i++){
         var sess = todays[i];
         var t = sess && sess.core_session_type;
+        if(t && CORE_TYPES.indexOf(t) >= 0) return t;
+        // Legacy 2-type fallback
         if(t === 'circuit' || t === 'strength') return t;
-        var st = String(sess && sess.session_type || '').toLowerCase();
-        if(st === 'core'){
-          // No explicit core_session_type — look at the day's other sessions for context.
-          for(var j=0;j<todays.length;j++){
-            var st2 = String(todays[j].session_type||'').toLowerCase();
-            if(st2.indexOf('lift')>=0 || st2.indexOf('strength')>=0) return 'circuit';
-            if(st2 === 'wod' || st2.indexOf('condition')>=0) return 'strength';
-          }
-        }
       }
     }
-    // No programme info — fall back to date parity so the default still rotates.
-    var d = new Date();
-    return (d.getDate() % 2 === 0) ? 'strength' : 'circuit';
-  } catch(e){
-    return 'circuit';
-  }
+    // No explicit type — derive from athlete profile
+    return _phxDeriveCoreType();
+  } catch(e){ return 'circuit'; }
+}
+
+// Derive the most appropriate core type from athlete profile when coach hasn't specified.
+function _phxDeriveCoreType(){
+  if(!athlete) return 'circuit';
+  var goals = (athlete.fqGoals || []).join(' ').toLowerCase();
+  var sport  = String(athlete.fqSport || '').toLowerCase();
+  var target = String(athlete.fqProgrammeTarget || '').toLowerCase();
+  var week   = (athlete.currentWeek || 1);
+  // Rotational sport → rotational power
+  if(sport.indexOf('tennis')>=0 || sport.indexOf('golf')>=0 || sport.indexOf('cricket')>=0 ||
+     sport.indexOf('baseball')>=0 || sport.indexOf('hockey')>=0) return 'rotational_power';
+  // Early weeks (1-4) → anti-rotation for injury prevention foundation
+  if(week <= 4) return 'anti_rotation';
+  // Strength-focused block → loaded strength core
+  if(goals.indexOf('strength')>=0 || target.indexOf('strength')>=0) return 'strength';
+  // Conditioning/endurance focus → endurance grind
+  if(goals.indexOf('endurance')>=0 || goals.indexOf('fitness')>=0) return 'endurance';
+  // Date rotation for variety as fallback
+  var d = new Date();
+  var types = ['circuit','strength','anti_rotation','rotational_power','endurance'];
+  return types[d.getDate() % types.length];
 }
 
 const CF_SAT = ['Base','Cindy','Danny','Fran'];
@@ -5458,56 +5553,86 @@ function makeTile(timeLabel,s){
 // v4.7.61 — two-tab picker. `currentCoreTab` is the active library being displayed.
 var currentCoreTab = 'circuit';
 
+// v4.8.6 — 5 core type definitions for the picker UI
+var CORE_TYPE_META = {
+  circuit:          {label:'Circuit',          sub:'AMRAP / Chipper · metabolic · rotational'},
+  strength:         {label:'Loaded Strength',  sub:'Sets × Reps · progressive overload'},
+  anti_rotation:    {label:'Anti-Rotation',    sub:'Carries · Pallof · stability focus'},
+  rotational_power: {label:'Rotational Power', sub:'Med ball · landmine · explosive'},
+  endurance:        {label:'Endurance Grind',  sub:'High rep · minimal rest · gut-check'}
+};
+
 function openCoreModal(preferFormat){
-  // Reset the modal sheet to the picker layout (fresh open after AI/preview overrides).
   var overlay = document.getElementById('core-modal');
   var sheet   = overlay.querySelector('.modal-sheet');
+  // Coach recommendation for this athlete
+  var coachRec = (typeof getTodayCoreFormat === 'function') ? getTodayCoreFormat() : 'circuit';
+  var initial  = (preferFormat && CORE_TYPE_META[preferFormat]) ? preferFormat : coachRec;
+  currentCoreTab = initial;
+
+  // Build the type selector list
+  var optionsHTML = Object.keys(CORE_TYPE_META).map(function(key){
+    var meta = CORE_TYPE_META[key];
+    var isRec = (key === coachRec);
+    var isSelected = (key === initial);
+    return '<div id="core-type-btn-'+key+'" onclick="switchCoreTab(\''+key+'\')" '+
+      'style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;'+
+      'border-bottom:1px solid var(--border);cursor:pointer;background:'+(isSelected?'rgba(200,150,62,0.08)':'transparent')+'">'+
+      '<div>'+
+        '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text);">'+meta.label+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+meta.sub+'</div>'+
+      '</div>'+
+      (isRec
+        ? '<div style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);padding:3px 8px;border-radius:10px;white-space:nowrap;">Coach recommends</div>'
+        : '<div style="width:16px;height:16px;border-radius:50%;border:2px solid '+(isSelected?'var(--gold)':'var(--border2)')+';background:'+(isSelected?'var(--gold)':'transparent')+';flex-shrink:0;"></div>'
+      )+
+    '</div>';
+  }).join('');
+
   sheet.innerHTML =
     '<div class="modal-title">Core Session</div>'+
-    '<div class="modal-subtitle">Pick a format</div>'+
-    '<div id="core-tab-strip" style="display:flex;gap:6px;padding:4px 20px 12px;">'+
-      '<button type="button" id="core-tab-circuit" class="core-tab" onclick="switchCoreTab(\'circuit\')" style="flex:1;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Circuit</button>'+
-      '<button type="button" id="core-tab-strength" class="core-tab" onclick="switchCoreTab(\'strength\')" style="flex:1;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Strength</button>'+
-    '</div>'+
-    '<div id="core-options-container"></div>'+
+    '<div class="modal-subtitle" style="padding:0 20px 12px;">Select a format — your coach's recommendation is highlighted</div>'+
+    '<div id="core-type-list">'+optionsHTML+'</div>'+
+    '<div id="core-options-container" style="max-height:280px;overflow-y:auto;"></div>'+
     '<div style="padding:8px 20px 4px;">'+
-      '<button id="core-tab-ai-btn" type="button" onclick="generateDailyCoreForCurrentTab()" style="width:100%;padding:12px;background:transparent;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">Generate today\'s Circuit</button>'+
+      '<button id="core-tab-ai-btn" type="button" onclick="generateDailyCoreForCurrentTab()" '+
+      'style="width:100%;padding:12px;background:transparent;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;">'+
+      'Generate today's '+CORE_TYPE_META[initial].label+'</button>'+
     '</div>'+
     '<button class="modal-close" onclick="closeCoreModal()">Cancel</button>';
 
-  var initial = (preferFormat === 'strength') ? 'strength' : 'circuit';
-  currentCoreTab = initial;
   renderCoreTab(initial);
   overlay.classList.add('active');
 }
 
 function switchCoreTab(fmt){
-  currentCoreTab = (fmt === 'strength') ? 'strength' : 'circuit';
-  renderCoreTab(currentCoreTab);
+  if(!CORE_TYPE_META[fmt]) fmt = 'circuit';
+  currentCoreTab = fmt;
+  // Update selector highlight
+  Object.keys(CORE_TYPE_META).forEach(function(key){
+    var btn = document.getElementById('core-type-btn-'+key);
+    if(btn) btn.style.background = (key === fmt) ? 'rgba(200,150,62,0.08)' : 'transparent';
+    // Update radio dot
+    var dot = btn && btn.querySelector('div[style*="border-radius:50%"]');
+    if(dot){
+      dot.style.borderColor = (key === fmt) ? 'var(--gold)' : 'var(--border2)';
+      dot.style.background  = (key === fmt) ? 'var(--gold)' : 'transparent';
+    }
+  });
+  var aiBtn = document.getElementById('core-tab-ai-btn');
+  if(aiBtn) aiBtn.textContent = 'Generate today\'s '+CORE_TYPE_META[fmt].label;
+  renderCoreTab(fmt);
 }
 
 function renderCoreTab(fmt){
-  var circuitBtn = document.getElementById('core-tab-circuit');
-  var strengthBtn= document.getElementById('core-tab-strength');
-  var aiBtn      = document.getElementById('core-tab-ai-btn');
-  function setActive(btn, active){
-    if(!btn) return;
-    btn.style.background = active ? 'var(--gold)' : 'var(--bg)';
-    btn.style.borderColor= active ? 'var(--gold)' : 'var(--border)';
-    btn.style.color      = active ? 'var(--bg)'   : 'var(--text2)';
-  }
-  setActive(circuitBtn,  fmt === 'circuit');
-  setActive(strengthBtn, fmt === 'strength');
-  if(aiBtn) aiBtn.textContent = (fmt === 'strength') ? "Generate today's Strength session" : "Generate today's Circuit";
-
-  var lib = (fmt === 'strength') ? CORE_STRENGTH_SESSIONS : CORE_CIRCUIT_SESSIONS;
+  if(!CORE_TYPE_META[fmt]) fmt = 'circuit';
+  var lib = _phxCoreLibForType(fmt);
   var container = document.getElementById('core-options-container');
   if(!container) return;
   container.innerHTML = '';
   lib.forEach(function(c){
     var div = document.createElement('div');
     div.className = 'core-option';
-    // Show 2-3 exercise names as a preview rather than a full row dump — keeps the picker scannable.
     var previewNames = (c.exercises||[]).slice(0,3).map(function(e){ return e.name; });
     var preview = previewNames.length
       ? '<div class="core-ex-row"><span class="core-ex-name" style="font-size:11px;color:var(--text3);text-transform:none;letter-spacing:0;">'+previewNames.join(' · ')+'</span></div>'
@@ -5515,8 +5640,8 @@ function renderCoreTab(fmt){
     div.innerHTML =
       '<div class="core-option-header">'+
         '<div class="core-option-name">'+c.name+'</div>'+
-        '<div class="core-option-badge">'+c.format+' · '+c.duration_min+' min</div>'+
-      '</div>'+ preview;
+        '<div class="core-option-badge">'+(c.format||fmt)+' · '+c.duration_min+' min</div>'+
+      '</div>'+preview;
     div.addEventListener('click', function(){
       openCoreSessionFromPicker(c.num, fmt);
     });
@@ -9403,18 +9528,31 @@ Do not write "60cm box" — write "24" box". Do not write "3m wall ball target" 
 CORE SESSION FORMAT (REQUIRED when session_type is "Core")
 ================================================================
 
-v4.7.61 — core sessions now come in TWO distinct formats. You MUST set
-core_session_type for every Core session in the week:
+v4.8.6 — core sessions come in FIVE distinct formats. You MUST set
+core_session_type for every Core session in the week. Choose the most appropriate
+type for THIS athlete based on their goals, sport, training age, and week context:
 
-- core_session_type: "circuit"  → AMRAP/Chipper, 15-20 min, metabolic, rotational-heavy
-- core_session_type: "strength" → Sets × Reps, 20-30 min, loaded, quality over speed, no time pressure
+CORE SESSION TYPES:
+- core_session_type: "circuit"           → AMRAP/Chipper, 15-20 min, metabolic, rotational-heavy. Default general fitness.
+- core_session_type: "strength"          → Sets × Reps, 20-30 min, loaded, progressive overload, no time pressure.
+- core_session_type: "anti_rotation"     → Carries, Pallof press, Copenhagen plank, stability focus. 25 min.
+- core_session_type: "rotational_power"  → Med ball throws, landmine rotation, explosive. 20-25 min. Sport athletes.
+- core_session_type: "endurance"         → High rep, minimal rest, gut-check chipper or EMOM. 15-22 min.
 
-When to assign which (based on the week's training context):
-- After a heavy lower body day        → core_session_type: "circuit"  (active recovery, metabolic, no axial load)
-- After an upper body day             → core_session_type: "strength" (complementary loading, posterior chain support)
-- Standalone core day with light week → core_session_type: "strength" (push the loaded work)
-- Standalone core day with heavy week → core_session_type: "circuit"  (preserve recovery)
-- Day already paired with a WOD       → core_session_type: "strength" (avoid back-to-back metabolic)
+WHEN TO ASSIGN EACH TYPE:
+- Weeks 1-4 (any athlete)             → "anti_rotation" (injury prevention foundation, proprioception)
+- After a heavy lower body day        → "circuit" (active recovery, metabolic, no axial load)
+- After an upper body day             → "strength" (complementary loading, posterior chain support)
+- Athlete with rotational sport       → "rotational_power" (translates directly to sport power)
+- Standalone core, strength-focus block → "strength" (push loaded work)
+- Standalone core, conditioning week  → "endurance" (grind, work capacity)
+- Day already paired with a WOD       → "strength" or "anti_rotation" (avoid back-to-back metabolic)
+- Comeback athlete, injury history    → "anti_rotation" first, then "circuit" from week 3
+
+COMEBACK ATHLETE RULE (training age < 2 years or returning after 6+ months off):
+Prescribe "anti_rotation" for the first 4 weeks minimum. The carry and Pallof work
+rebuilds the deep stability system that atrophies fastest during detraining. Progress
+to "strength" or "circuit" from week 5 once the foundation is confirmed.
 
 CIRCUIT schema (when core_session_type === "circuit"):
 {
@@ -13734,22 +13872,30 @@ function renderTodayScreen(){
 // caches the result in localStorage, and falls back to the static picker on timeout/failure.
 // This funnel is independent of coach-assigned core sessions, which live on athlete.aiProgramme
 // and render through the standard session flow (see openTodaySession core_circuit / core_strength).
+// v4.8.6: updated to show all 5 core type labels on the tile badge
 window._phxRenderCoreTileFormat = function(){
   var card = document.getElementById('card-core');
   if(!card) return;
   var fmt = (typeof getTodayCoreFormat === 'function') ? getTodayCoreFormat() : 'circuit';
-  var isStrength = (fmt === 'strength');
+  var meta = (typeof CORE_TYPE_META !== 'undefined' && CORE_TYPE_META[fmt])
+    ? CORE_TYPE_META[fmt]
+    : {label: fmt.charAt(0).toUpperCase()+fmt.slice(1).replace(/_/g,' '), sub: 'AI Generated'};
+  var badgeColor = (fmt === 'strength') ? 'var(--orange,#FF6B35)'
+    : (fmt === 'anti_rotation') ? 'var(--blue,#4A90D9)'
+    : (fmt === 'rotational_power') ? 'var(--purple,#9B59B6)'
+    : (fmt === 'endurance') ? 'var(--red,#CC3333)'
+    : 'var(--gold)';
   var badge = document.getElementById('card-core-fmt-badge');
   if(badge){
-    badge.textContent = isStrength ? 'STRENGTH' : 'CIRCUIT';
+    badge.textContent = meta.label.toUpperCase();
     badge.style.display = 'inline-block';
-    badge.style.borderColor = isStrength ? 'var(--orange,#FF6B35)' : 'var(--gold)';
-    badge.style.color       = isStrength ? 'var(--orange,#FF6B35)' : 'var(--gold)';
+    badge.style.borderColor = badgeColor;
+    badge.style.color       = badgeColor;
   }
   var sub = document.getElementById('card-core-sub');
-  if(sub) sub.textContent = isStrength ? 'Sets × Reps · Loaded' : 'AMRAP · Rotational';
+  if(sub) sub.textContent = meta.sub;
   var action = document.getElementById('card-core-action');
-  if(action) action.textContent = isStrength ? 'Strength session →' : 'Circuit session →';
+  if(action) action.textContent = meta.label + ' →';
   card.onclick = function(){ phxStandaloneCoreTap(); };
 };
 

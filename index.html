@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.12';
+var APP_VERSION='4.9.13';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15054,16 +15054,21 @@ function _phxMaybeShowMorningCheckin(){
   var card = document.getElementById('morning-checkin-card');
   if(!card) return;
   card.style.display = 'none';
-  // v4.7.32 FIX 3: read fqWeighInFrequency from any of the field-name variants.
   var freq = (athlete && (athlete.fqWeighInFrequency || athlete.fq_weigh_in_frequency || athlete.weighInFrequency || athlete.weigh_in_frequency)) || null;
-  if(freq === 'never') return;
-  // If the athlete record exists but the field is unset, default to "show" (the user
-  // can still skip). Only suppress when we explicitly know they opted out.
+  if(freq === 'never'){
+    console.log('[PHX] weigh-in: hidden — freq=never');
+    return;
+  }
   var keys = _phxMorningKeys();
-  // v4.7.32 FIX 3: time gate dropped — show ALL DAY until the user actions it.
-  // (Will reinstate the 5–10am Brisbane window once we confirm card+modal are reliable.)
-  if(localStorage.getItem(keys.doneKey)) return;
-  if(localStorage.getItem(keys.skipKey)) return;
+  if(localStorage.getItem(keys.doneKey)){
+    console.log('[PHX] weigh-in: hidden — already logged today ('+keys.today+')');
+    return;
+  }
+  if(localStorage.getItem(keys.skipKey)){
+    console.log('[PHX] weigh-in: hidden — skipped today ('+keys.today+'). Clear with: localStorage.removeItem("'+keys.skipKey+'")');
+    return;
+  }
+  console.log('[PHX] weigh-in: showing card (freq='+freq+', date='+keys.today+')');
   card.style.display = '';
 }
 
@@ -20770,6 +20775,10 @@ window._phxResetCustomisations = function(){
 };
 
 function openTodaySession(){
+  // Kill any open preview/adjust overlays that would sit on top of the session screen (z-index conflict)
+  ['phx-session-preview','phx-week-adjust','phx-wod-type-overlay','phx-core-type-overlay'].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.remove();
+  });
   // v4.7.8 BUG 1 hardening: every tile-tap entry kills any stale count-in overlay before doing anything,
   // so a leftover overlay from a previous session can never appear before the detail screen renders.
   // v4.7.10: also cancel the in-flight count-in INTERVAL so its callback can't fire startWODTimer later.

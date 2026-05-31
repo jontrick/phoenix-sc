@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.7';
+var APP_VERSION='4.8.8';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8949,7 +8949,7 @@ Phoenix WOD selection principles:
 - Match energy system to goal
 - Weekly movement pattern balance — avoid back-to-back same dominant pattern
 - Duration: 8-20 minutes of actual work
-- Formats: AMRAP (score = rounds.movements.reps), AFAP (score = time), EMOM, Chipper, Ladder
+- Formats: AMRAP, AFAP, EMOM, Chipper, Interval, Tabata, Death By, For Load, Blocks (multi-part)
 - Scale options: prescribed weight, Rx, Rx+
 - Phoenix WOD signatures: loaded carries, triphasic elements, structural balance focus
 
@@ -9518,11 +9518,51 @@ Required shape:
   "exercises": []
 }
 
-Allowed wod.format values:
-- "amrap"   → duration_sec = AMRAP duration in seconds; score_format = "rounds.movements.reps"
-- "afap"    → duration_sec = 0 (no time cap) OR a soft cap in seconds; score_format = "time"
-- "emom"    → duration_sec = total duration; movements array = one per minute (or repeating pattern across the whole duration); score_format = "completion"
-- "forload" → movements have sets+reps+load per movement; score_format = "load"
+Allowed wod.format values (9 total):
+- "amrap"     → AMRAP: duration_sec = cap in seconds; score = rounds.movements.reps
+- "afap"      → AFAP / For Time: tick off each movement; score = elapsed time
+- "emom"      → EMOM: movements array = one per minute slot (repeats if fewer movements than minutes); score = completion
+- "chipper"   → Chipper: complete all reps of each movement in order; score = time to finish; use for high-rep single-pass workouts
+- "interval"  → Interval: N sets × work/rest cycles. Set wod.sets, wod.work_sec, wod.rest_sec. Score = sets completed + times
+- "tabata"    → Tabata: 20 sec work / 10 sec rest × 8 rounds per movement. Auto-cycles movements. Score = completion
+- "death_by"  → Death By: Minute 1 = 1 rep, Minute 2 = 2 reps, etc. Score = last minute completed. Use for pull-ups, burpees, box jumps
+- "forload"   → For Load: sets × reps building to max. movements have sets+reps+load. Score = heaviest set
+- "blocks"    → Multi-block: wod.blocks = array of blocks, each with its own format+movements. See schema below
+
+BLOCKS schema (when format = "blocks"):
+{
+  "name": "Threshold Engine",
+  "format": "blocks",
+  "rest_between_sec": 90,
+  "blocks": [
+    {
+      "label": "Part A",
+      "format": "interval",
+      "sets": 5,
+      "work_sec": 120,
+      "rest_sec": 90,
+      "movements": [
+        {"name": "Row", "distance_m": 500, "load_rx": "Damper 6-7", "load_scale": "Damper 5"}
+      ],
+      "coaching_note": "Hold split within 5 sec of target across all 5 sets."
+    },
+    {
+      "label": "Part B",
+      "format": "afap",
+      "movements": [
+        {"name": "Burpee Box Jump", "reps": 20, "load_rx": "24 inch", "load_scale": "Step-up burpee"},
+        {"name": "KB Swing",        "reps": 30, "load_rx": "24kg",     "load_scale": "16kg"}
+      ],
+      "coaching_note": "No rest — this is the engine test after the aerobic work."
+    }
+  ],
+  "score_format": "parts",
+  "coaching_note": "Part A builds the aerobic engine. Part B tests what's left."
+}
+
+Each block in blocks[] supports: label, format (any of the 9), movements, sets, work_sec, rest_sec, duration_sec, duration_min, coaching_note.
+rest_between_sec on the parent = transition rest between blocks (default 60).
+Use blocks when the session has genuinely different modalities that don't share a clock (e.g. row intervals + AFAP circuit, strength complex + AMRAP finisher).
 
 Every movement MUST have name and reps as separate fields. Do not embed reps inside the name string. Use distance_m for distance work (carries, runs, rows). Use load_rx for the prescribed load and load_scale for a sensible scaling option.
 
@@ -16791,11 +16831,17 @@ function openPhoenixWOD(wodOverride){
 
 function _detectWODFormat(wod){
   var f = String(wod.format||'').toUpperCase();
-  if(f.indexOf('EMOM')>-1)  return 'emom';
-  if(f.indexOf('AMRAP')>-1) return 'amrap';
-  if(f.indexOf('AFAP')>-1 || f.indexOf('FOR TIME')>-1) return 'afap';
-  if(f.indexOf('FORLOAD')>-1 || f.indexOf('FOR LOAD')>-1) return 'strength';
-  return 'strength';
+  if(wod.blocks && Array.isArray(wod.blocks) && wod.blocks.length) return 'blocks';
+  if(f.indexOf('EMOM')>-1)     return 'emom';
+  if(f.indexOf('AMRAP')>-1)    return 'amrap';
+  if(f.indexOf('AFAP')>-1 || f.indexOf('FOR TIME')>-1 || f === 'FORTIME') return 'afap';
+  if(f.indexOf('CHIPPER')>-1)  return 'chipper';
+  if(f.indexOf('INTERVAL')>-1) return 'interval';
+  if(f.indexOf('TABATA')>-1)   return 'tabata';
+  if(f.indexOf('DEATH BY')>-1 || f.indexOf('DEATH_BY')>-1 || f.indexOf('DEATHBY')>-1) return 'death_by';
+  if(f.indexOf('FORLOAD')>-1 || f.indexOf('FOR LOAD')>-1) return 'forload';
+  if(f.indexOf('BLOCKS')>-1)   return 'blocks';
+  return 'afap'; // sensible default for unrecognised formats
 }
 
 // v4.7.6 FIX 2: convert an AI-generated session into the wod-shaped object that startWODTimer expects.
@@ -16808,10 +16854,15 @@ function _buildWodFromAISession(sess){
     var w = sess.wod;
     var fmtRaw = String(w.format||'').toLowerCase();
     var fmtOut;
-    if(fmtRaw.indexOf('amrap')>-1) fmtOut = 'AMRAP '+Math.round((w.duration_sec||0)/60);
-    else if(fmtRaw.indexOf('emom')>-1) fmtOut = 'EMOM '+Math.round((w.duration_sec||0)/60);
-    else if(fmtRaw.indexOf('afap')>-1) fmtOut = 'AFAP';
+    if(fmtRaw.indexOf('amrap')>-1)       fmtOut = 'AMRAP '+Math.round((w.duration_sec||0)/60);
+    else if(fmtRaw.indexOf('emom')>-1)  fmtOut = 'EMOM '+Math.round((w.duration_sec||0)/60);
+    else if(fmtRaw.indexOf('afap')>-1 || fmtRaw.indexOf('for time')>-1) fmtOut = 'AFAP';
+    else if(fmtRaw.indexOf('chipper')>-1)   fmtOut = 'Chipper';
+    else if(fmtRaw.indexOf('interval')>-1)  fmtOut = 'Interval';
+    else if(fmtRaw.indexOf('tabata')>-1)    fmtOut = 'Tabata';
+    else if(fmtRaw.indexOf('death')>-1)     fmtOut = 'Death By';
     else if(fmtRaw.indexOf('forload')>-1 || fmtRaw.indexOf('for load')>-1) fmtOut = 'For Load';
+    else if(fmtRaw.indexOf('blocks')>-1)    fmtOut = 'Blocks';
     else fmtOut = w.format || 'AFAP';
     var movs = (w.movements||[]).map(function(m){
       var repsStr = '';
@@ -16838,7 +16889,13 @@ function _buildWodFromAISession(sess){
       rep_scheme: w.rep_scheme || '',
       elite_target: w.elite_target || '',
       coaching_note: w.coaching_note || '',
-      combine_note: w.coaching_note || ''
+      combine_note: w.coaching_note || '',
+      // v4.8.8: pass blocks array through for multi-block sessions
+      blocks: w.blocks || null,
+      sets: w.sets || null,
+      work_sec: w.work_sec || null,
+      rest_sec: w.rest_sec || null,
+      rest_between_sec: w.rest_between_sec || null
     };
   }
   // Case B: legacy — parse single exercise with load_guidance blob
@@ -17199,11 +17256,349 @@ function startWODTimer(modalId){
       '</div>';
   }
 
+
+  // ── CHIPPER renderer ────────────────────────────────────────────────────────
+  // Complete ALL reps of each movement in order — score = total time. Tap "Done"
+  // per movement, elapsed timer counts up, auto-finish when last movement is ticked.
+  function _renderCHIPPER(){
+    var t = window._wodTimer;
+    var movHTML = movements.map(function(m, i){
+      var done = i <= t.doneIdx;
+      var isCurrent = i === t.doneIdx + 1;
+      var loadStr = phxFormatHeight(phxMovementLoad(m, window._wodSelection, i));
+      var boxes = phxRenderTargetBoxes(loadStr, m.reps, m.name);
+      return '<div style="background:var(--bg2);border:1px solid '+(done?'var(--gold)':(isCurrent?'var(--orange)':'var(--border)'))+';border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;'+(done?'opacity:0.45;':'')+'">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
+          '<div style="flex:1;">' +
+            '<div style="font-family:var(--font-d);font-size:'+(isCurrent?'22':'18')+'px;font-weight:700;text-transform:uppercase;color:'+(isCurrent?'var(--text)':'var(--text2)')+';">'+m.name+'</div>' +
+            boxes +
+          '</div>' +
+          (done
+            ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Done &#10003;</div>'
+            : (isCurrent
+                ? '<button class="btn-primary" style="padding:10px 14px;font-size:12px;width:auto;max-width:none;" onclick="window._wodChipperTick('+i+')">Done</button>'
+                : '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Up next</div>'
+              )
+          ) +
+        '</div>' +
+      '</div>';
+    }).join('');
+    inner.innerHTML='<div style="padding-top:20px;">' +
+      _headerHTML('CHIPPER — COMPLETE IN ORDER') +
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(t.elapsed)+'</div>' +
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">ELAPSED</div>' +
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">' +
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Completed</div>' +
+        '<div id="wod-chipper-progress" style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+(t.doneIdx+1)+' / '+movements.length+'</div>' +
+      '</div>' +
+      movHTML +
+      '<div style="display:flex;gap:10px;margin-top:14px;">' +
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>' +
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>' +
+      '</div>' +
+    '</div>';
+  }
+  window._wodChipperTick = function(i){
+    var t = window._wodTimer;
+    if(i === t.doneIdx + 1) t.doneIdx = i;
+    _renderCHIPPER();
+    if(t.doneIdx >= movements.length - 1){ finishWOD(); }
+  };
+
+  // ── INTERVAL renderer ───────────────────────────────────────────────────────
+  // N sets × work period, rest between. Movements shown each work period.
+  // wod.sets = number of intervals; wod.work_sec = work duration; wod.rest_sec = rest duration.
+  // On rest: passive countdown before next set auto-starts.
+  function _renderINTERVAL(){
+    var t = window._wodTimer;
+    var totalSets = wod.sets || t.intervalSets || 5;
+    var workSec   = wod.work_sec  || t.intervalWork || 60;
+    var restSec   = wod.rest_sec  || t.intervalRest || 60;
+    var setNum    = t.intervalSetNum || 1;
+    var phase     = t.intervalPhase || 'work'; // 'work' | 'rest' | 'done'
+    var phaseSec  = t.intervalPhaseSec !== undefined ? t.intervalPhaseSec : workSec;
+    var isWork    = (phase === 'work');
+    var movHTML   = movements.map(function(m, i){
+      var loadStr = phxFormatHeight(phxMovementLoad(m, window._wodSelection, i));
+      var boxes   = phxRenderTargetBoxes(loadStr, m.reps || (m.distance_m ? m.distance_m+'m' : ''), m.name);
+      return '<div style="background:var(--bg2);border:1px solid '+(isWork?'var(--orange)':'var(--border)')+';border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;">' +
+        '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>' +
+        boxes +
+      '</div>';
+    }).join('');
+    inner.innerHTML='<div style="padding-top:20px;">' +
+      _headerHTML(isWork ? 'SET '+setNum+' OF '+totalSets+' — WORK' : 'REST') +
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:'+(isWork?'var(--orange)':'var(--blue,#4A90D9)')+';">'+formatTime(phaseSec)+'</div>' +
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">'+(isWork?'WORK TIME REMAINING':'REST — NEXT SET IN')+'</div>' +
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">' +
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Set</div>' +
+        '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+setNum+' / '+totalSets+'</div>' +
+      '</div>' +
+      (isWork ? movHTML : '<div style="font-family:var(--font-d);font-size:16px;color:var(--text2);text-align:center;padding:20px 0;">Recover. Breathe. Next set starts automatically.</div>') +
+      '<div style="display:flex;gap:10px;margin-top:14px;">' +
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>' +
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── TABATA renderer ─────────────────────────────────────────────────────────
+  // 20 sec on / 10 sec off × 8 rounds per movement. Multiple movements cycle.
+  // Standard Tabata = 4 min total per movement. wod.movements = the movement list.
+  function _renderTABATA(){
+    var t        = window._wodTimer;
+    var movCount = Math.max(1, movements.length);
+    var WORK_SEC = 20, REST_SEC = 10, ROUNDS_PER_MOV = 8;
+    var totalRounds  = movCount * ROUNDS_PER_MOV;
+    var roundNum     = t.tabataRound !== undefined ? t.tabataRound : 0;
+    var phase        = t.tabataPhase || 'work';
+    var phaseSec     = t.tabataPhaseSec !== undefined ? t.tabataPhaseSec : WORK_SEC;
+    var movIdx       = Math.floor(roundNum / ROUNDS_PER_MOV) % movCount;
+    var roundInMov   = (roundNum % ROUNDS_PER_MOV) + 1;
+    var isWork       = (phase === 'work');
+    var curMov       = movements[movIdx] || {name:'Movement'};
+    var loadStr      = phxFormatHeight(phxMovementLoad(curMov, window._wodSelection, movIdx));
+    var boxes        = phxRenderTargetBoxes(loadStr, curMov.reps || '', curMov.name);
+    inner.innerHTML='<div style="padding-top:20px;">' +
+      _headerHTML(isWork ? 'WORK — '+curMov.name.toUpperCase() : 'REST') +
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:'+(isWork?'var(--orange)':'var(--blue,#4A90D9)')+';">'+formatTime(phaseSec)+'</div>' +
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:14px;">'+(isWork?'MAX REPS':'10 SEC REST')+'</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:14px;">' +
+        '<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;text-align:center;">' +
+          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Movement</div>' +
+          '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">'+(movIdx+1)+' of '+movCount+'</div>' +
+        '</div>' +
+        '<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;text-align:center;">' +
+          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Round</div>' +
+          '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">'+roundInMov+' / '+ROUNDS_PER_MOV+'</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="background:var(--bg2);border:1px solid '+(isWork?'var(--orange)':'var(--border)')+';border-radius:var(--radius);padding:16px;margin-bottom:14px;">' +
+        '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;color:var(--text);">'+curMov.name+'</div>' +
+        boxes +
+      '</div>' +
+      '<div style="display:flex;gap:10px;margin-top:4px;">' +
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>' +
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── DEATH BY renderer ────────────────────────────────────────────────────────
+  // Minute 1: 1 rep. Minute 2: 2 reps. Continue until unable to complete within the minute.
+  // Multiple movements cycle each minute (e.g. Death By Pull-Up + Burpee alternates).
+  function _renderDEATHBY(){
+    var t       = window._wodTimer;
+    var minute  = t.minute || 1;
+    var phaseSec = 60 - (t.elapsed % 60);
+    var movIdx  = (minute - 1) % Math.max(1, movements.length);
+    var curMov  = movements[movIdx] || {name:'Movement'};
+    var loadStr = phxFormatHeight(phxMovementLoad(curMov, window._wodSelection, movIdx));
+    var boxes   = phxRenderTargetBoxes(loadStr, minute, curMov.name);
+    inner.innerHTML='<div style="padding-top:20px;">' +
+      _headerHTML('DEATH BY — MINUTE '+minute) +
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:var(--orange);">'+formatTime(phaseSec)+'</div>' +
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">SECONDS THIS MINUTE</div>' +
+      '<div style="background:var(--bg2);border:1px solid var(--orange);border-radius:var(--radius);padding:20px;margin-bottom:14px;">' +
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--orange);margin-bottom:6px;">This minute — '+minute+' rep'+(minute===1?'':'s')+'</div>' +
+        '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);">'+curMov.name+'</div>' +
+        boxes +
+      '</div>' +
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;text-align:center;">' +
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Survive until you can't complete the reps</div>' +
+        '<div style="font-family:var(--font-d);font-size:13px;color:var(--text2);">Score = last completed minute</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start WOD':(t.running?'PAUSE':'RESUME'))+'</button>' +
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Failed</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── FOR LOAD renderer ────────────────────────────────────────────────────────
+  // Sets × reps working up to a max load. Athlete logs weight per set, score = heaviest set.
+  function _renderFORLOAD(){
+    var t = window._wodTimer;
+    if(!Array.isArray(t.forloadState)){
+      t.forloadState = movements.map(function(m){
+        return {name:m.name, sets:m.sets||5, reps:m.reps||'1', targetLoad:m.load_rx||'', completedSets:0, loads:[]};
+      });
+    }
+    var rows = t.forloadState.map(function(s, i){
+      var dots = '';
+      for(var k=0;k<s.sets;k++){
+        var filled = k < s.completedSets;
+        dots += '<span onclick="window._wodForloadDot('+i+','+k+')" style="display:inline-block;width:24px;height:24px;border-radius:50%;margin-right:6px;border:1.5px solid var(--gold);background:'+(filled?'var(--gold)':'transparent')+';cursor:pointer;"></span>';
+      }
+      return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">' +
+          '<div style="flex:1;">' +
+            '<div style="font-family:var(--font-d);font-size:17px;font-weight:700;text-transform:uppercase;color:var(--text);">'+s.name+'</div>' +
+            '<div style="font-size:11px;color:var(--text3);margin-top:2px;">Target: '+s.targetLoad+'</div>' +
+          '</div>' +
+          '<div style="text-align:right;">' +
+            '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--gold);">'+s.sets+' × '+s.reps+'</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+          '<div>'+dots+'</div>' +
+          '<input type="text" placeholder="Load used" oninput="window._wodForloadLog('+i+',this.value)" style="flex:0 0 110px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--font-d);font-size:12px;text-align:right;">' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    inner.innerHTML='<div style="padding-top:20px;">' +
+      _headerHTML('FOR LOAD — BUILD TO HEAVY') +
+      '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(t.elapsed)+'</div>' +
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:18px;">ELAPSED</div>' +
+      '<div style="padding:0 0 8px;">'+rows+'</div>' +
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;text-align:center;">' +
+        '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;">Score = heaviest successful set</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start':(t.running?'PAUSE':'RESUME'))+'</button>' +
+        '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>' +
+      '</div>' +
+    '</div>';
+  }
+  window._wodForloadDot = function(movIdx, setIdx){
+    var t = window._wodTimer;
+    if(!t || !t.forloadState) return;
+    var s = t.forloadState[movIdx];
+    if(!s) return;
+    s.completedSets = (s.completedSets === setIdx+1) ? setIdx : setIdx+1;
+    _renderFORLOAD();
+  };
+  window._wodForloadLog = function(movIdx, val){
+    var t = window._wodTimer;
+    if(!t || !t.forloadState) return;
+    var s = t.forloadState[movIdx];
+    if(s) s.loads.push(val);
+  };
+
+  // ── BLOCKS renderer (multi-block sequencer) ──────────────────────────────────
+  // Sequences through wod.blocks[]. Each block has its own format, movements, work/rest.
+  // Between blocks: a transition screen counts down rest_between_sec (default 60).
+  // State: t.blockIdx (current block), t.blockPhase ('active'|'rest'), t.blockPhaseSec.
+  function _getActiveBlock(){
+    var t = window._wodTimer;
+    var blocks = (wod.blocks || []);
+    return blocks[t.blockIdx || 0] || null;
+  }
+  function _renderBLOCKS(){
+    var t = window._wodTimer;
+    var blocks = wod.blocks || [];
+    var blockIdx = t.blockIdx || 0;
+    var block = blocks[blockIdx];
+    if(!block){
+      // All blocks done
+      inner.innerHTML='<div style="padding-top:40px;text-align:center;">' +
+        _headerHTML('ALL BLOCKS COMPLETE') +
+        '<div style="font-family:var(--font-d);font-size:32px;font-weight:900;color:var(--gold);margin:20px 0;">Done!</div>' +
+        '<button class="btn-primary" style="width:100%;padding:18px;font-size:18px;margin-top:20px;" onclick="finishWOD()">Complete Session</button>' +
+      '</div>';
+      return;
+    }
+    var phase = t.blockPhase || 'active';
+    // Between-block rest transition
+    if(phase === 'rest'){
+      var restSec = t.blockPhaseSec !== undefined ? t.blockPhaseSec : (wod.rest_between_sec || 60);
+      var nextBlock = blocks[blockIdx + 1];
+      inner.innerHTML='<div style="padding-top:20px;">' +
+        _headerHTML('REST — NEXT: '+(nextBlock ? (nextBlock.label||'Block '+(blockIdx+2)).toUpperCase() : 'DONE')) +
+        '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:var(--blue,#4A90D9);">'+formatTime(restSec)+'</div>' +
+        '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:20px;">REST BETWEEN BLOCKS</div>' +
+        '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;text-align:center;">' +
+          '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Completed</div>' +
+          '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);">'+(block.label||'Block '+(blockIdx+1))+'</div>' +
+        '</div>' +
+        (nextBlock ?
+          '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:14px;margin-bottom:14px;">' +
+            '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Up next</div>' +
+            '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);">'+(nextBlock.label||'Block '+(blockIdx+2))+'</div>' +
+            '<div style="font-size:12px;color:var(--text2);margin-top:2px;">'+(nextBlock.format||'').toUpperCase()+'</div>' +
+          '</div>' : '') +
+        '<div style="display:flex;gap:10px;margin-top:14px;">' +
+          '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" onclick="window._wodBlocksSkipRest()">Skip Rest</button>' +
+          '<button class="btn-secondary" style="flex:0 0 110px;padding:18px;margin:0;" onclick="finishWOD()">Finish</button>' +
+        '</div>' +
+      '</div>';
+      return;
+    }
+    // Active block — render a mini version appropriate to block format
+    var blockFmt = String(block.format||'afap').toLowerCase();
+    var blockMovs = block.movements || [];
+    var blockLabel = block.label || ('Block '+(blockIdx+1));
+    var progressBar = '<div style="display:flex;gap:4px;margin-bottom:14px;">' +
+      blocks.map(function(b,i){
+        return '<div style="flex:1;height:4px;border-radius:2px;background:'+(i<blockIdx?'var(--gold)':(i===blockIdx?'var(--orange)':'var(--border2)'))+';"></div>';
+      }).join('') +
+    '</div>';
+    var movHTML = blockMovs.map(function(m,i){
+      var loadStr = phxFormatHeight(m.load_rx || m.load_scaled || '');
+      var repStr = m.distance_m ? m.distance_m+'m' : (m.reps ? String(m.reps) : '');
+      return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;">' +
+        '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>' +
+        '<div style="font-size:12px;color:var(--gold);margin-top:4px;">'+(repStr?(repStr+' '):'')+loadStr+'</div>' +
+        (m.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:4px;font-style:italic;">'+m.coaching_note+'</div>':'')+
+      '</div>';
+    }).join('');
+    // Timer display — blocks use their own timing
+    var blockWorkSec = block.work_sec || block.duration_sec || (block.duration_min ? block.duration_min*60 : 0);
+    var phaseSec = t.blockPhaseSec !== undefined ? t.blockPhaseSec : blockWorkSec;
+    var timerDisplay = blockWorkSec > 0
+      ? '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:var(--orange);">'+formatTime(phaseSec)+'</div>' +
+        '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:14px;">'+(blockFmt==='amrap'?'TIME REMAINING':'ELAPSED')+'</div>'
+      : '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(t.elapsed)+'</div>' +
+        '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:14px;">ELAPSED</div>';
+    // Sets indicator for interval blocks
+    var setsBar = (block.sets && block.sets > 1)
+      ? '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">' +
+          '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;">Set</div>' +
+          '<div id="wod-block-setnum" style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+(t.blockSetNum||1)+' / '+block.sets+'</div>' +
+        '</div>'
+      : '';
+    inner.innerHTML='<div style="padding-top:20px;">' +
+      _headerHTML(blockLabel.toUpperCase()+' · '+(blockFmt.toUpperCase())) +
+      progressBar +
+      timerDisplay +
+      setsBar +
+      movHTML +
+      '<div style="display:flex;gap:10px;margin-top:10px;">' +
+        '<button class="btn-primary" style="flex:1;padding:18px;font-size:18px;" id="wod-timer-btn" onclick="window._wodPrimaryAction&&window._wodPrimaryAction()">'+(!t.started?'Start':(t.running?'PAUSE':'RESUME'))+'</button>' +
+        '<button class="btn-secondary" style="padding:18px;width:auto;max-width:none;margin:0;" onclick="window._wodBlocksNextBlock()">Next Block &rsaquo;</button>' +
+      '</div>' +
+    '</div>';
+  }
+  window._wodBlocksNextBlock = function(){
+    var t = window._wodTimer;
+    var blocks = wod.blocks || [];
+    t.blockIdx = (t.blockIdx || 0) + 1;
+    if(t.blockIdx >= blocks.length){ finishWOD(); return; }
+    var restSec = wod.rest_between_sec || 60;
+    t.blockPhase = 'rest';
+    t.blockPhaseSec = restSec;
+    _renderBLOCKS();
+  };
+  window._wodBlocksSkipRest = function(){
+    var t = window._wodTimer;
+    t.blockPhase = 'active';
+    var blocks = wod.blocks || [];
+    var block = blocks[t.blockIdx || 0];
+    t.blockPhaseSec = block ? (block.work_sec || block.duration_sec || (block.duration_min ? block.duration_min*60 : 0)) : 0;
+    _renderBLOCKS();
+  };
+
   function _renderRouter(){
-    if(fmt==='afap')  return _renderAFAP();
-    if(fmt==='amrap') return _renderAMRAP();
-    if(fmt==='emom')  return _renderEMOM();
-    return _renderStrength();
+    if(fmt==='afap')      return _renderAFAP();
+    if(fmt==='amrap')     return _renderAMRAP();
+    if(fmt==='emom')      return _renderEMOM();
+    if(fmt==='chipper')   return _renderCHIPPER();
+    if(fmt==='interval')  return _renderINTERVAL();
+    if(fmt==='tabata')    return _renderTABATA();
+    if(fmt==='death_by')  return _renderDEATHBY();
+    if(fmt==='forload')   return _renderFORLOAD();
+    if(fmt==='blocks')    return _renderBLOCKS();
+    return _renderAFAP(); // safe default
   }
   window._wodRender = _renderRouter;
 
@@ -17245,36 +17640,111 @@ function startWODTimer(modalId){
       var b=document.getElementById('wod-timer-btn'); if(b) b.textContent='PAUSE';
       t.interval = setInterval(function(){
         t.elapsed++;
-        // Update headline display
         var el = document.getElementById('wod-timer-num');
-        if(el){
-          if(t.fmt==='amrap'){
-            var remNow = Math.max(0, t.totalSecs - t.elapsed);
-            el.textContent = formatTime(remNow);
-            // v4.7.6 FIX 3: when we cross the 30s threshold, re-render so the partial-rep counter auto-reveals
-            if(remNow === 30) _renderRouter();
-          } else if(t.fmt==='emom'){
-            el.textContent = formatTime(60 - (t.elapsed % 60));
-            // Tick over a minute → advance movement + minute counter
-            if(t.elapsed>0 && t.elapsed % 60 === 0){
-              t.minute++;
-              t.emomMovIdx++;
+
+        // ── AMRAP ──
+        if(t.fmt==='amrap'){
+          var remNow = Math.max(0, t.totalSecs - t.elapsed);
+          if(el) el.textContent = formatTime(remNow);
+          if(remNow === 30) _renderRouter();
+          if(t.elapsed >= t.totalSecs){
+            clearInterval(t.interval); t.running=false;
+            if(el) el.textContent='TIME!';
+            if(typeof window._wodAmrapFinalReps==='function') window._wodAmrapFinalReps();
+            finishWOD();
+          }
+
+        // ── EMOM ──
+        } else if(t.fmt==='emom'){
+          if(el) el.textContent = formatTime(60 - (t.elapsed % 60));
+          if(t.elapsed>0 && t.elapsed % 60 === 0){ t.minute++; t.emomMovIdx++; _renderRouter(); }
+          if(t.elapsed >= t.totalSecs){ clearInterval(t.interval); t.running=false; finishWOD(); }
+
+        // ── DEATH BY (EMOM-style, no cap — athlete taps Fail) ──
+        } else if(t.fmt==='death_by'){
+          if(el) el.textContent = formatTime(60 - (t.elapsed % 60));
+          if(t.elapsed>0 && t.elapsed % 60 === 0){ t.minute = (t.minute||1)+1; _renderRouter(); }
+
+        // ── TABATA (20/10, auto-flip phases) ──
+        } else if(t.fmt==='tabata'){
+          var WORK=20, REST=10, ROUNDS=8;
+          var movCount = Math.max(1, movements.length);
+          var totalRounds = movCount * ROUNDS;
+          // phase sec counts down
+          t.tabataPhaseSec = (t.tabataPhaseSec !== undefined ? t.tabataPhaseSec : WORK) - 1;
+          if(el) el.textContent = formatTime(Math.max(0, t.tabataPhaseSec));
+          if(t.tabataPhaseSec <= 0){
+            if(t.tabataPhase === 'work'){
+              t.tabataPhase = 'rest';
+              t.tabataPhaseSec = REST;
+            } else {
+              t.tabataPhase = 'work';
+              t.tabataPhaseSec = WORK;
+              t.tabataRound = (t.tabataRound||0) + 1;
+              if(t.tabataRound >= totalRounds){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
+            }
+            _renderRouter();
+          }
+
+        // ── INTERVAL (work/rest cycles, N sets) ──
+        } else if(t.fmt==='interval'){
+          var workSec = wod.work_sec || 60;
+          var restSec = wod.rest_sec || 60;
+          var totalSets = wod.sets || 5;
+          // initialise state on first tick
+          if(t.intervalSetNum === undefined){ t.intervalSetNum=1; t.intervalPhase='work'; t.intervalPhaseSec=workSec; t.intervalWork=workSec; t.intervalRest=restSec; t.intervalSets=totalSets; }
+          t.intervalPhaseSec = (t.intervalPhaseSec||1) - 1;
+          if(el) el.textContent = formatTime(Math.max(0, t.intervalPhaseSec));
+          if(t.intervalPhaseSec <= 0){
+            if(t.intervalPhase === 'work'){
+              if(t.intervalSetNum >= totalSets){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
+              t.intervalPhase = 'rest';
+              t.intervalPhaseSec = restSec;
+            } else {
+              t.intervalSetNum++;
+              t.intervalPhase = 'work';
+              t.intervalPhaseSec = workSec;
+            }
+            _renderRouter();
+          }
+
+        // ── BLOCKS (multi-block sequencer with auto-rest transition) ──
+        } else if(t.fmt==='blocks'){
+          var blocks = wod.blocks||[];
+          var block = blocks[t.blockIdx||0];
+          if(!block){ finishWOD(); return; }
+          if(t.blockPhase === 'rest'){
+            t.blockPhaseSec = (t.blockPhaseSec||1) - 1;
+            if(el) el.textContent = formatTime(Math.max(0, t.blockPhaseSec));
+            if(t.blockPhaseSec <= 0){
+              t.blockPhase = 'active';
+              var nextBlock = blocks[t.blockIdx||0];
+              t.blockPhaseSec = nextBlock ? (nextBlock.work_sec||nextBlock.duration_sec||(nextBlock.duration_min?nextBlock.duration_min*60:0)) : 0;
               _renderRouter();
             }
           } else {
-            el.textContent = formatTime(t.elapsed);
+            // active block with a time limit
+            var bWorkSec = block.work_sec||block.duration_sec||(block.duration_min?block.duration_min*60:0);
+            if(bWorkSec > 0){
+              t.blockPhaseSec = (t.blockPhaseSec !== undefined ? t.blockPhaseSec : bWorkSec) - 1;
+              if(el) el.textContent = formatTime(Math.max(0, t.blockPhaseSec));
+              if(t.blockPhaseSec <= 0){
+                // auto-advance to rest
+                t.blockIdx = (t.blockIdx||0) + 1;
+                if(t.blockIdx >= blocks.length){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
+                t.blockPhase = 'rest';
+                t.blockPhaseSec = wod.rest_between_sec || 60;
+                _renderRouter();
+              }
+            } else {
+              // no time limit on this block — just elapsed
+              if(el) el.textContent = formatTime(t.elapsed);
+            }
           }
-        }
-        // AMRAP / EMOM auto-stop at time cap
-        if((t.fmt==='amrap' || t.fmt==='emom') && t.elapsed >= t.totalSecs){
-          clearInterval(t.interval);
-          t.running = false;
-          if(el) el.textContent = 'TIME!';
-          // v4.7.6 FIX 3: at time cap mid-round, prompt for the in-progress movement reps to finalise .r
-          if(t.fmt==='amrap' && typeof window._wodAmrapFinalReps==='function'){
-            window._wodAmrapFinalReps();
-          }
-          finishWOD();
+
+        // ── CHIPPER / AFAP / FORLOAD — elapsed timer only ──
+        } else {
+          if(el) el.textContent = formatTime(t.elapsed);
         }
       }, 1000);
     }

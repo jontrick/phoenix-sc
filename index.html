@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.9';
+var APP_VERSION='4.9.0';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16177,20 +16177,218 @@ window._phxWeekTileTap = function(sessionId, dayName){
   _phxOpenSessionFromWeekTile(sess, dayName);
 };
 
+// v4.8.10: full session preview from the week planner — shows complete session build
+// (exercises, sets, reps, load, format, WOD movements, core layout) as a read-only
+// overlay for any day in the week. Only today's sessions have a "Start" button.
 function _phxOpenSessionFromWeekTile(sess, dayName){
   var todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
-  if(dayName !== todayName){
-    _phxOpenBottomSheet({
-      title: 'Not today',
-      subtitle: 'This session is scheduled for '+dayName+'. Open it from the Today screen on the day.',
-      options: [{value:'ok', label:'OK'}]
-    });
-    return;
+  var isToday = (dayName === todayName);
+  _phxShowSessionPreview(sess, dayName, isToday);
+}
+
+function _phxShowSessionPreview(sess, dayName, isToday){
+  // Remove any stale preview
+  var stale = document.getElementById('phx-session-preview');
+  if(stale) stale.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-session-preview';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9500;overflow-y:auto;display:flex;flex-direction:column;';
+
+  var sessType = String(sess.session_type||'').toLowerCase();
+  var isWod = sessType === 'wod' || sessType.indexOf('wod') >= 0 || (sess.wod && typeof sess.wod === 'object');
+  var isCore = sessType.indexOf('core') >= 0;
+  var isWalk = sessType === 'walk' || sessType === 'run' || sessType.indexOf('walk') >= 0;
+  var isConditioning = sessType.indexOf('condition') >= 0 || sessType.indexOf('metabolic') >= 0;
+
+  // ── Header ──
+  var headerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);">' +
+      '<div onclick="document.getElementById('phx-session-preview').remove()" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">' +
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>' +
+      '</div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">'+dayName+(isToday?' · Today':'')+'</div>' +
+        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:1px;">'+(sess.session_type||'Training')+'</div>' +
+      '</div>' +
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);">'+(sess.duration_min||45)+' min</div>' +
+    '</div>';
+
+  // ── Content ──
+  var contentHTML = '<div style="padding:16px;flex:1;">';
+
+  // Coach note if present
+  if(sess.coach_note || sess.coaching_note){
+    var note = sess.coach_note || sess.coaching_note;
+    contentHTML +=
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">' +
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Coach Note</div>' +
+        '<div style="font-size:13px;color:var(--text2);line-height:1.6;">'+note+'</div>' +
+      '</div>';
   }
+
+  // ── WOD session ──
+  if(isWod){
+    var wod = sess.wod;
+    if(wod && typeof wod === 'object'){
+      var fmtStr = String(wod.format||'').toUpperCase();
+      var durationMin = wod.duration_sec ? Math.round(wod.duration_sec/60) : (sess.duration_min||20);
+      contentHTML +=
+        '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">' +
+          '<div>' +
+            '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">Format</div>' +
+            '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--gold);">'+fmtStr+'</div>' +
+          '</div>' +
+          '<div style="text-align:right;">' +
+            '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">Duration</div>' +
+            '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+durationMin+' min</div>' +
+          '</div>' +
+        '</div>';
+      // Blocks format — show each block
+      if(wod.blocks && wod.blocks.length){
+        wod.blocks.forEach(function(block, bi){
+          contentHTML += '<div style="margin-bottom:12px;">' +
+            '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">' +
+              (block.label||'Block '+(bi+1))+' · '+(block.format||'').toUpperCase() +
+              (block.sets ? ' · '+block.sets+' sets' : '') +
+              (block.work_sec ? ' · '+block.work_sec+'s work / '+block.rest_sec+'s rest' : '') +
+            '</div>';
+          (block.movements||[]).forEach(function(m){
+            contentHTML += _phxPreviewMovRow(m);
+          });
+          if(block.coaching_note){
+            contentHTML += '<div style="font-size:11px;color:var(--text3);font-style:italic;margin-top:4px;padding:6px 10px;background:var(--bg3);border-radius:var(--radius);">'+block.coaching_note+'</div>';
+          }
+          contentHTML += '</div>';
+        });
+      } else {
+        // Single-format WOD
+        if(wod.sets){ contentHTML += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;">'+wod.sets+' sets · '+wod.work_sec+'s work / '+wod.rest_sec+'s rest</div>'; }
+        (wod.movements||[]).forEach(function(m){
+          contentHTML += _phxPreviewMovRow(m);
+        });
+      }
+      if(wod.coaching_note){
+        contentHTML += '<div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;margin-top:10px;font-size:12px;color:var(--text2);line-height:1.5;font-style:italic;">'+wod.coaching_note+'</div>';
+      }
+    } else {
+      contentHTML += '<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">WOD details will be generated on the day.</div>';
+    }
+
+  // ── Core session ──
+  } else if(isCore){
+    var coreFmt = sess.core_session_type || 'circuit';
+    var coreLabel = (typeof CORE_TYPE_META !== 'undefined' && CORE_TYPE_META[coreFmt]) ? CORE_TYPE_META[coreFmt].label : coreFmt;
+    contentHTML +=
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">' +
+        '<div style="font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;color:var(--text);">'+coreLabel+'</div>' +
+        '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">'+(sess.duration_min||20)+' min</div>' +
+      '</div>';
+    var coreExs = sess.exercises || (sess.core && sess.core.movements) || [];
+    if(coreExs.length){
+      var usesStrength = (typeof _phxCoreUsesStrengthRenderer === 'function') ? _phxCoreUsesStrengthRenderer(coreFmt) : (coreFmt === 'strength' || coreFmt === 'anti_rotation' || coreFmt === 'rotational_power');
+      coreExs.forEach(function(e){
+        contentHTML += _phxPreviewExRow(e, usesStrength);
+      });
+    } else {
+      contentHTML += '<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">Core session will be generated on the day.</div>';
+    }
+
+  // ── Walk / Run ──
+  } else if(isWalk){
+    contentHTML +=
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--green,#4CAF50);border-radius:var(--radius);padding:16px;margin-bottom:14px;">' +
+        '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;text-transform:uppercase;color:var(--text);">Walk / Run</div>' +
+        '<div style="font-size:12px;color:var(--text2);margin-top:4px;">GPS tracked session · '+(sess.duration_min||45)+' min target</div>' +
+        (sess.notes||sess.coach_note ? '<div style="font-size:12px;color:var(--text3);margin-top:8px;font-style:italic;">'+(sess.notes||sess.coach_note)+'</div>' : '') +
+      '</div>';
+
+  // ── Strength / Standard session ──
+  } else {
+    var exercises = sess.exercises || [];
+    if(!exercises.length){
+      contentHTML += '<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">Session details will be generated on the day.</div>';
+    } else {
+      contentHTML += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">'+exercises.length+' exercises · '+(sess.duration_min||45)+' min</div>';
+      exercises.forEach(function(ex){
+        contentHTML += _phxPreviewExRow(ex, true);
+      });
+    }
+  }
+
+  contentHTML += '</div>'; // end padding wrapper
+
+  // ── Action bar ──
+  var actionHTML =
+    '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);">';
+  if(isToday){
+    actionHTML +=
+      '<button onclick="_phxPreviewStartSession()" style="width:100%;padding:16px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Start Session →</button>';
+  } else {
+    actionHTML +=
+      '<div style="text-align:center;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Scheduled for '+dayName+' — available to start on the day</div>';
+  }
+  actionHTML += '</div>';
+
+  overlay.innerHTML = headerHTML + contentHTML + actionHTML;
+  document.body.appendChild(overlay);
+
+  // Store session for the Start button
+  window._phxPreviewSess = sess;
+  window._phxPreviewDay  = dayName;
+}
+
+// Row renderer for a WOD movement in the preview
+function _phxPreviewMovRow(m){
+  var repStr = m.distance_m ? m.distance_m+'m' : (m.reps!=null ? String(m.reps) : '');
+  var loadStr = m.load_rx || m.load || '';
+  var scaleStr = m.load_scale || m.load_scaled || '';
+  return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">' +
+      '<div style="flex:1;">' +
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>' +
+        (m.coaching_note||m.cue ? '<div style="font-size:11px;color:var(--text3);margin-top:3px;font-style:italic;">'+(m.coaching_note||m.cue)+'</div>' : '') +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0;">' +
+        (repStr ? '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--gold);">'+repStr+'</div>' : '') +
+        (loadStr ? '<div style="font-size:12px;color:var(--text2);">'+loadStr+'</div>' : '') +
+        (scaleStr ? '<div style="font-size:10px;color:var(--text3);">Scale: '+scaleStr+'</div>' : '') +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// Row renderer for a strength/core exercise in the preview
+function _phxPreviewExRow(ex, showSets){
+  var sets = showSets ? (parseInt(ex.sets)||3) : null;
+  var reps = ex.reps || '';
+  var load = ex.load_guidance || ex.load || '';
+  var rest = ex.rest_sec ? ex.rest_sec+'s rest' : '';
+  return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">' +
+      '<div style="flex:1;">' +
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);">'+ex.name+'</div>' +
+        (ex.coaching_note||ex.cue ? '<div style="font-size:11px;color:var(--text3);margin-top:3px;font-style:italic;">'+(ex.coaching_note||ex.cue)+'</div>' : '') +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0;">' +
+        (sets ? '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--gold);">'+sets+' × '+reps+'</div>' : (reps ? '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--gold);">'+reps+'</div>' : '')) +
+        (load ? '<div style="font-size:12px;color:var(--text2);">'+load+'</div>' : '') +
+        (rest ? '<div style="font-size:10px;color:var(--text3);">'+rest+'</div>' : '') +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// Called by the "Start Session" button in the preview overlay
+window._phxPreviewStartSession = function(){
+  var sess = window._phxPreviewSess;
+  var overlay = document.getElementById('phx-session-preview');
+  if(overlay) overlay.remove();
+  if(!sess) return;
   window._todaySession = sess;
   window._todaySessions = window._todaySessions || [sess];
   if(typeof openTodaySession === 'function') openTodaySession();
-}
+};
 
 // v4.7.59: Confirm-then-remove for custom (athlete-added) sessions. Replaces the native
 // confirm() — uses the existing bottom sheet so it's consistent with the rest of the flow.

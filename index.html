@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.5';
+var APP_VERSION='4.9.6';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5765,7 +5765,8 @@ window._phxOpenWodTypePicker = function(o){
     var borderColor = isSelected ? 'var(--gold)' : 'var(--border)';
     var bg = isSelected ? 'rgba(200,150,62,0.08)' : 'var(--bg2)';
     var labelColor = isCoach ? 'var(--text2)' : 'var(--text)';
-    return '<div onclick="window._phxWodTypeSelect(\"'+t.value+'\")" style="background:'+bg+';border:1px solid '+borderColor+';border-radius:var(--radius);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s;">'+
+    // Use data-wod-val attribute instead of inline onclick to avoid quote/space issues
+    return '<div data-wod-val="'+encodeURIComponent(t.value)+'" class="phx-wod-type-tile" style="background:'+bg+';border:1px solid '+borderColor+';border-radius:var(--radius);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
         '<div style="font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:'+labelColor+';">'+t.label+'</div>'+
         (isSelected ? '<div style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;color:var(--gold);border:1px solid var(--gold);padding:3px 8px;border-radius:10px;">Selected</div>' : '')+
@@ -5787,6 +5788,16 @@ window._phxOpenWodTypePicker = function(o){
       tilesHTML+
     '</div>';
   document.body.appendChild(overlay);
+
+  // Wire tile clicks via event delegation — avoids inline onclick quoting issues with spaces in values
+  overlay.addEventListener('click', function(e){
+    var tile = e.target.closest('.phx-wod-type-tile');
+    if(tile){
+      var encoded = tile.getAttribute('data-wod-val');
+      if(encoded) window._phxWodTypeSelect(decodeURIComponent(encoded));
+    }
+  });
+
   // Store callbacks on window for the tile onclick handlers
   window._phxWodTypeOnPick   = function(value){
     var el = document.getElementById('phx-wod-type-overlay');

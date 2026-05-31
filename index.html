@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.10';
+var APP_VERSION='4.9.11';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18668,21 +18668,24 @@ function startWODTimer(modalId){
     }
     var phase = t.blockPhase || 'active';
     // Between-block rest transition
+    // blockIdx = index of the NEXT block to start (already incremented by _wodBlocksNextBlock)
+    // So: completed = blocks[blockIdx - 1], up next = blocks[blockIdx]
     if(phase === 'rest'){
       var restSec = t.blockPhaseSec !== undefined ? t.blockPhaseSec : (wod.rest_between_sec || 60);
-      var nextBlock = blocks[blockIdx + 1];
+      var completedBlock = blocks[blockIdx - 1] || blocks[0];
+      var nextBlock      = blocks[blockIdx];
       inner.innerHTML='<div style="padding-top:20px;">' +
-        _headerHTML('REST — NEXT: '+(nextBlock ? (nextBlock.label||'Block '+(blockIdx+2)).toUpperCase() : 'DONE')) +
+        _headerHTML('REST — NEXT: '+(nextBlock ? (nextBlock.label||'Block '+(blockIdx+1)).toUpperCase() : 'DONE')) +
         '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;color:var(--blue,#4A90D9);">'+formatTime(restSec)+'</div>' +
         '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:20px;">REST BETWEEN BLOCKS</div>' +
         '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;text-align:center;">' +
           '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Completed</div>' +
-          '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);">'+(block.label||'Block '+(blockIdx+1))+'</div>' +
+          '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);">'+(completedBlock.label||'Block '+blockIdx)+'</div>' +
         '</div>' +
         (nextBlock ?
           '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:14px;margin-bottom:14px;">' +
             '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Up next</div>' +
-            '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);">'+(nextBlock.label||'Block '+(blockIdx+2))+'</div>' +
+            '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);">'+(nextBlock.label||'Block '+(blockIdx+1))+'</div>' +
             '<div style="font-size:12px;color:var(--text2);margin-top:2px;">'+(nextBlock.format||'').toUpperCase()+'</div>' +
           '</div>' : '') +
         '<div style="display:flex;gap:10px;margin-top:14px;">' +
@@ -18913,8 +18916,9 @@ function startWODTimer(modalId){
             if(el) el.textContent = formatTime(Math.max(0, t.blockPhaseSec));
             if(t.blockPhaseSec <= 0){
               t.blockPhase = 'active';
-              var nextBlock = blocks[t.blockIdx||0];
-              t.blockPhaseSec = nextBlock ? (nextBlock.work_sec||nextBlock.duration_sec||(nextBlock.duration_min?nextBlock.duration_min*60:0)) : 0;
+              // blockIdx already points to the next block (incremented in _wodBlocksNextBlock or tick)
+              var activeBlock = blocks[t.blockIdx||0];
+              t.blockPhaseSec = activeBlock ? (activeBlock.work_sec||activeBlock.duration_sec||(activeBlock.duration_min?activeBlock.duration_min*60:0)) : 0;
               _renderRouter();
             }
           } else {
@@ -18924,7 +18928,7 @@ function startWODTimer(modalId){
               t.blockPhaseSec = (t.blockPhaseSec !== undefined ? t.blockPhaseSec : bWorkSec) - 1;
               if(el) el.textContent = formatTime(Math.max(0, t.blockPhaseSec));
               if(t.blockPhaseSec <= 0){
-                // auto-advance to rest
+                // auto-advance: increment THEN check (consistent with _wodBlocksNextBlock)
                 t.blockIdx = (t.blockIdx||0) + 1;
                 if(t.blockIdx >= blocks.length){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
                 t.blockPhase = 'rest';
@@ -18932,7 +18936,7 @@ function startWODTimer(modalId){
                 _renderRouter();
               }
             } else {
-              // no time limit on this block — just elapsed
+              // no time limit — manual Next Block button controls progression, just elapsed
               if(el) el.textContent = formatTime(t.elapsed);
             }
           }

@@ -1723,7 +1723,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div class="game-card-eyebrow">
           <span class="game-card-eyebrow-sm">This Week's Schedule</span>
         </div>
-        <div id="card-this-week-body" style="margin-top:8px;">Loading…</div>
+        <div id="card-this-week-body" style="margin-top:8px;"></div>
         <div class="game-card-action" style="font-size:11px;margin-top:10px;">View full week →</div>
       </div>
     </div>
@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.8.3';
+var APP_VERSION='4.8.4';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9201,6 +9201,11 @@ duration_min equal to the matching value:
   day_durations[day].am and day_durations[day].pm respectively. Tag each session
   with am/pm in any way the renderer expects (e.g. session.day = "Tuesday AM"
   is acceptable, or use a session._slot field).
+- SLOT ORDERING RULE (two-a-day): Always place the STRENGTH session in the AM slot
+  and the CONDITIONING / WOD / core session in the PM slot. Strength requires CNS
+  freshness — always comes first. If both sessions are strength (rare), heavier/primary
+  compound lifts go AM, accessory/volume work goes PM. Never put conditioning before
+  strength on the same day.
 
 Do not invent a different duration.
 
@@ -15262,7 +15267,20 @@ window._phxRenderWeekScheduleTile = function(){
     bodyEl.innerHTML = '<div style="font-size:13px;color:var(--text2);line-height:1.5;">No programme yet — complete the questionnaire to get started.</div>';
     return;
   }
+  // v4.8.4: check if today is before the week start (i.e. we're in the gap between
+  // check-in day and the new week kicking off). Show a "starts [day]" message.
   var start = _phxWeekStartDate();
+  var todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0);
+  if(start > todayMidnight){
+    var daysUntil = Math.round((start - todayMidnight) / 86400000);
+    var startDayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][start.getDay()];
+    var untilStr = daysUntil === 1 ? 'tomorrow' : 'in ' + daysUntil + ' days';
+    bodyEl.innerHTML =
+      '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Week ' +
+      ((athlete && athlete.currentWeek) || 1) + ' starts ' + untilStr + '</div>' +
+      '<div style="font-size:12px;color:var(--text2);line-height:1.5;">Your ' + startDayName + ' session is ready. Rest up.</div>';
+    return;
+  }
   var weekStartISO = start.getFullYear()+'-'+String(start.getMonth()+1).padStart(2,'0')+'-'+String(start.getDate()).padStart(2,'0');
   var byDay = {Monday:[],Tuesday:[],Wednesday:[],Thursday:[],Friday:[],Saturday:[],Sunday:[]};
   if(prog && prog.week && Array.isArray(prog.week.sessions)){
@@ -15739,7 +15757,7 @@ function renderTodaySessionCard(){
   // v4.7.9 TASK 3: clear any previously-rendered extra-session tiles before re-rendering.
   document.querySelectorAll('.card-today-extra').forEach(function(n){ n.remove(); });
 
-  // v4.8.3: no programme yet — show a build CTA instead of the static placeholder
+  // v4.8.4: no programme yet — show a build CTA instead of the static placeholder
   if(!athlete||!athlete.aiProgramme){
     var _nc = document.getElementById('card-today-session');
     if(_nc){
@@ -15755,6 +15773,31 @@ function renderTodaySessionCard(){
     return;
   }
   var prog=athlete.aiProgramme;
+  // v4.8.4: between-weeks gap — today is before the new week start date.
+  // Show a "starts tomorrow" state with two options.
+  var _weekStart = _phxWeekStartDate();
+  var _todayMid = new Date(); _todayMid.setHours(0,0,0,0);
+  if(_weekStart > _todayMid){
+    var _daysUntil = Math.round((_weekStart - _todayMid) / 86400000);
+    var _startDay = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][_weekStart.getDay()];
+    var _untilStr = _daysUntil === 1 ? 'tomorrow (' + _startDay + ')' : _startDay;
+    var _gapCard = document.getElementById('card-today-session');
+    if(_gapCard){
+      _gapCard.style.borderLeftColor = 'var(--gold)';
+      _gapCard.style.cursor = 'default';
+      _gapCard.setAttribute('onclick','');
+      _gapCard.querySelector('.game-card-inner').innerHTML =
+        '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Your Programme</span></div>'+
+        '<div class="game-card-title" style="font-size:24px;">Week ' + ((athlete.currentWeek)||1) + ' Starts ' + _untilStr + '</div>'+
+        '<div class="game-card-sub" style="margin-top:6px;line-height:1.6;">Rest up. Your next session is ready to go.</div>'+
+        '<div style="display:flex;gap:8px;margin-top:16px;">'+
+          '<div onclick="event.stopPropagation();openTBBSSession();" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);">Coach Recommends</div>'+
+          '<div onclick="event.stopPropagation();openWalkLog();" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);">Log a Walk</div>'+
+        '</div>';
+    }
+    window._todaySession = null;
+    return;
+  }
   var week=prog.week;
   if(!week||!week.sessions||!week.sessions.length) return;
   var now=new Date();

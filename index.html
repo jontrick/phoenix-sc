@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.2';
+var APP_VERSION='4.9.3';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5718,31 +5718,92 @@ window._phxBsheetOverlayClick = function(ev){
 // v4.7.58 SHARED WOD SUB-TYPE PICKER — second-level bottom sheet shown after WOD is chosen.
 // Used by the week-plan "+ Add Session" flow and the questionnaire session-timetable step (7).
 // onPick receives the sub-type string (or null if "Coach decides"). onCancel reopens the parent.
+// v4.9.3 — 4 physiologically distinct WOD types + Coach decides.
+// Labels are athlete-facing; descriptions carry the physiological detail.
+// RME = Repeated Max Effort (anaerobic glycolytic / lactic system).
 window.FQ_WOD_TYPES = [
-  {value:'Conditioning',     label:'Conditioning',     sub:'Mixed monostructural + gymnastics'},
-  {value:'Metabolic Circuit', label:'Metabolic Circuit', sub:'Weights + cardio'},
-  {value:'Strength WOD',     label:'Strength WOD',     sub:'Barbell/dumbbell focused'},
-  {value:'Aerobic',          label:'Aerobic',          sub:'Run/row/bike — lower intensity, longer'},
-  {value:'HIIT',             label:'HIIT',             sub:'Short, intense intervals'},
-  {value:'coach',            label:'Coach decides',    sub:'Let the AI pick the WOD type'}
+  {
+    value: 'Strength WOD',
+    label: 'Strength WOD',
+    sub: 'Barbell or KB dominant — loading matters. Alactic system. Low reps, full recovery between efforts. Think: heavy AMRAP, complex, for-load.'
+  },
+  {
+    value: 'Aerobic Capacity',
+    label: 'Aerobic Capacity',
+    sub: 'Build the engine. Sustained effort at 65–75% max output. Multi-modal — row/run/bike/bodyweight combinations. Oxidative system. 15–30 min.'
+  },
+  {
+    value: 'Mixed Modal',
+    label: 'Mixed Modal',
+    sub: 'Classic functional fitness feel. Varied movements, bodyweight and light load, aerobic-glycolytic blend. AMRAP, Chipper, EMOM. The CrossFit staple.'
+  },
+  {
+    value: 'RME',
+    label: 'RME — Repeated Max Effort',
+    sub: 'Short, brutal, high-lactate repeats. Anaerobic glycolytic system. 10–60 sec near-maximal efforts, full recovery between sets. Intervals, Tabata, Death By.'
+  },
+  {
+    value: 'coach',
+    label: 'Coach decides',
+    sub: 'AI picks the most appropriate type based on your training week, phase, and fatigue state.'
+  }
 ];
+// v4.9.3 — WOD type picker rebuilt as a full-tile overlay with physiological descriptions.
+// Each option shows label + full sub-text so athlete understands what they're selecting.
 window._phxOpenWodTypePicker = function(o){
   o = o || {};
-  _phxOpenBottomSheet({
-    title: o.title || 'WOD',
-    subtitle: o.subtitle || 'Pick a WOD type',
-    options: window.FQ_WOD_TYPES,
-    current: o.current || null,
-    cancelLabel: 'Back',
-    onSelect: function(value){
-      // 'coach' sentinel → null so wod_type === null means "AI picks".
-      var wodType = (value === 'coach') ? null : value;
-      if(typeof o.onPick === 'function') o.onPick(wodType);
-    },
-    onCancel: function(){
-      if(typeof o.onCancel === 'function') o.onCancel();
-    }
-  });
+  var current = o.current || null;
+  // Remove any stale picker
+  var stale = document.getElementById('phx-wod-type-overlay');
+  if(stale) stale.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-wod-type-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:10000;overflow-y:auto;display:flex;flex-direction:column;';
+  var tilesHTML = (window.FQ_WOD_TYPES||[]).map(function(t){
+    var isSelected = (t.value === current || (current === null && t.value === 'coach'));
+    var isCoach = (t.value === 'coach');
+    var borderColor = isSelected ? 'var(--gold)' : 'var(--border)';
+    var bg = isSelected ? 'rgba(200,150,62,0.08)' : 'var(--bg2)';
+    var labelColor = isCoach ? 'var(--text2)' : 'var(--text)';
+    return '<div onclick="window._phxWodTypeSelect(''+t.value+'')" style="background:'+bg+';border:1px solid '+borderColor+';border-radius:var(--radius);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+        '<div style="font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:'+labelColor+';">'+t.label+'</div>'+
+        (isSelected ? '<div style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;color:var(--gold);border:1px solid var(--gold);padding:3px 8px;border-radius:10px;">Selected</div>' : '')+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--text3);line-height:1.6;">'+t.sub+'</div>'+
+    '</div>';
+  }).join('');
+  overlay.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);">'+
+      '<div onclick="document.getElementById('phx-wod-type-overlay').remove();if(window._phxWodTypeOnCancel)window._phxWodTypeOnCancel();" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'+
+      '</div>'+
+      '<div>'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">'+(o.title||'WOD Type')+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;text-transform:uppercase;color:var(--text);">Pick a WOD Type</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:16px;">'+
+      tilesHTML+
+    '</div>';
+  document.body.appendChild(overlay);
+  // Store callbacks on window for the tile onclick handlers
+  window._phxWodTypeOnPick   = function(value){
+    var el = document.getElementById('phx-wod-type-overlay');
+    if(el) el.remove();
+    var wodType = (value === 'coach') ? null : value;
+    if(typeof o.onPick === 'function') o.onPick(wodType);
+  };
+  window._phxWodTypeOnCancel = function(){
+    var el = document.getElementById('phx-wod-type-overlay');
+    if(el) el.remove();
+    if(typeof o.onCancel === 'function') o.onCancel();
+  };
+};
+
+// Called by tile onclick — routes through stored callback
+window._phxWodTypeSelect = function(value){
+  if(typeof window._phxWodTypeOnPick === 'function') window._phxWodTypeOnPick(value);
 };
 
 // ====== GENERATE DAILY CORE (AI) ======
@@ -8950,6 +9011,34 @@ Phoenix WOD selection principles:
 - Weekly movement pattern balance — avoid back-to-back same dominant pattern
 - Duration: 8-20 minutes of actual work
 - Formats: AMRAP, AFAP, EMOM, Chipper, Interval, Tabata, Death By, For Load, Blocks (multi-part)
+
+WOD TYPE → FORMAT + ENERGY SYSTEM MAPPING:
+When wod_type is set (from athlete's timetable choice or fqWodTypes), apply:
+
+- "Strength WOD"      → For Load or heavy AMRAP (≤10 min). Alactic/ATP-CP system.
+                         Low reps, full recovery. Barbell/KB dominant. RPE 9-10 on work sets.
+                         Formats: forload, amrap (short), interval (full rest).
+
+- "Aerobic Capacity"  → Blocks or long AMRAP (15-30 min) at 65-75% max output.
+                         Oxidative system. Multi-modal: row/run/bike/bodyweight combinations.
+                         Athlete should be able to hold a conversation (barely).
+                         Formats: blocks (multi-modal), amrap (long), interval (2-5 min work, 1:1 rest).
+                         MUST use blocks format when combining 2+ monostructural modalities.
+
+- "Mixed Modal"       → AMRAP, Chipper, or EMOM (10-20 min). Aerobic-glycolytic blend.
+                         Varied movements, bodyweight + light-moderate load. Classic CrossFit feel.
+                         Formats: amrap, chipper, emom, afap.
+
+- "RME"               → Repeated Max Effort. Anaerobic glycolytic / lactic system.
+                         10-60 sec near-maximal efforts, FULL recovery (work:rest 1:3 to 1:6).
+                         Volume is low, intensity is everything. Athlete should feel it in 30 seconds.
+                         Formats: interval, tabata, death_by.
+                         Never use amrap or chipper for RME — continuous formats blunt the lactic stimulus.
+
+- null / "coach"      → AI selects the most appropriate type based on:
+                         week phase (accumulation→aerobic, intensification→mixed, realisation→RME/strength),
+                         adjacent sessions (heavy lower day → aerobic or mixed, not RME),
+                         athlete sport (rotational → mixed modal, endurance → aerobic capacity).
 - Scale options: prescribed weight, Rx, Rx+
 - Phoenix WOD signatures: loaded carries, triphasic elements, structural balance focus
 

@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.13';
+var APP_VERSION='4.9.14';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3552,6 +3552,7 @@ var FIELD_MAP=[
   // v4.7.38: weekly check-in day (friday|saturday|sunday|monday).
   // SQL: alter table profiles add column if not exists check_in_day text;
   ['fqCheckInDay','check_in_day'],
+  // SQL: alter table profiles add column if not exists weigh_in_frequency text;
   ['fqWeighInFrequency','weigh_in_frequency'],
   ['fqCurrentlyTraining','fq_currently_training'],
   ['fqCurrentStint','fq_current_stint'],
@@ -15055,10 +15056,16 @@ function _phxMaybeShowMorningCheckin(){
   if(!card) return;
   card.style.display = 'none';
   var freq = (athlete && (athlete.fqWeighInFrequency || athlete.fq_weigh_in_frequency || athlete.weighInFrequency || athlete.weigh_in_frequency)) || null;
+  // null = unset (column may not exist yet or questionnaire not reached that step)
+  // Default: show the card unless explicitly set to 'never'
   if(freq === 'never'){
     console.log('[PHX] weigh-in: hidden — freq=never');
     return;
   }
+  // freq is null but athlete has completed questionnaire — still show (they likely set daily
+  // but the weigh_in_frequency column may be missing from Supabase profiles table).
+  // SQL fix: alter table profiles add column if not exists weigh_in_frequency text;
+  console.log('[PHX] weigh-in: freq='+freq+' (null = column missing or not set)');
   var keys = _phxMorningKeys();
   if(localStorage.getItem(keys.doneKey)){
     console.log('[PHX] weigh-in: hidden — already logged today ('+keys.today+')');

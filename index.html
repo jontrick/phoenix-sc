@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.19';
+var APP_VERSION='4.9.20';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17798,42 +17798,83 @@ function openPhoenixWOD(wodOverride){
 
   function _renderDetail(){
     var sel = window._wodSelection || 'rx';
-    // v4.7.17 FIX 2: each movement card is name-on-top + two adjacent gold-bordered boxes (reps, load).
-    // v4.7.17 FIX 3: in Custom mode the load box becomes a numeric input with the unit label OUTSIDE.
-    // For blocks WODs, aggregate all movements from all blocks for the detail screen
-    var _detailMovements = (wod.movements && wod.movements.length) ? wod.movements :
-      (wod.blocks ? wod.blocks.reduce(function(acc, b){ return acc.concat(b.movements||[]); }, []) : []);
-    var movHTML = _detailMovements.map(function(m,idx){
+    var boxStyle = 'border-radius:8px;border:1px solid var(--gold);background:var(--bg3);padding:8px 16px;text-align:center;font-size:16px;font-weight:500;color:var(--gold);min-width:64px;';
+
+    // Single movement row builder — used by both flat and blocks layouts
+    function _buildMovRow(m, mIdx){
       var unitClass = phxExerciseUnitClass(m.name);
-      var unitLabel = unitClass === 'sec' ? '' : unitClass;
-      var loadStr = phxFormatHeight(phxMovementLoad(m, sel, idx));
-      var boxStyle = 'border-radius:8px;border:1px solid var(--gold);background:var(--bg3);padding:8px 16px;text-align:center;font-size:16px;font-weight:500;color:var(--gold);min-width:64px;';
+      var loadStr   = phxFormatHeight(phxMovementLoad(m, sel, mIdx));
       var repsBox = '';
-      if(m.reps){
+      if(m.distance_m){
+        repsBox = '<div style="'+boxStyle+'">'+m.distance_m+'m</div>';
+      } else if(m.reps){
         var rRaw = String(m.reps).trim();
-        var rTxt = /\b(reps?|sec|seconds?|m|cm|in|min|minutes?)\b/i.test(rRaw) ? rRaw : (rRaw + (unitClass==='sec'?' sec':' reps'));
+        var rTxt = /(reps?|sec|seconds?|m|cm|in|min|minutes?)/i.test(rRaw) ? rRaw : (rRaw+(unitClass==='sec'?' sec':' reps'));
         repsBox = '<div style="'+boxStyle+'">'+rTxt+'</div>';
       }
       var loadBoxHTML = '';
       if(sel === 'custom'){
-        // Editable: numeric input + external unit label.
-        var customVal = (window._wodCustomLoads[idx] != null) ? window._wodCustomLoads[idx] : phxStripUnit(m.load_rx || '');
-        var inputBoxStyle = 'border-radius:8px;border:1px solid var(--gold);background:var(--bg3);padding:6px 10px;display:inline-flex;align-items:center;gap:6px;';
-        loadBoxHTML = '<div style="'+inputBoxStyle+'">'+
-          '<input type="number" inputmode="decimal" value="'+String(customVal).replace(/"/g,'&quot;')+'" placeholder="—" oninput="window._wodCustomLoads['+idx+']=this.value;" style="width:70px;background:transparent;border:none;color:var(--gold);font-size:16px;font-weight:500;text-align:center;outline:none;padding:2px 0;">'+
-          (unitLabel?'<span style="font-family:var(--font-d);font-size:12px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;">'+unitLabel+'</span>':'')+
+        var customVal = (window._wodCustomLoads[mIdx] != null) ? window._wodCustomLoads[mIdx] : phxStripUnit(m.load_rx||'');
+        loadBoxHTML = '<div style="border-radius:8px;border:1px solid var(--gold);background:var(--bg3);padding:6px 10px;display:inline-flex;align-items:center;gap:6px;">'+
+          '<input type="number" inputmode="decimal" value="'+String(customVal).replace(/"/g,'&quot;')+'" placeholder="—" oninput="window._wodCustomLoads['+mIdx+']=this.value;" style="width:70px;background:transparent;border:none;color:var(--gold);font-size:16px;font-weight:500;text-align:center;outline:none;padding:2px 0;">'+
         '</div>';
       } else if(loadStr && unitClass !== 'sec'){
         loadBoxHTML = '<div style="'+boxStyle+'">'+loadStr+'</div>';
       }
-      var boxesRow = (repsBox || loadBoxHTML)
-        ? '<div style="display:inline-flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'+repsBox+loadBoxHTML+'</div>'
-        : '';
-      return '<div style="padding:14px 0;border-bottom:1px solid var(--border);">'+
-        '<div class="wod-movement-name" style="font-size:18px;">'+m.name+'</div>'+
-        boxesRow+
+      var scaleStr = m.load_scale||m.load_scaled||'';
+      var scaleHTML = scaleStr ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Scale: '+scaleStr+'</div>' : '';
+      var noteHTML  = m.coaching_note ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;font-style:italic;">'+m.coaching_note+'</div>' : '';
+      var bxRow = (repsBox||loadBoxHTML) ? '<div style="display:inline-flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'+repsBox+loadBoxHTML+'</div>' : '';
+      return '<div style="padding:12px 0;border-bottom:1px solid var(--border);">'+
+        '<div class="wod-movement-name" style="font-size:17px;">'+m.name+'</div>'+
+        bxRow+scaleHTML+noteHTML+
       '</div>';
-    }).join('');
+    }
+
+    // Build the full movements HTML — blocks WOD shows Part A / Part B headers
+    var movHTML;
+    if(wod.blocks && wod.blocks.length){
+      // Blocks format: render each block with its label, format meta, and movements
+      var globalIdx = 0;
+      movHTML = wod.blocks.map(function(block, bi){
+        var bFmt = String(block.format||'').toUpperCase();
+        var bLabel = block.label || ('Block '+(bi+1));
+        // Build meta line: format + sets/work/rest or duration
+        var bMeta = bFmt;
+        if(block.sets && block.work_sec){
+          var wMin = block.work_sec >= 60 ? Math.round(block.work_sec/60)+'min' : block.work_sec+'s';
+          var rMin = block.rest_sec ? (block.rest_sec >= 60 ? Math.round(block.rest_sec/60)+'min' : block.rest_sec+'s') : null;
+          bMeta += ' · '+block.sets+' sets · '+wMin+' work'+(rMin?' / '+rMin+' rest':'');
+        } else if(block.sets && !block.work_sec){
+          // Task mode: sets + rest only
+          var rMin2 = block.rest_sec ? (block.rest_sec >= 60 ? Math.round(block.rest_sec/60)+'min' : block.rest_sec+'s') : null;
+          bMeta += ' · '+block.sets+' sets'+(rMin2?' · '+rMin2+' rest between sets':'');
+        } else if(block.duration_min){
+          bMeta += ' · '+block.duration_min+' min';
+        } else if(block.work_sec){
+          bMeta += ' · '+Math.round(block.work_sec/60)+' min';
+        }
+        var blockMovsHTML = (block.movements||[]).map(function(m){
+          var r = _buildMovRow(m, globalIdx);
+          globalIdx++;
+          return r;
+        }).join('');
+        var blockNoteHTML = block.coaching_note
+          ? '<div style="font-size:12px;color:var(--text2);font-style:italic;padding:10px 0 4px;line-height:1.5;">'+block.coaching_note+'</div>' : '';
+        return '<div style="margin-bottom:6px;">'+
+          '<div style="display:flex;align-items:baseline;gap:8px;padding:10px 0 4px;">'+
+            '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:var(--text);">'+bLabel+'</div>'+
+            '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">'+bMeta+'</div>'+
+          '</div>'+
+          blockMovsHTML+
+          blockNoteHTML+
+        '</div>';
+      }).join('<div style="height:8px;"></div>');
+    } else {
+      movHTML = (wod.movements||[]).map(function(m,i){ return _buildMovRow(m,i); }).join('');
+    }
+
+    // _buildMovRow defined above
 
     function selBtn(val,label){
       var active = (sel===val);

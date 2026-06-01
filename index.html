@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.18';
+var APP_VERSION='4.9.19';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17800,7 +17800,10 @@ function openPhoenixWOD(wodOverride){
     var sel = window._wodSelection || 'rx';
     // v4.7.17 FIX 2: each movement card is name-on-top + two adjacent gold-bordered boxes (reps, load).
     // v4.7.17 FIX 3: in Custom mode the load box becomes a numeric input with the unit label OUTSIDE.
-    var movHTML = (wod.movements||[]).map(function(m,idx){
+    // For blocks WODs, aggregate all movements from all blocks for the detail screen
+    var _detailMovements = (wod.movements && wod.movements.length) ? wod.movements :
+      (wod.blocks ? wod.blocks.reduce(function(acc, b){ return acc.concat(b.movements||[]); }, []) : []);
+    var movHTML = _detailMovements.map(function(m,idx){
       var unitClass = phxExerciseUnitClass(m.name);
       var unitLabel = unitClass === 'sec' ? '' : unitClass;
       var loadStr = phxFormatHeight(phxMovementLoad(m, sel, idx));
@@ -18083,7 +18086,30 @@ function startWODTimer(modalId){
 
   var fmt = _detectWODFormat(wod);
   var totalSecs = (wod.time_cap||20)*60;
-  var movements = wod.movements||[];
+  // For blocks WODs, movements must always reflect the ACTIVE block's movements.
+  // We use a getter so all format renderers get the correct list even after restores.
+  var _movementsBase = wod.movements||[];
+  Object.defineProperty(window, '_phxActiveMovements', {
+    get: function(){
+      var t = window._wodTimer;
+      if(t && fmt === 'blocks' && wod.blocks && wod.blocks.length){
+        var block = wod.blocks[t.blockIdx||0];
+        return (block && block.movements) ? block.movements : _movementsBase;
+      }
+      return _movementsBase;
+    },
+    configurable: true
+  });
+  var movements = _movementsBase; // legacy alias - updated by _phxSyncBlockMovements()
+  function _phxSyncBlockMovements(){
+    var t = window._wodTimer;
+    if(t && fmt === 'blocks' && wod.blocks && wod.blocks.length){
+      var block = wod.blocks[t.blockIdx||0];
+      movements = (block && block.movements) ? block.movements : _movementsBase;
+    } else {
+      movements = _movementsBase;
+    }
+  }
 
   // v4.7.5 FIX 5: hold the screen awake from the moment the action page opens.
   requestWakeLock();
@@ -18708,44 +18734,40 @@ function startWODTimer(modalId){
       '</div>';
       return;
     }
-    // Active block — delegate to the correct format renderer.
-    // Temporarily patch wod.movements/format/timing fields to match this block,
-    // call the renderer, then the progress bar + Next Block button are injected after.
+    // Active block — sync movements to this block then delegate to the correct format renderer.
     var blockFmt = String(block.format||'afap').toLowerCase();
     var blockLabel = block.label || ('Block '+(blockIdx+1));
+    var blockWorkSec = block.work_sec || block.duration_sec || (block.duration_min ? block.duration_min*60 : 0);
 
-    // Progress bar — always shown at top
-    var progressBar = '<div style="display:flex;gap:4px;margin:0 0 10px;">' +
-      blocks.map(function(b,i){
-        return '<div style="flex:1;height:4px;border-radius:2px;background:'+(i<blockIdx?'var(--gold)':(i===blockIdx?'var(--orange)':'var(--border2)'))+';"></div>';
-      }).join('') +
-    '</div>';
+    // CRITICAL: sync movements closure variable to this block's movements.
+    // All format renderers (AMRAP, INTERVAL etc) read 'movements' — it must stay
+    // pointing to the active block's movements for the lifetime of this block.
+    _phxSyncBlockMovements();
 
-    // Patch wod fields to match this block so format renderers work correctly
-    var _savedMovements  = movements;
-    var _savedFmt        = fmt;
+    // Patch wod timing fields for the format renderer
     var _savedTotalSecs  = t.totalSecs;
     var _savedWodSets    = wod.sets;
     var _savedWodWorkSec = wod.work_sec;
     var _savedWodRestSec = wod.rest_sec;
+    if(block.sets)     wod.sets     = block.sets;
+    if(block.work_sec) wod.work_sec = block.work_sec;
+    if(block.rest_sec) wod.rest_sec = block.rest_sec;
 
-    // Override with block values
-    movements = block.movements || [];
+    // Temporarily set fmt to block format so _renderRouter dispatches correctly
+    var _savedFmt = fmt;
     fmt = blockFmt;
-    var blockWorkSec = block.work_sec || block.duration_sec || (block.duration_min ? block.duration_min*60 : 0);
-    var blockRestSec = block.rest_sec || 60;
-    wod.sets     = block.sets     || wod.sets;
-    wod.work_sec = block.work_sec || wod.work_sec;
-    wod.rest_sec = block.rest_sec || wod.rest_sec;
-    if(blockWorkSec > 0) t.totalSecs = blockWorkSec;
 
-    // Sync block-specific timer state into the interval/amrap state slots
-    if(blockFmt === 'amrap'){
-      if(t.blockPhaseSec === undefined) t.blockPhaseSec = blockWorkSec;
-      t.totalSecs = t.blockPhaseSec;
-    } else if(blockFmt === 'interval'){
-      // Preserve interval sub-state keyed to this block
-      if(t.intervalSetNum === undefined || t._lastBlockIdx !== blockIdx){
+    // Init block-specific timer sub-state (only on first entry to this block)
+    if(t._lastBlockIdx !== blockIdx){
+      t._lastBlockIdx = blockIdx;
+      // Reset all format-specific state for fresh block
+      t.partialMovIdx = 0; t.partialReps = 0; t.rounds = 0; t.showPartial = false;
+      t.intervalSetNum = undefined; t.intervalPhase = undefined; t.intervalPhaseSec = undefined;
+      t.intervalSplits = [];
+      if(blockFmt === 'amrap' && blockWorkSec > 0){
+        t.blockPhaseSec = blockWorkSec;
+        t.totalSecs = blockWorkSec;
+      } else if(blockFmt === 'interval'){
         t.intervalSetNum  = 1;
         t.intervalPhase   = 'work';
         t.intervalPhaseSec = block.work_sec ? block.work_sec : 0;
@@ -18753,41 +18775,46 @@ function startWODTimer(modalId){
         t.intervalWork = block.work_sec || 0;
         t.intervalRest = block.rest_sec || 60;
         t.intervalSets = block.sets || 4;
-        t.intervalSplits = [];
-        t._lastBlockIdx = blockIdx;
       }
     }
+    if(blockFmt === 'amrap' && t.blockPhaseSec !== undefined){
+      t.totalSecs = t.blockPhaseSec;
+    }
 
-    // Call the format renderer — renders into inner directly
+    // Progress bar
+    var progressBar = '<div style="display:flex;gap:4px;margin-bottom:8px;">' +
+      blocks.map(function(b,i){
+        return '<div style="flex:1;height:4px;border-radius:2px;background:'+(i<blockIdx?'var(--gold)':(i===blockIdx?'var(--orange)':'var(--border2)'))+';"></div>';
+      }).join('') +
+    '</div>';
+
+    // Render the block label + progress bar as a fixed header
+    var blockHeader = '<div style="padding:10px 0 4px;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">' +
+      blockLabel.toUpperCase()+' · '+blockFmt.toUpperCase() +
+    '</div>' + progressBar;
+
+    // Call the format renderer — sets inner.innerHTML
     _renderRouter();
 
-    // Restore patched wod fields
-    movements  = _savedMovements;
-    fmt        = _savedFmt;
-    t.totalSecs = _savedTotalSecs;
+    // Restore fmt and wod fields (movements stays synced to this block until next block)
+    fmt = _savedFmt;
+    t.totalSecs  = _savedTotalSecs;
     wod.sets     = _savedWodSets;
     wod.work_sec = _savedWodWorkSec;
     wod.rest_sec = _savedWodRestSec;
 
-    // Inject progress bar at top + block label header + Next Block button
-    // The renderer has already set inner.innerHTML — we prepend/append to it
-    var existing = inner.innerHTML;
-    // Strip the outermost padding div wrapper the renderers add, inject progress bar inside
-    inner.innerHTML = '<div style="padding-top:4px;">' +
-      '<div style="padding:10px 16px 0;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' +
-        blockLabel.toUpperCase()+' · '+blockFmt.toUpperCase() +
-      '</div>' +
-      progressBar +
-      existing +
-    '</div>';
+    // Prepend the block header to what the renderer produced
+    // The renderers wrap in <div style="padding-top:20px"> — inject header inside that
+    inner.innerHTML = inner.innerHTML.replace(
+      '<div style="padding-top:20px;">',
+      '<div style="padding-top:8px;">'+blockHeader
+    );
 
-    // Replace the standard finish/pause button row with Next Block alongside it
-    // Find and replace the Finish button with Next Block
-    inner.innerHTML = inner.innerHTML
-      .replace(
-        /<button[^>]*onclick="finishWOD\(\)"[^>]*>Finish<\/button>/g,
-        '<button class="btn-secondary" style="padding:18px;width:auto;max-width:none;margin:0;" onclick="window._wodBlocksNextBlock()">Next Block &rsaquo;</button>'
-      );
+    // Replace Finish button with Next Block button
+    inner.innerHTML = inner.innerHTML.replace(
+      /(<button[^>]*class="btn-secondary"[^>]*>)Finish(<\/button>)/,
+      '<button class="btn-secondary" style="padding:18px;width:auto;max-width:none;margin:0;" onclick="window._wodBlocksNextBlock()">Next Block &rsaquo;</button>'
+    );
   }
   window._wodBlocksNextBlock = function(){
     var t = window._wodTimer;

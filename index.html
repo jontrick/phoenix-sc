@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.20';
+var APP_VERSION='4.9.21';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23274,6 +23274,15 @@ async function _phxRestoreSessionVisualState(){
     // Tiny delay so any in-flight fetches finish, then hard reload to the fresh shell.
     setTimeout(function(){ window.location.reload(); }, 50);
   }
+  // If there's a waiting SW (installed but not yet active), tell it to skip waiting immediately.
+  // This covers the case where the old SW is still controlling the page after a deploy.
+  navigator.serviceWorker.getRegistration().then(function(reg){
+    if(reg && reg.waiting){
+      console.log('[PHX] SW waiting — sending skipWaiting');
+      reg.waiting.postMessage({type:'SKIP_WAITING'});
+    }
+  });
+
   navigator.serviceWorker.register('/sw.js').then(function(reg){
     // Active update poll — every 60s while the tab is open.
     setInterval(function(){ try { reg.update(); } catch(_e){} }, 60000);

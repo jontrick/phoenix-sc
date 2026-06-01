@@ -1,4 +1,4 @@
-var CACHE_NAME = 'phoenix-v4.9.20';
+var CACHE_NAME = 'phoenix-v4.9.21';
 var CACHE_FILES = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e) {
@@ -73,4 +73,12 @@ self.addEventListener('fetch', function(e) {
       return cached || fetch(req);
     })
   );
+});
+
+// Listen for SKIP_WAITING message from the app — forces immediate activation.
+self.addEventListener('message', function(e){
+  if(e.data && e.data.type === 'SKIP_WAITING'){
+    console.log('[PHX SW] SKIP_WAITING received — activating now');
+    self.skipWaiting();
+  }
 });

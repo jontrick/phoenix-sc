@@ -1705,6 +1705,16 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
       </div>
     </div>
+    <!-- Add Session — tap to generate an ad-hoc session on the spot -->
+    <div id="card-add-session" class="game-card" onclick="_phxOpenAddTodaySession()" style="margin-bottom:10px;border:1px dashed var(--border2);border-left:3px solid var(--border2);opacity:0.8;">
+      <div class="game-card-inner" style="padding:14px 18px;">
+        <div class="game-card-eyebrow">
+          <span class="game-card-eyebrow-sm" style="color:var(--text3);">Today</span>
+        </div>
+        <div class="game-card-title" style="font-size:20px;color:var(--text2);">+ Add a Session</div>
+        <div class="game-card-sub" style="color:var(--text3);">Build your own or let the coach generate one</div>
+      </div>
+    </div>
     <!-- Walk / Run — full width standalone tile -->
     <div id="card-walk" class="game-card" onclick="openWalkLog()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--green,#4CAF50);">
       <div class="game-card-inner" style="padding:18px;">
@@ -3458,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.24';
+var APP_VERSION='4.9.25';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9867,10 +9877,11 @@ Progressive load rules (apply to primary lifts only):
 - checkin_data.niggle_notes mentions a body part → remove or substitute movements that load it
 - checkin_data.next_week_requests text → implement the requested change (within reason)
 - checkin_data.continue_programme === false → re-balance the week toward what they're asking for
-- pre_session_adjustments (array of notes) → athlete made these exercise swaps BEFORE training this week.
-  This tells you what movements they avoided or preferred. Honour these preferences in next week's build
-  unless there is a strong programming reason not to (e.g. the swapped movement is a structural balance
-  priority). Always acknowledge pre-adjustments in the coach_note: "I noticed you swapped X for Y...".
+- pre_session_adjustments (array of notes) → athlete made these exercise swaps BEFORE training this week,
+  OR added ad-hoc sessions during the week. This tells you what they did beyond the programme.
+  For ad-hoc sessions: acknowledge the extra work, check if it affects recovery, factor into next week's load.
+  For exercise swaps: honour the preference unless structural reason not to.
+  Always acknowledge in the coach_note: "I noticed you added X on Tuesday..." or "I noticed you swapped...".
 
 CRITICAL: use next_week_schedule.days (or fall back to athlete.fqTrainingDays) for the
 sessions in the new week. Never use a day the athlete didn't pick.
@@ -17202,6 +17213,9 @@ function renderTodaySessionCard(){
   });
   todaySessions = expanded;
   // v4.8.0 FIX: don't fall back to sessions[0] when today has no session.
+  // Load any ad-hoc sessions generated today
+  if(typeof _phxLoadAdHocSessions === 'function') _phxLoadAdHocSessions();
+
   console.log('[PHX] renderTodaySessionCard: dayName='+dayName+', sessions found='+todaySessions.length, todaySessions.map(function(s){return s&&(s.session_type||s.day);}));
   if(!todaySessions.length){
     // Render rest card inline and bail out.
@@ -19297,6 +19311,237 @@ function openCombine(){
 
 // v4.7.22 BUILD 4: system prompt for the conversational coach (separate from PHOENIX_COACHING_PROMPT
 // which generates whole programmes — this one drives 1-1 chat).
+// ═══════════════════════════════════════════════════════════════════════════
+// ADD TODAY SESSION — on-the-spot AI session generation from the Today screen.
+// Flow: type picker → sub-type picker → AI generates → rendered as session tile.
+// Coach awareness: saved to localStorage + Supabase weekly_checkins.
+// ═══════════════════════════════════════════════════════════════════════════
+
+window._phxOpenAddTodaySession = function(){
+  var todayName = new Date().toLocaleDateString('en-AU', {weekday:'long'});
+  var slot = 'am'; // default — will detect PM if AM session already exists today
+
+  // Detect whether AM is already occupied — default to PM if so
+  if(window._todaySessions && window._todaySessions.length > 0){
+    slot = 'pm';
+  }
+
+  function _openTypePicker(){
+    _phxOpenBottomSheet({
+      title: 'Add a Session — '+todayName,
+      subtitle: 'Coach generates it on the spot',
+      options: [
+        {value:'Strength', label:'Strength',    sub:'Compound lifts — coach builds the session for you'},
+        {value:'WOD',      label:'WOD',         sub:'Conditioning — pick your format type'},
+        {value:'Core',     label:'Core',        sub:'Trunk work — pick your focus type'},
+        {value:'Walk',     label:'Walk / Run',  sub:'GPS tracked — log it now'},
+        {value:'custom',   label:'Build My Own',sub:'Pick exercises yourself — no AI'}
+      ],
+      onSelect: function(type){
+        if(type === 'WOD'){
+          _phxOpenWodTypePicker({
+            title: todayName+' — WOD Type',
+            onPick: function(wodType){ _phxGenerateTodaySession('WOD', {wodType: wodType}, slot); },
+            onCancel: function(){ _openTypePicker(); }
+          });
+          return;
+        }
+        if(type === 'Core'){
+          _phxOpenCoreTypePicker({
+            title: todayName+' — Core Type',
+            onPick: function(coreType){ _phxGenerateTodaySession('Core', {coreType: coreType}, slot); },
+            onCancel: function(){ _openTypePicker(); }
+          });
+          return;
+        }
+        if(type === 'Walk'){
+          openWalkLog();
+          return;
+        }
+        if(type === 'custom'){
+          _phxShowCustomSessionBuilder(todayName, slot);
+          return;
+        }
+        _phxGenerateTodaySession(type, {}, slot);
+      }
+    });
+  }
+  _openTypePicker();
+};
+
+// ── AI single-session generation ─────────────────────────────────────────────
+window._phxGenerateTodaySession = async function(sessionType, opts, slot){
+  opts = opts || {};
+  slot = slot || 'am';
+
+  // Show loading overlay
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-add-session-loading';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+  overlay.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">Generating Session</div>'+
+    '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);">'+sessionType.toUpperCase()+'</div>'+
+    '<div style="font-size:13px;color:var(--text2);text-align:center;max-width:260px;line-height:1.6;">Your coach is building this session based on your profile and this week's training...</div>'+
+    '<div style="width:48px;height:48px;border:3px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:phx-spin 0.8s linear infinite;margin-top:8px;"></div>';
+  if(!document.getElementById('phx-spin-style')){
+    var style = document.createElement('style');
+    style.id = 'phx-spin-style';
+    style.textContent = '@keyframes phx-spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(style);
+  }
+  document.body.appendChild(overlay);
+
+  try {
+    var a = athlete || {};
+    var weekN = (a.currentWeek) || 1;
+    var todayName = new Date().toLocaleDateString('en-AU', {weekday:'long'});
+    var sessionsThisWeek = (a.aiProgramme && a.aiProgramme.week && a.aiProgramme.week.sessions) || [];
+
+    // Build context for single-session generation
+    var ctx = {
+      athlete_name: a.fqName || 'Athlete',
+      age: a.fqAge || null,
+      sex: a.fqSex || null,
+      goal: a.fqGoal || null,
+      experience: a.fqExperience || null,
+      injuries: a.fqInjuries || null,
+      equipment: a.fqEquipment || null,
+      week_number: weekN,
+      day: todayName,
+      slot: slot,
+      session_type: sessionType,
+      wod_type: opts.wodType || null,
+      core_type: opts.coreType || null,
+      sessions_this_week: sessionsThisWeek.map(function(s){
+        return {day:s.day, session_type:s.session_type, duration_min:s.duration_min};
+      }),
+      reason: 'Athlete added an ad-hoc session on '+todayName+' via the Today screen.'
+    };
+
+    var prompt = 'Generate a single '+sessionType+' session for '+todayName+' ('+slot.toUpperCase()+'), Week '+weekN+'.
+
+'+
+      'Athlete context:
+'+JSON.stringify(ctx, null, 2)+'
+
+'+
+      (opts.wodType ? 'WOD type: '+opts.wodType+'
+' : '')+
+      (opts.coreType ? 'Core type: '+opts.coreType+'
+' : '')+
+      '
+Respond ONLY with a valid JSON object matching the programme session schema exactly as documented. '+
+      'The session object must include: day, slot, session_type, session_name, duration_min, exercises (for strength/core) or wod (for WOD sessions), coach_note.
+'+
+      'For WOD sessions use the full wod schema with format, movements or blocks as appropriate.
+'+
+      'No preamble. No explanation. JSON only.';
+
+    var resp = await fetch('https://phoenix-coach.jon-d87.workers.dev', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 2000,
+        system: PHOENIX_COACH_SYSTEM_PROMPT,
+        messages: [{role:'user', content: prompt}]
+      })
+    });
+
+    overlay.remove();
+
+    if(!resp.ok){
+      alert('Coach is unavailable right now. Try again in a moment.');
+      return;
+    }
+
+    var data = await resp.json();
+    var raw = (data.content && data.content[0] && data.content[0].text) || '';
+    raw = raw.replace(/```json
+?|```
+?/g, '').trim();
+
+    var sess;
+    try { sess = JSON.parse(raw); }
+    catch(e){
+      console.error('[PHX] add-session parse error:', e, raw);
+      alert('The coach returned an unexpected response. Try again.');
+      return;
+    }
+
+    // Stamp the session
+    sess._adHoc = true;
+    sess._slot = slot;
+    sess.day = todayName;
+    if(!sess.session_type) sess.session_type = sessionType;
+
+    // Save to localStorage under today's ad-hoc sessions key
+    var todayISO = new Date().toISOString().split('T')[0];
+    var adHocKey = 'phoenix_adhoc_sessions_'+todayISO;
+    var existing = [];
+    try { existing = JSON.parse(localStorage.getItem(adHocKey)||'[]'); } catch(_e){}
+    existing.push(sess);
+    localStorage.setItem(adHocKey, JSON.stringify(existing));
+
+    // Record for coach awareness at weekly check-in
+    var weekN2 = (athlete && athlete.currentWeek) || 1;
+    var note = 'Athlete added an ad-hoc '+sessionType+(opts.wodType?' ('+opts.wodType+')':'')+(opts.coreType?' ('+opts.coreType+')':'')+' session on '+todayName+' Week '+weekN2+'.';
+    var adjKey = 'phoenix_pre_adjustments_w'+weekN2;
+    var adjList = [];
+    try { adjList = JSON.parse(localStorage.getItem(adjKey)||'[]'); } catch(_e){}
+    adjList.push({sid:'adhoc-'+Date.now(), day:todayName, week:weekN2, note:note, ts:new Date().toISOString()});
+    localStorage.setItem(adjKey, JSON.stringify(adjList));
+
+    // Mirror to Supabase weekly_checkins
+    if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+      var weekStartISO = (typeof _phxBrisbaneMondayISO === 'function') ? _phxBrisbaneMondayISO() : new Date().toISOString().split('T')[0];
+      sb.from('weekly_checkins').upsert({
+        user_id: currentSession.user.id,
+        week_number: weekN2,
+        week_start_date: weekStartISO,
+        next_week_requests: note
+      }, {onConflict:'user_id,week_number,week_start_date'}).catch(function(e){
+        console.warn('[PHX] ad-hoc session mirror failed:', e);
+      });
+    }
+
+    // Inject into today's session list and re-render the Today screen
+    window._todaySessions = window._todaySessions || [];
+    window._todaySessions.push(sess);
+    if(typeof renderTodaySessionCard === 'function') renderTodaySessionCard();
+
+    // Show the generated session immediately
+    window._phxPreviewSess = sess;
+    window._phxPreviewDay = todayName;
+    _phxShowSessionPreview(sess, todayName, true);
+
+    console.log('[PHX] ad-hoc session generated:', sess.session_name || sess.session_type);
+
+  } catch(e) {
+    var lo = document.getElementById('phx-add-session-loading');
+    if(lo) lo.remove();
+    console.error('[PHX] _phxGenerateTodaySession error:', e);
+    alert('Something went wrong generating the session. Check your connection and try again.');
+  }
+};
+
+// ── Load ad-hoc sessions into today's session list on app start ───────────────
+function _phxLoadAdHocSessions(){
+  var todayISO = new Date().toISOString().split('T')[0];
+  var adHocKey = 'phoenix_adhoc_sessions_'+todayISO;
+  try {
+    var sessions = JSON.parse(localStorage.getItem(adHocKey)||'[]');
+    if(sessions.length && window._todaySessions){
+      sessions.forEach(function(s){
+        // Don't duplicate if already in list
+        if(!window._todaySessions.find(function(x){ return x._adHoc && x.session_type === s.session_type && x._slot === s._slot; })){
+          window._todaySessions.push(s);
+        }
+      });
+    }
+  } catch(_e){}
+}
+
 var PHOENIX_COACH_SYSTEM_PROMPT = "You are the Phoenix Coach — a world-class strength and conditioning coach with the combined knowledge of Cal Dietz, Louis Simmons, Charles Poliquin, Christian Thibaudeau, Joe DeFranco, Brett Bartholomew, Sebastian Oreb, Daniel Baker, Les Spellman, Mickey Marotti, and Brad Schoenfeld.\n\n"+
 // v4.7.23 hotfix: tell the chat coach to read today_date instead of guessing.
 "CURRENT DATE: The context object contains today_date (YYYY-MM-DD, Brisbane UTC+10), timezone, and current_day_of_week. Always read these when the athlete asks about programme timing, weeks remaining, days until an event, or any time-sensitive question. Never guess the date.\n\n"+

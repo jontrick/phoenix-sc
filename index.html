@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.21';
+var APP_VERSION='4.9.22';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17066,6 +17066,8 @@ function renderTodaySessionCard(){
         '<div onclick="event.stopPropagation();openActiveRecovery();" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;text-align:center;cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2);transition:opacity 0.15s;" onmousedown="this.style.opacity=0.7" onmouseup="this.style.opacity=1" ontouchstart="this.style.opacity=0.7" ontouchend="this.style.opacity=1">Active Recovery</div>'+
       '</div>';
     window._todaySession=null;
+    // Remove any extra session tiles from a previous render
+    document.querySelectorAll('.card-extra-session').forEach(function(el){ el.remove(); });
     return;
   }
 

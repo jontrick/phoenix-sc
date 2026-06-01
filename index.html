@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.23';
+var APP_VERSION='4.9.24';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16597,7 +16597,8 @@ window._phxOpenAddSessionSheet = function(dayName, slotKey){
       addedAt: new Date().toISOString(),
       recoveryNote: note
     };
-    if(wodType !== undefined) entry.wodType = wodType; // null = Coach decides
+    if(wodType !== undefined) entry.wodType = wodType;
+    if(arguments[2] !== undefined) entry.coreType = arguments[2]; // core sub-type
     byDay[dayName].push(entry);
     _phxSaveWeekCustomSessions(weekStartISO, byDay);
     console.log('[PHX] week-plan custom add:', dayName, slotKey, sessionType, wodType !== undefined ? '(wod_type: '+wodType+')' : '', 'recoveryNote:', note.kind);
@@ -16617,11 +16618,18 @@ window._phxOpenAddSessionSheet = function(dayName, slotKey){
       ],
       onSelect: function(sessionType){
         if(sessionType === 'WOD'){
-          // Two-step: ask for WOD sub-type before saving. Back returns here.
           _phxOpenWodTypePicker({
             title: dayName+' '+slotKey.toUpperCase()+' — WOD',
             subtitle: 'Pick a WOD type',
             onPick: function(wodType){ _persistCustom('WOD', wodType); },
+            onCancel: function(){ _openMainPicker(); }
+          });
+          return;
+        }
+        if(sessionType === 'Core'){
+          _phxOpenCoreTypePicker({
+            title: dayName+' '+slotKey.toUpperCase()+' — Core',
+            onPick: function(coreType){ _persistCustom('Core', undefined, coreType); },
             onCancel: function(){ _openMainPicker(); }
           });
           return;

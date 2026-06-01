@@ -3458,7 +3458,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.22';
+var APP_VERSION='4.9.23';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8979,6 +8979,10 @@ USER_ASSIGNS: The athlete has specified exactly which session type goes on which
 
 VALIDATION (user_assigns only):
 session_schedule now uses AM/PM slots: {"monday":{"am":"strength","pm":null},...}
+CRITICAL: Every session object in the week.sessions array MUST include a "slot" field: "am" or "pm".
+For two-a-day sessions, always output TWO separate session objects for the same day — one with slot:"am" and one with slot:"pm".
+Never omit the slot field — it controls how sessions appear in the week plan view.
+Example two-a-day: [{"day":"Saturday","slot":"am","session_type":"WOD",...},{"day":"Saturday","slot":"pm","session_type":"Strength Lower",...}]
 If session_schedule contains 3 or more consecutive strength sessions (counting each AM/PM slot as a separate session in order: Mon-AM, Mon-PM, Tue-AM, Tue-PM, ... Sun-PM, wrapping to Mon-AM), add a flag:
 "recovery_conflict — 3 consecutive strength sessions detected at [list slots]. Consider swapping one to rest or WOD for optimal recovery."
 Still build the programme as requested, but flag the concern.
@@ -16334,6 +16338,8 @@ async function _phxRenderWeekPlan(){
           if(s.am_session){ var am = Object.assign({}, s.am_session, {day:canon, _slot:'am'}); byDay[canon].push(am); }
           if(s.pm_session){ var pm = Object.assign({}, s.pm_session, {day:canon, _slot:'pm'}); byDay[canon].push(pm); }
         } else {
+          // Carry the slot field if the AI provided it
+          if(s.slot && !s._slot) s._slot = String(s.slot).toLowerCase();
           byDay[canon].push(s);
         }
       }
@@ -16390,9 +16396,35 @@ async function _phxRenderWeekPlan(){
     // placeholder for whichever slot is empty). Anything without an explicit slot lands in AM.
     var amSessions = [];
     var pmSessions = [];
-    daySessions.forEach(function(s){
+    // Build a lookup of the athlete's configured slots for this day
+    var _daySchedule = (athlete && athlete.fqSessionSchedule && athlete.fqSessionSchedule[dayName.toLowerCase()]) || {};
+    var _amType = (_daySchedule.am && _daySchedule.am !== 'rest') ? _daySchedule.am : null;
+    var _pmType = (_daySchedule.pm && _daySchedule.pm !== 'rest') ? _daySchedule.pm : null;
+    daySessions.forEach(function(s, sIdx){
       var slot = (s._slot || '').toLowerCase();
-      if(slot === 'pm') pmSessions.push(s); else amSessions.push(s);
+      if(slot === 'pm'){
+        pmSessions.push(s);
+      } else if(slot === 'am'){
+        amSessions.push(s);
+      } else {
+        // No explicit slot — infer from session type matching the schedule, or position
+        var sType = String(s.session_type||'').toLowerCase();
+        var dayStr = String(s.day||'').toLowerCase();
+        // Check if the day string itself has am/pm hint (e.g. "Monday AM")
+        if(/pm/i.test(dayStr)){
+          s._slot = 'pm'; pmSessions.push(s);
+        } else if(/am/i.test(dayStr)){
+          s._slot = 'am'; amSessions.push(s);
+        } else if(_pmType && sType.indexOf(_pmType.toLowerCase()) >= 0 && pmSessions.length === 0 && amSessions.length > 0){
+          // Matches the configured PM type and AM is already filled
+          s._slot = 'pm'; pmSessions.push(s);
+        } else if(daySessions.length > 1 && sIdx > 0 && amSessions.length >= 1){
+          // Multiple sessions with no slot — second one goes to PM
+          s._slot = 'pm'; pmSessions.push(s);
+        } else {
+          s._slot = 'am'; amSessions.push(s);
+        }
+      }
     });
     // v4.8.0: determine whether this day is a programme rest day BEFORE rendering slots.
     var isProgrammeRestDay = false;

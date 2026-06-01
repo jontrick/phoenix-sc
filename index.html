@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.25';
+var APP_VERSION='4.9.26';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19381,7 +19381,7 @@ window._phxGenerateTodaySession = async function(sessionType, opts, slot){
   overlay.innerHTML =
     '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">Generating Session</div>'+
     '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);">'+sessionType.toUpperCase()+'</div>'+
-    '<div style="font-size:13px;color:var(--text2);text-align:center;max-width:260px;line-height:1.6;">Your coach is building this session based on your profile and this week's training...</div>'+
+    '<div style="font-size:13px;color:var(--text2);text-align:center;max-width:260px;line-height:1.6;">Your coach is building this session based on your profile and this week\'s training...</div>'+
     '<div style="width:48px;height:48px;border:3px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:phx-spin 0.8s linear infinite;margin-top:8px;"></div>';
   if(!document.getElementById('phx-spin-style')){
     var style = document.createElement('style');
@@ -19418,24 +19418,13 @@ window._phxGenerateTodaySession = async function(sessionType, opts, slot){
       reason: 'Athlete added an ad-hoc session on '+todayName+' via the Today screen.'
     };
 
-    var prompt = 'Generate a single '+sessionType+' session for '+todayName+' ('+slot.toUpperCase()+'), Week '+weekN+'.
-
-'+
-      'Athlete context:
-'+JSON.stringify(ctx, null, 2)+'
-
-'+
-      (opts.wodType ? 'WOD type: '+opts.wodType+'
-' : '')+
-      (opts.coreType ? 'Core type: '+opts.coreType+'
-' : '')+
-      '
-Respond ONLY with a valid JSON object matching the programme session schema exactly as documented. '+
-      'The session object must include: day, slot, session_type, session_name, duration_min, exercises (for strength/core) or wod (for WOD sessions), coach_note.
-'+
-      'For WOD sessions use the full wod schema with format, movements or blocks as appropriate.
-'+
-      'No preamble. No explanation. JSON only.';
+    var prompt = 'Generate a single '+sessionType+' session for '+todayName+' ('+slot.toUpperCase()+'), Week '+weekN+'.' +
+      '\n\nAthlete context:\n'+JSON.stringify(ctx, null, 2)+'\n\n' +
+      (opts.wodType ? 'WOD type: '+opts.wodType+'\n' : '') +
+      (opts.coreType ? 'Core type: '+opts.coreType+'\n' : '') +
+      '\nRespond ONLY with a valid JSON object matching the programme session schema exactly as documented. ' +
+      'Include: day, slot, session_type, session_name, duration_min, exercises (strength/core) or wod (WOD), coach_note. ' +
+      'For WOD sessions use the full wod schema with format, movements or blocks. No preamble. JSON only.';
 
     var resp = await fetch('https://phoenix-coach.jon-d87.workers.dev', {
       method: 'POST',
@@ -19457,9 +19446,7 @@ Respond ONLY with a valid JSON object matching the programme session schema exac
 
     var data = await resp.json();
     var raw = (data.content && data.content[0] && data.content[0].text) || '';
-    raw = raw.replace(/```json
-?|```
-?/g, '').trim();
+    raw = raw.replace(/```json[\s\S]*?```|```/g, '').trim();
 
     var sess;
     try { sess = JSON.parse(raw); }

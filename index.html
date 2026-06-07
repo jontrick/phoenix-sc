@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.27';
+var APP_VERSION='4.9.28';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5715,6 +5715,8 @@ window._phxOpenBottomSheet = function(opts){
     });
   }
   window._phxBsheetState = opts;
+  // Re-append to body each time to ensure it sits above any current overlay (iOS stacking context fix)
+  if(overlay.parentNode !== document.body) document.body.appendChild(overlay);
   overlay.classList.add('active');
 };
 window._phxCloseBottomSheet = function(){

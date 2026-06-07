@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.33';
+var APP_VERSION='4.9.34';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15548,9 +15548,10 @@ function _phxLastWeekDaysFromProgramme(){
   return _phxAllDays().filter(function(d){ return seen[d]; });
 }
 
-// v4.9.29 — weekly schedule picker rebuilt as a full-screen overlay
-// using the EXACT same questionnaire timetable (fqRenderSessionTimetable + fqOpenSessionPicker).
-// No separate timetable rendering code — one source of truth.
+// v4.9.33 — weekly schedule picker uses exact questionnaire steps 5 + 7
+// Step 1 of overlay: fqRenderAvailability (AM/PM slots per day, duration picker)
+// Step 2 of overlay: fqRenderSessionTimetable (session type per slot)
+// Zero custom timetable code — 100% questionnaire function reuse.
 window._phxOpenWeeklyScheduleAdjust = function(){
   var existing = document.getElementById('phx-week-adjust');
   if(existing) existing.remove();
@@ -15558,189 +15559,102 @@ window._phxOpenWeeklyScheduleAdjust = function(){
   var weekN = (athlete && athlete.currentWeek) || 1;
   var nextN = weekN + 1;
 
-  // ── Pre-fill fqAnswers from athlete's stored schedule ──────────────────────
-  // The questionnaire timetable reads from fqAnswers.availableSlots + fqAnswers.sessionSchedule
-  // We populate those from the athlete profile so the timetable shows last week's setup.
-  if(!fqAnswers) window.fqAnswers = {};
-  if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule = {};
-  if(!fqAnswers.wodTypes)        fqAnswers.wodTypes = {};
-  if(!fqAnswers.coreTypes)       fqAnswers.coreTypes = {};
+  // Pre-fill fqAnswers from athlete profile
+  if(!window.fqAnswers) window.fqAnswers = {};
+  fqAnswers.availableSlots  = athlete && athlete.fqAvailableSlots  ? JSON.parse(JSON.stringify(athlete.fqAvailableSlots))  : {};
+  fqAnswers.sessionSchedule = athlete && athlete.fqSessionSchedule ? JSON.parse(JSON.stringify(athlete.fqSessionSchedule)) : {};
+  fqAnswers.wodTypes        = athlete && athlete.fqWodTypes        ? JSON.parse(JSON.stringify(athlete.fqWodTypes))        : {};
+  fqAnswers.coreTypes       = athlete && athlete.fqCoreTypes       ? JSON.parse(JSON.stringify(athlete.fqCoreTypes))       : {};
+  fqAnswers.dayDurations    = athlete && athlete.fqDayDurations    ? JSON.parse(JSON.stringify(athlete.fqDayDurations))    : {};
 
-  // Copy from athlete profile
-  if(athlete && athlete.fqSessionSchedule){
-    fqAnswers.sessionSchedule = JSON.parse(JSON.stringify(athlete.fqSessionSchedule));
-  }
-  if(athlete && athlete.fqWodTypes){
-    fqAnswers.wodTypes = JSON.parse(JSON.stringify(athlete.fqWodTypes));
-  }
-  if(athlete && athlete.fqCoreTypes){
-    fqAnswers.coreTypes = JSON.parse(JSON.stringify(athlete.fqCoreTypes));
-  }
-
-  // Build availableSlots from programme (detect two-a-day days)
-  fqAnswers.availableSlots = {};
-  if(athlete && athlete.fqAvailableSlots && Object.keys(athlete.fqAvailableSlots).length){
-    fqAnswers.availableSlots = JSON.parse(JSON.stringify(athlete.fqAvailableSlots));
-  } else {
-    // Derive from programme sessions
-    var _progSessions = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.sessions) || [];
-    var _dayCount = {};
-    _progSessions.forEach(function(s){
-      var d = String(s.day||'').toLowerCase();
-      if(d) _dayCount[d] = (_dayCount[d]||0) + 1;
-    });
-    var _days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-    _days.forEach(function(d){
-      var inProg = !!_dayCount[d];
-      var hasPM = (_dayCount[d]||0) >= 2;
-      if(inProg) fqAnswers.availableSlots[d] = {am: true, pm: hasPM};
-      else        fqAnswers.availableSlots[d] = {am: false, pm: false};
+  // If no slots, derive from programme
+  if(!Object.keys(fqAnswers.availableSlots).length){
+    var _sess = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.sessions) || [];
+    var _dc = {};
+    _sess.forEach(function(s){ var d=String(s.day||'').toLowerCase(); if(d) _dc[d]=(_dc[d]||0)+1; });
+    ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].forEach(function(d){
+      if(_dc[d]) fqAnswers.availableSlots[d] = {am:true, pm:(_dc[d]>=2)};
+      else        fqAnswers.availableSlots[d] = {am:false,pm:false};
     });
   }
 
-  // ── Build the overlay ──────────────────────────────────────────────────────
+  // Build two-page overlay
   var overlay = document.createElement('div');
   overlay.id = 'phx-week-adjust';
   overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9000;overflow-y:auto;display:flex;flex-direction:column;';
 
-  // Day toggle bar — tap to add/remove days, toggle AM/PM slots
-  var DAY_KEYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-  var DAY_SHORT = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
-  function _renderDayToggles(){
-    var bar = document.getElementById('phx-wa-day-bar');
-    if(!bar) return;
-    bar.innerHTML = DAY_KEYS.map(function(d){
-      var slot = fqAnswers.availableSlots[d]||{am:false,pm:false};
-      var active = slot.am||slot.pm;
-      return '<div onclick="window._phxWAToggleDay(\''+d+'\')" style="flex:1;padding:8px 2px;text-align:center;cursor:pointer;border-radius:var(--radius);background:'+(active?'var(--gold)':'var(--bg3)')+';border:1px solid '+(active?'var(--gold)':'var(--border2)')+';">'+
-        '<div style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:1px;color:'+(active?'#000':'var(--text3)')+';">'+DAY_SHORT[d]+'</div>'+
-        (active?'<div style="font-size:8px;color:#000;margin-top:1px;">'+(slot.pm?'2x':'AM')+'</div>':'<div style="font-size:8px;color:var(--border2);margin-top:1px;">-</div>')+
-      '</div>';
-    }).join('');
-  }
-  window._phxWAToggleDay = function(day){
-    var slot = fqAnswers.availableSlots[day]||{am:false,pm:false};
-    if(!slot.am && !slot.pm){
-      // Off → AM only
-      fqAnswers.availableSlots[day] = {am:true, pm:false};
-    } else if(slot.am && !slot.pm){
-      // AM → AM+PM (two-a-day)
-      fqAnswers.availableSlots[day] = {am:true, pm:true};
-    } else {
-      // AM+PM or anything else → Off (rest day)
-      fqAnswers.availableSlots[day] = {am:false, pm:false};
-    }
-    _renderDayToggles();
-    if(typeof fqRenderSessionTimetable === 'function') fqRenderSessionTimetable();
-  };
-
   overlay.innerHTML =
     // Header
-    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:2;">'+
-      '<div onclick="document.getElementById(\'phx-week-adjust\').remove()" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+
+    '<div id="phx-wa-header" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:2;">'+
+      '<div id="phx-wa-back" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+
         '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'+
       '</div>'+
       '<div style="flex:1;">'+
-        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Week '+nextN+'</div>'+
-        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;color:var(--text);">Plan Your Week</div>'+
+        '<div id="phx-wa-eyebrow" style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Week '+nextN+' — Step 1 of 2</div>'+
+        '<div id="phx-wa-title" style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;color:var(--text);">Training Days</div>'+
       '</div>'+
     '</div>'+
-    // Day toggles
-    '<div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg);">'+
-      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Training days — tap to toggle, tap again for two-a-day</div>'+
-      '<div id="phx-wa-day-bar" style="display:flex;gap:4px;"></div>'+
-    '</div>'+
-    // Timetable using exact questionnaire container
-    '<div style="padding:14px 16px;flex:1;">'+
-      '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Tap any session slot to pick type. <strong>Coach decides</strong> = AI picks the best fit.</div>'+
-      '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-session-timetable"></div>'+
-    '</div>'+
-    // Build button
+    // Content area — swaps between step 1 and step 2
+    '<div id="phx-wa-content" style="padding:16px;flex:1;"></div>'+
+    // Footer button
     '<div style="padding:16px;border-top:1px solid var(--border);background:var(--bg);">'+
-      '<button id="phx-wa-build" class="btn-primary" style="width:100%;padding:16px;font-size:15px;">Build Week '+nextN+' →</button>'+
+      '<button id="phx-wa-next" class="btn-primary" style="width:100%;padding:16px;font-size:15px;">Next: Pick Sessions →</button>'+
     '</div>';
 
   document.body.appendChild(overlay);
 
-  // Render day toggle bar
-  _renderDayToggles();
+  var _step = 1;
 
-  // Render timetable rows directly — mirrors fqRenderSessionTimetable exactly
-  function _renderWATimetable(){
-    var container = document.getElementById('fq-session-timetable');
-    if(!container) return;
-    container.innerHTML = '';
-    var days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-    var DAY_LBL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
-    days.forEach(function(day){
-      var slot = (fqAnswers.availableSlots||{})[day]||{am:false,pm:false};
-      if(!slot.am && !slot.pm){
-        container.insertAdjacentHTML('beforeend',
-          '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--text3);font-size:11px;font-family:var(--font-d);letter-spacing:1px;border-bottom:1px solid var(--border);">'+
-          '<div style="width:50px;">'+DAY_LBL[day]+'</div>'+
-          '<div style="flex:1;font-style:italic;">Rest day</div></div>');
-        return;
-      }
-      ['am','pm'].forEach(function(sl){
-        if(!slot[sl]) return;
-        var raw = ((fqAnswers.sessionSchedule||{})[day]||{})[sl];
-        var current = (raw && raw !== 'rest') ? raw : 'coach';
-        var label = (typeof _phxSessionTypeLabel === 'function') ? _phxSessionTypeLabel(current) : current;
-        if(current === 'wod' && fqAnswers.wodTypes && (fqAnswers.wodTypes[day]||{})[sl]){
-          label += ' · ' + fqAnswers.wodTypes[day][sl];
-        }
-        if(current === 'core' && fqAnswers.coreTypes && (fqAnswers.coreTypes[day]||{})[sl]){
-          var ck = fqAnswers.coreTypes[day][sl];
-          var CL = {circuit:'Circuit',strength:'Loaded Strength',anti_rotation:'Anti-Rotation',rotational_power:'Rotational Power',endurance:'Endurance Grind'};
-          label += ' · '+(CL[ck]||ck);
-        }
-        var isDefault = (current === 'coach');
-        container.insertAdjacentHTML('beforeend',
-          '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">'+
-          '<div style="width:50px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+(sl==='am'?DAY_LBL[day]:'')+'</div>'+
-          '<div style="width:32px;font-size:10px;color:var(--gold);font-weight:700;font-family:var(--font-d);letter-spacing:1.5px;">'+sl.toUpperCase()+'</div>'+
-          '<div data-wa-day="'+day+'" data-wa-sl="'+sl+'" class="phx-wa-slot-btn" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:1px;color:'+(isDefault?'var(--text3)':'var(--text)')+';">'+
-            '<span>'+label+'</span>'+
-            '<span style="font-size:18px;color:var(--text3);">&#9662;</span>'+
-          '</div>'+
-          '</div>');
-      });
-    });
-    // Wire slot taps via event delegation
-    container.onclick = function(e){
-      var btn = e.target.closest('.phx-wa-slot-btn');
-      if(!btn) return;
-      var day = btn.getAttribute('data-wa-day');
-      var sl  = btn.getAttribute('data-wa-sl');
-      if(day && sl) fqOpenSessionPicker(day, sl);
-    };
-    // After fqOpenSessionPicker writes to fqAnswers, re-render this timetable
-    window._phxWARerender = _renderWATimetable;
+  function _renderStep1(){
+    _step = 1;
+    document.getElementById('phx-wa-eyebrow').textContent = 'Week '+nextN+' — Step 1 of 2';
+    document.getElementById('phx-wa-title').textContent = 'Training Days';
+    document.getElementById('phx-wa-next').textContent = 'Next: Pick Sessions →';
+    var content = document.getElementById('phx-wa-content');
+    content.innerHTML =
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Tap <strong>AM</strong> or <strong>PM</strong> to add a session slot. Tap again to remove it.</div>'+
+      '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-availability-grid"></div>'+
+      '<div id="fq-availability-summary" style="margin-top:12px;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;"></div>';
+    fqRenderAvailability();
   }
-  _renderWATimetable();
 
-  // Override fqRenderSessionTimetable in this context to also update our timetable
-  var _origFqRender = window.fqRenderSessionTimetable;
-  window.fqRenderSessionTimetable = function(){
-    if(typeof _origFqRender === 'function') _origFqRender();
-    _renderWATimetable();
-  };
+  function _renderStep2(){
+    _step = 2;
+    document.getElementById('phx-wa-eyebrow').textContent = 'Week '+nextN+' — Step 2 of 2';
+    document.getElementById('phx-wa-title').textContent = 'Session Types';
+    document.getElementById('phx-wa-next').textContent = 'Build Week '+nextN+' →';
+    var content = document.getElementById('phx-wa-content');
+    content.innerHTML =
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Tap any slot to pick what your coach should program. Leave as <strong>Coach decides</strong> and the AI picks the best fit.</div>'+
+      '<div id="fq-session-warning" style="display:none;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--orange);line-height:1.5;"></div>'+
+      '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-session-timetable"></div>';
+    fqRenderSessionTimetable();
+  }
 
-  document.getElementById('phx-wa-build').addEventListener('click', function(){
-    // Restore original fqRenderSessionTimetable
-    window.fqRenderSessionTimetable = _origFqRender;
-    _phxConfirmWeeklyAdjust();
+  // Back button — step 2 goes to step 1, step 1 closes overlay
+  document.getElementById('phx-wa-back').addEventListener('click', function(){
+    if(_step === 2){ _renderStep1(); }
+    else { overlay.remove(); }
   });
 
-  // Also restore on overlay close (back button)
-  var _waOverlay = document.getElementById('phx-week-adjust');
-  if(_waOverlay){
-    var _origRemove = _waOverlay.remove.bind(_waOverlay);
-    _waOverlay.remove = function(){
-      window.fqRenderSessionTimetable = _origFqRender;
-      _origRemove();
-    };
-  }
+  // Next/Build button
+  document.getElementById('phx-wa-next').addEventListener('click', function(){
+    if(_step === 1){
+      var days = (fqAnswers.trainingDays||[]).length;
+      if(!days){
+        // Compute from slots if not set
+        fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
+        days = (fqAnswers.trainingDays||[]).length;
+      }
+      if(!days){ alert('Pick at least one training day.'); return; }
+      _renderStep2();
+    } else {
+      _phxConfirmWeeklyAdjust();
+    }
+  });
+
+  // Start on step 1
+  _renderStep1();
 };
 
 

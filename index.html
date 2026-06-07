@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.50';
+var APP_VERSION='4.9.51';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9868,6 +9868,10 @@ new block. Generate ONLY the next week (week_number = N+1) and return a payload 
 "week" object only. Do NOT re-emit block_framework, programme_summary, or nutrition.
 The app already has those.
 
+The week object MUST include a "coach_note" field — a personal message to the athlete
+about this specific week. 2-3 sentences. Reference what happened last week, what this
+week's focus is, and anything specific to watch for. Tone = fqCoachTone.
+
 Use the inbound block_framework to determine what phase week N+1 falls in and what the
 focus should be (e.g. weeks 5-8 = Strength phase → load progression).
 
@@ -10502,7 +10506,34 @@ function onProgrammeGenerated(programme, trigger){
   // renderTodayScreen() + navTo('today').
   if(isWeekly){
     try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e){}
-    if(typeof navTo === 'function') navTo('today');
+    // Show a brief weekly coach overview overlay before going to Today
+    var _weekNote = (merged.week && merged.week.coach_note) ||
+                    (merged.programme_summary && merged.programme_summary.coach_note) || '';
+    var _weekNum  = nextWeekN || 2;
+    var _sessions = (merged.week && merged.week.sessions) || [];
+    var _sessionSummary = _sessions.map(function(s){
+      return (s.day||'').slice(0,3)+' '+((s.slot||s._slot||'am').toUpperCase())+': '+(s.session_name||s.session_type||'');
+    }).join(' · ');
+    var _overlay = document.createElement('div');
+    _overlay.id = 'phx-week-built-overlay';
+    _overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9800;overflow-y:auto;display:flex;flex-direction:column;';
+    _overlay.innerHTML =
+      '<div style="padding:32px 20px 20px;">' +
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Week '+_weekNum+' Ready</div>'+
+        '<div style="font-family:var(--font-d);font-size:32px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:20px;">Your Week<br>Is Built</div>'+
+        (_weekNote ?
+          '<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:20px;">'+
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Coach Note</div>'+
+            '<div style="font-size:14px;color:var(--text);line-height:1.7;">'+_weekNote+'</div>'+
+          '</div>' : '') +
+        (_sessionSummary ?
+          '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:20px;">'+
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">This Week</div>'+
+            '<div style="font-size:12px;color:var(--text2);line-height:1.8;">'+_sessionSummary+'</div>'+
+          '</div>' : '') +
+        '<button onclick="document.getElementById(\'phx-week-built-overlay\').remove();navTo(\'today\')" style="width:100%;padding:18px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Start Week '+_weekNum+' →</button>'+
+      '</div>';
+    document.body.appendChild(_overlay);
     return;
   }
   try { _phxShowPostBuildAnalysis(updated, merged); }

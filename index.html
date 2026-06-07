@@ -3474,7 +3474,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.54';
+var APP_VERSION='4.9.55';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17568,7 +17568,8 @@ function renderTodaySessionCard(){
   // Show a "starts tomorrow" state with two options.
   var _weekStart = _phxWeekStartDate();
   var _todayMid = new Date(); _todayMid.setHours(0,0,0,0);
-  if(_weekStart > _todayMid){
+  // Only show gap state if week genuinely hasn't started yet (strictly future)
+  if(_weekStart.getTime() > _todayMid.getTime() + 1000){
     var _daysUntil = Math.round((_weekStart - _todayMid) / 86400000);
     var _startDay = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][_weekStart.getDay()];
     var _untilStr = _daysUntil === 1 ? 'tomorrow (' + _startDay + ')' : _startDay;
@@ -17632,6 +17633,15 @@ function renderTodaySessionCard(){
   // v4.8.0 FIX: don't fall back to sessions[0] when today has no session.
   // Load any ad-hoc sessions generated today
   if(typeof _phxLoadAdHocSessions === 'function') _phxLoadAdHocSessions();
+
+  // If programme has no sessions for today, check ad-hoc sessions
+  if(!todaySessions.length){
+    var todayISO = new Date().toISOString().split('T')[0];
+    try {
+      var adHoc = JSON.parse(localStorage.getItem('phoenix_adhoc_sessions_'+todayISO)||'[]');
+      if(adHoc.length) todaySessions = adHoc;
+    } catch(_e){}
+  }
 
   console.log('[PHX] renderTodaySessionCard: dayName='+dayName+', sessions found='+todaySessions.length, todaySessions.map(function(s){return s&&(s.session_type||s.day);}));
   if(!todaySessions.length){

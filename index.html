@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.48';
+var APP_VERSION='4.9.49';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15780,12 +15780,8 @@ window._phxOpenWeeklyScheduleAdjust = function(){
       var slot = (fqAnswers.availableSlots && fqAnswers.availableSlots[day])||{am:false,pm:false};
       var hasAM = !!(slot.am);
       var hasPM = !!(slot.pm);
-      console.log('[PHX] session row:', day, 'am='+hasAM, 'pm='+hasPM);
       if(!hasAM && !hasPM) return; // skip rest days
-      // Debug: for wednesday, always add a visible marker
-      if(day === 'wednesday'){
-        html += '<div style="background:rgba(200,150,62,0.1);padding:4px 8px;font-size:10px;color:var(--gold);font-family:var(--font-d);">wed: am='+hasAM+' pm='+hasPM+'</div>';
-      }
+
       ['am','pm'].forEach(function(sl){
         var slotOn = sl==='am' ? hasAM : hasPM;
         if(!slotOn) return;
@@ -15802,9 +15798,10 @@ window._phxOpenWeeklyScheduleAdjust = function(){
           label += ' · '+(CL[fqAnswers.coreTypes[day][sl]]||fqAnswers.coreTypes[day][sl]);
         }
         var isDefault = (raw === 'coach');
+        var isFirstSlot = (sl==='am' && hasAM) || (sl==='pm' && !hasAM);
         html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'+
           '<div style="width:90px;font-family:var(--font-d);font-size:12px;font-weight:700;color:var(--text);">'+
-            (sl==='am'?DL[day]:'')+
+            (isFirstSlot ? DL[day] : '')+
           '</div>'+
           '<div style="width:28px;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--gold);">'+sl.toUpperCase()+'</div>'+
           '<div data-wa2-day="'+day+'" data-wa2-sl="'+sl+'" style="flex:1;background:var(--bg3);border:1.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;color:'+(isDefault?'var(--text3)':'var(--gold)')+';">'+
@@ -15825,21 +15822,9 @@ window._phxOpenWeeklyScheduleAdjust = function(){
     var waContent2 = document.getElementById('phx-wa-content');
     waContent2.innerHTML =
       '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:8px;">Tap any slot to choose what your coach programs. <strong style="color:var(--text);">Coach decides</strong> = AI picks the best fit.</div>'+
-      '<div id="phx-slot-debug" style="font-size:10px;color:var(--text3);margin-bottom:12px;font-family:var(--font-d);letter-spacing:1px;word-break:break-all;"></div>'+
       '<div id="phx-session-rows">'+_buildSessionRows()+'</div>';
     // Wire taps
-    // Show active slots for debugging
-    var _dbg = document.getElementById('phx-slot-debug');
-    if(_dbg){
-      var _active = Object.keys(fqAnswers.availableSlots).filter(function(d){
-        var s=fqAnswers.availableSlots[d]; return s&&(s.am||s.pm);
-      }).map(function(d){
-        var s=fqAnswers.availableSlots[d];
-        return d.slice(0,3)+(s.am?'+AM':'')+(s.pm?'+PM':'');
-      }).join(' | ');
-      _dbg.textContent = 'Slots: '+_active;
-    }
-    var sessionRows = document.getElementById('phx-session-rows');
+var sessionRows = document.getElementById('phx-session-rows');
     if(sessionRows){
       sessionRows.addEventListener('click', function(e){
         var btn = e.target.closest('[data-wa2-day]');

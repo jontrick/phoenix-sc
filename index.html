@@ -3471,7 +3471,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.37';
+var APP_VERSION='4.9.38';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15567,22 +15567,49 @@ window._phxOpenWeeklyScheduleAdjust = function(){
 
   // Pre-fill fqAnswers from athlete profile
   if(!window.fqAnswers) window.fqAnswers = {};
-  fqAnswers.availableSlots  = athlete && athlete.fqAvailableSlots  ? JSON.parse(JSON.stringify(athlete.fqAvailableSlots))  : {};
+
+  // Always reset availableSlots — derive fresh from programme sessions
+  var _sess = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.sessions) || [];
+  var _dc = {};
+  _sess.forEach(function(s){
+    var d = String(s.day||'').toLowerCase().replace(/\s*(am|pm)$/i,'').trim();
+    if(d) _dc[d] = (_dc[d]||0) + 1;
+  });
+  console.log('[PHX] weekly schedule prefill — programme sessions:', _sess.length, 'day counts:', JSON.stringify(_dc));
+
+  // Build slots: any day with a programme session gets AM=true, PM=true if 2+ sessions
+  var _builtSlots = {};
+  ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].forEach(function(d){
+    if(_dc[d]){
+      _builtSlots[d] = {am:true, pm:(_dc[d]>=2)};
+    } else {
+      _builtSlots[d] = {am:false, pm:false};
+    }
+  });
+
+  // Use athlete's stored slots if they have active days, otherwise use programme-derived
+  var _storedSlots = (athlete && athlete.fqAvailableSlots) || {};
+  var _hasStoredActive = Object.keys(_storedSlots).some(function(d){ return _storedSlots[d] && (_storedSlots[d].am || _storedSlots[d].pm); });
+  fqAnswers.availableSlots = _hasStoredActive
+    ? JSON.parse(JSON.stringify(_storedSlots))
+    : _builtSlots;
+
+  // If STILL no active days (brand new user, no programme), default to sensible starter week
+  var _hasAny = Object.keys(fqAnswers.availableSlots).some(function(d){ return fqAnswers.availableSlots[d] && (fqAnswers.availableSlots[d].am || fqAnswers.availableSlots[d].pm); });
+  if(!_hasAny){
+    fqAnswers.availableSlots = {
+      monday:{am:false,pm:false}, tuesday:{am:true,pm:false}, wednesday:{am:false,pm:false},
+      thursday:{am:true,pm:false}, friday:{am:false,pm:false}, saturday:{am:true,pm:true}, sunday:{am:true,pm:false}
+    };
+    console.log('[PHX] No active days found — using starter week defaults');
+  }
+
   fqAnswers.sessionSchedule = athlete && athlete.fqSessionSchedule ? JSON.parse(JSON.stringify(athlete.fqSessionSchedule)) : {};
   fqAnswers.wodTypes        = athlete && athlete.fqWodTypes        ? JSON.parse(JSON.stringify(athlete.fqWodTypes))        : {};
   fqAnswers.coreTypes       = athlete && athlete.fqCoreTypes       ? JSON.parse(JSON.stringify(athlete.fqCoreTypes))       : {};
   fqAnswers.dayDurations    = athlete && athlete.fqDayDurations    ? JSON.parse(JSON.stringify(athlete.fqDayDurations))    : {};
 
-  // If no slots, derive from programme
-  if(!Object.keys(fqAnswers.availableSlots).length){
-    var _sess = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.sessions) || [];
-    var _dc = {};
-    _sess.forEach(function(s){ var d=String(s.day||'').toLowerCase(); if(d) _dc[d]=(_dc[d]||0)+1; });
-    ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].forEach(function(d){
-      if(_dc[d]) fqAnswers.availableSlots[d] = {am:true, pm:(_dc[d]>=2)};
-      else        fqAnswers.availableSlots[d] = {am:false,pm:false};
-    });
-  }
+  console.log('[PHX] fqAnswers.availableSlots set to:', JSON.stringify(fqAnswers.availableSlots));
 
   // Build two-page overlay
   var overlay = document.createElement('div');

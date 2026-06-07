@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.35';
+var APP_VERSION='4.9.36';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23579,12 +23579,38 @@ async function _phxRestoreSessionVisualState(){
     // Tiny delay so any in-flight fetches finish, then hard reload to the fresh shell.
     setTimeout(function(){ window.location.reload(); }, 50);
   }
-  // If there's a waiting SW (installed but not yet active), tell it to skip waiting immediately.
-  // This covers the case where the old SW is still controlling the page after a deploy.
+  // Version check: if the page loaded from cache but a newer version exists, force reload
+  var _storedVer = localStorage.getItem('phoenix_sw_version');
+  if(_storedVer && _storedVer !== APP_VERSION){
+    console.log('[PHX] Version mismatch: page='+APP_VERSION+' stored='+_storedVer+' — reloading');
+    localStorage.setItem('phoenix_sw_version', APP_VERSION);
+    window.location.reload(true);
+  } else {
+    localStorage.setItem('phoenix_sw_version', APP_VERSION);
+  }
+
+  // Send SKIP_WAITING to any waiting SW immediately
   navigator.serviceWorker.getRegistration().then(function(reg){
     if(reg && reg.waiting){
       console.log('[PHX] SW waiting — sending skipWaiting');
       reg.waiting.postMessage({type:'SKIP_WAITING'});
+    }
+  });
+
+  // Listen for SW_UPDATED message
+  navigator.serviceWorker.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'SW_UPDATED'){
+      console.log('[PHX] SW_UPDATED received:', e.data.version);
+      var banner = document.getElementById('phx-update-banner');
+      if(!banner){
+        banner = document.createElement('div');
+        banner.id = 'phx-update-banner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--gold,#C89630);color:#000;font-family:var(--font-d,"Arial");font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:10px;cursor:pointer;';
+        banner.textContent = 'Phoenix updated — tap to reload';
+        banner.addEventListener('click', function(){ window.location.reload(true); });
+        document.body.appendChild(banner);
+      }
+      setTimeout(function(){ window.location.reload(true); }, 1500);
     }
   });
 

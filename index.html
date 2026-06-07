@@ -3471,7 +3471,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.39';
+var APP_VERSION='4.9.40';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23621,20 +23621,24 @@ async function _phxRestoreSessionVisualState(){
     }
   });
 
-  // Listen for SW_UPDATED message
+  // Listen for SW_UPDATED — only reload if SW version is newer than what we loaded
   navigator.serviceWorker.addEventListener('message', function(e){
     if(e.data && e.data.type === 'SW_UPDATED'){
-      console.log('[PHX] SW_UPDATED received:', e.data.version);
-      var banner = document.getElementById('phx-update-banner');
-      if(!banner){
-        banner = document.createElement('div');
-        banner.id = 'phx-update-banner';
+      var newVer = e.data.version || '';
+      console.log('[PHX] SW_UPDATED received:', newVer, 'current APP_VERSION:', APP_VERSION);
+      // Only reload if the SW version is different from what this page loaded as
+      // and we haven't already reloaded in this session
+      if(newVer && newVer !== ('phoenix-v' + APP_VERSION) && !window._phxReloadPending){
+        window._phxReloadPending = true;
+        console.log('[PHX] New version detected — reloading to', newVer);
+        var banner = document.createElement('div');
         banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--gold,#C89630);color:#000;font-family:var(--font-d,"Arial");font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:10px;cursor:pointer;';
-        banner.textContent = 'Phoenix updated — tap to reload';
-        banner.addEventListener('click', function(){ window.location.reload(true); });
+        banner.textContent = 'Phoenix updated — reloading...';
         document.body.appendChild(banner);
+        setTimeout(function(){ window.location.reload(true); }, 1500);
+      } else {
+        console.log('[PHX] SW_UPDATED ignored — same version or already reloading');
       }
-      setTimeout(function(){ window.location.reload(true); }, 1500);
     }
   });
 

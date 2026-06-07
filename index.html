@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.32';
+var APP_VERSION='4.9.33';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15662,14 +15662,85 @@ window._phxOpenWeeklyScheduleAdjust = function(){
 
   document.body.appendChild(overlay);
 
-  // Render day toggle bar + timetable
+  // Render day toggle bar
   _renderDayToggles();
-  console.log('[PHX] timetable slots:', JSON.stringify(fqAnswers.availableSlots));
-  console.log('[PHX] fqRenderSessionTimetable exists:', typeof fqRenderSessionTimetable);
-  console.log('[PHX] container exists:', !!document.getElementById('fq-session-timetable'));
-  if(typeof fqRenderSessionTimetable === 'function') fqRenderSessionTimetable();
-  console.log('[PHX] container after render:', document.getElementById('fq-session-timetable') ? document.getElementById('fq-session-timetable').innerHTML.substring(0,100) : 'null');
-  document.getElementById('phx-wa-build').addEventListener('click', _phxConfirmWeeklyAdjust);
+
+  // Render timetable rows directly — mirrors fqRenderSessionTimetable exactly
+  function _renderWATimetable(){
+    var container = document.getElementById('fq-session-timetable');
+    if(!container) return;
+    container.innerHTML = '';
+    var days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    var DAY_LBL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
+    days.forEach(function(day){
+      var slot = (fqAnswers.availableSlots||{})[day]||{am:false,pm:false};
+      if(!slot.am && !slot.pm){
+        container.insertAdjacentHTML('beforeend',
+          '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;color:var(--text3);font-size:11px;font-family:var(--font-d);letter-spacing:1px;border-bottom:1px solid var(--border);">'+
+          '<div style="width:50px;">'+DAY_LBL[day]+'</div>'+
+          '<div style="flex:1;font-style:italic;">Rest day</div></div>');
+        return;
+      }
+      ['am','pm'].forEach(function(sl){
+        if(!slot[sl]) return;
+        var raw = ((fqAnswers.sessionSchedule||{})[day]||{})[sl];
+        var current = (raw && raw !== 'rest') ? raw : 'coach';
+        var label = (typeof _phxSessionTypeLabel === 'function') ? _phxSessionTypeLabel(current) : current;
+        if(current === 'wod' && fqAnswers.wodTypes && (fqAnswers.wodTypes[day]||{})[sl]){
+          label += ' · ' + fqAnswers.wodTypes[day][sl];
+        }
+        if(current === 'core' && fqAnswers.coreTypes && (fqAnswers.coreTypes[day]||{})[sl]){
+          var ck = fqAnswers.coreTypes[day][sl];
+          var CL = {circuit:'Circuit',strength:'Loaded Strength',anti_rotation:'Anti-Rotation',rotational_power:'Rotational Power',endurance:'Endurance Grind'};
+          label += ' · '+(CL[ck]||ck);
+        }
+        var isDefault = (current === 'coach');
+        container.insertAdjacentHTML('beforeend',
+          '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">'+
+          '<div style="width:50px;font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-d);letter-spacing:1px;">'+(sl==='am'?DAY_LBL[day]:'')+'</div>'+
+          '<div style="width:32px;font-size:10px;color:var(--gold);font-weight:700;font-family:var(--font-d);letter-spacing:1.5px;">'+sl.toUpperCase()+'</div>'+
+          '<div data-wa-day="'+day+'" data-wa-sl="'+sl+'" class="phx-wa-slot-btn" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:1px;color:'+(isDefault?'var(--text3)':'var(--text)')+';">'+
+            '<span>'+label+'</span>'+
+            '<span style="font-size:18px;color:var(--text3);">&#9662;</span>'+
+          '</div>'+
+          '</div>');
+      });
+    });
+    // Wire slot taps via event delegation
+    container.onclick = function(e){
+      var btn = e.target.closest('.phx-wa-slot-btn');
+      if(!btn) return;
+      var day = btn.getAttribute('data-wa-day');
+      var sl  = btn.getAttribute('data-wa-sl');
+      if(day && sl) fqOpenSessionPicker(day, sl);
+    };
+    // After fqOpenSessionPicker writes to fqAnswers, re-render this timetable
+    window._phxWARerender = _renderWATimetable;
+  }
+  _renderWATimetable();
+
+  // Override fqRenderSessionTimetable in this context to also update our timetable
+  var _origFqRender = window.fqRenderSessionTimetable;
+  window.fqRenderSessionTimetable = function(){
+    if(typeof _origFqRender === 'function') _origFqRender();
+    _renderWATimetable();
+  };
+
+  document.getElementById('phx-wa-build').addEventListener('click', function(){
+    // Restore original fqRenderSessionTimetable
+    window.fqRenderSessionTimetable = _origFqRender;
+    _phxConfirmWeeklyAdjust();
+  });
+
+  // Also restore on overlay close (back button)
+  var _waOverlay = document.getElementById('phx-week-adjust');
+  if(_waOverlay){
+    var _origRemove = _waOverlay.remove.bind(_waOverlay);
+    _waOverlay.remove = function(){
+      window.fqRenderSessionTimetable = _origFqRender;
+      _origRemove();
+    };
+  }
 };
 
 

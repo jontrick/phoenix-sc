@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.47';
+var APP_VERSION='4.9.48';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15782,6 +15782,10 @@ window._phxOpenWeeklyScheduleAdjust = function(){
       var hasPM = !!(slot.pm);
       console.log('[PHX] session row:', day, 'am='+hasAM, 'pm='+hasPM);
       if(!hasAM && !hasPM) return; // skip rest days
+      // Debug: for wednesday, always add a visible marker
+      if(day === 'wednesday'){
+        html += '<div style="background:rgba(200,150,62,0.1);padding:4px 8px;font-size:10px;color:var(--gold);font-family:var(--font-d);">wed: am='+hasAM+' pm='+hasPM+'</div>';
+      }
       ['am','pm'].forEach(function(sl){
         var slotOn = sl==='am' ? hasAM : hasPM;
         if(!slotOn) return;

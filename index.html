@@ -3471,7 +3471,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.38';
+var APP_VERSION='4.9.39';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23602,25 +23602,7 @@ async function _phxRestoreSessionVisualState(){
 //      also triggers a one-shot reload. Guarded so a single deploy doesn't reload twice.
 (function(){
   if(!('serviceWorker' in navigator)) return;
-  // Unregister any stale service workers then re-register fresh
-  navigator.serviceWorker.getRegistrations().then(function(regs){
-    var stale = regs.filter(function(r){ return r.scope && r.scope.indexOf('projectphoenix-app.com') >= 0; });
-    // Only unregister if we detect a version mismatch (stored vs current)
-    var _sv = localStorage.getItem('phoenix_sw_version');
-    if(_sv && _sv !== APP_VERSION){
-      console.log('[PHX] Stale SW detected — unregistering all and reloading');
-      Promise.all(regs.map(function(r){ return r.unregister(); })).then(function(){
-        caches.keys().then(function(keys){
-          Promise.all(keys.map(function(k){ return caches.delete(k); })).then(function(){
-            localStorage.setItem('phoenix_sw_version', APP_VERSION);
-            window.location.reload(true);
-          });
-        });
-      });
-      return;
-    }
-    localStorage.setItem('phoenix_sw_version', APP_VERSION);
-  });
+  // Store current version — used for diagnostics only
   var reloading = false;
   function reloadOnce(){
     if(reloading) return;
@@ -23628,15 +23610,8 @@ async function _phxRestoreSessionVisualState(){
     // Tiny delay so any in-flight fetches finish, then hard reload to the fresh shell.
     setTimeout(function(){ window.location.reload(); }, 50);
   }
-  // Version check: if the page loaded from cache but a newer version exists, force reload
-  var _storedVer = localStorage.getItem('phoenix_sw_version');
-  if(_storedVer && _storedVer !== APP_VERSION){
-    console.log('[PHX] Version mismatch: page='+APP_VERSION+' stored='+_storedVer+' — reloading');
-    localStorage.setItem('phoenix_sw_version', APP_VERSION);
-    window.location.reload(true);
-  } else {
-    localStorage.setItem('phoenix_sw_version', APP_VERSION);
-  }
+  // Store current version
+  localStorage.setItem('phoenix_sw_version', APP_VERSION);
 
   // Send SKIP_WAITING to any waiting SW immediately
   navigator.serviceWorker.getRegistration().then(function(reg){

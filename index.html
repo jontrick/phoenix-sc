@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.31';
+var APP_VERSION='4.9.32';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15664,7 +15664,11 @@ window._phxOpenWeeklyScheduleAdjust = function(){
 
   // Render day toggle bar + timetable
   _renderDayToggles();
+  console.log('[PHX] timetable slots:', JSON.stringify(fqAnswers.availableSlots));
+  console.log('[PHX] fqRenderSessionTimetable exists:', typeof fqRenderSessionTimetable);
+  console.log('[PHX] container exists:', !!document.getElementById('fq-session-timetable'));
   if(typeof fqRenderSessionTimetable === 'function') fqRenderSessionTimetable();
+  console.log('[PHX] container after render:', document.getElementById('fq-session-timetable') ? document.getElementById('fq-session-timetable').innerHTML.substring(0,100) : 'null');
   document.getElementById('phx-wa-build').addEventListener('click', _phxConfirmWeeklyAdjust);
 };
 

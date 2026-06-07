@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.44';
+var APP_VERSION='4.9.45';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15776,11 +15776,16 @@ window._phxOpenWeeklyScheduleAdjust = function(){
     var DL = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
     var CL = {circuit:'Circuit',strength:'Loaded Strength',anti_rotation:'Anti-Rotation',rotational_power:'Rotational Power',endurance:'Endurance Grind'};
     var html = '';
+    console.log('[PHX] _buildSessionRows availableSlots:', JSON.stringify(fqAnswers.availableSlots));
     days.forEach(function(day){
-      var slot = (fqAnswers.availableSlots[day])||{am:false,pm:false};
-      if(!slot.am && !slot.pm) return; // skip rest days
+      var slot = (fqAnswers.availableSlots && fqAnswers.availableSlots[day])||{am:false,pm:false};
+      // Normalise — slot values may be truthy non-boolean
+      var hasAM = !!(slot.am);
+      var hasPM = !!(slot.pm);
+      if(!hasAM && !hasPM) return; // skip rest days
       ['am','pm'].forEach(function(sl){
-        if(!slot[sl]) return;
+        var slotOn = sl==='am' ? hasAM : hasPM;
+        if(!slotOn) return;
         var raw = ((fqAnswers.sessionSchedule||{})[day]||{})[sl] || 'coach';
         var label = raw === 'coach' ? 'Coach decides' :
                     raw === 'strength' ? 'Strength' :

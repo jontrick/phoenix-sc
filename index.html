@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.42';
+var APP_VERSION='4.9.43';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15643,9 +15643,11 @@ window._phxOpenWeeklyScheduleAdjust = function(){
       var slot = (fqAnswers.availableSlots[day])||{am:false,pm:false};
       var amActive = !!slot.am;
       var pmActive = !!slot.pm;
-      var dur = (fqAnswers.dayDurations && fqAnswers.dayDurations[day]) || 60;
-      var amLabel = amActive ? 'AM &middot; '+dur : 'AM';
-      var pmLabel = pmActive ? 'PM &middot; '+dur : 'PM';
+      var _durRaw = (fqAnswers.dayDurations && fqAnswers.dayDurations[day]);
+      var _amDur = typeof _durRaw === 'object' ? (_durRaw.am||60) : (_durRaw||60);
+      var _pmDur = typeof _durRaw === 'object' ? (_durRaw.pm||60) : (_durRaw||60);
+      var amLabel = amActive ? 'AM · '+_amDur : 'AM';
+      var pmLabel = pmActive ? 'PM · '+_pmDur : 'PM';
       var amStyle = 'flex:1;padding:12px 8px;text-align:center;border-radius:8px;border:2px solid '+(amActive?'var(--gold)':'var(--border2)')+';background:'+(amActive?'rgba(200,150,62,0.12)':'var(--bg3)')+';color:'+(amActive?'var(--gold)':'var(--text3)')+';font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;';
       var pmStyle = 'flex:1;padding:12px 8px;text-align:center;border-radius:8px;border:2px solid '+(pmActive?'var(--gold)':'var(--border2)')+';background:'+(pmActive?'rgba(200,150,62,0.12)':'var(--bg3)')+';color:'+(pmActive?'var(--gold)':'var(--text3)')+';font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;';
       var dayColor = (amActive||pmActive) ? 'var(--text)' : 'var(--text3)';
@@ -15702,9 +15704,12 @@ window._phxOpenWeeklyScheduleAdjust = function(){
               onSelect: function(val){
                 if(!fqAnswers.dayDurations) fqAnswers.dayDurations={};
                 var existing = fqAnswers.dayDurations[day];
-                if(typeof existing === 'object'){
-                  fqAnswers.dayDurations[day] = Object.assign({}, existing);
-                  fqAnswers.dayDurations[day][sl] = val;
+                var bothOn = !!(fqAnswers.availableSlots[day] && fqAnswers.availableSlots[day].am && fqAnswers.availableSlots[day].pm);
+                if(bothOn){
+                  var cur2 = fqAnswers.dayDurations[day];
+                  var obj2 = (cur2 && typeof cur2 === 'object') ? Object.assign({},cur2) : {am:(typeof cur2==='number'?cur2:60),pm:(typeof cur2==='number'?cur2:60)};
+                  obj2[sl] = val;
+                  fqAnswers.dayDurations[day] = obj2;
                 } else {
                   fqAnswers.dayDurations[day] = val;
                 }
@@ -15728,10 +15733,10 @@ window._phxOpenWeeklyScheduleAdjust = function(){
       var sum = document.getElementById('phx-day-summary');
       if(!sum) return;
       var n = (fqAnswers.trainingDays||[]).length;
-      sum.style.color = (n>=3&&n<=6) ? 'var(--gold)' : 'var(--text3)';
+      sum.style.color = (n>=3) ? 'var(--gold)' : 'var(--text3)';
+      // Max 7 — core and walk sessions are recovery-compatible
       sum.textContent = n===0 ? 'Pick at least 3 training days' :
                         n<3   ? n+' selected — pick '+(3-n)+' more (3 min)' :
-                        n>6   ? n+' selected — drop '+(n-6)+' (6 max)' :
                                 n+' training days locked in';
     }
     _updateDaySummary();

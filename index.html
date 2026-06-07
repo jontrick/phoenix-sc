@@ -2763,7 +2763,13 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <pre id="diag-test-result" style="display:none;background:#0d0a08;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 12px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;"></pre>
 
   <button onclick="_phxOpenDiagnostic()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Refresh snapshot</button>
-  <button onclick="try{localStorage.removeItem('phx_last_write_error');_phxOpenDiagnostic();}catch(e){}" class="btn-secondary" style="width:100%;padding:12px;">Clear last write error</button>
+  <button onclick="try{localStorage.removeItem('phx_last_write_error');_phxOpenDiagnostic();}catch(e){}" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:24px;">Clear last write error</button>
+
+  <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">Developer Shortcuts</div>
+  <button onclick="_phxDevForceCheckin()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Force Weekly Check-in (any day)</button>
+  <button onclick="_phxDevBumpWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Bump Week Number (+1)</button>
+  <button onclick="_phxDevResetWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Reset to Week 1</button>
+  <button onclick="_phxDevClearCheckinDone()" class="btn-secondary" style="width:100%;padding:12px;">Clear check-in done flag (show review card)</button>
 </div>
 </div>
 
@@ -3468,7 +3474,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.51';
+var APP_VERSION='4.9.52';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3521,6 +3527,35 @@ function _phxDiagTapVersion(){
   }
 }
 window._phxDiagTapVersion = _phxDiagTapVersion;
+
+// ── Developer shortcuts (accessible via 5-tap diagnostic) ────────────────────
+window._phxDevForceCheckin = function(){
+  // Force open the weekly check-in regardless of day
+  navTo('weekly-checkin');
+  if(typeof openWeeklyCheckin === 'function') openWeeklyCheckin();
+};
+window._phxDevBumpWeek = function(){
+  if(!athlete) return alert('No athlete loaded');
+  athlete.currentWeek = (athlete.currentWeek||1) + 1;
+  if(typeof saveAthlete === 'function') saveAthlete(athlete);
+  alert('Week bumped to ' + athlete.currentWeek);
+};
+window._phxDevResetWeek = function(){
+  if(!athlete) return alert('No athlete loaded');
+  athlete.currentWeek = 1;
+  if(typeof saveAthlete === 'function') saveAthlete(athlete);
+  alert('Reset to Week 1');
+};
+window._phxDevClearCheckinDone = function(){
+  try {
+    if(typeof _phxBrisbaneMondayISO === 'function'){
+      var key = 'phoenix_weekly_checkin_done_'+_phxBrisbaneMondayISO();
+      localStorage.removeItem(key);
+      window._phxSundayCardRunning = false;
+      alert('Check-in done flag cleared — refresh to see review card');
+    }
+  } catch(e){ alert('Error: '+e); }
+};
 // Apply current visibility on boot in case the tab was reloaded mid-session.
 if(typeof document !== 'undefined'){
   if(document.readyState === 'loading'){
@@ -13397,6 +13432,9 @@ function setupSplashButtons(){
       </div>
     </div>
 
+    <!-- SECTION 1b — weight analysis -->
+    <div id="wci-weight-analysis" style="margin-bottom:20px;display:none;"></div>
+
     <!-- SECTION 2 — body check-in -->
     <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Body check-in</div>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:24px;">
@@ -13447,6 +13485,9 @@ function setupSplashButtons(){
     <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Notes for your coach</div>
     <textarea id="wci-coach-notes" class="q-input" rows="4" placeholder="Tell your coach anything about this week — what worked, what didn't, how you felt, life context…" style="margin-bottom:6px;resize:vertical;min-height:96px;"></textarea>
     <div style="font-size:11px;color:var(--text3);margin-bottom:24px;font-style:italic;">Your coach reads these notes before building next week's programme.</div>
+
+    <!-- SECTION 4b — goal progress (populated by _phxRenderGoalProgress) -->
+    <div id="wci-goal-progress" style="margin-bottom:20px;display:none;"></div>
 
     <!-- SECTION 5 — coach notes for next week -->
     <textarea id="wci-next-requests" class="q-input" rows="3" placeholder="Anything you want changed next week? (optional)" style="margin-bottom:24px;resize:vertical;min-height:80px;"></textarea>
@@ -14636,6 +14677,152 @@ function _wciFormatDateRange(start, end){
   return start.getDate()+' '+months[start.getMonth()]+' – '+end.getDate()+' '+months[end.getMonth()]+' '+end.getFullYear();
 }
 
+// ── Weight analysis for weekly check-in ──────────────────────────────────────
+async function _phxRenderWeightAnalysis(){
+  var el = document.getElementById('wci-weight-analysis');
+  if(!el) return;
+  try {
+    var goal = (athlete && (athlete.fqGoal||athlete.goal||'')) || '';
+    // Get this week's weight logs from Supabase
+    var weekStart = (typeof _phxBrisbaneMondayISO === 'function') ? _phxBrisbaneMondayISO() : new Date().toISOString().split('T')[0];
+    var weekStartDate = new Date(weekStart+'T00:00:00');
+    var res = await sb.from('weight_logs')
+      .select('logged_at,weight_kg')
+      .eq('user_id', currentSession.user.id)
+      .gte('logged_at', weekStartDate.toISOString())
+      .order('logged_at', {ascending:true})
+      .limit(14);
+    var logs = (res && res.data) || [];
+    // Also get last week's average for comparison
+    var lastWeekStart = new Date(weekStartDate); lastWeekStart.setDate(lastWeekStart.getDate()-7);
+    var res2 = await sb.from('weight_logs')
+      .select('logged_at,weight_kg')
+      .eq('user_id', currentSession.user.id)
+      .gte('logged_at', lastWeekStart.toISOString())
+      .lt('logged_at', weekStartDate.toISOString())
+      .order('logged_at', {ascending:true})
+      .limit(14);
+    var lastLogs = (res2 && res2.data) || [];
+    if(!logs.length && !lastLogs.length){ el.style.display='none'; return; }
+    // Calculate stats
+    var thisWeekWeights = logs.map(function(l){ return parseFloat(l.weight_kg); }).filter(function(w){ return !isNaN(w); });
+    var lastWeekWeights = lastLogs.map(function(l){ return parseFloat(l.weight_kg); }).filter(function(w){ return !isNaN(w); });
+    var avg = function(arr){ return arr.length ? arr.reduce(function(a,b){return a+b;},0)/arr.length : null; };
+    var thisAvg  = avg(thisWeekWeights);
+    var lastAvg  = avg(lastWeekWeights);
+    var startW   = thisWeekWeights[0] || null;
+    var endW     = thisWeekWeights[thisWeekWeights.length-1] || null;
+    var change   = (thisAvg && lastAvg) ? (thisAvg - lastAvg) : (startW && endW ? endW - startW : null);
+    // Interpretation based on goal
+    var isLoss   = goal.indexOf('fat') >= 0 || goal.indexOf('loss') >= 0 || goal.indexOf('lean') >= 0;
+    var isGain   = goal.indexOf('build') >= 0 || goal.indexOf('muscle') >= 0 || goal.indexOf('mass') >= 0;
+    var isPerf   = goal.indexOf('perform') >= 0 || goal.indexOf('athletic') >= 0 || goal.indexOf('sport') >= 0;
+    var interpretation = '', interpColor = 'var(--text2)';
+    if(change !== null){
+      var abs = Math.abs(change);
+      if(isLoss){
+        if(abs < 0.1)       { interpretation = 'No change this week. Check nutrition consistency — are you hitting your targets?'; interpColor = 'var(--text3)'; }
+        else if(change < -1.0){ interpretation = 'Loss of '+abs.toFixed(1)+'kg this week — faster than recommended. Ensure you're eating enough protein and not over-restricting.'; interpColor = 'var(--orange)'; }
+        else if(change < -0.3){ interpretation = 'Steady loss of '+abs.toFixed(1)+'kg. Right in the optimal range (0.3-0.8kg/week). Keep going.'; interpColor = 'var(--green,#3a7d44)'; }
+        else if(change > 0.3) { interpretation = 'Slight gain of '+abs.toFixed(1)+'kg. Normal fluctuation, or worth reviewing nutrition compliance.'; interpColor = 'var(--orange)'; }
+        else                  { interpretation = 'Minimal change ('+Math.abs(change).toFixed(1)+'kg). Normal week-to-week variation.'; interpColor = 'var(--text2)'; }
+      } else if(isGain){
+        if(change > 0.8)    { interpretation = 'Gain of '+abs.toFixed(1)+'kg. May include water/glycogen. Track over 4 weeks for the trend.'; interpColor = 'var(--gold)'; }
+        else if(change > 0) { interpretation = 'Small gain of '+abs.toFixed(1)+'kg. Consistent with a lean building phase.'; interpColor = 'var(--green,#3a7d44)'; }
+        else                { interpretation = 'Slight drop of '+abs.toFixed(1)+'kg. May need to increase calories slightly.'; interpColor = 'var(--orange)'; }
+      } else {
+        if(abs < 0.5)       { interpretation = 'Weight stable ('+Math.abs(change).toFixed(1)+'kg change). Good body composition maintenance.'; interpColor = 'var(--green,#3a7d44)'; }
+        else                { interpretation = Math.abs(change).toFixed(1)+'kg change this week. Normal fluctuation — track the trend over 4 weeks.'; interpColor = 'var(--text2)'; }
+      }
+    }
+    // Mini sparkline chart
+    var sparkHTML = '';
+    if(thisWeekWeights.length > 1){
+      var mn = Math.min.apply(null,thisWeekWeights), mx = Math.max.apply(null,thisWeekWeights);
+      var range = mx - mn || 0.5;
+      var pts = thisWeekWeights.map(function(w,i){
+        var x = (i/(thisWeekWeights.length-1||1))*280;
+        var y = 36 - ((w-mn)/range)*32;
+        return x+','+y;
+      }).join(' ');
+      sparkHTML = '<svg viewBox="0 0 280 40" style="width:100%;height:40px;margin:8px 0;">'+
+        '<polyline points="'+pts+'" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round"/>'+
+        thisWeekWeights.map(function(w,i){
+          var x=(i/(thisWeekWeights.length-1||1))*280;
+          var y=36-((w-mn)/range)*32;
+          return '<circle cx="'+x+'" cy="'+y+'" r="3" fill="var(--gold)"/>';
+        }).join('')+
+      '</svg>';
+    }
+    el.style.display = 'block';
+    el.innerHTML =
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Weight This Week</div>'+
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">'+
+        '<div style="display:flex;gap:8px;margin-bottom:10px;">'+
+          (startW ? '<div style="flex:1;text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Start</div><div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+startW.toFixed(1)+'<span style="font-size:11px;color:var(--text3);">kg</span></div></div>' : '')+
+          (thisAvg  ? '<div style="flex:1;text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Avg</div><div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--gold);">'+thisAvg.toFixed(1)+'<span style="font-size:11px;color:var(--text3);">kg</span></div></div>' : '')+
+          (endW     ? '<div style="flex:1;text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">End</div><div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+endW.toFixed(1)+'<span style="font-size:11px;color:var(--text3);">kg</span></div></div>' : '')+
+          (change !== null ? '<div style="flex:1;text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Change</div><div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:'+(change<0?'var(--green,#3a7d44)':change>0?'var(--orange)':'var(--text2)');+">'+(change>0?'+':'')+change.toFixed(1)+'<span style="font-size:11px;color:var(--text3);">kg</span></div></div>' : '')+
+        '</div>'+
+        sparkHTML+
+        (interpretation ? '<div style="font-size:12px;color:'+interpColor+';line-height:1.6;margin-top:6px;padding-top:8px;border-top:1px solid var(--border);">'+interpretation+'</div>' : '')+
+      '</div>';
+  } catch(e){ console.warn('[PHX] weight analysis failed:', e); el.style.display='none'; }
+}
+
+// ── Goal progress for weekly check-in ─────────────────────────────────────────
+function _phxRenderGoalProgress(){
+  var el = document.getElementById('wci-goal-progress');
+  if(!el) return;
+  var goal = (athlete && (athlete.fqGoal||athlete.goal||'')) || '';
+  var weekN = (athlete && athlete.currentWeek) || 1;
+  var totalWeeks = (athlete && athlete.aiProgramme && athlete.aiProgramme.programme_summary && athlete.aiProgramme.programme_summary.total_weeks) || 12;
+  var blockSize = 4;
+  var currentBlock = Math.ceil(weekN/blockSize);
+  var totalBlocks  = Math.ceil(totalWeeks/blockSize);
+  var weekInBlock  = ((weekN-1) % blockSize) + 1;
+  // Progress bar
+  var pct = Math.round((weekN/totalWeeks)*100);
+  var goalLabel = goal === 'fat_loss' ? 'Fat Loss' :
+                  goal === 'build'    ? 'Muscle Build' :
+                  goal === 'performance' ? 'Athletic Performance' :
+                  goal === 'recomp'   ? 'Body Recomposition' :
+                  goal === 'health'   ? 'General Health' :
+                  goal ? goal.charAt(0).toUpperCase()+goal.slice(1) : 'Your Goal';
+  // Block context message
+  var blockMsg = weekInBlock === 1
+    ? 'Week 1 of Block '+currentBlock+' — establishing the new stimulus. Don't judge progress yet.'
+    : weekInBlock === 2
+    ? 'Week 2 of Block '+currentBlock+' — adaptation beginning. Consistency is the job right now.'
+    : weekInBlock === 3
+    ? 'Week 3 of Block '+currentBlock+' — peak volume. This is where the work happens.'
+    : 'Week 4 of Block '+currentBlock+' — deload week. Recovery IS the training this week.';
+  el.style.display = 'block';
+  el.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Goal Progress</div>'+
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);">'+goalLabel+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">Week '+weekN+' of '+totalWeeks+'</div>'+
+      '</div>'+
+      '<div style="background:var(--bg3);border-radius:4px;height:6px;margin-bottom:10px;overflow:hidden;">'+
+        '<div style="background:var(--gold);height:6px;width:'+pct+'%;border-radius:4px;transition:width 0.5s;"></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;margin-bottom:12px;">'+
+        Array.from({length:totalBlocks},function(_,i){
+          var active = (i+1) === currentBlock;
+          var done   = (i+1) < currentBlock;
+          return '<div style="flex:1;text-align:center;padding:6px 4px;border-radius:var(--radius);background:'+(active?'rgba(200,150,62,0.12)':(done?'rgba(200,150,62,0.05)':'var(--bg3)'))+';border:1px solid '+(active?'var(--gold)':'var(--border2)')+';">'+
+            '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:1px;color:'+(active?'var(--gold)':done?'var(--text3)':'var(--text3)')+';text-transform:uppercase;">B'+(i+1)+'</div>'+
+            '<div style="font-size:9px;color:'+(active?'var(--gold)':'var(--text3)')+';">'+((i)*blockSize+1)+'-'+Math.min((i+1)*blockSize,totalWeeks)+'</div>'+
+          '</div>';
+        }).join('')+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--text2);line-height:1.6;padding:10px 12px;background:var(--bg3);border-radius:var(--radius);">'+blockMsg+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;line-height:1.5;">Comprehensive results show after a full block ('+blockSize+' weeks). Small consistent improvements each week compound into meaningful change.</div>'+
+    '</div>';
+}
+
 function openWeeklyCheckin(){
   // Reset transient form state
   window._wciState = {feeling:0, sleep:0, energy:0, weight:0, continueProgramme:null, photoFront:null, photoSide:null};
@@ -14681,6 +14868,9 @@ function openWeeklyCheckin(){
   loadWeeklyStats();
   // v4.7.60: pre-fill from last week's data — training days, session types, RPE, weight, injuries.
   if(typeof _phxWciPrefillLastWeek === 'function') _phxWciPrefillLastWeek();
+  // Render weight analysis and goal progress
+  if(typeof _phxRenderWeightAnalysis === 'function') _phxRenderWeightAnalysis();
+  if(typeof _phxRenderGoalProgress === 'function') _phxRenderGoalProgress();
   // v4.7.34 BUILD 3: load (or regenerate) the coach's weekly recommendation card.
   if(typeof _phxLoadCoachWeeklyRecommendation === 'function') _phxLoadCoachWeeklyRecommendation();
   // v4.7.38: editable on the athlete's chosen check-in day (default friday). Readonly otherwise.

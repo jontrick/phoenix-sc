@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.29';
+var APP_VERSION='4.9.30';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15503,9 +15503,9 @@ function _phxLastWeekDaysFromProgramme(){
   return _phxAllDays().filter(function(d){ return seen[d]; });
 }
 
-// v4.9.2 — weekly check-in timetable: mirrors questionnaire Step 7 exactly.
-// Shows AM/PM session type dropdowns pre-filled from last week, rest days labelled,
-// consecutive strength conflict checked including crossover from prev week's last sessions.
+// v4.9.29 — weekly schedule picker rebuilt as a full-screen overlay
+// using the EXACT same questionnaire timetable (fqRenderSessionTimetable + fqOpenSessionPicker).
+// No separate timetable rendering code — one source of truth.
 window._phxOpenWeeklyScheduleAdjust = function(){
   var existing = document.getElementById('phx-week-adjust');
   if(existing) existing.remove();
@@ -15513,304 +15513,120 @@ window._phxOpenWeeklyScheduleAdjust = function(){
   var weekN = (athlete && athlete.currentWeek) || 1;
   var nextN = weekN + 1;
 
-  // Initialise adjust state from current athlete schedule
-  // availableSlots = which AM/PM slots exist; sessionSchedule = what type each slot is
-  var slots    = (athlete && athlete.fqAvailableSlots)    ? JSON.parse(JSON.stringify(athlete.fqAvailableSlots))    : {};
-  var schedule = (athlete && athlete.fqSessionSchedule)   ? JSON.parse(JSON.stringify(athlete.fqSessionSchedule))   : {};
-  var wodTypes = (athlete && athlete.fqWodTypes)          ? JSON.parse(JSON.stringify(athlete.fqWodTypes))          : {};
+  // ── Pre-fill fqAnswers from athlete's stored schedule ──────────────────────
+  // The questionnaire timetable reads from fqAnswers.availableSlots + fqAnswers.sessionSchedule
+  // We populate those from the athlete profile so the timetable shows last week's setup.
+  if(!fqAnswers) window.fqAnswers = {};
+  if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule = {};
+  if(!fqAnswers.wodTypes)        fqAnswers.wodTypes = {};
+  if(!fqAnswers.coreTypes)       fqAnswers.coreTypes = {};
 
-  // If no slots set (coach_assigns mode), derive from programme days
-  if(!Object.keys(slots).length){
-    // Build slots from the actual programme — detect two-a-day days
+  // Copy from athlete profile
+  if(athlete && athlete.fqSessionSchedule){
+    fqAnswers.sessionSchedule = JSON.parse(JSON.stringify(athlete.fqSessionSchedule));
+  }
+  if(athlete && athlete.fqWodTypes){
+    fqAnswers.wodTypes = JSON.parse(JSON.stringify(athlete.fqWodTypes));
+  }
+  if(athlete && athlete.fqCoreTypes){
+    fqAnswers.coreTypes = JSON.parse(JSON.stringify(athlete.fqCoreTypes));
+  }
+
+  // Build availableSlots from programme (detect two-a-day days)
+  fqAnswers.availableSlots = {};
+  if(athlete && athlete.fqAvailableSlots && Object.keys(athlete.fqAvailableSlots).length){
+    fqAnswers.availableSlots = JSON.parse(JSON.stringify(athlete.fqAvailableSlots));
+  } else {
+    // Derive from programme sessions
     var _progSessions = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.sessions) || [];
     var _dayCount = {};
     _progSessions.forEach(function(s){
       var d = String(s.day||'').toLowerCase();
       if(d) _dayCount[d] = (_dayCount[d]||0) + 1;
     });
-    _phxLastWeekDaysFromProgramme().forEach(function(d){
-      var key = d.toLowerCase();
-      var count = _dayCount[key] || 1;
-      slots[key] = {am: true, pm: count >= 2};
+    var _days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    _days.forEach(function(d){
+      var inProg = !!_dayCount[d];
+      var hasPM = (_dayCount[d]||0) >= 2;
+      if(inProg) fqAnswers.availableSlots[d] = {am: true, pm: hasPM};
+      else        fqAnswers.availableSlots[d] = {am: false, pm: false};
     });
-    // If still empty, add all days with AM only
-    if(!Object.keys(slots).length){
-      ['tuesday','wednesday','thursday','friday','saturday','sunday'].forEach(function(d){
-        slots[d] = {am: true, pm: false};
-      });
-    }
   }
 
-  window._phxWeekAdjustState = {slots: slots, schedule: schedule, wodTypes: wodTypes};
-
+  // ── Build the overlay ──────────────────────────────────────────────────────
   var overlay = document.createElement('div');
   overlay.id = 'phx-week-adjust';
   overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9000;overflow-y:auto;display:flex;flex-direction:column;';
 
   overlay.innerHTML =
-    '<div class="app-header" style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);">'+
-      '<div class="icon-btn" onclick="document.getElementById(\'phx-week-adjust\').remove();navTo(\'today\')" style="cursor:pointer;">'+
-        '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'+
+    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:1;">'+
+      '<div onclick="document.getElementById(\'phx-week-adjust\').remove()" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'+
       '</div>'+
-      '<div style="flex:1;text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text);">Plan Week '+nextN+'</div>'+
-      '<div style="width:36px;"></div>'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Week '+nextN+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;color:var(--text);">Your Timetable</div>'+
+      '</div>'+
     '</div>'+
-    '<div style="padding:20px 16px;flex:1;">'+
-      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Week '+nextN+' Timetable</div>'+
-      '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;margin-bottom:6px;">Set Your Sessions</div>'+
-      '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px;">Pre-filled from last week. Tap any slot to change it. Coach uses this to build your next week.</div>'+
+    '<div style="padding:16px 16px 0;">'+
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Tap any slot to change session type. Leave as <strong>Coach decides</strong> to let the AI pick.</div>'+
       '<div id="phx-wa-conflict" style="display:none;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--orange);line-height:1.5;"></div>'+
-      '<div id="phx-wa-timetable" style="margin-bottom:20px;"></div>'+
+    '</div>'+
+    // Reuse the EXACT same container id the questionnaire uses — fqRenderSessionTimetable targets it
+    '<div style="padding:0 16px;flex:1;">'+
+      '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-session-timetable"></div>'+
+    '</div>'+
+    '<div style="padding:16px;border-top:1px solid var(--border);margin-top:14px;">'+
       '<button id="phx-wa-build" class="btn-primary" style="width:100%;padding:16px;">Build Week '+nextN+' →</button>'+
     '</div>';
 
   document.body.appendChild(overlay);
-  _phxRenderWATimtable();
+
+  // ── Render using the EXACT questionnaire function ──────────────────────────
+  if(typeof fqRenderSessionTimetable === 'function'){
+    fqRenderSessionTimetable();
+  }
+
+  // Wire the build button
   document.getElementById('phx-wa-build').addEventListener('click', _phxConfirmWeeklyAdjust);
-};
 
-// Render the timetable rows — same visual as questionnaire Step 7
-function _phxRenderWATimtable(){
-  var wrap = document.getElementById('phx-wa-timetable');
-  if(!wrap) return;
-  var st = window._phxWeekAdjustState || {};
-  var slots    = st.slots    || {};
-  var schedule = st.schedule || {};
-  var wodTypes = st.wodTypes || {};
-  var days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-  var DAY_LABEL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
-  var rows = '';
-  days.forEach(function(day){
-    var slot = slots[day] || {am:false, pm:false};
-    if(!slot.am && !slot.pm){
-      rows +=
-        '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">'+
-          '<div style="width:44px;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text3);">'+DAY_LABEL[day]+'</div>'+
-          '<div style="flex:1;font-size:12px;color:var(--text3);font-style:italic;">Rest day</div>'+
-          '<div onclick="window._phxWATAddDay(\"'+day+'\")" style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);opacity:0.7;cursor:pointer;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius);">+ Add</div>'+
-        '</div>';
-      return;
-    }
-    ['am','pm'].forEach(function(sl){
-      if(!slot[sl]) return;
-      var raw = (schedule[day]||{})[sl];
-      var current = (raw && raw !== 'rest') ? raw : 'coach';
-      var label = (typeof _phxSessionTypeLabel === 'function') ? _phxSessionTypeLabel(current) : current;
-      if(current === 'wod' && wodTypes[day] && wodTypes[day][sl]){
-        label += ' · '+wodTypes[day][sl];
-      }
-      if(current === 'core'){
-        var coreTypes = st.coreTypes || {};
-        if(coreTypes[day] && coreTypes[day][sl]){
-          var _ck = coreTypes[day][sl];
-          var _CL = {circuit:'Circuit', strength:'Loaded Strength', anti_rotation:'Anti-Rotation', rotational_power:'Rotational Power', endurance:'Endurance Grind'};
-          label += ' · '+(_CL[_ck]||_ck);
-        }
-      }
-      var isDefault = (current === 'coach');
-      rows +=
-        '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'+
-          '<div style="width:44px;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text);">'+(sl==='am'?DAY_LABEL[day]:'')+'</div>'+
-          '<div style="width:28px;font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">'+sl.toUpperCase()+'</div>'+
-          '<div onclick="window._phxWAPickSession(\"'+day+'\",\"'+sl+'\")" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:1px;color:'+(isDefault?'var(--text3)':'var(--text)')+';">'+
-            '<span>'+label+'</span>'+
-            '<span style="font-size:18px;color:var(--text3);">&#9662;</span>'+
-          '</div>'+
-        '</div>';
-    });
-  });
-  wrap.innerHTML = rows;
-  _phxWAEvaluateConflict();
-}
-
-// Open session picker for a day/slot — same options as questionnaire
-window._phxWAPickSession = function(day, sl){
-  var st = window._phxWeekAdjustState = window._phxWeekAdjustState || {slots:{}, schedule:{}, wodTypes:{}};
-  var FQ_TYPES = (typeof FQ_SESSION_TYPES !== 'undefined') ? FQ_SESSION_TYPES : [
-    {value:'strength', label:'Strength'},{value:'wod', label:'WOD'},{value:'core', label:'Core'},
-    {value:'walk', label:'Walk'},{value:'coach', label:'Coach decides'}
-  ];
-  var DAY_LABEL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
-  var raw = (st.schedule[day]||{})[sl];
-  var current = (raw && raw !== 'rest') ? raw : 'coach';
-
-  function _openMain(){
-    _phxOpenBottomSheet({
-      title: (DAY_LABEL[day]||day.toUpperCase())+' '+sl.toUpperCase(),
-      subtitle: 'Pick session type for week '+(((athlete&&athlete.currentWeek)||1)+1),
-      options: FQ_TYPES,
-      current: current,
-      onSelect: function(value){
-        if(value === 'wod'){
-          var curWod = (st.wodTypes[day]||{})[sl] || 'coach';
-          if(typeof _phxOpenWodTypePicker === 'function'){
-            _phxOpenWodTypePicker({
-              title: (DAY_LABEL[day]||day.toUpperCase())+' '+sl.toUpperCase()+' — WOD',
-              subtitle: 'Pick a WOD type',
-              current: curWod,
-              onPick: function(wodType){
-                if(!st.schedule[day]) st.schedule[day]={};
-                if(!st.wodTypes[day]) st.wodTypes[day]={};
-                st.schedule[day][sl] = 'wod';
-                st.wodTypes[day][sl] = wodType;
-                _phxRenderWATimtable();
-              },
-              onCancel: function(){ _openMain(); }
-            });
-            return;
-          }
-        }
-        // v4.9.7: Core drill-down in weekly check-in timetable
-        if(value === 'core'){
-          if(!st.coreTypes) st.coreTypes = {};
-          var curCore = (st.coreTypes[day]||{})[sl] || 'coach';
-          if(typeof _phxOpenCoreTypePicker === 'function'){
-            _phxOpenCoreTypePicker({
-              title: (DAY_LABEL[day]||day.toUpperCase())+' '+sl.toUpperCase()+' — Core',
-              current: curCore,
-              onPick: function(coreType){
-                if(!st.schedule[day]) st.schedule[day]={};
-                if(!st.coreTypes) st.coreTypes={};
-                if(!st.coreTypes[day]) st.coreTypes[day]={};
-                st.schedule[day][sl] = 'core';
-                st.coreTypes[day][sl] = coreType;
-                _phxRenderWATimtable();
-              },
-              onCancel: function(){ _openMain(); }
-            });
-            return;
-          }
-        }
-        if(!st.schedule[day]) st.schedule[day]={};
-        if(st.wodTypes[day]) delete st.wodTypes[day][sl];
-        st.schedule[day][sl] = value;
-        _phxRenderWATimtable();
-      }
-    });
+  // Consecutive strength conflict check (reuse questionnaire function if available)
+  if(typeof fqEvaluateConsecutiveStrength === 'function'){
+    fqEvaluateConsecutiveStrength();
   }
-  _openMain();
 };
 
-// Add a training day that was previously rest
-window._phxWATAddDay = function(day){
-  var st = window._phxWeekAdjustState = window._phxWeekAdjustState || {slots:{}, schedule:{}, wodTypes:{}};
-  if(!st.slots[day]) st.slots[day] = {};
-  st.slots[day].am = true;
-  if(!st.schedule[day]) st.schedule[day] = {};
-  st.schedule[day].am = 'coach';
-  _phxRenderWATimtable();
-};
-
-// Consecutive strength conflict check — includes crossover from previous week
-function _phxWAEvaluateConflict(){
-  var warn = document.getElementById('phx-wa-conflict');
-  if(!warn) return;
-  var st = window._phxWeekAdjustState || {};
-  var slots    = st.slots    || {};
-  var schedule = st.schedule || {};
-  var days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-
-  // Build a flat sequence of {day, slot, type} for the NEXT week
-  var seq = [];
-  days.forEach(function(day){
-    var slot = slots[day] || {};
-    ['am','pm'].forEach(function(sl){
-      if(slot[sl]){
-        seq.push({day:day, slot:sl, type:(schedule[day]||{})[sl]||'coach'});
-      }
-    });
-  });
-
-  // Prepend the last 2 sessions from the CURRENT week's programme (crossover check)
-  // This catches: prev week ends Mon-Tue strength → next week starts Wed-Thu strength
-  var prevSessions = [];
-  if(athlete && athlete.aiProgramme && athlete.aiProgramme.week && Array.isArray(athlete.aiProgramme.week.sessions)){
-    athlete.aiProgramme.week.sessions.forEach(function(s){
-      var t = String(s.session_type||'').toLowerCase();
-      if(t === 'strength' || t.indexOf('strength')>=0){
-        prevSessions.push({day:s.day, slot:'am', type:'strength', _prev:true});
-      }
-    });
-    // Take only the last 2 strength sessions from the prev week
-    prevSessions = prevSessions.slice(-2);
-  }
-  var fullSeq = prevSessions.concat(seq);
-
-  // Count consecutive strength runs (rest days break the run)
-  var run = 0, runStart = null, worst = {count:0, start:null, end:null};
-  fullSeq.forEach(function(entry, i){
-    var isRest = !entry.type || entry.type === 'coach'; // coach = unknown, not counted as strength
-    var isStrength = (entry.type === 'strength');
-    if(isStrength){
-      if(run === 0) runStart = i;
-      run++;
-      if(run > worst.count) worst = {count:run, start:runStart, end:i};
-    } else {
-      run = 0; runStart = null; // rest OR any non-strength type breaks the run
-    }
-  });
-
-  if(worst.count >= 3){
-    var s = fullSeq[worst.start];
-    var e = fullSeq[worst.end];
-    var DAY_FULL = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
-    var fromLabel = s._prev ? 'last week ('+( DAY_FULL[s.day]||s.day)+')' : (DAY_FULL[s.day]||s.day);
-    var toLabel   = DAY_FULL[e.day]||e.day;
-    warn.style.display = 'block';
-    warn.textContent = 'You have '+worst.count+' consecutive strength sessions ('+fromLabel+' → '+toLabel+'). Consider adding a rest day or WOD between them for better recovery.';
-  } else {
-    warn.style.display = 'none';
-  }
-}
-
-// Legacy toggle function — no longer used but kept for safety
-window._phxToggleWeekAdjustDay = function(day){
-  var st = window._phxWeekAdjustState = window._phxWeekAdjustState || {slots:{}, schedule:{}, wodTypes:{}};
-  var slot = st.slots[day] || {};
-  var hasSlot = slot.am || slot.pm;
-  if(hasSlot){ delete st.slots[day]; } else { st.slots[day] = {am:true}; }
-  _phxRenderWATimtable();
-};
 
 async function _phxConfirmWeeklyAdjust(){
-  var st = window._phxWeekAdjustState || {};
+  // v4.9.29: read directly from fqAnswers — the questionnaire functions write here
+  var slots    = fqAnswers.availableSlots  || {};
+  var schedule = fqAnswers.sessionSchedule || {};
+  var wodTypes = fqAnswers.wodTypes        || {};
+  var coreTypes= fqAnswers.coreTypes       || {};
 
-  // v4.9.2: read from new timetable state (slots + schedule) not legacy selected
-  var slots    = st.slots    || {};
-  var schedule = st.schedule || {};
-  var wodTypes = st.wodTypes || {};
-
-  // Derive chosen days from slots (days that have at least one AM or PM slot active)
+  // Derive chosen days (capitalised) from any day with at least one active slot
   var dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   var chosen = dayOrder.filter(function(d){
-    var key = d.toLowerCase();
-    var slot = slots[key] || {};
+    var slot = slots[d.toLowerCase()] || {};
     return slot.am || slot.pm;
   });
-
-  // Fallback: if legacy selected state exists (shouldn't but safety net)
-  if(!chosen.length && st.selected){
-    chosen = _phxAllDays().filter(function(d){ return !!st.selected[d]; });
-  }
 
   if(!chosen.length){
     alert('Pick at least one training day.');
     return;
   }
 
-  // Save the updated schedule back to athlete so it persists and flows into the regen prompt
+  // Save back to athlete profile
   if(athlete){
     athlete.fqAvailableSlots  = slots;
     athlete.fqSessionSchedule = schedule;
     athlete.fqWodTypes        = wodTypes;
-    athlete.fqCoreTypes       = st.coreTypes || {};
-    // Also update fqTrainingDays for backwards compat
-    athlete.fqTrainingDays = chosen;
-    // Persist to localStorage + Supabase
+    athlete.fqCoreTypes       = coreTypes;
+    athlete.fqTrainingDays    = chosen;
     if(typeof saveAthlete === 'function') saveAthlete(athlete);
     if(typeof saveAthleteToSupabase === 'function'){
       saveAthleteToSupabase(athlete).catch(function(e){
-        console.warn('[PHX] schedule save to Supabase failed:', e);
+        console.warn('[PHX] schedule save failed:', e);
       });
     }
   }
@@ -15818,12 +15634,10 @@ async function _phxConfirmWeeklyAdjust(){
   var btn = document.getElementById('phx-wa-build');
   if(btn){ btn.disabled = true; btn.textContent = 'Building…'; }
 
-  // Build the regen context — now carries updated session_schedule
   var ctx = await _phxBuildWeeklyRegenContext(chosen);
-  // Add the per-slot session types to next_week_schedule so the coach sees them
   ctx.next_week_schedule.session_schedule = schedule;
   ctx.next_week_schedule.wod_types        = wodTypes;
-  ctx.next_week_schedule.core_types       = st.coreTypes || {};
+  ctx.next_week_schedule.core_types       = coreTypes;
 
   var overlay = document.getElementById('phx-week-adjust');
   if(overlay) overlay.remove();

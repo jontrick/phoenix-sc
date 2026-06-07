@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.43';
+var APP_VERSION='4.9.44';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15734,10 +15734,38 @@ window._phxOpenWeeklyScheduleAdjust = function(){
       if(!sum) return;
       var n = (fqAnswers.trainingDays||[]).length;
       sum.style.color = (n>=3) ? 'var(--gold)' : 'var(--text3)';
-      // Max 7 — core and walk sessions are recovery-compatible
       sum.textContent = n===0 ? 'Pick at least 3 training days' :
                         n<3   ? n+' selected — pick '+(3-n)+' more (3 min)' :
                                 n+' training days locked in';
+      // Soft warning: check for 3+ consecutive heavy days (strength/wod only, not core/walk)
+      var _warn = document.getElementById('phx-day-warning');
+      if(!_warn){
+        _warn = document.createElement('div');
+        _warn.id = 'phx-day-warning';
+        _warn.style.cssText = 'margin-top:10px;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--orange);line-height:1.5;display:none;';
+        sum.parentNode.insertBefore(_warn, sum.nextSibling);
+      }
+      // Build sequence of active days with session types
+      var _days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+      var _heavyRun = 0; _maxHeavy = 0;
+      _days.forEach(function(d){
+        var slot = fqAnswers.availableSlots[d]||{};
+        if(!slot.am && !slot.pm){ _heavyRun=0; return; }
+        // Check session types for this day
+        var sch = (fqAnswers.sessionSchedule||{})[d]||{};
+        var types = [sch.am, sch.pm].filter(Boolean);
+        var hasHeavy = types.some(function(t){ return t==='strength'||t==='wod'||t==='coach'||!t; });
+        var allLight = types.length && types.every(function(t){ return t==='core'||t==='walk'; });
+        if(allLight){ _heavyRun=0; } // core/walk breaks the run
+        else if(hasHeavy){ _heavyRun++; if(_heavyRun>_maxHeavy) _maxHeavy=_heavyRun; }
+        else { _heavyRun=0; }
+      });
+      if(_maxHeavy >= 3){
+        _warn.style.display = 'block';
+        _warn.textContent = 'Heads up: you have '+_maxHeavy+' heavy days in a row. Consider dropping a core or walk day between them for better recovery — your coach will flag this too.';
+      } else {
+        _warn.style.display = 'none';
+      }
     }
     _updateDaySummary();
     fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);

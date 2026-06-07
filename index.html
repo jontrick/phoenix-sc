@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.30';
+var APP_VERSION='4.9.31';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -13417,27 +13417,10 @@ function setupSplashButtons(){
     <textarea id="wci-coach-notes" class="q-input" rows="4" placeholder="Tell your coach anything about this week — what worked, what didn't, how you felt, life context…" style="margin-bottom:6px;resize:vertical;min-height:96px;"></textarea>
     <div style="font-size:11px;color:var(--text3);margin-bottom:24px;font-style:italic;">Your coach reads these notes before building next week's programme.</div>
 
-    <!-- SECTION 5 — next week -->
-    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Next week</div>
-    <!-- v4.7.34 BUILD 3: coach-generated recommendation. Populated by _phxLoadCoachWeeklyRecommendation()
-         when the screen opens. Cached in localStorage so it doesn't regenerate on every reopen. -->
-    <div id="wci-coach-rec" style="display:none;background:linear-gradient(135deg,var(--bg2) 0%,#1a1410 100%);border:1px solid var(--gold);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
-      <div id="wci-coach-rec-header" style="font-size:10px;color:var(--gold);letter-spacing:3px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:8px;">Coach Recommendation</div>
-      <div id="wci-coach-rec-body" style="font-size:13px;color:var(--text);line-height:1.6;"></div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
-      <div style="font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--font-d);margin-bottom:8px;">Last week's structure</div>
-      <div id="wci-prev-structure" style="font-size:13px;color:var(--text2);line-height:1.7;"></div>
-    </div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">Continue with this structure?</div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;">
-      <button class="btn-secondary" id="wci-continue-yes" style="flex:1;padding:12px;margin:0;" onclick="window._wciSetContinue(true)">Yes, continue</button>
-      <button class="btn-secondary" id="wci-continue-no" style="flex:1;padding:12px;margin:0;" onclick="window._wciSetContinue(false)">Request changes</button>
-    </div>
-    <textarea id="wci-next-requests" class="q-input" rows="3" placeholder="What would you like changed next week?" style="margin-bottom:24px;display:none;resize:vertical;min-height:80px;"></textarea>
+    <!-- SECTION 5 — coach notes for next week -->
+    <textarea id="wci-next-requests" class="q-input" rows="3" placeholder="Anything you want changed next week? (optional)" style="margin-bottom:24px;resize:vertical;min-height:80px;"></textarea>
 
-    <button class="btn-primary" style="width:100%;padding:16px;" onclick="submitWeeklyCheckin()">Submit Check-in →</button>
-    <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:10px;font-style:italic;">After submitting you\'ll set next week\'s schedule, then the coach builds your programme.</div>
+    <button class="btn-primary" style="width:100%;padding:18px;font-size:15px;" onclick="window._wciGoToTimetable()">Next: Plan Week &rarr;</button>
     <div id="wci-readonly-note" style="display:none;font-size:12px;color:var(--text3);text-align:center;margin-top:14px;font-style:italic;">Next check-in available Sunday.</div>
   </div>
 </div>
@@ -15359,6 +15342,68 @@ async function loadLastCheckin(){
   } catch(e){ /* no prior check-in — fine */ }
 }
 
+// ─── _wciGoToTimetable ────────────────────────────────────────────────────────
+// Saves the check-in to Supabase then opens the timetable overlay (page 2).
+// The timetable uses the EXACT questionnaire fqRenderSessionTimetable function.
+window._wciGoToTimetable = async function(){
+  var s = window._wciState || {};
+  var weekNum = (athlete && athlete.currentWeek) || 1;
+  var bounds  = _wciWeekBounds();
+
+  // ── 1. Save check-in to Supabase ──────────────────────────────────────────
+  if(typeof sb !== 'undefined' && currentSession && currentSession.user){
+    function num(txt){ var m = String(txt||'').replace(/,/g,'').match(/(-?\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; }
+    function intPart(txt){ var m = String(txt||'').match(/^\s*(\d+)/); return m ? parseInt(m[1]) : null; }
+    function plannedPart(txt){ var m = String(txt||'').match(/\/\s*(\d+)/); return m ? parseInt(m[1]) : null; }
+    var sessionsTxt = (document.getElementById('wci-sessions')||{}).textContent || '';
+    var weightEl = document.getElementById('wci-weight');
+    var niggleEl = document.getElementById('wci-niggle');
+    var coachEl  = document.getElementById('wci-coach-notes');
+    var nextEl   = document.getElementById('wci-next-requests');
+    var row = {
+      user_id: currentSession.user.id,
+      week_number: weekNum,
+      week_start_date: bounds.start.toISOString().split('T')[0],
+      sessions_completed: intPart(sessionsTxt),
+      sessions_planned: plannedPart(sessionsTxt),
+      total_volume_kg: num((document.getElementById('wci-volume')||{}).textContent),
+      total_distance_m: Math.round(num((document.getElementById('wci-distance')||{}).textContent)*1000),
+      wods_completed: parseInt((document.getElementById('wci-wods')||{}).textContent)||0,
+      weight_kg: weightEl && weightEl.value ? parseFloat(weightEl.value) : null,
+      feeling_score: s.feeling || null,
+      sleep_score:   s.sleep   || null,
+      energy_score:  s.energy  || null,
+      niggle_notes: niggleEl ? (niggleEl.value||'').trim()||null : null,
+      coach_notes:  coachEl  ? (coachEl.value||'').trim()||null  : null,
+      next_week_requests: nextEl ? (nextEl.value||'').trim()||null : null,
+      continue_programme: true,
+      submitted_at: new Date().toISOString()
+    };
+    window._phxLastCheckinRow = row;
+    try {
+      var ins = await sb.from('weekly_checkins').insert(row);
+      if(ins.error){
+        var isDup = String(ins.error.code||'') === '23505' || String(ins.error.message||'').toLowerCase().indexOf('duplicate') >= 0;
+        if(isDup){
+          await sb.from('weekly_checkins').update(row)
+            .eq('user_id', row.user_id).eq('week_number', row.week_number).eq('week_start_date', row.week_start_date);
+        } else {
+          console.warn('[PHX] check-in save failed:', ins.error.message);
+          // Non-fatal — continue to timetable anyway
+        }
+      }
+      // Clear hamburger dot
+      try {
+        if(typeof _phxBrisbaneMondayISO==='function') localStorage.setItem('phoenix_weekly_checkin_done_'+_phxBrisbaneMondayISO(), '1');
+        if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
+      } catch(_e){}
+    } catch(e){ console.warn('[PHX] check-in save error:', e); }
+  }
+
+  // ── 2. Open the timetable overlay ─────────────────────────────────────────
+  _phxOpenWeeklyScheduleAdjust();
+};
+
 async function submitWeeklyCheckin(){
   var s = window._wciState || {};
   if(typeof sb === 'undefined' || !currentSession || !currentSession.user){
@@ -15558,42 +15603,69 @@ window._phxOpenWeeklyScheduleAdjust = function(){
   overlay.id = 'phx-week-adjust';
   overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9000;overflow-y:auto;display:flex;flex-direction:column;';
 
+  // Day toggle bar — tap to add/remove days, toggle AM/PM slots
+  var DAY_KEYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+  var DAY_SHORT = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
+  function _renderDayToggles(){
+    var bar = document.getElementById('phx-wa-day-bar');
+    if(!bar) return;
+    bar.innerHTML = DAY_KEYS.map(function(d){
+      var slot = fqAnswers.availableSlots[d]||{am:false,pm:false};
+      var active = slot.am||slot.pm;
+      return '<div onclick="window._phxWAToggleDay(\''+d+'\')" style="flex:1;padding:8px 2px;text-align:center;cursor:pointer;border-radius:var(--radius);background:'+(active?'var(--gold)':'var(--bg3)')+';border:1px solid '+(active?'var(--gold)':'var(--border2)')+';">'+
+        '<div style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:1px;color:'+(active?'#000':'var(--text3)')+';">'+DAY_SHORT[d]+'</div>'+
+        (active?'<div style="font-size:8px;color:#000;margin-top:1px;">'+(slot.pm?'2x':'AM')+'</div>':'<div style="font-size:8px;color:var(--border2);margin-top:1px;">-</div>')+
+      '</div>';
+    }).join('');
+  }
+  window._phxWAToggleDay = function(day){
+    var slot = fqAnswers.availableSlots[day]||{am:false,pm:false};
+    if(!slot.am && !slot.pm){
+      // Off → AM only
+      fqAnswers.availableSlots[day] = {am:true, pm:false};
+    } else if(slot.am && !slot.pm){
+      // AM → AM+PM (two-a-day)
+      fqAnswers.availableSlots[day] = {am:true, pm:true};
+    } else {
+      // AM+PM or anything else → Off (rest day)
+      fqAnswers.availableSlots[day] = {am:false, pm:false};
+    }
+    _renderDayToggles();
+    if(typeof fqRenderSessionTimetable === 'function') fqRenderSessionTimetable();
+  };
+
   overlay.innerHTML =
-    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:1;">'+
+    // Header
+    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:2;">'+
       '<div onclick="document.getElementById(\'phx-week-adjust\').remove()" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+
         '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'+
       '</div>'+
       '<div style="flex:1;">'+
         '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">Week '+nextN+'</div>'+
-        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;color:var(--text);">Your Timetable</div>'+
+        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;color:var(--text);">Plan Your Week</div>'+
       '</div>'+
     '</div>'+
-    '<div style="padding:16px 16px 0;">'+
-      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Tap any slot to change session type. Leave as <strong>Coach decides</strong> to let the AI pick.</div>'+
-      '<div id="phx-wa-conflict" style="display:none;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--orange);line-height:1.5;"></div>'+
+    // Day toggles
+    '<div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg);">'+
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Training days — tap to toggle, tap again for two-a-day</div>'+
+      '<div id="phx-wa-day-bar" style="display:flex;gap:4px;"></div>'+
     '</div>'+
-    // Reuse the EXACT same container id the questionnaire uses — fqRenderSessionTimetable targets it
-    '<div style="padding:0 16px;flex:1;">'+
+    // Timetable using exact questionnaire container
+    '<div style="padding:14px 16px;flex:1;">'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Tap any session slot to pick type. <strong>Coach decides</strong> = AI picks the best fit.</div>'+
       '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-session-timetable"></div>'+
     '</div>'+
-    '<div style="padding:16px;border-top:1px solid var(--border);margin-top:14px;">'+
-      '<button id="phx-wa-build" class="btn-primary" style="width:100%;padding:16px;">Build Week '+nextN+' →</button>'+
+    // Build button
+    '<div style="padding:16px;border-top:1px solid var(--border);background:var(--bg);">'+
+      '<button id="phx-wa-build" class="btn-primary" style="width:100%;padding:16px;font-size:15px;">Build Week '+nextN+' →</button>'+
     '</div>';
 
   document.body.appendChild(overlay);
 
-  // ── Render using the EXACT questionnaire function ──────────────────────────
-  if(typeof fqRenderSessionTimetable === 'function'){
-    fqRenderSessionTimetable();
-  }
-
-  // Wire the build button
+  // Render day toggle bar + timetable
+  _renderDayToggles();
+  if(typeof fqRenderSessionTimetable === 'function') fqRenderSessionTimetable();
   document.getElementById('phx-wa-build').addEventListener('click', _phxConfirmWeeklyAdjust);
-
-  // Consecutive strength conflict check (reuse questionnaire function if available)
-  if(typeof fqEvaluateConsecutiveStrength === 'function'){
-    fqEvaluateConsecutiveStrength();
-  }
 };
 
 

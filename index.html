@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.28';
+var APP_VERSION='4.9.29';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -13436,7 +13436,8 @@ function setupSplashButtons(){
     </div>
     <textarea id="wci-next-requests" class="q-input" rows="3" placeholder="What would you like changed next week?" style="margin-bottom:24px;display:none;resize:vertical;min-height:80px;"></textarea>
 
-    <button class="btn-primary" style="width:100%;padding:16px;" onclick="submitWeeklyCheckin()">Submit to Coach</button>
+    <button class="btn-primary" style="width:100%;padding:16px;" onclick="submitWeeklyCheckin()">Submit Check-in →</button>
+    <div style="font-size:12px;color:var(--text3);text-align:center;margin-top:10px;font-style:italic;">After submitting you\'ll set next week\'s schedule, then the coach builds your programme.</div>
     <div id="wci-readonly-note" style="display:none;font-size:12px;color:var(--text3);text-align:center;margin-top:14px;font-style:italic;">Next check-in available Sunday.</div>
   </div>
 </div>
@@ -14677,11 +14678,32 @@ window._wciSetScore = function(kind, val){
 window._wciSetContinue = function(yes){
   window._wciState.continueProgramme = !!yes;
   var yesBtn = document.getElementById('wci-continue-yes');
-  var noBtn = document.getElementById('wci-continue-no');
+  var noBtn  = document.getElementById('wci-continue-no');
   if(yesBtn) yesBtn.classList.toggle('active', !!yes);
   if(noBtn)  noBtn.classList.toggle('active', !yes);
   var ta = document.getElementById('wci-next-requests');
   if(ta) ta.style.display = yes ? 'none' : 'block';
+  // "Request changes" also shows a "Set Next Week's Schedule" button
+  var existingBtn = document.getElementById('wci-schedule-btn');
+  if(!yes){
+    if(!existingBtn){
+      var schedBtn = document.createElement('button');
+      schedBtn.id = 'wci-schedule-btn';
+      schedBtn.className = 'btn-secondary';
+      schedBtn.style.cssText = 'width:100%;padding:14px;margin:0 0 12px;font-size:13px;letter-spacing:1.5px;';
+      schedBtn.textContent = 'Set Next Week\'s Schedule →';
+      schedBtn.onclick = function(){
+        var reqTa = document.getElementById('wci-next-requests');
+        if(reqTa && reqTa.value) window._wciState.nextRequests = reqTa.value;
+        _phxOpenWeeklyScheduleAdjust();
+      };
+      if(ta && ta.parentNode) ta.parentNode.insertBefore(schedBtn, ta);
+    } else {
+      existingBtn.style.display = 'block';
+    }
+  } else {
+    if(existingBtn) existingBtn.style.display = 'none';
+  }
 };
 
 // ====== v4.7.27: weekly photo capture ======
@@ -14874,10 +14896,10 @@ async function _phxWciPrefillLastWeek(){
     return;
   }
 
-  // Initial render with placeholders for RPE — filled in once Supabase responds.
+  // Compact single-line summary (avoids duplicating the full session list in wci-prev-structure)
   var rowsHtml = sessions.map(function(s, i){
     var day = s.day || '';
-    var type = s.session_type || 'Training';
+    var type = s.session_name || s.session_type || 'Training';
     return '<div data-wci-prev-idx="'+i+'"><strong style="color:var(--text);">'+day+':</strong> '+type+
            ' <span class="wci-prev-rpe" style="color:var(--text3);font-size:11px;"></span></div>';
   }).join('');
@@ -15286,13 +15308,24 @@ async function loadLastCheckin(){
     if(athlete && athlete.aiProgramme && athlete.aiProgramme.week && Array.isArray(athlete.aiProgramme.week.sessions)){
       athlete.aiProgramme.week.sessions.forEach(function(s){
         var day = s.day || '';
-        var summary = s.session_type || (s.exercises && s.exercises.length ? 'Training' : 'Rest');
+        // Build a rich summary: session name + type + WOD sub-type
+        var sessName = s.session_name || '';
+        var sessType = s.session_type || '';
+        var wodType  = (s.wod && s.wod.wod_type) || s.wod_type || '';
+        var summary  = sessName || sessType || 'Training';
+        if(wodType && wodType !== 'coach') summary += ' ('+wodType+')';
+        var slot = s._slot || s.slot || '';
+        var slotLabel = slot ? ' · '+slot.toUpperCase() : '';
         var firstThree = '';
         if(s.exercises && s.exercises.length){
           firstThree = ' — '+s.exercises.slice(0,3).map(function(e){ return e.name; }).join(', ');
           if(s.exercises.length > 3) firstThree += '…';
+        } else if(s.wod && s.wod.blocks && s.wod.blocks.length){
+          firstThree = ' — '+s.wod.blocks.map(function(b){ return b.label||(b.format||''); }).join(' + ');
+        } else if(s.wod && s.wod.movements && s.wod.movements.length){
+          firstThree = ' — '+s.wod.movements.slice(0,3).map(function(m){ return m.name; }).join(', ');
         }
-        html += '<div><strong style="color:var(--text);">'+day+':</strong> '+summary+firstThree+'</div>';
+        html += '<div style="padding:4px 0;"><strong style="color:var(--text);">'+day+slotLabel+':</strong> <span style="color:var(--text2);">'+summary+'</span>'+firstThree+'</div>';
       });
     } else {
       html = '<div style="color:var(--text3);">No programme on file yet.</div>';
@@ -15488,10 +15521,24 @@ window._phxOpenWeeklyScheduleAdjust = function(){
 
   // If no slots set (coach_assigns mode), derive from programme days
   if(!Object.keys(slots).length){
+    // Build slots from the actual programme — detect two-a-day days
+    var _progSessions = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.sessions) || [];
+    var _dayCount = {};
+    _progSessions.forEach(function(s){
+      var d = String(s.day||'').toLowerCase();
+      if(d) _dayCount[d] = (_dayCount[d]||0) + 1;
+    });
     _phxLastWeekDaysFromProgramme().forEach(function(d){
       var key = d.toLowerCase();
-      slots[key] = {am: true, pm: false};
+      var count = _dayCount[key] || 1;
+      slots[key] = {am: true, pm: count >= 2};
     });
+    // If still empty, add all days with AM only
+    if(!Object.keys(slots).length){
+      ['tuesday','wednesday','thursday','friday','saturday','sunday'].forEach(function(d){
+        slots[d] = {am: true, pm: false};
+      });
+    }
   }
 
   window._phxWeekAdjustState = {slots: slots, schedule: schedule, wodTypes: wodTypes};

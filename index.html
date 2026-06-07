@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.49';
+var APP_VERSION='4.9.50';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14501,6 +14501,13 @@ async function _phxRenderSundayReviewCard(){
   if(prior) prior.remove();
   // v4.7.38: was Sunday-only — now gated by athlete.fqCheckInDay (default friday).
   if(new Date().getDay() !== _phxCheckInDayIndex()) return;
+  // Don't show if athlete already submitted check-in today
+  try {
+    if(typeof _phxBrisbaneMondayISO === 'function'){
+      var _doneKey = 'phoenix_weekly_checkin_done_'+_phxBrisbaneMondayISO();
+      if(localStorage.getItem(_doneKey)) return;
+    }
+  } catch(_e){}
   // v4.7.39 hotfix FIX 3: don't surface the review card on the check-in day if the athlete
   // has done fewer than 3 completed sessions this Brisbane week. No data to review yet.
   try {

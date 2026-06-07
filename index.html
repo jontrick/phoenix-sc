@@ -553,7 +553,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .reset-modal-option.full-reset .reset-modal-option-label{color:var(--red);}
 
 /* CORE PICKER MODAL */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:500;display:none;flex-direction:column;justify-content:flex-end;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10500;display:none;flex-direction:column;justify-content:flex-end;}
 .modal-overlay.active{display:flex;}
 .modal-sheet{background:var(--bg2);border-top:1px solid var(--border2);border-radius:16px 16px 0 0;padding:24px 20px 40px;max-height:85vh;overflow-y:auto;animation:slideUp 0.3s ease;}
 .modal-title{font-family:var(--font-d);font-size:13px;font-weight:600;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;}
@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.26';
+var APP_VERSION='4.9.27';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18628,22 +18628,29 @@ function startWODTimer(modalId){
   window._wodIntervalDone = function(){
     var t = window._wodTimer;
     if(!t || t.intervalPhase !== 'work') return;
-    var workSec   = wod.work_sec  || t.intervalWork || 0;
-    var restSec   = wod.rest_sec  || t.intervalRest || 60;
-    var totalSets = wod.sets || t.intervalSets || 5;
+    // Get set count from active block if in blocks mode
+    var inBlocks = (t.fmt === 'blocks');
+    var activeBlock = inBlocks ? ((wod.blocks||[])[t.blockIdx||0]) : null;
+    var restSec   = activeBlock ? (activeBlock.rest_sec||60) : (wod.rest_sec||t.intervalRest||60);
+    var totalSets = activeBlock ? (activeBlock.sets||t.intervalSets||4) : (wod.sets||t.intervalSets||5);
     // Record split time for this set
     var setElapsed = t.elapsed - (t.intervalElapsedAtSetStart||0);
     if(!t.intervalSplits) t.intervalSplits = [];
     t.intervalSplits.push(setElapsed);
-    // Transition to rest
+    console.log('[PHX] interval set '+t.intervalSetNum+' done — split: '+formatTime(setElapsed));
+    // Last set done
     if(t.intervalSetNum >= totalSets){
-      // Last set done — finish
-      finishWOD();
+      if(inBlocks){
+        // Advance to next block
+        window._wodBlocksNextBlock();
+      } else {
+        finishWOD();
+      }
       return;
     }
     t.intervalPhase    = 'rest';
     t.intervalPhaseSec = restSec;
-    _renderINTERVAL();
+    _renderRouter();
   };
 
   // ── TABATA renderer ─────────────────────────────────────────────────────────
@@ -19125,21 +19132,75 @@ function startWODTimer(modalId){
               _renderRouter();
             }
           } else {
-            // active block with a time limit
+            // Active block — dispatch to block-format-specific tick logic
+            var bFmt = String((block.format||'afap')).toLowerCase();
             var bWorkSec = block.work_sec||block.duration_sec||(block.duration_min?block.duration_min*60:0);
-            if(bWorkSec > 0){
+
+            if(bFmt === 'interval'){
+              // Interval block: handle work/rest cycles and set counting
+              var bRestSec = block.rest_sec || 60;
+              var bTotalSets = block.sets || t.intervalSets || 4;
+              var bFirstMov = (block.movements||[])[0] || {};
+              var bIsTask = !!(bFirstMov.distance_m || (bFirstMov.reps && !block.work_sec));
+              if(block.work_sec > 0) bIsTask = false;
+              if(t.intervalSetNum === undefined){ t.intervalSetNum=1; t.intervalPhase='work'; t.intervalPhaseSec=bIsTask?0:block.work_sec||0; t.intervalElapsedAtSetStart=t.elapsed; t.intervalSets=bTotalSets; t.intervalWork=block.work_sec||0; t.intervalRest=bRestSec; t.intervalSplits=[]; }
+              if(t.intervalPhase === 'work'){
+                if(bIsTask){
+                  var setEl2 = t.elapsed - (t.intervalElapsedAtSetStart||0);
+                  if(el) el.textContent = formatTime(setEl2);
+                } else {
+                  t.intervalPhaseSec = (t.intervalPhaseSec||1) - 1;
+                  if(el) el.textContent = formatTime(Math.max(0, t.intervalPhaseSec));
+                  if(t.intervalPhaseSec <= 0){
+                    if(t.intervalSetNum >= bTotalSets){
+                      // All sets done — advance to next block
+                      t.blockIdx = (t.blockIdx||0) + 1;
+                      if(t.blockIdx >= blocks.length){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
+                      t.blockPhase = 'rest'; t.blockPhaseSec = wod.rest_between_sec||60;
+                      t.intervalSetNum = undefined;
+                    } else {
+                      t.intervalPhase = 'rest'; t.intervalPhaseSec = bRestSec;
+                    }
+                    _renderRouter();
+                  }
+                }
+              } else {
+                t.intervalPhaseSec = (t.intervalPhaseSec||1) - 1;
+                if(el) el.textContent = formatTime(Math.max(0, t.intervalPhaseSec));
+                if(t.intervalPhaseSec <= 0){
+                  t.intervalSetNum++;
+                  t.intervalPhase = 'work';
+                  t.intervalPhaseSec = bIsTask ? 0 : block.work_sec||0;
+                  t.intervalElapsedAtSetStart = t.elapsed;
+                  _renderRouter();
+                }
+              }
+
+            } else if(bFmt === 'amrap' && bWorkSec > 0){
+              // AMRAP block: countdown timer
               t.blockPhaseSec = (t.blockPhaseSec !== undefined ? t.blockPhaseSec : bWorkSec) - 1;
               if(el) el.textContent = formatTime(Math.max(0, t.blockPhaseSec));
               if(t.blockPhaseSec <= 0){
-                // auto-advance: increment THEN check (consistent with _wodBlocksNextBlock)
                 t.blockIdx = (t.blockIdx||0) + 1;
                 if(t.blockIdx >= blocks.length){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
-                t.blockPhase = 'rest';
-                t.blockPhaseSec = wod.rest_between_sec || 60;
+                t.blockPhase = 'rest'; t.blockPhaseSec = wod.rest_between_sec || 60;
+                t.intervalSetNum = undefined;
+                _renderRouter();
+              }
+
+            } else if(bWorkSec > 0){
+              // Other timed blocks
+              t.blockPhaseSec = (t.blockPhaseSec !== undefined ? t.blockPhaseSec : bWorkSec) - 1;
+              if(el) el.textContent = formatTime(Math.max(0, t.blockPhaseSec));
+              if(t.blockPhaseSec <= 0){
+                t.blockIdx = (t.blockIdx||0) + 1;
+                if(t.blockIdx >= blocks.length){ clearInterval(t.interval); t.running=false; finishWOD(); return; }
+                t.blockPhase = 'rest'; t.blockPhaseSec = wod.rest_between_sec || 60;
+                t.intervalSetNum = undefined;
                 _renderRouter();
               }
             } else {
-              // no time limit — manual Next Block button controls progression, just elapsed
+              // No time limit — manual Next Block button, just elapsed
               if(el) el.textContent = formatTime(t.elapsed);
             }
           }
@@ -19431,7 +19492,7 @@ window._phxGenerateTodaySession = async function(sessionType, opts, slot){
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: PHOENIX_COACH_SYSTEM_PROMPT,
         messages: [{role:'user', content: prompt}]
       })
@@ -19446,12 +19507,16 @@ window._phxGenerateTodaySession = async function(sessionType, opts, slot){
 
     var data = await resp.json();
     var raw = (data.content && data.content[0] && data.content[0].text) || '';
-    raw = raw.replace(/```json[\s\S]*?```|```/g, '').trim();
+    // Strip markdown fences
+    raw = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    // Extract first JSON object if there's surrounding text
+    var jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if(jsonMatch) raw = jsonMatch[0];
 
     var sess;
     try { sess = JSON.parse(raw); }
     catch(e){
-      console.error('[PHX] add-session parse error:', e, raw);
+      console.error('[PHX] add-session parse error:', e, 'raw:', raw.substring(0,200));
       alert('The coach returned an unexpected response. Try again.');
       return;
     }

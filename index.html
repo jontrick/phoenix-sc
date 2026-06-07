@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#c8963e">
 <link rel="manifest" href="manifest.json">
@@ -3468,7 +3471,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.36';
+var APP_VERSION='4.9.37';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23572,6 +23575,25 @@ async function _phxRestoreSessionVisualState(){
 //      also triggers a one-shot reload. Guarded so a single deploy doesn't reload twice.
 (function(){
   if(!('serviceWorker' in navigator)) return;
+  // Unregister any stale service workers then re-register fresh
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    var stale = regs.filter(function(r){ return r.scope && r.scope.indexOf('projectphoenix-app.com') >= 0; });
+    // Only unregister if we detect a version mismatch (stored vs current)
+    var _sv = localStorage.getItem('phoenix_sw_version');
+    if(_sv && _sv !== APP_VERSION){
+      console.log('[PHX] Stale SW detected — unregistering all and reloading');
+      Promise.all(regs.map(function(r){ return r.unregister(); })).then(function(){
+        caches.keys().then(function(keys){
+          Promise.all(keys.map(function(k){ return caches.delete(k); })).then(function(){
+            localStorage.setItem('phoenix_sw_version', APP_VERSION);
+            window.location.reload(true);
+          });
+        });
+      });
+      return;
+    }
+    localStorage.setItem('phoenix_sw_version', APP_VERSION);
+  });
   var reloading = false;
   function reloadOnce(){
     if(reloading) return;

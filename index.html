@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.34';
+var APP_VERSION='4.9.35';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14494,7 +14494,9 @@ async function _phxApplyCompletedTileMarkers(){
 }
 
 async function _phxRenderSundayReviewCard(){
-  // Idempotent: remove any prior render so re-running doesn't duplicate the card.
+  // Idempotent: prevent concurrent runs from doubling the card
+  if(window._phxSundayCardRunning) return;
+  window._phxSundayCardRunning = true;
   var prior = document.getElementById('card-weekly-review');
   if(prior) prior.remove();
   // v4.7.38: was Sunday-only — now gated by athlete.fqCheckInDay (default friday).
@@ -14542,6 +14544,7 @@ async function _phxRenderSundayReviewCard(){
       '<div class="game-card-sub" style="margin-top:6px;">Review your week and set up next week →</div>'+
     '</div>';
   parent.insertBefore(card, sessionCard);
+  window._phxSundayCardRunning = false;
 }
 
 function submitWeightCheckin(){
@@ -15610,12 +15613,51 @@ window._phxOpenWeeklyScheduleAdjust = function(){
     document.getElementById('phx-wa-eyebrow').textContent = 'Week '+nextN+' — Step 1 of 2';
     document.getElementById('phx-wa-title').textContent = 'Training Days';
     document.getElementById('phx-wa-next').textContent = 'Next: Pick Sessions →';
-    var content = document.getElementById('phx-wa-content');
-    content.innerHTML =
+    var waContent = document.getElementById('phx-wa-content');
+    waContent.innerHTML =
       '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Tap <strong>AM</strong> or <strong>PM</strong> to add a session slot. Tap again to remove it.</div>'+
       '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-availability-grid"></div>'+
       '<div id="fq-availability-summary" style="margin-top:12px;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;"></div>';
-    fqRenderAvailability();
+    // Suppress fqValidateStep errors in this context
+    var _origValidate = window.fqValidateStep;
+    window.fqValidateStep = function(){ try{ if(_origValidate) _origValidate(); }catch(_e){} };
+    try {
+      fqRenderAvailability();
+    } catch(e) {
+      console.warn('[PHX] fqRenderAvailability threw:', e);
+    }
+    // Restore after render
+    setTimeout(function(){ window.fqValidateStep = _origValidate; }, 100);
+    // Safety check: if grid still empty after render, force-populate it
+    var grid = document.getElementById('fq-availability-grid');
+    if(grid && !grid.children.length){
+      console.warn('[PHX] fq-availability-grid empty after render — force-populating');
+      var _days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+      var _DL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
+      var _sbs = 'flex:1;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;border-radius:14px;letter-spacing:2px;border:2px solid transparent;';
+      _days.forEach(function(day){
+        var slot = (fqAnswers.availableSlots[day])||{am:false,pm:false};
+        grid.insertAdjacentHTML('beforeend',
+          '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'+
+          '<div style="width:50px;font-size:12px;font-weight:600;color:'+(slot.am||slot.pm?'var(--gold)':'var(--text3)')+';font-family:var(--font-d);letter-spacing:1px;">'+_DL[day]+'</div>'+
+          '<div data-fq-day="'+day+'" data-fq-sl="am" class="q-option-card'+(slot.am?' active':'')+'" style="'+_sbs+'">AM'+(slot.am?' · '+((fqAnswers.dayDurations&&fqAnswers.dayDurations[day])||60):'')+'</div>'+
+          '<div data-fq-day="'+day+'" data-fq-sl="pm" class="q-option-card'+(slot.pm?' active':'')+'" style="'+_sbs+'">PM'+(slot.pm?' · '+((fqAnswers.dayDurations&&fqAnswers.dayDurations[day])||60):'')+'</div>'+
+          '<div style="width:60px;font-size:10px;color:'+(slot.am||slot.pm?'var(--gold)':'var(--text3)')+';text-align:right;font-family:var(--font-d);letter-spacing:1px;">'+(slot.am&&slot.pm?'AM+PM':slot.am?'AM':slot.pm?'PM':'Rest')+'</div>'+
+          '</div>');
+      });
+      grid.addEventListener('click', function(e){
+        var btn = e.target.closest('[data-fq-day]');
+        if(!btn) return;
+        var day = btn.getAttribute('data-fq-day');
+        var sl  = btn.getAttribute('data-fq-sl');
+        if(typeof fqToggleAvailability === 'function') fqToggleAvailability(day, sl);
+        else {
+          if(!fqAnswers.availableSlots[day]) fqAnswers.availableSlots[day]={am:false,pm:false};
+          fqAnswers.availableSlots[day][sl] = !fqAnswers.availableSlots[day][sl];
+          _renderStep1();
+        }
+      });
+    }
   }
 
   function _renderStep2(){

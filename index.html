@@ -3468,7 +3468,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.41';
+var APP_VERSION='4.9.42';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15635,56 +15635,145 @@ window._phxOpenWeeklyScheduleAdjust = function(){
 
   var _step = 1;
 
+  function _buildDayRows(){
+    var days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    var DL = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
+    var html = '';
+    days.forEach(function(day){
+      var slot = (fqAnswers.availableSlots[day])||{am:false,pm:false};
+      var amActive = !!slot.am;
+      var pmActive = !!slot.pm;
+      var dur = (fqAnswers.dayDurations && fqAnswers.dayDurations[day]) || 60;
+      var amLabel = amActive ? 'AM &middot; '+dur : 'AM';
+      var pmLabel = pmActive ? 'PM &middot; '+dur : 'PM';
+      var amStyle = 'flex:1;padding:12px 8px;text-align:center;border-radius:8px;border:2px solid '+(amActive?'var(--gold)':'var(--border2)')+';background:'+(amActive?'rgba(200,150,62,0.12)':'var(--bg3)')+';color:'+(amActive?'var(--gold)':'var(--text3)')+';font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;';
+      var pmStyle = 'flex:1;padding:12px 8px;text-align:center;border-radius:8px;border:2px solid '+(pmActive?'var(--gold)':'var(--border2)')+';background:'+(pmActive?'rgba(200,150,62,0.12)':'var(--bg3)')+';color:'+(pmActive?'var(--gold)':'var(--text3)')+';font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;';
+      var dayColor = (amActive||pmActive) ? 'var(--text)' : 'var(--text3)';
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'+
+        '<div style="width:90px;font-family:var(--font-d);font-size:12px;font-weight:700;letter-spacing:1px;color:'+dayColor+';">'+DL[day]+'</div>'+
+        '<div data-day="'+day+'" data-sl="am" style="'+amStyle+'">'+amLabel+'</div>'+
+        '<div data-day="'+day+'" data-sl="pm" style="'+pmStyle+'">'+pmLabel+'</div>'+
+      '</div>';
+    });
+    return html;
+  }
+
   function _renderStep1(){
     _step = 1;
     document.getElementById('phx-wa-eyebrow').textContent = 'Week '+nextN+' — Step 1 of 2';
     document.getElementById('phx-wa-title').textContent = 'Training Days';
     document.getElementById('phx-wa-next').textContent = 'Next: Pick Sessions →';
     var waContent = document.getElementById('phx-wa-content');
+    // Pure inline HTML — no dependency on questionnaire CSS classes or functions
     waContent.innerHTML =
-      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Tap <strong>AM</strong> or <strong>PM</strong> to add a session slot. Tap again to remove it.</div>'+
-      '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-availability-grid"></div>'+
-      '<div id="fq-availability-summary" style="margin-top:12px;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;"></div>';
-    // Suppress fqValidateStep errors in this context
-    var _origValidate = window.fqValidateStep;
-    window.fqValidateStep = function(){ try{ if(_origValidate) _origValidate(); }catch(_e){} };
-    try {
-      fqRenderAvailability();
-    } catch(e) {
-      console.warn('[PHX] fqRenderAvailability threw:', e);
-    }
-    // Restore after render
-    setTimeout(function(){ window.fqValidateStep = _origValidate; }, 100);
-    // Safety check: if grid still empty after render, force-populate it
-    var grid = document.getElementById('fq-availability-grid');
-    if(grid && !grid.children.length){
-      console.warn('[PHX] fq-availability-grid empty after render — force-populating');
-      var _days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-      var _DL = {monday:'MON',tuesday:'TUE',wednesday:'WED',thursday:'THU',friday:'FRI',saturday:'SAT',sunday:'SUN'};
-      var _sbs = 'flex:1;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;border-radius:14px;letter-spacing:2px;border:2px solid transparent;';
-      _days.forEach(function(day){
-        var slot = (fqAnswers.availableSlots[day])||{am:false,pm:false};
-        grid.insertAdjacentHTML('beforeend',
-          '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'+
-          '<div style="width:50px;font-size:12px;font-weight:600;color:'+(slot.am||slot.pm?'var(--gold)':'var(--text3)')+';font-family:var(--font-d);letter-spacing:1px;">'+_DL[day]+'</div>'+
-          '<div data-fq-day="'+day+'" data-fq-sl="am" class="q-option-card'+(slot.am?' active':'')+'" style="'+_sbs+'">AM'+(slot.am?' · '+((fqAnswers.dayDurations&&fqAnswers.dayDurations[day])||60):'')+'</div>'+
-          '<div data-fq-day="'+day+'" data-fq-sl="pm" class="q-option-card'+(slot.pm?' active':'')+'" style="'+_sbs+'">PM'+(slot.pm?' · '+((fqAnswers.dayDurations&&fqAnswers.dayDurations[day])||60):'')+'</div>'+
-          '<div style="width:60px;font-size:10px;color:'+(slot.am||slot.pm?'var(--gold)':'var(--text3)')+';text-align:right;font-family:var(--font-d);letter-spacing:1px;">'+(slot.am&&slot.pm?'AM+PM':slot.am?'AM':slot.pm?'PM':'Rest')+'</div>'+
-          '</div>');
-      });
-      grid.addEventListener('click', function(e){
-        var btn = e.target.closest('[data-fq-day]');
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;">'+
+        'Tap <strong style="color:var(--text);">AM</strong> or <strong style="color:var(--text);">PM</strong> to add a session slot. Tap again to remove. Tap twice for duration.'+
+      '</div>'+
+      '<div id="phx-day-rows">'+_buildDayRows()+'</div>'+
+      '<div id="phx-day-summary" style="margin-top:14px;font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;"></div>';
+
+    // Wire taps via event delegation
+    var dayRows = document.getElementById('phx-day-rows');
+    if(dayRows){
+      dayRows.addEventListener('click', function(e){
+        var btn = e.target.closest('[data-day][data-sl]');
         if(!btn) return;
-        var day = btn.getAttribute('data-fq-day');
-        var sl  = btn.getAttribute('data-fq-sl');
-        if(typeof fqToggleAvailability === 'function') fqToggleAvailability(day, sl);
-        else {
-          if(!fqAnswers.availableSlots[day]) fqAnswers.availableSlots[day]={am:false,pm:false};
-          fqAnswers.availableSlots[day][sl] = !fqAnswers.availableSlots[day][sl];
-          _renderStep1();
+        var day = btn.getAttribute('data-day');
+        var sl  = btn.getAttribute('data-sl');
+        if(!fqAnswers.availableSlots[day]) fqAnswers.availableSlots[day]={am:false,pm:false};
+        var wasOn = !!fqAnswers.availableSlots[day][sl];
+        if(wasOn){
+          // Turn off
+          fqAnswers.availableSlots[day][sl] = false;
+        } else {
+          // Turn on — show duration picker
+          fqAnswers.availableSlots[day][sl] = true;
+          // Open duration picker using the questionnaire bottom sheet
+          if(typeof _phxOpenBottomSheet === 'function'){
+            _phxOpenBottomSheet({
+              title: day.charAt(0).toUpperCase()+day.slice(1)+' '+sl.toUpperCase()+' — Duration',
+              subtitle: 'How long is this session?',
+              options: [
+                {value:45,  label:'45 min', sub:'Shorter session'},
+                {value:60,  label:'60 min', sub:'Standard'},
+                {value:90,  label:'90 min', sub:'Full session'},
+                {value:120, label:'120 min',sub:'Double session'}
+              ],
+              onSelect: function(val){
+                if(!fqAnswers.dayDurations) fqAnswers.dayDurations={};
+                var existing = fqAnswers.dayDurations[day];
+                if(typeof existing === 'object'){
+                  fqAnswers.dayDurations[day] = Object.assign({}, existing);
+                  fqAnswers.dayDurations[day][sl] = val;
+                } else {
+                  fqAnswers.dayDurations[day] = val;
+                }
+                // Re-render rows
+                var dr = document.getElementById('phx-day-rows');
+                if(dr) dr.innerHTML = _buildDayRows();
+                _updateDaySummary();
+              }
+            });
+          }
         }
+        // Re-render rows
+        var dr = document.getElementById('phx-day-rows');
+        if(dr) dr.innerHTML = _buildDayRows();
+        fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
+        _updateDaySummary();
       });
     }
+
+    function _updateDaySummary(){
+      var sum = document.getElementById('phx-day-summary');
+      if(!sum) return;
+      var n = (fqAnswers.trainingDays||[]).length;
+      sum.style.color = (n>=3&&n<=6) ? 'var(--gold)' : 'var(--text3)';
+      sum.textContent = n===0 ? 'Pick at least 3 training days' :
+                        n<3   ? n+' selected — pick '+(3-n)+' more (3 min)' :
+                        n>6   ? n+' selected — drop '+(n-6)+' (6 max)' :
+                                n+' training days locked in';
+    }
+    _updateDaySummary();
+    fqAnswers.trainingDays = _phxComputeTrainingDays(fqAnswers.availableSlots);
+  }
+
+  function _buildSessionRows(){
+    var days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    var DL = {monday:'Monday',tuesday:'Tuesday',wednesday:'Wednesday',thursday:'Thursday',friday:'Friday',saturday:'Saturday',sunday:'Sunday'};
+    var CL = {circuit:'Circuit',strength:'Loaded Strength',anti_rotation:'Anti-Rotation',rotational_power:'Rotational Power',endurance:'Endurance Grind'};
+    var html = '';
+    days.forEach(function(day){
+      var slot = (fqAnswers.availableSlots[day])||{am:false,pm:false};
+      if(!slot.am && !slot.pm) return; // skip rest days
+      ['am','pm'].forEach(function(sl){
+        if(!slot[sl]) return;
+        var raw = ((fqAnswers.sessionSchedule||{})[day]||{})[sl] || 'coach';
+        var label = raw === 'coach' ? 'Coach decides' :
+                    raw === 'strength' ? 'Strength' :
+                    raw === 'wod' ? 'WOD' :
+                    raw === 'core' ? 'Core' :
+                    raw === 'walk' ? 'Walk / Run' : raw;
+        if(raw === 'wod' && fqAnswers.wodTypes && (fqAnswers.wodTypes[day]||{})[sl]){
+          label += ' · '+fqAnswers.wodTypes[day][sl];
+        }
+        if(raw === 'core' && fqAnswers.coreTypes && (fqAnswers.coreTypes[day]||{})[sl]){
+          label += ' · '+(CL[fqAnswers.coreTypes[day][sl]]||fqAnswers.coreTypes[day][sl]);
+        }
+        var isDefault = (raw === 'coach');
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'+
+          '<div style="width:90px;font-family:var(--font-d);font-size:12px;font-weight:700;color:var(--text);">'+
+            (sl==='am'?DL[day]:'')+
+          '</div>'+
+          '<div style="width:28px;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--gold);">'+sl.toUpperCase()+'</div>'+
+          '<div data-wa2-day="'+day+'" data-wa2-sl="'+sl+'" style="flex:1;background:var(--bg3);border:1.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:1px;color:'+(isDefault?'var(--text3)':'var(--gold)')+';">'+
+            '<span>'+label+'</span>'+
+            '<span style="font-size:16px;color:var(--text3);">&#9662;</span>'+
+          '</div>'+
+        '</div>';
+      });
+    });
+    return html || '<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">No training days selected. Go back and add some days first.</div>';
   }
 
   function _renderStep2(){
@@ -15692,12 +15781,85 @@ window._phxOpenWeeklyScheduleAdjust = function(){
     document.getElementById('phx-wa-eyebrow').textContent = 'Week '+nextN+' — Step 2 of 2';
     document.getElementById('phx-wa-title').textContent = 'Session Types';
     document.getElementById('phx-wa-next').textContent = 'Build Week '+nextN+' →';
-    var content = document.getElementById('phx-wa-content');
-    content.innerHTML =
-      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">Tap any slot to pick what your coach should program. Leave as <strong>Coach decides</strong> and the AI picks the best fit.</div>'+
-      '<div id="fq-session-warning" style="display:none;background:rgba(200,100,60,0.1);border:1px solid var(--orange);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--orange);line-height:1.5;"></div>'+
-      '<div style="display:flex;flex-direction:column;gap:6px;" id="fq-session-timetable"></div>';
-    fqRenderSessionTimetable();
+    var waContent2 = document.getElementById('phx-wa-content');
+    waContent2.innerHTML =
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;">Tap any slot to choose what your coach programs. <strong style="color:var(--text);">Coach decides</strong> = AI picks the best fit.</div>'+
+      '<div id="phx-session-rows">'+_buildSessionRows()+'</div>';
+    // Wire taps
+    var sessionRows = document.getElementById('phx-session-rows');
+    if(sessionRows){
+      sessionRows.addEventListener('click', function(e){
+        var btn = e.target.closest('[data-wa2-day]');
+        if(!btn) return;
+        var day = btn.getAttribute('data-wa2-day');
+        var sl  = btn.getAttribute('data-wa2-sl');
+        var cur = ((fqAnswers.sessionSchedule||{})[day]||{})[sl] || 'coach';
+        // Open session type picker
+        _phxOpenBottomSheet({
+          title: day.charAt(0).toUpperCase()+day.slice(1)+' '+sl.toUpperCase(),
+          subtitle: 'What should the coach program?',
+          options: [
+            {value:'strength', label:'Strength',      sub:'Compound lifts + accessories'},
+            {value:'wod',      label:'WOD',           sub:'Conditioning — pick type next'},
+            {value:'core',     label:'Core',          sub:'Trunk work — pick type next'},
+            {value:'walk',     label:'Walk / Run',    sub:'Zone 2 / recovery'},
+            {value:'coach',    label:'Coach decides', sub:'AI picks the best fit'}
+          ],
+          current: cur,
+          onSelect: function(val){
+            if(!fqAnswers.sessionSchedule) fqAnswers.sessionSchedule={};
+            if(!fqAnswers.sessionSchedule[day]) fqAnswers.sessionSchedule[day]={};
+            fqAnswers.sessionSchedule[day][sl] = val;
+            if(val === 'wod'){
+              _phxOpenWodTypePicker({
+                title: day.charAt(0).toUpperCase()+day.slice(1)+' '+sl.toUpperCase()+' — WOD Type',
+                onPick: function(wodType){
+                  if(!fqAnswers.wodTypes) fqAnswers.wodTypes={};
+                  if(!fqAnswers.wodTypes[day]) fqAnswers.wodTypes[day]={};
+                  fqAnswers.wodTypes[day][sl] = wodType;
+                  var sr = document.getElementById('phx-session-rows');
+                  if(sr) sr.innerHTML = _buildSessionRows();
+                  _rewireStep2();
+                },
+                onCancel: function(){
+                  var sr = document.getElementById('phx-session-rows');
+                  if(sr) sr.innerHTML = _buildSessionRows();
+                  _rewireStep2();
+                }
+              });
+              return;
+            }
+            if(val === 'core'){
+              _phxOpenCoreTypePicker({
+                title: day.charAt(0).toUpperCase()+day.slice(1)+' '+sl.toUpperCase()+' — Core Type',
+                onPick: function(coreType){
+                  if(!fqAnswers.coreTypes) fqAnswers.coreTypes={};
+                  if(!fqAnswers.coreTypes[day]) fqAnswers.coreTypes[day]={};
+                  fqAnswers.coreTypes[day][sl] = coreType;
+                  var sr = document.getElementById('phx-session-rows');
+                  if(sr) sr.innerHTML = _buildSessionRows();
+                  _rewireStep2();
+                },
+                onCancel: function(){
+                  var sr = document.getElementById('phx-session-rows');
+                  if(sr) sr.innerHTML = _buildSessionRows();
+                  _rewireStep2();
+                }
+              });
+              return;
+            }
+            var sr = document.getElementById('phx-session-rows');
+            if(sr) sr.innerHTML = _buildSessionRows();
+            _rewireStep2();
+          }
+        });
+      });
+    }
+    function _rewireStep2(){
+      var sr = document.getElementById('phx-session-rows');
+      if(!sr) return;
+      sr.removeEventListener('click', sr._wa2handler);
+    }
   }
 
   // Back button — step 2 goes to step 1, step 1 closes overlay

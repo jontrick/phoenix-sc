@@ -3475,7 +3475,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.58';
+var APP_VERSION='4.9.59';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17588,17 +17588,16 @@ function renderTodaySessionCard(){
     return;
   }
   var prog=athlete.aiProgramme;
+  // Declare dayName early so gap check can use it
+  var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  var dayLow = dayName.toLowerCase();
   // v4.8.4: between-weeks gap — today is before the new week start date.
-  // Show a "starts tomorrow" state with two options.
   var _weekStart = _phxWeekStartDate();
   var _todayMid = new Date(); _todayMid.setHours(0,0,0,0);
-  // Only show gap state if week genuinely hasn't started yet (strictly future)
-  // Emergency bypass: if programme has sessions for today, never show gap state
+  // Bypass gap state if programme already has sessions for today
   var _hasTodaySess = !!(prog && prog.week && prog.week.sessions && prog.week.sessions.some(function(s){
-    return s && s.day && String(s.day).toLowerCase().indexOf(dayName.toLowerCase()) >= 0;
+    return s && s.day && String(s.day).toLowerCase().indexOf(dayLow) >= 0;
   }));
-  var _now2 = new Date();
-  var _dayName2 = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][_now2.getDay()];
   if(!_hasTodaySess && _weekStart.getTime() > _todayMid.getTime() + 1000){
     var _daysUntil = Math.round((_weekStart - _todayMid) / 86400000);
     var _startDay = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][_weekStart.getDay()];
@@ -17630,12 +17629,7 @@ function renderTodaySessionCard(){
       '<div class="game-card-action" style="font-size:12px;margin-top:10px;" onclick="openWeekPlan()">View sessions →</div>';
     return;
   }
-  var now=new Date();
-  var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
-
   // v4.7.9 TASK 3 / v4.7.34 BUG FIX 2: collect ALL sessions for today's day.
-  // Match by day-name substring (case-insensitive) so "Monday" / "Monday AM" / "monday" all match.
-  var dayLow = dayName.toLowerCase();
   var todaySessions = week.sessions.filter(function(s){
     return s.day && String(s.day).toLowerCase().indexOf(dayLow) >= 0;
   });

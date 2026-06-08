@@ -3474,7 +3474,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.57';
+var APP_VERSION='4.9.58';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16528,7 +16528,25 @@ function isTodayRestDay(){
   if(!athlete) return false;
   var now=new Date();
   var dayKey=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
-  // User-assigned schedule takes priority
+  var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+
+  // AI programme is the source of truth — check it FIRST.
+  // If the programme has a non-rest session for today, it is NOT a rest day,
+  // regardless of what fqSessionSchedule says.
+  if(athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.sessions){
+    var sess=athlete.aiProgramme.week.sessions.find(function(s){
+      return s.day&&s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;
+    });
+    if(sess){
+      // Programme has a session for today — not a rest day
+      if(sess.session_type&&sess.session_type.toLowerCase().indexOf('rest')>=0) return true;
+      return false;
+    }
+    // Programme exists but has no session for today → rest day
+    return true;
+  }
+
+  // No AI programme yet — fall back to user-assigned schedule
   if(athlete.fqScheduleMode==='user_assigns'&&athlete.fqSessionSchedule){
     var ds=athlete.fqSessionSchedule[dayKey];
     if(!ds) return true;
@@ -16537,13 +16555,6 @@ function isTodayRestDay(){
       return (am==='rest'||am===null||!am)&&(pm==='rest'||pm===null||!pm);
     }
     return ds==='rest';
-  }
-  // Check if AI programme has no session for today
-  if(athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.sessions){
-    var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
-    var sess=athlete.aiProgramme.week.sessions.find(function(s){return s.day&&s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;});
-    if(!sess) return true;
-    if(sess.session_type&&sess.session_type.toLowerCase().indexOf('rest')>=0) return true;
   }
   return false;
 }

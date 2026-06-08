@@ -3475,7 +3475,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.60';
+var APP_VERSION='4.9.61';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3965,7 +3965,10 @@ window._phxOpenDiagnostic = async function(){
     ['localStorage.phoenix_athlete present', String(!!local)],
     ['athlete.fqCompleted', local ? String(local.fqCompleted) : '(no local athlete)'],
     ['athlete.aiProgramme exists', local ? String(!!local.aiProgramme) : '(no local athlete)'],
+    ['athlete.currentWeek', (local && local.currentWeek) ? String(local.currentWeek) : '(not set)'],
     ['athlete.aiProgramme.week.week_number', (local && local.aiProgramme && local.aiProgramme.week) ? String(local.aiProgramme.week.week_number||'(unset)') : '(none)'],
+    ['athlete.aiProgramme.week.sessions count', (local && local.aiProgramme && local.aiProgramme.week && local.aiProgramme.week.sessions) ? String(local.aiProgramme.week.sessions.length) : '0'],
+    ['Monday sessions', (local && local.aiProgramme && local.aiProgramme.week && local.aiProgramme.week.sessions) ? String(local.aiProgramme.week.sessions.filter(function(s){return s&&String(s.day||'').toLowerCase().indexOf('monday')>=0;}).length) : '0'],
     ['phoenix_invite_code', (function(){ try { return localStorage.getItem('phoenix_invite_code')||'(none)'; } catch(_e){ return '(unavail)'; } })()],
     ['phoenix_sessions_migrated', (function(){ try { return localStorage.getItem('phoenix_sessions_migrated')||'(none)'; } catch(_e){ return '(unavail)'; } })()],
     ['APP_VERSION', (typeof APP_VERSION==='string') ? APP_VERSION : '(unknown)']
@@ -14457,8 +14460,9 @@ function renderTodayScreen(){
   // then to 1 for brand-new accounts.
   var weekBadge=document.getElementById('t-weekbadge');
   if(weekBadge){
-    var wkNum = (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.week_number)
-             || (athlete && athlete.currentWeek)
+    // Use currentWeek as primary (set by weekly regen), fall back to week.week_number
+    var wkNum = (athlete && athlete.currentWeek)
+             || (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.week_number)
              || 1;
     weekBadge.textContent = 'Week '+wkNum;
   }

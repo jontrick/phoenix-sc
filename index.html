@@ -3474,7 +3474,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.55';
+var APP_VERSION='4.9.56';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17591,7 +17591,15 @@ function renderTodaySessionCard(){
     return;
   }
   var week=prog.week;
-  if(!week||!week.sessions||!week.sessions.length) return;
+  if(!week||!week.sessions||!week.sessions.length){
+    // Programme exists but week has no sessions — show diagnostic info
+    card.querySelector('.game-card-inner').innerHTML =
+      '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Your Programme</span></div>'+
+      '<div class="game-card-title" style="font-size:22px;">Week '+((athlete.currentWeek)||1)+'</div>'+
+      '<div class="game-card-sub" style="margin-top:6px;color:var(--text3);">Programme loaded — tap to view week plan</div>'+
+      '<div class="game-card-action" style="font-size:12px;margin-top:10px;" onclick="openWeekPlan()">View sessions →</div>';
+    return;
+  }
   var now=new Date();
   var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
 
@@ -17645,6 +17653,30 @@ function renderTodaySessionCard(){
 
   console.log('[PHX] renderTodaySessionCard: dayName='+dayName+', sessions found='+todaySessions.length, todaySessions.map(function(s){return s&&(s.session_type||s.day);}));
   if(!todaySessions.length){
+    // Before showing rest card, show the next upcoming session this week
+    var _dayOrder = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var _todayIdx = new Date().getDay();
+    var _upcoming = week.sessions.filter(function(s){
+      var d = String(s.day||'').replace(/\s*(am|pm)$/i,'').trim();
+      var name = d.charAt(0).toUpperCase()+d.slice(1).toLowerCase();
+      var idx = _dayOrder.indexOf(name);
+      return idx > _todayIdx;
+    });
+    if(_upcoming.length){
+      var _ns = _upcoming[0];
+      var _nd = String(_ns.day||'').replace(/\s*(am|pm)$/i,'').trim();
+      card.style.borderLeftColor = 'var(--gold)';
+      card.style.cursor = 'pointer';
+      card.setAttribute('onclick','openWeekPlan()');
+      card.querySelector('.game-card-inner').innerHTML =
+        '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Today — Rest / Active Recovery</span></div>'+
+        '<div class="game-card-title" style="font-size:22px;">Next session: '+_nd+'</div>'+
+        '<div class="game-card-sub" style="margin-top:6px;">'+((_ns.session_name||_ns.session_type||'Session'))+' · '+(_ns.duration_min||60)+' min</div>'+
+        '<div class="game-card-action" style="font-size:12px;margin-top:10px;">View this week →</div>';
+      window._todaySession = null;
+      document.querySelectorAll('.card-extra-session').forEach(function(el){ el.remove(); });
+      return;
+    }
     // Render rest card inline and bail out.
     var _c2=document.getElementById('card-today-session');
     if(_c2){

@@ -3477,7 +3477,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.73';
+var APP_VERSION='4.9.74';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14669,10 +14669,21 @@ async function _phxApplyCompletedTileMarkers(){
       if(pos === 'static') tile.style.position = 'relative';
       tile.appendChild(badge);
     }
+    // Mark primary session tile — check if today's primary session type matches
+    var _primaryType = (window._todaySession && String(window._todaySession.session_type||'').toLowerCase()) || '';
     if(did.strength) mark('card-today-session');
-    if(did.wod)      mark('card-phoenix-wod');
-    if(did.core)     mark('card-core');
-    if(did.walk || did.run) mark('card-walk');
+    if(did.wod && _primaryType.indexOf('wod') >= 0) mark('card-today-session');
+    else if(did.wod) mark('card-phoenix-wod');
+    if(did.core && _primaryType.indexOf('core') >= 0) mark('card-today-session');
+    else if(did.core) mark('card-core');
+    if(did.walk || did.run){
+      // If walk is the primary programme session, mark card-today-session
+      if(_primaryType === 'walk' || _primaryType === 'run'){
+        mark('card-today-session');
+      } else {
+        mark('card-walk'); // add-on walk tile
+      }
+    }
   } catch(e){ console.warn('[PHX] completed-marker query failed:', e); }
 }
 

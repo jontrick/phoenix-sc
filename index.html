@@ -3475,7 +3475,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.62';
+var APP_VERSION='4.9.63';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14466,6 +14466,19 @@ function renderTodayScreen(){
              || 1;
     weekBadge.textContent = 'Week '+wkNum;
   }
+
+  // Safety net: force-render today sessions if card still shows placeholder
+  setTimeout(function(){
+    var _card = document.getElementById('card-today-session');
+    if(_card){
+      var _inner = _card.querySelector('.game-card-inner');
+      if(_inner && _inner.textContent.indexOf('Start training') >= 0){
+        // Card still showing placeholder - force re-render
+        console.log('[PHX] Safety net: card still showing placeholder, forcing re-render');
+        if(typeof renderTodaySessionCard === 'function') renderTodaySessionCard();
+      }
+    }
+  }, 500);
 
   // Phoenix WOD
   renderDailyWOD();

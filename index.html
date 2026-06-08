@@ -2767,6 +2767,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 
   <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">Developer Shortcuts</div>
   <button onclick="_phxDevForceReload()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:12px;background:#c44;">Force Reload from Supabase</button>
+  <button onclick="_phxDevForceRenderToday()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;border-color:var(--gold);color:var(--gold);">Debug + Force Render Today Card</button>
   <button onclick="_phxDevForceCheckin()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Force Weekly Check-in (any day)</button>
   <button onclick="_phxDevBumpWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Bump Week Number (+1)</button>
   <button onclick="_phxDevResetWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Reset to Week 1</button>
@@ -3475,7 +3476,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.63';
+var APP_VERSION='4.9.64';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3531,14 +3532,44 @@ window._phxDiagTapVersion = _phxDiagTapVersion;
 
 // ── Developer shortcuts (accessible via 5-tap diagnostic) ────────────────────
 window._phxDevForceReload = async function(){
-  // Clear localStorage athlete cache and reload from Supabase
   try { localStorage.removeItem('phoenix_athlete'); } catch(_e){}
   alert('localStorage cleared — reloading from Supabase now...');
-  // Re-run the auth init
   if(typeof handleAuthSession === 'function' && currentSession){
     await handleAuthSession(currentSession);
   } else {
     window.location.reload(true);
+  }
+};
+window._phxDevForceRenderToday = function(){
+  // Directly force-render the Today card bypassing all checks
+  var a = athlete;
+  if(!a || !a.aiProgramme || !a.aiProgramme.week) { alert('No programme loaded'); return; }
+  var sessions = a.aiProgramme.week.sessions || [];
+  var dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  var dayLow = dayName.toLowerCase();
+  var todaySess = sessions.filter(function(s){
+    return s && s.day && String(s.day).toLowerCase().indexOf(dayLow) >= 0;
+  });
+  alert('Day: '+dayName+' | Sessions found: '+todaySess.length+' | Types: '+todaySess.map(function(s){return s.session_type||s.session_name||'?';}).join(', '));
+  if(todaySess.length){
+    var card = document.getElementById('card-today-session');
+    if(card){
+      var inner = card.querySelector('.game-card-inner');
+      if(inner){
+        var s = todaySess[0];
+        inner.innerHTML =
+          '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">Today · '+dayName+'</span></div>'+
+          '<div class="game-card-title" style="font-size:26px;">'+(s.session_name||s.session_type||'Session')+'</div>'+
+          '<div class="game-card-sub" style="margin-top:6px;">'+(s.duration_min||60)+' min'+(todaySess.length>1?' · '+todaySess.length+' sessions today':'')+'</div>'+
+          '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
+        card.style.borderLeftColor='var(--gold)';
+        card.style.cursor='pointer';
+        card.setAttribute('onclick','openTodaySession()');
+        window._todaySession = s;
+        window._todaySessions = todaySess;
+        alert('Card updated! Go to Today screen.');
+      }
+    }
   }
 };
 window._phxDevForceCheckin = function(){

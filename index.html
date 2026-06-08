@@ -3476,7 +3476,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.65';
+var APP_VERSION='4.9.66';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16590,6 +16590,14 @@ function isTodayRestDay(){
   var dayKey=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
   var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
   var dayLow=dayName.toLowerCase();
+  // HARD OVERRIDE: if programme has ANY session for today, it is NEVER a rest day
+  if(athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.sessions){
+    var _override=athlete.aiProgramme.week.sessions.some(function(s){
+      return s&&s.day&&String(s.day).toLowerCase().indexOf(dayLow)>=0&&
+             (!s.session_type||String(s.session_type).toLowerCase().indexOf('rest')<0);
+    });
+    if(_override) return false;
+  }
 
   // Check ad-hoc sessions first
   var todayISO = new Date().toISOString().split('T')[0];

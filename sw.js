@@ -1,4 +1,4 @@
-var CACHE_NAME = 'phoenix-v4.9.65';
+var CACHE_NAME = 'phoenix-v4.9.66';
 var CACHE_FILES = ['/', '/index.html', '/manifest.json'];
 
 // INSTALL: skip waiting immediately so new SW activates without waiting for tabs to close

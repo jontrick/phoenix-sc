@@ -3475,7 +3475,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.61';
+var APP_VERSION='4.9.62';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16558,7 +16558,13 @@ function isTodayRestDay(){
       if(sess.session_type&&sess.session_type.toLowerCase().indexOf('rest')>=0) return true;
       return false;
     }
-    // Programme exists but has no session for today → rest day
+    // Programme exists but has no session for today
+    // Check ad-hoc sessions before declaring rest day
+    var todayISO = new Date().toISOString().split('T')[0];
+    try {
+      var adHoc = JSON.parse(localStorage.getItem('phoenix_adhoc_sessions_'+todayISO)||'[]');
+      if(adHoc.length) return false; // ad-hoc sessions = not a rest day
+    } catch(_e){}
     return true;
   }
 

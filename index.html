@@ -3477,7 +3477,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.67';
+var APP_VERSION='4.9.68';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17615,6 +17615,19 @@ window._phxCyclePriority = function(weekNumber, sessionId){
 };
 
 function renderTodaySessionCard(){
+  try { _renderTodaySessionCardInner(); }
+  catch(e){
+    console.error('[PHX] renderTodaySessionCard CRASHED:', e);
+    var _ec = document.getElementById('card-today-session');
+    if(_ec && _ec.querySelector('.game-card-inner')){
+      _ec.querySelector('.game-card-inner').innerHTML =
+        '<div style="padding:8px;font-size:11px;color:var(--orange);">Session load error: '+e.message+'</div>'+
+        '<div class="game-card-title" style="font-size:22px;">Tap to retry</div>';
+      _ec.setAttribute('onclick','renderTodaySessionCard()');
+    }
+  }
+}
+function _renderTodaySessionCardInner(){
   var card=document.getElementById('card-today-session');
   if(!card) return;
 

@@ -3477,7 +3477,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.68';
+var APP_VERSION='4.9.69';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14531,6 +14531,42 @@ function renderTodayScreen(){
   // Ad slot
   var adEl=document.getElementById('ad-today');
   if(adEl) adEl.style.display=hasProAccess()?'none':'block';
+
+  // Direct session inject — bypass renderTodaySessionCard entirely for main tile
+  (function(){
+    try {
+      if(!athlete || !athlete.aiProgramme || !athlete.aiProgramme.week) return;
+      var _sessions = athlete.aiProgramme.week.sessions || [];
+      var _day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+      var _dayLow = _day.toLowerCase();
+      var _todaySess = _sessions.filter(function(s){
+        return s && s.day && String(s.day).toLowerCase().indexOf(_dayLow) >= 0 &&
+               (!s.session_type || String(s.session_type).toLowerCase().indexOf('rest') < 0);
+      });
+      if(!_todaySess.length) return;
+      var _card = document.getElementById('card-today-session');
+      if(!_card) return;
+      var _inner = _card.querySelector('.game-card-inner');
+      if(!_inner) return;
+      var _s = _todaySess[0];
+      var _name = _s.session_name || _s.session_type || 'Session';
+      var _dur = _s.duration_min || 60;
+      var _sub = _dur + ' min';
+      if(_todaySess.length > 1) _sub += ' · ' + _todaySess.length + ' sessions today';
+      var _exs = (_s.exercises||[]).slice(0,3).map(function(e){return e.name;}).join(' · ');
+      if(!_exs && _s.wod && _s.wod.movements) _exs = (_s.wod.movements||[]).slice(0,3).map(function(m){return m.name;}).join(' · ');
+      _inner.innerHTML =
+        '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">'+_day+' · Week '+(athlete.currentWeek||1)+'</span></div>'+
+        '<div class="game-card-title" id="today-session-name" style="font-size:26px;">'+_name+'</div>'+
+        '<div class="game-card-sub" id="today-session-detail" style="margin-top:4px;">'+_sub+(_exs?'<br><span style="font-size:11px;color:var(--text3);">'+_exs+'</span>':'')+'</div>'+
+        '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
+      _card.style.borderLeftColor = 'var(--gold)';
+      _card.style.cursor = 'pointer';
+      _card.setAttribute('onclick','openTodaySession()');
+      window._todaySession = _s;
+      window._todaySessions = _todaySess;
+    } catch(_e) { console.error('[PHX] direct inject failed:', _e); }
+  })();
 
   // Session info
   renderTodaySessionCard();

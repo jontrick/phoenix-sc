@@ -3476,7 +3476,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.64';
+var APP_VERSION='4.9.65';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16589,30 +16589,32 @@ function isTodayRestDay(){
   var now=new Date();
   var dayKey=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][now.getDay()];
   var dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+  var dayLow=dayName.toLowerCase();
 
-  // AI programme is the source of truth — check it FIRST.
-  // If the programme has a non-rest session for today, it is NOT a rest day,
-  // regardless of what fqSessionSchedule says.
+  // Check ad-hoc sessions first
+  var todayISO = new Date().toISOString().split('T')[0];
+  try {
+    var adHoc = JSON.parse(localStorage.getItem('phoenix_adhoc_sessions_'+todayISO)||'[]');
+    if(adHoc.length) return false;
+  } catch(_e){}
+
+  // AI programme is the source of truth
   if(athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.sessions){
-    var sess=athlete.aiProgramme.week.sessions.find(function(s){
-      return s.day&&s.day.toLowerCase().indexOf(dayName.toLowerCase())>=0;
+    var todaySessions=athlete.aiProgramme.week.sessions.filter(function(s){
+      return s&&s.day&&String(s.day).toLowerCase().indexOf(dayLow)>=0;
     });
-    if(sess){
-      // Programme has a session for today — not a rest day
-      if(sess.session_type&&sess.session_type.toLowerCase().indexOf('rest')>=0) return true;
-      return false;
+    if(todaySessions.length){
+      // Has sessions — only rest if ALL are explicitly 'rest' type
+      var allRest=todaySessions.every(function(s){
+        return s.session_type&&String(s.session_type).toLowerCase().indexOf('rest')>=0;
+      });
+      return allRest;
     }
-    // Programme exists but has no session for today
-    // Check ad-hoc sessions before declaring rest day
-    var todayISO = new Date().toISOString().split('T')[0];
-    try {
-      var adHoc = JSON.parse(localStorage.getItem('phoenix_adhoc_sessions_'+todayISO)||'[]');
-      if(adHoc.length) return false; // ad-hoc sessions = not a rest day
-    } catch(_e){}
+    // No sessions for today in programme — rest day
     return true;
   }
 
-  // No AI programme yet — fall back to user-assigned schedule
+  // No AI programme — fall back to schedule
   if(athlete.fqScheduleMode==='user_assigns'&&athlete.fqSessionSchedule){
     var ds=athlete.fqSessionSchedule[dayKey];
     if(!ds) return true;
@@ -17722,9 +17724,9 @@ function renderTodaySessionCard(){
 
   // If programme has no sessions for today, check ad-hoc sessions
   if(!todaySessions.length){
-    var todayISO = new Date().toISOString().split('T')[0];
+    var todayISO2 = new Date().toISOString().split('T')[0];
     try {
-      var adHoc = JSON.parse(localStorage.getItem('phoenix_adhoc_sessions_'+todayISO)||'[]');
+      var adHoc = JSON.parse(localStorage.getItem('phoenix_adhoc_sessions_'+todayISO2)||'[]');
       if(adHoc.length) todaySessions = adHoc;
     } catch(_e){}
   }
@@ -17895,6 +17897,11 @@ function renderTodaySessionCard(){
   window._todaySessions = todaySessions;
   // Back-compat: legacy openers read window._todaySession (singular). Default to first.
   window._todaySession = first;
+  // Persist to localStorage so navigation doesn't lose them
+  try {
+    var _tsKey = 'phoenix_today_sessions_'+new Date().toISOString().split('T')[0];
+    localStorage.setItem(_tsKey, JSON.stringify(todaySessions));
+  } catch(_e){}
 }
 
 // v4.7.9 TASK 3: tile-tap dispatcher — picks the right session by index then opens it.
@@ -19917,14 +19924,11 @@ function openCombine(){
 
 window._phxOpenAddTodaySession = function(){
   var todayName = new Date().toLocaleDateString('en-AU', {weekday:'long'});
-  var slot = 'am'; // default — will detect PM if AM session already exists today
-
-  // Detect whether AM is already occupied — default to PM if so
-  if(window._todaySessions && window._todaySessions.length > 0){
-    slot = 'pm';
-  }
+  var slot = 'am';
+  if(window._todaySessions && window._todaySessions.length > 0) slot = 'pm';
 
   function _openTypePicker(){
+    try {
     _phxOpenBottomSheet({
       title: 'Add a Session — '+todayName,
       subtitle: 'Coach generates it on the spot',

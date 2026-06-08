@@ -2766,6 +2766,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button onclick="try{localStorage.removeItem('phx_last_write_error');_phxOpenDiagnostic();}catch(e){}" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:24px;">Clear last write error</button>
 
   <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">Developer Shortcuts</div>
+  <button onclick="_phxDevForceReload()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:12px;background:#c44;">Force Reload from Supabase</button>
   <button onclick="_phxDevForceCheckin()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Force Weekly Check-in (any day)</button>
   <button onclick="_phxDevBumpWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Bump Week Number (+1)</button>
   <button onclick="_phxDevResetWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Reset to Week 1</button>
@@ -3529,6 +3530,17 @@ function _phxDiagTapVersion(){
 window._phxDiagTapVersion = _phxDiagTapVersion;
 
 // ── Developer shortcuts (accessible via 5-tap diagnostic) ────────────────────
+window._phxDevForceReload = async function(){
+  // Clear localStorage athlete cache and reload from Supabase
+  try { localStorage.removeItem('phoenix_athlete'); } catch(_e){}
+  alert('localStorage cleared — reloading from Supabase now...');
+  // Re-run the auth init
+  if(typeof handleAuthSession === 'function' && currentSession){
+    await handleAuthSession(currentSession);
+  } else {
+    window.location.reload(true);
+  }
+};
 window._phxDevForceCheckin = function(){
   // Force open the weekly check-in regardless of day
   navTo('weekly-checkin');

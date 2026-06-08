@@ -3474,7 +3474,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.56';
+var APP_VERSION='4.9.57';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14430,6 +14430,7 @@ function _phxGenerateDailyWOD(dateStr){
 // ====== TODAY SCREEN RENDER ======
 
 function renderTodayScreen(){
+  console.log('[PHX] renderTodayScreen called. athlete='+!!(athlete)+' prog='+!!(athlete&&athlete.aiProgramme)+' week_num='+((athlete&&athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.week_number)||'none')+' currentWeek='+((athlete&&athlete.currentWeek)||'none'));
   // Date display
   var now=new Date();
   var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -17569,7 +17570,13 @@ function renderTodaySessionCard(){
   var _weekStart = _phxWeekStartDate();
   var _todayMid = new Date(); _todayMid.setHours(0,0,0,0);
   // Only show gap state if week genuinely hasn't started yet (strictly future)
-  if(_weekStart.getTime() > _todayMid.getTime() + 1000){
+  // Emergency bypass: if programme has sessions for today, never show gap state
+  var _hasTodaySess = !!(prog && prog.week && prog.week.sessions && prog.week.sessions.some(function(s){
+    return s && s.day && String(s.day).toLowerCase().indexOf(dayName.toLowerCase()) >= 0;
+  }));
+  var _now2 = new Date();
+  var _dayName2 = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][_now2.getDay()];
+  if(!_hasTodaySess && _weekStart.getTime() > _todayMid.getTime() + 1000){
     var _daysUntil = Math.round((_weekStart - _todayMid) / 86400000);
     var _startDay = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][_weekStart.getDay()];
     var _untilStr = _daysUntil === 1 ? 'tomorrow (' + _startDay + ')' : _startDay;
@@ -21715,6 +21722,7 @@ window._phxResetCustomisations = function(){
 };
 
 function openTodaySession(){
+  console.log('[PHX] openTodaySession: _todaySession='+!!(window._todaySession)+' sessions='+((window._todaySessions||[]).length));
   // Kill any open preview/adjust overlays that would sit on top of the session screen (z-index conflict)
   ['phx-session-preview','phx-week-adjust','phx-wod-type-overlay','phx-core-type-overlay'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.remove();

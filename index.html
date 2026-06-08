@@ -2766,6 +2766,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button onclick="try{localStorage.removeItem('phx_last_write_error');_phxOpenDiagnostic();}catch(e){}" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:24px;">Clear last write error</button>
 
   <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">Developer Shortcuts</div>
+  <button onclick="_phxDevForceSaveToSupabase()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:8px;background:#2a6;color:#fff;">Force Save to Supabase (fixes Safari)</button>
   <button onclick="_phxDevForceReload()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:12px;background:#c44;">Force Reload from Supabase</button>
   <button onclick="_phxDevForceRenderToday()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;border-color:var(--gold);color:var(--gold);">Debug + Force Render Today Card</button>
   <button onclick="_phxDevForceCheckin()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Force Weekly Check-in (any day)</button>
@@ -3476,7 +3477,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.66';
+var APP_VERSION='4.9.67';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3531,6 +3532,16 @@ function _phxDiagTapVersion(){
 window._phxDiagTapVersion = _phxDiagTapVersion;
 
 // ── Developer shortcuts (accessible via 5-tap diagnostic) ────────────────────
+window._phxDevForceSaveToSupabase = async function(){
+  // Force save current localStorage athlete data to Supabase
+  if(!athlete){ alert('No athlete loaded'); return; }
+  if(!currentSession||!currentSession.user){ alert('Not signed in'); return; }
+  try {
+    var result = await saveAthleteToSupabase(athlete);
+    if(result && result.error){ alert('Save failed: '+result.error.message); }
+    else { alert('Saved to Supabase successfully! Now reload Safari.'); }
+  } catch(e){ alert('Error: '+e.message); }
+};
 window._phxDevForceReload = async function(){
   try { localStorage.removeItem('phoenix_athlete'); } catch(_e){}
   alert('localStorage cleared — reloading from Supabase now...');

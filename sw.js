@@ -1,4 +1,4 @@
-var CACHE_NAME = 'phoenix-v4.9.70';
+var CACHE_NAME = 'phoenix-v4.9.71';
 
 self.addEventListener('install', function(e) {
   self.skipWaiting();

@@ -3477,7 +3477,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.70';
+var APP_VERSION='4.9.71';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4338,6 +4338,9 @@ async function _loadProfileAndRouteInner(){
     console.log('[PHX] routing decision:',{hasAthlete:true,fqCompleted:profile.fq_completed,targetScreen:'today'});
     viewWeek=progWeek();
     navTo('today');
+    // Re-render after short delay to ensure DOM is ready and athlete is fully loaded
+    setTimeout(function(){ if(typeof renderTodayScreen==='function') renderTodayScreen(); }, 300);
+    setTimeout(function(){ if(typeof renderTodayScreen==='function') renderTodayScreen(); }, 1500);
     // v4.7.20: after the athlete profile is loaded and we've routed to Today, check whether
     // there's an unfinished walk in Supabase. The helper handles the resume / finish / discard prompt.
     setTimeout(function(){ if(typeof _phxResumeWalk==='function') _phxResumeWalk(); }, 600);

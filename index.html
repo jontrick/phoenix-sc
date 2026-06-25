@@ -3571,7 +3571,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.80';
+var APP_VERSION='4.9.81';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3701,13 +3701,16 @@ window._blabUpdatePreview = function(){
   inner.innerHTML = lines.join('<br>');
 };
 
-// Wire up live preview on input
-document.addEventListener('DOMContentLoaded', function(){
+// Wire up live preview — called each time setup screen opens
+window._blabWirePreviewInputs = function(){
   ['blab-bench','blab-squat','blab-dead','blab-chin'].forEach(function(id){
     var el = document.getElementById(id);
-    if(el) el.addEventListener('input', window._blabUpdatePreview);
+    if(el){
+      el.removeEventListener('input', window._blabUpdatePreview);
+      el.addEventListener('input', window._blabUpdatePreview);
+    }
   });
-});
+};
 
 window._blabConfirmSetup = function(){
   var b = parseFloat(document.getElementById('blab-bench').value);
@@ -3754,6 +3757,7 @@ window._blabConfirmSetup = function(){
 
 // ── Open BLAB setup (entry point) ────────────────────────────────────────────
 window.openBlabSetup = function(){
+  console.log('[BLAB] openBlabSetup called, athlete='+!!(athlete));
   // Pre-fill if maxes already set
   if(athlete && athlete.blabState && athlete.blabState.maxes){
     var m = athlete.blabState.maxes;
@@ -3765,7 +3769,10 @@ window.openBlabSetup = function(){
     _blabSelectDlVar(athlete.blabState.deadlift_var || 'conventional');
     _blabUpdatePreview();
   }
-  if(typeof showScreen === 'function') showScreen('screen-blab-setup');
+  console.log('[BLAB] calling showScreen(screen-blab-setup)');
+  showScreen('screen-blab-setup');
+  window._blabWirePreviewInputs && window._blabWirePreviewInputs();
+  console.log('[BLAB] showScreen done');
 };
 
 // ── BLAB state helpers ───────────────────────────────────────────────────────

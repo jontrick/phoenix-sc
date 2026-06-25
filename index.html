@@ -3571,7 +3571,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.81';
+var APP_VERSION='4.9.82';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3757,22 +3757,117 @@ window._blabConfirmSetup = function(){
 
 // ── Open BLAB setup (entry point) ────────────────────────────────────────────
 window.openBlabSetup = function(){
-  console.log('[BLAB] openBlabSetup called, athlete='+!!(athlete));
-  // Pre-fill if maxes already set
+  // Remove any existing overlay
+  var old = document.getElementById('blab-setup-overlay');
+  if(old) old.remove();
+
+  // Pre-fill values
+  var prevB = '', prevS = '', prevD = '', prevC = '';
+  var prevSqVar = 'free', prevDlVar = 'conventional';
   if(athlete && athlete.blabState && athlete.blabState.maxes){
     var m = athlete.blabState.maxes;
-    if(m.bench) document.getElementById('blab-bench').value = m.bench;
-    if(m.squat) document.getElementById('blab-squat').value = m.squat;
-    if(m.deadlift) document.getElementById('blab-dead').value = m.deadlift;
-    if(athlete.blabState.chin_up_max) document.getElementById('blab-chin').value = athlete.blabState.chin_up_max;
-    _blabSelectSqVar(athlete.blabState.squat_var || 'free');
-    _blabSelectDlVar(athlete.blabState.deadlift_var || 'conventional');
-    _blabUpdatePreview();
+    prevB = m.bench || ''; prevS = m.squat || ''; prevD = m.deadlift || '';
+    prevC = athlete.blabState.chin_up_max || '';
+    prevSqVar = athlete.blabState.squat_var || 'free';
+    prevDlVar = athlete.blabState.deadlift_var || 'conventional';
   }
-  console.log('[BLAB] calling showScreen(screen-blab-setup)');
-  showScreen('screen-blab-setup');
-  window._blabWirePreviewInputs && window._blabWirePreviewInputs();
-  console.log('[BLAB] showScreen done');
+
+  var overlay = document.createElement('div');
+  overlay.id = 'blab-setup-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:99999;overflow-y:auto;';
+  overlay.innerHTML =
+    '<div style="padding:24px 20px 60px;">'+
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:28px;">'+
+        '<button onclick="document.getElementById('blab-setup-overlay').remove()" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--font-d);font-size:12px;color:var(--text2);">← Back</button>'+
+        '<div>'+
+          '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">Programme Setup</div>'+
+          '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);">Built Like A Badass</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:24px;">Enter your TRUE 1-rep maxes. The app calculates every working set across all 12 weeks.</div>'+
+
+      // Bench
+      '<div style="margin-bottom:16px;">'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Bench Press 1RM (kg)</div>'+
+        '<input id="blab-ov-bench" type="number" inputmode="decimal" placeholder="e.g. 130" value="'+prevB+'" style="width:100%;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;box-sizing:border-box;">'+
+      '</div>'+
+
+      // Squat
+      '<div style="margin-bottom:16px;">'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Back Squat 1RM (kg)</div>'+
+        '<input id="blab-ov-squat" type="number" inputmode="decimal" placeholder="e.g. 150" value="'+prevS+'" style="width:100%;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;box-sizing:border-box;">'+
+      '</div>'+
+
+      // Deadlift
+      '<div style="margin-bottom:16px;">'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Deadlift 1RM (kg)</div>'+
+        '<input id="blab-ov-dead" type="number" inputmode="decimal" placeholder="e.g. 170" value="'+prevD+'" style="width:100%;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;box-sizing:border-box;">'+
+      '</div>'+
+
+      // Chin-up
+      '<div style="margin-bottom:24px;">'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Chin-Up Max Reps</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Enter 0 if unknown — establish on Week 1 Day 3.</div>'+
+        '<input id="blab-ov-chin" type="number" inputmode="numeric" placeholder="0" value="'+prevC+'" style="width:100%;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;box-sizing:border-box;">'+
+      '</div>'+
+
+      // Squat variation
+      '<div style="margin-bottom:16px;">'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Day 2 Squat Variation</div>'+
+        '<div style="display:flex;gap:10px;">'+
+          '<button id="blab-ov-sq-free" onclick="window._blabOvSq='free';this.style.background='var(--gold)';this.style.color='#000';document.getElementById('blab-ov-sq-box').style.background='var(--bg2)';document.getElementById('blab-ov-sq-box').style.color='var(--text2)'" style="flex:1;padding:12px;background:'+(prevSqVar==='free'?'var(--gold)':'var(--bg2)')+';border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:'+(prevSqVar==='free'?'#000':'var(--text2)')+';">Free Squat</button>'+
+          '<button id="blab-ov-sq-box" onclick="window._blabOvSq='box';this.style.background='var(--gold)';this.style.color='#000';document.getElementById('blab-ov-sq-free').style.background='var(--bg2)';document.getElementById('blab-ov-sq-free').style.color='var(--text2)'" style="flex:1;padding:12px;background:'+(prevSqVar==='box'?'var(--gold)':'var(--bg2)')+';border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:'+(prevSqVar==='box'?'#000':'var(--text2)')+';">Box Squat</button>'+
+        '</div>'+
+      '</div>'+
+
+      // Deadlift variation
+      '<div style="margin-bottom:32px;">'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Day 4 Deadlift Variation</div>'+
+        '<div style="display:flex;gap:8px;">'+
+          '<button id="blab-ov-dl-conv" onclick="window._blabOvDl='conventional';['blab-ov-dl-conv','blab-ov-dl-trap','blab-ov-dl-sumo'].forEach(function(x){var b=document.getElementById(x);if(b){b.style.background='var(--bg2)';b.style.color='var(--text2)';}});this.style.background='var(--gold)';this.style.color='#000'" style="flex:1;padding:10px 6px;background:'+(prevDlVar==='conventional'?'var(--gold)':'var(--bg2)')+';border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;color:'+(prevDlVar==='conventional'?'#000':'var(--text2)')+';">Conventional</button>'+
+          '<button id="blab-ov-dl-trap" onclick="window._blabOvDl='trap';['blab-ov-dl-conv','blab-ov-dl-trap','blab-ov-dl-sumo'].forEach(function(x){var b=document.getElementById(x);if(b){b.style.background='var(--bg2)';b.style.color='var(--text2)';}});this.style.background='var(--gold)';this.style.color='#000'" style="flex:1;padding:10px 6px;background:'+(prevDlVar==='trap'?'var(--gold)':'var(--bg2)')+';border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;color:'+(prevDlVar==='trap'?'#000':'var(--text2)')+';">Trap Bar</button>'+
+          '<button id="blab-ov-dl-sumo" onclick="window._blabOvDl='sumo';['blab-ov-dl-conv','blab-ov-dl-trap','blab-ov-dl-sumo'].forEach(function(x){var b=document.getElementById(x);if(b){b.style.background='var(--bg2)';b.style.color='var(--text2)';}});this.style.background='var(--gold)';this.style.color='#000'" style="flex:1;padding:10px 6px;background:'+(prevDlVar==='sumo'?'var(--gold)':'var(--bg2)')+';border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;color:'+(prevDlVar==='sumo'?'#000':'var(--text2)')+';">Sumo</button>'+
+        '</div>'+
+      '</div>'+
+
+      '<button onclick="window._blabOvConfirm()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:8px;font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;">Start BLAB — Week 1 →</button>'+
+    '</div>';
+
+  // Set default variation state
+  window._blabOvSq = prevSqVar;
+  window._blabOvDl = prevDlVar;
+
+  document.body.appendChild(overlay);
+};
+
+// Confirm from overlay
+window._blabOvConfirm = function(){
+  var b = parseFloat(document.getElementById('blab-ov-bench').value);
+  var s = parseFloat(document.getElementById('blab-ov-squat').value);
+  var d = parseFloat(document.getElementById('blab-ov-dead').value);
+  var c = parseInt(document.getElementById('blab-ov-chin').value) || 0;
+  if(!b || !s || !d){ alert('Please enter all three 1RMs to continue.'); return; }
+  if(b < 20 || s < 20 || d < 20){ alert('Please enter weights in kg.'); return; }
+  if(!athlete){ alert('Profile not loaded — try again.'); return; }
+  athlete.blabState = {
+    active: true, block: 1, week: 1, day: 1,
+    last_completed_day: 0, last_completed_date: null,
+    chin_up_max: c, chin_up_established: c > 0,
+    squat_var: window._blabOvSq || 'free',
+    deadlift_var: window._blabOvDl || 'conventional',
+    maxes: {bench: b, squat: s, deadlift: d},
+    session_log: []
+  };
+  if(athlete.aiProgramme){
+    athlete.blabState.suspended_programme = athlete.aiProgramme;
+    athlete.aiProgramme = null;
+  }
+  athlete.currentWeek = 1;
+  if(typeof saveAthlete === 'function') saveAthlete(athlete);
+  document.getElementById('blab-setup-overlay').remove();
+  if(typeof renderTodayScreen === 'function') renderTodayScreen();
+  if(typeof navTo === 'function') navTo('today');
+  alert('BLAB is live. Week 1 Day 1 is ready on the Today screen.');
 };
 
 // ── BLAB state helpers ───────────────────────────────────────────────────────

@@ -2739,6 +2739,83 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 
 <!-- v4.7.47 DIAGNOSTIC SCREEN — visible-text readouts + live test write. Always reachable. -->
+<!-- BLAB SETUP SCREEN -->
+<div id="screen-blab-setup" class="screen">
+  <div style="padding:24px 20px 40px;">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:32px;">
+      <button onclick="navTo('today')" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;">← Back</button>
+    </div>
+
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Programme Setup</div>
+    <div style="font-family:var(--font-d);font-size:34px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:8px;">Built Like<br>A Badass</div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:32px;">Enter your TRUE 1-rep maxes. The app calculates every working set across all 12 weeks. Be honest — an inflated max breaks the programme.</div>
+
+    <!-- BENCH -->
+    <div style="margin-bottom:20px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Bench Press 1RM</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <input id="blab-bench" type="number" inputmode="decimal" placeholder="e.g. 130" style="flex:1;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;">
+        <div style="font-family:var(--font-d);font-size:14px;color:var(--text3);">kg</div>
+      </div>
+    </div>
+
+    <!-- SQUAT -->
+    <div style="margin-bottom:20px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Back Squat 1RM</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <input id="blab-squat" type="number" inputmode="decimal" placeholder="e.g. 150" style="flex:1;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;">
+        <div style="font-family:var(--font-d);font-size:14px;color:var(--text3);">kg</div>
+      </div>
+    </div>
+
+    <!-- DEADLIFT -->
+    <div style="margin-bottom:20px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Deadlift 1RM</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <input id="blab-dead" type="number" inputmode="decimal" placeholder="e.g. 170" style="flex:1;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;">
+        <div style="font-family:var(--font-d);font-size:14px;color:var(--text3);">kg</div>
+      </div>
+    </div>
+
+    <!-- CHIN-UP -->
+    <div style="margin-bottom:32px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Chin-Up Max Reps</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Consecutive reps in one set. If unsure, enter 0 — Week 1 Day 3 is your test.</div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <input id="blab-chin" type="number" inputmode="numeric" placeholder="e.g. 12" style="flex:1;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;">
+        <div style="font-family:var(--font-d);font-size:14px;color:var(--text3);">reps</div>
+      </div>
+    </div>
+
+    <!-- SQUAT VARIATION -->
+    <div style="margin-bottom:20px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Day 2 Squat Variation</div>
+      <div style="display:flex;gap:10px;">
+        <button id="blab-sq-free" onclick="window._blabSelectSqVar('free')" style="flex:1;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#000;cursor:pointer;">Free Squat</button>
+        <button id="blab-sq-box" onclick="window._blabSelectSqVar('box')" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;">Box Squat</button>
+      </div>
+    </div>
+
+    <!-- DEADLIFT VARIATION -->
+    <div style="margin-bottom:32px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Day 4 Deadlift Variation</div>
+      <div style="display:flex;gap:10px;">
+        <button id="blab-dl-conv" onclick="window._blabSelectDlVar('conventional')" style="flex:1;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#000;cursor:pointer;">Conventional</button>
+        <button id="blab-dl-trap" onclick="window._blabSelectDlVar('trap')" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;">Trap Bar</button>
+        <button id="blab-dl-sumo" onclick="window._blabSelectDlVar('sumo')" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;">Sumo</button>
+      </div>
+    </div>
+
+    <!-- PREVIEW -->
+    <div id="blab-setup-preview" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:24px;">
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">Week 1 Working Weights</div>
+      <div id="blab-setup-preview-inner" style="font-size:12px;color:var(--text2);line-height:2;"></div>
+    </div>
+
+    <button onclick="window._blabConfirmSetup()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Start BLAB — Week 1 →</button>
+  </div>
+</div>
+
 <div id="screen-diagnostic" class="screen">
 <div class="app-header">
   <div class="icon-btn" onclick="navTo('today')">
@@ -3477,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.74';
+var APP_VERSION='4.9.76';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3530,6 +3607,195 @@ function _phxDiagTapVersion(){
   }
 }
 window._phxDiagTapVersion = _phxDiagTapVersion;
+
+// ============================================================================
+// BUILT LIKE A BADASS (BLAB) — PROGRAMME ENGINE
+// ============================================================================
+
+// ── Weight calculator ────────────────────────────────────────────────────────
+window._blabPct = function(maxKg, pct){
+  return Math.round((maxKg * pct / 100) / 2.5) * 2.5;
+};
+
+// ── Setup screen state ───────────────────────────────────────────────────────
+var _blabSetupSqVar = 'free';
+var _blabSetupDlVar = 'conventional';
+
+window._blabSelectSqVar = function(v){
+  _blabSetupSqVar = v;
+  ['free','box'].forEach(function(k){
+    var btn = document.getElementById('blab-sq-'+k);
+    if(!btn) return;
+    if(k === v){
+      btn.style.background = 'var(--gold)';
+      btn.style.color = '#000';
+      btn.style.borderColor = 'var(--gold)';
+    } else {
+      btn.style.background = 'var(--bg2)';
+      btn.style.color = 'var(--text2)';
+      btn.style.borderColor = 'var(--border)';
+    }
+  });
+  _blabUpdatePreview();
+};
+
+window._blabSelectDlVar = function(v){
+  _blabSetupDlVar = v;
+  ['conv','trap','sumo'].forEach(function(k){
+    var btn = document.getElementById('blab-dl-'+k);
+    if(!btn) return;
+    var match = (k === 'conv' && v === 'conventional') || k === v;
+    if(match){
+      btn.style.background = 'var(--gold)';
+      btn.style.color = '#000';
+      btn.style.borderColor = 'var(--gold)';
+    } else {
+      btn.style.background = 'var(--bg2)';
+      btn.style.color = 'var(--text2)';
+      btn.style.borderColor = 'var(--border)';
+    }
+  });
+  _blabUpdatePreview();
+};
+
+window._blabUpdatePreview = function(){
+  var b = parseFloat(document.getElementById('blab-bench').value) || 0;
+  var s = parseFloat(document.getElementById('blab-squat').value) || 0;
+  var d = parseFloat(document.getElementById('blab-dead').value) || 0;
+  var c = parseInt(document.getElementById('blab-chin').value) || 0;
+  var preview = document.getElementById('blab-setup-preview');
+  var inner = document.getElementById('blab-setup-preview-inner');
+  if(!preview || !inner) return;
+  if(!b && !s && !d){ preview.style.display='none'; return; }
+  preview.style.display = 'block';
+  var lines = [];
+  if(b) lines.push(
+    'Bench: '+_blabPct(b,72.5)+'×8 / '+_blabPct(b,77.5)+'×6 / '+_blabPct(b,82.5)+'×4+'
+  );
+  var sqLabel = _blabSetupSqVar === 'box' ? 'Box Squat' : 'Squat';
+  if(s) lines.push(
+    sqLabel+': '+_blabPct(s,72.5)+'×8 / '+_blabPct(s,77.5)+'×6 / '+_blabPct(s,82.5)+'×4'
+  );
+  var dlLabel = _blabSetupDlVar === 'trap' ? 'Trap Bar' : _blabSetupDlVar === 'sumo' ? 'Sumo DL' : 'Deadlift';
+  if(d) lines.push(
+    dlLabel+': '+_blabPct(d,72.5)+'×8 / '+_blabPct(d,77.5)+'×6 / '+_blabPct(d,82.5)+'×4'
+  );
+  if(c) lines.push('Chin-up target: '+(c+Math.round(c*0.5))+' total reps (max '+c+' + 50%)');
+  inner.innerHTML = lines.join('<br>');
+};
+
+// Wire up live preview on input
+document.addEventListener('DOMContentLoaded', function(){
+  ['blab-bench','blab-squat','blab-dead','blab-chin'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener('input', window._blabUpdatePreview);
+  });
+});
+
+window._blabConfirmSetup = function(){
+  var b = parseFloat(document.getElementById('blab-bench').value);
+  var s = parseFloat(document.getElementById('blab-squat').value);
+  var d = parseFloat(document.getElementById('blab-dead').value);
+  var c = parseInt(document.getElementById('blab-chin').value) || 0;
+  if(!b || !s || !d){
+    alert('Enter all three 1RMs to continue. Chin-up max can be 0 if unknown.');
+    return;
+  }
+  if(b < 20 || s < 20 || d < 20){
+    alert('These look too light — please enter weights in kg.');
+    return;
+  }
+  // Initialise BLAB state on athlete
+  if(!athlete) { alert('Profile not loaded — try again.'); return; }
+  athlete.blabState = {
+    active: true,
+    block: 1,
+    week: 1,
+    day: 1,
+    last_completed_day: 0,
+    last_completed_date: null,
+    chin_up_max: c,
+    chin_up_established: c > 0,
+    squat_var: _blabSetupSqVar,
+    deadlift_var: _blabSetupDlVar,
+    maxes: { bench: b, squat: s, deadlift: d },
+    session_log: []
+  };
+  if(typeof saveAthlete === 'function') saveAthlete(athlete);
+  // Route to Today screen
+  if(typeof renderTodayScreen === 'function') renderTodayScreen();
+  if(typeof navTo === 'function') navTo('today');
+  alert('BLAB is set up. Week 1 Day 1 is ready. Let\'s go.');
+};
+
+// ── Open BLAB setup (entry point) ────────────────────────────────────────────
+window.openBlabSetup = function(){
+  // Pre-fill if maxes already set
+  if(athlete && athlete.blabState && athlete.blabState.maxes){
+    var m = athlete.blabState.maxes;
+    if(m.bench) document.getElementById('blab-bench').value = m.bench;
+    if(m.squat) document.getElementById('blab-squat').value = m.squat;
+    if(m.deadlift) document.getElementById('blab-dead').value = m.deadlift;
+    if(athlete.blabState.chin_up_max) document.getElementById('blab-chin').value = athlete.blabState.chin_up_max;
+    _blabSelectSqVar(athlete.blabState.squat_var || 'free');
+    _blabSelectDlVar(athlete.blabState.deadlift_var || 'conventional');
+    _blabUpdatePreview();
+  }
+  if(typeof showScreen === 'function') showScreen('screen-blab-setup');
+};
+
+// ── BLAB state helpers ───────────────────────────────────────────────────────
+window._blabGetState = function(){
+  return (athlete && athlete.blabState) || null;
+};
+
+window._blabIsActive = function(){
+  var s = window._blabGetState();
+  return !!(s && s.active);
+};
+
+// Check if next day is available (48hr rule for Day2→Day4)
+window._blabCanDoNextDay = function(){
+  var s = window._blabGetState();
+  if(!s) return false;
+  var nextDay = (s.last_completed_day % 4) + 1;
+  // Hard rule: Day 4 needs 48hrs after Day 2
+  if(nextDay === 4 && s.last_completed_day === 2){
+    if(!s.last_completed_date) return true;
+    var last = new Date(s.last_completed_date);
+    var now = new Date();
+    var hoursDiff = (now - last) / (1000 * 60 * 60);
+    return hoursDiff >= 47; // 47hrs tolerance
+  }
+  return true;
+};
+
+window._blabGetNextSession = function(){
+  var s = window._blabGetState();
+  if(!s) return null;
+  var nextDay = s.last_completed_day === 0 ? 1 : (s.last_completed_day % 4) + 1;
+  var week = nextDay === 1 && s.last_completed_day === 4 ? (s.week + 1) : s.week;
+  return { week: week, day: nextDay };
+};
+
+window._blabCompleteSession = function(dayNum){
+  var s = window._blabGetState();
+  if(!s) return;
+  s.last_completed_day = dayNum;
+  s.last_completed_date = new Date().toISOString();
+  if(!s.session_log) s.session_log = [];
+  s.session_log.push({ week: s.week, day: dayNum, date: s.last_completed_date });
+  // Week complete when day 4 done
+  if(dayNum === 4){
+    s.week = s.week + 1;
+    s.last_completed_day = 0;
+    // Trigger BLAB check-in
+    window._blabWeekComplete = true;
+  }
+  athlete.blabState = s;
+  if(typeof saveAthlete === 'function') saveAthlete(athlete);
+  if(typeof renderTodayScreen === 'function') renderTodayScreen();
+};
 
 // ── Developer shortcuts (accessible via 5-tap diagnostic) ────────────────────
 window._phxDevForceSaveToSupabase = async function(){
@@ -4338,9 +4604,6 @@ async function _loadProfileAndRouteInner(){
     console.log('[PHX] routing decision:',{hasAthlete:true,fqCompleted:profile.fq_completed,targetScreen:'today'});
     viewWeek=progWeek();
     navTo('today');
-    // Re-render after short delay to ensure DOM is ready and athlete is fully loaded
-    setTimeout(function(){ if(typeof renderTodayScreen==='function') renderTodayScreen(); }, 300);
-    setTimeout(function(){ if(typeof renderTodayScreen==='function') renderTodayScreen(); }, 1500);
     // v4.7.20: after the athlete profile is loaded and we've routed to Today, check whether
     // there's an unfinished walk in Supabase. The helper handles the resume / finish / discard prompt.
     setTimeout(function(){ if(typeof _phxResumeWalk==='function') _phxResumeWalk(); }, 600);
@@ -14490,7 +14753,6 @@ function _phxGenerateDailyWOD(dateStr){
 // ====== TODAY SCREEN RENDER ======
 
 function renderTodayScreen(){
-  console.log('[PHX] renderTodayScreen called. athlete='+!!(athlete)+' prog='+!!(athlete&&athlete.aiProgramme)+' week_num='+((athlete&&athlete.aiProgramme&&athlete.aiProgramme.week&&athlete.aiProgramme.week.week_number)||'none')+' currentWeek='+((athlete&&athlete.currentWeek)||'none'));
   // Date display
   var now=new Date();
   var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -14511,19 +14773,6 @@ function renderTodayScreen(){
              || 1;
     weekBadge.textContent = 'Week '+wkNum;
   }
-
-  // Safety net: force-render today sessions if card still shows placeholder
-  setTimeout(function(){
-    var _card = document.getElementById('card-today-session');
-    if(_card){
-      var _inner = _card.querySelector('.game-card-inner');
-      if(_inner && _inner.textContent.indexOf('Start training') >= 0){
-        // Card still showing placeholder - force re-render
-        console.log('[PHX] Safety net: card still showing placeholder, forcing re-render');
-        if(typeof renderTodaySessionCard === 'function') renderTodaySessionCard();
-      }
-    }
-  }, 500);
 
   // Phoenix WOD
   renderDailyWOD();
@@ -18672,6 +18921,7 @@ function _detectWODFormat(wod){
   if(f.indexOf('TABATA')>-1)   return 'tabata';
   if(f.indexOf('DEATH BY')>-1 || f.indexOf('DEATH_BY')>-1 || f.indexOf('DEATHBY')>-1) return 'death_by';
   if(f.indexOf('FORLOAD')>-1 || f.indexOf('FOR LOAD')>-1) return 'forload';
+  if(f.indexOf('PERCENTAGE_SETS')>-1 || f.indexOf('PERCENTAGE SETS')>-1) return 'percentage_sets';
   if(f.indexOf('BLOCKS')>-1)   return 'blocks';
   return 'afap'; // sensible default for unrecognised formats
 }
@@ -18694,6 +18944,7 @@ function _buildWodFromAISession(sess){
     else if(fmtRaw.indexOf('tabata')>-1)    fmtOut = 'Tabata';
     else if(fmtRaw.indexOf('death')>-1)     fmtOut = 'Death By';
     else if(fmtRaw.indexOf('forload')>-1 || fmtRaw.indexOf('for load')>-1) fmtOut = 'For Load';
+    else if(fmtRaw.indexOf('percentage_sets')>-1) fmtOut = 'Strength Sets';
     else if(fmtRaw.indexOf('blocks')>-1)    fmtOut = 'Blocks';
     else fmtOut = w.format || 'AFAP';
     var movs = (w.movements||[]).map(function(m){
@@ -19353,6 +19604,157 @@ function startWODTimer(modalId){
     '</div>';
   }
 
+  // ── PERCENTAGE SETS renderer (BLAB) ─────────────────────────────────────────
+  // Pre-calculated sets from 1RM. Each set card shows %/weight/reps.
+  // Final set has "or more" flag — athlete logs actual reps.
+  // Detects and celebrates PRs.
+  function _renderPERCENTAGE_SETS(){
+    var t = window._wodTimer;
+    // Initialise state
+    if(!t.pctState){
+      t.pctState = movements.map(function(m, i){
+        return {
+          name: m.name,
+          pct: m.pct || 0,
+          weight: m.weight_kg || 0,
+          target_reps: m.reps || 1,
+          or_more: !!(m.or_more),
+          actual_reps: null,
+          completed: false,
+          rest_sec: m.rest_sec || 180
+        };
+      });
+      t.pctCurrentSet = 0;
+      t.pctResting = false;
+      t.pctRestSec = 0;
+    }
+
+    var sets = t.pctState;
+    var cur = t.pctCurrentSet;
+    var isResting = t.pctResting;
+    var allDone = sets.every(function(s){ return s.completed; });
+
+    // Build set cards
+    var setsHTML = sets.map(function(s, i){
+      var isCurrent = (i === cur && !allDone);
+      var isDone = s.completed;
+      var isPending = i > cur;
+      var borderColor = isDone ? 'var(--green,#3a7d44)' : isCurrent ? 'var(--gold)' : 'var(--border)';
+      var opacity = isPending ? '0.5' : '1';
+      var repLabel = s.or_more ? s.target_reps+'+' : String(s.target_reps);
+
+      var inputHTML = '';
+      if(isCurrent && !isResting){
+        inputHTML = s.or_more
+          ? '<div style="margin-top:12px;"><div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Reps completed (aim for '+s.target_reps+'+)</div>'+
+            '<div style="display:flex;align-items:center;gap:10px;">'+
+              '<input type="number" inputmode="numeric" id="pct-reps-input" placeholder="'+s.target_reps+'" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:22px;font-weight:700;text-align:center;">'+
+              '<button onclick="window._blabPctDone('+i+')" style="flex:0 0 90px;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done</button>'+
+            '</div></div>'
+          : '<button onclick="window._blabPctDone('+i+')" style="width:100%;padding:14px;margin-top:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#000;cursor:pointer;">Done — '+s.target_reps+' reps</button>';
+      } else if(isDone){
+        var prBadge = (s.or_more && s.actual_reps && s.actual_reps > s.target_reps)
+          ? '<span style="background:var(--gold);color:#000;font-family:var(--font-d);font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px;letter-spacing:1px;">PR 🏆</span>' : '';
+        inputHTML = '<div style="margin-top:8px;font-family:var(--font-d);font-size:13px;color:var(--green,#3a7d44);">✓ '+(s.actual_reps||s.target_reps)+' reps completed'+prBadge+'</div>';
+      }
+
+      return '<div style="background:var(--bg2);border:1px solid '+borderColor+';border-radius:var(--radius);padding:16px;margin-bottom:10px;opacity:'+opacity+';transition:all 0.2s;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:'+(isCurrent&&!isResting?'0':'4px')+';">'+
+          '<div>'+
+            '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Set '+(i+1)+' of '+sets.length+'</div>'+
+            '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--text);">'+s.name+'</div>'+
+          '</div>'+
+          '<div style="text-align:right;">'+
+            '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;color:var(--gold);">'+s.weight+'<span style="font-size:14px;color:var(--text3);">kg</span></div>'+
+            '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">'+s.pct+'% × '+repLabel+'</div>'+
+          '</div>'+
+        '</div>'+
+        inputHTML+
+      '</div>';
+    }).join('');
+
+    // Rest timer overlay
+    var restHTML = '';
+    if(isResting){
+      restHTML = '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:20px;text-align:center;margin-bottom:16px;">'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Rest</div>'+
+        '<div style="font-family:var(--font-d);font-size:56px;font-weight:900;color:var(--gold);" id="pct-rest-timer">'+formatTime(t.pctRestSec)+'</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+(cur < sets.length ? 'Set '+(cur+1)+' of '+sets.length+' next' : 'All sets complete')+'</div>'+
+        '<div style="display:flex;gap:10px;margin-top:14px;">'+
+          '<button onclick="window._blabPctSkipRest()" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;">Skip Rest</button>'+
+          '<button onclick="window._blabPctAddRest(30)" style="flex:0 0 80px;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;">+30s</button>'+
+        '</div>'+
+      '</div>';
+    }
+
+    // All done — show finish
+    var finishHTML = allDone
+      ? '<button onclick="window._blabPctFinish()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Complete ✓</button>'
+      : '';
+
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      _headerHTML(wod.session_name || 'STRENGTH SETS')+
+      '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:20px;letter-spacing:2px;text-transform:uppercase;">Rest '+Math.round((sets[0]&&sets[0].rest_sec||180)/60)+' min between sets</div>'+
+      restHTML+
+      (isResting ? '' : setsHTML)+
+      finishHTML+
+    '</div>';
+  }
+
+  // Done tap — log reps, start rest
+  window._blabPctDone = function(setIdx){
+    var t = window._wodTimer;
+    if(!t || !t.pctState) return;
+    var s = t.pctState[setIdx];
+    if(!s || s.completed) return;
+    // Get reps if "or more" set
+    if(s.or_more){
+      var inp = document.getElementById('pct-reps-input');
+      var reps = inp ? (parseInt(inp.value) || s.target_reps) : s.target_reps;
+      s.actual_reps = reps;
+    } else {
+      s.actual_reps = s.target_reps;
+    }
+    s.completed = true;
+    t.pctCurrentSet = setIdx + 1;
+    // Start rest unless last set
+    if(setIdx < t.pctState.length - 1){
+      t.pctResting = true;
+      t.pctRestSec = s.rest_sec || 180;
+    }
+    _renderPERCENTAGE_SETS();
+  };
+
+  // Rest countdown tick (called from main timer)
+  window._blabPctRestTick = function(){
+    var t = window._wodTimer;
+    if(!t || !t.pctResting) return;
+    t.pctRestSec = Math.max(0, t.pctRestSec - 1);
+    var el = document.getElementById('pct-rest-timer');
+    if(el) el.textContent = formatTime(t.pctRestSec);
+    if(t.pctRestSec <= 0){
+      t.pctResting = false;
+      _renderPERCENTAGE_SETS();
+    }
+  };
+
+  window._blabPctSkipRest = function(){
+    var t = window._wodTimer;
+    if(t) { t.pctResting = false; t.pctRestSec = 0; }
+    _renderPERCENTAGE_SETS();
+  };
+
+  window._blabPctAddRest = function(secs){
+    var t = window._wodTimer;
+    if(t) t.pctRestSec = (t.pctRestSec || 0) + secs;
+    var el = document.getElementById('pct-rest-timer');
+    if(el) el.textContent = formatTime(t.pctRestSec);
+  };
+
+  window._blabPctFinish = function(){
+    if(typeof finishWOD === 'function') finishWOD();
+  };
+
   // ── FOR LOAD renderer ────────────────────────────────────────────────────────
   // Sets × reps working up to a max load. Athlete logs weight per set, score = heaviest set.
   function _renderFORLOAD(){
@@ -19597,6 +19999,7 @@ function startWODTimer(modalId){
   };
 
   function _renderRouter(){
+    if(fmt==='percentage_sets') return _renderPERCENTAGE_SETS();
     if(fmt==='afap')      return _renderAFAP();
     if(fmt==='amrap')     return _renderAMRAP();
     if(fmt==='emom')      return _renderEMOM();
@@ -19655,6 +20058,7 @@ function startWODTimer(modalId){
           var remNow = Math.max(0, t.totalSecs - t.elapsed);
           if(el) el.textContent = formatTime(remNow);
           if(remNow === 30) _renderRouter();
+          if(typeof window._blabPctRestTick === 'function') window._blabPctRestTick();
           if(t.elapsed >= t.totalSecs){
             clearInterval(t.interval); t.running=false;
             if(el) el.textContent='TIME!';
@@ -21879,7 +22283,6 @@ window._phxResetCustomisations = function(){
 };
 
 function openTodaySession(){
-  console.log('[PHX] openTodaySession: _todaySession='+!!(window._todaySession)+' sessions='+((window._todaySessions||[]).length));
   // Kill any open preview/adjust overlays that would sit on top of the session screen (z-index conflict)
   ['phx-session-preview','phx-week-adjust','phx-wod-type-overlay','phx-core-type-overlay'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.remove();

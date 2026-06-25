@@ -2739,6 +2739,22 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 
 <!-- v4.7.47 DIAGNOSTIC SCREEN — visible-text readouts + live test write. Always reachable. -->
+<!-- BLAB SESSION SCREEN -->
+<div id="screen-blab-session" class="screen">
+  <div style="padding:0 0 60px;">
+    <!-- Header -->
+    <div style="padding:20px 20px 0;display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+      <button onclick="navTo('today')" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;">← Today</button>
+      <div>
+        <div id="blab-sess-eyebrow" style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">BLAB · Week 1 · Day 1</div>
+        <div id="blab-sess-title" style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);">Upper Body</div>
+      </div>
+    </div>
+    <!-- Exercise list -->
+    <div id="blab-sess-exercises" style="padding:0 16px;"></div>
+  </div>
+</div>
+
 <!-- BLAB SETUP SCREEN -->
 <div id="screen-blab-setup" class="screen">
   <div style="padding:24px 20px 40px;">
@@ -3554,7 +3570,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.77';
+var APP_VERSION='4.9.78';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3745,6 +3761,167 @@ window.openBlabSetup = function(){
 };
 
 // ── BLAB state helpers ───────────────────────────────────────────────────────
+// ── BLAB Session Screen ──────────────────────────────────────────────────────
+window._blabOpenSessionScreen = function(session){
+  // Set header
+  var eyebrow = document.getElementById('blab-sess-eyebrow');
+  var title = document.getElementById('blab-sess-title');
+  var exercisesEl = document.getElementById('blab-sess-exercises');
+  if(eyebrow) eyebrow.textContent = 'BLAB · Week '+session.week+' · Day '+session.day;
+  if(title) title.textContent = session.session_name;
+  if(!exercisesEl) return;
+
+  // Build exercise cards
+  var html = '';
+  (session.exercises||[]).forEach(function(ex, i){
+    html += _blabRenderExerciseCard(ex, i, session.exercises.length);
+  });
+  // Complete session button
+  html += '<div style="margin-top:24px;">'+
+    '<button onclick="window._blabFinishSession()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Complete Session ✓</button>'+
+  '</div>';
+  exercisesEl.innerHTML = html;
+  showScreen('screen-blab-session');
+};
+
+window._blabRenderExerciseCard = function(ex, idx, total){
+  var fmt = ex.format || 'standard_sets';
+  var borderColor = 'var(--border)';
+  var badge = '';
+
+  // Format badge
+  var fmtLabel = {
+    'percentage_sets': 'Strength Sets',
+    'superset': 'Superset',
+    'total_rep_goal': 'Total Reps',
+    'afap': 'Complex',
+    'interval': 'Cardio',
+    'standard_sets': 'Sets'
+  }[fmt] || fmt;
+
+  badge = '<span style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);background:rgba(200,150,62,0.12);padding:3px 8px;border-radius:10px;">'+fmtLabel+'</span>';
+
+  // Exercise detail based on format
+  var detail = '';
+
+  if(fmt === 'percentage_sets'){
+    detail = (ex.sets||[]).map(function(s){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border2);">'+
+        '<div style="font-size:12px;color:var(--text3);">Set — '+s.pct+'%</div>'+
+        '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">'+s.weight_kg+'kg × '+(s.or_more ? s.reps+'+' : s.reps)+' reps</div>'+
+      '</div>';
+    }).join('');
+    detail += '<div style="font-size:11px;color:var(--text3);margin-top:8px;">Rest: 3 min between sets</div>';
+  } else if(fmt === 'superset'){
+    var movs = ex.movements || [];
+    detail = movs.map(function(m,mi){
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2);">'+
+        '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);width:20px;">'+(mi===0?'A':'B')+'</div>'+
+        '<div>'+
+          '<div style="font-size:14px;font-weight:600;color:var(--text);">'+m.name+'</div>'+
+          '<div style="font-size:12px;color:var(--text3);">'+m.reps+' reps</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+    detail += '<div style="font-size:11px;color:var(--text3);margin-top:8px;">'+(ex.sets||3)+' sets · Rest '+(ex.rest_sec||90)+'s after A+B</div>';
+  } else if(fmt === 'total_rep_goal'){
+    if(ex.chin_up_test){
+      detail = '<div style="font-size:13px;color:var(--text2);margin-bottom:6px;">Test set: do max reps, log the number.</div>';
+    } else {
+      detail = '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);margin-bottom:4px;">'+(ex.target_reps||'?')+' total reps</div>';
+    }
+  } else if(fmt === 'afap'){
+    var movs2 = ex.movements || [];
+    detail = movs2.map(function(m){
+      return '<div style="font-size:13px;color:var(--text2);padding:4px 0;">'+m.name+' × '+m.reps+'</div>';
+    }).join('');
+    if(ex.sets > 1) detail += '<div style="font-size:11px;color:var(--text3);margin-top:6px;">'+ex.sets+' sets · Rest '+(ex.rest_sec||90)+'s between</div>';
+  } else if(fmt === 'interval'){
+    detail = '<div style="font-size:14px;color:var(--text2);">1.6km run · Record your time</div>';
+  } else if(fmt === 'standard_sets'){
+    detail = '<div style="font-family:var(--font-d);font-size:18px;font-weight:700;color:var(--text);">'+(ex.sets||3)+' × '+(ex.reps||10)+'</div>';
+  }
+
+  var coaching = ex.coaching_note
+    ? '<div style="background:var(--bg3);border-left:2px solid var(--gold);padding:10px 12px;border-radius:0 4px 4px 0;margin-top:10px;font-size:12px;color:var(--text3);line-height:1.6;">'+ex.coaching_note+'</div>'
+    : '';
+
+  // Start button
+  var startBtn = '<button onclick="window._blabLaunchExercise('+idx+')" style="width:100%;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;margin-top:12px;">Start →</button>';
+
+  return '<div id="blab-ex-'+idx+'" style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--border2);border-radius:var(--radius);padding:16px;margin-bottom:12px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Exercise '+(idx+1)+' of '+total+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.2;">'+ex.name+'</div>'+
+      '</div>'+
+      '<div style="margin-left:10px;">'+badge+'</div>'+
+    '</div>'+
+    detail+
+    coaching+
+    startBtn+
+  '</div>';
+};
+
+// Launch individual exercise into WOD renderer
+window._blabLaunchExercise = function(idx){
+  var cur = window._blabCurrentSession;
+  if(!cur || !cur.data) return;
+  var ex = cur.data.exercises[idx];
+  if(!ex) return;
+  var fmt = ex.format || 'standard_sets';
+
+  // Build WOD object for the renderer
+  var wod = {
+    format: fmt.toUpperCase().replace(/_/g,' '),
+    session_name: ex.name,
+    sets: ex.sets || 1,
+    rest_sec: ex.rest_sec || 90,
+    movements: ex.movements || [{name: ex.name, reps: ex.reps || 10}],
+    target_reps: ex.target_reps,
+    prev_best: ex.prev_best || 0,
+    reps_per_set: ex.reps_per_set || null,
+    chin_up_test: ex.chin_up_test || false,
+    timed: ex.timed || false
+  };
+
+  // For percentage sets — pass sets array as movements
+  if(fmt === 'percentage_sets'){
+    wod.format = 'PERCENTAGE_SETS';
+    wod.movements = (ex.sets||[]).map(function(s){
+      return {
+        name: ex.name,
+        pct: s.pct,
+        weight_kg: s.weight_kg,
+        reps: s.reps,
+        or_more: s.or_more,
+        rest_sec: ex.rest_sec || 180
+      };
+    });
+  }
+
+  // Store exercise index for completion callback
+  window._blabCurrentExIdx = idx;
+
+  // Open WOD screen
+  window._wodSelection = {};
+  if(typeof openWOD === 'function'){
+    openWOD(wod);
+  } else {
+    alert('Opening: '+ex.name);
+  }
+};
+
+window._blabFinishSession = function(){
+  var cur = window._blabCurrentSession;
+  if(!cur) return;
+  var day = cur.day;
+  if(typeof window._blabCompleteSession === 'function'){
+    window._blabCompleteSession(day);
+  }
+  if(typeof navTo === 'function') navTo('today');
+};
+
 window._blabGetState = function(){
   return (athlete && athlete.blabState) || null;
 };
@@ -3778,13 +3955,251 @@ window._blabGetNextSession = function(){
   return { week: week, day: nextDay };
 };
 
-// Start a BLAB session (routes to session screen)
-window._blabStartSession = function(week, day){
-  // Store which session we're about to do
-  window._blabCurrentSession = {week: week, day: day};
-  // For now navigate to a placeholder — will route to session renderer in Session 3
-  alert('BLAB Week '+week+' Day '+day+' — session renderer coming in next build!');
+
+// ============================================================================
+// BLAB SESSION DATA — Week 1
+// All weights calculated from athlete.blabState.maxes at runtime
+// ============================================================================
+
+window._blabGetSession = function(week, day){
+  var bs = athlete && athlete.blabState;
+  if(!bs) return null;
+  var B = bs.maxes.bench || 130;
+  var S = bs.maxes.squat || 150;
+  var D = bs.maxes.deadlift || 170;
+  var C = bs.chin_up_max || 0;
+  var p = window._blabPct;
+  var sqVar = bs.squat_var === 'box' ? 'Box Squat' : 'Back Squat';
+  var dlVar = bs.deadlift_var === 'trap' ? 'Trap Bar Deadlift' : bs.deadlift_var === 'sumo' ? 'Sumo Deadlift' : 'Conventional Deadlift';
+
+  // ── WEEK 1 ────────────────────────────────────────────────────────────────
+  if(week === 1){
+
+    if(day === 1){ return {
+      session_name: 'Upper Body',
+      session_type: 'Strength',
+      week: 1, day: 1,
+      duration_min: 75,
+      exercises: [
+        {
+          name: 'Bench Press',
+          format: 'percentage_sets',
+          rest_sec: 180,
+          sets: [
+            {pct:72.5, weight_kg:p(B,72.5), reps:8,  or_more:false},
+            {pct:77.5, weight_kg:p(B,77.5), reps:6,  or_more:false},
+            {pct:82.5, weight_kg:p(B,82.5), reps:4,  or_more:true}
+          ],
+          coaching_note: 'Controlled descent, pause 1sec at chest on set 3. Log reps on the final set — aim for more than 4.'
+        },
+        {
+          name: 'Flat DB Press',
+          format: 'max_reps_sets',
+          sets: 2,
+          coaching_note: 'Choose a weight you can get 20-25 reps with on set 1. Same weight both sets. Log reps.'
+        },
+        {
+          name: 'Seated Cable Rows / Cable Tricep Pushdowns',
+          format: 'superset',
+          sets: 4, rest_sec: 90,
+          movements: [
+            {name:'Seated Cable Rows (overhand)', reps:'15'},
+            {name:'Cable Tricep Pushdowns (straight bar)', reps:'15'}
+          ]
+        },
+        {
+          name: 'DB Shrugs / DB Lateral Raises',
+          format: 'superset',
+          sets: 3, rest_sec: 90,
+          movements: [
+            {name:'DB Shrugs (2-sec holds)', reps:'15'},
+            {name:'DB Lateral Raises', reps:'15'}
+          ]
+        },
+        {
+          name: 'Barbell Complex',
+          format: 'afap',
+          sets: 2, rest_sec: 90,
+          coaching_note: '10 reps each movement. Don\'t put the bar down. Rest 90s between sets.',
+          movements: [
+            {name:'Deadlifts', reps:10},
+            {name:'Bent Rows', reps:10},
+            {name:'Hang Cleans', reps:10},
+            {name:'Push Press', reps:10},
+            {name:'Back Squats', reps:10}
+          ]
+        }
+      ]
+    };}
+
+    if(day === 2){ return {
+      session_name: 'Lower Body',
+      session_type: 'Strength',
+      week: 1, day: 2,
+      duration_min: 70,
+      exercises: [
+        {
+          name: 'DB Squat Jumps',
+          format: 'standard_sets',
+          sets: 4, reps: 6,
+          coaching_note: 'Hold 5kg DBs. Full squat, explosive jump, soft landing. Reset between reps.'
+        },
+        {
+          name: sqVar,
+          format: 'percentage_sets',
+          rest_sec: 180,
+          sets: [
+            {pct:72.5, weight_kg:p(S,72.5), reps:8,  or_more:false},
+            {pct:77.5, weight_kg:p(S,77.5), reps:6,  or_more:false},
+            {pct:82.5, weight_kg:p(S,82.5), reps:4,  or_more:false}
+          ],
+          coaching_note: 'No AMRAP on final set — mile run follows. Save the legs.'
+        },
+        {
+          name: '45° Back Raises / Seated MB Twists',
+          format: 'superset',
+          sets: 3, rest_sec: 90,
+          movements: [
+            {name:'45° Back Raises (hold plate over chest)', reps:'15'},
+            {name:'Seated MB Twists (feet off floor)', reps:'20 each side'}
+          ]
+        },
+        {
+          name: '1.6km Run',
+          format: 'interval',
+          sets: 1,
+          task_mode: true,
+          coaching_note: 'Record your time. This is your baseline. Comfortable pace — you\'ll beat it Week 2.'
+        }
+      ]
+    };}
+
+    if(day === 3){ return {
+      session_name: 'Upper Body — Chin-up Focus',
+      session_type: 'Strength',
+      week: 1, day: 3,
+      duration_min: 70,
+      exercises: [
+        {
+          name: 'Chin-ups',
+          format: 'total_rep_goal',
+          target_reps: C > 0 ? (C + Math.round(C * 0.5)) : null,
+          chin_up_test: C === 0,
+          coaching_note: C === 0
+            ? 'Establish your max today. Do 1 all-out set. Log the number — the app will calculate all future targets.'
+            : 'Target: '+(C + Math.round(C*0.5))+' total reps (your max '+C+' + 50%). Break it into sets, rest as needed. Don\'t go to failure on set 1.'
+        },
+        {
+          name: 'Front Lat Pulldowns / Standing DB Military Press',
+          format: 'superset',
+          sets: 2, rest_sec: 90,
+          movements: [
+            {name:'Front Lat Pulldowns (wide overhand)', reps:'Max (aim 20-25 set 1, 10-20 set 2)'},
+            {name:'Standing DB Military Press', reps:'Max (aim 15-20 set 1, 10-15 set 2)'}
+          ]
+        },
+        {
+          name: 'Rolling Tricep Extensions / Hammer Curls',
+          format: 'superset',
+          sets: 4, rest_sec: 90,
+          movements: [
+            {name:'Rolling Tricep Extensions', reps:'8'},
+            {name:'Hammer Curls (both arms)', reps:'8'}
+          ]
+        },
+        {
+          name: 'Core Circuit',
+          format: 'afap',
+          sets: 2, rest_sec: 60,
+          coaching_note: '2 rounds. No rest between movements within a round.',
+          movements: [
+            {name:'Toe Touches', reps:20},
+            {name:'Bicycle', reps:'30 total'},
+            {name:'Side Plank', reps:'30s each side'}
+          ]
+        },
+        {
+          name: '100 Push-ups',
+          format: 'total_rep_goal',
+          target_reps: 100,
+          timed: true,
+          coaching_note: 'As fast as possible. Break into sets, minimal rest. Record your time.'
+        }
+      ]
+    };}
+
+    if(day === 4){ return {
+      session_name: 'Deadlift + Power',
+      session_type: 'Strength',
+      week: 1, day: 4,
+      duration_min: 65,
+      exercises: [
+        {
+          name: 'Box Jumps',
+          format: 'standard_sets',
+          sets: 4, reps: 5,
+          coaching_note: 'Step off, land soft, full reset between reps. This is CNS activation — not conditioning. Quality over speed.'
+        },
+        {
+          name: dlVar,
+          format: 'percentage_sets',
+          rest_sec: 180,
+          sets: [
+            {pct:72.5, weight_kg:p(D,72.5), reps:8,  or_more:false},
+            {pct:77.5, weight_kg:p(D,77.5), reps:6,  or_more:false},
+            {pct:82.5, weight_kg:p(D,82.5), reps:4,  or_more:false}
+          ],
+          coaching_note: 'Reset each rep. Brace hard before every pull. No touch-and-go.'
+        },
+        {
+          name: 'Single Leg RDL / Ab Wheel Rollouts',
+          format: 'superset',
+          sets: 3, rest_sec: 90,
+          movements: [
+            {name:'Single Leg RDL (DB)', reps:'10 each leg'},
+            {name:'Ab Wheel Rollouts', reps:'10'}
+          ]
+        },
+        {
+          name: 'Sled Push',
+          format: 'interval',
+          sets: 4,
+          task_mode: true,
+          distance_m: 20,
+          coaching_note: 'Heavy load, 20m push. Full rest between sets (2-3 min). Record load used.'
+        }
+      ]
+    };}
+  }
+
+  return null; // Other weeks coming in Session 4
 };
+
+// ── Session launcher ──────────────────────────────────────────────────────────
+window._blabStartSession = function(week, day){
+  var session = window._blabGetSession(week, day);
+  if(!session){
+    alert('Week '+week+' Day '+day+' sessions coming soon — in next build.');
+    return;
+  }
+  window._blabCurrentSession = {week: week, day: day, data: session};
+  // Open the BLAB session screen
+  if(typeof window._blabOpenSessionScreen === 'function'){
+    window._blabOpenSessionScreen(session);
+  } else {
+    alert('Session screen coming in next build. Session data loaded: '+session.session_name);
+  }
+};
+
+// ── Chin-up max establishment ─────────────────────────────────────────────────
+window._blabSetChinMax = function(reps){
+  if(!athlete || !athlete.blabState) return;
+  athlete.blabState.chin_up_max = reps;
+  athlete.blabState.chin_up_established = true;
+  if(typeof saveAthlete === 'function') saveAthlete(athlete);
+  alert('Chin-up max set: '+reps+' reps. All future targets calculated from this.');
+};
+
 
 window._blabCompleteSession = function(dayNum){
   var s = window._blabGetState();

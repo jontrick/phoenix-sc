@@ -3571,7 +3571,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.79';
+var APP_VERSION='4.9.80';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3738,6 +3738,13 @@ window._blabConfirmSetup = function(){
     maxes: { bench: b, squat: s, deadlift: d },
     session_log: []
   };
+  // Suspend AI programme — BLAB takes over completely
+  // AI programme preserved in blabState.suspended_programme so it can be restored
+  if(athlete.aiProgramme){
+    athlete.blabState.suspended_programme = athlete.aiProgramme;
+    athlete.aiProgramme = null;
+  }
+  athlete.currentWeek = 1;
   if(typeof saveAthlete === 'function') saveAthlete(athlete);
   // Route to Today screen
   if(typeof renderTodayScreen === 'function') renderTodayScreen();
@@ -3911,6 +3918,37 @@ window._blabLaunchExercise = function(idx){
   } else {
     alert('Opening: '+ex.name);
   }
+};
+
+// Simple week overview for BLAB
+window._blabOpenWeekOverview = function(){
+  var bs = athlete && athlete.blabState;
+  if(!bs) return;
+  var week = bs.week || 1;
+  var lastDay = bs.last_completed_day || 0;
+  var dayLabels = ['','Upper Body','Lower Body (Squat)','Upper Body (Chin-up)','Deadlift + Power'];
+  var html = '<div style="padding:24px 20px;">';
+  html += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">BLAB</div>';
+  html += '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;margin-bottom:20px;">Week '+week+'</div>';
+  for(var d=1; d<=4; d++){
+    var done = d <= lastDay;
+    var next = d === lastDay + 1;
+    html += '<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg2);border:1px solid '+(next?'var(--gold)':done?'var(--green,#3a7d44)':'var(--border)')+';border-radius:var(--radius);margin-bottom:8px;">'+
+      '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:'+(done?'var(--green,#3a7d44)':next?'var(--gold)':'var(--text3)')+';">'+
+        (done ? '✓' : next ? '→' : '○')+
+      '</div>'+
+      '<div>'+
+        '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Day '+d+'</div>'+
+        '<div style="font-size:15px;font-weight:600;color:var(--text);">'+dayLabels[d]+'</div>'+
+      '</div>'+
+      (next ? '<div style="margin-left:auto;"><button onclick="window._blabStartSession('+week+','+d+');this.closest(\'.screen-overlay\')&&this.closest(\'.screen-overlay\').remove()" style="padding:10px 16px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Start</button></div>' : '')+
+    '</div>';
+  }
+  html += '</div>';
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9500;overflow-y:auto;';
+  overlay.innerHTML = '<button onclick="this.parentElement.remove()" style="position:fixed;top:20px;left:20px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;z-index:9501;">← Back</button>'+html;
+  document.body.appendChild(overlay);
 };
 
 window._blabFinishSession = function(){
@@ -15407,6 +15445,8 @@ async function _phxApplyCompletedTileMarkers(){
 }
 
 async function _phxRenderSundayReviewCard(){
+  // Suppress standard check-in when BLAB is active
+  if(athlete && athlete.blabState && athlete.blabState.active) return;
   // Idempotent: prevent concurrent runs from doubling the card
   if(window._phxSundayCardRunning) return;
   window._phxSundayCardRunning = true;
@@ -17518,6 +17558,11 @@ async function _phxMirrorWeekCustomToSupabase(weekStart, byDay, weekNumber){
 }
 
 window.openWeekPlan = function(){
+  // When BLAB is active, show BLAB week overview instead
+  if(athlete && athlete.blabState && athlete.blabState.active){
+    window._blabOpenWeekOverview && window._blabOpenWeekOverview();
+    return;
+  }
   showScreen('screen-week-plan');
   _phxRenderWeekPlan();
 };

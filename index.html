@@ -3592,7 +3592,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.91';
+var APP_VERSION='4.9.92';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18148,6 +18148,8 @@ function renderTodaySessionCard(){
   }
 }
 function _renderTodaySessionCardInner(){
+  // BLAB handles its own Today card — skip standard renderer
+  if(athlete && athlete.blabState && athlete.blabState.active) return;
   var card=document.getElementById('card-today-session');
   if(!card) return;
   var now=new Date();

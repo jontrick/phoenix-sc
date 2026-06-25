@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.76';
+var APP_VERSION='4.9.77';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3776,6 +3776,14 @@ window._blabGetNextSession = function(){
   var nextDay = s.last_completed_day === 0 ? 1 : (s.last_completed_day % 4) + 1;
   var week = nextDay === 1 && s.last_completed_day === 4 ? (s.week + 1) : s.week;
   return { week: week, day: nextDay };
+};
+
+// Start a BLAB session (routes to session screen)
+window._blabStartSession = function(week, day){
+  // Store which session we're about to do
+  window._blabCurrentSession = {week: week, day: day};
+  // For now navigate to a placeholder — will route to session renderer in Session 3
+  alert('BLAB Week '+week+' Day '+day+' — session renderer coming in next build!');
 };
 
 window._blabCompleteSession = function(dayNum){
@@ -14787,6 +14795,52 @@ function renderTodayScreen(){
   // Direct session inject — bypass renderTodaySessionCard entirely for main tile
   (function(){
     try {
+      // BLAB mode — show next session based on sequence, not calendar day
+      if(athlete && athlete.blabState && athlete.blabState.active){
+        var _bs = athlete.blabState;
+        var _card = document.getElementById('card-today-session');
+        if(!_card) return;
+        var _inner = _card.querySelector('.game-card-inner');
+        if(!_inner) return;
+        var _next = window._blabGetNextSession ? window._blabGetNextSession() : null;
+        if(!_next) return;
+        var _canDo = window._blabCanDoNextDay ? window._blabCanDoNextDay() : true;
+        var _dayLabels = ['','Upper Body','Lower Body (Squat)','Upper Body (Chin-up)','Deadlift + Power'];
+        var _dayName = 'Day '+_next.day+' · '+(_dayLabels[_next.day]||'');
+        var _weekComplete = window._blabWeekComplete;
+        if(_weekComplete){
+          // Show check-in prompt
+          _inner.innerHTML =
+            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week '+(_next.week-1)+' Complete</span></div>'+
+            '<div class="game-card-title" style="font-size:24px;">Week Complete</div>'+
+            '<div class="game-card-sub" style="margin-top:6px;">Log your check-in to load Week '+_next.week+'</div>'+
+            '<div class="game-card-action" style="font-size:12px;margin-top:10px;" onclick="window._blabOpenCheckin && window._blabOpenCheckin()">Check in →</div>';
+          _card.style.borderLeftColor='var(--gold)';
+          _card.style.cursor='pointer';
+          _card.setAttribute('onclick','window._blabOpenCheckin && window._blabOpenCheckin()');
+        } else if(!_canDo){
+          // 48hr rest enforced
+          _inner.innerHTML =
+            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week '+_next.week+'</span></div>'+
+            '<div class="game-card-title" style="font-size:24px;">Rest Day</div>'+
+            '<div class="game-card-sub" style="margin-top:6px;">Day 4 needs 48hrs after squats. Back tomorrow.</div>';
+          _card.style.borderLeftColor='var(--border2)';
+          _card.style.cursor='default';
+          _card.removeAttribute('onclick');
+        } else {
+          // Ready to train
+          _inner.innerHTML =
+            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week '+_next.week+' · Day '+_next.day+'</span></div>'+
+            '<div class="game-card-title" style="font-size:26px;">'+_dayName+'</div>'+
+            '<div class="game-card-sub" style="margin-top:6px;">Built Like A Badass</div>'+
+            '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
+          _card.style.borderLeftColor='var(--gold)';
+          _card.style.cursor='pointer';
+          _card.setAttribute('onclick','window._blabStartSession('+_next.week+','+_next.day+')');
+          window._blabCurrentSession = _next;
+        }
+        return; // Don't fall through to AI programme inject
+      }
       if(!athlete || !athlete.aiProgramme || !athlete.aiProgramme.week) return;
       var _sessions = athlete.aiProgramme.week.sessions || [];
       var _day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
@@ -18922,6 +18976,8 @@ function _detectWODFormat(wod){
   if(f.indexOf('DEATH BY')>-1 || f.indexOf('DEATH_BY')>-1 || f.indexOf('DEATHBY')>-1) return 'death_by';
   if(f.indexOf('FORLOAD')>-1 || f.indexOf('FOR LOAD')>-1) return 'forload';
   if(f.indexOf('PERCENTAGE_SETS')>-1 || f.indexOf('PERCENTAGE SETS')>-1) return 'percentage_sets';
+  if(f.indexOf('SUPERSET')>-1) return 'superset';
+  if(f.indexOf('TOTAL_REP_GOAL')>-1 || f.indexOf('TOTAL REP GOAL')>-1) return 'total_rep_goal';
   if(f.indexOf('BLOCKS')>-1)   return 'blocks';
   return 'afap'; // sensible default for unrecognised formats
 }
@@ -18945,6 +19001,8 @@ function _buildWodFromAISession(sess){
     else if(fmtRaw.indexOf('death')>-1)     fmtOut = 'Death By';
     else if(fmtRaw.indexOf('forload')>-1 || fmtRaw.indexOf('for load')>-1) fmtOut = 'For Load';
     else if(fmtRaw.indexOf('percentage_sets')>-1) fmtOut = 'Strength Sets';
+    else if(fmtRaw.indexOf('superset')>-1) fmtOut = 'Superset';
+    else if(fmtRaw.indexOf('total_rep_goal')>-1) fmtOut = 'Total Reps';
     else if(fmtRaw.indexOf('blocks')>-1)    fmtOut = 'Blocks';
     else fmtOut = w.format || 'AFAP';
     var movs = (w.movements||[]).map(function(m){
@@ -19145,7 +19203,41 @@ function startWODTimer(modalId){
   // ---------- AFAP renderer ----------
   function _renderAFAP(){
     var t=window._wodTimer;
-    var movHTML = movements.map(function(m,i){
+    // Multi-set AFAP: if wod.sets > 1, show set counter and rest timer between sets
+    var totalSets = wod.sets || 1;
+    if(!t.afapSetNum) t.afapSetNum = 1;
+    if(t.afapResting === undefined) t.afapResting = false;
+    if(!t.afapRestSec) t.afapRestSec = 0;
+    // Reset doneIdx when starting a new set
+    if(t.afapSetStart !== t.afapSetNum){
+      t.afapSetStart = t.afapSetNum;
+      t.doneIdx = -1;
+    }
+    // Variable reps per set (ascending/descending)
+    var repsPerSet = wod.reps_per_set; // array e.g. [7,8,9] or null for fixed
+    var curReps = repsPerSet ? (repsPerSet[t.afapSetNum-1] || wod.reps_per_movement || 10) : null;
+    // Override movement reps for this set if variable
+    var setMovements = movements.map(function(m){
+      if(!curReps) return m;
+      return Object.assign({}, m, {reps: curReps});
+    });
+    // If resting between sets
+    if(t.afapResting){
+      var restSec = wod.rest_sec || 90;
+      if(t.afapRestSec === undefined || t.afapRestSec <= 0) t.afapRestSec = restSec;
+      inner.innerHTML='<div style="padding-top:20px;">'+
+        _headerHTML('REST — SET '+(t.afapSetNum-1)+' DONE')+
+        '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;color:var(--gold);text-align:center;margin:20px 0;" id="afap-rest-timer">'+formatTime(t.afapRestSec)+'</div>'+
+        '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:8px;">Set '+t.afapSetNum+' of '+totalSets+' up next</div>'+
+        (repsPerSet ? '<div style="font-size:12px;color:var(--gold);text-align:center;margin-bottom:20px;font-family:var(--font-d);font-weight:700;">'+repsPerSet[t.afapSetNum-1]+' reps each movement</div>' : '<div style="margin-bottom:20px;"></div>')+
+        '<div style="display:flex;gap:10px;">'+
+          '<button onclick="window._afapSkipRest()" style="flex:1;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:var(--text2);cursor:pointer;">Skip Rest</button>'+
+          '<button onclick="window._afapAddRest(30)" style="flex:0 0 80px;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;color:var(--text2);cursor:pointer;">+30s</button>'+
+        '</div>'+
+      '</div>';
+      return;
+    }
+    var movHTML = setMovements.map(function(m,i){
       var done = i<=t.doneIdx;
       // v4.7.17 FIX 2: name on top + two adjacent gold-bordered boxes (reps, load).
       var loadStr = phxFormatHeight(phxMovementLoad(m, window._wodSelection, i));
@@ -19162,9 +19254,10 @@ function startWODTimer(modalId){
       '</div>';
     }).join('');
     inner.innerHTML='<div style="padding-top:20px;">'+
-      _headerHTML('AS FAST AS POSSIBLE')+
+      _headerHTML(totalSets > 1 ? 'SET '+t.afapSetNum+' OF '+totalSets : 'AS FAST AS POSSIBLE')+
       '<div class="wod-timer-display" id="wod-timer-num" style="margin-bottom:4px;">'+formatTime(t.elapsed)+'</div>'+
-      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:24px;">ELAPSED</div>'+
+      '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:'+(repsPerSet?'8px':'24px')+';">ELAPSED</div>'+
+      (repsPerSet ? '<div style="font-family:var(--font-d);font-size:13px;color:var(--gold);text-align:center;margin-bottom:16px;font-weight:700;">'+curReps+' reps each movement</div>' : '')+
       (wod.rep_scheme?'<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:var(--radius);padding:8px 12px;text-align:center;margin-bottom:14px;font-family:var(--font-d);font-size:14px;color:var(--gold);letter-spacing:2px;">'+wod.rep_scheme+'</div>':'')+
       movHTML+
       '<div style="display:flex;gap:10px;margin-top:14px;">'+
@@ -19178,9 +19271,37 @@ function startWODTimer(modalId){
     if(i===t.doneIdx+1){ t.doneIdx = i; }
     _renderAFAP();
     if(t.doneIdx >= movements.length-1){
-      // All movements ticked → auto-stop and record
-      finishWOD();
+      var totalSets = wod.sets || 1;
+      if((t.afapSetNum||1) < totalSets){
+        // More sets to go — start rest
+        t.afapSetNum = (t.afapSetNum||1) + 1;
+        t.afapResting = true;
+        t.afapRestSec = wod.rest_sec || 90;
+        _renderAFAP();
+      } else {
+        finishWOD();
+      }
     }
+  };
+  window._afapSkipRest = function(){
+    var t=window._wodTimer;
+    if(t){ t.afapResting=false; t.afapRestSec=0; }
+    _renderAFAP();
+  };
+  window._afapAddRest = function(s){
+    var t=window._wodTimer;
+    if(t){ t.afapRestSec=(t.afapRestSec||0)+s; }
+    var el=document.getElementById('afap-rest-timer');
+    if(el) el.textContent=formatTime(t.afapRestSec);
+  };
+  // Called from main timer tick
+  window._afapRestTick = function(){
+    var t=window._wodTimer;
+    if(!t||!t.afapResting) return;
+    t.afapRestSec=Math.max(0,(t.afapRestSec||0)-1);
+    var el=document.getElementById('afap-rest-timer');
+    if(el) el.textContent=formatTime(t.afapRestSec);
+    if(t.afapRestSec<=0){ t.afapResting=false; _renderAFAP(); }
   };
 
   // ---------- AMRAP renderer (v4.7.6 FIX 3) ----------
@@ -19755,6 +19876,218 @@ function startWODTimer(modalId){
     if(typeof finishWOD === 'function') finishWOD();
   };
 
+  // ── TOTAL REP GOAL renderer (BLAB) ──────────────────────────────────────────
+  // Used for chin-ups and empty barbell curls.
+  // Target total reps — athlete logs sets as they go. No fixed set count.
+  // Progress bar fills. Shows previous best.
+  function _renderTOTAL_REP_GOAL(){
+    var t = window._wodTimer;
+    if(!t.trState){
+      var target = (wod.target_reps) || (movements[0] && movements[0].reps) || 20;
+      var prevBest = (wod.prev_best) || 0;
+      t.trState = {
+        target: target,
+        prevBest: prevBest,
+        sets: [],
+        total: 0,
+        done: false
+      };
+    }
+    var tr = t.trState;
+    var pct = Math.min(100, Math.round((tr.total / tr.target) * 100));
+    var mov = movements[0] || {name:'Chin-ups'};
+    var isComplete = tr.total >= tr.target;
+
+    // Set log
+    var setLog = tr.sets.length
+      ? tr.sets.map(function(r,i){ return '<span style="font-family:var(--font-d);font-size:14px;color:var(--text2);">'+r+'</span>'; }).join('<span style="color:var(--border2);padding:0 4px;">+</span>')
+      : '<span style="font-size:12px;color:var(--text3);">No sets logged yet</span>';
+
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      _headerHTML(mov.name.toUpperCase())+
+      // Progress
+      '<div style="text-align:center;margin-bottom:6px;">'+
+        '<div style="font-family:var(--font-d);font-size:72px;font-weight:900;color:'+(isComplete?'var(--gold)':'var(--text)')+';line-height:1;">'+tr.total+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:14px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;">of '+tr.target+' total reps</div>'+
+      '</div>'+
+      // Progress bar
+      '<div style="background:var(--bg3);border-radius:4px;height:8px;margin:16px 0;overflow:hidden;">'+
+        '<div style="background:var(--gold);height:8px;width:'+pct+'%;border-radius:4px;transition:width 0.4s;"></div>'+
+      '</div>'+
+      // Previous best
+      (tr.prevBest ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:16px;letter-spacing:1px;">Previous best: '+tr.prevBest+' reps</div>' : '<div style="margin-bottom:16px;"></div>')+
+      // Set log
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;">'+
+        setLog+
+      '</div>'+
+      // Log reps input
+      (!isComplete
+        ? '<div style="display:flex;gap:10px;margin-bottom:12px;">'+
+            '<input type="number" inputmode="numeric" id="tr-reps-input" placeholder="Reps this set" style="flex:1;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:22px;font-weight:700;text-align:center;">'+
+            '<button onclick="window._blabTrLog()" style="flex:0 0 90px;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Log</button>'+
+          '</div>'+
+          '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:16px;">Rest as needed between sets. Don\'t go to failure on the first set.</div>'
+        : '<div style="background:rgba(200,150,62,0.1);border:1px solid var(--gold);border-radius:var(--radius);padding:16px;text-align:center;margin-bottom:16px;">'+
+            '<div style="font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;color:var(--gold);">Target reached! 🏆</div>'+
+            (tr.total > tr.prevBest && tr.prevBest > 0 ? '<div style="font-size:12px;color:var(--text2);margin-top:4px;">New personal best!</div>' : '')+
+          '</div>'
+      )+
+      '<button onclick="finishWOD()" style="width:100%;padding:18px;background:'+(isComplete?'var(--gold)':'var(--bg2)')+';border:'+(isComplete?'none':'1px solid var(--border)')+';border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:'+(isComplete?'#000':'var(--text2)')+';cursor:pointer;">'+(isComplete?'Finish ✓':'Finish Early')+'</button>'+
+    '</div>';
+  }
+
+  window._blabTrLog = function(){
+    var t = window._wodTimer;
+    if(!t||!t.trState) return;
+    var inp = document.getElementById('tr-reps-input');
+    var reps = inp ? (parseInt(inp.value)||0) : 0;
+    if(reps <= 0) return;
+    t.trState.sets.push(reps);
+    t.trState.total += reps;
+    if(inp) inp.value = '';
+    _renderTOTAL_REP_GOAL();
+  };
+
+  // ── SUPERSET renderer (BLAB) ─────────────────────────────────────────────────  // ── SUPERSET renderer (BLAB) ─────────────────────────────────────────────────
+  // Paired A+B exercises shown together. Shared set counter.
+  // Rest timer fires after BOTH exercises complete per set.
+  function _renderSUPERSET(){
+    var t = window._wodTimer;
+    if(!t.superState){
+      // movements: alternating A/B pairs
+      // wod.sets = total sets, wod.rest_sec = rest between paired sets
+      var totalSets = wod.sets || 3;
+      var restSec = wod.rest_sec || 90;
+      t.superState = {
+        totalSets: totalSets,
+        restSec: restSec,
+        currentSet: 1,
+        aComplete: false,
+        bComplete: false,
+        resting: false,
+        phaseSec: 0,
+        completedSets: 0
+      };
+    }
+    var ss = t.superState;
+    var movA = movements[0] || {name:'Exercise A'};
+    var movB = movements[1] || {name:'Exercise B'};
+    var allDone = ss.completedSets >= ss.totalSets;
+    var isResting = ss.resting;
+
+    // Set progress dots
+    var dots = '';
+    for(var d=1; d<=ss.totalSets; d++){
+      var done = d <= ss.completedSets;
+      var cur = d === ss.currentSet && !allDone;
+      dots += '<div style="width:10px;height:10px;border-radius:50%;background:'+(done?'var(--gold)':cur?'var(--orange)':'var(--border2)')+';display:inline-block;margin:0 3px;"></div>';
+    }
+
+    var loadA = phxFormatHeight(phxMovementLoad(movA, window._wodSelection, 0));
+    var loadB = phxFormatHeight(phxMovementLoad(movB, window._wodSelection, 1));
+
+    // Exercise cards
+    var cardA = '<div style="background:var(--bg2);border:2px solid '+(ss.aComplete?'var(--green,#3a7d44)':'var(--gold)')+';border-radius:var(--radius);padding:16px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+        '<div>'+
+          '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">A</div>'+
+          '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);">'+movA.name+'</div>'+
+          '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+movA.reps+' reps'+(loadA?' · '+loadA:'')+'</div>'+
+        '</div>'+
+        (ss.aComplete
+          ? '<div style="font-family:var(--font-d);font-size:13px;color:var(--green,#3a7d44);">✓</div>'
+          : '<button onclick="window._blabSuperDone('a')" style="padding:12px 18px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done</button>'
+        )+
+      '</div>'+
+    '</div>';
+
+    var cardB = '<div style="background:var(--bg2);border:2px solid '+(ss.bComplete?'var(--green,#3a7d44)':ss.aComplete?'var(--gold)':'var(--border2)')+';border-radius:var(--radius);padding:16px;margin-bottom:8px;opacity:'+(ss.aComplete?'1':'0.6')+';transition:all 0.2s;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+        '<div>'+
+          '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">B</div>'+
+          '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);">'+movB.name+'</div>'+
+          '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+movB.reps+' reps'+(loadB?' · '+loadB:'')+'</div>'+
+        '</div>'+
+        (ss.bComplete
+          ? '<div style="font-family:var(--font-d);font-size:13px;color:var(--green,#3a7d44);">✓</div>'
+          : (ss.aComplete
+              ? '<button onclick="window._blabSuperDone('b')" style="padding:12px 18px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done</button>'
+              : '<div style="padding:12px 18px;font-family:var(--font-d);font-size:12px;color:var(--text3);">After A</div>'
+            )
+        )+
+      '</div>'+
+    '</div>';
+
+    // Rest screen
+    var restHTML = isResting
+      ? '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:24px;text-align:center;margin-bottom:16px;">'+
+          '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Rest</div>'+
+          '<div style="font-family:var(--font-d);font-size:56px;font-weight:900;color:var(--gold);" id="super-rest-timer">'+formatTime(ss.phaseSec)+'</div>'+
+          '<div style="font-size:12px;color:var(--text3);margin-top:6px;">'+(ss.completedSets < ss.totalSets ? 'Set '+(ss.completedSets+1)+' of '+ss.totalSets+' next' : 'All sets complete — rest up')+'</div>'+
+          '<div style="display:flex;gap:10px;margin-top:16px;">'+
+            '<button onclick="window._blabSuperSkipRest()" style="flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text2);cursor:pointer;">Skip</button>'+
+            '<button onclick="window._blabSuperAddRest(30)" style="flex:0 0 70px;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;">+30s</button>'+
+          '</div>'+
+        '</div>'
+      : '';
+
+    var finishHTML = allDone && !isResting
+      ? '<button onclick="finishWOD()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-top:8px;">Complete ✓</button>'
+      : '';
+
+    inner.innerHTML='<div style="padding-top:20px;">'+
+      _headerHTML('SUPERSET — SET '+ss.currentSet+' OF '+ss.totalSets)+
+      '<div style="text-align:center;margin-bottom:16px;">'+dots+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:16px;letter-spacing:1px;">Complete A → then B → rest '+Math.round(ss.restSec/60)+'min</div>'+
+      restHTML+
+      (isResting ? '' : cardA+cardB)+
+      finishHTML+
+    '</div>';
+  }
+
+  window._blabSuperDone = function(which){
+    var t = window._wodTimer;
+    if(!t||!t.superState) return;
+    var ss = t.superState;
+    if(which === 'a'){ ss.aComplete = true; }
+    else if(which === 'b' && ss.aComplete){
+      ss.bComplete = true;
+      ss.completedSets++;
+      if(ss.completedSets < ss.totalSets){
+        // Start rest
+        ss.resting = true;
+        ss.phaseSec = ss.restSec;
+        ss.aComplete = false;
+        ss.bComplete = false;
+        ss.currentSet++;
+      }
+    }
+    _renderSUPERSET();
+  };
+
+  window._blabSuperRestTick = function(){
+    var t = window._wodTimer;
+    if(!t||!t.superState||!t.superState.resting) return;
+    var ss = t.superState;
+    ss.phaseSec = Math.max(0, ss.phaseSec - 1);
+    var el = document.getElementById('super-rest-timer');
+    if(el) el.textContent = formatTime(ss.phaseSec);
+    if(ss.phaseSec <= 0){ ss.resting = false; _renderSUPERSET(); }
+  };
+
+  window._blabSuperSkipRest = function(){
+    var t = window._wodTimer;
+    if(t&&t.superState){ t.superState.resting=false; t.superState.phaseSec=0; }
+    _renderSUPERSET();
+  };
+
+  window._blabSuperAddRest = function(s){
+    var t = window._wodTimer;
+    if(t&&t.superState) t.superState.phaseSec+=s;
+    var el=document.getElementById('super-rest-timer');
+    if(el) el.textContent=formatTime(t.superState.phaseSec);
+  };
+
   // ── FOR LOAD renderer ────────────────────────────────────────────────────────
   // Sets × reps working up to a max load. Athlete logs weight per set, score = heaviest set.
   function _renderFORLOAD(){
@@ -20000,6 +20333,8 @@ function startWODTimer(modalId){
 
   function _renderRouter(){
     if(fmt==='percentage_sets') return _renderPERCENTAGE_SETS();
+    if(fmt==='superset')  return _renderSUPERSET();
+    if(fmt==='total_rep_goal') return _renderTOTAL_REP_GOAL();
     if(fmt==='afap')      return _renderAFAP();
     if(fmt==='amrap')     return _renderAMRAP();
     if(fmt==='emom')      return _renderEMOM();
@@ -20059,6 +20394,8 @@ function startWODTimer(modalId){
           if(el) el.textContent = formatTime(remNow);
           if(remNow === 30) _renderRouter();
           if(typeof window._blabPctRestTick === 'function') window._blabPctRestTick();
+          if(typeof window._blabSuperRestTick === 'function') window._blabSuperRestTick();
+          if(typeof window._afapRestTick === 'function') window._afapRestTick();
           if(t.elapsed >= t.totalSecs){
             clearInterval(t.interval); t.running=false;
             if(el) el.textContent='TIME!';

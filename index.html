@@ -2862,7 +2862,28 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button onclick="_phxDevForceSaveToSupabase()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:8px;background:#2a6;color:#fff;">Force Save to Supabase (fixes Safari)</button>
   <button onclick="_phxDevForceReload()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:12px;background:#c44;">Force Reload from Supabase</button>
   <button onclick="_phxDevForceRenderToday()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;border-color:var(--gold);color:var(--gold);">Debug + Force Render Today Card</button>
-  <button onclick="openBlabSetup()" class="btn-secondary" style="width:100%;padding:14px;margin-bottom:12px;background:rgba(200,150,62,0.1);border-color:var(--gold);color:var(--gold);">⚡ Start / Edit BLAB Programme</button>
+  <div id="blab-inline-setup" style="background:rgba(200,150,62,0.06);border:1px solid var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
+    <div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">⚡ Built Like A Badass Setup</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Bench 1RM (kg)</div>
+        <input id="blab-d-bench" type="number" value="130" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;box-sizing:border-box;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Squat 1RM (kg)</div>
+        <input id="blab-d-squat" type="number" value="150" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;box-sizing:border-box;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Deadlift 1RM (kg)</div>
+        <input id="blab-d-dead" type="number" value="170" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;box-sizing:border-box;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Chin-up max reps</div>
+        <input id="blab-d-chin" type="number" value="0" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;box-sizing:border-box;">
+      </div>
+    </div>
+    <button onclick="window._blabDiagStart()" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#000;cursor:pointer;">Start BLAB — Week 1 →</button>
+  </div>
   <button onclick="_phxDevForceCheckin()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Force Weekly Check-in (any day)</button>
   <button onclick="_phxDevBumpWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Bump Week Number (+1)</button>
   <button onclick="_phxDevResetWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Reset to Week 1</button>
@@ -3571,7 +3592,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.90';
+var APP_VERSION='4.9.91';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3855,6 +3876,35 @@ window.openBlabSetup = function(){
   
   overlay.appendChild(d);
   document.body.appendChild(overlay);
+};
+
+window._blabDiagStart = function(){
+  var b = parseFloat(document.getElementById('blab-d-bench').value);
+  var s = parseFloat(document.getElementById('blab-d-squat').value);
+  var d = parseFloat(document.getElementById('blab-d-dead').value);
+  var c = parseInt(document.getElementById('blab-d-chin').value) || 0;
+  if(!b||!s||!d){ alert('Enter all three 1RMs.'); return; }
+  if(!athlete){
+    try { var raw=localStorage.getItem('phoenix_athlete'); if(raw) athlete=JSON.parse(raw); } catch(_){}
+    if(!athlete){ alert('Not signed in.'); return; }
+  }
+  athlete.blabState = {
+    active:true, block:1, week:1, day:1,
+    last_completed_day:0, last_completed_date:null,
+    chin_up_max:c, chin_up_established:c>0,
+    squat_var:'free', deadlift_var:'conventional',
+    maxes:{bench:b, squat:s, deadlift:d},
+    session_log:[]
+  };
+  if(athlete.aiProgramme){
+    athlete.blabState.suspended_programme = athlete.aiProgramme;
+    athlete.aiProgramme = null;
+  }
+  athlete.currentWeek = 1;
+  if(typeof saveAthlete==='function') saveAthlete(athlete);
+  if(typeof renderTodayScreen==='function') renderTodayScreen();
+  if(typeof navTo==='function') navTo('today');
+  alert('BLAB active. Week 1 Day 1 ready on Today screen.');
 };
 
 window._blabOvConfirm = function(){

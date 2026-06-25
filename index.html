@@ -3571,7 +3571,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.82';
+var APP_VERSION='4.9.83';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -25574,8 +25574,9 @@ async function _phxRestoreSessionVisualState(){
   });
 
   navigator.serviceWorker.register('/sw.js').then(function(reg){
-    // Active update poll — every 60s while the tab is open.
-    setInterval(function(){ try { reg.update(); } catch(_e){} }, 60000);
+    // Force update check on every load AND every 30s
+    try { reg.update(); } catch(_e){}
+    setInterval(function(){ try { reg.update(); } catch(_e){} }, 30000);
     reg.addEventListener('updatefound', function(){
       var newWorker = reg.installing;
       if(!newWorker) return;

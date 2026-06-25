@@ -3592,7 +3592,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.92';
+var APP_VERSION='4.9.93';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3884,11 +3884,7 @@ window._blabDiagStart = function(){
   var d = parseFloat(document.getElementById('blab-d-dead').value);
   var c = parseInt(document.getElementById('blab-d-chin').value) || 0;
   if(!b||!s||!d){ alert('Enter all three 1RMs.'); return; }
-  if(!athlete){
-    try { var raw=localStorage.getItem('phoenix_athlete'); if(raw) athlete=JSON.parse(raw); } catch(_){}
-    if(!athlete){ alert('Not signed in.'); return; }
-  }
-  athlete.blabState = {
+  var state = {
     active:true, block:1, week:1, day:1,
     last_completed_day:0, last_completed_date:null,
     chin_up_max:c, chin_up_established:c>0,
@@ -3896,15 +3892,18 @@ window._blabDiagStart = function(){
     maxes:{bench:b, squat:s, deadlift:d},
     session_log:[]
   };
-  if(athlete.aiProgramme){
-    athlete.blabState.suspended_programme = athlete.aiProgramme;
+  // Store in localStorage as separate key — immune to Supabase overwrites
+  localStorage.setItem('phoenix_blab_state', JSON.stringify(state));
+  // Also set on athlete if loaded
+  if(athlete){
+    athlete.blabState = state;
     athlete.aiProgramme = null;
+    athlete.currentWeek = 1;
+    if(typeof saveAthlete==='function') saveAthlete(athlete);
   }
-  athlete.currentWeek = 1;
-  if(typeof saveAthlete==='function') saveAthlete(athlete);
   if(typeof renderTodayScreen==='function') renderTodayScreen();
   if(typeof navTo==='function') navTo('today');
-  alert('BLAB active. Week 1 Day 1 ready on Today screen.');
+  alert('BLAB active. Week 1 Day 1 ready.');
 };
 
 window._blabOvConfirm = function(){
@@ -3958,6 +3957,7 @@ window._blabCompleteSession = function(dayNum){
     window._blabWeekComplete = true;
   }
   athlete.blabState = s;
+  localStorage.setItem('phoenix_blab_state', JSON.stringify(s));
   if(typeof saveAthlete === 'function') saveAthlete(athlete);
   if(typeof renderTodayScreen === 'function') renderTodayScreen();
 };
@@ -14956,8 +14956,10 @@ function renderTodayScreen(){
   (function(){
     try {
       // BLAB mode — show next session based on sequence, not calendar day
-      if(athlete && athlete.blabState && athlete.blabState.active){
-        var _bs = athlete.blabState;
+      var _blabS = window._blabGetState ? window._blabGetState() : null;
+      if(_blabS && _blabS.active){
+        var _bs = _blabS;
+        if(athlete) athlete.blabState = _blabS;
         var _card = document.getElementById('card-today-session');
         if(!_card) return;
         var _inner = _card.querySelector('.game-card-inner');
@@ -18149,7 +18151,8 @@ function renderTodaySessionCard(){
 }
 function _renderTodaySessionCardInner(){
   // BLAB handles its own Today card — skip standard renderer
-  if(athlete && athlete.blabState && athlete.blabState.active) return;
+  var _bs2 = window._blabGetState ? window._blabGetState() : null;
+  if(_bs2 && _bs2.active) return;
   var card=document.getElementById('card-today-session');
   if(!card) return;
   var now=new Date();

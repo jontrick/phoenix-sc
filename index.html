@@ -3571,7 +3571,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.88';
+var APP_VERSION='4.9.89';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4199,7 +4199,9 @@ window._phxShowAlphaWelcome = function(){
     btn.style.pointerEvents = 'none';
     btn.onclick = function(){
       try { localStorage.setItem('phoenix_alpha_welcomed', '1'); } catch(_e){}
-      if(typeof openFoundationQ === 'function') openFoundationQ();
+      if(athlete && athlete.blabState && athlete.blabState.active){
+        if(typeof navTo === 'function') navTo('today');
+      } else if(typeof openFoundationQ === 'function') openFoundationQ();
       else if(typeof showScreen === 'function') showScreen('screen-foundation-q');
     };
     // Reveal the BEGIN button after 4s so the user has time to read.
@@ -6626,7 +6628,8 @@ function renderProgramme(){
   if(!container) return;
 
   // If no AI programme, show prompt to complete questionnaire
-  if(!athlete.aiProgramme){
+  // But not if BLAB is active — BLAB doesn't use aiProgramme
+  if(!athlete.aiProgramme && !(athlete.blabState && athlete.blabState.active)){
     document.querySelector('.stats-widget').style.display='none';
     document.querySelector('.week-nav').style.display='none';
     container.innerHTML=`
@@ -18122,7 +18125,8 @@ function _renderTodaySessionCardInner(){
   document.querySelectorAll('.card-today-extra').forEach(function(n){ n.remove(); });
 
   // v4.8.4: no programme yet — show a build CTA instead of the static placeholder
-  if(!athlete||!athlete.aiProgramme){
+  // Skip if BLAB is active — handled by direct inject above
+  if((!athlete||!athlete.aiProgramme) && !(athlete && athlete.blabState && athlete.blabState.active)){
     var _nc = document.getElementById('card-today-session');
     if(_nc){
       _nc.style.borderLeftColor = 'var(--gold)';

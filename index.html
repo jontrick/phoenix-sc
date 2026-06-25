@@ -3571,7 +3571,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.89';
+var APP_VERSION='4.9.90';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3759,7 +3759,7 @@ window._blabConfirmSetup = function(){
 window.openBlabSetup = function(){
   var old = document.getElementById('blab-setup-overlay');
   if(old) old.remove();
-  var prevB='',prevS='',prevD='',prevC='';
+  var prevB='130',prevS='150',prevD='170',prevC='0';
   window._blabOvSq = 'free';
   window._blabOvDl = 'conventional';
   if(athlete && athlete.blabState && athlete.blabState.maxes){
@@ -3864,7 +3864,14 @@ window._blabOvConfirm = function(){
   var c=parseInt(document.getElementById('blab-ov-chin').value)||0;
   if(!b||!s||!d){ alert('Please enter all three 1RMs.'); return; }
   if(b<20||s<20||d<20){ alert('Please enter weights in kg.'); return; }
-  if(!athlete){ alert('Profile not loaded — try again.'); return; }
+  if(!athlete){
+    // Try to get athlete from localStorage directly
+    try {
+      var raw = localStorage.getItem('phoenix_athlete');
+      if(raw) { athlete = JSON.parse(raw); }
+    } catch(_e){}
+    if(!athlete){ alert('Profile not loaded — please sign in first.'); return; }
+  }
   athlete.blabState={
     active:true, block:1, week:1, day:1,
     last_completed_day:0, last_completed_date:null,

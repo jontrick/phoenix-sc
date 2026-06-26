@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.90';
+var APP_VERSION='4.9.91';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4095,6 +4095,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       // Store raw sets for custom rendering
       phxEx._blabSets = sets;
       phxEx._blabFmt = 'percentage_sets';
+      phxEx.format = 'percentage_sets';
       phxEx._perSetKg = sets.map(function(s){ return s.kg; });
       phxEx._perSetReps = sets.map(function(s){ return s.amrap ? s.reps+'+' : String(s.reps); });
 
@@ -4107,12 +4108,14 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx._supersetPartner = ex.movements[1];
       phxEx._supersetRest = ex.rest || 90;
       phxEx._blabFmt = 'superset';
+      phxEx.format = 'superset';
 
     } else if(fmt === 'total_rep_goal'){
       phxEx.sets = 1;
       phxEx.reps = ex.chin_test ? 'max reps' : String(ex.target||0)+' total';
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'total_rep_goal';
+      phxEx.format = 'total_rep_goal';
       phxEx._blabTarget = ex.target || 0;
       phxEx._blabChinTest = ex.chin_test || false;
 
@@ -4121,6 +4124,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.reps = (ex.movements||[]).map(function(m){ return m.name+' x'+m.reps; }).join(', ');
       phxEx.load_guidance = ex.suggested_load ? ex.suggested_load+'kg' : '';
       phxEx._blabFmt = 'afap';
+      phxEx.format = 'afap';
       phxEx._blabMovements = ex.movements;
       phxEx._blabRepsPerSet = ex.reps_per_set;
       phxEx._blabRest = ex.rest || 90;
@@ -4133,12 +4137,14 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.reps = 'Max reps';
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'max_reps_sets';
+      phxEx.format = 'max_reps_sets';
 
     } else if(fmt === 'interval'){
       phxEx.sets = 1;
       phxEx.reps = '1.6km';
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'interval';
+      phxEx.format = 'interval';
 
     } else {
       phxEx.sets = ex.sets || 3;
@@ -4603,7 +4609,7 @@ window._blabTrLog=function(){
 function blabRenderAfap(ex,st,body){
   if(!st.afapSet) st.afapSet=1;
   if(typeof st.afapIdx==='undefined') st.afapIdx=-1;
-  if(!st.afapLoad) st.afapLoad=ex.suggested_load||0;
+  if(!st.afapLoad) st.afapLoad=ex.suggested_load||ex._blabSuggestedLoad||0;
   if(!st.afapSetTimes) st.afapSetTimes=[];
   if(!st.afapSetStart) st.afapSetStart=0;
   // Countdown before first set
@@ -4630,7 +4636,7 @@ function blabRenderAfap(ex,st,body){
     }
     return;
   }
-  var totalSets=ex.sets||1, movs=ex.movements||[];
+  var totalSets=ex.sets||1, movs=ex.movements||ex._blabMovements||[];
   var rps=ex.reps_per_set, curReps=rps?rps[st.afapSet-1]:null;
   var prevBest=ex.prev_best||0;
 
@@ -4696,7 +4702,7 @@ window._blabAfapTick=function(i){
   var st=window._blabWoState; if(!st) return;
   if(i!==st.afapIdx+1) return;
   st.afapIdx=i;
-  var movs=st.ex.movements||[];
+  var movs=st.ex.movements||st.ex._blabMovements||[];
   if(st.afapIdx>=movs.length-1){
     var tot=st.ex.sets||1;
     // Record set time

@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.79';
+var APP_VERSION='4.9.80';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4053,34 +4053,69 @@ function blabRenderSuper(ex,st,body){
   if(!st.ssSet) st.ssSet=1;
   if(!st.ssA) st.ssA=false;
   if(!st.ssB) st.ssB=false;
+  if(!st.ssLog) st.ssLog=[];
   var total=ex.sets||3, allDone=st.ssSet>total;
+  var m=ex.movements||[];
   var h=blabDots(total,st.ssSet-1);
   h+='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:16px;">Set '+Math.min(st.ssSet,total)+' of '+total+' &middot; Rest '+(ex.rest||90)+'s after A+B</div>';
-  var m=ex.movements||[];
+  if(st.ssLog.length){
+    var lh='<div style="background:var(--bg3);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;">';
+    st.ssLog.forEach(function(l,i){ lh+='<div style="font-size:11px;color:var(--text3);">Set '+(i+1)+': A='+l.a+' reps &middot; B='+l.b+' reps</div>'; });
+    h+=lh+'</div>';
+  }
   h+='<div style="background:var(--bg2);border:2px solid '+(st.ssA?'#3a7d44':'var(--gold)')+';border-radius:var(--radius);padding:16px;margin-bottom:8px;">'+
-    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">A</div>'+
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">A</div>'+
     '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:4px;">'+(m[0]&&m[0].name)+'</div>'+
     '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;">'+(m[0]&&m[0].reps)+'</div>'+
-    (st.ssA?'<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">\u2713 Done</div>':
-     allDone?'':'<button onclick="window._blabSuperA()" style="width:100%;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done A \u2713</button>')+
+    (st.ssA
+      ? '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">\u2713 '+(st.ssALog||'')+' reps done</div>'
+      : allDone?''
+      : '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Log reps completed</div>'+
+        '<div style="display:flex;gap:8px;">'+
+          '<input type="number" inputmode="numeric" id="ss-a-in" style="flex:1;padding:11px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:20px;font-weight:700;text-align:center;outline:none;" placeholder="reps">'+
+          '<button onclick="window._blabSuperA()" style="flex:0 0 90px;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done A \u2713</button>'+
+        '</div>'
+    )+
   '</div>';
   h+='<div style="background:var(--bg2);border:2px solid '+(st.ssB?'#3a7d44':st.ssA?'var(--gold)':'var(--border2)')+';border-radius:var(--radius);padding:16px;margin-bottom:8px;opacity:'+(st.ssA||st.ssB?'1':'0.5')+';transition:opacity 0.2s;">'+
-    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">B</div>'+
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">B</div>'+
     '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:4px;">'+(m[1]&&m[1].name)+'</div>'+
     '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;">'+(m[1]&&m[1].reps)+'</div>'+
-    (st.ssB?'<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">\u2713 Done</div>':
-     st.ssA&&!allDone?'<button onclick="window._blabSuperB()" style="width:100%;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done B \u2713</button>':'')+
+    (st.ssB
+      ? '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">\u2713 '+(st.ssBLog||'')+' reps done</div>'
+      : st.ssA&&!allDone
+      ? '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Log reps completed</div>'+
+        '<div style="display:flex;gap:8px;">'+
+          '<input type="number" inputmode="numeric" id="ss-b-in" style="flex:1;padding:11px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:20px;font-weight:700;text-align:center;outline:none;" placeholder="reps">'+
+          '<button onclick="window._blabSuperB()" style="flex:0 0 90px;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done B \u2713</button>'+
+        '</div>'
+      : ''
+    )+
   '</div>';
   h+=blabElapsed(st);
   if(allDone) h+=blabFinishBtn();
   body.innerHTML=h;
 }
-window._blabSuperA=function(){ var st=window._blabWoState; if(st){st.ssA=true;} window._blabWoRender(); };
+window._blabSuperA=function(){
+  var st=window._blabWoState; if(!st) return;
+  var inp=document.getElementById('ss-a-in');
+  var r=parseInt(inp&&inp.value)||0;
+  if(r<=0){ alert('Enter reps for A.'); return; }
+  st.ssA=true; st.ssALog=r;
+  window._blabWoRender();
+};
 window._blabSuperB=function(){
   var st=window._blabWoState; if(!st||!st.ssA) return;
-  st.ssB=true; st.ssSet++;
-  if(st.ssSet<=(st.ex.sets||3)){st.ssA=false;st.ssB=false;st.resting=true;st.restSec=st.ex.rest||90;}
+  var inp=document.getElementById('ss-b-in');
+  var r=parseInt(inp&&inp.value)||0;
+  if(r<=0){ alert('Enter reps for B.'); return; }
+  st.ssB=true; st.ssBLog=r;
+  if(!st.ssLog) st.ssLog=[];
+  st.ssLog.push({a:st.ssALog,b:r});
+  st.ssSet++;
+  if(st.ssSet<=(st.ex.sets||3)){ st.ssA=false; st.ssB=false; st.ssALog=0; st.ssBLog=0; st.resting=true; st.restSec=st.ex.rest||90; }
   window._blabWoRender();
+};
 };
 
 // TOTAL REP GOAL

@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.86';
+var APP_VERSION='4.9.87';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3736,6 +3736,16 @@ window.blabOpenSession = function(week, day){
   var sess = window.blabGetSessionData(week, day);
   if(!sess){ alert('Session data not available yet.'); return; }
   window._blabCurrentSession = {week:week, day:day, data:sess};
+  // Translate BLAB session into Phoenix session format and use the existing renderer
+  var phoenixSess = window.blabToPhoenixSession(sess, week, day);
+  if(phoenixSess){
+    window._todaySession = phoenixSess;
+    window._phxWarmupSkipNext = true; // skip warmup for BLAB
+    // Set up completion callback
+    window._blabSessionCompleteCallback = function(){ window.blabCompleteSession(week, day); };
+    openTodaySession();
+    return;
+  }
 
   // Build overlay
   var old = document.getElementById('blab-session-overlay');
@@ -3778,6 +3788,94 @@ window.blabOpenSession = function(week, day){
   list.appendChild(completeBtn);
   overlay.appendChild(list);
   document.body.appendChild(overlay);
+};
+
+// Translate BLAB session data into Phoenix session format
+window.blabToPhoenixSession = function(sess, week, day){
+  var bs = window.blabGetState();
+  if(!sess || !bs) return null;
+  var exercises = (sess.exercises||[]).map(function(ex, i){
+    var fmt = ex.format || 'standard_sets';
+    // Build a Phoenix-compatible exercise object
+    var phxEx = {
+      name: ex.name,
+      sets: 3,
+      reps: '10',
+      rest_sec: 90,
+      load_guidance: '',
+      coaching_note: ex.note || ''
+    };
+
+    if(fmt === 'percentage_sets' && ex.sets && ex.sets.length){
+      var sets = ex.sets;
+      phxEx.sets = sets.length;
+      phxEx.rest_sec = 180;
+      // Use last set as target, build load_guidance from percentages
+      var lastSet = sets[sets.length-1];
+      phxEx.reps = sets.map(function(s){ return s.amrap ? s.reps+'+' : String(s.reps); }).join('/');
+      phxEx.load_guidance = sets.map(function(s){ return s.kg+'kg'; }).join('/');
+      phxEx._blabSets = sets; // keep raw data
+      phxEx._blabFmt = 'percentage_sets';
+
+    } else if(fmt === 'superset' && ex.movements && ex.movements.length===2){
+      // Split into two exercises with superset flag
+      phxEx.name = ex.movements[0].name;
+      phxEx.sets = ex.sets || 3;
+      phxEx.reps = ex.movements[0].reps;
+      phxEx.rest_sec = 0; // no rest between A and B
+      phxEx._supersetPartner = ex.movements[1];
+      phxEx._supersetRest = ex.rest || 90;
+      phxEx._blabFmt = 'superset';
+
+    } else if(fmt === 'total_rep_goal'){
+      phxEx.sets = 1;
+      phxEx.reps = ex.chin_test ? 'max reps' : String(ex.target||0)+' total';
+      phxEx.load_guidance = '';
+      phxEx._blabFmt = 'total_rep_goal';
+      phxEx._blabTarget = ex.target || 0;
+      phxEx._blabChinTest = ex.chin_test || false;
+
+    } else if(fmt === 'afap'){
+      phxEx.sets = ex.sets || 1;
+      phxEx.reps = (ex.movements||[]).map(function(m){ return m.name+' x'+m.reps; }).join(', ');
+      phxEx.load_guidance = ex.suggested_load ? ex.suggested_load+'kg' : '';
+      phxEx._blabFmt = 'afap';
+      phxEx._blabMovements = ex.movements;
+      phxEx._blabRepsPerSet = ex.reps_per_set;
+      phxEx._blabRest = ex.rest || 90;
+      phxEx._blabSuggestedLoad = ex.suggested_load || 0;
+      phxEx._blabPrevBest = ex.prev_best || 0;
+      phxEx._blabHasLoad = ex.has_load || false;
+
+    } else if(fmt === 'max_reps_sets'){
+      phxEx.sets = ex.sets || 2;
+      phxEx.reps = 'Max reps';
+      phxEx.load_guidance = '';
+      phxEx._blabFmt = 'max_reps_sets';
+
+    } else if(fmt === 'interval'){
+      phxEx.sets = 1;
+      phxEx.reps = '1.6km';
+      phxEx.load_guidance = '';
+      phxEx._blabFmt = 'interval';
+
+    } else {
+      phxEx.sets = ex.sets || 3;
+      phxEx.reps = String(ex.reps || 10);
+      phxEx.load_guidance = '';
+    }
+
+    return phxEx;
+  });
+
+  return {
+    day: 'BLAB Week '+week+' Day '+day,
+    session_type: sess.name,
+    duration_min: sess.duration_min || 75,
+    exercises: exercises,
+    _blabWeek: week,
+    _blabDay: day
+  };
 };
 
 window.blabBuildExCard = function(ex, idx, total, week, day){

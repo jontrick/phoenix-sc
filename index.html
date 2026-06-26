@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.77';
+var APP_VERSION='4.9.78';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3972,6 +3972,7 @@ window._blabWoRender = function(){
   else if(fmt==='total_rep_goal') blabRenderTR(ex,st,body);
   else if(fmt==='afap') blabRenderAfap(ex,st,body);
   else if(fmt==='interval') blabRenderRun(ex,st,body);
+  else if(fmt==='max_reps_sets') blabRenderMaxReps(ex,st,body);
   else blabRenderStd(ex,st,body);
 };
 
@@ -4154,6 +4155,66 @@ window._blabAfapTick=function(i){
   window._blabWoRender();
 };
 
+// MAX REPS SETS
+// Two sets, log actual reps per set, rest timer between, show previous best
+function blabRenderMaxReps(ex,st,body){
+  if(!st.mrSet) st.mrSet=1;
+  if(!st.mrResults) st.mrResults=[];
+  var totalSets=ex.sets||2, cur=st.mrSet-1, allDone=cur>=totalSets;
+  var prevBest=ex.prev_best||0;
+
+  var h=blabDots(totalSets,cur);
+  h+='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:16px;">Rest 90s between sets</div>';
+  if(prevBest) h+='<div style="text-align:center;font-size:12px;color:var(--text3);margin-bottom:12px;">Previous best: '+prevBest+' reps</div>';
+
+  for(var i=0;i<totalSets;i++){
+    var isDone=i<cur, isCur=i===cur&&!allDone, isPend=i>cur;
+    var bord=isDone?'#3a7d44':isCur?'var(--gold)':'var(--border)';
+    h+='<div style="background:var(--bg2);border:1px solid '+bord+';border-radius:var(--radius);padding:16px;margin-bottom:10px;opacity:'+(isPend?'0.4':'1')+';">'+
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Set '+(i+1)+' of '+totalSets+'</div>';
+    if(isDone){
+      var logged=st.mrResults[i];
+      var pr=prevBest&&logged>prevBest;
+      h+='<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:#3a7d44;">✓ '+logged+' reps'+(pr?' <span style="background:var(--gold);color:#000;font-size:9px;padding:2px 6px;border-radius:8px;">PR</span>':'')+'</div>';
+    } else if(isCur){
+      h+='<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Log how many reps you completed</div>'+
+        '<div style="display:flex;gap:10px;">'+
+          '<input type="number" inputmode="numeric" id="mr-in" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:26px;font-weight:700;text-align:center;outline:none;" placeholder="reps">'+
+          '<button onclick="window._blabMrDone()" style="flex:0 0 90px;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done</button>'+
+        '</div>';
+    } else {
+      h+='<div style="font-size:13px;color:var(--text3);">Up next</div>';
+    }
+    h+='</div>';
+  }
+
+  h+=blabElapsed(st);
+  if(allDone) h+=blabFinishBtn();
+  body.innerHTML=h;
+}
+window._blabMrDone=function(){
+  var st=window._blabWoState; if(!st) return;
+  var inp=document.getElementById('mr-in');
+  var r=parseInt(inp&&inp.value)||0;
+  if(r<=0){ alert('Enter reps completed.'); return; }
+  if(!st.mrResults) st.mrResults=[];
+  var cur=st.mrSet-1;
+  st.mrResults[cur]=r;
+  // Save PR
+  var bs=window.blabGetState();
+  if(bs){
+    if(!bs.records) bs.records={};
+    var k=st.ex.name+'_max';
+    if(!bs.records[k]||r>bs.records[k]){ bs.records[k]=r; window.blabSaveState(bs); }
+  }
+  st.mrSet++;
+  if(st.mrSet<=(st.ex.sets||2)){
+    st.resting=true;
+    st.restSec=90;
+  }
+  window._blabWoRender();
+};
+
 // STANDARD SETS
 function blabRenderStd(ex,st,body){
   body.innerHTML=
@@ -4258,7 +4319,8 @@ window.blabGetSessionData = function(week, day){
     } else {
       exs.push({name:'Bench Press', format:'percentage_sets', sets:bSets});
       var dbName = w<=2?'Flat DB Press':w<=4?'Incline DB Press':w<=7?'Offset Med Ball Push-ups':'Alternate DB Bench (flat)';
-      exs.push({name:dbName, format:'standard_sets', sets:2, reps:'Max reps', note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets. Log reps.'});
+      var dbRecord = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_max'])||0;
+      exs.push({name:dbName, format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:dbRecord, note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
       if(!isDeload){
         if(w<=2) exs.push({name:'Seated Cable Rows / Cable Tricep Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Seated Cable Rows (overhand grip)',reps:'15 reps'},{name:'Cable Tricep Pushdowns (straight bar)',reps:'15 reps'}]});
         else if(w<=4) exs.push({name:'1-Arm DB Rows / Tricep Rope Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Bent-over 1-Arm DB Rows',reps:'10 each arm'},{name:'Tricep Rope Pushdowns',reps:'10 reps'}]});

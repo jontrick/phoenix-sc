@@ -2769,6 +2769,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button onclick="_phxDevForceSaveToSupabase()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:8px;background:#2a6;color:#fff;">Force Save to Supabase (fixes Safari)</button>
   <button onclick="_phxDevForceReload()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:12px;background:#c44;">Force Reload from Supabase</button>
   <button onclick="_phxDevForceRenderToday()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;border-color:var(--gold);color:var(--gold);">Debug + Force Render Today Card</button>
+  <button onclick="window.blabOpenSetup()" style="width:100%;padding:14px;margin-bottom:12px;background:rgba(200,150,62,0.1);border:1px solid var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);cursor:pointer;">⚡ Built Like A Badass Setup</button>
   <button onclick="_phxDevForceCheckin()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Force Weekly Check-in (any day)</button>
   <button onclick="_phxDevBumpWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Bump Week Number (+1)</button>
   <button onclick="_phxDevResetWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Reset to Week 1</button>
@@ -3477,7 +3478,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.74';
+var APP_VERSION='4.9.75';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3531,6 +3532,183 @@ function _phxDiagTapVersion(){
 }
 window._phxDiagTapVersion = _phxDiagTapVersion;
 
+// ============================================================
+// BLAB — BUILT LIKE A BADASS
+// Stored in localStorage only. Never conflicts with aiProgramme.
+// ============================================================
+
+// ── Weight calculator ────────────────────────────────────────
+window.blabPct = function(maxKg, pct){
+  return Math.round((maxKg * pct / 100) / 2.5) * 2.5;
+};
+
+// ── State ────────────────────────────────────────────────────
+window.blabGetState = function(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    var key = uid ? 'blab_v1_' + uid : 'blab_v1';
+    var raw = localStorage.getItem(key);
+    if(raw) return JSON.parse(raw);
+  } catch(_){}
+  return null;
+};
+
+window.blabSaveState = function(state){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    var key = uid ? 'blab_v1_' + uid : 'blab_v1';
+    localStorage.setItem(key, JSON.stringify(state));
+  } catch(_){}
+};
+
+window.blabIsActive = function(){
+  var s = window.blabGetState();
+  return !!(s && s.active);
+};
+
+// ── Setup (called from diagnostic or settings) ───────────────
+window.blabOpenSetup = function(){
+  var existing = window.blabGetState() || {};
+  var m = existing.maxes || {};
+
+  var overlay = document.createElement('div');
+  overlay.id = 'blab-setup-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:99999;overflow-y:auto;';
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:24px 20px 60px;';
+
+  // Header
+  var header = document.createElement('div');
+  header.innerHTML = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Programme Setup</div>' +
+    '<div style="font-family:var(--font-d);font-size:30px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:8px;">Built Like<br>A Badass</div>' +
+    '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:28px;">Enter your TRUE 1-rep maxes. Every working set is calculated from these.</div>';
+  wrap.appendChild(header);
+
+  // Back button
+  var back = document.createElement('button');
+  back.textContent = '← Back';
+  back.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:24px;display:block;';
+  back.onclick = function(){ document.getElementById('blab-setup-overlay').remove(); };
+  wrap.insertBefore(back, header);
+
+  // Input helper
+  function makeInput(id, label, hint, val){
+    var d = document.createElement('div');
+    d.style.marginBottom = '16px';
+    var l = document.createElement('div');
+    l.style.cssText = 'font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:' + (hint?'4':'8') + 'px;';
+    l.textContent = label;
+    d.appendChild(l);
+    if(hint){ var h=document.createElement('div'); h.style.cssText='font-size:11px;color:var(--text3);margin-bottom:6px;'; h.textContent=hint; d.appendChild(h); }
+    var inp = document.createElement('input');
+    inp.id = id; inp.type = 'number'; inp.value = val || '';
+    inp.style.cssText = 'width:100%;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:26px;font-weight:700;box-sizing:border-box;outline:none;';
+    d.appendChild(inp);
+    return d;
+  }
+  wrap.appendChild(makeInput('blab-bench', 'Bench Press 1RM (kg)', null, m.bench || 130));
+  wrap.appendChild(makeInput('blab-squat', 'Back Squat 1RM (kg)', null, m.squat || 150));
+  wrap.appendChild(makeInput('blab-dead',  'Deadlift 1RM (kg)', null, m.deadlift || 170));
+  wrap.appendChild(makeInput('blab-chin',  'Chin-up Max Reps', 'Enter 0 — establish on Week 1 Day 3', existing.chin_max || 0));
+
+  // Variation selector helper
+  var sqVar = existing.squat_var || 'free';
+  var dlVar = existing.dl_var || 'conventional';
+
+  function makeVarGroup(label, opts, cur, onChange){
+    var d = document.createElement('div');
+    d.style.marginBottom = '20px';
+    var l = document.createElement('div');
+    l.style.cssText = 'font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;';
+    l.textContent = label;
+    d.appendChild(l);
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;';
+    opts.forEach(function(opt){
+      var btn = document.createElement('button');
+      btn.textContent = opt.label;
+      btn.style.cssText = 'flex:1;padding:12px 6px;background:' + (cur===opt.val?'var(--gold)':'var(--bg2)') + ';border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:700;text-transform:uppercase;color:' + (cur===opt.val?'#000':'var(--text2)') + ';cursor:pointer;';
+      btn.onclick = function(){
+        onChange(opt.val);
+        row.querySelectorAll('button').forEach(function(b){ b.style.background='var(--bg2)'; b.style.color='var(--text2)'; });
+        btn.style.background='var(--gold)'; btn.style.color='#000';
+      };
+      row.appendChild(btn);
+    });
+    d.appendChild(row);
+    return d;
+  }
+
+  wrap.appendChild(makeVarGroup('Day 2 Squat Variation',
+    [{val:'free',label:'Free Squat'},{val:'box',label:'Box Squat'}],
+    sqVar, function(v){ sqVar = v; }
+  ));
+  wrap.appendChild(makeVarGroup('Day 4 Deadlift Variation',
+    [{val:'conventional',label:'Conventional'},{val:'trap',label:'Trap Bar'},{val:'sumo',label:'Sumo'}],
+    dlVar, function(v){ dlVar = v; }
+  ));
+
+  // Preview
+  var preview = document.createElement('div');
+  preview.id = 'blab-preview';
+  preview.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:24px;display:none;';
+  wrap.appendChild(preview);
+
+  function updatePreview(){
+    var b = parseFloat(document.getElementById('blab-bench').value)||0;
+    var s = parseFloat(document.getElementById('blab-squat').value)||0;
+    var d = parseFloat(document.getElementById('blab-dead').value)||0;
+    if(!b && !s && !d){ preview.style.display='none'; return; }
+    preview.style.display='block';
+    var html = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Week 1 Working Weights</div>';
+    if(b) html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Bench: ' + blabPct(b,72.5) + ' / ' + blabPct(b,77.5) + ' / ' + blabPct(b,82.5) + 'kg</div>';
+    if(s) html += '<div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Squat: ' + blabPct(s,72.5) + ' / ' + blabPct(s,77.5) + ' / ' + blabPct(s,82.5) + 'kg</div>';
+    if(d) html += '<div style="font-size:12px;color:var(--text2);">Deadlift: ' + blabPct(d,72.5) + ' / ' + blabPct(d,77.5) + ' / ' + blabPct(d,82.5) + 'kg</div>';
+    preview.innerHTML = html;
+  }
+
+  ['blab-bench','blab-squat','blab-dead','blab-chin'].forEach(function(id){
+    setTimeout(function(){
+      var el = document.getElementById(id);
+      if(el) el.addEventListener('input', updatePreview);
+    }, 100);
+  });
+  setTimeout(updatePreview, 200);
+
+  // Confirm button
+  var confirm = document.createElement('button');
+  confirm.textContent = 'Start BLAB — Week 1 →';
+  confirm.style.cssText = 'width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;';
+  confirm.onclick = function(){
+    var b = parseFloat(document.getElementById('blab-bench').value);
+    var s = parseFloat(document.getElementById('blab-squat').value);
+    var d = parseFloat(document.getElementById('blab-dead').value);
+    var c = parseInt(document.getElementById('blab-chin').value) || 0;
+    if(!b || !s || !d){ alert('Please enter all three 1-rep maxes.'); return; }
+    var state = {
+      active: true, week: 1,
+      last_completed_day: 0, last_completed_date: null,
+      chin_max: c, chin_established: c > 0,
+      squat_var: sqVar, dl_var: dlVar,
+      maxes: {bench:b, squat:s, deadlift:d},
+      records: {}, log: []
+    };
+    window.blabSaveState(state);
+    document.getElementById('blab-setup-overlay').remove();
+    if(typeof renderTodayScreen === 'function') renderTodayScreen();
+    if(typeof navTo === 'function') navTo('today');
+    alert('BLAB is live. Week 1 Day 1 is ready on your Today screen.');
+  };
+  wrap.appendChild(confirm);
+
+  overlay.appendChild(wrap);
+  document.body.appendChild(overlay);
+};
+
+// ── Diagnostic shortcut ──────────────────────────────────────
+window._phxDevBlabSetup = function(){ window.blabOpenSetup(); };
+
 // ── Developer shortcuts (accessible via 5-tap diagnostic) ────────────────────
 window._phxDevForceSaveToSupabase = async function(){
   // Force save current localStorage athlete data to Supabase
@@ -3542,6 +3720,405 @@ window._phxDevForceSaveToSupabase = async function(){
     else { alert('Saved to Supabase successfully! Now reload Safari.'); }
   } catch(e){ alert('Error: '+e.message); }
 };
+
+// ============================================================
+// BLAB SESSION SCREEN + RENDERERS
+// ============================================================
+
+window.blabOpenSession = function(week, day){
+  var sess = window.blabGetSessionData(week, day);
+  if(!sess){ alert('Session data not available yet.'); return; }
+  window._blabCurrentSession = {week:week, day:day, data:sess};
+
+  // Build overlay
+  var old = document.getElementById('blab-session-overlay');
+  if(old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'blab-session-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9500;overflow-y:auto;padding-bottom:60px;';
+
+  // Header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'padding:20px 20px 0;';
+  var back = document.createElement('button');
+  back.textContent = '← Today';
+  back.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:16px;display:block;';
+  back.onclick = function(){ overlay.remove(); };
+  hdr.appendChild(back);
+  var eyebrow = document.createElement('div');
+  eyebrow.style.cssText = 'font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;';
+  eyebrow.textContent = 'BLAB · Week ' + week + ' · Day ' + day;
+  hdr.appendChild(eyebrow);
+  var title = document.createElement('div');
+  title.style.cssText = 'font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:20px;';
+  title.textContent = sess.name;
+  hdr.appendChild(title);
+  overlay.appendChild(hdr);
+
+  // Exercise cards
+  var list = document.createElement('div');
+  list.style.padding = '0 16px';
+  sess.exercises.forEach(function(ex, i){
+    var card = window.blabBuildExCard(ex, i, sess.exercises.length, week, day);
+    list.appendChild(card);
+  });
+
+  // Complete session button
+  var completeBtn = document.createElement('button');
+  completeBtn.textContent = 'Complete Session ✓';
+  completeBtn.style.cssText = 'width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-top:16px;';
+  completeBtn.onclick = function(){ window.blabCompleteSession(week, day); overlay.remove(); };
+  list.appendChild(completeBtn);
+  overlay.appendChild(list);
+  document.body.appendChild(overlay);
+};
+
+window.blabBuildExCard = function(ex, idx, total, week, day){
+  var card = document.createElement('div');
+  card.id = 'blab-ex-' + idx;
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--border2);border-radius:var(--radius);padding:16px;margin-bottom:12px;';
+
+  var fmt = ex.format || 'standard_sets';
+  var fmtLabels = {percentage_sets:'Strength Sets',superset:'Superset',total_rep_goal:'Total Reps',afap:'Complex',interval:'Cardio',standard_sets:'Sets'};
+  var badge = document.createElement('div');
+  badge.style.cssText = 'display:inline-block;font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);background:rgba(200,150,62,0.12);padding:3px 8px;border-radius:10px;margin-bottom:10px;';
+  badge.textContent = fmtLabels[fmt] || fmt;
+
+  var num = document.createElement('div');
+  num.style.cssText = 'font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;';
+  num.textContent = 'Exercise ' + (idx+1) + ' of ' + total;
+
+  var name = document.createElement('div');
+  name.style.cssText = 'font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;';
+  name.textContent = ex.name;
+
+  card.appendChild(num);
+  card.appendChild(name);
+  card.appendChild(badge);
+
+  // Detail
+  var detail = document.createElement('div');
+  if(fmt === 'percentage_sets'){
+    ex.sets.forEach(function(s){
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border2);';
+      row.innerHTML = '<span style="font-size:12px;color:var(--text3);">Set — ' + s.pct + '%</span>' +
+        '<span style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">' + s.kg + 'kg</span>' +
+        '<span style="font-size:12px;color:' + (s.amrap?'var(--gold)':'var(--text3)') + ';">' + s.reps + (s.amrap?'+':'') + ' reps</span>';
+      detail.appendChild(row);
+    });
+    var restNote = document.createElement('div');
+    restNote.style.cssText = 'font-size:11px;color:var(--text3);margin-top:8px;';
+    restNote.textContent = 'Rest 3 min between sets';
+    detail.appendChild(restNote);
+  } else if(fmt === 'superset'){
+    ex.movements.forEach(function(m, mi){
+      var pair = document.createElement('div');
+      pair.style.cssText = 'border-left:3px solid var(--gold);padding-left:12px;margin-bottom:8px;';
+      pair.innerHTML = '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;color:var(--gold);margin-bottom:2px;">' + (mi===0?'A':'B') + '</div>' +
+        '<div style="font-size:14px;font-weight:600;color:var(--text);">' + m.name + '</div>' +
+        '<div style="font-size:12px;color:var(--text3);">' + m.reps + '</div>';
+      detail.appendChild(pair);
+    });
+    var setInfo = document.createElement('div');
+    setInfo.style.cssText = 'font-size:11px;color:var(--text3);margin-top:4px;';
+    setInfo.textContent = (ex.sets||3) + ' sets · Rest ' + (ex.rest||90) + 's after A+B';
+    detail.appendChild(setInfo);
+  } else if(fmt === 'total_rep_goal'){
+    var trInfo = document.createElement('div');
+    if(ex.chin_test){
+      trInfo.innerHTML = '<div style="font-size:13px;color:var(--text2);">Test set — 1 all-out set. Log your max reps.</div>';
+    } else {
+      trInfo.innerHTML = '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--gold);">' + (ex.target||'?') + ' total reps</div>';
+    }
+    detail.appendChild(trInfo);
+  } else if(fmt === 'afap'){
+    ex.movements.forEach(function(m){
+      var row = document.createElement('div');
+      row.style.cssText = 'font-size:13px;color:var(--text2);padding:3px 0;';
+      row.textContent = m.name + ' × ' + m.reps;
+      detail.appendChild(row);
+    });
+    if((ex.sets||1) > 1){
+      var setNote = document.createElement('div');
+      setNote.style.cssText = 'font-size:11px;color:var(--text3);margin-top:6px;';
+      setNote.textContent = (ex.sets) + ' sets · Rest ' + (ex.rest||90) + 's between';
+      detail.appendChild(setNote);
+    }
+  } else if(fmt === 'interval'){
+    detail.innerHTML = '<div style="font-size:14px;color:var(--text2);">1.6km run · Count-up timer · Record time</div>';
+  } else if(fmt === 'standard_sets'){
+    detail.innerHTML = '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text);">' + (ex.sets||3) + ' × ' + (ex.reps||10) + '</div>';
+  }
+  card.appendChild(detail);
+
+  // Coaching note
+  if(ex.note){
+    var note = document.createElement('div');
+    note.style.cssText = 'background:var(--bg3);border-left:2px solid var(--gold);padding:10px 12px;border-radius:0 4px 4px 0;margin-top:10px;font-size:12px;color:var(--text3);line-height:1.6;';
+    note.textContent = ex.note;
+    card.appendChild(note);
+  }
+
+  // Start button
+  var startBtn = document.createElement('button');
+  startBtn.style.cssText = 'width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;margin-top:12px;';
+  startBtn.textContent = 'Start →';
+  startBtn.setAttribute('data-idx', idx);
+  startBtn.onclick = function(){ window.blabLaunchExercise(idx); };
+  card.appendChild(startBtn);
+
+  return card;
+};
+
+window.blabLaunchExercise = function(idx){
+  var cur = window._blabCurrentSession;
+  if(!cur) return;
+  var ex = cur.data.exercises[idx];
+  if(!ex) return;
+  window._blabCurrentExIdx = idx;
+  // Use existing WOD system by building a wod object
+  var fmt = ex.format;
+  var wod = {
+    format: fmt === 'percentage_sets' ? 'PERCENTAGE_SETS' :
+             fmt === 'superset' ? 'SUPERSET' :
+             fmt === 'total_rep_goal' ? 'TOTAL_REP_GOAL' :
+             fmt === 'afap' ? 'AFAP' :
+             fmt === 'interval' ? 'INTERVAL' : 'AFAP',
+    session_name: ex.name,
+    sets: ex.sets || 1,
+    rest_sec: ex.rest || 90,
+    target_reps: ex.target || 0,
+    chin_test: ex.chin_test || false,
+    movements: ex.movements || [{name:ex.name, reps:ex.reps||10}],
+    reps_per_set: ex.reps_per_set || null
+  };
+  if(fmt === 'percentage_sets'){
+    wod.movements = ex.sets.map(function(s){
+      return {name:ex.name, pct:s.pct, weight_kg:s.kg, reps:s.reps, or_more:s.amrap, rest_sec:180};
+    });
+  }
+  if(fmt === 'interval'){
+    wod.format = 'INTERVAL';
+    wod.task_mode = true;
+    wod.movements = [{name:'1.6km Run', distance_m:1600}];
+  }
+  window._wodSelection = {};
+  if(typeof openWOD === 'function'){
+    openWOD(wod);
+  } else {
+    alert('Session: ' + ex.name);
+  }
+};
+
+// ── BLAB Session Data ────────────────────────────────────────────
+window.blabGetSessionData = function(week, day){
+  var s = window.blabGetState();
+  if(!s || !s.maxes) return null;
+  var B = s.maxes.bench, S = s.maxes.squat, D = s.maxes.deadlift;
+  var C = s.chin_max || 0;
+  var sq = s.squat_var === 'box' ? 'Box Squat' : 'Back Squat';
+  var dl = s.dl_var === 'trap' ? 'Trap Bar Deadlift' : s.dl_var === 'sumo' ? 'Sumo Deadlift' : 'Conventional Deadlift';
+  var p = window.blabPct;
+
+  var benchSchemes = {
+    1:[[72.5,8,false],[77.5,6,false],[82.5,4,true]],
+    2:[[75,7,false],[80,5,false],[85,3,true]],
+    3:[[77.5,6,false],[82.5,4,false],[90,2,true]],
+    4:[[80,5,false],[85,3,false],[95,1,true]],
+    5:[[50,5,false],[60,5,false]],
+    6:[[72.5,8,false],[77.5,6,false],[82.5,4,true]],
+    7:[[75,7,false],[80,5,false],[85,3,true]],
+    8:[[77.5,6,false],[82.5,4,false],[90,2,true]],
+    9:[[80,5,false],[85,3,false],[95,1,true]],
+    10:[[50,5,false],[60,5,false]],
+    11:[[80,4,false],[87.5,2,false],[92.5,1,false],[97.5,1,false],[102,1,true]]
+  };
+  var lowerSchemes = {
+    1:[[72.5,8,false],[77.5,6,false],[82.5,4,false]],
+    2:[[75,7,false],[80,5,false],[85,3,false]],
+    3:[[77.5,6,false],[82.5,4,false],[90,2,false]],
+    4:[[80,5,false],[85,3,false],[95,1,false]],
+    5:[[50,5,false],[60,5,false]],
+    6:[[72.5,8,false],[77.5,6,false],[82.5,4,true]],
+    7:[[75,7,false],[80,5,false],[85,3,true]],
+    8:[[77.5,6,false],[82.5,4,false],[90,2,true]],
+    9:[[80,5,false],[85,3,false],[95,1,true]],
+    10:[[50,5,false],[60,5,false]],
+    11:[[80,4,false],[87.5,2,false],[92.5,1,false],[97.5,1,false],[102,1,true]]
+  };
+
+  function mkSets(scheme, maxKg){
+    if(!scheme) return [];
+    return scheme.map(function(s){ return {pct:s[0], kg:p(maxKg,s[0]), reps:s[1], amrap:s[2]}; });
+  }
+
+  function chinTarget(pct){ return C > 0 ? C + Math.round(C * pct / 100) : 0; }
+
+  var isDeload = (week === 5 || week === 10);
+  var w = week, d = day;
+
+  // ── DAY 1: UPPER BODY ───────────────────────────────────────
+  if(d === 1){
+    var bSets = w < 12 ? mkSets(benchSchemes[w], B) : [];
+    var complexMovs = w <= 9
+      ? [{name:'Deadlifts',reps:10},{name:'Bent Rows',reps:10},{name:'Hang Cleans',reps:10},{name:'Push Press',reps:10},{name:'Back Squats',reps:10}]
+      : [{name:'Zercher Squats',reps:10},{name:'Zercher Reverse Lunges',reps:10},{name:'Curl to Press',reps:10},{name:'RDLs',reps:10},{name:'Bent Rows',reps:10}];
+    var complexSets = [0,2,3,4,4,1,3,4,5,3,1,4,5][w] || 2;
+    var complexRest = (w === 4 || w >= 6) ? 60 : 90;
+    var exs = [];
+    if(w === 12){
+      exs = [
+        {name:'Bench Press Max Rep Test', format:'total_rep_goal', target:0, note:'Choose 84kg (185lb) or 102kg (225lb). 1 set max reps. Warm up fully first.'},
+        {name:'BW Inverted Row', format:'standard_sets', sets:2, reps:'Max reps', note:'Stop when chest no longer touches bar.'},
+        {name:'Barbell Overhead Shrugs', format:'standard_sets', sets:3, reps:15},
+        {name:'BeZercher Complex', format:'afap', sets:5, rest:60, reps_per_set:[10,9,8,7,6], movements:complexMovs}
+      ];
+    } else {
+      exs.push({name:'Bench Press', format:'percentage_sets', sets:bSets});
+      var dbName = w<=2?'Flat DB Press':w<=4?'Incline DB Press':w<=7?'Offset Med Ball Push-ups':'Alternate DB Bench (flat)';
+      exs.push({name:dbName, format:'standard_sets', sets:2, reps:'Max reps', note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets. Log reps.'});
+      if(!isDeload){
+        if(w<=2) exs.push({name:'Seated Cable Rows / Cable Tricep Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Seated Cable Rows (overhand grip)',reps:'15 reps'},{name:'Cable Tricep Pushdowns (straight bar)',reps:'15 reps'}]});
+        else if(w<=4) exs.push({name:'1-Arm DB Rows / Tricep Rope Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Bent-over 1-Arm DB Rows',reps:'10 each arm'},{name:'Tricep Rope Pushdowns',reps:'10 reps'}]});
+        else exs.push({name:'Cable Rows (Double-D) / Lying DB Tricep Extensions', format:'superset', sets:w<=9?3:4, rest:90, movements:[{name:'Seated Cable Rows (Double-D handle)',reps:'12 reps'},{name:'Lying DB Tricep Extensions',reps:'12 reps'}]});
+        if(w<=2) exs.push({name:'DB Shrugs / DB Lateral Raises', format:'superset', sets:3, rest:90, movements:[{name:'DB Shrugs (2-sec holds)',reps:'15 reps'},{name:'DB Lateral Raises',reps:'15 reps'}]});
+        else if(w<=4) exs.push({name:'BB Shrugs / Incline Rear Delt Flyes', format:'superset', sets:3, rest:90, movements:[{name:'BB Shrugs (2-sec holds)',reps:'10 reps'},{name:'Incline Rear Delt Flyes (pinkies up)',reps:'12 reps'}]});
+        else exs.push({name:'Cable Face Pull / Zottman Curls', format:'superset', sets:3, rest:90, movements:[{name:'Cable Face Pull (2-sec hold)',reps:'12 reps'},{name:'Zottman Curls',reps:'12 reps'}]});
+      } else {
+        exs.push({name:'Seated Cable Rows', format:'standard_sets', sets:2, reps:15});
+        exs.push({name:'DB Shrugs', format:'standard_sets', sets:2, reps:10});
+      }
+      exs.push({name:w<=9?'Barbell Complex':'BeZercher Complex', format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, note:'Keep hold of the bar throughout. Complete all movements then rest.'});
+    }
+    return {name:'Upper Body', week:w, day:d, exercises:exs};
+  }
+
+  // ── DAY 2: LOWER BODY (SQUAT) ───────────────────────────────
+  if(d === 2){
+    var sSets = w < 12 ? mkSets(lowerSchemes[w], S) : [];
+    var exs2 = [];
+    if(w<=2||isDeload) exs2.push({name:'DB Squat Jumps', format:'standard_sets', sets:isDeload?2:4, reps:6, note:'Hold '+(w===2?'7kg':'5kg')+' DBs. Explosive jump, soft landing.'});
+    else if(w<=4) exs2.push({name:'Bulgarian Split Squat Jumps', format:'standard_sets', sets:w===3?4:5, reps:'5 each leg'+(w===4?' holding 2.5kg DBs':''), note:'Control the landing.'});
+    else exs2.push({name:'Kneeling Jumps', format:'standard_sets', sets:w<=9?4:3, reps:5, note:'Drop to knees, explode up. CNS activation before the main lift.'});
+    exs2.push({name:sq, format:'percentage_sets', sets:sSets, note:w<=5?'No max effort — run follows. Save the legs.':null});
+    if(!isDeload){
+      if(w<=2) exs2.push({name:'45° Back Raises / Seated MB Twists', format:'superset', sets:3, rest:90, movements:[{name:'45° Back Raises (hold plate over chest)',reps:'15 reps'},{name:'Seated MB Twists (feet off floor)',reps:'20 each side'}]});
+      else if(w<=4) exs2.push({name:'Stability Ball Hamstring Curls / Spread Eagle Sit-ups', format:'superset', sets:3, rest:90, movements:[{name:'Stability Ball Hamstring Curls (hips up)',reps:'15 reps'},{name:'Weighted Spread Eagle Sit-ups',reps:'15 reps'}]});
+      else if(w<=9) exs2.push({name:'Supine Hip Thrust / Stability Ball Plank', format:'superset', sets:3, rest:90, movements:[{name:'Supine Hip Thrust (shoulders + feet elevated)',reps:'12 reps'},{name:'Stability Ball Plank (ball under arms, feet on bench)',reps:'30s'}]});
+      else exs2.push({name:'Single Leg Hip Thrust / DB Side Bends', format:'superset', sets:3, rest:90, movements:[{name:'Single Leg Supine Hip Thrust (foot elevated)',reps:'10 each leg'},{name:'DB Side Bends',reps:'15 each side'}]});
+      if(w<=4) exs2.push({name:'Alternating Forward Lunge (DBs)', format:'standard_sets', sets:2, reps:(w<=2?'45':'60')+'s continuous', note:'Keep moving for the full time.'});
+      else if(w<=9) exs2.push({name:'DB Reverse Lunge (front foot elevated)', format:'standard_sets', sets:2, reps:'10 each leg'});
+      else exs2.push({name:'Low Box Heel Touches', format:'standard_sets', sets:w===11?2:3, reps:'12 each leg'});
+    }
+    exs2.push(isDeload
+      ? {name:'Steady State Cardio', format:'interval', note:'20-30 min walk, bike or elliptical at 60-70% max HR.'}
+      : w<=5 ? {name:'1.6km Run', format:'interval', note:'Record your time. This is your benchmark.'}
+      : {name:'Tabata Jump Rope', format:'standard_sets', sets:1, reps:[0,0,0,0,0,0,'8-10 rounds','10-12 rounds','12-14 rounds','14-16 rounds',0,'max rounds','max rounds'][w]||'8-10 rounds', note:'20s all-out / 10s rest. Push hard.'}
+    );
+    return {name:'Lower Body — ' + sq, week:w, day:d, exercises:exs2};
+  }
+
+  // ── DAY 3: UPPER BODY (CHINS) ───────────────────────────────
+  if(d === 3){
+    var chinPcts = [0,50,50,60,70,50,60,60,70,70,50,80,0];
+    var target3 = chinTarget(chinPcts[w]);
+    var exs3 = [{
+      name:'Chin-ups', format:'total_rep_goal',
+      target:target3, chin_test:C===0,
+      note:C===0 ? 'Establish your max today — 1 all-out set. The app calculates all future targets from this.' : 'Target: ' + target3 + ' total reps (max ' + C + ' + ' + chinPcts[w] + '%). Break into sets, rest as needed.'
+    }];
+    if(!isDeload){
+      if(w<=2) exs3.push({name:'Front Lat Pulldowns / Standing DB Military Press', format:'superset', sets:2, rest:90, movements:[{name:'Front Lat Pulldowns (wide overhand)',reps:'Max reps (20-25 set 1, 10-20 set 2)'},{name:'Standing DB Military Press',reps:'Max reps (15-20 set 1, 10-15 set 2)'}]});
+      else if(w<=4) exs3.push({name:'Front Lat Pulldowns (neutral) / DB Military Press (neutral)', format:'superset', sets:2, rest:90, movements:[{name:'Front Lat Pulldowns (neutral grip)',reps:'Max reps'},{name:'Standing DB Military Press (neutral grip)',reps:'Max reps'}]});
+      else if(w<=9) exs3.push({name:'Rest-Pause Eccentric Lat Pulldowns', format:'standard_sets', sets:1, reps:'Extended set', note:'3-sec eccentric. Rest-pause. Wide overhand. Go until you can\'t control the descent.'});
+      else exs3.push({name:'1-Arm Eccentric Pulldowns / DB Side Press', format:'superset', sets:2, rest:90, movements:[{name:'1-Arm 3-Sec Eccentric Front Lat Pulldowns',reps:'12 each arm'},{name:'Standing DB Side Press',reps:'12 each arm'}]});
+      if(w<=2) exs3.push({name:'Rolling Tricep Extensions / Hammer Curls', format:'superset', sets:w===1?4:5, rest:90, movements:[{name:'Rolling Tricep Extensions',reps:'8 reps'},{name:'Hammer Curls (both arms)',reps:'8 reps'}]});
+      else if(w<=4) exs3.push({name:'1-Arm Cable Rear Delt Flyes', format:'standard_sets', sets:4, reps:'10 each arm'});
+      else if(w<=9) exs3.push({name:'Modified Arnold Press / Incline DB Cleans', format:'superset', sets:3, rest:90, movements:[{name:'Standing DB Modified Arnold Press',reps:w<=7?'10 reps':'8 reps'},{name:'Incline DB Cleans',reps:'10 reps'}]});
+      else exs3.push({name:'Incline DB Rear Delt Flyes (thumbs up)', format:'standard_sets', sets:3, reps:15});
+      if(w>=3 && w<=4) exs3.push({name:'Run the Rack DB Curls', format:'standard_sets', sets:1, reps:'1 descending set', note:'Example: 20kg×8 → 15kg×8 → 10kg×8 → 7.5kg×8. No rest between weight drops.'});
+      if(w>=6 && w<=9) exs3.push({name:'Cable Curls', format:'standard_sets', sets:w<=7?3:w===8?4:5, reps:w<=7?15:w===8?8:6});
+      if(w>=10) exs3.push({name:'Eccentric BB Curls', format:'standard_sets', sets:w===10?2:w===11?2:3, reps:5, note:'Cheat the weight up, lower as slowly as possible.'});
+      exs3.push({name:'Core Circuit', format:'afap', sets:isDeload?1:2, rest:60,
+        movements:w<=2||isDeload
+          ? [{name:'Toe Touches',reps:20},{name:'Bicycle',reps:'30 total'},{name:'Side Plank',reps:'30s each side'}]
+          : [{name:'Sprinter Sit-ups',reps:20},{name:'V-ups',reps:15},{name:'Hip-ups',reps:15},{name:'Toe Touches',reps:15}]
+      });
+    }
+    if(w<=9) exs3.push({name:'100 Push-ups', format:'total_rep_goal', target:100, note:'As fast as possible. Record your time.'});
+    else exs3.push({name:'Barbell Push-ups — Descending '+(w===11?'20':'21')+' to 1', format:'standard_sets', sets:1, reps:'From '+(w===11?'20':'21')+' to 1', note:'18 reps, 17, 16... down to 1. Minimal rest between sets.'});
+    return {name:'Upper Body — Chins', week:w, day:d, exercises:exs3};
+  }
+
+  // ── DAY 4: DEADLIFT + POWER ─────────────────────────────────
+  if(d === 4){
+    var dSets = w < 12 ? mkSets(lowerSchemes[w], D) : [];
+    var exs4 = [];
+    if(isDeload){
+      exs4 = [
+        {name:'Box Jumps', format:'standard_sets', sets:2, reps:5, note:'BW only. Full reset between reps.'},
+        {name:dl, format:'percentage_sets', sets:dSets},
+        {name:'Single Leg RDL', format:'standard_sets', sets:2, reps:'10 each leg', note:'BW only. Control the descent.'},
+        {name:'Steady State Cardio', format:'interval', note:'20 min easy.'}
+      ];
+    } else if(w<=4){
+      exs4 = [
+        {name:w<=2?'Box Jumps':'Broad Jumps', format:'standard_sets', sets:4, reps:5, note:'CNS activation. Full reset between reps.'},
+        {name:dl, format:'percentage_sets', sets:dSets, note:'Reset each rep. Brace hard before every pull. No touch-and-go.'},
+        {name:'Single Leg RDL / Ab Wheel Rollouts', format:'superset', sets:3, rest:90, movements:[{name:'Single Leg RDL (DB)',reps:'10 each leg'},{name:'Ab Wheel Rollouts',reps:'10 reps'}]},
+        {name:'Sled Push', format:'standard_sets', sets:w<=2?4:5, reps:'20m '+(w<=2?'heavy':'speed focus'), note:'Record load used. Full rest between sets (2-3 min).'}
+      ];
+    } else if(w<=9){
+      exs4 = [
+        {name:'Depth Drops into Broad Jump', format:'standard_sets', sets:4, reps:5, note:'Step off box, land, immediately broad jump. Reactive power.'},
+        {name:dl, format:'percentage_sets', sets:dSets, note:'Drive the floor away. Full reset each rep.'},
+        {name:'Barbell Hip Thrust / Pallof Press', format:'superset', sets:3, rest:90, movements:[{name:'Barbell Hip Thrust',reps:'12 reps'},{name:'Pallof Press',reps:'12 each side'}]},
+        {name:'Assault Bike / Row Tabata', format:'standard_sets', sets:1, reps:(w<=7?'8-10':w===8?'10-12':'12-14')+' rounds', note:'20s all-out / 10s rest. Max effort on every interval.'}
+      ];
+    } else {
+      exs4 = [
+        {name:'Kneeling Jumps', format:'standard_sets', sets:3, reps:5},
+        {name:dl, format:'percentage_sets', sets:dSets, note:'Peak week. Every rep with intent.'},
+        {name:'Single Leg Hip Thrust / DB Side Bends', format:'superset', sets:3, rest:90, movements:[{name:'Single Leg Hip Thrust',reps:'10 each leg'},{name:'DB Side Bends',reps:'15 each side'}]},
+        w===12
+          ? {name:'Tabata — Max Rounds', format:'standard_sets', sets:1, reps:'Max rounds', note:'20s on / 10s off. Go until you drop.'}
+          : {name:'Sled/Carry Medley', format:'standard_sets', sets:1, reps:'Max effort', note:'Sled push + farmers carry. Record distance or time.'}
+      ];
+    }
+    return {name:'Deadlift + Power', week:w, day:d, exercises:exs4};
+  }
+
+  return null;
+};
+
+window.blabCompleteSession = function(week, day){
+  var s = window.blabGetState();
+  if(!s) return;
+  s.last_completed_day = day;
+  s.last_completed_date = new Date().toISOString();
+  if(!s.log) s.log = [];
+  s.log.push({week:week, day:day, date:s.last_completed_date});
+  if(day === 4){
+    s.week = week + 1;
+    s.last_completed_day = 0;
+    window._blabWeekDone = true;
+  }
+  window.blabSaveState(s);
+  if(typeof renderTodayScreen === 'function') renderTodayScreen();
+  if(typeof navTo === 'function') navTo('today');
+};
+
+// Week complete check-in (stub — AI assessment in next build)
+window.blabOpenCheckin = function(){
+  var s = window.blabGetState();
+  if(!s) return;
+  // Simple confirm for now — AI assessment coming
+  if(confirm('Start Week ' + s.week + '?')){
+    if(typeof renderTodayScreen === 'function') renderTodayScreen();
+  }
+};
+
 window._phxDevForceReload = async function(){
   try { localStorage.removeItem('phoenix_athlete'); } catch(_e){}
   alert('localStorage cleared — reloading from Supabase now...');
@@ -14538,6 +15115,53 @@ function renderTodayScreen(){
   // Direct session inject — bypass renderTodaySessionCard entirely for main tile
   (function(){
     try {
+      // BLAB MODE — takes over Today card when active
+      var _bs = window.blabGetState ? window.blabGetState() : null;
+      if(_bs && _bs.active){
+        var _card = document.getElementById('card-today-session');
+        if(!_card) return;
+        var _inner = _card.querySelector('.game-card-inner');
+        if(!_inner) return;
+        var _lastDay = _bs.last_completed_day || 0;
+        var _nextDay = _lastDay === 0 ? 1 : (_lastDay % 4) + 1;
+        var _weekDone = _lastDay === 4;
+        var _week = _bs.week || 1;
+        var _dayLabels = ['','Upper Body','Lower Body','Upper Body — Chins','Deadlift + Power'];
+        // 48hr rule Day2→Day4
+        var _canTrain = true;
+        if(_nextDay === 4 && _lastDay === 2 && _bs.last_completed_date){
+          var _hrs = (new Date() - new Date(_bs.last_completed_date)) / 3600000;
+          if(_hrs < 47) _canTrain = false;
+        }
+        if(_weekDone){
+          _inner.innerHTML =
+            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week ' + _week + ' Complete</span></div>' +
+            '<div class="game-card-title" style="font-size:22px;">Week ' + _week + ' Done</div>' +
+            '<div class="game-card-sub" style="margin-top:6px;">All 4 sessions complete. Ready for Week ' + (_week+1) + '.</div>' +
+            '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Check in →</div>';
+          _card.style.borderLeftColor = 'var(--gold)';
+          _card.style.cursor = 'pointer';
+          _card.setAttribute('onclick', 'window.blabOpenCheckin && window.blabOpenCheckin()');
+        } else if(!_canTrain){
+          _inner.innerHTML =
+            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week ' + _week + '</span></div>' +
+            '<div class="game-card-title" style="font-size:22px;">Rest Day</div>' +
+            '<div class="game-card-sub" style="margin-top:6px;">Day 4 needs 48hrs after squats. Back tomorrow.</div>';
+          _card.style.borderLeftColor = 'var(--border2)';
+          _card.style.cursor = 'default';
+          _card.removeAttribute('onclick');
+        } else {
+          _inner.innerHTML =
+            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week ' + _week + ' · Day ' + _nextDay + '</span></div>' +
+            '<div class="game-card-title" style="font-size:24px;">' + _dayLabels[_nextDay] + '</div>' +
+            '<div class="game-card-sub" style="margin-top:6px;">Built Like A Badass</div>' +
+            '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
+          _card.style.borderLeftColor = 'var(--gold)';
+          _card.style.cursor = 'pointer';
+          _card.setAttribute('onclick', 'window.blabOpenSession(' + _week + ',' + _nextDay + ')');
+        }
+        return; // skip AI programme inject
+      }
       if(!athlete || !athlete.aiProgramme || !athlete.aiProgramme.week) return;
       var _sessions = athlete.aiProgramme.week.sessions || [];
       var _day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
@@ -17665,6 +18289,8 @@ window._phxCyclePriority = function(weekNumber, sessionId){
 };
 
 function renderTodaySessionCard(){
+  // Skip when BLAB is active — Today card handled by direct inject
+  if(window.blabGetState && window.blabGetState() && window.blabGetState().active) return;
   try { _renderTodaySessionCardInner(); }
   catch(e){
     console.error('[PHX] renderTodaySessionCard CRASHED:', e);

@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.91';
+var APP_VERSION='4.9.92';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3921,6 +3921,16 @@ window._blabBuildSupersetBlock = function(ex, idx){
     if(st.set<=totalSets){
       // rest timer
       window._blabShowRestBanner(ex2._supersetRest||90, function(){ window['_blabSSrender_'+i](); });
+    } else {
+      // v4.9.92: superset block complete → persist A/B sets under each movement's name
+      // (RPE PATCH attaches to ex2.name rows) and fire the RPE check-in.
+      var partner = ex2._supersetPartner || {};
+      var rows = [];
+      st.log.forEach(function(l, li){
+        rows.push({name:ex2.name, setNumber:li+1, weightKg:l.ka, reps:l.a});
+        if(partner.name) rows.push({name:partner.name, setNumber:li+1, weightKg:l.kb, reps:l.b});
+      });
+      window._blabBlockComplete(i, ex2, rows);
     }
     window['_blabSSrender_'+i]();
   };
@@ -4369,6 +4379,32 @@ window._blabWoRender = function(){
 
 window._blabSkipRest=function(){ var st=window._blabWoState; if(st){st.resting=false;st.restSec=0;} window._blabWoRender(); };
 window._blabAddRest=function(s){ var st=window._blabWoState; if(st) st.restSec+=s; var el=document.getElementById('blab-rest-cd'); if(el) el.textContent=blabFmt(st.restSec); };
+// v4.9.92: centralized BLAB block-completion. The four BLAB custom-block formats
+// (superset / afap / total_rep_goal / interval) bypass the standard Phoenix set-row
+// renderer, so they never wrote set_logs rows and never fired the post-block RPE prompt
+// (only percentage_sets / max_reps_sets did, via the standard done-ai path). This helper
+// gives them parity: it persists the block's sets to set_logs under exercise_name (so the
+// showExerciseBlockRPE PATCH — matched by session_id + exercise_name — has rows to attach
+// to) and then fires the RPE check-in. setRows is optional [{name,setNumber,weightKg,reps,opts}];
+// when omitted, a single completion row is written under ex.name so RPE still attaches.
+window._blabBlockComplete = function(idx, ex, setRows){
+  try {
+    if(typeof supabaseLogSet === 'function'){
+      if(Array.isArray(setRows) && setRows.length){
+        setRows.forEach(function(r){
+          if(!r) return;
+          supabaseLogSet(r.name || (ex&&ex.name) || '', null, r.setNumber||1, r.weightKg, r.reps, r.opts);
+        });
+      } else if(ex && ex.name){
+        supabaseLogSet(ex.name, null, 1, null, null);
+      }
+    }
+  } catch(e){ console.warn('[PHX] _blabBlockComplete set-log failed:', e); }
+  try {
+    if(typeof showExerciseBlockRPE === 'function') showExerciseBlockRPE(idx, ex);
+  } catch(e){ console.warn('[PHX] _blabBlockComplete RPE failed:', e); }
+};
+
 window._blabWoDone=function(){
   if(window._blabWoTimer){clearInterval(window._blabWoTimer);window._blabWoTimer=null;}
   if(window._blabWakeLock){ window._blabWakeLock.release().catch(function(){}); window._blabWakeLock=null; }
@@ -4397,6 +4433,9 @@ window._blabWoDone=function(){
     if(btn){btn.textContent='\u2713 Done';btn.style.background='rgba(58,125,68,0.1)';btn.style.borderColor='#3a7d44';btn.style.color='#3a7d44';}
     card.style.borderLeftColor='#3a7d44';
   }
+  // v4.9.92: overlay-driven BLAB formats (afap / total_rep_goal / interval) complete here \u2192
+  // persist a completion row + fire the RPE check-in, same as the standard set-row path.
+  if(st && st.ex){ window._blabBlockComplete(idx, st.ex); }
 };
 
 function blabDots(total, cur){

@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.80';
+var APP_VERSION='4.9.81';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3980,6 +3980,25 @@ window._blabSkipRest=function(){ var st=window._blabWoState; if(st){st.resting=f
 window._blabAddRest=function(s){ var st=window._blabWoState; if(st) st.restSec+=s; var el=document.getElementById('blab-rest-cd'); if(el) el.textContent=blabFmt(st.restSec); };
 window._blabWoDone=function(){
   if(window._blabWoTimer){clearInterval(window._blabWoTimer);window._blabWoTimer=null;}
+  // Save complex time score
+  var st=window._blabWoState;
+  if(st&&st.ex&&st.ex.has_load&&st.elapsed>0){
+    var bs=window.blabGetState();
+    if(bs){
+      if(!bs.records) bs.records={};
+      var k=st.ex.name+'_time';
+      var prev=bs.records[k]||0;
+      bs.records[k]=st.elapsed;
+      window.blabSaveState(bs);
+      var msg='Time: '+blabFmt(st.elapsed);
+      if(st.afapSetTimes&&st.afapSetTimes.length>1){ msg+='
+'; st.afapSetTimes.forEach(function(t,i){ msg+='Set '+(i+1)+': '+blabFmt(t)+' '; }); }
+      if(prev) msg+=prev>st.elapsed?'
+New PB! Previous: '+blabFmt(prev):'
+Previous best: '+blabFmt(prev);
+      alert(msg);
+    }
+  }
   var overlay=document.getElementById('blab-workout-overlay');
   if(overlay) overlay.style.display='none';
   var idx=window._blabCurrentExIdx;
@@ -4158,26 +4177,71 @@ window._blabTrLog=function(){
 function blabRenderAfap(ex,st,body){
   if(!st.afapSet) st.afapSet=1;
   if(typeof st.afapIdx==='undefined') st.afapIdx=-1;
+  if(!st.afapLoad) st.afapLoad=ex.suggested_load||0;
+  if(!st.afapSetTimes) st.afapSetTimes=[];
+  if(!st.afapSetStart) st.afapSetStart=0;
   var totalSets=ex.sets||1, movs=ex.movements||[];
   var rps=ex.reps_per_set, curReps=rps?rps[st.afapSet-1]:null;
-  var h=totalSets>1?'<div style="text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--gold);margin-bottom:12px;">Set '+st.afapSet+' of '+totalSets+(curReps?' &middot; '+curReps+' reps each':'')+'</div>':'';
+  var prevBest=ex.prev_best||0;
+
+  var h='';
+
+  // Load chip at top
+  if(ex.has_load){
+    h+='<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px;">'+
+      '<button onclick="window._blabAfapLoadAdj(-5)" style="width:40px;height:40px;background:var(--bg2);border:1px solid var(--border);border-radius:50%;font-size:18px;color:var(--text2);cursor:pointer;">-</button>'+
+      '<div style="text-align:center;">'+
+        '<div style="font-family:var(--font-d);font-size:32px;font-weight:900;color:var(--gold);" id="afap-load">'+st.afapLoad+'<span style="font-size:14px;color:var(--text3);">kg</span></div>'+
+        '<div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Bar weight</div>'+
+      '</div>'+
+      '<button onclick="window._blabAfapLoadAdj(5)" style="width:40px;height:40px;background:var(--bg2);border:1px solid var(--border);border-radius:50%;font-size:18px;color:var(--text2);cursor:pointer;">+</button>'+
+    '</div>';
+  }
+
+  // Set header
+  if(totalSets>1){
+    h+='<div style="text-align:center;font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px;">Set '+st.afapSet+' of '+totalSets+(curReps?' &middot; '+curReps+' reps each':'')+'</div>';
+  }
+
+  // Previous best
+  if(prevBest) h+='<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px;">Previous best: '+blabFmt(prevBest)+'</div>';
+
+  // Set times log
+  if(st.afapSetTimes.length){
+    h+='<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:8px;">';
+    st.afapSetTimes.forEach(function(t,i){ h+='Set '+(i+1)+': '+blabFmt(t)+' &nbsp;'; });
+    h+='</div>';
+  }
+
+  // Elapsed timer
   h+='<div style="font-family:var(--font-d);font-size:42px;font-weight:900;color:var(--text);text-align:center;margin-bottom:4px;" id="blab-elapsed">'+blabFmt(st.elapsed)+'</div>'+
     '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:20px;letter-spacing:1px;text-transform:uppercase;">Elapsed</div>';
+
+  // Movement list
   movs.forEach(function(m,i){
     var isDone=i<=st.afapIdx;
     h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border2);">'+
       '<div>'+
-        '<div style="font-size:15px;font-weight:600;color:'+(isDone?'var(--text3)':'var(--text)')+';">'+(isDone?'\u2713 ':'')+m.name+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);">'+(curReps||m.reps)+' reps</div>'+
+        '<div style="font-size:15px;font-weight:600;color:'+(isDone?'var(--text3)':'var(--text)')+';line-height:1.2;">'+(isDone?'\u2713 ':'')+m.name+'</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(curReps||m.reps)+' reps'+(ex.has_load&&st.afapLoad?' &middot; '+st.afapLoad+'kg':'')+'</div>'+
       '</div>'+
-      '<button onclick="window._blabAfapTick('+i+')" style="padding:10px 16px;background:'+(isDone?'#3a7d44':'var(--gold)')+';border:none;border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:#000;cursor:pointer;">'+(isDone?'\u2713':'Done')+'</button>'+
+      '<button onclick="window._blabAfapTick('+i+')" style="padding:10px 16px;background:'+(isDone?'#3a7d44':'var(--gold)')+';border:none;border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:#000;cursor:pointer;min-width:64px;">'+(isDone?'\u2713':'Done')+'</button>'+
     '</div>';
   });
+
   var allMovsDone=st.afapIdx>=movs.length-1;
   var allSetsDone=allMovsDone&&st.afapSet>=totalSets;
-  if(allSetsDone) h+=blabFinishBtn();
+  if(allSetsDone) h+=blabFinishBtn('Complete \u2713 &mdash; Log Time');
   body.innerHTML=h;
 }
+
+window._blabAfapLoadAdj=function(delta){
+  var st=window._blabWoState; if(!st) return;
+  st.afapLoad=Math.max(0,(st.afapLoad||0)+delta);
+  var el=document.getElementById('afap-load');
+  if(el) el.innerHTML=st.afapLoad+'<span style="font-size:14px;color:var(--text3);">kg</span>';
+};
+
 window._blabAfapTick=function(i){
   var st=window._blabWoState; if(!st) return;
   if(i!==st.afapIdx+1) return;
@@ -4185,16 +4249,21 @@ window._blabAfapTick=function(i){
   var movs=st.ex.movements||[];
   if(st.afapIdx>=movs.length-1){
     var tot=st.ex.sets||1;
-    if(st.afapSet<tot){st.afapSet++;st.afapIdx=-1;st.resting=true;st.restSec=st.ex.rest||90;}
+    // Record set time
+    var setTime=st.elapsed-(st.afapSetStart||0);
+    if(!st.afapSetTimes) st.afapSetTimes=[];
+    st.afapSetTimes.push(setTime);
+    if(st.afapSet<tot){
+      st.afapSet++;
+      st.afapIdx=-1;
+      st.afapSetStart=st.elapsed+(st.ex.rest||90);
+      st.resting=true;
+      st.restSec=st.ex.rest||90;
+    }
   }
   window._blabWoRender();
 };
 
-// MAX REPS SETS
-// Two sets, log actual reps per set, rest timer between, show previous best
-function blabRenderMaxReps(ex,st,body){
-  if(!st.mrSet) st.mrSet=1;
-  if(!st.mrResults) st.mrResults=[];
   var totalSets=ex.sets||2, cur=st.mrSet-1, allDone=cur>=totalSets;
   var prevBest=ex.prev_best||0;
 
@@ -4367,7 +4436,9 @@ window.blabGetSessionData = function(week, day){
         exs.push({name:'Seated Cable Rows', format:'standard_sets', sets:2, reps:15});
         exs.push({name:'DB Shrugs', format:'standard_sets', sets:2, reps:10});
       }
-      exs.push({name:w<=9?'Barbell Complex':'BeZercher Complex', format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, note:'Keep hold of the bar throughout. Complete all movements then rest.'});
+      var complexPrevBest = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[(w<=9?'Barbell Complex':'BeZercher Complex')+'_time'])||0;
+      var suggestedLoad = Math.round((blabPct(B,40))/5)*5; // 40% of bench max, rounded to 5kg
+      exs.push({name:w<=9?'Barbell Complex':'BeZercher Complex', format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, has_load:true, suggested_load:suggestedLoad, prev_best:complexPrevBest, note:'Keep hold of the bar throughout. Adjust load with +/- chips. Your combined set time is your score to beat.'});
     }
     return {name:'Upper Body', week:w, day:d, exercises:exs};
   }

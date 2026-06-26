@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.87';
+var APP_VERSION='4.9.88';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23138,9 +23138,12 @@ function openTodaySession(){
   _phxCancelCountIn();
   var staleCountIn = document.getElementById('count-in-overlay');
   if(staleCountIn) staleCountIn.remove();
-  if(!athlete||!athlete.aiProgramme){
-    navTo('programme');
-    return;
+  // BLAB bypass — don't require aiProgramme
+  if(!window.blabIsActive()){
+    if(!athlete||!athlete.aiProgramme){
+      navTo('programme');
+      return;
+    }
   }
   var sess=window._todaySession;
   if(!sess){

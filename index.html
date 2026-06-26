@@ -3485,7 +3485,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.81';
+var APP_VERSION='4.9.82';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3991,8 +3991,7 @@ window._blabWoDone=function(){
       bs.records[k]=st.elapsed;
       window.blabSaveState(bs);
       var msg='Time: '+blabFmt(st.elapsed);
-      if(st.afapSetTimes&&st.afapSetTimes.length>1){ msg+='
-'; st.afapSetTimes.forEach(function(t,i){ msg+='Set '+(i+1)+': '+blabFmt(t)+' '; }); }
+      if(st.afapSetTimes&&st.afapSetTimes.length>1){ msg+=' | '; st.afapSetTimes.forEach(function(t,i){ msg+='Set '+(i+1)+': '+blabFmt(t)+' '; }); }
       if(prev) msg+=prev>st.elapsed?'
 New PB! Previous: '+blabFmt(prev):'
 Previous best: '+blabFmt(prev);

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#c8963e">
-<!-- TEMP DEBUG PANEL (v4.9.101-debug-2): capture [PHX][DBG] logs, show on ?debug=1 -->
+<!-- TEMP DEBUG PANEL (v4.9.102): capture [PHX][DBG] logs + force-clear BLAB, show on ?debug=1 -->
 <script>
 (function(){
   if(new URLSearchParams(location.search).get('debug')!=='1') return;
@@ -37,10 +37,21 @@
       'position:sticky;top:0;background:#0a0a0a;border-bottom:1px solid #c8963e;'+
       'padding:2px 0 4px;margin-bottom:4px;color:#c8963e;font-weight:bold;';
     var title=document.createElement('span');title.textContent='[PHX][DBG] console';
+    var right=document.createElement('span');
+    right.style.cssText='display:flex;gap:12px;align-items:center;';
+    var fix=document.createElement('span');fix.textContent='⟳ force-clear BLAB';
+    fix.style.cssText='cursor:pointer;color:#e05c2a;';
+    fix.onclick=function(){
+      if(window.blabForceClearLocal){
+        var ok=window.blabForceClearLocal();
+        console.log('[PHX][DBG] force-clear BLAB triggered, result =',ok,'— reload to see Today tile');
+      } else { console.log('[PHX][DBG] blabForceClearLocal not available yet'); }
+    };
     var close=document.createElement('span');close.textContent='✕ close';
     close.style.cssText='cursor:pointer;color:#c8963e;';
     close.onclick=function(){panel.style.display='none';};
-    bar.appendChild(title);bar.appendChild(close);
+    right.appendChild(fix);right.appendChild(close);
+    bar.appendChild(title);bar.appendChild(right);
     body=document.createElement('div');
     body.style.cssText='white-space:pre-wrap;word-break:break-word;';
     panel.appendChild(bar);panel.appendChild(body);
@@ -3535,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.101-debug-2';
+var APP_VERSION='4.9.102';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3705,16 +3716,55 @@ window.blabRestoreFromCloud = function(profileRow){
     var key = 'blab_v1_' + uid;
     // v4.9.100: content-aware guard. Local is authoritative ONLY if it holds a valid,
     // ACTIVE state — a stale/inactive/empty stub must not shadow an active cloud state.
+    // v4.9.102: progress-aware tiebreak. When BOTH local and cloud are active, prefer
+    // whichever is further ahead by last_completed_day. A stale local stub (active:true
+    // but last_completed_day:0) must not shadow a cloud state that is further along.
     var localRaw = localStorage.getItem(key);
     console.log('[PHX][DBG] localRaw present =', !!localRaw);
     if(localRaw){
-      try { var ls = JSON.parse(localRaw); console.log('[PHX][DBG] localRaw.active =', ls && ls.active); if(ls && ls.active) { console.log('[PHX][DBG] blabRestoreFromCloud abort: local already active, keeping local'); return false; } } catch(_){ console.log('[PHX][DBG] localRaw parse failed'); }
+      try {
+        var ls = JSON.parse(localRaw);
+        console.log('[PHX][DBG] localRaw.active =', ls && ls.active);
+        if(ls && ls.active){
+          var cloudObj = (typeof cloud === 'string') ? JSON.parse(cloud) : cloud;
+          var localDay = (ls && ls.last_completed_day) || 0;
+          var cloudDay = (cloudObj && cloudObj.last_completed_day) || 0;
+          console.log('[PHX][DBG] both active. localDay =', localDay, '| cloudDay =', cloudDay);
+          if(cloudDay > localDay){
+            console.log('[PHX][DBG] cloud is further ahead — cloud wins');
+          } else {
+            console.log('[PHX][DBG] blabRestoreFromCloud abort: local active and >= cloud, keeping local');
+            return false;
+          }
+        }
+      } catch(_){ console.log('[PHX][DBG] localRaw parse failed'); }
     }
     localStorage.setItem(key, typeof cloud === 'string' ? cloud : JSON.stringify(cloud));
     console.log('[PHX] BLAB state restored from Supabase');
     console.log('[PHX][DBG] blabRestoreFromCloud SUCCESS: wrote cloud state to', key);
     return true;
   } catch(e){ console.warn('[PHX] blabRestoreFromCloud error:', e); return false; }
+};
+
+// v4.9.102: one-time recovery — force-clear local BLAB state so cloud can take over.
+// Removes the local blab_v1_{uid} (and legacy blab_v1) keys, then re-runs the cloud
+// restore against the cached profile if one is available.
+window.blabForceClearLocal = function(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    var keys = ['blab_v1'];
+    if(uid) keys.push('blab_v1_' + uid);
+    keys.forEach(function(k){ try { localStorage.removeItem(k); } catch(_){} });
+    console.log('[PHX][DBG] blabForceClearLocal: cleared keys', keys.join(', '));
+    var prof = window._lastProfileRow || (window.PHX && window.PHX.lastProfile) || null;
+    if(window.blabRestoreFromCloud && prof){
+      var ok = window.blabRestoreFromCloud(prof);
+      console.log('[PHX][DBG] blabForceClearLocal: re-ran cloud restore, success =', ok);
+    } else {
+      console.log('[PHX][DBG] blabForceClearLocal: no cached profile — reload to restore from cloud');
+    }
+    return true;
+  } catch(e){ console.warn('[PHX] blabForceClearLocal error:', e); return false; }
 };
 
 window.blabIsActive = function(){
@@ -5943,6 +5993,7 @@ async function _loadProfileAndRouteInner(){
       sb.from('profiles').select('*').eq('id', session.user.id).single().then(function(pRes){
         if(pRes && pRes.data && !pRes.error){
           // v4.9.99: hydrate BLAB state from server if local was wiped (PWA reinstall).
+          window._lastProfileRow = pRes.data; // v4.9.102: cache for blabForceClearLocal recovery
           if(window.blabRestoreFromCloud && window.blabRestoreFromCloud(pRes.data)){
             try { if(typeof renderTodayScreen==='function') renderTodayScreen(); } catch(_e){}
           }
@@ -5971,6 +6022,7 @@ async function _loadProfileAndRouteInner(){
     // v4.9.99: hydrate BLAB state from server if local was wiped (PWA reinstall / new
     // device). Safe to run before routing — only fills an empty local key. The later
     // renderTodayScreen() in the routing block picks up the restored BLAB tile.
+    window._lastProfileRow = profile; // v4.9.102: cache for blabForceClearLocal recovery
     try { if(window.blabRestoreFromCloud) window.blabRestoreFromCloud(profile); } catch(_e){}
     if(profile&&!profile.name&&currentSession&&currentSession.user&&currentSession.user.user_metadata&&currentSession.user.user_metadata.name){
       profile.name=currentSession.user.user_metadata.name;

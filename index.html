@@ -4,6 +4,61 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#c8963e">
+<!-- TEMP DEBUG PANEL (v4.9.101-debug-2): capture [PHX][DBG] logs, show on ?debug=1 -->
+<script>
+(function(){
+  if(new URLSearchParams(location.search).get('debug')!=='1') return;
+  var captured=[];
+  var origLog=console.log.bind(console);
+  console.log=function(){
+    try{
+      var args=Array.prototype.slice.call(arguments);
+      var first=args.length?String(args[0]):'';
+      if(first.indexOf('[PHX][DBG]')!==-1){
+        captured.push(args.map(function(a){
+          if(typeof a==='object'){try{return JSON.stringify(a);}catch(e){return String(a);}}
+          return String(a);
+        }).join(' '));
+        renderPanel();
+      }
+    }catch(e){}
+    return origLog.apply(console,arguments);
+  };
+  var panel=null,body=null;
+  function ensurePanel(){
+    if(panel)return;
+    panel=document.createElement('div');
+    panel.id='phx-debug-panel';
+    panel.style.cssText='position:fixed;left:0;right:0;bottom:0;max-height:40vh;z-index:2147483647;'+
+      'background:#0a0a0a;border-top:2px solid #c8963e;color:#e8d9b0;font:11px/1.4 monospace;'+
+      'overflow-y:auto;padding:6px 10px;box-shadow:0 -4px 12px rgba(0,0,0,.6);box-sizing:border-box;';
+    var bar=document.createElement('div');
+    bar.style.cssText='display:flex;justify-content:space-between;align-items:center;'+
+      'position:sticky;top:0;background:#0a0a0a;border-bottom:1px solid #c8963e;'+
+      'padding:2px 0 4px;margin-bottom:4px;color:#c8963e;font-weight:bold;';
+    var title=document.createElement('span');title.textContent='[PHX][DBG] console';
+    var close=document.createElement('span');close.textContent='✕ close';
+    close.style.cssText='cursor:pointer;color:#c8963e;';
+    close.onclick=function(){panel.style.display='none';};
+    bar.appendChild(title);bar.appendChild(close);
+    body=document.createElement('div');
+    body.style.cssText='white-space:pre-wrap;word-break:break-word;';
+    panel.appendChild(bar);panel.appendChild(body);
+    document.body.appendChild(panel);
+  }
+  function renderPanel(){
+    if(!document.body)return;
+    ensurePanel();
+    body.textContent=captured.join('\n');
+    panel.scrollTop=panel.scrollHeight;
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',renderPanel);
+  }else{
+    renderPanel();
+  }
+})();
+</script>
 <link rel="manifest" href="manifest.json">
 <title>PROJECT PHOENIX PLAN</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
@@ -3480,7 +3535,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.101-debug';
+var APP_VERSION='4.9.101-debug-2';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');

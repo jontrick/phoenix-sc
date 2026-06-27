@@ -3477,7 +3477,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.94-debug';
+var APP_VERSION='4.9.95';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3736,7 +3736,6 @@ window.blabOpenSession = function(week, day){
     window._todaySession = phoenixSess;
     window._phxWarmupSkipNext = true; // skip warmup for BLAB
     // Set up completion callback
-    console.log('[BLAB-DEBUG] blabOpenSession: callback set for week ' + week + ', day ' + day);
     window._blabSessionCompleteCallback = function(){ window.blabCompleteSession(week, day); };
     openTodaySession();
     return;
@@ -16072,7 +16071,6 @@ function renderTodayScreen(){
     try {
       // BLAB MODE — takes over Today card when active
       var _bs = window.blabGetState ? window.blabGetState() : null;
-      console.log('[BLAB-DEBUG] Today inject running — active:', !!(_bs && _bs.active), '| last_completed_day:', _bs ? _bs.last_completed_day : '(no state)', '| week:', _bs ? _bs.week : '-');
       if(_bs && _bs.active){
         var _card = document.getElementById('card-today-session');
         if(!_card) return;
@@ -23838,7 +23836,10 @@ function openTodaySession(){
   finBtn.className='finish-btn';
   finBtn.textContent='Complete Session \u2713';
   finBtn.addEventListener('click',function(){
-    if(confirm('Mark session as complete?')){
+    // v4.9.95: in-app confirm modal. Native confirm() is suppressed in the standalone PWA,
+    // so the old `if(confirm(...))` gate silently dropped the entire completion body —
+    // including the BLAB advance callback — and the Today tile never moved off Day 1.
+    var _doComplete=function(){
       // Collect AI session sets from DOM
       var aiSets={};
       exercises.forEach(function(ex,i){
@@ -23863,13 +23864,39 @@ function openTodaySession(){
       // v4.9.93 FIX 3: fire the BLAB completion callback so blabCompleteSession advances
       // last_completed_day (and week on day 4), then re-renders Today to the NEXT session.
       // Previously set in blabOpenSession but never invoked, so the tile never advanced.
-      console.log('[BLAB-DEBUG] Phoenix finish: BLAB callback firing — _blabSessionCompleteCallback is', (typeof window._blabSessionCompleteCallback === 'function') ? 'SET (function)' : 'NOT SET (' + typeof window._blabSessionCompleteCallback + ')');
       if(typeof window._blabSessionCompleteCallback === 'function'){
         try { window._blabSessionCompleteCallback(); } catch(_e){ console.warn('[PHX] blab complete callback failed:', _e); }
         window._blabSessionCompleteCallback = null;
       }
       navTo('today');
-    }
+    };
+    // In-app confirm modal — same DOM/overlay pattern as the BLAB overlays. No native confirm().
+    var _old=document.getElementById('phx-complete-confirm'); if(_old) _old.remove();
+    var _ov=document.createElement('div');
+    _ov.id='phx-complete-confirm';
+    _ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9700;display:flex;align-items:center;justify-content:center;padding:24px;';
+    var _box=document.createElement('div');
+    _box.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:360px;width:100%;text-align:center;';
+    var _eb=document.createElement('div');
+    _eb.style.cssText='font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;';
+    _eb.textContent='Complete Session';
+    var _nm=document.createElement('div');
+    _nm.style.cssText='font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:6px;';
+    _nm.textContent=sess.session_type||sess.name||'Today’s Session';
+    var _sub=document.createElement('div');
+    _sub.style.cssText='font-size:13px;color:var(--text3);margin-bottom:20px;';
+    _sub.textContent='Mark this session as complete?';
+    var _confirmBtn=document.createElement('button');
+    _confirmBtn.textContent='Complete Session ✓';
+    _confirmBtn.style.cssText='width:100%;padding:16px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-bottom:10px;';
+    _confirmBtn.addEventListener('click',function(){ _ov.remove(); _doComplete(); });
+    var _cancelBtn=document.createElement('button');
+    _cancelBtn.textContent='Cancel';
+    _cancelBtn.style.cssText='width:100%;padding:14px;background:transparent;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--text2);cursor:pointer;';
+    _cancelBtn.addEventListener('click',function(){ _ov.remove(); });
+    _box.appendChild(_eb); _box.appendChild(_nm); _box.appendChild(_sub); _box.appendChild(_confirmBtn); _box.appendChild(_cancelBtn);
+    _ov.appendChild(_box);
+    document.body.appendChild(_ov);
   });
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};

@@ -3480,7 +3480,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.99';
+var APP_VERSION='4.9.100';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3646,7 +3646,12 @@ window.blabRestoreFromCloud = function(profileRow){
     var cloud = profileRow.blab_state;
     if(cloud == null) return false;
     var key = 'blab_v1_' + uid;
-    if(localStorage.getItem(key)) return false; // local present → authoritative
+    // v4.9.100: content-aware guard. Local is authoritative ONLY if it holds a valid,
+    // ACTIVE state — a stale/inactive/empty stub must not shadow an active cloud state.
+    var localRaw = localStorage.getItem(key);
+    if(localRaw){
+      try { var ls = JSON.parse(localRaw); if(ls && ls.active) return false; } catch(_){}
+    }
     localStorage.setItem(key, typeof cloud === 'string' ? cloud : JSON.stringify(cloud));
     console.log('[PHX] BLAB state restored from Supabase');
     return true;
@@ -6024,6 +6029,21 @@ async function _loadProfileAndRouteInner(){
     athlete=profileToAthlete(profile);
     if(!athlete||Object.keys(athlete).length===0) athlete={id:profile.id};
     localStorage.setItem('phoenix_athlete',JSON.stringify(athlete));
+  }
+  // v4.9.100: BLAB users never complete the fitness questionnaire and have no aiProgramme,
+  // so both "route to Today" branches above miss them — they'd fall through to splash/FQ and
+  // the restored BLAB tile would never render. If BLAB is active (incl. just restored from
+  // cloud above), route to Today regardless of fq_completed / aiProgramme.
+  if(window.blabIsActive && window.blabIsActive()){
+    console.log('[PHX] routing decision: BLAB active → today');
+    try {
+      if(athlete && athlete.theme && typeof applySkin==='function') applySkin(athlete.theme);
+      if(athlete && athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
+    } catch(_e){}
+    if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
+    navTo('today');
+    setTimeout(function(){ if(typeof renderTodayScreen==='function') renderTodayScreen(); }, 300);
+    return;
   }
   // v4.7.41 hotfix: belt-and-braces. The fast-path at the top should have caught this,
   // but if a stale localStorage write somehow surfaces a fully-onboarded athlete only

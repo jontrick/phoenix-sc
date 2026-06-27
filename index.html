@@ -3480,7 +3480,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.98';
+var APP_VERSION='4.9.99';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3558,11 +3558,99 @@ window.blabGetState = function(){
 };
 
 window.blabSaveState = function(state){
+  var uid = currentSession && currentSession.user && currentSession.user.id;
   try {
-    var uid = currentSession && currentSession.user && currentSession.user.id;
     var key = uid ? 'blab_v1_' + uid : 'blab_v1';
     localStorage.setItem(key, JSON.stringify(state));
   } catch(_){}
+  // v4.9.99: mirror BLAB state to Supabase profiles.blab_state (jsonb, column already
+  // exists) so it survives a localStorage wipe — PWA reinstall, cache clear, or a new
+  // device. Fire-and-forget + debounced: per-set saves fire rapidly, so we coalesce
+  // them into a single network write ~1.5s after the last change. localStorage stays
+  // the synchronous source of truth; this is a backup mirror only.
+  if(uid){
+    try {
+      window._blabCloudPending = state;
+      if(window._blabCloudTimer) clearTimeout(window._blabCloudTimer);
+      window._blabCloudTimer = setTimeout(function(){
+        window._blabCloudTimer = null;
+        var payload = window._blabCloudPending;
+        window._blabCloudPending = null;
+        window._blabSendCloud(uid, payload, false);
+      }, 1500);
+    } catch(_){}
+  }
+};
+
+// ── Cloud write + flush ──────────────────────────────────────
+// v4.9.99: the actual blab_state write. useKeepalive=true is for the unload path, where
+// the Supabase SDK's async promise chain can be dropped before it hits the network — a
+// keepalive fetch lets the browser finish the PATCH even as the page goes away.
+window._blabSendCloud = function(uid, payload, useKeepalive){
+  if(!uid || payload == null) return;
+  if(useKeepalive){
+    try {
+      var token = (currentSession && currentSession.access_token) || SUPABASE_KEY;
+      fetch(SUPABASE_URL + '/rest/v1/profiles?id=eq.' + encodeURIComponent(uid), {
+        method:'PATCH',
+        keepalive:true,
+        headers:{
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + token,
+          'Content-Type':'application/json',
+          'Prefer':'return=minimal'
+        },
+        body: JSON.stringify({ blab_state: payload })
+      }).catch(function(){});
+    } catch(_){}
+  } else {
+    try {
+      sb.from('profiles').update({ blab_state: payload }).eq('id', uid)
+        .then(function(res){ if(res && res.error) console.warn('[PHX] blab cloud sync failed:', res.error); })
+        .catch(function(e){ console.warn('[PHX] blab cloud sync error:', e); });
+    } catch(e){ console.warn('[PHX] blab cloud sync threw:', e); }
+  }
+};
+
+// v4.9.99: force any pending (debounced) BLAB write out immediately. Called when the app
+// is backgrounded or killed so the last set isn't lost in the 1.5s debounce window.
+window._blabFlushCloud = function(){
+  try {
+    if(window._blabCloudTimer){ clearTimeout(window._blabCloudTimer); window._blabCloudTimer = null; }
+    var payload = window._blabCloudPending;
+    if(payload == null) return;
+    window._blabCloudPending = null;
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    window._blabSendCloud(uid, payload, true);
+  } catch(_){}
+};
+
+// pagehide covers PWA/tab close + iOS home-button app switch; visibilitychange→hidden
+// covers backgrounding on platforms where pagehide is unreliable. Both just flush.
+try {
+  window.addEventListener('pagehide', function(){ window._blabFlushCloud(); });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden') window._blabFlushCloud();
+  });
+} catch(_){}
+
+// ── Cloud restore ────────────────────────────────────────────
+// v4.9.99: when localStorage has no BLAB state (fresh install / cleared cache) but the
+// server holds a saved blab_state, hydrate localStorage from it. Local is authoritative
+// whenever present — we only fill the gap, never clobber a live local session. Pass the
+// already-fetched profile row to avoid an extra round-trip (both load paths select('*')).
+window.blabRestoreFromCloud = function(profileRow){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid || !profileRow) return false;
+    var cloud = profileRow.blab_state;
+    if(cloud == null) return false;
+    var key = 'blab_v1_' + uid;
+    if(localStorage.getItem(key)) return false; // local present → authoritative
+    localStorage.setItem(key, typeof cloud === 'string' ? cloud : JSON.stringify(cloud));
+    console.log('[PHX] BLAB state restored from Supabase');
+    return true;
+  } catch(e){ console.warn('[PHX] blabRestoreFromCloud error:', e); return false; }
 };
 
 window.blabIsActive = function(){
@@ -5789,6 +5877,10 @@ async function _loadProfileAndRouteInner(){
     try {
       sb.from('profiles').select('*').eq('id', session.user.id).single().then(function(pRes){
         if(pRes && pRes.data && !pRes.error){
+          // v4.9.99: hydrate BLAB state from server if local was wiped (PWA reinstall).
+          if(window.blabRestoreFromCloud && window.blabRestoreFromCloud(pRes.data)){
+            try { if(typeof renderTodayScreen==='function') renderTodayScreen(); } catch(_e){}
+          }
           var fresh = profileToAthlete(pRes.data);
           // Merge server fields onto local without losing local-only state. If the server
           // somehow lost fqCompleted / aiProgramme, keep the local versions — local is
@@ -5811,6 +5903,10 @@ async function _loadProfileAndRouteInner(){
     if(pRes.error&&pRes.error.code!=='PGRST116') throw pRes.error;
     profile=pRes.data;
     console.log('[PHX] profile fetched:',profile);
+    // v4.9.99: hydrate BLAB state from server if local was wiped (PWA reinstall / new
+    // device). Safe to run before routing — only fills an empty local key. The later
+    // renderTodayScreen() in the routing block picks up the restored BLAB tile.
+    try { if(window.blabRestoreFromCloud) window.blabRestoreFromCloud(profile); } catch(_e){}
     if(profile&&!profile.name&&currentSession&&currentSession.user&&currentSession.user.user_metadata&&currentSession.user.user_metadata.name){
       profile.name=currentSession.user.user_metadata.name;
     }

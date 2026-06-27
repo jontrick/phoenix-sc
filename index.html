@@ -3480,7 +3480,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.100';
+var APP_VERSION='4.9.101-debug';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3642,24 +3642,29 @@ try {
 window.blabRestoreFromCloud = function(profileRow){
   try {
     var uid = currentSession && currentSession.user && currentSession.user.id;
-    if(!uid || !profileRow) return false;
+    console.log('[PHX][DBG] blabRestoreFromCloud called. uid =', uid, '| profileRow present =', !!profileRow);
+    if(!uid || !profileRow) { console.log('[PHX][DBG] blabRestoreFromCloud abort: no uid or no profileRow'); return false; }
     var cloud = profileRow.blab_state;
-    if(cloud == null) return false;
+    console.log('[PHX][DBG] cloud blab_state present =', cloud != null, '| cloud.active =', (cloud && typeof cloud === 'object') ? cloud.active : '(string/unknown)');
+    if(cloud == null) { console.log('[PHX][DBG] blabRestoreFromCloud abort: cloud blab_state is null'); return false; }
     var key = 'blab_v1_' + uid;
     // v4.9.100: content-aware guard. Local is authoritative ONLY if it holds a valid,
     // ACTIVE state — a stale/inactive/empty stub must not shadow an active cloud state.
     var localRaw = localStorage.getItem(key);
+    console.log('[PHX][DBG] localRaw present =', !!localRaw);
     if(localRaw){
-      try { var ls = JSON.parse(localRaw); if(ls && ls.active) return false; } catch(_){}
+      try { var ls = JSON.parse(localRaw); console.log('[PHX][DBG] localRaw.active =', ls && ls.active); if(ls && ls.active) { console.log('[PHX][DBG] blabRestoreFromCloud abort: local already active, keeping local'); return false; } } catch(_){ console.log('[PHX][DBG] localRaw parse failed'); }
     }
     localStorage.setItem(key, typeof cloud === 'string' ? cloud : JSON.stringify(cloud));
     console.log('[PHX] BLAB state restored from Supabase');
+    console.log('[PHX][DBG] blabRestoreFromCloud SUCCESS: wrote cloud state to', key);
     return true;
   } catch(e){ console.warn('[PHX] blabRestoreFromCloud error:', e); return false; }
 };
 
 window.blabIsActive = function(){
   var s = window.blabGetState();
+  console.log('[PHX][DBG] blabIsActive: blabGetState() returned =', s, '| active =', !!(s && s.active));
   return !!(s && s.active);
 };
 
@@ -6034,6 +6039,7 @@ async function _loadProfileAndRouteInner(){
   // so both "route to Today" branches above miss them — they'd fall through to splash/FQ and
   // the restored BLAB tile would never render. If BLAB is active (incl. just restored from
   // cloud above), route to Today regardless of fq_completed / aiProgramme.
+  console.log('[PHX][DBG] BLAB routing check: blabIsActive fn present =', !!window.blabIsActive, '| blabIsActive() =', (window.blabIsActive ? window.blabIsActive() : '(no fn)'));
   if(window.blabIsActive && window.blabIsActive()){
     console.log('[PHX] routing decision: BLAB active → today');
     try {

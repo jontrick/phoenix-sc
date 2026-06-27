@@ -636,7 +636,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .set-col-label{font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;text-align:center;}
 
 /* REST TIMER OVERLAY */
-.rest-overlay{position:fixed;inset:0;background:var(--bg);z-index:600;display:none;flex-direction:column;align-items:center;justify-content:center;}
+/* v4.9.97: z-index raised 600 -> 9700 so the rest overlay sits ABOVE the BLAB runner
+   overlay (#blab-workout-overlay, z-index 9600). The afap/total_rep runner now routes its
+   inter-set rest through this same full-screen overlay. */
+.rest-overlay{position:fixed;inset:0;background:var(--bg);z-index:9700;display:none;flex-direction:column;align-items:center;justify-content:center;}
 /* v4.7.22 BUILD 2: My Coach chat bubbles */
 #screen-my-coach.active{display:flex;flex-direction:column;}
 .mc-bubble{max-width:80%;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.5;word-wrap:break-word;}
@@ -3477,7 +3480,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.95';
+var APP_VERSION='4.9.97';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3917,8 +3920,12 @@ window._blabBuildSupersetBlock = function(ex, idx){
     // closure captured the LAST-built superset's set count (e.g. 3) — causing an earlier
     // sets:4 superset (Seated Cable Rows) to complete after only 3 sets.
     if(st.set<=(ex2.sets||3)){
-      // rest timer
-      window._blabShowRestBanner(ex2._supersetRest||90, function(){ window['_blabSSrender_'+i](); });
+      // v4.9.97: superset inter-set rest now uses the full-screen #rest-overlay (Path A,
+      // startRestTimer) instead of the small footer banner, for parity with the main lift /
+      // percentage_sets / max_reps_sets. The next set's A/B card is already re-rendered below
+      // at the end of this handler, so dismissing the overlay reveals it — no callback needed.
+      var ssRest = ex2._supersetRest||90;
+      startRestTimer(ssRest, 'Set '+st.set+' · A: '+ex2.name, '', '', '', true);
     } else {
       // v4.9.92: superset block complete → persist A/B sets under each movement's name
       // (RPE PATCH attaches to ex2.name rows) and fire the RPE check-in.
@@ -4332,6 +4339,9 @@ window.blabRunWorkout = function(ex, idx){
     var st = window._blabWoState;
     if(!st) return;
     if(st.resting){
+      // v4.9.97: when the global #rest-overlay owns this rest, it drives the countdown +
+      // resume callback — the runner's own per-second loop must stand down.
+      if(st.globalRestActive) return;
       st.restSec = Math.max(0, st.restSec - 1);
       var re = document.getElementById('blab-rest-cd');
       if(re) re.textContent = blabFmt(st.restSec);
@@ -4354,16 +4364,18 @@ window._blabWoRender = function(){
   if(!st||!body) return;
   var ex=st.ex, fmt=ex.format;
   if(st.resting){
-    body.innerHTML=
-      '<div style="text-align:center;padding:40px 0;">'+
-        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Rest</div>'+
-        '<div style="font-family:var(--font-d);font-size:72px;font-weight:900;color:var(--gold);line-height:1;" id="blab-rest-cd">'+blabFmt(st.restSec)+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:8px;">Next set coming up</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:10px;">'+
-        '<button onclick="window._blabSkipRest()" style="flex:1;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;color:var(--text2);cursor:pointer;">Skip Rest</button>'+
-        '<button onclick="window._blabAddRest(30)" style="flex:0 0 80px;padding:16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;color:var(--text2);cursor:pointer;">+30s</button>'+
-      '</div>';
+    // v4.9.97: route the runner's inter-set rest through the global full-screen #rest-overlay
+    // (startRestTimer) instead of the old inline 72px countdown, for parity with the main lift.
+    // Guard with st.globalRestActive so repeated _blabWoRender calls don't restart the timer;
+    // the completion callback clears the rest flags and re-renders the next set.
+    if(!st.globalRestActive){
+      st.globalRestActive = true;
+      startRestTimer(st.restSec||0, 'Next set', '', '', '', true, function(){
+        var s2 = window._blabWoState;
+        if(s2){ s2.resting=false; s2.restSec=0; s2.globalRestActive=false; }
+        window._blabWoRender();
+      });
+    }
     return;
   }
   if(fmt==='percentage_sets') blabRenderPct(ex,st,body);
@@ -8527,6 +8539,9 @@ var exPickerCallback=null;
 var rtInterval=null;
 var rtTotal=0;
 var rtRemaining=0;
+// v4.9.97: optional completion callback fired when the global rest overlay finishes (timer
+// hits 0 OR Skip Rest). Used by the BLAB runner (blabRunWorkout) to resume after rest.
+var rtDoneCb=null;
 
 var rtEndTime=0;
 var wakeLock=null;
@@ -8614,9 +8629,12 @@ window._phxCancelCountIn = _phxCancelCountIn;
 // v4.7.15 FIX 2: clean weight × reps display + ≤8-word technique cue subtext.
 // v4.7.15 FIX 3: hide ad slots + upgrade link for Pro accounts.
 // v4.7.16 FIX 3: isPrescribed=true → show only "+30 sec" control. false → show full 2/3/4/5/6m selector.
-function startRestTimer(secs,nextLabel,nextKg,nextReps,cue,isPrescribed){
+function startRestTimer(secs,nextLabel,nextKg,nextReps,cue,isPrescribed,onDone){
   rtTotal=secs;
   rtEndTime=Date.now()+(secs*1000);
+  // v4.9.97: store (or clear) the completion callback. Callers that don't pass one — e.g. the
+  // standard set-row path — reset it to null so a stale callback from a prior rest never fires.
+  rtDoneCb = (typeof onDone==='function') ? onDone : null;
   document.getElementById('rt-next').textContent=nextLabel||'Next set';
   // v4.7.17 FIX 2: render the next-set prescription as two adjacent gold boxes (load + reps).
   var nextInfo=document.getElementById('rt-next-info');
@@ -8668,6 +8686,8 @@ function updateRTDisplay(){
     clearInterval(rtInterval);
     document.getElementById('rest-overlay').classList.remove('active');
     releaseWakeLock();
+    // v4.9.97: fire-and-clear the completion callback (e.g. resume the BLAB runner).
+    if(rtDoneCb){ var cb=rtDoneCb; rtDoneCb=null; cb(); }
   }
 }
 document.addEventListener('DOMContentLoaded',function(){
@@ -8675,6 +8695,8 @@ document.addEventListener('DOMContentLoaded',function(){
   if(rtSkip)rtSkip.addEventListener('click',function(){
     if(rtInterval)clearInterval(rtInterval);
     document.getElementById('rest-overlay').classList.remove('active');
+    // v4.9.97: skipping rest must also resume the BLAB runner, same as natural completion.
+    if(rtDoneCb){ var cb=rtDoneCb; rtDoneCb=null; cb(); }
   });
 });
 function openExPicker(exId,title,optionsKey,callback){

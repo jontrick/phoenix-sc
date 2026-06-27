@@ -3477,7 +3477,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.93';
+var APP_VERSION='4.9.94-debug';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3736,6 +3736,7 @@ window.blabOpenSession = function(week, day){
     window._todaySession = phoenixSess;
     window._phxWarmupSkipNext = true; // skip warmup for BLAB
     // Set up completion callback
+    console.log('[BLAB-DEBUG] blabOpenSession: callback set for week ' + week + ', day ' + day);
     window._blabSessionCompleteCallback = function(){ window.blabCompleteSession(week, day); };
     openTodaySession();
     return;
@@ -16071,6 +16072,7 @@ function renderTodayScreen(){
     try {
       // BLAB MODE — takes over Today card when active
       var _bs = window.blabGetState ? window.blabGetState() : null;
+      console.log('[BLAB-DEBUG] Today inject running — active:', !!(_bs && _bs.active), '| last_completed_day:', _bs ? _bs.last_completed_day : '(no state)', '| week:', _bs ? _bs.week : '-');
       if(_bs && _bs.active){
         var _card = document.getElementById('card-today-session');
         if(!_card) return;
@@ -23861,6 +23863,7 @@ function openTodaySession(){
       // v4.9.93 FIX 3: fire the BLAB completion callback so blabCompleteSession advances
       // last_completed_day (and week on day 4), then re-renders Today to the NEXT session.
       // Previously set in blabOpenSession but never invoked, so the tile never advanced.
+      console.log('[BLAB-DEBUG] Phoenix finish: BLAB callback firing — _blabSessionCompleteCallback is', (typeof window._blabSessionCompleteCallback === 'function') ? 'SET (function)' : 'NOT SET (' + typeof window._blabSessionCompleteCallback + ')');
       if(typeof window._blabSessionCompleteCallback === 'function'){
         try { window._blabSessionCompleteCallback(); } catch(_e){ console.warn('[PHX] blab complete callback failed:', _e); }
         window._blabSessionCompleteCallback = null;

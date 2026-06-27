@@ -3480,7 +3480,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.97';
+var APP_VERSION='4.9.98';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4345,7 +4345,9 @@ window.blabRunWorkout = function(ex, idx){
       st.restSec = Math.max(0, st.restSec - 1);
       var re = document.getElementById('blab-rest-cd');
       if(re) re.textContent = blabFmt(st.restSec);
-      if(st.restSec <= 0){ st.resting=false; window._blabWoRender(); }
+      // v4.9.98 BUG 2.1: clear globalRestActive alongside resting so this fallback branch can't
+      // orphan the runner either (defensive — this branch is unreachable while the overlay owns rest).
+      if(st.restSec <= 0){ st.resting=false; st.globalRestActive=false; window._blabWoRender(); }
     } else {
       st.elapsed++;
       var et = document.getElementById('blab-elapsed');
@@ -4370,7 +4372,13 @@ window._blabWoRender = function(){
     // the completion callback clears the rest flags and re-renders the next set.
     if(!st.globalRestActive){
       st.globalRestActive = true;
+      // v4.9.98 BUG 2.3: tag this rest with a generation token. rtDoneCb/#rest-overlay are global
+      // singletons shared with the main-lift path; if another startRestTimer call replaces our
+      // callback mid-rest, a late-firing stale callback must NOT clobber the (possibly new) runner
+      // state. The closure only resumes when its captured gen is still the active one.
+      var _restGen = (window._blabRestGen = (window._blabRestGen || 0) + 1);
       startRestTimer(st.restSec||0, 'Next set', '', '', '', true, function(){
+        if(window._blabRestGen !== _restGen) return; // stale → no-op
         var s2 = window._blabWoState;
         if(s2){ s2.resting=false; s2.restSec=0; s2.globalRestActive=false; }
         window._blabWoRender();
@@ -4387,7 +4395,10 @@ window._blabWoRender = function(){
   else blabRenderStd(ex,st,body);
 };
 
-window._blabSkipRest=function(){ var st=window._blabWoState; if(st){st.resting=false;st.restSec=0;} window._blabWoRender(); };
+// v4.9.98 BUG 2.1: also clear globalRestActive. If an inline handler clears resting but leaves
+// globalRestActive=true, the NEXT set's rest sees the `if(!st.globalRestActive)` guard as false,
+// never starts the overlay, and the runner timer stands down — orphaning the runner in rest.
+window._blabSkipRest=function(){ var st=window._blabWoState; if(st){st.resting=false;st.restSec=0;st.globalRestActive=false;} window._blabWoRender(); };
 window._blabAddRest=function(s){ var st=window._blabWoState; if(st) st.restSec+=s; var el=document.getElementById('blab-rest-cd'); if(el) el.textContent=blabFmt(st.restSec); };
 // v4.9.92: centralized BLAB block-completion. The four BLAB custom-block formats
 // (superset / afap / total_rep_goal / interval) bypass the standard Phoenix set-row
@@ -16255,7 +16266,13 @@ async function _phxApplyCompletedTileMarkers(){
       if(t === 'core_circuit' || t === 'core_strength') t = 'core';
       if(t in did) did[t] = true;
     });
+    // v4.9.98 BUG 1: when BLAB is active, card-today-session is the BLAB day tile, which
+    // manages its own state (next day / week-complete). The completed-session query badges by
+    // calendar day + session_type='strength' and is BLAB-day-blind — completing Day 1 would
+    // wrongly stamp "✓ Completed" on the Day 2 tile. Skip the external badge for that tile.
+    var _blabActive = !!(window.blabIsActive && window.blabIsActive());
     function mark(id){
+      if(id === 'card-today-session' && _blabActive) return;
       var tile = document.getElementById(id);
       if(!tile) return;
       tile.style.opacity = '0.7';
@@ -23896,7 +23913,9 @@ function openTodaySession(){
     var _old=document.getElementById('phx-complete-confirm'); if(_old) _old.remove();
     var _ov=document.createElement('div');
     _ov.id='phx-complete-confirm';
-    _ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9700;display:flex;align-items:center;justify-content:center;padding:24px;';
+    // v4.9.98 BUG 2.2: z-index 9800 so this confirm modal always sits ABOVE the rest overlay
+    // (9700). At equal z-index, stacking was DOM-order-dependent and the modal could be obscured.
+    _ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9800;display:flex;align-items:center;justify-content:center;padding:24px;';
     var _box=document.createElement('div');
     _box.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:360px;width:100%;text-align:center;';
     var _eb=document.createElement('div');

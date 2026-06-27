@@ -1726,17 +1726,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
       </div>
     </div>
-    <!-- v4.7.59: This Week's Schedule tile — replaces the underlined text link. Body is
-         populated by _phxRenderWeekScheduleTile() during renderTodayScreen(). -->
-    <div id="card-this-week" class="game-card" onclick="openWeekPlan()" style="margin:6px 0 14px;border:1px solid var(--border);border-left:3px solid var(--border2);cursor:pointer;opacity:0.85;">
-      <div class="game-card-inner" style="padding:14px 18px;">
-        <div class="game-card-eyebrow">
-          <span class="game-card-eyebrow-sm" style="color:var(--text3);">This Week's Schedule</span>
-        </div>
-        <div id="card-this-week-body" style="margin-top:8px;"></div>
-        <div class="game-card-action" style="font-size:11px;margin-top:10px;color:var(--text3);">View full week →</div>
-      </div>
-    </div>
+    <!-- v4.9.93 FIX 5: "This Week's Schedule" tile removed. -->
+    <!-- v4.9.93 FIX 4: subtle version label at the very bottom of the Today screen. -->
+    <div id="today-version-display" style="text-align:center;font-size:10px;letter-spacing:1px;color:var(--text3);padding:14px 0 4px;"></div>
   </div>
 </div>
 <div class="bottom-nav">
@@ -3485,17 +3477,19 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.92';
+var APP_VERSION='4.9.93';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
   var settings=document.getElementById('settings-version-display');
   var sidebar=document.getElementById('sidebar-version-display');
   var auth=document.getElementById('auth-version-display');
+  var today=document.getElementById('today-version-display'); // v4.9.93 FIX 4
   if(splash) splash.textContent='v'+APP_VERSION;
   if(settings) settings.textContent='Version '+APP_VERSION;
   if(sidebar) sidebar.textContent='v'+APP_VERSION;
   if(auth) auth.textContent='v'+APP_VERSION;
+  if(today) today.textContent='v'+APP_VERSION;
 }
 (function(){
   var stored=localStorage.getItem('phoenix_app_version');
@@ -3918,7 +3912,11 @@ window._blabBuildSupersetBlock = function(ex, idx){
     st.log.push({a:st.aReps,ka:st.loadA,b:rb,kb:kb});
     st.set++;
     st.aOk=false; st.bOk=false; st.loadA=0; st.loadB=0;
-    if(st.set<=totalSets){
+    // v4.9.93 FIX 1: read sets from the per-index exercise (ex2.sets), NOT the closure
+    // `totalSets`. window._blabSSdoneB is a global reassigned on every superset build, so its
+    // closure captured the LAST-built superset's set count (e.g. 3) — causing an earlier
+    // sets:4 superset (Seated Cable Rows) to complete after only 3 sets.
+    if(st.set<=(ex2.sets||3)){
       // rest timer
       window._blabShowRestBanner(ex2._supersetRest||90, function(){ window['_blabSSrender_'+i](); });
     } else {
@@ -4408,9 +4406,11 @@ window._blabBlockComplete = function(idx, ex, setRows){
 window._blabWoDone=function(){
   if(window._blabWoTimer){clearInterval(window._blabWoTimer);window._blabWoTimer=null;}
   if(window._blabWakeLock){ window._blabWakeLock.release().catch(function(){}); window._blabWakeLock=null; }
-  // Save complex time score
+  // v4.9.93 FIX 2: afap completion summary — total time, per-set split times, and comparison
+  // to previous best. Previously only fired for loaded complexes (has_load); now covers every
+  // afap-format block (complexes, Core Circuit, etc.) and reads/saves the per-exercise _time PB.
   var st=window._blabWoState;
-  if(st&&st.ex&&st.ex.has_load&&st.elapsed>0){
+  if(st && st.ex && (st.ex._blabFmt==='afap' || st.ex.format==='afap') && st.elapsed>0){
     var bs=window.blabGetState();
     if(bs){
       if(!bs.records) bs.records={};
@@ -4418,10 +4418,16 @@ window._blabWoDone=function(){
       var prev=bs.records[k]||0;
       bs.records[k]=st.elapsed;
       window.blabSaveState(bs);
-      var msg='Time: '+blabFmt(st.elapsed);
-      if(st.afapSetTimes&&st.afapSetTimes.length>1){ msg+=' | '; st.afapSetTimes.forEach(function(t,i){ msg+='Set '+(i+1)+': '+blabFmt(t)+' '; }); }
-      if(prev) msg+=prev>st.elapsed?' | New PB! Previous: '+blabFmt(prev):' | Previous best: '+blabFmt(prev);
-      alert(msg);
+      var lines=['Total time: '+blabFmt(st.elapsed)];
+      if(st.afapSetTimes && st.afapSetTimes.length>1){
+        st.afapSetTimes.forEach(function(t,i){ lines.push('Set '+(i+1)+': '+blabFmt(t)); });
+      }
+      if(prev){
+        lines.push(st.elapsed<prev ? 'New PB! Previous best: '+blabFmt(prev) : 'Previous best: '+blabFmt(prev));
+      } else {
+        lines.push('First time logged — this is your benchmark.');
+      }
+      alert(st.ex.name+'\n\n'+lines.join('\n'));
     }
   }
   var overlay=document.getElementById('blab-workout-overlay');
@@ -4914,7 +4920,7 @@ window.blabGetSessionData = function(week, day){
     var exs = [];
     if(w === 12){
       exs = [
-        {name:'Bench Press Max Rep Test', format:'total_rep_goal', target:0, note:'Choose 84kg (185lb) or 102kg (225lb). 1 set max reps. Warm up fully first.'},
+        {name:'Bench Press Max Rep Test', format:'total_rep_goal', target:0, note:'Choose 84kg or 102kg. 1 set max reps. Warm up fully first.'},
         {name:'BW Inverted Row', format:'standard_sets', sets:2, reps:'Max reps', note:'Stop when chest no longer touches bar.'},
         {name:'Barbell Overhead Shrugs', format:'standard_sets', sets:3, reps:15},
         {name:'BeZercher Complex', format:'afap', sets:5, rest:60, reps_per_set:[10,9,8,7,6], movements:complexMovs}
@@ -16163,8 +16169,7 @@ function renderTodayScreen(){
   if(typeof _phxRefreshMyCoachTile==='function') _phxRefreshMyCoachTile();
   // v4.7.23 BUILD 1/5: render the Agoge tile (no-op when fqProgrammeTarget isn't agoge/both).
   if(typeof _phxRenderAgogeTile==='function') _phxRenderAgogeTile();
-  // v4.7.59: populate the "This Week's Schedule" tile with the next 2 upcoming sessions.
-  if(typeof _phxRenderWeekScheduleTile==='function') _phxRenderWeekScheduleTile();
+  // v4.9.93 FIX 5: "This Week's Schedule" tile removed — render call dropped.
   // v4.7.61: show today's core format badge (CIRCUIT / STRENGTH) on the Core tile.
   if(typeof _phxRenderCoreTileFormat==='function') _phxRenderCoreTileFormat();
 }
@@ -23853,6 +23858,13 @@ function openTodaySession(){
       // Supabase complete
       var _aiM=computeSessionMetrics(aiSets);
       supabaseCompleteSession({total_volume_kg:_aiM.total_volume_kg,total_reps:_aiM.total_reps,notes:entry.notes,details:{session_id:aiSessionId,week:entry.week,sets:aiSets}});
+      // v4.9.93 FIX 3: fire the BLAB completion callback so blabCompleteSession advances
+      // last_completed_day (and week on day 4), then re-renders Today to the NEXT session.
+      // Previously set in blabOpenSession but never invoked, so the tile never advanced.
+      if(typeof window._blabSessionCompleteCallback === 'function'){
+        try { window._blabSessionCompleteCallback(); } catch(_e){ console.warn('[PHX] blab complete callback failed:', _e); }
+        window._blabSessionCompleteCallback = null;
+      }
       navTo('today');
     }
   });

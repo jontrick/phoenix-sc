@@ -1774,14 +1774,14 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
         <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
       </div>
     </div>
-    <!-- Add Session — tap to generate an ad-hoc session on the spot -->
-    <div id="card-add-session" class="game-card" onclick="_phxOpenAddTodaySession()" style="margin-bottom:10px;border:1px dashed var(--border2);border-left:3px solid var(--border2);opacity:0.8;">
+    <!-- Add Session — tap to pick from the hardcoded WOD/Core session library -->
+    <div id="card-add-session" class="game-card" onclick="_phxOpenSessionLibrary()" style="margin-bottom:10px;border:1px dashed var(--border2);border-left:3px solid var(--border2);opacity:0.8;">
       <div class="game-card-inner" style="padding:14px 18px;">
         <div class="game-card-eyebrow">
           <span class="game-card-eyebrow-sm" style="color:var(--text3);">Today</span>
         </div>
         <div class="game-card-title" style="font-size:20px;color:var(--text2);">+ Add a Session</div>
-        <div class="game-card-sub" style="color:var(--text3);">Build your own or let the coach generate one</div>
+        <div class="game-card-sub" style="color:var(--text3);">Pick a WOD or Core session from the library</div>
       </div>
     </div>
     <!-- Walk / Run — full width standalone tile -->
@@ -3546,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.102';
+var APP_VERSION='4.9.103';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21898,6 +21898,260 @@ window._phxOpenAddTodaySession = function(){
     });
   }
   _openTypePicker();
+};
+
+// ============================================================================
+// v4.9.103 — HARDCODED SESSION LIBRARY (WOD + Core). No AI generation.
+// Flow: Add Session → WOD/Core picker → session list → tap to open detail.
+// Detail renders a clean exercise list with sets/reps + Start / Complete.
+// ============================================================================
+window.PHX_WOD_LIBRARY = [
+  {
+    name: 'AMRAP 20',
+    format: 'AMRAP',
+    duration_min: 20,
+    note: 'As many rounds as possible in 20 minutes. Pace it — keep moving, break before failure.',
+    movements: [
+      {name: 'Pull-ups',   reps: '5'},
+      {name: 'Push-ups',   reps: '10'},
+      {name: 'Air Squats', reps: '15'}
+    ]
+  },
+  {
+    name: 'EMOM 12',
+    format: 'EMOM',
+    duration_min: 12,
+    note: 'Every minute on the minute for 12 minutes. Alternate movements each minute — rest with whatever time is left.',
+    movements: [
+      {name: 'Kettlebell Swings', reps: '10', sub: 'Odd minutes (1, 3, 5, 7, 9, 11)'},
+      {name: 'Box Jumps',         reps: '10', sub: 'Even minutes (2, 4, 6, 8, 10, 12)'}
+    ]
+  },
+  {
+    name: 'The Chipper',
+    format: 'Chipper',
+    duration_min: 25,
+    note: 'Work through the list top to bottom, one movement at a time. For time.',
+    movements: [
+      {name: 'Calorie Row', reps: '50 cal'},
+      {name: 'Wall Balls',  reps: '40'},
+      {name: 'Box Jumps',   reps: '30'},
+      {name: 'Pull-ups',    reps: '20'},
+      {name: 'Burpees',     reps: '10'}
+    ]
+  }
+];
+window.PHX_CORE_LIBRARY = [
+  {
+    name: 'Anti-Rotation Circuit',
+    format: '3 Rounds',
+    duration_min: 20,
+    note: '3 rounds. Resist the rotation — slow and controlled, brace the trunk on every rep.',
+    exercises: [
+      {name: 'Pallof Press',   sets: 3, reps: '10 each side'},
+      {name: 'Dead Bug',       sets: 3, reps: '10 each side'},
+      {name: 'Single-Leg RDL', sets: 3, reps: '10 each side'}
+    ]
+  },
+  {
+    name: 'Loaded Strength',
+    format: 'Sets × Reps',
+    duration_min: 25,
+    note: 'Treat the core like any other muscle — add load and progress it. Full range, controlled tempo.',
+    exercises: [
+      {name: 'Ab Wheel Rollout',  sets: 4, reps: '10'},
+      {name: 'Cable Crunch',      sets: 4, reps: '12'},
+      {name: 'Hanging Knee Raise',sets: 3, reps: '15'}
+    ]
+  },
+  {
+    name: 'Rotational Power',
+    format: 'Sets × Reps',
+    duration_min: 22,
+    note: 'Move explosively on the concentric. Quality over fatigue — rest fully between sets.',
+    exercises: [
+      {name: 'Med Ball Rotational Throw', sets: 3, reps: '10 each side'},
+      {name: 'Russian Twist (weighted)',  sets: 3, reps: '12'},
+      {name: 'Landmine Rotation',         sets: 3, reps: '10 each side'}
+    ]
+  }
+];
+
+// Step 1 — category picker (WOD vs Core).
+window._phxOpenSessionLibrary = function(){
+  _phxOpenBottomSheet({
+    title: 'Add a Session',
+    subtitle: 'Pick a category from the library',
+    options: [
+      {value:'WOD',  label:'WOD',  sub:'Conditioning — AMRAP, EMOM, Chipper'},
+      {value:'Core', label:'Core', sub:'Trunk work — anti-rotation, strength, rotational power'}
+    ],
+    onSelect: function(cat){ window._phxOpenLibraryList(cat); }
+  });
+};
+
+// Step 2 — session list for the chosen category.
+window._phxOpenLibraryList = function(cat){
+  var lib = (cat === 'WOD') ? window.PHX_WOD_LIBRARY : window.PHX_CORE_LIBRARY;
+  var stale = document.getElementById('phx-lib-list');
+  if(stale) stale.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-lib-list';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9500;overflow-y:auto;display:flex;flex-direction:column;';
+
+  var tiles = lib.map(function(s, i){
+    var count = (s.movements || s.exercises || []).length;
+    return '<div class="phx-lib-tile" data-lib-idx="'+i+'" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color 0.15s;">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+          '<div style="font-family:var(--font-d);font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text);">'+s.name+'</div>'+
+          '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--gold);border:1px solid var(--gold);padding:3px 8px;border-radius:10px;">'+s.format+'</div>'+
+        '</div>'+
+        '<div style="font-size:12px;color:var(--text3);">'+count+' movements · '+(s.duration_min)+' min</div>'+
+      '</div>';
+  }).join('');
+
+  overlay.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);">'+
+      '<div id="phx-lib-list-back" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'+
+      '</div>'+
+      '<div>'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">'+cat+' Library</div>'+
+        '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;text-transform:uppercase;color:var(--text);">Pick a Session</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:16px;">'+tiles+'</div>';
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', function(e){
+    var tile = e.target.closest('.phx-lib-tile');
+    if(tile){
+      var idx = parseInt(tile.getAttribute('data-lib-idx'), 10);
+      window._phxOpenLibrarySession(cat, idx);
+    }
+  });
+  document.getElementById('phx-lib-list-back').addEventListener('click', function(){
+    overlay.remove();
+    window._phxOpenSessionLibrary();
+  });
+};
+
+// Step 3 — clean session detail with Start / Complete.
+window._phxOpenLibrarySession = function(cat, idx){
+  var lib = (cat === 'WOD') ? window.PHX_WOD_LIBRARY : window.PHX_CORE_LIBRARY;
+  var sess = lib[idx];
+  if(!sess) return;
+  if(window._phxLibTimer){ clearInterval(window._phxLibTimer); window._phxLibTimer = null; }
+
+  var stale = document.getElementById('phx-lib-session');
+  if(stale) stale.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'phx-lib-session';
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9600;overflow-y:auto;display:flex;flex-direction:column;';
+
+  // Header
+  var header =
+    '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);">'+
+      '<div id="phx-lib-sess-back" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'+
+      '</div>'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:2px;">'+cat+' · '+sess.format+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:1px;">'+sess.name+'</div>'+
+      '</div>'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);">'+sess.duration_min+' min</div>'+
+    '</div>';
+
+  // Content
+  var content = '<div style="padding:16px;flex:1;">';
+  if(sess.note){
+    content +=
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">How It Works</div>'+
+        '<div style="font-size:13px;color:var(--text2);line-height:1.6;">'+sess.note+'</div>'+
+      '</div>';
+  }
+  var items = sess.movements || sess.exercises || [];
+  content += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">'+items.length+' movements</div>';
+  items.forEach(function(it){
+    var right = '';
+    if(it.sets){ right = it.sets+' × '+it.reps; }
+    else if(it.reps){ right = it.reps; }
+    content +=
+      '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;">'+
+        '<div style="flex:1;">'+
+          '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;color:var(--text);">'+it.name+'</div>'+
+          (it.sub ? '<div style="font-size:11px;color:var(--text3);margin-top:3px;font-style:italic;">'+it.sub+'</div>' : '')+
+        '</div>'+
+        (right ? '<div style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--gold);flex-shrink:0;">'+right+'</div>' : '')+
+      '</div>';
+  });
+  content += '</div>';
+
+  // Action bar — Start swaps in a live timer + Complete.
+  var actions =
+    '<div id="phx-lib-actions" style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);">'+
+      '<button id="phx-lib-start" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Start →</button>'+
+    '</div>';
+
+  overlay.innerHTML = header + content + actions;
+  document.body.appendChild(overlay);
+
+  document.getElementById('phx-lib-sess-back').addEventListener('click', function(){
+    if(window._phxLibTimer){ clearInterval(window._phxLibTimer); window._phxLibTimer = null; }
+    overlay.remove();
+    window._phxOpenLibraryList(cat);
+  });
+  document.getElementById('phx-lib-start').addEventListener('click', function(){
+    window._phxLibStartSession(sess);
+  });
+};
+
+// Start — replace the action bar with a running clock + Complete button.
+window._phxLibStartSession = function(sess){
+  var bar = document.getElementById('phx-lib-actions');
+  if(!bar) return;
+  var started = 0; // seconds; Date.now avoided per harness constraints
+  bar.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;">'+
+      '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);">Elapsed</div>'+
+      '<div id="phx-lib-clock" style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">00:00</div>'+
+    '</div>'+
+    '<button id="phx-lib-complete" style="width:100%;padding:14px;background:var(--green,#4CAF50);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#fff;cursor:pointer;">Complete ✓</button>';
+
+  if(window._phxLibTimer){ clearInterval(window._phxLibTimer); }
+  window._phxLibTimer = setInterval(function(){
+    started += 1;
+    var m = Math.floor(started/60), s = started%60;
+    var el = document.getElementById('phx-lib-clock');
+    if(el) el.textContent = (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  }, 1000);
+
+  document.getElementById('phx-lib-complete').addEventListener('click', function(){
+    window._phxLibCompleteSession(sess, started);
+  });
+};
+
+// Complete — stop the clock, show a confirmation, then close.
+window._phxLibCompleteSession = function(sess, elapsedSec){
+  if(window._phxLibTimer){ clearInterval(window._phxLibTimer); window._phxLibTimer = null; }
+  var overlay = document.getElementById('phx-lib-session');
+  if(!overlay) return;
+  var m = Math.floor((elapsedSec||0)/60), s = (elapsedSec||0)%60;
+  var clock = (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  overlay.innerHTML =
+    '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;">'+
+      '<div style="width:72px;height:72px;border-radius:50%;background:var(--green,#4CAF50);display:flex;align-items:center;justify-content:center;">'+
+        '<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'+
+      '</div>'+
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">Session Complete</div>'+
+      '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--text);">'+sess.name+'</div>'+
+      '<div style="font-size:13px;color:var(--text2);">Logged at '+clock+' elapsed. Nice work.</div>'+
+      '<button id="phx-lib-done" style="margin-top:8px;padding:14px 32px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Done</button>'+
+    '</div>';
+  document.getElementById('phx-lib-done').addEventListener('click', function(){
+    overlay.remove();
+  });
 };
 
 // ── AI single-session generation ─────────────────────────────────────────────

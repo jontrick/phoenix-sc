@@ -38,7 +38,12 @@ if (inlineCount === 0) bad('no inline scripts found — extraction regex broke')
 console.log('\nFeature check — v4.9.103 prominent PREVIOUS BEST banner:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 
-has("var APP_VERSION='4.9.103'", 'version is 4.9.103');
+has("var APP_VERSION='4.9.104'", 'version is 4.9.104');
+
+// v4.9.104: blabToPhoenixSession must carry prev_best fields onto the mapped phxEx
+// object, otherwise the renderers (which read ex.prev_best) show a blank banner.
+has('phxEx.prev_best = ex.prev_best || 0', 'mapper carries prev_best onto phxEx (afap + max-reps)');
+has('phxEx.prev_best_wt = ex.prev_best_wt || 0', 'mapper carries prev_best_wt onto phxEx (max-reps)');
 
 // Shared banner helper — the gold, top-pinned PREVIOUS BEST strip.
 has('function blabPrevBestBanner(value)', 'blabPrevBestBanner helper defined');

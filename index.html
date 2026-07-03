@@ -3546,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.103';
+var APP_VERSION='4.9.104';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4348,6 +4348,9 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx._blabRest = ex.rest || 90;
       phxEx._blabSuggestedLoad = ex.suggested_load || 0;
       phxEx._blabPrevBest = ex.prev_best || 0;
+      // v4.9.104: also carry prev_best onto phxEx — blabRenderAfap's gold PREVIOUS BEST
+      // banner reads ex.prev_best (not _blabPrevBest), so without this the banner stays blank.
+      phxEx.prev_best = ex.prev_best || 0;
       phxEx._blabHasLoad = ex.has_load || false;
 
     } else if(fmt === 'max_reps_sets'){
@@ -4356,6 +4359,10 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'max_reps_sets';
       phxEx.format = 'max_reps_sets';
+      // v4.9.104: carry prev_best/prev_best_wt through — blabRenderMaxReps's banner
+      // reads these off the mapped exercise object; the mapper previously dropped them.
+      phxEx.prev_best = ex.prev_best || 0;
+      phxEx.prev_best_wt = ex.prev_best_wt || 0;
 
     } else if(fmt === 'interval'){
       phxEx.sets = 1;

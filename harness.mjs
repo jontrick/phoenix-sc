@@ -38,12 +38,33 @@ if (inlineCount === 0) bad('no inline scripts found — extraction regex broke')
 console.log('\nFeature check — v4.9.103 prominent PREVIOUS BEST banner:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 
-has("var APP_VERSION='4.9.104'", 'version is 4.9.104');
+has("var APP_VERSION='4.9.105'", 'version is 4.9.105');
 
 // v4.9.104: blabToPhoenixSession must carry prev_best fields onto the mapped phxEx
 // object, otherwise the renderers (which read ex.prev_best) show a blank banner.
 has('phxEx.prev_best = ex.prev_best || 0', 'mapper carries prev_best onto phxEx (afap + max-reps)');
 has('phxEx.prev_best_wt = ex.prev_best_wt || 0', 'mapper carries prev_best_wt onto phxEx (max-reps)');
+
+// v4.9.105: max_reps_sets renders through the GENERIC Phoenix set-row block (no dedicated
+// builder), which previously ignored prev_best. The banner must be injected there.
+console.log('\nFeature check — v4.9.105 prev-best across all BLAB formats:');
+has("ex._blabFmt === 'max_reps_sets' && (ex.prev_best||0)", 'max-reps generic block gates on prev_best');
+has('prevBestSection = blabPrevBestBanner(ex.prev_best', 'max-reps generic block builds prev-best banner');
+has("'</div></div>'+\n      prevBestSection+\n      setsHTML", 'max-reps banner injected between header and set rows');
+
+// v4.9.105: max_reps_sets raw exercise must carry prev_best/prev_best_wt from records
+// BEFORE mapping (blabGetSessionData), else there is nothing for the mapper to carry.
+has('prev_best:dbRecord, prev_best_wt:dbRecordWt', 'blabGetSessionData sets prev_best on raw max-reps ex');
+
+// v4.9.105: superset — mapper reads previous A/B weights from records (keyed by movement name).
+has('phxEx.prev_wt_a = _ssRec[ex.movements[0].name', 'mapper carries superset prev weight for A');
+has('phxEx.prev_wt_b = _ssRec[ex.movements[1].name', 'mapper carries superset prev weight for B');
+// Superset renderer shows the previous weight as small gold text under each movement.
+has("ex.prev_wt_a?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev A weight (gold)');
+has("ex.prev_wt_b?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev B weight (gold)');
+// Superset persists the last weight used per movement so next session can read it back.
+has("bs.records[ex2.name+'_wt'] = last.ka", 'superset persists A weight to records');
+has("bs.records[partner.name+'_wt'] = last.kb", 'superset persists B weight to records');
 
 // Shared banner helper — the gold, top-pinned PREVIOUS BEST strip.
 has('function blabPrevBestBanner(value)', 'blabPrevBestBanner helper defined');

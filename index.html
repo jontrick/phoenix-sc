@@ -3546,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.104';
+var APP_VERSION='4.9.105';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4060,6 +4060,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card A
       h += '<div style="background:var(--bg2);border:2px solid '+(state.aOk?'#3a7d44':'var(--gold)')+';border-radius:12px;padding:14px;margin-bottom:8px;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">A &mdash; '+ex.name+'</div>'+
+        (ex.prev_wt_a?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+ex.prev_wt_a+'kg</div>':'')+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+ex.reps+'</div>';
       if(state.aOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadA?state.loadA+'kg &middot; ':'')+state.aReps+' reps</div>';
@@ -4077,6 +4078,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card B
       h += '<div style="background:var(--bg2);border:2px solid '+(state.bOk?'#3a7d44':state.aOk?'var(--gold)':'var(--border2)')+';border-radius:12px;padding:14px;margin-bottom:8px;opacity:'+(state.aOk?'1':'0.5')+';transition:opacity 0.2s;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">B &mdash; '+m.name+'</div>'+
+        (ex.prev_wt_b?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+ex.prev_wt_b+'kg</div>':'')+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+m.reps+'</div>';
       if(state.bOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadB?state.loadB+'kg &middot; ':'')+state.bReps+' reps</div>';
@@ -4138,6 +4140,21 @@ window._blabBuildSupersetBlock = function(ex, idx){
         rows.push({name:ex2.name, setNumber:li+1, weightKg:l.ka, reps:l.a});
         if(partner.name) rows.push({name:partner.name, setNumber:li+1, weightKg:l.kb, reps:l.b});
       });
+      // v4.9.105: persist the last weight used for each movement under records[name+'_wt']
+      // so the next session's superset renderer can surface "Prev: Xkg" (blabToPhoenixSession
+      // reads these back). Uses the final logged set's loads.
+      try {
+        var last = st.log[st.log.length-1];
+        if(last){
+          var bs = window.blabGetState();
+          if(bs){
+            if(!bs.records) bs.records={};
+            if(last.ka) bs.records[ex2.name+'_wt'] = last.ka;
+            if(partner.name && last.kb) bs.records[partner.name+'_wt'] = last.kb;
+            window.blabSaveState(bs);
+          }
+        }
+      } catch(e){ console.warn('[PHX] superset prev-weight save failed:', e); }
       window._blabBlockComplete(i, ex2, rows);
     }
     window['_blabSSrender_'+i]();
@@ -4327,6 +4344,12 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx._supersetRest = ex.rest || 90;
       phxEx._blabFmt = 'superset';
       phxEx.format = 'superset';
+      // v4.9.105: carry the previous weight used for the A and B movements so the superset
+      // renderer can show "Prev: Xkg" under each movement name. Keyed by movement name in
+      // records (written on block complete via _blabSSdoneB) — same source, same key.
+      var _ssRec = (bs && bs.records) || {};
+      phxEx.prev_wt_a = _ssRec[ex.movements[0].name+'_wt'] || 0;
+      phxEx.prev_wt_b = _ssRec[ex.movements[1].name+'_wt'] || 0;
 
     } else if(fmt === 'total_rep_goal'){
       phxEx.sets = 1;
@@ -24301,6 +24324,14 @@ function openTodaySession(){
     } else if(ex._isSuperset){
       customiseBadgeHTML = '<span style="display:inline-block;margin-left:6px;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);padding:1px 5px;border-radius:3px;vertical-align:middle;">Superset</span>';
     }
+    // v4.9.105: max_reps_sets has no dedicated block builder — it renders through this generic
+    // set-row path, which previously dropped prev_best entirely. Surface the gold PREVIOUS BEST
+    // banner ("22 reps @ 27.5kg") between the header and the set rows. blabToPhoenixSession
+    // carries prev_best / prev_best_wt onto the mapped exercise from records.
+    var prevBestSection = '';
+    if(ex._blabFmt === 'max_reps_sets' && (ex.prev_best||0)){
+      prevBestSection = blabPrevBestBanner(ex.prev_best+' reps'+(ex.prev_best_wt?' @ '+ex.prev_best_wt+'kg':''));
+    }
     block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
       '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
@@ -24309,6 +24340,7 @@ function openTodaySession(){
       targetSection+
       customiseControlsHTML+
       '</div></div>'+
+      prevBestSection+
       setsHTML;
     body.appendChild(block);
     if(upNextHTML){var upDiv=document.createElement('div');upDiv.innerHTML=upNextHTML;body.appendChild(upDiv.firstChild);}

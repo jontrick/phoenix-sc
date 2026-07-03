@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Phoenix node harness — static validation of the single-file PWA.
 // 1. Syntax-checks every inline <script> block via vm (compile, no execute).
-// 2. Asserts the v4.9.103 session-library feature is present and wired.
+// 2. Asserts the v4.9.103 prominent "PREVIOUS BEST" feature is present and wired.
 // Usage: node harness.mjs [path-to-index.html]
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -35,27 +35,29 @@ while ((m = re.exec(html)) !== null) {
 if (inlineCount === 0) bad('no inline scripts found — extraction regex broke');
 
 // ── 2. Feature assertions ───────────────────────────────────────────────────
-console.log('\nFeature check — v4.9.103 session library:');
+console.log('\nFeature check — v4.9.103 prominent PREVIOUS BEST banner:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 
-has("var APP_VERSION='4.9.103'", 'version bumped to 4.9.103');
-has('onclick="_phxOpenSessionLibrary()"', 'Add Session button wired to library');
-has('window.PHX_WOD_LIBRARY', 'WOD library defined');
-has('window.PHX_CORE_LIBRARY', 'Core library defined');
-has('window._phxOpenSessionLibrary', 'category picker (WOD/Core) defined');
-has('window._phxOpenLibraryList', 'session list step defined');
-has('window._phxOpenLibrarySession', 'session detail step defined');
-has('window._phxLibStartSession', 'Start handler defined');
-has('window._phxLibCompleteSession', 'Complete handler defined');
+has("var APP_VERSION='4.9.103'", 'version is 4.9.103');
 
-// Content of the libraries — confirm the three WOD + three Core sessions exist.
-['AMRAP 20', 'EMOM 12', 'The Chipper'].forEach(n => has("name: '" + n + "'", 'WOD: ' + n));
-['Anti-Rotation Circuit', 'Loaded Strength', 'Rotational Power'].forEach(n => has("name: '" + n + "'", 'Core: ' + n));
+// Shared banner helper — the gold, top-pinned PREVIOUS BEST strip.
+has('function blabPrevBestBanner(value)', 'blabPrevBestBanner helper defined');
+has("Previous Best: '+value", 'banner renders "Previous Best:" label');
+has('background:var(--gold-dim)', 'banner uses theme-aware gold tint');
+has('color:var(--gold);">Previous Best', 'banner text is gold');
 
-// Spot-check a few prescribed movements/reps.
-[['Air Squats', "15"], ['Kettlebell Swings', "10"], ['Wall Balls', "40"],
- ['Ab Wheel Rollout', '4'], ['Pallof Press', '10 each side']].forEach(([nm]) =>
-  has("name: '" + nm + "'", 'movement present: ' + nm));
+// AFAP: banner on the countdown screen AND the main runner screen (so it stays
+// visible through the countdown, every set, and the completion screen).
+has('blabPrevBestBanner((ex.prev_best||0)?blabFmt(ex.prev_best)', 'AFAP countdown shows banner (formatted time)');
+has('h+=blabPrevBestBanner(prevBest?blabFmt(prevBest):', 'AFAP runner shows banner at top');
+
+// Max-reps: banner shows reps AND the weight it was done at ("22 reps @ 27.5kg").
+has("prevBest+' reps'+(prevBestWt?' @ '+prevBestWt+'kg':'')", 'max-reps banner shows "reps @ kg"');
+has('var prevBestWt=ex.prev_best_wt||0', 'max-reps reads prev_best_wt');
+has('prev_best_wt:dbRecordWt', 'max-reps exercise carries prev_best_wt');
+has("records[dbName+'_maxwt']", 'prev weight sourced from records');
+has("id=\"mr-wt\"", 'max-reps has a weight input');
+has("bs.records[st.ex.name+'_maxwt']=wt", 'max-reps persists the weight at PR');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

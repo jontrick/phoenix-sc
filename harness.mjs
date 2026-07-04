@@ -38,7 +38,7 @@ if (inlineCount === 0) bad('no inline scripts found — extraction regex broke')
 console.log('\nFeature check — v4.9.103 prominent PREVIOUS BEST banner:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 
-has("var APP_VERSION='4.9.106'", 'version is 4.9.106');
+has("var APP_VERSION='4.9.107'", 'version is 4.9.107');
 
 // v4.9.104: blabToPhoenixSession must carry prev_best fields onto the mapped phxEx
 // object, otherwise the renderers (which read ex.prev_best) show a blank banner.
@@ -115,6 +115,24 @@ has("name:'DB Front Squats'", 'DB Complex movements present for W6-8');
 has('var complexReps = {6:[7,8,9],7:[7,8,9,10],8:[6,7,8,9,10],9:[10,9,8],11:[10,9,8,7],12:[10,9,8,7,6]}[w]', 'complex per-set rep schemes present');
 has('reps_per_set:complexReps', 'complex push carries reps_per_set');
 has('phxEx.reps_per_set = ex.reps_per_set || null', 'mapper carries reps_per_set so AFAP renderer shows per-set reps');
+
+// ── v4.9.107 deload reconciliation (Weeks 5 & 10 vs source) ──────────────────
+console.log('\nFeature check — v4.9.107 deload weeks reconciled to source:');
+
+// Day 1: W5 Flat DB Press 2×15; W10 Push-Ups/Rows superset + Bicep 21s; complex 1×8 empty bar.
+has("name:'Flat DB Press', format:'standard_sets', sets:2, reps:15", 'deload W5 Day1: Flat DB Press 2×15');
+has("name:'Push-Ups / Seated Cable Rows (neutral grip)'", 'deload W10 Day1: Push-Ups/Rows superset');
+has("Bicep '21s' (version 2.0)", 'deload W10 Day1: Bicep 21s');
+has('reps_per_set:[8]', 'deload complex is 1 set × 8 reps (empty bar)');
+
+// Day 2: W10 Kneeling Jumps (not DB Squat Jumps) + accessory superset restored.
+has("name:'45° Back Raises (BW only)'", 'deload W5 Day2: back raises/MB twists superset');
+has("name:'Stability Ball Hamstring Curls / Stability Ball Plank'", 'deload W10 Day2: ball curls/plank superset');
+
+// Day 3: accessories restored; source deload ends on the core circuit (no push-up finisher).
+has("name:'Empty Barbell Curls'", 'deload W5 Day3: empty barbell curls 100 total');
+has("name:'Blackburns'", 'deload W10 Day3: Blackburns');
+has('source deload Day 3 ends with the core circuit', 'deload Day3 skips the 100 push-up / barbell push-up finisher');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

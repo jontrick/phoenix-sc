@@ -3546,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.106';
+var APP_VERSION='4.9.107';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5227,11 +5227,26 @@ window.blabGetSessionData = function(week, day){
       ];
     } else {
       exs.push({name:'Bench Press', format:'percentage_sets', sets:bSets});
-      var dbName = w<=2?'Flat DB Press':w<=4?'Incline DB Press':w<=7?'Offset Med Ball Push-ups':'Alternate DB Bench (flat)';
-      var dbRecord = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_max'])||0;
-      var dbRecordWt = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_maxwt'])||0;
-      exs.push({name:dbName, format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:dbRecord, prev_best_wt:dbRecordWt, note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
-      if(!isDeload){
+      if(isDeload){
+        // v4.9.107: deload Day 1 rebuilt to match the source program. W5 and W10 differ:
+        //   W5  — Flat DB Press 2×15, Seated Cable Rows 2×15, DB Shrugs 2×10, Barbell Complex.
+        //   W10 — Push-Ups/Rows superset 2×20, Bicep '21s', 'BeZercher' Complex.
+        if(w===5){
+          exs.push({name:'Flat DB Press', format:'standard_sets', sets:2, reps:15, note:'Deload — light. Same weight both sets.'});
+          exs.push({name:'Seated Cable Rows', format:'standard_sets', sets:2, reps:15});
+          exs.push({name:'DB Shrugs', format:'standard_sets', sets:2, reps:10});
+        } else {
+          exs.push({name:'Push-Ups / Seated Cable Rows (neutral grip)', format:'superset', sets:2, rest:90, movements:[{name:'Push-Ups',reps:'20 reps'},{name:'Seated Cable Neutral Grip Rows',reps:'20 reps'}]});
+          exs.push({name:"Bicep '21s' (version 2.0)", format:'standard_sets', sets:1, reps:'21 (7+7+7)', note:'7 bottom-half + 7 top-half + 7 full-range reps. No rest.'});
+        }
+        // Source: complex done with an EMPTY bar only, 1 set × 8 reps each movement.
+        var deloadCxPB = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[complexName+'_time'])||0;
+        exs.push({name:complexName, format:'afap', sets:1, rest:complexRest, movements:complexMovs, reps_per_set:[8], has_load:true, suggested_load:0, prev_best:deloadCxPB, note:'Deload — empty bar only. 1 set, 8 reps each movement. Move continuously.'});
+      } else {
+        var dbName = w<=2?'Flat DB Press':w<=4?'Incline DB Press':w<=7?'Offset Med Ball Push-ups':'Alternate DB Bench (flat)';
+        var dbRecord = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_max'])||0;
+        var dbRecordWt = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_maxwt'])||0;
+        exs.push({name:dbName, format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:dbRecord, prev_best_wt:dbRecordWt, note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
         // v4.9.106: superset reps are now per-week to match the source progression instead of
         // one flat value per exercise band. Superset A (rows/triceps): W1 15, W2 12, W3 10,
         // W4 8, W6 12, W7 10, then a descending continuation for the W8/W9/W11 weeks where the
@@ -5248,13 +5263,10 @@ window.blabGetSessionData = function(week, day){
         if(w<=2) exs.push({name:'DB Shrugs / DB Lateral Raises', format:'superset', sets:3, rest:90, movements:[{name:'DB Shrugs (2-sec holds)',reps:ssbA+' reps'},{name:'DB Lateral Raises',reps:ssbB+' reps'}]});
         else if(w<=4) exs.push({name:'BB Shrugs / Incline Rear Delt Flyes', format:'superset', sets:3, rest:90, movements:[{name:'BB Shrugs (2-sec holds)',reps:ssbA+' reps'},{name:'Incline Rear Delt Flyes (pinkies up)',reps:ssbB+' reps'}]});
         else exs.push({name:'Cable Face Pull / Zottman Curls', format:'superset', sets:3, rest:90, movements:[{name:'Cable Face Pull (2-sec hold)',reps:ssbA+' reps'},{name:'Zottman Curls',reps:ssbB+' reps'}]});
-      } else {
-        exs.push({name:'Seated Cable Rows', format:'standard_sets', sets:2, reps:15});
-        exs.push({name:'DB Shrugs', format:'standard_sets', sets:2, reps:10});
+        var complexPrevBest = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[complexName+'_time'])||0;
+        var suggestedLoad = Math.round((blabPct(B,40))/5)*5; // 40% of bench max, rounded to 5kg
+        exs.push({name:complexName, format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, reps_per_set:complexReps, has_load:true, suggested_load:suggestedLoad, prev_best:complexPrevBest, note:'Move continuously through all movements — no rest within a set. Adjust load with +/- chips. Your combined set time is your score to beat.'});
       }
-      var complexPrevBest = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[complexName+'_time'])||0;
-      var suggestedLoad = Math.round((blabPct(B,40))/5)*5; // 40% of bench max, rounded to 5kg
-      exs.push({name:complexName, format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, reps_per_set:complexReps, has_load:true, suggested_load:suggestedLoad, prev_best:complexPrevBest, note:'Move continuously through all movements — no rest within a set. Adjust load with +/- chips. Your combined set time is your score to beat.'});
     }
     return {name:'Upper Body', week:w, day:d, exercises:exs};
   }
@@ -5263,10 +5275,20 @@ window.blabGetSessionData = function(week, day){
   if(d === 2){
     var sSets = w < 12 ? mkSets(lowerSchemes[w], S) : [];
     var exs2 = [];
-    if(w<=2||isDeload) exs2.push({name:'DB Squat Jumps', format:'standard_sets', sets:isDeload?2:4, reps:6, note:'Hold '+(w===2?'7kg':'5kg')+' DBs. Explosive jump, soft landing.'});
+    // v4.9.107: deload jump matches source — W5 DB Squat Jumps, W10 Kneeling Jumps (BW).
+    if(isDeload) exs2.push(w===5
+      ? {name:'DB Squat Jumps', format:'standard_sets', sets:2, reps:6, note:'Hold 5kg DBs. Explosive jump, soft landing.'}
+      : {name:'Kneeling Jumps', format:'standard_sets', sets:2, reps:6, note:'BW only. Drop to knees, explode up.'});
+    else if(w<=2) exs2.push({name:'DB Squat Jumps', format:'standard_sets', sets:4, reps:6, note:'Hold '+(w===2?'7kg':'5kg')+' DBs. Explosive jump, soft landing.'});
     else if(w<=4) exs2.push({name:'Bulgarian Split Squat Jumps', format:'standard_sets', sets:w===3?4:5, reps:'5 each leg'+(w===4?' holding 2.5kg DBs':''), note:'Control the landing.'});
     else exs2.push({name:'Kneeling Jumps', format:'standard_sets', sets:w<=9?4:3, reps:5, note:'Drop to knees, explode up. CNS activation before the main lift.'});
-    exs2.push({name:sq, format:'percentage_sets', sets:sSets, note:w<=5?'No max effort — run follows. Save the legs.':null});
+    exs2.push({name:sq, format:'percentage_sets', sets:sSets, note:isDeload?'Deload — 50/60% only. No grinding, save the legs.':w<=5?'No max effort — run follows. Save the legs.':null});
+    if(isDeload){
+      // v4.9.107: deload accessory superset from source — W5 back raises/twists, W10 ball work.
+      exs2.push(w===5
+        ? {name:'45° Back Raises / Seated MB Twists', format:'superset', sets:2, rest:90, movements:[{name:'45° Back Raises (BW only)',reps:'10 reps'},{name:'Seated MB Twists',reps:'10 each side'}]}
+        : {name:'Stability Ball Hamstring Curls / Stability Ball Plank', format:'superset', sets:2, rest:90, movements:[{name:'Stability Ball Hamstring Curls (hips up)',reps:'10 reps'},{name:'Stability Ball Plank (ball under arms, feet on bench)',reps:'30s'}]});
+    }
     if(!isDeload){
       if(w<=2) exs2.push({name:'45° Back Raises / Seated MB Twists', format:'superset', sets:3, rest:90, movements:[{name:'45° Back Raises (hold plate over chest)',reps:'15 reps'},{name:'Seated MB Twists (feet off floor)',reps:'20 each side'}]});
       else if(w<=4) exs2.push({name:'Stability Ball Hamstring Curls / Spread Eagle Sit-ups', format:'superset', sets:3, rest:90, movements:[{name:'Stability Ball Hamstring Curls (hips up)',reps:'15 reps'},{name:'Weighted Spread Eagle Sit-ups',reps:'15 reps'}]});
@@ -5310,9 +5332,26 @@ window.blabGetSessionData = function(week, day){
           ? [{name:'Toe Touches',reps:20},{name:'Bicycle',reps:'30 total'},{name:'Side Plank',reps:'30s each side'}]
           : [{name:'Sprinter Sit-ups',reps:20},{name:'V-ups',reps:15},{name:'Hip-ups',reps:15},{name:'Toe Touches',reps:15}]
       });
+    } else {
+      // v4.9.107: deload Day 3 accessories rebuilt from source. W5 and W10 differ.
+      if(w===5){
+        exs3.push({name:'Standing DB Military Press', format:'standard_sets', sets:2, reps:15});
+        exs3.push({name:'Incline DB Rear Delt Flyes (pinkies up)', format:'standard_sets', sets:2, reps:10});
+        exs3.push({name:'Empty Barbell Curls', format:'total_rep_goal', target:100, note:'100 total reps, empty bar — no added weight. Break into sets as needed.'});
+        exs3.push({name:'Core Circuit', format:'afap', sets:1, rest:60, movements:[{name:'Toe Touches',reps:20},{name:'Bicycle',reps:'20 total'},{name:'Side Plank',reps:'30s each side'}]});
+      } else {
+        exs3.push({name:'Front Lat Pulldowns / Seated DB Lateral Raises', format:'superset', sets:2, rest:90, movements:[{name:'Front Lat Pulldowns (wide grip)',reps:'10 reps'},{name:'Seated DB Lateral Raises',reps:'10 reps'}]});
+        exs3.push({name:'Blackburns', format:'standard_sets', sets:1, reps:'4 positions, 15s each', note:'Prone on a bench. Hold 15s in each of 4 arm positions.'});
+        exs3.push({name:'Cable Curls', format:'standard_sets', sets:2, reps:12});
+        exs3.push({name:'Core Circuit', format:'afap', sets:2, rest:60, movements:[{name:'V-ups',reps:15},{name:'Hip-ups',reps:15},{name:'Alt Toe Touches',reps:'15 each side'}]});
+      }
     }
-    if(w<=9) exs3.push({name:'100 Push-ups', format:'total_rep_goal', target:100, note:'As fast as possible. Record your time.'});
-    else exs3.push({name:'Barbell Push-ups — Descending '+(w===11?'20':'21')+' to 1', format:'standard_sets', sets:1, reps:'From '+(w===11?'20':'21')+' to 1', note:'18 reps, 17, 16... down to 1. Minimal rest between sets.'});
+    // v4.9.107: source deload Day 3 ends with the core circuit — no 100 push-up / barbell
+    // push-up finisher (those are build-week benchmarks only).
+    if(!isDeload){
+      if(w<=9) exs3.push({name:'100 Push-ups', format:'total_rep_goal', target:100, note:'As fast as possible. Record your time.'});
+      else exs3.push({name:'Barbell Push-ups — Descending '+(w===11?'20':'21')+' to 1', format:'standard_sets', sets:1, reps:'From '+(w===11?'20':'21')+' to 1', note:'18 reps, 17, 16... down to 1. Minimal rest between sets.'});
+    }
     return {name:'Upper Body — Chins', week:w, day:d, exercises:exs3};
   }
 

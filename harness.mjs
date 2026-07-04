@@ -38,7 +38,7 @@ if (inlineCount === 0) bad('no inline scripts found — extraction regex broke')
 console.log('\nFeature check — v4.9.103 prominent PREVIOUS BEST banner:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 
-has("var APP_VERSION='4.9.105'", 'version is 4.9.105');
+has("var APP_VERSION='4.9.106'", 'version is 4.9.106');
 
 // v4.9.104: blabToPhoenixSession must carry prev_best fields onto the mapped phxEx
 // object, otherwise the renderers (which read ex.prev_best) show a blank banner.
@@ -60,8 +60,9 @@ has('prev_best:dbRecord, prev_best_wt:dbRecordWt', 'blabGetSessionData sets prev
 has('phxEx.prev_wt_a = _ssRec[ex.movements[0].name', 'mapper carries superset prev weight for A');
 has('phxEx.prev_wt_b = _ssRec[ex.movements[1].name', 'mapper carries superset prev weight for B');
 // Superset renderer shows the previous weight as small gold text under each movement.
-has("ex.prev_wt_a?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev A weight (gold)');
-has("ex.prev_wt_b?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev B weight (gold)');
+// v4.9.106: gate widened to (prev_wt||prev_reps) so bodyweight movements still surface reps.
+has("(ex.prev_wt_a||ex.prev_reps_a)?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev A (gold)');
+has("(ex.prev_wt_b||ex.prev_reps_b)?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev B (gold)');
 // Superset persists the last weight used per movement so next session can read it back.
 has("bs.records[ex2.name+'_wt'] = last.ka", 'superset persists A weight to records');
 has("bs.records[partner.name+'_wt'] = last.kb", 'superset persists B weight to records');
@@ -84,6 +85,36 @@ has('prev_best_wt:dbRecordWt', 'max-reps exercise carries prev_best_wt');
 has("records[dbName+'_maxwt']", 'prev weight sourced from records');
 has("id=\"mr-wt\"", 'max-reps has a weight input');
 has("bs.records[st.ex.name+'_maxwt']=wt", 'max-reps persists the weight at PR');
+
+// ── v4.9.106 audit fixes ─────────────────────────────────────────────────────
+console.log('\nFeature check — v4.9.106 BLAB session-data audit fixes:');
+
+// Issue #1: superset reps are per-week (match the source progression), not one flat value
+// per exercise band. Superset A: W1 15 / W2 12 / W3 10 / W4 8 / W6 12 / W7 10.
+has('var ssaReps = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w]', 'superset A reps are per-week');
+has('var ssbA = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w]', 'superset B shrug/face-pull reps per-week');
+has('var ssbB = ({1:15,2:12,3:12,4:10,6:12,7:10,8:8,9:6,11:8})[w]', 'superset B lateral/flye reps per-week (W3/W4 asymmetric)');
+has('reps:ssaReps+\' reps\'', 'superset A movement reps driven by ssaReps');
+
+// Issue #2: max_reps_sets (DB Press) persists rep PR + weight in the LIVE generic path
+// (autoLogSet), not the dead blabRenderMaxReps. Keyed by exerciseName so the banner reads back.
+has("e._blabFmt==='max_reps_sets'", 'autoLogSet detects BLAB max-reps exercise');
+has("_bs.records[exerciseName+'_maxwt']=_wt", 'autoLogSet persists max-reps weight (issue #2)');
+has("var _mk=exerciseName+'_max'", 'autoLogSet persists max-reps PR keyed by exerciseName');
+
+// Issue #3: superset PREVIOUS BEST shows LOAD × REPS (persist reps + carry + render).
+has("bs.records[ex2.name+'_reps'] = last.a", 'superset persists A reps');
+has("bs.records[partner.name+'_reps'] = last.b", 'superset persists B reps');
+has("phxEx.prev_reps_a = _ssRec[ex.movements[0].name+'_reps']", 'mapper carries superset prev reps A');
+has("ex.prev_reps_a?ex.prev_reps_a+' reps'", 'superset renderer shows prev reps A (load × reps)');
+has("ex.prev_reps_b?ex.prev_reps_b+' reps'", 'superset renderer shows prev reps B (load × reps)');
+
+// Issue #4: complex identity + per-set rep schemes match the source.
+has("var complexName = w <= 5 ? 'Barbell Complex' : w <= 8 ? 'DB Complex' : 'BeZercher Complex'", 'complex name: Barbell/DB/BeZercher by week');
+has("name:'DB Front Squats'", 'DB Complex movements present for W6-8');
+has('var complexReps = {6:[7,8,9],7:[7,8,9,10],8:[6,7,8,9,10],9:[10,9,8],11:[10,9,8,7],12:[10,9,8,7,6]}[w]', 'complex per-set rep schemes present');
+has('reps_per_set:complexReps', 'complex push carries reps_per_set');
+has('phxEx.reps_per_set = ex.reps_per_set || null', 'mapper carries reps_per_set so AFAP renderer shows per-set reps');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

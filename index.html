@@ -3546,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.105';
+var APP_VERSION='4.9.106';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4060,7 +4060,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card A
       h += '<div style="background:var(--bg2);border:2px solid '+(state.aOk?'#3a7d44':'var(--gold)')+';border-radius:12px;padding:14px;margin-bottom:8px;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">A &mdash; '+ex.name+'</div>'+
-        (ex.prev_wt_a?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+ex.prev_wt_a+'kg</div>':'')+
+        ((ex.prev_wt_a||ex.prev_reps_a)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+(ex.prev_wt_a?ex.prev_wt_a+'kg':'')+(ex.prev_wt_a&&ex.prev_reps_a?' &times; ':'')+(ex.prev_reps_a?ex.prev_reps_a+' reps':'')+'</div>':'')+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+ex.reps+'</div>';
       if(state.aOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadA?state.loadA+'kg &middot; ':'')+state.aReps+' reps</div>';
@@ -4078,7 +4078,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card B
       h += '<div style="background:var(--bg2);border:2px solid '+(state.bOk?'#3a7d44':state.aOk?'var(--gold)':'var(--border2)')+';border-radius:12px;padding:14px;margin-bottom:8px;opacity:'+(state.aOk?'1':'0.5')+';transition:opacity 0.2s;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">B &mdash; '+m.name+'</div>'+
-        (ex.prev_wt_b?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+ex.prev_wt_b+'kg</div>':'')+
+        ((ex.prev_wt_b||ex.prev_reps_b)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+(ex.prev_wt_b?ex.prev_wt_b+'kg':'')+(ex.prev_wt_b&&ex.prev_reps_b?' &times; ':'')+(ex.prev_reps_b?ex.prev_reps_b+' reps':'')+'</div>':'')+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+m.reps+'</div>';
       if(state.bOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadB?state.loadB+'kg &middot; ':'')+state.bReps+' reps</div>';
@@ -4143,6 +4143,8 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // v4.9.105: persist the last weight used for each movement under records[name+'_wt']
       // so the next session's superset renderer can surface "Prev: Xkg" (blabToPhoenixSession
       // reads these back). Uses the final logged set's loads.
+      // v4.9.106: also persist the last reps done per movement (records[name+'_reps']) so the
+      // banner can show LOAD × REPS — the athlete calibrates the weight increase as reps drop.
       try {
         var last = st.log[st.log.length-1];
         if(last){
@@ -4150,7 +4152,9 @@ window._blabBuildSupersetBlock = function(ex, idx){
           if(bs){
             if(!bs.records) bs.records={};
             if(last.ka) bs.records[ex2.name+'_wt'] = last.ka;
+            if(last.a) bs.records[ex2.name+'_reps'] = last.a;
             if(partner.name && last.kb) bs.records[partner.name+'_wt'] = last.kb;
+            if(partner.name && last.b) bs.records[partner.name+'_reps'] = last.b;
             window.blabSaveState(bs);
           }
         }
@@ -4350,6 +4354,9 @@ window.blabToPhoenixSession = function(sess, week, day){
       var _ssRec = (bs && bs.records) || {};
       phxEx.prev_wt_a = _ssRec[ex.movements[0].name+'_wt'] || 0;
       phxEx.prev_wt_b = _ssRec[ex.movements[1].name+'_wt'] || 0;
+      // v4.9.106: carry previous reps too so the renderer shows LOAD × REPS for A and B.
+      phxEx.prev_reps_a = _ssRec[ex.movements[0].name+'_reps'] || 0;
+      phxEx.prev_reps_b = _ssRec[ex.movements[1].name+'_reps'] || 0;
 
     } else if(fmt === 'total_rep_goal'){
       phxEx.sets = 1;
@@ -4368,6 +4375,10 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.format = 'afap';
       phxEx._blabMovements = ex.movements;
       phxEx._blabRepsPerSet = ex.reps_per_set;
+      // v4.9.106: blabRenderAfap reads ex.reps_per_set (not _blabRepsPerSet). Without this the
+      // per-set rep scheme (ascending DB Complex, descending BeZercher) never rendered — every
+      // set showed a flat "10 reps each". Carry it onto the mapped exercise the renderer sees.
+      phxEx.reps_per_set = ex.reps_per_set || null;
       phxEx._blabRest = ex.rest || 90;
       phxEx._blabSuggestedLoad = ex.suggested_load || 0;
       phxEx._blabPrevBest = ex.prev_best || 0;
@@ -5192,10 +5203,19 @@ window.blabGetSessionData = function(week, day){
   // ── DAY 1: UPPER BODY ───────────────────────────────────────
   if(d === 1){
     var bSets = w < 12 ? mkSets(benchSchemes[w], B) : [];
-    var complexMovs = w <= 9
+    // v4.9.106: complex identity now matches the source program — Barbell Complex (W1-5),
+    // DB Complex (W6-8), 'BeZercher' Complex (W9-12). Previously W6-9 all used the barbell
+    // movement list, which mislabelled the three DB Complex weeks AND the W9 BeZercher week.
+    var complexName = w <= 5 ? 'Barbell Complex' : w <= 8 ? 'DB Complex' : 'BeZercher Complex';
+    var complexMovs = w <= 5
       ? [{name:'Deadlifts',reps:10},{name:'Bent Rows',reps:10},{name:'Hang Cleans',reps:10},{name:'Push Press',reps:10},{name:'Back Squats',reps:10}]
+      : w <= 8
+      ? [{name:'DB Front Squats',reps:10},{name:'DB Swings',reps:10},{name:'Unilateral Curl to Press',reps:10},{name:'DB Squat Jumps',reps:10}]
       : [{name:'Zercher Squats',reps:10},{name:'Zercher Reverse Lunges',reps:10},{name:'Curl to Press',reps:10},{name:'RDLs',reps:10},{name:'Bent Rows',reps:10}];
     var complexSets = [0,2,3,4,4,1,3,4,5,3,1,4,5][w] || 2;
+    // v4.9.106: per-set rep schemes from the source — ascending DB Complex (W6-8), descending
+    // BeZercher (W9/W11/W12). W1-5 stay flat at 10 reps each (reps_per_set null → m.reps).
+    var complexReps = {6:[7,8,9],7:[7,8,9,10],8:[6,7,8,9,10],9:[10,9,8],11:[10,9,8,7],12:[10,9,8,7,6]}[w] || null;
     var complexRest = (w === 4 || w >= 6) ? 60 : 90;
     var exs = [];
     if(w === 12){
@@ -5212,19 +5232,29 @@ window.blabGetSessionData = function(week, day){
       var dbRecordWt = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_maxwt'])||0;
       exs.push({name:dbName, format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:dbRecord, prev_best_wt:dbRecordWt, note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
       if(!isDeload){
-        if(w<=2) exs.push({name:'Seated Cable Rows / Cable Tricep Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Seated Cable Rows (overhand grip)',reps:'15 reps'},{name:'Cable Tricep Pushdowns (straight bar)',reps:'15 reps'}]});
-        else if(w<=4) exs.push({name:'1-Arm DB Rows / Tricep Rope Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Bent-over 1-Arm DB Rows',reps:'10 each arm'},{name:'Tricep Rope Pushdowns',reps:'10 reps'}]});
-        else exs.push({name:'Cable Rows (Double-D) / Lying DB Tricep Extensions', format:'superset', sets:w<=9?3:4, rest:90, movements:[{name:'Seated Cable Rows (Double-D handle)',reps:'12 reps'},{name:'Lying DB Tricep Extensions',reps:'12 reps'}]});
-        if(w<=2) exs.push({name:'DB Shrugs / DB Lateral Raises', format:'superset', sets:3, rest:90, movements:[{name:'DB Shrugs (2-sec holds)',reps:'15 reps'},{name:'DB Lateral Raises',reps:'15 reps'}]});
-        else if(w<=4) exs.push({name:'BB Shrugs / Incline Rear Delt Flyes', format:'superset', sets:3, rest:90, movements:[{name:'BB Shrugs (2-sec holds)',reps:'10 reps'},{name:'Incline Rear Delt Flyes (pinkies up)',reps:'12 reps'}]});
-        else exs.push({name:'Cable Face Pull / Zottman Curls', format:'superset', sets:3, rest:90, movements:[{name:'Cable Face Pull (2-sec hold)',reps:'12 reps'},{name:'Zottman Curls',reps:'12 reps'}]});
+        // v4.9.106: superset reps are now per-week to match the source progression instead of
+        // one flat value per exercise band. Superset A (rows/triceps): W1 15, W2 12, W3 10,
+        // W4 8, W6 12, W7 10, then a descending continuation for the W8/W9/W11 weeks where the
+        // source swaps this slot for a different pulling movement (no exact PDF value).
+        var ssaReps = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w] || 12;
+        if(w<=2) exs.push({name:'Seated Cable Rows / Cable Tricep Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Seated Cable Rows (overhand grip)',reps:ssaReps+' reps'},{name:'Cable Tricep Pushdowns (straight bar)',reps:ssaReps+' reps'}]});
+        else if(w<=4) exs.push({name:'1-Arm DB Rows / Tricep Rope Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Bent-over 1-Arm DB Rows',reps:ssaReps+' each arm'},{name:'Tricep Rope Pushdowns',reps:ssaReps+' reps'}]});
+        else exs.push({name:'Cable Rows (Double-D) / Lying DB Tricep Extensions', format:'superset', sets:w<=9?3:4, rest:90, movements:[{name:'Seated Cable Rows (Double-D handle)',reps:ssaReps+' reps'},{name:'Lying DB Tricep Extensions',reps:ssaReps+' reps'}]});
+        // Superset B (shrugs/delts). W3/W4 are asymmetric in the source (BB Shrugs 10/8, Incline
+        // Rear Delt Flyes 12/10), so track the two movements separately: ssbA = shrug/face-pull
+        // movement, ssbB = lateral/flye/curl movement.
+        var ssbA = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w] || 12;
+        var ssbB = ({1:15,2:12,3:12,4:10,6:12,7:10,8:8,9:6,11:8})[w] || 12;
+        if(w<=2) exs.push({name:'DB Shrugs / DB Lateral Raises', format:'superset', sets:3, rest:90, movements:[{name:'DB Shrugs (2-sec holds)',reps:ssbA+' reps'},{name:'DB Lateral Raises',reps:ssbB+' reps'}]});
+        else if(w<=4) exs.push({name:'BB Shrugs / Incline Rear Delt Flyes', format:'superset', sets:3, rest:90, movements:[{name:'BB Shrugs (2-sec holds)',reps:ssbA+' reps'},{name:'Incline Rear Delt Flyes (pinkies up)',reps:ssbB+' reps'}]});
+        else exs.push({name:'Cable Face Pull / Zottman Curls', format:'superset', sets:3, rest:90, movements:[{name:'Cable Face Pull (2-sec hold)',reps:ssbA+' reps'},{name:'Zottman Curls',reps:ssbB+' reps'}]});
       } else {
         exs.push({name:'Seated Cable Rows', format:'standard_sets', sets:2, reps:15});
         exs.push({name:'DB Shrugs', format:'standard_sets', sets:2, reps:10});
       }
-      var complexPrevBest = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[(w<=9?'Barbell Complex':'BeZercher Complex')+'_time'])||0;
+      var complexPrevBest = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[complexName+'_time'])||0;
       var suggestedLoad = Math.round((blabPct(B,40))/5)*5; // 40% of bench max, rounded to 5kg
-      exs.push({name:w<=9?'Barbell Complex':'BeZercher Complex', format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, has_load:true, suggested_load:suggestedLoad, prev_best:complexPrevBest, note:'Keep hold of the bar throughout. Adjust load with +/- chips. Your combined set time is your score to beat.'});
+      exs.push({name:complexName, format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, reps_per_set:complexReps, has_load:true, suggested_load:suggestedLoad, prev_best:complexPrevBest, note:'Move continuously through all movements — no rest within a set. Adjust load with +/- chips. Your combined set time is your score to beat.'});
     }
     return {name:'Upper Body', week:w, day:d, exercises:exs};
   }
@@ -9286,6 +9316,24 @@ function autoLogSet(row){
   } catch(e){ console.warn('[PHX] completed-sets shadow write failed:', e); }
   // Supabase real-time set logging
   supabaseLogSet(exerciseName,exId,setIdx,kg,reps);
+  // v4.9.106 FIX (issue #2): BLAB max_reps_sets (the DB Press slot) renders through THIS generic
+  // set-row path, not blabRenderMaxReps — so the old records[name+'_max'/'_maxwt'] save at line
+  // ~5097 never ran and the PREVIOUS BEST banner ("X reps @ Ykg") stayed blank. Persist the rep
+  // PR and the weight it was hit at here, keyed by the SAME name blabGetSessionData reads back.
+  try {
+    var _bex=(window._blabPhxExercises||[]).filter(function(e){return e&&e.name===exerciseName&&e._blabFmt==='max_reps_sets';})[0];
+    if(_bex){
+      var _rp=parseInt(reps)||0, _wt=parseFloat(kg)||0;
+      if(_rp>0){
+        var _bs=window.blabGetState();
+        if(_bs){
+          if(!_bs.records) _bs.records={};
+          var _mk=exerciseName+'_max';
+          if(!_bs.records[_mk]||_rp>_bs.records[_mk]){ _bs.records[_mk]=_rp; if(_wt) _bs.records[exerciseName+'_maxwt']=_wt; window.blabSaveState(_bs); }
+        }
+      }
+    }
+  } catch(_e){ console.warn('[PHX] BLAB max-reps PR save failed:', _e); }
 }
 
 // AMRAP Rep Counter

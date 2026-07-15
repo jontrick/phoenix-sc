@@ -3546,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.108';
+var APP_VERSION='4.9.109';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4931,6 +4931,7 @@ window.blabGetSessionData = function(week, day){
 
   // ── Complex config (v4.9.108 spec override) ──────────────────────────────────
   // W1-3: 2 sets / 90s · W4: 4 sets / 60s · W5: 1×8 empty bar · W6-8: 3 sets / 60s
+  // W6: 3 asc (7/8/9) · W7-8: 3 asc (8/9/10) / 60s
   // W9: 3 desc (10/9/8) / 60s · W10: 1×8 empty bar · W11: 4 desc (10/9/8/7) · W12: 5 desc (10/9/8/7/6)
   var complexName = w <= 5 ? 'Barbell Complex' : w <= 8 ? 'DB Complex' : 'BeZercher Complex';
   var complexMovs = w <= 5
@@ -4940,7 +4941,7 @@ window.blabGetSessionData = function(week, day){
     : [{name:'Zercher Squats',reps:10},{name:'Zercher Reverse Lunges',reps:10},{name:'Curl to Press',reps:10},{name:'RDLs',reps:10},{name:'Bent Rows',reps:10}];
   var complexSets = ({1:2,2:2,3:2,4:4,5:1,6:3,7:3,8:3,9:3,10:1,11:4,12:5})[w] || 2;
   var complexRest = (w <= 3) ? 90 : 60;
-  var complexReps = ({5:[8],9:[10,9,8],10:[8],11:[10,9,8,7],12:[10,9,8,7,6]})[w] || null;
+  var complexReps = ({5:[8],6:[7,8,9],7:[8,9,10],8:[8,9,10],9:[10,9,8],10:[8],11:[10,9,8,7],12:[10,9,8,7,6]})[w] || null;
   function mkComplex(){
     var sload = isDeload ? 0 : Math.round((p(B,40))/5)*5;
     return {name:complexName, format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs,

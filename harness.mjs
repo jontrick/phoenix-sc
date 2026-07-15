@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.108'", 'version is 4.9.108');
+has("var APP_VERSION='4.9.109'", 'version is 4.9.109');
 
 // Dead overlay duplicates removed
 hasNot('window.blabBuildExCard', 'blabBuildExCard removed');
@@ -120,7 +120,7 @@ has("name:'Power + Conditioning — Deload'", 'Day4 deload variant (no condition
 // Complex sets override
 has("({1:2,2:2,3:2,4:4,5:1,6:3,7:3,8:3,9:3,10:1,11:4,12:5})[w]", 'complexSets override array (spec)');
 has("var complexRest = (w <= 3) ? 90 : 60", 'complex rest 90s (W1-3) else 60s');
-has("({5:[8],9:[10,9,8],10:[8],11:[10,9,8,7],12:[10,9,8,7,6]})[w]", 'complex per-set reps (W9/W11/W12 desc, deload 1×8)');
+has("({5:[8],6:[7,8,9],7:[8,9,10],8:[8,9,10],9:[10,9,8],10:[8],11:[10,9,8,7],12:[10,9,8,7,6]})[w]", 'complex per-set reps (W6 asc 7/8/9, W7-8 asc 8/9/10, W9/W11/W12 desc, deload 1×8)');
 
 // Day 1 content fixes
 has("Standing Rope 'J' Pulldowns", 'Day1 W8/W9 Rope J-Pulldowns');

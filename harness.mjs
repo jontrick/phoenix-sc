@@ -94,7 +94,22 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.109'", 'version is 4.9.109');
+has("var APP_VERSION='4.9.110'", 'version is 4.9.110');
+
+// ── v4.9.110 Programme Audit ────────────────────────────────────────────────
+has('window.blabOpenAudit = function', 'audit entry blabOpenAudit present');
+has("onclick=\"closeSidebar();window.blabOpenAudit()\"", 'sidebar item wired to audit');
+has('>Programme Audit<', 'sidebar labelled "Programme Audit"');
+has('window.blabOpenAuditDay = function', 'per-day audit opener present');
+has('window._blabDecorateAuditSession = function', 'audit session decorator present');
+has('window._blabAuditDryRun = function', 'dry-run switch present');
+has('window._blabExitAuditSession = function', 'audit exit handler present');
+has('window._blabAuditWeekStatus = function', 'week status helper (COMPLETED/IN PROGRESS/UPCOMING)');
+// test-mode short-circuits — no logging / no state change
+has('if(window._blabDryRun) return;', 'dry-run guard neutralises saves/complete');
+has('if(!window.blabIsActive() && !window._blabDryRun)', 'openTodaySession bypasses programme guard in dry run');
+has('if(!window._blabDryRun){\n    supabaseStartSession', 'dry-run skips server session start');
+has('if(window._blabAuditStateOverride) return window._blabAuditStateOverride;', 'audit placeholder state override');
 
 // Dead overlay duplicates removed
 hasNot('window.blabBuildExCard', 'blabBuildExCard removed');

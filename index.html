@@ -370,6 +370,33 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 /* v4.7.34 BUILD 1: notification dot — shown on Sunday when weekly check-in is unsubmitted */
 #hamburger-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#CC3333;display:none;pointer-events:none;}
 
+/* v4.9.110 PROGRAMME AUDIT — 12-week read-only audit + dry-run mode */
+#blab-audit-overlay{position:fixed;inset:0;background:var(--bg);z-index:99998;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.blab-audit-week-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.blab-audit-week-tile{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 10px;cursor:pointer;transition:all 0.15s;text-align:left;position:relative;overflow:hidden;}
+.blab-audit-week-tile:active{opacity:0.7;}
+.blab-audit-week-tile.expanded{border-color:var(--gold);background:var(--bg3);}
+.blab-audit-week-tile .baw-num{font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);letter-spacing:1px;}
+.blab-audit-week-tile .baw-sub{font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-top:1px;}
+.blab-audit-status{display:inline-block;margin-top:8px;font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:3px 7px;border-radius:3px;border:1px solid;}
+.blab-audit-status.done{color:#4CAF50;border-color:#3a7d44;background:rgba(74,175,80,0.1);}
+.blab-audit-status.prog{color:var(--gold);border-color:var(--gold);background:var(--gold-dim);}
+.blab-audit-status.upcoming{color:var(--text3);border-color:var(--border2);background:transparent;}
+.blab-audit-day-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:6px 0 4px;}
+.blab-audit-day-tile{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 12px;cursor:pointer;transition:all 0.15s;}
+.blab-audit-day-tile:active{opacity:0.7;}
+.blab-audit-day-tile .bad-day{font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:var(--gold);}
+.blab-audit-day-tile .bad-name{font-size:11px;color:var(--text2);margin-top:3px;line-height:1.3;}
+.blab-audit-day-tile .bad-check{float:right;color:#4CAF50;font-size:13px;}
+/* read-only session view — disable interaction on the content blocks but keep the
+   .session-body scroll container itself touch-scrollable (pointer-events on children only) */
+#screen-session.blab-audit-readonly .session-body > *{pointer-events:none;}
+/* banner sits between the sticky header and the flex:1 scrolling body → stays put, not sticky */
+#blab-audit-banner{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 14px;background:linear-gradient(135deg,#1a1410 0%,var(--bg2) 100%);border-bottom:1px solid var(--gold);}
+#blab-audit-banner .bab-label{flex:1;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);line-height:1.3;}
+#blab-audit-banner .bab-btn{background:var(--gold);color:#000;border:none;border-radius:var(--radius);padding:8px 14px;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;white-space:nowrap;}
+#blab-audit-banner .bab-btn.ghost{background:transparent;color:var(--text2);border:1px solid var(--border2);}
+
 /* GPS WALK TRACKER */
 .walk-tracker-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 #walk-map{flex:1;min-height:260px;height:calc(100vh - 280px);background:var(--bg3);}
@@ -3322,6 +3349,11 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
       <div><div class="sidebar-item-text" style="color:var(--gold);">Built Like A Badass</div><div class="sidebar-item-sub">DeFranco 12-week programme</div></div>
     </div>
+    <!-- v4.9.110: 12-week read-only audit view + per-session dry run -->
+    <div class="sidebar-item" onclick="closeSidebar();window.blabOpenAudit()">
+      <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+      <div><div class="sidebar-item-text">Programme Audit</div><div class="sidebar-item-sub">Inspect all 12 weeks · read-only + dry run</div></div>
+    </div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">Train</div>
@@ -3546,7 +3578,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.109';
+var APP_VERSION='4.9.110';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3614,6 +3646,10 @@ window.blabPct = function(maxKg, pct){
 
 // ── State ────────────────────────────────────────────────────
 window.blabGetState = function(){
+  // v4.9.110: Programme Audit may run before setup exists. When the audit provides a
+  // placeholder state (no real BLAB state on this account) it sets this override so the
+  // session pipeline can render structure + loads with prev-best fields blank.
+  if(window._blabAuditStateOverride) return window._blabAuditStateOverride;
   try {
     var uid = currentSession && currentSession.user && currentSession.user.id;
     var key = uid ? 'blab_v1_' + uid : 'blab_v1';
@@ -3624,6 +3660,10 @@ window.blabGetState = function(){
 };
 
 window.blabSaveState = function(state){
+  // v4.9.110: dry-run / read-only audit mode never persists. Guarding here neutralises
+  // every mid-session write (records, chin_max, tabata_rounds, etc.) and the cloud mirror
+  // in a single place — no logging, no state change while auditing.
+  if(window._blabDryRun) return;
   var uid = currentSession && currentSession.user && currentSession.user.id;
   try {
     var key = uid ? 'blab_v1_' + uid : 'blab_v1';
@@ -3946,6 +3986,192 @@ window.blabOpenSession = function(week, day){
     openTodaySession();
     return;
   }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// v4.9.110 PROGRAMME AUDIT
+// A read-only inspection of all 12 weeks. Tap a week → 4 day tiles; tap a day →
+// the session rendered EXACTLY as the live runner renders it (same blocks, same
+// formats, same prev-best fields — blank when no data). "Dry Run" re-opens the
+// same session fully interactive but in test mode: blabSaveState / blabCompleteSession
+// / supabaseStartSession are all short-circuited by window._blabDryRun, so nothing is
+// logged and no programme state advances. Week tiles show COMPLETED / IN PROGRESS /
+// UPCOMING derived from the BLAB state log.
+// ══════════════════════════════════════════════════════════════════════════════
+window._blabAuditExpanded = null; // which week is currently expanded in the grid
+
+window._blabAuditWeekMeta = function(w){
+  // Block + deload labelling, faithful to the session generator (blocks 1-5 / 6-10 / 11-12).
+  return { block: (w <= 5 ? 1 : (w <= 10 ? 2 : 3)), deload: (w === 5 || w === 10) };
+};
+
+window._blabAuditWeekStatus = function(w, s){
+  var completed = 0;
+  if(s && s.log && s.log.length){
+    var days = {};
+    s.log.forEach(function(l){ if(l && l.week === w && l.day) days[l.day] = 1; });
+    completed = Object.keys(days).length;
+  }
+  var active = !!(s && s.active);
+  var cur = (s && s.week) || 0;
+  if(completed >= 4) return 'done';
+  if(active && cur && w < cur) return 'done';
+  if(active && cur && w === cur) return 'prog';
+  if(completed > 0) return 'prog';
+  return 'upcoming';
+};
+
+window._blabAuditDayDone = function(w, d, s){
+  if(!(s && s.log)) return false;
+  return s.log.some(function(l){ return l && l.week === w && l.day === d; });
+};
+
+window.blabOpenAudit = function(){
+  // Ensure the session pipeline has a state to read. If this account has no real BLAB
+  // state, synthesise a read-only placeholder (example 1RMs, no records) so the audit
+  // still renders every session's structure with prev-best fields left blank.
+  var real = window.blabGetState();
+  if(!real || !real.maxes){
+    window._blabAuditStateOverride = {
+      active:false, week:0, last_completed_day:0, log:[],
+      maxes:{bench:130, squat:150, deadlift:170}, chin_max:0,
+      squat_var:'free', dl_var:'conventional', records:{}, _placeholder:true
+    };
+  } else {
+    window._blabAuditStateOverride = null;
+  }
+  window._blabAuditExpanded = null;
+  var old = document.getElementById('blab-audit-overlay');
+  if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'blab-audit-overlay';
+  ov.innerHTML = window._blabAuditGridHTML(window.blabGetState());
+  document.body.appendChild(ov);
+  window.scrollTo(0,0);
+};
+
+window._blabAuditGridHTML = function(s){
+  var placeholder = !!(s && s._placeholder);
+  var h = '<div style="padding:22px 18px 60px;max-width:640px;margin:0 auto;">';
+  h += '<button onclick="window._blabCloseAudit()" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 15px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:20px;">← Back</button>';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Built Like A Badass</div>';
+  h += '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:8px;">Programme Audit</div>';
+  h += '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:'+(placeholder?'10':'18')+'px;">Tap a week to reveal its four days. Tap a day for a read-only session preview, then Dry Run to walk the full live session with nothing saved.</div>';
+  if(placeholder){
+    h += '<div style="font-size:11px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:18px;line-height:1.5;">No programme data yet — showing structure with example 1RMs (bench&nbsp;130 / squat&nbsp;150 / deadlift&nbsp;170). Previous-best fields stay blank until you train.</div>';
+  }
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">'+
+    '<span class="blab-audit-status done">Completed</span>'+
+    '<span class="blab-audit-status prog">In Progress</span>'+
+    '<span class="blab-audit-status upcoming">Upcoming</span></div>';
+  h += '<div class="blab-audit-week-grid">';
+  for(var w=1; w<=12; w++){ h += window._blabAuditWeekTileHTML(w, s); }
+  h += '</div></div>';
+  return h;
+};
+
+window._blabAuditWeekTileHTML = function(w, s){
+  var meta = window._blabAuditWeekMeta(w);
+  var status = window._blabAuditWeekStatus(w, s);
+  var statusLabel = status==='done' ? 'Completed' : status==='prog' ? 'In Progress' : 'Upcoming';
+  var sub = 'Block '+meta.block + (meta.deload ? ' · Deload' : '');
+  var expanded = window._blabAuditExpanded === w;
+  var h = '<div class="blab-audit-week-tile'+(expanded?' expanded':'')+'" onclick="window._blabAuditToggleWeek('+w+')">'+
+    '<div class="baw-num">Wk '+w+'</div>'+
+    '<div class="baw-sub">'+sub+'</div>'+
+    '<span class="blab-audit-status '+status+'">'+statusLabel+'</span>'+
+  '</div>';
+  if(expanded){
+    h += '<div class="blab-audit-day-panel" style="grid-column:1/-1;"><div class="blab-audit-day-grid">';
+    for(var d=1; d<=4; d++){
+      var sess = null;
+      try { sess = window.blabGetSessionData(w, d); } catch(_e){}
+      var nm = (sess && sess.name) || ('Day '+d);
+      var done = window._blabAuditDayDone(w, d, s);
+      h += '<div class="blab-audit-day-tile" onclick="window.blabOpenAuditDay('+w+','+d+',false)">'+
+        (done?'<span class="bad-check">✓</span>':'')+
+        '<div class="bad-day">Day '+d+'</div>'+
+        '<div class="bad-name">'+nm+'</div>'+
+      '</div>';
+    }
+    h += '</div></div>';
+  }
+  return h;
+};
+
+window._blabAuditToggleWeek = function(w){
+  window._blabAuditExpanded = (window._blabAuditExpanded === w) ? null : w;
+  var ov = document.getElementById('blab-audit-overlay');
+  if(ov) ov.innerHTML = window._blabAuditGridHTML(window.blabGetState());
+};
+
+// Open a single audit session. interactive=false → read-only preview; true → dry run.
+window.blabOpenAuditDay = function(week, day, interactive){
+  window._blabAuditMode = { week:week, day:day, readOnly:!interactive };
+  window._blabDryRun = true;              // no persistence, no state advance
+  window._blabReadOnly = !interactive;
+  window._blabSessionCompleteCallback = null;
+  var ov = document.getElementById('blab-audit-overlay');
+  if(ov) ov.style.display = 'none';
+  window.blabOpenSession(week, day);      // renders into #screen-session, then calls _blabDecorateAuditSession
+};
+
+// Post-render: shield the body from interaction (read-only) and add the audit banner.
+window._blabDecorateAuditSession = function(){
+  var am = window._blabAuditMode;
+  if(!am) return;
+  var screen = document.getElementById('screen-session');
+  if(!screen) return;
+  screen.classList.toggle('blab-audit-readonly', !!am.readOnly);
+  var old = document.getElementById('blab-audit-banner'); if(old) old.remove();
+  var banner = document.createElement('div');
+  banner.id = 'blab-audit-banner';
+  var label = 'Audit · Week '+am.week+' · Day '+am.day+' — '+(am.readOnly ? 'Read-only preview' : 'Dry run · nothing saved');
+  var mid = am.readOnly ? '<button class="bab-btn" onclick="window._blabAuditDryRun()">Dry Run ▶</button>' : '';
+  banner.innerHTML = '<div class="bab-label">'+label+'</div>'+mid+
+    '<button class="bab-btn ghost" onclick="window._blabExitAuditSession()">Exit</button>';
+  var header = screen.querySelector('.app-header');
+  if(header) screen.insertBefore(banner, header.nextSibling);
+  else screen.insertBefore(banner, screen.firstChild);
+  var back = document.getElementById('session-back-btn');
+  if(back) back.onclick = function(){ window._blabExitAuditSession(); };
+};
+
+// Read-only preview → full interactive dry run of the same session.
+window._blabAuditDryRun = function(){
+  var am = window._blabAuditMode;
+  if(!am) return;
+  window.blabOpenAuditDay(am.week, am.day, true);
+};
+
+// Leave an audit session and return to the week grid. Clears all test-mode flags.
+window._blabExitAuditSession = function(){
+  window._blabDryRun = false;
+  window._blabReadOnly = false;
+  window._blabAuditMode = null;
+  window._blabSessionCompleteCallback = null;
+  var b = document.getElementById('blab-audit-banner'); if(b) b.remove();
+  var screen = document.getElementById('screen-session');
+  if(screen) screen.classList.remove('blab-audit-readonly');
+  var ov = document.getElementById('blab-audit-overlay');
+  if(ov){ ov.style.display = ''; ov.innerHTML = window._blabAuditGridHTML(window.blabGetState()); }
+  else { window.blabOpenAudit(); }
+  window.scrollTo(0,0);
+};
+
+// Close the audit entirely and return to Today. Clears the placeholder state override.
+window._blabCloseAudit = function(){
+  window._blabAuditStateOverride = null;
+  window._blabAuditExpanded = null;
+  window._blabDryRun = false;
+  window._blabReadOnly = false;
+  window._blabAuditMode = null;
+  window._blabSessionCompleteCallback = null;
+  var ov = document.getElementById('blab-audit-overlay'); if(ov) ov.remove();
+  var b = document.getElementById('blab-audit-banner'); if(b) b.remove();
+  var screen = document.getElementById('screen-session');
+  if(screen) screen.classList.remove('blab-audit-readonly');
+  if(typeof navTo === 'function') navTo('today');
 };
 
 // ── BLAB custom block builders (Phoenix-styled) ──────────────────
@@ -5235,6 +5461,8 @@ window.blabGetSessionData = function(week, day){
 };
 
 window.blabCompleteSession = function(week, day){
+  // v4.9.110: dry-run audit never advances programme state.
+  if(window._blabDryRun) return;
   var s = window.blabGetState();
   if(!s) return;
   s.last_completed_day = day;
@@ -24004,7 +24232,8 @@ function openTodaySession(){
   var staleCountIn = document.getElementById('count-in-overlay');
   if(staleCountIn) staleCountIn.remove();
   // BLAB bypass — don't require aiProgramme
-  if(!window.blabIsActive()){
+  // v4.9.110: audit dry-run also bypasses (a placeholder BLAB state feeds the pipeline).
+  if(!window.blabIsActive() && !window._blabDryRun){
     if(!athlete||!athlete.aiProgramme){
       navTo('programme');
       return;
@@ -24421,6 +24650,12 @@ function openTodaySession(){
       });
       var notesEl=document.getElementById('session-notes-field');
       var aiSessionId='ai-'+(sess.session_type||'training').toLowerCase();
+      // v4.9.110: dry-run audit — nothing is written anywhere. Skip the localStorage log,
+      // the Supabase completion, and the BLAB week-advance callback; return to the audit grid.
+      if(window._blabDryRun){
+        if(typeof window._blabExitAuditSession==='function') window._blabExitAuditSession();
+        return;
+      }
       // Log to localStorage
       var entry={date:new Date().toISOString(),sessionId:aiSessionId,week:currentProgWeek||1,notes:notesEl?notesEl.value:'',sets:aiSets};
       var logs=JSON.parse(localStorage.getItem('phoenix_session_logs')||'[]');
@@ -24471,8 +24706,15 @@ function openTodaySession(){
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
   var aiSessionType=mapSessionType('ai-'+(sess.session_type||'strength').toLowerCase());
-  supabaseStartSession(aiSessionType,sess.session_type||'Training','ai-'+(sess.session_type||'training').toLowerCase());
+  // v4.9.110: dry-run audit must not open a server session row.
+  if(!window._blabDryRun){
+    supabaseStartSession(aiSessionType,sess.session_type||'Training','ai-'+(sess.session_type||'training').toLowerCase());
+  }
   showScreen('screen-session');
+  // v4.9.110: decorate the just-rendered session for audit (read-only shield + banner).
+  if(window._blabAuditMode && typeof window._blabDecorateAuditSession==='function'){
+    window._blabDecorateAuditSession();
+  }
 }
 
 function showUpgradePrompt(tier, reason){

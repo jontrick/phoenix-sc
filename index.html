@@ -3546,7 +3546,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.107';
+var APP_VERSION='4.9.108';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3946,48 +3946,6 @@ window.blabOpenSession = function(week, day){
     openTodaySession();
     return;
   }
-
-  // Build overlay
-  var old = document.getElementById('blab-session-overlay');
-  if(old) old.remove();
-  var overlay = document.createElement('div');
-  overlay.id = 'blab-session-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:9500;overflow-y:auto;padding-bottom:60px;';
-
-  // Header
-  var hdr = document.createElement('div');
-  hdr.style.cssText = 'padding:20px 20px 0;';
-  var back = document.createElement('button');
-  back.textContent = '← Today';
-  back.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:16px;display:block;';
-  back.onclick = function(){ overlay.remove(); };
-  hdr.appendChild(back);
-  var eyebrow = document.createElement('div');
-  eyebrow.style.cssText = 'font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;';
-  eyebrow.textContent = 'BLAB · Week ' + week + ' · Day ' + day;
-  hdr.appendChild(eyebrow);
-  var title = document.createElement('div');
-  title.style.cssText = 'font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:20px;';
-  title.textContent = sess.name;
-  hdr.appendChild(title);
-  overlay.appendChild(hdr);
-
-  // Exercise cards
-  var list = document.createElement('div');
-  list.style.padding = '0 16px';
-  sess.exercises.forEach(function(ex, i){
-    var card = window.blabBuildExCard(ex, i, sess.exercises.length, week, day);
-    list.appendChild(card);
-  });
-
-  // Complete session button
-  var completeBtn = document.createElement('button');
-  completeBtn.textContent = 'Complete Session ✓';
-  completeBtn.style.cssText = 'width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-top:16px;';
-  completeBtn.onclick = function(){ window.blabCompleteSession(week, day); overlay.remove(); };
-  list.appendChild(completeBtn);
-  overlay.appendChild(list);
-  document.body.appendChild(overlay);
 };
 
 // ── BLAB custom block builders (Phoenix-styled) ──────────────────
@@ -4285,19 +4243,29 @@ window._blabBuildTotalRepBlock = function(ex, idx){
   return wrap;
 };
 
+// v4.9.108: one cardio block for all three cardio formats — interval (1.6km run),
+// steady_state (deload cardio), and tabata (conditioning). Title/chips/button/PB adapt.
 window._blabBuildRunBlock = function(ex, idx){
   var wrap = document.createElement('div');
   wrap.className = 'ex-block';
+  var fmt = ex._blabFmt || 'interval';
+  var title = fmt==='interval' ? '1.6km Run' : fmt==='steady_state' ? 'Steady State Cardio' : (ex.name||'Tabata');
+  var chips = fmt==='interval' ? ['Count-up timer','Record time']
+    : fmt==='steady_state' ? ['Count-up timer','20-30 min']
+    : ['20s on / 10s off', (ex._blabTargetRounds?('Target '+ex._blabTargetRounds+' rounds'):'Log rounds')];
+  var btnLabel = fmt==='tabata' ? 'Start Tabata →' : fmt==='steady_state' ? 'Start Cardio →' : 'Start Run →';
+  var pb = ex.prev_best ? (fmt==='tabata' ? ('Previous best: '+ex.prev_best+' rounds') : ('Previous best: '+blabFmt(ex.prev_best))) : '';
   var header = document.createElement('div');
   header.style.cssText = 'padding:16px;';
   header.innerHTML =
     '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Exercise '+(idx+1)+'</div>'+
-    '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;">1.6km Run</div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:8px;"><div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-family:var(--font-d);font-size:12px;font-weight:700;">Count-up timer</div><div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-family:var(--font-d);font-size:12px;font-weight:700;">Record time</div></div>'+
+    '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;">'+title+'</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">'+chips.map(function(c){return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-family:var(--font-d);font-size:12px;font-weight:700;">'+c+'</div>';}).join('')+'</div>'+
+    (pb?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">'+pb+'</div>':'')+
     (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);font-style:italic;">'+ex.coaching_note+'</div>':'');
   var startBtn = document.createElement('button');
   startBtn.style.cssText = 'display:block;margin:0 16px 16px;width:calc(100% - 32px);padding:16px;background:var(--gold);border:none;border-radius:12px;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;';
-  startBtn.textContent = 'Start Run →';
+  startBtn.textContent = btnLabel;
   startBtn.onclick = function(){
     var exArr = window._blabPhxExercises || [];
     window.blabRunWorkout(exArr[idx]||ex, idx);
@@ -4337,6 +4305,17 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.format = 'percentage_sets';
       phxEx._perSetKg = sets.map(function(s){ return s.kg; });
       phxEx._perSetReps = sets.map(function(s){ return s.amrap ? s.reps+'+' : String(s.reps); });
+      // v4.9.108: main-lift AMRAP capture + previous-week surfacing. Carry the lift key + week so
+      // autoLogSet can persist the top-set reps to records[lift+'_amrap_w'+week], and read back the
+      // PRIOR week's top-set reps@weight for the "Last week: X reps @ Ykg" banner.
+      phxEx.blab_lift = ex.blab_lift || '';
+      phxEx._blabWeek = week;
+      phxEx._blabAmrapTopIdx = sets.length - 1;
+      if(ex.blab_lift){
+        var _amRec = (bs.records) || {};
+        phxEx.prev_amrap_reps = _amRec[ex.blab_lift+'_amrap_w'+(week-1)] || 0;
+        phxEx.prev_amrap_wt = _amRec[ex.blab_lift+'_amrap_w'+(week-1)+'_wt'] || 0;
+      }
 
     } else if(fmt === 'superset' && ex.movements && ex.movements.length===2){
       // Split into two exercises with superset flag
@@ -4386,6 +4365,9 @@ window.blabToPhoenixSession = function(sess, week, day){
       // banner reads ex.prev_best (not _blabPrevBest), so without this the banner stays blank.
       phxEx.prev_best = ex.prev_best || 0;
       phxEx._blabHasLoad = ex.has_load || false;
+      // v4.9.108: custom time-record key so timed afap blocks (100 Push-ups, Bodyweight
+      // Complex, Core Circuit, complexes) each persist to their own records[...] slot.
+      phxEx._timeRecordKey = ex._timeRecordKey || (ex.name+'_time');
 
     } else if(fmt === 'max_reps_sets'){
       phxEx.sets = ex.sets || 2;
@@ -4393,10 +4375,13 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'max_reps_sets';
       phxEx.format = 'max_reps_sets';
-      // v4.9.104: carry prev_best/prev_best_wt through — blabRenderMaxReps's banner
+      // v4.9.104: carry prev_best/prev_best_wt through — the generic set-row banner
       // reads these off the mapped exercise object; the mapper previously dropped them.
       phxEx.prev_best = ex.prev_best || 0;
       phxEx.prev_best_wt = ex.prev_best_wt || 0;
+      // v4.9.108: W12 bench test — load choice + dedicated record keys.
+      phxEx.bench_test = ex.bench_test || false;
+      phxEx.load_choices = ex.load_choices || null;
 
     } else if(fmt === 'interval'){
       phxEx.sets = 1;
@@ -4404,11 +4389,38 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'interval';
       phxEx.format = 'interval';
+      phxEx.prev_best = ex.prev_best || 0;
+
+    } else if(fmt === 'steady_state'){
+      // v4.9.108: steady-state cardio — own record slot, never touches records['1.6km'].
+      phxEx.sets = 1;
+      phxEx.reps = '20-30 min';
+      phxEx.load_guidance = '';
+      phxEx._blabFmt = 'steady_state';
+      phxEx.format = 'steady_state';
+      phxEx.prev_best = ex.prev_best || 0;
+
+    } else if(fmt === 'tabata'){
+      // v4.9.108: tabata / conditioning — logs rounds to records['tabata_rounds'].
+      phxEx.sets = 1;
+      phxEx.reps = (ex.target_rounds || '8-10') + ' rounds';
+      phxEx.load_guidance = '';
+      phxEx._blabFmt = 'tabata';
+      phxEx.format = 'tabata';
+      phxEx._blabTargetRounds = ex.target_rounds || '';
+      phxEx.prev_best = ex.prev_best || 0;
 
     } else {
       phxEx.sets = ex.sets || 3;
       phxEx.reps = String(ex.reps || 10);
       phxEx.load_guidance = '';
+      phxEx._blabFmt = 'standard_sets';
+      // v4.9.108: result capture for "record …" cues (sled/prowler/tests). autoLogSet writes
+      // records[name+'_result']; the generic block surfaces the prior result.
+      if(ex.note && /record/i.test(ex.note)){
+        phxEx._blabResultCapture = true;
+        phxEx.prev_result = (bs.records && bs.records[ex.name+'_result']) || 0;
+      }
     }
 
     return phxEx;
@@ -4424,139 +4436,7 @@ window.blabToPhoenixSession = function(sess, week, day){
   };
 };
 
-window.blabBuildExCard = function(ex, idx, total, week, day){
-  var card = document.createElement('div');
-  card.id = 'blab-ex-' + idx;
-  card.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--border2);border-radius:var(--radius);padding:16px;margin-bottom:12px;';
-
-  var fmt = ex.format || 'standard_sets';
-  var fmtLabels = {percentage_sets:'Strength Sets',superset:'Superset',total_rep_goal:'Total Reps',afap:'Complex',interval:'Cardio',standard_sets:'Sets'};
-  var badge = document.createElement('div');
-  badge.style.cssText = 'display:inline-block;font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);background:rgba(200,150,62,0.12);padding:3px 8px;border-radius:10px;margin-bottom:10px;';
-  badge.textContent = fmtLabels[fmt] || fmt;
-
-  var num = document.createElement('div');
-  num.style.cssText = 'font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;';
-  num.textContent = 'Exercise ' + (idx+1) + ' of ' + total;
-
-  var name = document.createElement('div');
-  name.style.cssText = 'font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;';
-  name.textContent = ex.name;
-
-  card.appendChild(num);
-  card.appendChild(name);
-  card.appendChild(badge);
-
-  // Detail
-  var detail = document.createElement('div');
-  if(fmt === 'percentage_sets'){
-    ex.sets.forEach(function(s){
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border2);';
-      row.innerHTML = '<span style="font-size:12px;color:var(--text3);">Set — ' + s.pct + '%</span>' +
-        '<span style="font-family:var(--font-d);font-size:16px;font-weight:700;color:var(--text);">' + s.kg + 'kg</span>' +
-        '<span style="font-size:12px;color:' + (s.amrap?'var(--gold)':'var(--text3)') + ';">' + s.reps + (s.amrap?'+':'') + ' reps</span>';
-      detail.appendChild(row);
-    });
-    var restNote = document.createElement('div');
-    restNote.style.cssText = 'font-size:11px;color:var(--text3);margin-top:8px;';
-    restNote.textContent = 'Rest 3 min between sets';
-    detail.appendChild(restNote);
-  } else if(fmt === 'superset'){
-    ex.movements.forEach(function(m, mi){
-      var pair = document.createElement('div');
-      pair.style.cssText = 'border-left:3px solid var(--gold);padding-left:12px;margin-bottom:8px;';
-      pair.innerHTML = '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;color:var(--gold);margin-bottom:2px;">' + (mi===0?'A':'B') + '</div>' +
-        '<div style="font-size:14px;font-weight:600;color:var(--text);">' + m.name + '</div>' +
-        '<div style="font-size:12px;color:var(--text3);">' + m.reps + '</div>';
-      detail.appendChild(pair);
-    });
-    var setInfo = document.createElement('div');
-    setInfo.style.cssText = 'font-size:11px;color:var(--text3);margin-top:4px;';
-    setInfo.textContent = (ex.sets||3) + ' sets · Rest ' + (ex.rest||90) + 's after A+B';
-    detail.appendChild(setInfo);
-  } else if(fmt === 'total_rep_goal'){
-    var trInfo = document.createElement('div');
-    if(ex.chin_test){
-      trInfo.innerHTML = '<div style="font-size:13px;color:var(--text2);">Test set — 1 all-out set. Log your max reps.</div>';
-    } else {
-      trInfo.innerHTML = '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;color:var(--gold);">' + (ex.target||'?') + ' total reps</div>';
-    }
-    detail.appendChild(trInfo);
-  } else if(fmt === 'afap'){
-    ex.movements.forEach(function(m){
-      var row = document.createElement('div');
-      row.style.cssText = 'font-size:13px;color:var(--text2);padding:3px 0;';
-      row.textContent = m.name + ' × ' + m.reps;
-      detail.appendChild(row);
-    });
-    if((ex.sets||1) > 1){
-      var setNote = document.createElement('div');
-      setNote.style.cssText = 'font-size:11px;color:var(--text3);margin-top:6px;';
-      setNote.textContent = (ex.sets) + ' sets · Rest ' + (ex.rest||90) + 's between';
-      detail.appendChild(setNote);
-    }
-  } else if(fmt === 'interval'){
-    detail.innerHTML = '<div style="font-size:14px;color:var(--text2);">1.6km run · Count-up timer · Record time</div>';
-  } else if(fmt === 'standard_sets'){
-    detail.innerHTML = '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text);">' + (ex.sets||3) + ' × ' + (ex.reps||10) + '</div>';
-  }
-  card.appendChild(detail);
-
-  // Coaching note
-  if(ex.note){
-    var note = document.createElement('div');
-    note.style.cssText = 'background:var(--bg3);border-left:2px solid var(--gold);padding:10px 12px;border-radius:0 4px 4px 0;margin-top:10px;font-size:12px;color:var(--text3);line-height:1.6;';
-    note.textContent = ex.note;
-    card.appendChild(note);
-  }
-
-  // Start button
-  var startBtn = document.createElement('button');
-  startBtn.style.cssText = 'width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;margin-top:12px;';
-  startBtn.textContent = 'Start →';
-  startBtn.setAttribute('data-idx', idx);
-  startBtn.onclick = function(){ window.blabLaunchExercise(idx); };
-  card.appendChild(startBtn);
-
-  return card;
-};
-
-window.blabLaunchExercise = function(idx){
-  var cur = window._blabCurrentSession;
-  if(!cur) return;
-  var ex = cur.data.exercises[idx];
-  if(!ex) return;
-  window._blabCurrentExIdx = idx;
-  // Use existing WOD system by building a wod object
-  var fmt = ex.format;
-  var wod = {
-    format: fmt === 'percentage_sets' ? 'PERCENTAGE_SETS' :
-             fmt === 'superset' ? 'SUPERSET' :
-             fmt === 'total_rep_goal' ? 'TOTAL_REP_GOAL' :
-             fmt === 'afap' ? 'AFAP' :
-             fmt === 'interval' ? 'INTERVAL' : 'AFAP',
-    session_name: ex.name,
-    sets: ex.sets || 1,
-    rest_sec: ex.rest || 90,
-    target_reps: ex.target || 0,
-    chin_test: ex.chin_test || false,
-    movements: ex.movements || [{name:ex.name, reps:ex.reps||10}],
-    reps_per_set: ex.reps_per_set || null
-  };
-  if(fmt === 'percentage_sets'){
-    wod.movements = ex.sets.map(function(s){
-      return {name:ex.name, pct:s.pct, weight_kg:s.kg, reps:s.reps, or_more:s.amrap, rest_sec:180};
-    });
-  }
-  if(fmt === 'interval'){
-    wod.format = 'INTERVAL';
-    wod.task_mode = true;
-    wod.movements = [{name:'1.6km Run', distance_m:1600}];
-  }
-  window._wodSelection = {};
-  window.blabRunWorkout(ex, idx);
-};
+// v4.9.108: blabBuildExCard + blabLaunchExercise (dead overlay card path) removed.
 
 window.blabRunWorkout = function(ex, idx){
   // Prevent screen timeout during workout
@@ -4642,13 +4522,14 @@ window._blabWoRender = function(){
     }
     return;
   }
-  if(fmt==='percentage_sets') blabRenderPct(ex,st,body);
-  else if(fmt==='superset') blabRenderSuper(ex,st,body);
-  else if(fmt==='total_rep_goal') blabRenderTR(ex,st,body);
+  // v4.9.108: dispatch only the overlay-runner formats. percentage_sets / superset /
+  // max_reps_sets render inline inside openTodaySession — they never reach the runner.
+  if(fmt==='total_rep_goal') blabRenderTR(ex,st,body);
   else if(fmt==='afap') blabRenderAfap(ex,st,body);
   else if(fmt==='interval') blabRenderRun(ex,st,body);
-  else if(fmt==='max_reps_sets') blabRenderMaxReps(ex,st,body);
-  else blabRenderStd(ex,st,body);
+  else if(fmt==='steady_state') blabRenderSteady(ex,st,body);
+  else if(fmt==='tabata') blabRenderTabata(ex,st,body);
+  else blabRenderAfap(ex,st,body);
 };
 
 // v4.9.98 BUG 2.1: also clear globalRestActive. If an inline handler clears resting but leaves
@@ -4693,7 +4574,9 @@ window._blabWoDone=function(){
     var bs=window.blabGetState();
     if(bs){
       if(!bs.records) bs.records={};
-      var k=st.ex.name+'_time';
+      // v4.9.108: use the exercise's dedicated time-record key (100_pushups_time,
+      // bw_complex_time, Core Circuit_time, <complex>_time) so each timed block keeps its own PB.
+      var k=st.ex._timeRecordKey || (st.ex.name+'_time');
       var prev=bs.records[k]||0;
       bs.records[k]=st.elapsed;
       window.blabSaveState(bs);
@@ -4734,165 +4617,7 @@ function blabDots(total, cur){
 function blabElapsed(st){ return '<div style="text-align:center;font-family:var(--font-d);font-size:11px;color:var(--text3);margin:12px 0;">Time: <span id="blab-elapsed">'+blabFmt(st.elapsed)+'</span></div>'; }
 function blabFinishBtn(label){ return '<button onclick="window._blabWoDone()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-top:8px;">'+(label||'Complete \u2713')+'</button>'; }
 
-// PERCENTAGE SETS — Phoenix format: coach target chips + set rows with editable load/reps
-function blabRenderPct(ex,st,body){
-  if(!st.pctSet) st.pctSet=1;
-  if(!st.pctRes) st.pctRes=[];
-  if(!st.pctLoads) st.pctLoads=[];
-  var sets=ex.sets, cur=st.pctSet-1, allDone=cur>=sets.length;
-
-  // Coach target chips
-  var h='<div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px;">';
-  var topSet=sets[sets.length-1];
-  h+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--text);">'+topSet.kg+'kg</div>'+
-     '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--text);">'+(topSet.amrap?topSet.reps+'+':topSet.reps)+' reps</div>';
-  h+='</div>';
-  h+='<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:16px;">COACH TARGET &mdash; FINAL SET</div>';
-
-  // Set rows
-  sets.forEach(function(s,i){
-    var isDone=i<cur, isCur=i===cur&&!allDone, isPend=i>cur;
-    var loggedKg=st.pctLoads[i]||s.kg;
-    var loggedReps=st.pctRes[i]||s.reps;
-    var pr=isDone&&s.amrap&&st.pctRes[i]>s.reps;
-    h+='<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border2);opacity:'+(isPend?'0.4':'1')+'">' +
-      '<div style="font-family:var(--font-d);font-size:12px;color:var(--text3);width:16px;">'+( isDone?'✓':isCur?'▶':String(i+1))+'</div>'+
-      // Load input
-      '<input type="number" inputmode="decimal" id="pct-kg-'+i+'" '+
-        'style="width:80px;padding:10px 8px;background:'+(isDone?'var(--bg2)':isCur?'var(--bg)':'var(--bg2)')+';border:1px solid '+(isCur?'var(--gold)':'var(--border)')+';border-radius:var(--radius);color:'+(isDone?'var(--text3)':'var(--text)')+';font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;" '+
-        'value="'+loggedKg+'" '+(isPend||isDone?'disabled':'')+'>'+
-      '<div style="font-size:11px;color:var(--text3);">KG</div>'+
-      // Reps input
-      (isCur&&s.amrap
-        ? '<input type="number" inputmode="numeric" id="pct-in" style="flex:1;padding:10px 8px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;" placeholder="'+s.reps+'+">'
-        : '<div style="flex:1;text-align:center;font-family:var(--font-d);font-size:16px;font-weight:700;color:'+(isDone?'#3a7d44':isPend?'var(--text3)':'var(--text)')+';">'+loggedReps+(s.amrap&&!isDone?'+':'')+'<span style="font-size:11px;color:var(--text3);margin-left:2px;">REPS</span>'+(pr?'<span style="background:var(--gold);color:#000;font-size:9px;padding:1px 5px;border-radius:6px;margin-left:4px;">PR</span>':'')+'</div>'
-      )+
-      // Tick button
-      (isCur
-        ? '<button onclick="window._blabPctDone()" style="width:44px;height:44px;background:var(--gold);border:none;border-radius:var(--radius);font-size:18px;cursor:pointer;">✓</button>'
-        : (isDone?'<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#3a7d44;font-size:18px;">✓</div>':'<div style="width:44px;"></div>')
-      )+
-    '</div>';
-  });
-
-  h+='<div style="font-size:11px;color:var(--text3);text-align:center;margin:8px 0 12px;">3 min rest between sets</div>';
-  h+=blabElapsed(st);
-  if(allDone) h+=blabFinishBtn();
-  body.innerHTML=h;
-}
-window._blabPctDone=function(){
-  var st=window._blabWoState; if(!st) return;
-  var sets=st.ex.sets, cur=st.pctSet-1, s=sets[cur];
-  var kgIn=document.getElementById('pct-kg-'+cur);
-  var kg=parseFloat(kgIn&&kgIn.value)||s.kg;
-  var reps=s.amrap?(parseInt((document.getElementById('pct-in')||{}).value)||s.reps):s.reps;
-  if(!st.pctRes) st.pctRes=[];
-  if(!st.pctLoads) st.pctLoads=[];
-  st.pctRes[cur]=reps;
-  st.pctLoads[cur]=kg;
-  if(s.amrap){var bs=window.blabGetState();if(bs){if(!bs.records)bs.records={};var k=st.ex.name+'_'+s.pct;if(!bs.records[k]||reps>bs.records[k]){bs.records[k]=reps;window.blabSaveState(bs);}}}
-  st.pctSet++;
-  if(st.pctSet<=sets.length){st.resting=true;st.restSec=180;}
-  window._blabWoRender();
-};
-
-// SUPERSET — Phoenix format: coach target chips + load/reps per set
-function blabRenderSuper(ex,st,body){
-  if(!st.ssSet) st.ssSet=1;
-  if(!st.ssA) st.ssA=false;
-  if(!st.ssB) st.ssB=false;
-  if(!st.ssLog) st.ssLog=[];
-  if(!st.ssLoadA) st.ssLoadA=0;
-  if(!st.ssLoadB) st.ssLoadB=0;
-  var total=ex.sets||3, allDone=st.ssSet>total;
-  var m=ex.movements||[];
-
-  var h=blabDots(total,st.ssSet-1);
-  h+='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:16px;">Set '+Math.min(st.ssSet,total)+' of '+total+' &middot; Rest '+(ex.rest||90)+'s after A+B</div>';
-
-  // Set history
-  if(st.ssLog.length){
-    var lh='<div style="background:var(--bg3);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;">';
-    st.ssLog.forEach(function(l,i){
-      lh+='<div style="font-size:11px;color:var(--text3);">Set '+(i+1)+': A &mdash; '+(l.ka?l.ka+'kg &middot; ':'')+l.a+' reps &nbsp;|&nbsp; B &mdash; '+(l.kb?l.kb+'kg &middot; ':'')+l.b+' reps</div>';
-    });
-    h+=lh+'</div>';
-  }
-
-  // Card A
-  h+='<div style="background:var(--bg2);border:2px solid '+(st.ssA?'#3a7d44':'var(--gold)')+';border-radius:var(--radius);padding:16px;margin-bottom:10px;">'+
-    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">A</div>'+
-    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:2px;">'+(m[0]&&m[0].name)+'</div>'+
-    '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;">'+(m[0]&&m[0].reps)+'</div>';
-  if(st.ssA){
-    h+='<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(st.ssLoadA?st.ssLoadA+'kg &middot; ':'')+st.ssALog+' reps</div>';
-  } else if(!allDone){
-    h+='<div style="display:flex;gap:8px;margin-bottom:0;">'+
-      '<div style="flex:1;">'+
-        '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;text-transform:uppercase;">Load (kg)</div>'+
-        '<input type="number" inputmode="decimal" id="ss-ka-in" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="kg" value="'+(st.ssLoadA||'')+'">'+
-      '</div>'+
-      '<div style="flex:1;">'+
-        '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;text-transform:uppercase;">Reps</div>'+
-        '<input type="number" inputmode="numeric" id="ss-a-in" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="reps">'+
-      '</div>'+
-      '<button onclick="window._blabSuperA()" style="flex:0 0 70px;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;align-self:flex-end;">✓ A</button>'+
-    '</div>';
-  }
-  h+='</div>';
-
-  // Card B
-  h+='<div style="background:var(--bg2);border:2px solid '+(st.ssB?'#3a7d44':st.ssA?'var(--gold)':'var(--border2)')+';border-radius:var(--radius);padding:16px;margin-bottom:10px;opacity:'+(st.ssA||st.ssB?'1':'0.5')+';transition:opacity 0.2s;">'+
-    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">B</div>'+
-    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:2px;">'+(m[1]&&m[1].name)+'</div>'+
-    '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;">'+(m[1]&&m[1].reps)+'</div>';
-  if(st.ssB){
-    h+='<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(st.ssLoadB?st.ssLoadB+'kg &middot; ':'')+st.ssBLog+' reps</div>';
-  } else if(st.ssA&&!allDone){
-    h+='<div style="display:flex;gap:8px;margin-bottom:0;">'+
-      '<div style="flex:1;">'+
-        '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;text-transform:uppercase;">Load (kg)</div>'+
-        '<input type="number" inputmode="decimal" id="ss-kb-in" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="kg" value="'+(st.ssLoadB||'')+'">'+
-      '</div>'+
-      '<div style="flex:1;">'+
-        '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;letter-spacing:1px;text-transform:uppercase;">Reps</div>'+
-        '<input type="number" inputmode="numeric" id="ss-b-in" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="reps">'+
-      '</div>'+
-      '<button onclick="window._blabSuperB()" style="flex:0 0 70px;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;align-self:flex-end;">✓ B</button>'+
-    '</div>';
-  }
-  h+='</div>';
-
-  h+=blabElapsed(st);
-  if(allDone) h+=blabFinishBtn();
-  body.innerHTML=h;
-}
-window._blabSuperA=function(){
-  var st=window._blabWoState; if(!st) return;
-  var kin=document.getElementById('ss-ka-in');
-  var rin=document.getElementById('ss-a-in');
-  var r=parseInt(rin&&rin.value)||0;
-  if(r<=0){ alert('Enter reps for A.'); return; }
-  st.ssLoadA=parseFloat(kin&&kin.value)||st.ssLoadA||0;
-  st.ssA=true; st.ssALog=r;
-  window._blabWoRender();
-};
-window._blabSuperB=function(){
-  var st=window._blabWoState; if(!st||!st.ssA) return;
-  var kin=document.getElementById('ss-kb-in');
-  var rin=document.getElementById('ss-b-in');
-  var r=parseInt(rin&&rin.value)||0;
-  if(r<=0){ alert('Enter reps for B.'); return; }
-  st.ssLoadB=parseFloat(kin&&kin.value)||st.ssLoadB||0;
-  st.ssB=true; st.ssBLog=r;
-  if(!st.ssLog) st.ssLog=[];
-  st.ssLog.push({a:st.ssALog,ka:st.ssLoadA,b:r,kb:st.ssLoadB});
-  st.ssSet++;
-  if(st.ssSet<=(st.ex.sets||3)){ st.ssA=false; st.ssB=false; st.ssALog=0; st.ssBLog=0; st.resting=true; st.restSec=st.ex.rest||90; }
-  window._blabWoRender();
-};
-
-
+// v4.9.108: blabRenderPct/_blabPctDone/blabRenderSuper/_blabSuperA/_blabSuperB removed (dead).
 // TOTAL REP GOAL
 function blabRenderTR(ex,st,body){
   if(!st.trTotal) st.trTotal=0;
@@ -5048,85 +4773,7 @@ window._blabAfapTick=function(i){
   window._blabWoRender();
 };
 
-// MAX REPS SETS
-function blabRenderMaxReps(ex,st,body){
-  if(!st.mrSet) st.mrSet=1;
-  if(!st.mrResults) st.mrResults=[];
-  var totalSets=ex.sets||2, cur=st.mrSet-1, allDone=cur>=totalSets;
-  var prevBest=ex.prev_best||0;
-  var prevBestWt=ex.prev_best_wt||0;
-
-  // v4.9.103: prominent gold PREVIOUS BEST banner at the top, visible while doing the sets.
-  // Shows reps and (when recorded) the weight, e.g. "22 reps @ 27.5kg".
-  var h=blabPrevBestBanner(prevBest?(prevBest+' reps'+(prevBestWt?' @ '+prevBestWt+'kg':'')):'');
-  h+=blabDots(totalSets,cur);
-  h+='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:16px;">Rest 90s between sets</div>';
-
-  for(var i=0;i<totalSets;i++){
-    var isDone=i<cur, isCur=i===cur&&!allDone, isPend=i>cur;
-    var bord=isDone?'#3a7d44':isCur?'var(--gold)':'var(--border)';
-    h+='<div style="background:var(--bg2);border:1px solid '+bord+';border-radius:var(--radius);padding:16px;margin-bottom:10px;opacity:'+(isPend?'0.4':'1')+';">'+
-      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Set '+(i+1)+' of '+totalSets+'</div>';
-    if(isDone){
-      var logged=st.mrResults[i];
-      var pr=prevBest&&logged>prevBest;
-      h+='<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:#3a7d44;">✓ '+logged+' reps'+(pr?' <span style="background:var(--gold);color:#000;font-size:9px;padding:2px 6px;border-radius:8px;">PR</span>':'')+'</div>';
-    } else if(isCur){
-      var wtPrefill=st.mrWeight||prevBestWt||'';
-      h+='<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Log the weight and reps you completed</div>'+
-        '<div style="display:flex;gap:10px;">'+
-          '<input type="number" inputmode="decimal" id="mr-wt" value="'+wtPrefill+'" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:26px;font-weight:700;text-align:center;outline:none;" placeholder="kg">'+
-          '<input type="number" inputmode="numeric" id="mr-in" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:26px;font-weight:700;text-align:center;outline:none;" placeholder="reps">'+
-          '<button onclick="window._blabMrDone()" style="flex:0 0 90px;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Done</button>'+
-        '</div>';
-    } else {
-      h+='<div style="font-size:13px;color:var(--text3);">Up next</div>';
-    }
-    h+='</div>';
-  }
-
-  h+=blabElapsed(st);
-  if(allDone) h+=blabFinishBtn();
-  body.innerHTML=h;
-}
-window._blabMrDone=function(){
-  var st=window._blabWoState; if(!st) return;
-  var inp=document.getElementById('mr-in');
-  var r=parseInt(inp&&inp.value)||0;
-  if(r<=0){ alert('Enter reps completed.'); return; }
-  var wtEl=document.getElementById('mr-wt');
-  var wt=parseFloat(wtEl&&wtEl.value)||0;
-  if(wt) st.mrWeight=wt; // remember for the next set (same weight both sets)
-  if(!st.mrResults) st.mrResults=[];
-  var cur=st.mrSet-1;
-  st.mrResults[cur]=r;
-  // Save PR (reps + the weight it was done at, so the next session can show "X reps @ Ykg")
-  var bs=window.blabGetState();
-  if(bs){
-    if(!bs.records) bs.records={};
-    var k=st.ex.name+'_max';
-    if(!bs.records[k]||r>bs.records[k]){ bs.records[k]=r; if(wt) bs.records[st.ex.name+'_maxwt']=wt; window.blabSaveState(bs); }
-  }
-  st.mrSet++;
-  if(st.mrSet<=(st.ex.sets||2)){
-    st.resting=true;
-    st.restSec=90;
-  }
-  window._blabWoRender();
-};
-
-// STANDARD SETS
-function blabRenderStd(ex,st,body){
-  body.innerHTML=
-    '<div style="text-align:center;padding:40px 0;">'+
-      '<div style="font-family:var(--font-d);font-size:72px;font-weight:900;color:var(--gold);line-height:1;">'+(ex.sets||3)+'<span style="font-size:24px;color:var(--text3);">&times;</span>'+(ex.reps||10)+'</div>'+
-      '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-top:8px;">Sets &times; Reps</div>'+
-    '</div>'+
-    (ex.note?'<div style="background:var(--bg3);border-left:2px solid var(--gold);padding:10px 12px;border-radius:0 4px 4px 0;margin-bottom:20px;font-size:12px;color:var(--text3);line-height:1.6;">'+ex.note+'</div>':'')+
-    blabElapsed(st)+
-    blabFinishBtn();
-}
-
+// v4.9.108: blabRenderMaxReps/_blabMrDone/blabRenderStd removed (dead).
 // INTERVAL RUN
 function blabRenderRun(ex,st,body){
   body.innerHTML=
@@ -5153,16 +4800,75 @@ window._blabRunDone=function(){
   window._blabWoDone();
 };
 
+// STEADY-STATE CARDIO (v4.9.108) — count-up timer, saves records['steady_state'].
+// Kept fully separate from the 1.6km run so a deload walk never clobbers the run PB.
+function blabRenderSteady(ex,st,body){
+  var note=ex.coaching_note||ex.note||'';
+  body.innerHTML=
+    '<div style="text-align:center;padding:40px 0;">'+
+      '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text);margin-bottom:12px;">Steady State Cardio</div>'+
+      '<div style="font-family:var(--font-d);font-size:72px;font-weight:900;color:var(--gold);line-height:1;" id="blab-elapsed">'+blabFmt(st.elapsed)+'</div>'+
+      '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-top:8px;">Time Elapsed</div>'+
+    '</div>'+
+    (note?'<div style="background:var(--bg3);border-left:2px solid var(--gold);padding:10px 12px;border-radius:0 4px 4px 0;margin-bottom:20px;font-size:12px;color:var(--text3);line-height:1.6;">'+note+'</div>':'')+
+    '<button onclick="window._blabSteadyDone()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Finished &mdash; Log Time</button>';
+}
+window._blabSteadyDone=function(){
+  var st=window._blabWoState, t=st?st.elapsed:0;
+  var bs=window.blabGetState();
+  if(bs){
+    if(!bs.records) bs.records={};
+    bs.records['steady_state']=t;
+    window.blabSaveState(bs);
+    alert('Steady-state cardio: '+blabFmt(t)+' logged.');
+  }
+  window._blabWoDone();
+};
+
+// TABATA / CONDITIONING (v4.9.108) — count-up timer + rounds input, saves the best
+// rounds count to records['tabata_rounds']. Never touches the run PB.
+function blabRenderTabata(ex,st,body){
+  var note=ex.coaching_note||ex.note||'';
+  var tgt=ex._blabTargetRounds||'';
+  var prev=ex.prev_best||0;
+  body.innerHTML=
+    blabPrevBestBanner(prev?prev+' rounds':'')+
+    '<div style="text-align:center;padding:24px 0 12px;">'+
+      '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px;">'+(ex.name||'Tabata')+'</div>'+
+      (tgt?'<div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Target: '+tgt+' rounds &middot; 20s on / 10s off</div>':'')+
+      '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;color:var(--gold);line-height:1;" id="blab-elapsed">'+blabFmt(st.elapsed)+'</div>'+
+      '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-top:8px;">Time Elapsed</div>'+
+    '</div>'+
+    (note?'<div style="background:var(--bg3);border-left:2px solid var(--gold);padding:10px 12px;border-radius:0 4px 4px 0;margin:0 0 16px;font-size:12px;color:var(--text3);line-height:1.6;">'+note+'</div>':'')+
+    '<div style="display:flex;gap:10px;margin-bottom:16px;">'+
+      '<input type="number" inputmode="numeric" id="blab-tabata-rounds" style="flex:1;padding:14px;background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:22px;font-weight:700;text-align:center;outline:none;" placeholder="Rounds done">'+
+    '</div>'+
+    '<button onclick="window._blabTabataDone()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Finished &mdash; Log Rounds</button>';
+}
+window._blabTabataDone=function(){
+  var el=document.getElementById('blab-tabata-rounds');
+  var r=parseInt(el&&el.value)||0;
+  var bs=window.blabGetState();
+  if(bs && r>0){
+    if(!bs.records) bs.records={};
+    var prev=bs.records['tabata_rounds']||0;
+    if(r>prev) bs.records['tabata_rounds']=r;
+    window.blabSaveState(bs);
+    alert('Rounds: '+r+(prev?(r>prev?' — new best! (was '+prev+')':' (best '+prev+')'):' logged.'));
+  }
+  window._blabWoDone();
+};
+
 // ── BLAB Session Data ────────────────────────────────────────────
 window.blabGetSessionData = function(week, day){
   var s = window.blabGetState();
   if(!s || !s.maxes) return null;
   var B = s.maxes.bench, S = s.maxes.squat, D = s.maxes.deadlift;
   var C = s.chin_max || 0;
-  var sq = s.squat_var === 'box' ? 'Box Squat' : 'Back Squat';
-  var dl = s.dl_var === 'trap' ? 'Trap Bar Deadlift' : s.dl_var === 'sumo' ? 'Sumo Deadlift' : 'Conventional Deadlift';
   var p = window.blabPct;
+  function rec(k){ return (s.records && s.records[k]) || 0; }
 
+  // ── Main-lift % schemes — faithful to the "Built Like A Badass" PDF ──────────
   var benchSchemes = {
     1:[[72.5,8,false],[77.5,6,false],[82.5,4,true]],
     2:[[75,7,false],[80,5,false],[85,3,true]],
@@ -5189,208 +4895,339 @@ window.blabGetSessionData = function(week, day){
     10:[[50,5,false],[60,5,false]],
     11:[[80,4,false],[87.5,2,false],[92.5,1,false],[97.5,1,false],[102,1,true]]
   };
-
   function mkSets(scheme, maxKg){
     if(!scheme) return [];
-    return scheme.map(function(s){ return {pct:s[0], kg:p(maxKg,s[0]), reps:s[1], amrap:s[2]}; });
+    return scheme.map(function(x){ return {pct:x[0], kg:p(maxKg,x[0]), reps:x[1], amrap:x[2]}; });
   }
-
   function chinTarget(pct){ return C > 0 ? C + Math.round(C * pct / 100) : 0; }
 
   var isDeload = (week === 5 || week === 10);
   var w = week, d = day;
 
-  // ── DAY 1: UPPER BODY ───────────────────────────────────────
+  // ── Shared builders ──────────────────────────────────────────────────────────
+  function SS(name, sets, rest, an, ar, bn, br){
+    return {name:name, format:'superset', sets:sets, rest:rest, movements:[{name:an,reps:ar},{name:bn,reps:br}]};
+  }
+  function coreCircuit(sets, movs){
+    return {name:'Core Circuit', format:'afap', sets:sets, rest:60, has_load:false, suggested_load:0,
+      prev_best:rec('Core Circuit_time'), _timeRecordKey:'Core Circuit_time', movements:movs,
+      note:'Move through continuously — the clock keeps running. Rest 60s between rounds.'};
+  }
+  function pushups100(){
+    return {name:'100 Push-ups', format:'afap', sets:1, rest:0, has_load:false, suggested_load:0,
+      movements:[{name:'Push-ups',reps:100}], prev_best:rec('100_pushups_time'), _timeRecordKey:'100_pushups_time',
+      note:'As fast as possible. Break into sub-sets as needed — the clock never stops. Beat your best time.'};
+  }
+  function bwComplex(rounds){
+    return {name:'Bodyweight Complex', format:'afap', sets:rounds, rest:60, has_load:false, suggested_load:0,
+      movements:[{name:'Mountain Climbers',reps:30},{name:'Push-ups',reps:20},{name:'Groiners',reps:10},{name:'Burpees',reps:5}],
+      prev_best:rec('bw_complex_time'), _timeRecordKey:'bw_complex_time',
+      note:'Move through all four continuously. Rest 60s between rounds. Total time is your score.'};
+  }
+  function bbPushupsDescending(top){
+    return {name:'Barbell Push-ups — Descending '+top+' to 1', format:'standard_sets', sets:1, reps:'From '+top+' to 1',
+      note:top+' reps, then '+(top-1)+', '+(top-2)+' … down to 1. Minimal rest between sets. Record your total time.'};
+  }
+
+  // ── Complex config (v4.9.108 spec override) ──────────────────────────────────
+  // W1-3: 2 sets / 90s · W4: 4 sets / 60s · W5: 1×8 empty bar · W6-8: 3 sets / 60s
+  // W9: 3 desc (10/9/8) / 60s · W10: 1×8 empty bar · W11: 4 desc (10/9/8/7) · W12: 5 desc (10/9/8/7/6)
+  var complexName = w <= 5 ? 'Barbell Complex' : w <= 8 ? 'DB Complex' : 'BeZercher Complex';
+  var complexMovs = w <= 5
+    ? [{name:'Deadlifts',reps:10},{name:'Bent Rows',reps:10},{name:'Hang Cleans',reps:10},{name:'Push Press',reps:10},{name:'Back Squats',reps:10}]
+    : w <= 8
+    ? [{name:'DB Front Squats',reps:10},{name:'DB Swings',reps:10},{name:'Unilateral Curl to Press',reps:10},{name:'DB Squat Jumps',reps:10}]
+    : [{name:'Zercher Squats',reps:10},{name:'Zercher Reverse Lunges',reps:10},{name:'Curl to Press',reps:10},{name:'RDLs',reps:10},{name:'Bent Rows',reps:10}];
+  var complexSets = ({1:2,2:2,3:2,4:4,5:1,6:3,7:3,8:3,9:3,10:1,11:4,12:5})[w] || 2;
+  var complexRest = (w <= 3) ? 90 : 60;
+  var complexReps = ({5:[8],9:[10,9,8],10:[8],11:[10,9,8,7],12:[10,9,8,7,6]})[w] || null;
+  function mkComplex(){
+    var sload = isDeload ? 0 : Math.round((p(B,40))/5)*5;
+    return {name:complexName, format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs,
+      reps_per_set:complexReps, has_load:true, suggested_load:sload, prev_best:rec(complexName+'_time'),
+      _timeRecordKey:complexName+'_time',
+      note: isDeload
+        ? 'Deload — empty bar only. 1 set × 8 reps each movement. Move continuously.'
+        : 'Move continuously through all movements — no rest within a set. Adjust load with the +/- chips. Your combined set time is your score to beat.'};
+  }
+
+  // ── DAY 1: UPPER BODY (BENCH) ─────────────────────────────────────────────────
   if(d === 1){
-    var bSets = w < 12 ? mkSets(benchSchemes[w], B) : [];
-    // v4.9.106: complex identity now matches the source program — Barbell Complex (W1-5),
-    // DB Complex (W6-8), 'BeZercher' Complex (W9-12). Previously W6-9 all used the barbell
-    // movement list, which mislabelled the three DB Complex weeks AND the W9 BeZercher week.
-    var complexName = w <= 5 ? 'Barbell Complex' : w <= 8 ? 'DB Complex' : 'BeZercher Complex';
-    var complexMovs = w <= 5
-      ? [{name:'Deadlifts',reps:10},{name:'Bent Rows',reps:10},{name:'Hang Cleans',reps:10},{name:'Push Press',reps:10},{name:'Back Squats',reps:10}]
-      : w <= 8
-      ? [{name:'DB Front Squats',reps:10},{name:'DB Swings',reps:10},{name:'Unilateral Curl to Press',reps:10},{name:'DB Squat Jumps',reps:10}]
-      : [{name:'Zercher Squats',reps:10},{name:'Zercher Reverse Lunges',reps:10},{name:'Curl to Press',reps:10},{name:'RDLs',reps:10},{name:'Bent Rows',reps:10}];
-    var complexSets = [0,2,3,4,4,1,3,4,5,3,1,4,5][w] || 2;
-    // v4.9.106: per-set rep schemes from the source — ascending DB Complex (W6-8), descending
-    // BeZercher (W9/W11/W12). W1-5 stay flat at 10 reps each (reps_per_set null → m.reps).
-    var complexReps = {6:[7,8,9],7:[7,8,9,10],8:[6,7,8,9,10],9:[10,9,8],11:[10,9,8,7],12:[10,9,8,7,6]}[w] || null;
-    var complexRest = (w === 4 || w >= 6) ? 60 : 90;
     var exs = [];
     if(w === 12){
-      exs = [
-        {name:'Bench Press Max Rep Test', format:'total_rep_goal', target:0, note:'Choose 84kg or 102kg. 1 set max reps. Warm up fully first.'},
-        {name:'BW Inverted Row', format:'standard_sets', sets:2, reps:'Max reps', note:'Stop when chest no longer touches bar.'},
-        {name:'Barbell Overhead Shrugs', format:'standard_sets', sets:3, reps:15},
-        {name:'BeZercher Complex', format:'afap', sets:5, rest:60, reps_per_set:[10,9,8,7,6], movements:complexMovs}
-      ];
-    } else {
-      exs.push({name:'Bench Press', format:'percentage_sets', sets:bSets});
-      if(isDeload){
-        // v4.9.107: deload Day 1 rebuilt to match the source program. W5 and W10 differ:
-        //   W5  — Flat DB Press 2×15, Seated Cable Rows 2×15, DB Shrugs 2×10, Barbell Complex.
-        //   W10 — Push-Ups/Rows superset 2×20, Bicep '21s', 'BeZercher' Complex.
-        if(w===5){
-          exs.push({name:'Flat DB Press', format:'standard_sets', sets:2, reps:15, note:'Deload — light. Same weight both sets.'});
-          exs.push({name:'Seated Cable Rows', format:'standard_sets', sets:2, reps:15});
-          exs.push({name:'DB Shrugs', format:'standard_sets', sets:2, reps:10});
-        } else {
-          exs.push({name:'Push-Ups / Seated Cable Rows (neutral grip)', format:'superset', sets:2, rest:90, movements:[{name:'Push-Ups',reps:'20 reps'},{name:'Seated Cable Neutral Grip Rows',reps:'20 reps'}]});
-          exs.push({name:"Bicep '21s' (version 2.0)", format:'standard_sets', sets:1, reps:'21 (7+7+7)', note:'7 bottom-half + 7 top-half + 7 full-range reps. No rest.'});
-        }
-        // Source: complex done with an EMPTY bar only, 1 set × 8 reps each movement.
-        var deloadCxPB = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[complexName+'_time'])||0;
-        exs.push({name:complexName, format:'afap', sets:1, rest:complexRest, movements:complexMovs, reps_per_set:[8], has_load:true, suggested_load:0, prev_best:deloadCxPB, note:'Deload — empty bar only. 1 set, 8 reps each movement. Move continuously.'});
-      } else {
-        var dbName = w<=2?'Flat DB Press':w<=4?'Incline DB Press':w<=7?'Offset Med Ball Push-ups':'Alternate DB Bench (flat)';
-        var dbRecord = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_max'])||0;
-        var dbRecordWt = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[dbName+'_maxwt'])||0;
-        exs.push({name:dbName, format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:dbRecord, prev_best_wt:dbRecordWt, note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
-        // v4.9.106: superset reps are now per-week to match the source progression instead of
-        // one flat value per exercise band. Superset A (rows/triceps): W1 15, W2 12, W3 10,
-        // W4 8, W6 12, W7 10, then a descending continuation for the W8/W9/W11 weeks where the
-        // source swaps this slot for a different pulling movement (no exact PDF value).
-        var ssaReps = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w] || 12;
-        if(w<=2) exs.push({name:'Seated Cable Rows / Cable Tricep Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Seated Cable Rows (overhand grip)',reps:ssaReps+' reps'},{name:'Cable Tricep Pushdowns (straight bar)',reps:ssaReps+' reps'}]});
-        else if(w<=4) exs.push({name:'1-Arm DB Rows / Tricep Rope Pushdowns', format:'superset', sets:4, rest:90, movements:[{name:'Bent-over 1-Arm DB Rows',reps:ssaReps+' each arm'},{name:'Tricep Rope Pushdowns',reps:ssaReps+' reps'}]});
-        else exs.push({name:'Cable Rows (Double-D) / Lying DB Tricep Extensions', format:'superset', sets:w<=9?3:4, rest:90, movements:[{name:'Seated Cable Rows (Double-D handle)',reps:ssaReps+' reps'},{name:'Lying DB Tricep Extensions',reps:ssaReps+' reps'}]});
-        // Superset B (shrugs/delts). W3/W4 are asymmetric in the source (BB Shrugs 10/8, Incline
-        // Rear Delt Flyes 12/10), so track the two movements separately: ssbA = shrug/face-pull
-        // movement, ssbB = lateral/flye/curl movement.
-        var ssbA = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w] || 12;
-        var ssbB = ({1:15,2:12,3:12,4:10,6:12,7:10,8:8,9:6,11:8})[w] || 12;
-        if(w<=2) exs.push({name:'DB Shrugs / DB Lateral Raises', format:'superset', sets:3, rest:90, movements:[{name:'DB Shrugs (2-sec holds)',reps:ssbA+' reps'},{name:'DB Lateral Raises',reps:ssbB+' reps'}]});
-        else if(w<=4) exs.push({name:'BB Shrugs / Incline Rear Delt Flyes', format:'superset', sets:3, rest:90, movements:[{name:'BB Shrugs (2-sec holds)',reps:ssbA+' reps'},{name:'Incline Rear Delt Flyes (pinkies up)',reps:ssbB+' reps'}]});
-        else exs.push({name:'Cable Face Pull / Zottman Curls', format:'superset', sets:3, rest:90, movements:[{name:'Cable Face Pull (2-sec hold)',reps:ssbA+' reps'},{name:'Zottman Curls',reps:ssbB+' reps'}]});
-        var complexPrevBest = (window.blabGetState()&&window.blabGetState().records&&window.blabGetState().records[complexName+'_time'])||0;
-        var suggestedLoad = Math.round((blabPct(B,40))/5)*5; // 40% of bench max, rounded to 5kg
-        exs.push({name:complexName, format:'afap', sets:complexSets, rest:complexRest, movements:complexMovs, reps_per_set:complexReps, has_load:true, suggested_load:suggestedLoad, prev_best:complexPrevBest, note:'Move continuously through all movements — no rest within a set. Adjust load with +/- chips. Your combined set time is your score to beat.'});
-      }
+      exs.push({name:'Bench Press Max Rep Test', format:'max_reps_sets', sets:1, reps:'Max reps', bench_test:true,
+        load_choices:[84,102], prev_best:rec('bench_test_reps'), prev_best_wt:rec('bench_test_load'),
+        note:'Choose 84kg or 102kg. One all-out set — warm up fully first. Log the load, then the reps.'});
+      exs.push({name:'BW Inverted Row (feet elevated)', format:'standard_sets', sets:2, reps:'Max reps', note:'Stop when your chest no longer touches the bar.'});
+      exs.push({name:'Barbell Overhead Shrugs', format:'standard_sets', sets:3, reps:15});
+      exs.push({name:'Rest-Pause Incline DB Curls (palms up)', format:'standard_sets', sets:3, reps:'Max — 20s rest', note:'3 mini-sets to failure, 20 sec rest between. 1 round.'});
+      exs.push(mkComplex());
+      return {name:'Upper Body — Bench Test', week:w, day:d, exercises:exs};
     }
+
+    var bSets = mkSets(benchSchemes[w], B);
+    exs.push({name:'Bench Press', format:'percentage_sets', sets:bSets, blab_lift:'bench'});
+
+    if(isDeload){
+      if(w === 5){
+        exs.push({name:'Flat DB Press', format:'standard_sets', sets:2, reps:15, note:'Deload — light. Same weight both sets.'});
+        exs.push({name:'Seated Cable Rows', format:'standard_sets', sets:2, reps:15});
+        exs.push({name:'DB Shrugs', format:'standard_sets', sets:2, reps:10});
+      } else {
+        exs.push(SS('Push-Ups / Seated Cable Rows (neutral grip)', 2, 90, 'Push-Ups', '20 reps', 'Seated Cable Neutral Grip Rows', '20 reps'));
+        exs.push({name:"Bicep '21s' (version 2.0)", format:'standard_sets', sets:1, reps:'21 (7+7+7)', note:'7 bottom-half + 7 top-half + 7 full-range reps. No rest.'});
+      }
+      exs.push(mkComplex());
+      return {name:'Upper Body', week:w, day:d, exercises:exs};
+    }
+
+    // DB / horizontal-press slot
+    if(w <= 2) exs.push({name:'Flat DB Press', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Flat DB Press_max'), prev_best_wt:rec('Flat DB Press_maxwt'), note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
+    else if(w <= 4) exs.push({name:'Incline DB Press', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Incline DB Press_max'), prev_best_wt:rec('Incline DB Press_maxwt'), note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
+    else if(w === 6 || w === 7) exs.push({name:'Offset Med Ball Push-ups', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Offset Med Ball Push-ups_max'), prev_best_wt:rec('Offset Med Ball Push-ups_maxwt'), note:'One hand on a med ball, alternate each rep.'});
+    else if(w === 8) exs.push({name:'Alternate DB Bench (flat)', format:'standard_sets', sets:2, reps:'10 each arm', note:'Flat bench — one DB stays locked out while the other presses.'});
+    else if(w === 9) exs.push({name:'Alternate DB Bench (flat)', format:'standard_sets', sets:2, reps:'12 each arm', note:'Same weight as Week 8.'});
+    else if(w === 11) exs.push({name:'DB Floor Press (palms in)', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('DB Floor Press (palms in)_max'), prev_best_wt:rec('DB Floor Press (palms in)_maxwt'), note:'Palms facing in. Choose a weight for ~20-25 reps on set 1.'});
+
+    // Accessories
+    if(w <= 2){
+      var a12 = (w === 1) ? 15 : 12;
+      exs.push(SS('Seated Cable Rows / Cable Tricep Pushdowns', 4, 90, 'Seated Cable Rows (overhand grip)', a12+' reps', 'Cable Tricep Pushdowns (straight bar)', a12+' reps'));
+      exs.push(SS('DB Shrugs / DB Lateral Raises', 3, 90, 'DB Shrugs (2-sec holds)', a12+' reps', 'DB Lateral Raises', a12+' reps'));
+    } else if(w <= 4){
+      var a34 = (w === 3) ? 10 : 8;
+      exs.push(SS('1-Arm DB Rows / Tricep Rope Pushdowns', 4, 90, 'Bent-over 1-Arm DB Rows', a34+' each arm', 'Tricep Rope Pushdowns', a34+' reps'));
+      var sh34 = (w === 3) ? 10 : 8, fl34 = (w === 3) ? 12 : 10;
+      exs.push(SS('BB Shrugs / Incline Rear Delt Flyes', 3, 90, 'BB Shrugs (2-sec holds)', sh34+' reps', 'Incline Rear Delt Flyes (pinkies up)', fl34+' reps'));
+    } else if(w === 6 || w === 7){
+      var a67 = (w === 6) ? 12 : 10;
+      exs.push(SS('Cable Rows (Double-D) / Lying DB Tricep Extensions', 3, 90, 'Seated Cable Rows (Double-D handle)', a67+' reps', 'Lying DB Tricep Extensions', a67+' reps'));
+      exs.push(SS('Cable Face Pull / Zottman Curls', 3, 90, 'Cable Face Pull (2-sec hold)', a67+' reps', 'Zottman Curls', a67+' reps'));
+    } else if(w === 8){
+      exs.push({name:"Standing Rope 'J' Pulldowns", format:'standard_sets', sets:4, reps:12});
+      exs.push({name:"3-Way 'Shoulder Shocker'", format:'standard_sets', sets:2, reps:'10 each way', note:'Front raise / lateral raise / rear flye — 10 reps each, no rest between the three.'});
+      exs.push({name:'Timed DB Shrugs', format:'standard_sets', sets:2, reps:'30s'});
+      exs.push({name:'Alternating Hammer Curls', format:'standard_sets', sets:2, reps:'10 each arm'});
+    } else if(w === 9){
+      exs.push({name:"Standing Rope 'J' Pulldowns", format:'standard_sets', sets:4, reps:10});
+      exs.push({name:"3-Way 'Shoulder Shocker'", format:'standard_sets', sets:2, reps:'10 each way', note:'Front raise / lateral raise / rear flye — 10 reps each, no rest between the three.'});
+      exs.push({name:'Timed DB Shrugs', format:'standard_sets', sets:3, reps:'30s'});
+      exs.push({name:'Alternating Hammer Curls', format:'standard_sets', sets:3, reps:'8 each arm'});
+    } else if(w === 11){
+      exs.push({name:'BW Inverted Row (feet elevated)', format:'standard_sets', sets:2, reps:'Max reps', note:'Stop when your chest no longer touches the bar.'});
+      exs.push({name:'Barbell Overhead Shrugs', format:'standard_sets', sets:3, reps:15});
+      exs.push({name:'Rest-Pause Incline DB Curls (palms up)', format:'standard_sets', sets:3, reps:'Max — 20s rest', note:'3 mini-sets to failure, 20 sec rest between. 1 round.'});
+    }
+    exs.push(mkComplex());
     return {name:'Upper Body', week:w, day:d, exercises:exs};
   }
 
-  // ── DAY 2: LOWER BODY (SQUAT) ───────────────────────────────
+  // ── DAY 2: LOWER BODY (main lift by block) ────────────────────────────────────
   if(d === 2){
-    var sSets = w < 12 ? mkSets(lowerSchemes[w], S) : [];
+    // W1-4 (+W5 deload): Free Back Squat · W6-9 (+W10 deload): Conventional Deadlift · W11-12: athlete choice
+    var liftName = w <= 5 ? 'Free Back Squat' : w <= 10 ? 'Conventional Deadlift' : 'Squat or Deadlift (your choice)';
+    var liftBasis = w <= 5 ? S : w <= 10 ? D : S;
+    var liftKey = w <= 5 ? 'squat' : w <= 10 ? 'deadlift' : 'squat';
+    var liftNote = isDeload ? 'Deload — 50/60% only. Smooth, powerful reps. Save the legs.'
+      : w <= 4 ? 'No max effort — power work follows on Day 4. Save the legs.'
+      : w <= 9 ? 'Reset each rep. Brace hard before every pull. No touch-and-go.'
+      : 'Weeks 11-12: your choice — squat or deadlift. Peak intent on every rep.';
+    var mSets = w < 12 ? mkSets(lowerSchemes[w], liftBasis) : [];
     var exs2 = [];
-    // v4.9.107: deload jump matches source — W5 DB Squat Jumps, W10 Kneeling Jumps (BW).
-    if(isDeload) exs2.push(w===5
-      ? {name:'DB Squat Jumps', format:'standard_sets', sets:2, reps:6, note:'Hold 5kg DBs. Explosive jump, soft landing.'}
-      : {name:'Kneeling Jumps', format:'standard_sets', sets:2, reps:6, note:'BW only. Drop to knees, explode up.'});
-    else if(w<=2) exs2.push({name:'DB Squat Jumps', format:'standard_sets', sets:4, reps:6, note:'Hold '+(w===2?'7kg':'5kg')+' DBs. Explosive jump, soft landing.'});
-    else if(w<=4) exs2.push({name:'Bulgarian Split Squat Jumps', format:'standard_sets', sets:w===3?4:5, reps:'5 each leg'+(w===4?' holding 2.5kg DBs':''), note:'Control the landing.'});
-    else exs2.push({name:'Kneeling Jumps', format:'standard_sets', sets:w<=9?4:3, reps:5, note:'Drop to knees, explode up. CNS activation before the main lift.'});
-    exs2.push({name:sq, format:'percentage_sets', sets:sSets, note:isDeload?'Deload — 50/60% only. No grinding, save the legs.':w<=5?'No max effort — run follows. Save the legs.':null});
+
+    // ex1 — explosive / jump
     if(isDeload){
-      // v4.9.107: deload accessory superset from source — W5 back raises/twists, W10 ball work.
-      exs2.push(w===5
-        ? {name:'45° Back Raises / Seated MB Twists', format:'superset', sets:2, rest:90, movements:[{name:'45° Back Raises (BW only)',reps:'10 reps'},{name:'Seated MB Twists',reps:'10 each side'}]}
-        : {name:'Stability Ball Hamstring Curls / Stability Ball Plank', format:'superset', sets:2, rest:90, movements:[{name:'Stability Ball Hamstring Curls (hips up)',reps:'10 reps'},{name:'Stability Ball Plank (ball under arms, feet on bench)',reps:'30s'}]});
+      exs2.push(w === 5
+        ? {name:'DB Squat Jumps', format:'standard_sets', sets:2, reps:6, note:'Hold 5kg DBs. Explosive jump, soft landing.'}
+        : {name:'Kneeling Jumps', format:'standard_sets', sets:2, reps:6, note:'BW only. Drop to knees, explode up.'});
+    } else if(w <= 2){
+      exs2.push({name:'DB Squat Jumps', format:'standard_sets', sets:4, reps:6, note:'Hold '+(w === 2 ? '7kg' : '5kg')+' DBs. Explosive jump, soft landing.'});
+    } else if(w <= 4){
+      exs2.push({name:'Bulgarian Split Squat Jumps', format:'standard_sets', sets:(w === 3 ? 4 : 5), reps:'5 each leg'+(w === 4 ? ' holding 2.5kg DBs' : ''), note:'Control the landing.'});
+    } else if(w === 6){
+      exs2.push({name:'Kneeling Jumps', format:'standard_sets', sets:4, reps:5, note:'Drop to knees, explode up. CNS primer before the main lift.'});
+    } else if(w === 7){
+      exs2.push({name:'Kneeling Jumps', format:'standard_sets', sets:5, reps:5, note:'Drop to knees, explode up.'});
+    } else if(w === 8){
+      exs2.push({name:'Split Squat Jumps (BW)', format:'standard_sets', sets:3, reps:'20s', note:'Bodyweight. Continuous switching jumps for the full time.'});
+    } else if(w === 9){
+      exs2.push({name:'Split Squat Jumps (BW)', format:'standard_sets', sets:3, reps:'30s', note:'Bodyweight. Continuous switching jumps for the full time.'});
+    } else if(w === 11){
+      exs2.push({name:'DB Squat Jumps', format:'standard_sets', sets:3, reps:5, note:'Hold 5kg DBs. Explosive.'});
+    } else if(w === 12){
+      exs2.push({name:'DB Squat Jumps', format:'standard_sets', sets:5, reps:5, note:'Hold 5kg DBs. Explosive.'});
     }
-    if(!isDeload){
-      if(w<=2) exs2.push({name:'45° Back Raises / Seated MB Twists', format:'superset', sets:3, rest:90, movements:[{name:'45° Back Raises (hold plate over chest)',reps:'15 reps'},{name:'Seated MB Twists (feet off floor)',reps:'20 each side'}]});
-      else if(w<=4) exs2.push({name:'Stability Ball Hamstring Curls / Spread Eagle Sit-ups', format:'superset', sets:3, rest:90, movements:[{name:'Stability Ball Hamstring Curls (hips up)',reps:'15 reps'},{name:'Weighted Spread Eagle Sit-ups',reps:'15 reps'}]});
-      else if(w<=9) exs2.push({name:'Supine Hip Thrust / Stability Ball Plank', format:'superset', sets:3, rest:90, movements:[{name:'Supine Hip Thrust (shoulders + feet elevated)',reps:'12 reps'},{name:'Stability Ball Plank (ball under arms, feet on bench)',reps:'30s'}]});
-      else exs2.push({name:'Single Leg Hip Thrust / DB Side Bends', format:'superset', sets:3, rest:90, movements:[{name:'Single Leg Supine Hip Thrust (foot elevated)',reps:'10 each leg'},{name:'DB Side Bends',reps:'15 each side'}]});
-      if(w<=4) exs2.push({name:'Alternating Forward Lunge (DBs)', format:'standard_sets', sets:2, reps:(w<=2?'45':'60')+'s continuous', note:'Keep moving for the full time.'});
-      else if(w<=9) exs2.push({name:'DB Reverse Lunge (front foot elevated)', format:'standard_sets', sets:2, reps:'10 each leg'});
-      else exs2.push({name:'Low Box Heel Touches', format:'standard_sets', sets:w===11?2:3, reps:'12 each leg'});
+
+    // ex2 — main lift (W12 is a lower test/accessory day: no barbell main lift)
+    if(w !== 12){
+      exs2.push({name:liftName, format:'percentage_sets', sets:mSets, blab_lift:liftKey, note:liftNote});
+    } else {
+      exs2.push({name:'Low Box Heel Touches', format:'standard_sets', sets:3, reps:'12 each leg'});
     }
-    exs2.push(isDeload
-      ? {name:'Steady State Cardio', format:'interval', note:'20-30 min walk, bike or elliptical at 60-70% max HR.'}
-      : w<=5 ? {name:'1.6km Run', format:'interval', note:'Record your time. This is your benchmark.'}
-      : {name:'Tabata Jump Rope', format:'standard_sets', sets:1, reps:[0,0,0,0,0,0,'8-10 rounds','10-12 rounds','12-14 rounds','14-16 rounds',0,'max rounds','max rounds'][w]||'8-10 rounds', note:'20s all-out / 10s rest. Push hard.'}
-    );
-    return {name:'Lower Body — ' + sq, week:w, day:d, exercises:exs2};
+
+    // ex3+ — posterior chain accessory (+ 4th movement on build weeks)
+    if(isDeload){
+      exs2.push(w === 5
+        ? SS('45° Back Raises / Seated MB Twists', 2, 90, '45° Back Raises (BW only)', '10 reps', 'Seated MB Twists', '10 each side')
+        : SS('Stability Ball Hamstring Curls / Stability Ball Plank', 2, 90, 'Stability Ball Hamstring Curls (hips up)', '10 reps', 'Stability Ball Plank (ball under arms, feet on bench)', '30s'));
+    } else if(w <= 2){
+      exs2.push(SS('45° Back Raises / Seated MB Twists', 3, 90, '45° Back Raises (hold plate over chest)', '15 reps', 'Seated MB Twists (feet off floor)', '20 each side'));
+      exs2.push({name:'Alternating Forward Lunge (DBs)', format:'standard_sets', sets:2, reps:'45s continuous', note:'Keep moving for the full time.'});
+    } else if(w <= 4){
+      exs2.push(SS('Stability Ball Hamstring Curls / Spread Eagle Sit-ups', 3, 90, 'Stability Ball Hamstring Curls (hips up)', '15 reps', 'Weighted Spread Eagle Sit-ups', '15 reps'));
+      exs2.push({name:'Alternating Forward Lunge (DBs)', format:'standard_sets', sets:2, reps:(w === 3 ? '45s' : '60s')+' continuous', note:'Keep moving for the full time.'});
+    } else if(w === 6){
+      exs2.push(SS('Supine Hip Thrust / Stability Ball Plank', 3, 90, 'Supine Hip Thrust (shoulders + feet elevated)', '12 reps', 'Stability Ball Plank (ball under arms, feet on bench)', '30s'));
+      exs2.push({name:'DB Reverse Lunge (front foot elevated)', format:'standard_sets', sets:2, reps:'10 each leg'});
+    } else if(w === 7){
+      exs2.push(SS('Supine Hip Thrust / Stability Ball Plank', 3, 90, 'Supine Hip Thrust (shoulders + feet elevated)', '15 reps', 'Stability Ball Plank (ball under arms, feet on bench)', '45s'));
+      exs2.push({name:'DB Reverse Lunge (front foot elevated)', format:'standard_sets', sets:2, reps:'12 each leg'});
+    } else if(w === 8){
+      exs2.push(SS('DB RDL / Plank Shoulder Touches', 3, 90, 'DB RDL', '12 reps', 'Plank Shoulder Touches', '12 each shoulder'));
+      exs2.push({name:"Single Leg 'Speed Skater' Squats", format:'standard_sets', sets:2, reps:'8 each leg'});
+    } else if(w === 9){
+      exs2.push(SS('DB RDL / Plank Shoulder Touches', 3, 90, 'DB RDL', '10 reps', 'Plank Shoulder Touches', '12 each shoulder'));
+      exs2.push({name:"Single Leg 'Speed Skater' Squats", format:'standard_sets', sets:2, reps:'10 each leg'});
+    } else if(w === 11){
+      exs2.push(SS('Single Leg Hip Thrust / DB Side Bends', 3, 90, 'Single Leg Supine Hip Thrust (foot elevated)', '10 each leg', 'DB Side Bends', '15 each side'));
+      exs2.push({name:'Low Box Heel Touches', format:'standard_sets', sets:2, reps:'12 each leg'});
+    } else if(w === 12){
+      exs2.push(SS('Single Leg Hip Thrust / DB Side Bends', 3, 90, 'Single Leg Supine Hip Thrust (foot elevated)', '12 each leg', 'DB Side Bends', '15 each side'));
+    }
+
+    // last — conditioning / cardio
+    if(isDeload){
+      exs2.push({name:'Steady State Cardio', format:'steady_state', prev_best:rec('steady_state'), note:'20-30 min walk, bike or elliptical at 60-70% max HR.'});
+    } else if(w <= 5){
+      exs2.push({name:'1.6km Run', format:'interval', prev_best:rec('1.6km'), note:'Record your time. Beat your previous best.'});
+    } else if(w >= 6 && w <= 9){
+      var tr2 = ({6:'8-10',7:'10-12',8:'12-14',9:'14-16'})[w];
+      exs2.push({name:'Tabata Jump Rope', format:'tabata', target_rounds:tr2, prev_best:rec('tabata_rounds'), note:'20s all-out / 10s rest × '+tr2+' rounds. Push hard.'});
+    } else if(w === 12){
+      exs2.push({name:'Tabata Jump Rope', format:'tabata', target_rounds:'Max', prev_best:rec('tabata_rounds'), note:'20s all-out / 10s rest — as many rounds as you can handle.'});
+    }
+    // W11 has no conditioning finisher (peak week).
+    return {name:'Lower Body — '+liftName, week:w, day:d, exercises:exs2};
   }
 
-  // ── DAY 3: UPPER BODY (CHINS) ───────────────────────────────
+  // ── DAY 3: UPPER BODY (CHINS) ─────────────────────────────────────────────────
   if(d === 3){
-    var chinPcts = [0,50,50,60,70,50,60,60,70,70,50,80,0];
-    var target3 = chinTarget(chinPcts[w]);
-    var exs3 = [{
-      name:'Chin-ups', format:'total_rep_goal',
-      target:target3, chin_test:C===0,
-      note:C===0 ? 'Establish your max today — 1 all-out set. The app calculates all future targets from this.' : 'Target: ' + target3 + ' total reps (max ' + C + ' + ' + chinPcts[w] + '%). Break into sets, rest as needed.'
-    }];
-    if(!isDeload){
-      if(w<=2) exs3.push({name:'Front Lat Pulldowns / Standing DB Military Press', format:'superset', sets:2, rest:90, movements:[{name:'Front Lat Pulldowns (wide overhand)',reps:'Max reps (20-25 set 1, 10-20 set 2)'},{name:'Standing DB Military Press',reps:'Max reps (15-20 set 1, 10-15 set 2)'}]});
-      else if(w<=4) exs3.push({name:'Front Lat Pulldowns (neutral) / DB Military Press (neutral)', format:'superset', sets:2, rest:90, movements:[{name:'Front Lat Pulldowns (neutral grip)',reps:'Max reps'},{name:'Standing DB Military Press (neutral grip)',reps:'Max reps'}]});
-      else if(w<=9) exs3.push({name:'Rest-Pause Eccentric Lat Pulldowns', format:'standard_sets', sets:1, reps:'Extended set', note:'3-sec eccentric. Rest-pause. Wide overhand. Go until you can\'t control the descent.'});
-      else exs3.push({name:'1-Arm Eccentric Pulldowns / DB Side Press', format:'superset', sets:2, rest:90, movements:[{name:'1-Arm 3-Sec Eccentric Front Lat Pulldowns',reps:'12 each arm'},{name:'Standing DB Side Press',reps:'12 each arm'}]});
-      if(w<=2) exs3.push({name:'Rolling Tricep Extensions / Hammer Curls', format:'superset', sets:w===1?4:5, rest:90, movements:[{name:'Rolling Tricep Extensions',reps:'8 reps'},{name:'Hammer Curls (both arms)',reps:'8 reps'}]});
-      else if(w<=4) exs3.push({name:'1-Arm Cable Rear Delt Flyes', format:'standard_sets', sets:4, reps:'10 each arm'});
-      else if(w<=9) exs3.push({name:'Modified Arnold Press / Incline DB Cleans', format:'superset', sets:3, rest:90, movements:[{name:'Standing DB Modified Arnold Press',reps:w<=7?'10 reps':'8 reps'},{name:'Incline DB Cleans',reps:'10 reps'}]});
-      else exs3.push({name:'Incline DB Rear Delt Flyes (thumbs up)', format:'standard_sets', sets:3, reps:15});
-      if(w>=3 && w<=4) exs3.push({name:'Run the Rack DB Curls', format:'standard_sets', sets:1, reps:'1 descending set', note:'Example: 20kg×8 → 15kg×8 → 10kg×8 → 7.5kg×8. No rest between weight drops.'});
-      if(w>=6 && w<=9) exs3.push({name:'Cable Curls', format:'standard_sets', sets:w<=7?3:w===8?4:5, reps:w<=7?15:w===8?8:6});
-      if(w>=10) exs3.push({name:'Eccentric BB Curls', format:'standard_sets', sets:w===10?2:w===11?2:3, reps:5, note:'Cheat the weight up, lower as slowly as possible.'});
-      exs3.push({name:'Core Circuit', format:'afap', sets:isDeload?1:2, rest:60,
-        movements:w<=2||isDeload
-          ? [{name:'Toe Touches',reps:20},{name:'Bicycle',reps:'30 total'},{name:'Side Plank',reps:'30s each side'}]
-          : [{name:'Sprinter Sit-ups',reps:20},{name:'V-ups',reps:15},{name:'Hip-ups',reps:15},{name:'Toe Touches',reps:15}]
-      });
+    var exs3 = [];
+
+    // Chin-ups (deload = 50% OF max; build = max + pct%; W12 = fresh max test)
+    if(w === 12){
+      exs3.push({name:'Chin-Up Max Test', format:'total_rep_goal', target:0, chin_test:true, note:'Fresh max retest — 1 all-out set. This updates your chin-up max and every future target.'});
+    } else if(isDeload){
+      var dTgt = C > 0 ? Math.round(C * 0.5) : 0;
+      exs3.push({name:'Chin-ups', format:'total_rep_goal', target:dTgt, chin_test:(C === 0),
+        note:C === 0 ? 'Establish your max first — 1 all-out set.' : 'Deload — '+dTgt+' total reps (50% of your '+C+'-rep max). Break into easy sets.'});
     } else {
-      // v4.9.107: deload Day 3 accessories rebuilt from source. W5 and W10 differ.
-      if(w===5){
+      var cPct = ({1:50,2:50,3:60,4:70,6:60,7:60,8:70,9:70,11:80})[w] || 50;
+      var bTgt = chinTarget(cPct);
+      exs3.push({name:'Chin-ups', format:'total_rep_goal', target:bTgt, chin_test:(C === 0),
+        note:C === 0 ? 'Establish your max today — 1 all-out set. The app calculates all future targets from this.' : 'Target: '+bTgt+' total reps (max '+C+' + '+cPct+'%). Break into sets, rest as needed.'});
+    }
+
+    if(isDeload){
+      if(w === 5){
         exs3.push({name:'Standing DB Military Press', format:'standard_sets', sets:2, reps:15});
         exs3.push({name:'Incline DB Rear Delt Flyes (pinkies up)', format:'standard_sets', sets:2, reps:10});
         exs3.push({name:'Empty Barbell Curls', format:'total_rep_goal', target:100, note:'100 total reps, empty bar — no added weight. Break into sets as needed.'});
-        exs3.push({name:'Core Circuit', format:'afap', sets:1, rest:60, movements:[{name:'Toe Touches',reps:20},{name:'Bicycle',reps:'20 total'},{name:'Side Plank',reps:'30s each side'}]});
+        exs3.push(coreCircuit(1, [{name:'Toe Touches',reps:20},{name:'Bicycle',reps:'20 total'},{name:'Side Plank',reps:'30s each side'}]));
       } else {
-        exs3.push({name:'Front Lat Pulldowns / Seated DB Lateral Raises', format:'superset', sets:2, rest:90, movements:[{name:'Front Lat Pulldowns (wide grip)',reps:'10 reps'},{name:'Seated DB Lateral Raises',reps:'10 reps'}]});
-        exs3.push({name:'Blackburns', format:'standard_sets', sets:1, reps:'4 positions, 15s each', note:'Prone on a bench. Hold 15s in each of 4 arm positions.'});
+        exs3.push(SS('Front Lat Pulldowns / Seated DB Lateral Raises', 2, 90, 'Front Lat Pulldowns (wide grip)', '10 reps', 'Seated DB Lateral Raises', '10 reps'));
+        exs3.push({name:'Blackburns', format:'standard_sets', sets:1, reps:'4 positions × 15s each', note:'Prone on a bench. Hold 15s in each of 4 arm positions.'});
         exs3.push({name:'Cable Curls', format:'standard_sets', sets:2, reps:12});
-        exs3.push({name:'Core Circuit', format:'afap', sets:2, rest:60, movements:[{name:'V-ups',reps:15},{name:'Hip-ups',reps:15},{name:'Alt Toe Touches',reps:'15 each side'}]});
+        exs3.push(coreCircuit(2, [{name:'V-ups',reps:15},{name:'Hip-ups',reps:15},{name:'Alt Toe Touches',reps:'15 each side'}]));
       }
+      return {name:'Upper Body — Chins', week:w, day:d, exercises:exs3};
     }
-    // v4.9.107: source deload Day 3 ends with the core circuit — no 100 push-up / barbell
-    // push-up finisher (those are build-week benchmarks only).
-    if(!isDeload){
-      if(w<=9) exs3.push({name:'100 Push-ups', format:'total_rep_goal', target:100, note:'As fast as possible. Record your time.'});
-      else exs3.push({name:'Barbell Push-ups — Descending '+(w===11?'20':'21')+' to 1', format:'standard_sets', sets:1, reps:'From '+(w===11?'20':'21')+' to 1', note:'18 reps, 17, 16... down to 1. Minimal rest between sets.'});
+
+    if(w <= 2){
+      exs3.push(SS('Front Lat Pulldowns / Standing DB Military Press', 2, 90, 'Front Lat Pulldowns (wide overhand)', 'Max reps (20-25 set 1, 10-20 set 2)', 'Standing DB Military Press', 'Max reps (15-20 set 1, 10-15 set 2)'));
+      exs3.push(SS('Rolling Tricep Extensions / Hammer Curls', (w === 1 ? 4 : 5), 90, 'Rolling Tricep Extensions', '8 reps', 'Hammer Curls (both arms)', '8 reps'));
+      exs3.push(coreCircuit(2, [{name:'Toe Touches',reps:20},{name:'Bicycle',reps:'30 total'},{name:'Side Plank',reps:'30s each side'}]));
+      exs3.push(pushups100());
+    } else if(w <= 4){
+      exs3.push(SS('Front Lat Pulldowns (neutral) / DB Military Press (neutral)', 2, 90, 'Front Lat Pulldowns (neutral grip)', 'Max reps', 'Standing DB Military Press (neutral grip)', 'Max reps'));
+      exs3.push({name:'1-Arm Cable Rear Delt Flyes', format:'standard_sets', sets:4, reps:'10 each arm'});
+      exs3.push({name:'Run the Rack DB Curls', format:'standard_sets', sets:1, reps:'1 descending set', note:'e.g. 20kg×8 → 15kg×8 → 10kg×8 → 7.5kg×8. No rest between weight drops.'});
+      exs3.push(coreCircuit(2, [{name:'Sprinter Sit-ups',reps:20},{name:'V-ups',reps:15},{name:'Toe Touches',reps:(w === 3 ? 15 : 20)},{name:'Hip-ups',reps:15}]));
+      exs3.push(w === 4 ? bwComplex(3) : pushups100());
+    } else if(w === 6){
+      exs3.push({name:'Rest-Pause 3-Sec Eccentric Lat Pulldowns', format:'standard_sets', sets:1, reps:'Extended set', note:'Wide overhand. 3-sec eccentric. Rest-pause — go until you can no longer control the descent.'});
+      exs3.push({name:'Standing DB Modified Arnold Press', format:'standard_sets', sets:3, reps:10});
+      exs3.push({name:'Blackburns', format:'standard_sets', sets:2, reps:'4 positions × 15s each', note:'Prone on a bench. Hold 15s in each of 4 arm positions, both sets.'});
+      exs3.push({name:'Cable Curls', format:'standard_sets', sets:3, reps:15});
+      exs3.push(coreCircuit(2, [{name:'V-ups',reps:20},{name:'Hip-ups',reps:20},{name:'Alt Toe Touches',reps:'15 each side'}]));
+      exs3.push(bwComplex(4));
+    } else if(w === 7){
+      exs3.push({name:'Rest-Pause 3-Sec Eccentric Lat Pulldowns', format:'standard_sets', sets:1, reps:'Extended set', note:'Wide overhand. 3-sec eccentric. Rest-pause — go until you can no longer control the descent.'});
+      exs3.push({name:'Standing DB Modified Arnold Press', format:'standard_sets', sets:3, reps:8});
+      exs3.push({name:'Blackburns', format:'standard_sets', sets:2, reps:'4 positions × 20s each', note:'Prone on a bench. Hold 20s in each of 4 arm positions, both sets.'});
+      exs3.push({name:'Cable Curls', format:'standard_sets', sets:3, reps:12});
+      exs3.push(coreCircuit(2, [{name:'V-ups',reps:20},{name:'Hip-ups',reps:20},{name:'Alt Toe Touches',reps:'15 each side'}]));
+      exs3.push(bwComplex(5));
+    } else if(w === 8){
+      exs3.push({name:'Drop-Set Front Lat Pulldowns (wide overhand)', format:'standard_sets', sets:2, reps:'8, drop, 6, drop, 6', note:'2 sets: 8 reps, drop 20kg → 6, drop 10kg → 6. Wide overhand.'});
+      exs3.push(SS('Modified Arnold Press / Incline DB Cleans', 3, 90, 'Seated DB Modified Arnold Press', '8 reps', 'Incline DB Cleans', '10 reps'));
+      exs3.push({name:'Barbell Curls', format:'standard_sets', sets:4, reps:8});
+      exs3.push(coreCircuit(2, [{name:'Spread Eagle Sit-ups (med ball)',reps:15},{name:'Seated Twists (med ball)',reps:'20 each side'},{name:'Toe Touches',reps:20}]));
+      exs3.push(bbPushupsDescending(18));
+    } else if(w === 9){
+      exs3.push({name:'Drop-Set Front Lat Pulldowns (wide overhand)', format:'standard_sets', sets:2, reps:'8, drop, 6, drop, 6', note:'2 sets: 8 reps, drop 20kg → 6, drop 10kg → 6. Wide overhand.'});
+      exs3.push(SS('Modified Arnold Press / Incline DB Cleans', 3, 90, 'Seated DB Modified Arnold Press', '8 reps', 'Incline DB Cleans', '10 reps'));
+      exs3.push({name:'Barbell Curls', format:'standard_sets', sets:5, reps:6});
+      exs3.push(coreCircuit(2, [{name:'Spread Eagle Sit-ups (med ball)',reps:20},{name:'Seated Twists (med ball)',reps:'20 each side'},{name:'Toe Touches',reps:25}]));
+      exs3.push(bbPushupsDescending(19));
+    } else if(w === 11){
+      exs3.push(SS('1-Arm Eccentric Pulldowns / DB Side Press', 2, 90, '1-Arm 3-Sec Eccentric Front Lat Pulldowns', '12 each arm', 'Standing DB Side Press', '12 each arm'));
+      exs3.push({name:'Incline DB Rear Delt Flyes (thumbs up)', format:'standard_sets', sets:3, reps:15});
+      exs3.push({name:'Eccentric BB Curls', format:'standard_sets', sets:2, reps:5, note:'Cheat the weight up, lower as slowly as possible.'});
+      exs3.push(coreCircuit(2, [{name:'Standing Russian Twists (45lb plate)',reps:15},{name:'Side Bends',reps:15},{name:'Crunches (feet on floor)',reps:15},{name:'Crunches (legs at 90°)',reps:15},{name:'Toe Touches',reps:15}]));
+      exs3.push(bbPushupsDescending(20));
+    }
+
+    // W12 accessories + push-up test
+    if(w === 12){
+      exs3.push(SS('1-Arm Eccentric Pulldowns / DB Side Press', 2, 90, '1-Arm 3-Sec Eccentric Front Lat Pulldowns', '10 each arm', 'Standing DB Side Press', '10 each arm'));
+      exs3.push({name:'Incline DB Rear Delt Flyes (thumbs up)', format:'standard_sets', sets:3, reps:15});
+      exs3.push({name:'Eccentric BB Curls', format:'standard_sets', sets:3, reps:5, note:'Cheat the weight up, lower as slowly as possible.'});
+      exs3.push(coreCircuit(2, [{name:'Standing Russian Twists (45lb plate)',reps:15},{name:'Side Bends',reps:15},{name:'Crunches (feet on floor)',reps:15},{name:'Crunches (legs at 90°)',reps:15},{name:'Toe Touches',reps:15}]));
+      exs3.push({name:'Push-Up Max Test', format:'standard_sets', sets:1, reps:'Max reps', note:'One all-out set of regular push-ups. Record your number.'});
     }
     return {name:'Upper Body — Chins', week:w, day:d, exercises:exs3};
   }
 
-  // ── DAY 4: DEADLIFT + POWER ─────────────────────────────────
+  // ── DAY 4: POWER + CONDITIONING (not in the PDF — Vision addition) ─────────────
   if(d === 4){
-    var dSets = w < 12 ? mkSets(lowerSchemes[w], D) : [];
     var exs4 = [];
     if(isDeload){
-      exs4 = [
-        {name:'Box Jumps', format:'standard_sets', sets:2, reps:5, note:'BW only. Full reset between reps.'},
-        {name:dl, format:'percentage_sets', sets:dSets},
-        {name:'Single Leg RDL', format:'standard_sets', sets:2, reps:'10 each leg', note:'BW only. Control the descent.'},
-        {name:'Steady State Cardio', format:'interval', note:'20 min easy.'}
-      ];
-    } else if(w<=4){
-      exs4 = [
-        {name:w<=2?'Box Jumps':'Broad Jumps', format:'standard_sets', sets:4, reps:5, note:'CNS activation. Full reset between reps.'},
-        {name:dl, format:'percentage_sets', sets:dSets, note:'Reset each rep. Brace hard before every pull. No touch-and-go.'},
-        {name:'Single Leg RDL / Ab Wheel Rollouts', format:'superset', sets:3, rest:90, movements:[{name:'Single Leg RDL (DB)',reps:'10 each leg'},{name:'Ab Wheel Rollouts',reps:'10 reps'}]},
-        {name:'Sled Push', format:'standard_sets', sets:w<=2?4:5, reps:'20m '+(w<=2?'heavy':'speed focus'), note:'Record load used. Full rest between sets (2-3 min).'}
-      ];
-    } else if(w<=9){
-      exs4 = [
-        {name:'Depth Drops into Broad Jump', format:'standard_sets', sets:4, reps:5, note:'Step off box, land, immediately broad jump. Reactive power.'},
-        {name:dl, format:'percentage_sets', sets:dSets, note:'Drive the floor away. Full reset each rep.'},
-        {name:'Barbell Hip Thrust / Pallof Press', format:'superset', sets:3, rest:90, movements:[{name:'Barbell Hip Thrust',reps:'12 reps'},{name:'Pallof Press',reps:'12 each side'}]},
-        {name:'Assault Bike / Row Tabata', format:'standard_sets', sets:1, reps:(w<=7?'8-10':w===8?'10-12':'12-14')+' rounds', note:'20s all-out / 10s rest. Max effort on every interval.'}
-      ];
-    } else {
-      exs4 = [
-        {name:'Kneeling Jumps', format:'standard_sets', sets:3, reps:5},
-        {name:dl, format:'percentage_sets', sets:dSets, note:'Peak week. Every rep with intent.'},
-        {name:'Single Leg Hip Thrust / DB Side Bends', format:'superset', sets:3, rest:90, movements:[{name:'Single Leg Hip Thrust',reps:'10 each leg'},{name:'DB Side Bends',reps:'15 each side'}]},
-        w===12
-          ? {name:'Tabata — Max Rounds', format:'standard_sets', sets:1, reps:'Max rounds', note:'20s on / 10s off. Go until you drop.'}
-          : {name:'Sled/Carry Medley', format:'standard_sets', sets:1, reps:'Max effort', note:'Sled push + farmers carry. Record distance or time.'}
-      ];
+      // Halved volume, NO conditioning finisher.
+      exs4.push(w === 5
+        ? {name:'Box Jumps', format:'standard_sets', sets:2, reps:5, note:'BW only. Step down between reps — full reset. Deload: crisp, not maximal.'}
+        : {name:'Kneeling Jumps', format:'standard_sets', sets:2, reps:5, note:'BW only. Drop to knees, explode up. Deload: crisp, not maximal.'});
+      exs4.push({name:'Single Leg RDL', format:'standard_sets', sets:2, reps:'10 each leg', note:'BW or light DBs. Control the descent — feel the hamstring/glute, not the load.'});
+      return {name:'Power + Conditioning — Deload', week:w, day:d, exercises:exs4};
     }
-    return {name:'Deadlift + Power', week:w, day:d, exercises:exs4};
+
+    // Explosive movement (3-4 sets)
+    if(w <= 2) exs4.push({name:'Box Jumps', format:'standard_sets', sets:4, reps:5, note:'Step down between reps — full reset. Land soft, absorb the impact.'});
+    else if(w <= 4) exs4.push({name:'Broad Jumps', format:'standard_sets', sets:4, reps:5, note:'Max horizontal distance. Stick the landing, no stumble.'});
+    else if(w <= 7) exs4.push({name:'Depth Drops into Broad Jump', format:'standard_sets', sets:4, reps:5, note:'Step off a low box, land, immediately broad jump. Reactive power.'});
+    else if(w <= 9) exs4.push({name:'Med Ball Slams', format:'standard_sets', sets:4, reps:8, note:'Full overhead extension, slam hard, catch on the bounce.'});
+    else exs4.push({name:'Kneeling Jumps', format:'standard_sets', sets:3, reps:5, note:'Drop to knees, explode to standing. Peak-week CNS primer.'});
+
+    // Posterior chain accessory (NOT a % main lift)
+    if(w <= 4) exs4.push(SS('Single Leg RDL / Ab Wheel Rollouts', 3, 90, 'Single Leg RDL (DB)', '10 each leg', 'Ab Wheel Rollouts', '10 reps'));
+    else if(w <= 9) exs4.push(SS('Barbell Hip Thrust / Pallof Press', 3, 90, 'Barbell Hip Thrust', '12 reps', 'Pallof Press', '12 each side'));
+    else exs4.push(SS('Single Leg Hip Thrust / DB Side Bends', 3, 90, 'Single Leg Hip Thrust', '10 each leg', 'DB Side Bends', '15 each side'));
+
+    // Conditioning finisher — assault bike tabata OR prowler OR jump rope intervals
+    var cTr = ({6:'8-10',7:'10-12',8:'12-14',9:'14-16'})[w] || (w <= 4 ? '6-8' : 'Max');
+    exs4.push({name:'Conditioning Finisher', format:'tabata', target_rounds:cTr, prev_best:rec('tabata_rounds'),
+      note:'Pick one: Assault Bike Tabata (20s/10s), heavy Prowler pushes (20m), or Jump Rope intervals. Target '+cTr+' rounds — log the rounds you complete.'});
+    return {name:'Power + Conditioning', week:w, day:d, exercises:exs4};
   }
 
   return null;
@@ -9360,20 +9197,52 @@ function autoLogSet(row){
   // ~5097 never ran and the PREVIOUS BEST banner ("X reps @ Ykg") stayed blank. Persist the rep
   // PR and the weight it was hit at here, keyed by the SAME name blabGetSessionData reads back.
   try {
-    var _bex=(window._blabPhxExercises||[]).filter(function(e){return e&&e.name===exerciseName&&e._blabFmt==='max_reps_sets';})[0];
+    var _bex=(window._blabPhxExercises||[]).filter(function(e){return e&&e.name===exerciseName;})[0];
     if(_bex){
       var _rp=parseInt(reps)||0, _wt=parseFloat(kg)||0;
-      if(_rp>0){
-        var _bs=window.blabGetState();
-        if(_bs){
-          if(!_bs.records) _bs.records={};
-          var _mk=exerciseName+'_max';
-          if(!_bs.records[_mk]||_rp>_bs.records[_mk]){ _bs.records[_mk]=_rp; if(_wt) _bs.records[exerciseName+'_maxwt']=_wt; window.blabSaveState(_bs); }
+      var _bs=window.blabGetState();
+      if(_bs){
+        if(!_bs.records) _bs.records={};
+        var _dirty=false;
+        // max_reps_sets (DB press slots): rep PR + the weight it was hit at.
+        if(_bex._blabFmt==='max_reps_sets' && _rp>0){
+          // v4.9.108: W12 bench test writes dedicated keys so its own PREVIOUS BEST is separate.
+          if(_bex.bench_test){
+            _bs.records['bench_test_reps']=_rp; if(_wt) _bs.records['bench_test_load']=_wt; _dirty=true;
+          } else {
+            var _mk=exerciseName+'_max';
+            if(!_bs.records[_mk]||_rp>_bs.records[_mk]){ _bs.records[_mk]=_rp; if(_wt) _bs.records[exerciseName+'_maxwt']=_wt; _dirty=true; }
+          }
         }
+        // v4.9.108: percentage_sets AMRAP top set — persist the work-set reps@weight per week
+        // (the BLAB benchmark) so next week's block can surface "Last week: X reps @ Ykg".
+        if(_bex._blabFmt==='percentage_sets' && _bex.blab_lift && _bex._blabWeek && setIdx===_bex._blabAmrapTopIdx && _rp>0){
+          _bs.records[_bex.blab_lift+'_amrap_w'+_bex._blabWeek]=_rp;
+          if(_wt) _bs.records[_bex.blab_lift+'_amrap_w'+_bex._blabWeek+'_wt']=_wt;
+          _dirty=true;
+        }
+        if(_dirty) window.blabSaveState(_bs);
       }
     }
-  } catch(_e){ console.warn('[PHX] BLAB max-reps PR save failed:', _e); }
+  } catch(_e){ console.warn('[PHX] BLAB PR save failed:', _e); }
 }
+
+// v4.9.108: save a single "record …" result (sled/prowler distance-or-time, push-up test
+// count, etc.) to records[name+'_result']. Wired to the Save button in the generic block.
+window._blabLogResult=function(name, idx){
+  var el=document.getElementById('blab-result-'+idx);
+  var v=parseInt(el&&el.value)||0;
+  if(v<=0){ alert('Enter a result to log.'); return; }
+  var bs=window.blabGetState();
+  if(bs){
+    if(!bs.records) bs.records={};
+    var prev=bs.records[name+'_result']||0;
+    bs.records[name+'_result']=v;
+    window.blabSaveState(bs);
+    alert(name+': '+v+' logged.'+(prev?' (was '+prev+')':''));
+  }
+  if(el){ el.style.borderColor='#3a7d44'; }
+};
 
 // AMRAP Rep Counter
 var amrapRepCount=0;
@@ -24262,7 +24131,7 @@ function openTodaySession(){
       var trBlock = window._blabBuildTotalRepBlock(ex, i);
       if(trBlock){ body.appendChild(trBlock); return; }
     }
-    if(ex._blabFmt === 'interval'){
+    if(ex._blabFmt === 'interval' || ex._blabFmt === 'steady_state' || ex._blabFmt === 'tabata'){
       var runBlock = window._blabBuildRunBlock(ex, i);
       if(runBlock){ body.appendChild(runBlock); return; }
     }
@@ -24419,6 +24288,29 @@ function openTodaySession(){
     if(ex._blabFmt === 'max_reps_sets' && (ex.prev_best||0)){
       prevBestSection = blabPrevBestBanner(ex.prev_best+' reps'+(ex.prev_best_wt?' @ '+ex.prev_best_wt+'kg':''));
     }
+    // v4.9.108: percentage_sets surfaces last week's top-set result ("X reps @ Ykg").
+    if(ex._blabFmt === 'percentage_sets' && (ex.prev_amrap_reps||0)){
+      prevBestSection = blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':'')+' — last week, top set');
+    }
+    // v4.9.108: W12 bench-test load-choice chips fill the set-1 load input (84kg / 102kg).
+    var loadChoiceSection = '';
+    if(ex.load_choices && ex.load_choices.length){
+      loadChoiceSection = '<div style="display:flex;gap:8px;justify-content:center;margin:0 0 12px;">'+
+        ex.load_choices.map(function(lc){ return '<button type="button" onclick="var el=document.getElementById(\'kg-ai-'+i+'-0\');if(el){el.value='+lc+';}" style="padding:8px 18px;background:var(--bg2);border:1px solid var(--gold);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:14px;font-weight:700;cursor:pointer;">'+lc+'kg</button>'; }).join('')+
+      '</div>';
+    }
+    // v4.9.108: result capture for "record …" standard sets → records[name+'_result'].
+    var resultCaptureSection = '';
+    if(ex._blabResultCapture){
+      var exNameEsc = String(ex.name).replace(/'/g,"\\'");
+      resultCaptureSection = '<div style="margin:12px 0 0;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);">'+
+        '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;font-family:var(--font-d);">Log result'+(ex.prev_result?' &middot; last: '+ex.prev_result:'')+'</div>'+
+        '<div style="display:flex;gap:8px;">'+
+          '<input type="number" inputmode="numeric" id="blab-result-'+i+'" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="reps / m / rounds">'+
+          '<button type="button" onclick="window._blabLogResult(\''+exNameEsc+'\','+i+')" style="flex:0 0 80px;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Save</button>'+
+        '</div>'+
+      '</div>';
+    }
     block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
       '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
@@ -24428,7 +24320,9 @@ function openTodaySession(){
       customiseControlsHTML+
       '</div></div>'+
       prevBestSection+
-      setsHTML;
+      loadChoiceSection+
+      setsHTML+
+      resultCaptureSection;
     body.appendChild(block);
     if(upNextHTML){var upDiv=document.createElement('div');upDiv.innerHTML=upNextHTML;body.appendChild(upDiv.firstChild);}
   });

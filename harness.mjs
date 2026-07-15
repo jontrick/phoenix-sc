@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Phoenix node harness — static validation of the single-file PWA.
+// Phoenix node harness — static + executable validation of the single-file PWA.
 // 1. Syntax-checks every inline <script> block via vm (compile, no execute).
-// 2. Asserts the v4.9.103 prominent "PREVIOUS BEST" feature is present and wired.
+// 2. Extracts blabGetSessionData + blabToPhoenixSession and RUNS them across all
+//    48 week/day combinations (x2 state fixtures) asserting no errors + invariants.
+// 3. Feature assertions for the v4.9.108 BLAB rebuild.
 // Usage: node harness.mjs [path-to-index.html]
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -18,10 +20,9 @@ console.log('\nSyntax check — inline <script> blocks:');
 const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
 let m, idx = 0, inlineCount = 0;
 while ((m = re.exec(html)) !== null) {
-  const attrs = m[1] || '';
-  const code = m[2] || '';
+  const attrs = m[1] || '', code = m[2] || '';
   idx++;
-  if (/\bsrc\s*=/.test(attrs)) continue;        // external script, nothing to parse
+  if (/\bsrc\s*=/.test(attrs)) continue;
   if (!code.trim()) continue;
   inlineCount++;
   const line = html.slice(0, m.index).split('\n').length;
@@ -34,105 +35,126 @@ while ((m = re.exec(html)) !== null) {
 }
 if (inlineCount === 0) bad('no inline scripts found — extraction regex broke');
 
-// ── 2. Feature assertions ───────────────────────────────────────────────────
-console.log('\nFeature check — v4.9.103 prominent PREVIOUS BEST banner:');
+// ── 2. Execute the session pipeline across all 48 combos ────────────────────
+console.log('\nExecution check — blabGetSessionData → blabToPhoenixSession × 48 combos:');
+function extract(startMarker, endMarker) {
+  const i = html.indexOf(startMarker);
+  const j = html.indexOf(endMarker, i + startMarker.length);
+  if (i < 0 || j < 0) throw new Error(`extract failed for ${startMarker}`);
+  return html.slice(i, j);
+}
+const KNOWN_FORMATS = new Set(['percentage_sets','superset','total_rep_goal','afap','max_reps_sets','interval','steady_state','tabata','standard_sets']);
+try {
+  const srcGet = extract('window.blabGetSessionData = function(week, day){', '\nwindow.blabCompleteSession = function');
+  const srcMap = extract('window.blabToPhoenixSession = function(sess, week, day){', '\nwindow.blabRunWorkout = function');
+  // Two state fixtures: fresh (no records, chin unset) and populated (records + chin).
+  const fixtures = [
+    { label: 'fresh',     st: { maxes:{bench:100,squat:140,deadlift:180}, chin_max:0,  records:{} } },
+    { label: 'populated', st: { maxes:{bench:100,squat:140,deadlift:180}, chin_max:12, records:{
+        'squat_amrap_w0':6, 'bench_amrap_w5':4, 'Flat DB Press_max':22, 'Flat DB Press_maxwt':30,
+        'Barbell Complex_time':240, '100_pushups_time':300, 'tabata_rounds':10, '1.6km':420, 'steady_state':1500 } } }
+  ];
+  let errors = 0, combos = 0;
+  const seen = new Set();
+  for (const fx of fixtures) {
+    const sandbox = { window:{}, console };
+    sandbox.window.blabPct = (maxKg,pct)=>Math.round((maxKg*pct/100)/2.5)*2.5;
+    sandbox.window.blabGetState = ()=>fx.st;
+    vm.createContext(sandbox);
+    new vm.Script(srcGet + '\n' + srcMap).runInContext(sandbox);
+    for (let w=1; w<=12; w++) for (let d=1; d<=4; d++) {
+      combos++;
+      try {
+        const sess = sandbox.window.blabGetSessionData(w,d);
+        if (!sess || !Array.isArray(sess.exercises) || !sess.exercises.length) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d}: no session/exercises\x1b[0m`); continue; }
+        const phx = sandbox.window.blabToPhoenixSession(sess, w, d);
+        if (!phx || !Array.isArray(phx.exercises) || phx.exercises.length !== sess.exercises.length) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d}: mapper mismatch\x1b[0m`); continue; }
+        sess.exercises.forEach((e,ei)=>{
+          seen.add(e.format);
+          const pe = phx.exercises[ei];
+          if (!e.name) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d} ex${ei}: no name\x1b[0m`); }
+          if (!KNOWN_FORMATS.has(e.format)) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d} (${e.name}): unknown format ${e.format}\x1b[0m`); }
+          if (e.format==='percentage_sets' && !(Array.isArray(e.sets)&&e.sets.length)) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d} (${e.name}): empty %sets\x1b[0m`); }
+          if (e.format==='superset' && !(e.movements&&e.movements.length===2)) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d} (${e.name}): bad superset\x1b[0m`); }
+          if (e.format==='afap' && !(e.movements&&e.movements.length)) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d} (${e.name}): afap no movements\x1b[0m`); }
+          if (pe && pe.format && !pe._blabFmt) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d} (${e.name}): mapper dropped _blabFmt\x1b[0m`); }
+        });
+      } catch(err) { errors++; console.log(`  \x1b[31m✗ [${fx.label}] W${w}D${d}: THREW ${err.message}\x1b[0m`); }
+    }
+  }
+  if (errors===0) ok(`${combos} combos executed cleanly (2 fixtures × 48)`);
+  else bad(`${errors} execution errors across ${combos} combos`);
+  const want = ['afap','interval','max_reps_sets','percentage_sets','standard_sets','steady_state','superset','tabata','total_rep_goal'];
+  const missing = want.filter(f=>!seen.has(f));
+  missing.length ? bad(`formats not exercised: ${missing.join(', ')}`) : ok(`all 9 formats exercised: ${want.join(', ')}`);
+} catch(e) { bad(`pipeline execution setup failed: ${e.message}`); }
+
+// ── 3. Feature assertions — v4.9.108 BLAB rebuild ───────────────────────────
+console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
+const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.107'", 'version is 4.9.107');
+has("var APP_VERSION='4.9.108'", 'version is 4.9.108');
 
-// v4.9.104: blabToPhoenixSession must carry prev_best fields onto the mapped phxEx
-// object, otherwise the renderers (which read ex.prev_best) show a blank banner.
-has('phxEx.prev_best = ex.prev_best || 0', 'mapper carries prev_best onto phxEx (afap + max-reps)');
-has('phxEx.prev_best_wt = ex.prev_best_wt || 0', 'mapper carries prev_best_wt onto phxEx (max-reps)');
+// Dead overlay duplicates removed
+hasNot('window.blabBuildExCard', 'blabBuildExCard removed');
+hasNot('window.blabLaunchExercise', 'blabLaunchExercise removed');
+hasNot('function blabRenderPct', 'blabRenderPct removed');
+hasNot('function blabRenderSuper(', 'blabRenderSuper removed');
+hasNot('function blabRenderMaxReps', 'blabRenderMaxReps removed');
+hasNot('function blabRenderStd', 'blabRenderStd removed');
+hasNot("document.getElementById('blab-session-overlay')", 'blabOpenSession overlay fallback removed');
+// Live runner kept
+has('window.blabRunWorkout = function', 'live runner blabRunWorkout kept');
+has('function blabRenderAfap', 'blabRenderAfap kept');
+has('function blabRenderTR', 'blabRenderTR kept');
+has('function blabRenderRun', 'blabRenderRun kept');
 
-// v4.9.105: max_reps_sets renders through the GENERIC Phoenix set-row block (no dedicated
-// builder), which previously ignored prev_best. The banner must be injected there.
-console.log('\nFeature check — v4.9.105 prev-best across all BLAB formats:');
-has("ex._blabFmt === 'max_reps_sets' && (ex.prev_best||0)", 'max-reps generic block gates on prev_best');
-has('prevBestSection = blabPrevBestBanner(ex.prev_best', 'max-reps generic block builds prev-best banner');
-has("'</div></div>'+\n      prevBestSection+\n      setsHTML", 'max-reps banner injected between header and set rows');
+// Day 2 main lift by block
+has("w <= 5 ? 'Free Back Squat' : w <= 10 ? 'Conventional Deadlift' : 'Squat or Deadlift (your choice)'", 'Day2 main lift by block (squat/deadlift/choice)');
+// Day 4 power + conditioning, not deadlift
+has("name:'Power + Conditioning'", 'Day4 is Power + Conditioning');
+has("name:'Conditioning Finisher', format:'tabata'", 'Day4 conditioning finisher (tabata)');
+has("name:'Power + Conditioning — Deload'", 'Day4 deload variant (no conditioning finisher)');
 
-// v4.9.105: max_reps_sets raw exercise must carry prev_best/prev_best_wt from records
-// BEFORE mapping (blabGetSessionData), else there is nothing for the mapper to carry.
-has('prev_best:dbRecord, prev_best_wt:dbRecordWt', 'blabGetSessionData sets prev_best on raw max-reps ex');
+// Complex sets override
+has("({1:2,2:2,3:2,4:4,5:1,6:3,7:3,8:3,9:3,10:1,11:4,12:5})[w]", 'complexSets override array (spec)');
+has("var complexRest = (w <= 3) ? 90 : 60", 'complex rest 90s (W1-3) else 60s');
+has("({5:[8],9:[10,9,8],10:[8],11:[10,9,8,7],12:[10,9,8,7,6]})[w]", 'complex per-set reps (W9/W11/W12 desc, deload 1×8)');
 
-// v4.9.105: superset — mapper reads previous A/B weights from records (keyed by movement name).
-has('phxEx.prev_wt_a = _ssRec[ex.movements[0].name', 'mapper carries superset prev weight for A');
-has('phxEx.prev_wt_b = _ssRec[ex.movements[1].name', 'mapper carries superset prev weight for B');
-// Superset renderer shows the previous weight as small gold text under each movement.
-// v4.9.106: gate widened to (prev_wt||prev_reps) so bodyweight movements still surface reps.
-has("(ex.prev_wt_a||ex.prev_reps_a)?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev A (gold)');
-has("(ex.prev_wt_b||ex.prev_reps_b)?'<div style=\"font-size:11px;font-weight:700;color:var(--gold)", 'superset renderer shows Prev B (gold)');
-// Superset persists the last weight used per movement so next session can read it back.
-has("bs.records[ex2.name+'_wt'] = last.ka", 'superset persists A weight to records');
-has("bs.records[partner.name+'_wt'] = last.kb", 'superset persists B weight to records');
+// Day 1 content fixes
+has("Standing Rope 'J' Pulldowns", 'Day1 W8/W9 Rope J-Pulldowns');
+has("3-Way 'Shoulder Shocker'", 'Day1 W8/W9 Shoulder Shocker');
+has("name:'DB Floor Press (palms in)'", 'Day1 W11 DB Floor Press');
 
-// Shared banner helper — the gold, top-pinned PREVIOUS BEST strip.
-has('function blabPrevBestBanner(value)', 'blabPrevBestBanner helper defined');
-has("Previous Best: '+value", 'banner renders "Previous Best:" label');
-has('background:var(--gold-dim)', 'banner uses theme-aware gold tint');
-has('color:var(--gold);">Previous Best', 'banner text is gold');
+// Day 3 content fixes + deload chin
+has("var dTgt = C > 0 ? Math.round(C * 0.5) : 0", 'deload chin = 50% OF max (not +50%)');
+has('function bwComplex(rounds)', 'Bodyweight Complex builder present');
+has("w === 4 ? bwComplex(3) : pushups100()", 'W4 finisher = Bodyweight Complex ×3');
+has('bbPushupsDescending(18)', 'W8 finisher = Barbell Push-ups 18→1');
+has('bbPushupsDescending(19)', 'W9 finisher = Barbell Push-ups 19→1');
+has('bbPushupsDescending(20)', 'W11 finisher = Barbell Push-ups 20→1');
+has("name:'Push-Up Max Test'", 'W12 Day3 Push-Up test (no descending)');
+has("name:'Chin-Up Max Test', format:'total_rep_goal', target:0, chin_test:true", 'W12 Day3 fresh chin max test');
 
-// AFAP: banner on the countdown screen AND the main runner screen (so it stays
-// visible through the countdown, every set, and the completion screen).
-has('blabPrevBestBanner((ex.prev_best||0)?blabFmt(ex.prev_best)', 'AFAP countdown shows banner (formatted time)');
-has('h+=blabPrevBestBanner(prevBest?blabFmt(prevBest):', 'AFAP runner shows banner at top');
+// Data fixes: new formats + timed + capture
+has("phxEx._blabFmt = 'steady_state'", 'mapper: steady_state format');
+has("phxEx._blabFmt = 'tabata'", 'mapper: tabata format');
+has("bs.records['steady_state']=t", 'steady_state saves its own record');
+has("bs.records['tabata_rounds']=r", 'tabata saves tabata_rounds');
+has("_timeRecordKey:'100_pushups_time'", '100 push-ups timed via afap (own key)');
+has("_timeRecordKey:'bw_complex_time'", 'Bodyweight Complex timed via afap (own key)');
+has('var k=st.ex._timeRecordKey', 'afap completion uses per-exercise time key');
+has("_bs.records['bench_test_reps']=_rp", 'W12 bench test saves bench_test_reps');
+has("_bs.records['bench_test_load']=_wt", 'W12 bench test saves bench_test_load');
+has("_bs.records[_bex.blab_lift+'_amrap_w'+_bex._blabWeek]=_rp", 'main-lift AMRAP top set captured per week');
+has('window._blabLogResult=function', 'standard-set result capture handler');
+has("records[ex.name+'_result']", 'result capture prev surfaced');
 
-// Max-reps: banner shows reps AND the weight it was done at ("22 reps @ 27.5kg").
-has("prevBest+' reps'+(prevBestWt?' @ '+prevBestWt+'kg':'')", 'max-reps banner shows "reps @ kg"');
-has('var prevBestWt=ex.prev_best_wt||0', 'max-reps reads prev_best_wt');
-has('prev_best_wt:dbRecordWt', 'max-reps exercise carries prev_best_wt');
-has("records[dbName+'_maxwt']", 'prev weight sourced from records');
-has("id=\"mr-wt\"", 'max-reps has a weight input');
-has("bs.records[st.ex.name+'_maxwt']=wt", 'max-reps persists the weight at PR');
-
-// ── v4.9.106 audit fixes ─────────────────────────────────────────────────────
-console.log('\nFeature check — v4.9.106 BLAB session-data audit fixes:');
-
-// Issue #1: superset reps are per-week (match the source progression), not one flat value
-// per exercise band. Superset A: W1 15 / W2 12 / W3 10 / W4 8 / W6 12 / W7 10.
-has('var ssaReps = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w]', 'superset A reps are per-week');
-has('var ssbA = ({1:15,2:12,3:10,4:8,6:12,7:10,8:8,9:6,11:8})[w]', 'superset B shrug/face-pull reps per-week');
-has('var ssbB = ({1:15,2:12,3:12,4:10,6:12,7:10,8:8,9:6,11:8})[w]', 'superset B lateral/flye reps per-week (W3/W4 asymmetric)');
-has('reps:ssaReps+\' reps\'', 'superset A movement reps driven by ssaReps');
-
-// Issue #2: max_reps_sets (DB Press) persists rep PR + weight in the LIVE generic path
-// (autoLogSet), not the dead blabRenderMaxReps. Keyed by exerciseName so the banner reads back.
-has("e._blabFmt==='max_reps_sets'", 'autoLogSet detects BLAB max-reps exercise');
-has("_bs.records[exerciseName+'_maxwt']=_wt", 'autoLogSet persists max-reps weight (issue #2)');
-has("var _mk=exerciseName+'_max'", 'autoLogSet persists max-reps PR keyed by exerciseName');
-
-// Issue #3: superset PREVIOUS BEST shows LOAD × REPS (persist reps + carry + render).
-has("bs.records[ex2.name+'_reps'] = last.a", 'superset persists A reps');
-has("bs.records[partner.name+'_reps'] = last.b", 'superset persists B reps');
-has("phxEx.prev_reps_a = _ssRec[ex.movements[0].name+'_reps']", 'mapper carries superset prev reps A');
-has("ex.prev_reps_a?ex.prev_reps_a+' reps'", 'superset renderer shows prev reps A (load × reps)');
-has("ex.prev_reps_b?ex.prev_reps_b+' reps'", 'superset renderer shows prev reps B (load × reps)');
-
-// Issue #4: complex identity + per-set rep schemes match the source.
-has("var complexName = w <= 5 ? 'Barbell Complex' : w <= 8 ? 'DB Complex' : 'BeZercher Complex'", 'complex name: Barbell/DB/BeZercher by week');
-has("name:'DB Front Squats'", 'DB Complex movements present for W6-8');
-has('var complexReps = {6:[7,8,9],7:[7,8,9,10],8:[6,7,8,9,10],9:[10,9,8],11:[10,9,8,7],12:[10,9,8,7,6]}[w]', 'complex per-set rep schemes present');
-has('reps_per_set:complexReps', 'complex push carries reps_per_set');
-has('phxEx.reps_per_set = ex.reps_per_set || null', 'mapper carries reps_per_set so AFAP renderer shows per-set reps');
-
-// ── v4.9.107 deload reconciliation (Weeks 5 & 10 vs source) ──────────────────
-console.log('\nFeature check — v4.9.107 deload weeks reconciled to source:');
-
-// Day 1: W5 Flat DB Press 2×15; W10 Push-Ups/Rows superset + Bicep 21s; complex 1×8 empty bar.
-has("name:'Flat DB Press', format:'standard_sets', sets:2, reps:15", 'deload W5 Day1: Flat DB Press 2×15');
-has("name:'Push-Ups / Seated Cable Rows (neutral grip)'", 'deload W10 Day1: Push-Ups/Rows superset');
-has("Bicep '21s' (version 2.0)", 'deload W10 Day1: Bicep 21s');
-has('reps_per_set:[8]', 'deload complex is 1 set × 8 reps (empty bar)');
-
-// Day 2: W10 Kneeling Jumps (not DB Squat Jumps) + accessory superset restored.
-has("name:'45° Back Raises (BW only)'", 'deload W5 Day2: back raises/MB twists superset');
-has("name:'Stability Ball Hamstring Curls / Stability Ball Plank'", 'deload W10 Day2: ball curls/plank superset');
-
-// Day 3: accessories restored; source deload ends on the core circuit (no push-up finisher).
-has("name:'Empty Barbell Curls'", 'deload W5 Day3: empty barbell curls 100 total');
-has("name:'Blackburns'", 'deload W10 Day3: Blackburns');
-has('source deload Day 3 ends with the core circuit', 'deload Day3 skips the 100 push-up / barbell push-up finisher');
+// Previous-best surfacing
+has("ex._blabFmt === 'percentage_sets' && (ex.prev_amrap_reps||0)", 'percentage_sets shows last-week top set');
+has("ex._blabFmt === 'max_reps_sets' && (ex.prev_best||0)", 'max_reps_sets prev-best banner');
+has('function blabPrevBestBanner(value)', 'prev-best banner helper present');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

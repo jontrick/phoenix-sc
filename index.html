@@ -3578,7 +3578,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.112';
+var APP_VERSION='4.9.113';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20762,59 +20762,6 @@ CORE: [
     movements:[ _phxMv('Jefferson Curl (light, strict)','4 × 8'), _phxMv('Single-Leg RDL (KB)','4 × 10'), _phxMv('Good Morning (bar)','3 × 12') ],
     config:{} },
 
-  // --- CIRCUIT (5) ---
-  { id:'core-ci-phoenix', name:'Phoenix Circuit', cat:'CORE', coreType:'Circuit',
-    format:'CORE — Circuit (4 rounds)', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'4 rounds for time. Keep moving.',
-    movements:[ _phxMv('Push-Up','15'), _phxMv('Goblet Squat','15 @ 24kg'), _phxMv('Pull-Up','10'), _phxMv('DB Row','15 each'), _phxMv('KB Swing','20') ],
-    config:{ chipper:true, rounds:4 } },
-  { id:'core-ci-conditioning', name:'Conditioning Circuit', cat:'CORE', coreType:'Circuit',
-    format:'CORE — Circuit (3 rounds)', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'3 rounds for time.',
-    movements:[ _phxMv('Box Jump','20'), _phxMv('DB Thruster','15 @ 20kg'), _phxMv('Burpee Pull-Up','10'), _phxMv('Run','200m') ],
-    config:{ chipper:true, rounds:3 } },
-  { id:'core-ci-upper', name:'Upper Circuit', cat:'CORE', coreType:'Circuit',
-    format:'CORE — Circuit (4 rounds)', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'4 rounds for time.',
-    movements:[ _phxMv('Push-Up','12'), _phxMv('Pull-Up','10'), _phxMv('DB Press','12'), _phxMv('Face Pull','15'), _phxMv('Dip','10') ],
-    config:{ chipper:true, rounds:4 } },
-  { id:'core-ci-lower', name:'Lower Circuit', cat:'CORE', coreType:'Circuit',
-    format:'CORE — Circuit (4 rounds)', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'4 rounds for time.',
-    movements:[ _phxMv('Goblet Squat','15'), _phxMv('DB Lunge','12 each'), _phxMv('Glute Bridge','15'), _phxMv('DB Step-Up','12 each') ],
-    config:{ chipper:true, rounds:4 } },
-  { id:'core-ci-fullbody', name:'Full Body Burn', cat:'CORE', coreType:'Circuit',
-    format:'CORE — Circuit (5 rounds)', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'5 rounds for time.',
-    movements:[ _phxMv('Deadlift','10 @ 60kg'), _phxMv('Push-Up','10'), _phxMv('Pull-Up','10'), _phxMv('Box Jump','10'), _phxMv('Burpee','10') ],
-    config:{ chipper:true, rounds:5 } },
-
-  // --- ENDURANCE GRIND (5) ---
-  { id:'core-en-rowcore', name:'Row + Core', cat:'CORE', coreType:'Endurance Grind',
-    format:'SPRINT INTERVALS', renderer:'intervals', scoreType:'avg_split', scoreLabel:'Avg 500m split',
-    note:'5 × 500m Row, 2 min rest. Between each: 20 Sit-Ups + 10 Side Plank rotations each side.',
-    movements:[ _phxMv('500m Row','×5 · 2 min rest'), _phxMv('Between rounds','20 Sit-Ups + 10 Side Plank rotations each') ],
-    config:{ efforts:5, work:'500m Row', restSec:120 } },
-  { id:'core-en-runcarry', name:'Run + Carry', cat:'CORE', coreType:'Endurance Grind',
-    format:'FOR TIME — 4 rounds', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'4 rounds for time.',
-    movements:[ _phxMv('Run','400m'), _phxMv('Farmers Walk','50m (heavy)') ],
-    config:{ chipper:true, rounds:4 } },
-  { id:'core-en-bikecore', name:'Bike + Core', cat:'CORE', coreType:'Endurance Grind',
-    format:'CORE — Steady + Finisher', renderer:'core', scoreType:'calories', scoreLabel:'Bike calories',
-    note:'20 min assault bike (steady), then 3 × 15 each: Pallof Press, Dead Bug, Side Plank.',
-    movements:[ _phxMv('Assault Bike','20 min steady'), _phxMv('Pallof Press','3 × 15 each'), _phxMv('Dead Bug','3 × 15 each'), _phxMv('Side Plank','3 × 15 each') ],
-    config:{} },
-  { id:'core-en-flow', name:'Continuous Flow', cat:'CORE', coreType:'Endurance Grind',
-    format:'AMRAP 30', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 30 minutes. Steady, unbroken.',
-    movements:[ _phxMv('Run','200m'), _phxMv('KB Swing','10'), _phxMv('Push-Up','10'), _phxMv('Pull-Up','5') ],
-    config:{ durationMin:30 } },
-  { id:'core-en-longchipper', name:'Long Chipper', cat:'CORE', coreType:'Endurance Grind',
-    format:'FOR TIME — CHIPPER', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'Work top to bottom. One long grind.',
-    movements:[ _phxMv('KB Swing','100 @ 24kg'), _phxMv('Air Squat','80'), _phxMv('Push-Up','60'), _phxMv('Pull-Up','40'), _phxMv('Burpee','20'), _phxMv('Run','400m') ],
-    config:{ chipper:true } },
 ],
 };
 
@@ -20904,13 +20851,15 @@ function _phxBestFor(session){
 function _phxLocalId(){ var n=1; try{ n=parseInt(localStorage.getItem('phoenix_lib_score_seq')||'0',10)+1; localStorage.setItem('phoenix_lib_score_seq',String(n)); }catch(e){} return 'l'+n+'-'+(new Date().getTime()); }
 
 // Save a score → localStorage mirror + Supabase (best-effort). Returns the record.
-function _phxSaveScore(session, rawScore, notes){
+function _phxSaveScore(session, rawScore, notes, extra){
   var uid=(typeof currentSession!=='undefined' && currentSession && currentSession.user && currentSession.user.id) || null;
   var hist=_phxHistoryFor(session.id);
   var isPb = (session.scoreType!=='done') && hist.every(function(h){ return phxIsBetter(session.scoreType, rawScore, h.score); });
+  var fullNotes = notes||'';
+  if(extra && extra.summary){ fullNotes = fullNotes ? (fullNotes+' · '+extra.summary) : extra.summary; }
   var rec={ local_id:_phxLocalId(), user_id:uid, wod_id:session.id, wod_name:session.name, cat:session.cat,
     tier:(session.tier||session.coreType||''), score:String(rawScore), score_type:session.scoreType,
-    date:new Date().toISOString(), notes:notes||'', is_pb:isPb };
+    date:new Date().toISOString(), notes:fullNotes, is_pb:isPb, sets:(extra&&extra.sets)||null };
   var all=_phxScoresAll(); all.push(rec); _phxScoresWrite(all);
   // Supabase — wrapped so a missing table / offline never breaks the UI.
   try{
@@ -21114,33 +21063,79 @@ function _phxClockBox(id, label){
 function _phxFinishBtn(label){ return '<button id="phx-run-finish" style="width:100%;padding:15px;background:var(--green,#4CAF50);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#fff;cursor:pointer;">'+(label||'Finish ✓')+'</button>'; }
 
 // 1) TIME / AFAP / CHIPPER — tap-to-complete list + count-up clock. Score = time.
+// Parse a WOD movement's detail string into structured parts for the chipper renderer.
+//   "20 reps @ 60kg" -> {reps:20, load:'60kg'} ; "2000m" -> {dist:'2000m'} ; "21-15-9" -> {scheme}
+function _phxParseMoveDetail(d){
+  d=String(d||''); var load=null,m;
+  m=d.match(/[@·]\s*([0-9.]+\s*kg[^,·]*)/i);
+  if(m) load=m[1].trim(); else { m=d.match(/\b([0-9.]+\s*kg)\b/i); if(m) load=m[1].trim(); }
+  var scheme=null; var sm=d.match(/(\d+(?:-\d+){1,})/); if(sm) scheme=sm[1];
+  var dist=null; var dm=d.match(/(\d+(?:\.\d+)?\s*k?m)\b/i); if(dm && !/kg/i.test(dm[0])) dist=dm[1].replace(/\s+/g,'');
+  var reps=null;
+  if(!scheme){ var rm=d.match(/^\s*(\d+)/); if(rm){ reps=parseInt(rm[1],10);
+    if(dist && d.trim().replace(/\s+/g,'').toLowerCase().indexOf(dist.toLowerCase())===0) reps=null; } }
+  return { load:load, scheme:scheme, dist:dist, reps:reps, raw:d };
+}
+
+// 1) TIME / AFAP / CHIPPER — per-movement blocks (load chip + rep counter), tick in order,
+//    count-up timer throughout, total time logged on finish.
 function _phxRenderTime(s){
-  var o=_phxRunOverlay(s), plan=phxBuildSessionPlan(s), elapsed=0, done={};
+  var o=_phxRunOverlay(s), plan=phxBuildSessionPlan(s), elapsed=0;
   var rounds=plan.rounds||1;
-  var listHtml='';
-  for(var rd=0; rd<rounds; rd++){
-    if(rounds>1) listHtml+='<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;">Round '+(rd+1)+'</div>';
-    plan.steps.forEach(function(m, mi){
-      var key=rd+'-'+mi;
-      listHtml+='<div class="phx-run-mv" data-mv-key="'+key+'" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px;cursor:pointer;">'+
-        '<div class="phx-mv-check" style="width:24px;height:24px;border:2px solid var(--border2);border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;"></div>'+
-        '<div style="flex:1;"><div style="font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
-          (m.detail?'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+m.detail+'</div>':'')+'</div></div>';
+  var steps=[];
+  for(var rd=0; rd<rounds; rd++){ plan.steps.forEach(function(m){ steps.push({ mv:m, parsed:_phxParseMoveDetail(m.detail), round:rd, reps:0, done:false }); }); }
+  var cur=0;
+  function stepHtml(st, i){
+    var p=st.parsed, active=(i===cur), completed=st.done;
+    var loadChip = p.load ? '<span style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;color:var(--gold);border:1px solid var(--gold);padding:2px 8px;border-radius:10px;white-space:nowrap;">'+p.load+'</span>' : '';
+    var target = p.scheme ? p.scheme+' reps' : (p.reps!=null ? p.reps+' reps' : (p.dist||st.mv.detail||''));
+    var stateBorder = completed ? 'var(--green,#4CAF50)' : (active ? 'var(--gold)' : 'var(--border)');
+    var opacity = (!active && !completed) ? '0.45' : '1';
+    var checkInner = completed ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+                     : '<span style="font-family:var(--font-d);font-size:12px;font-weight:900;color:'+(active?'var(--gold)':'var(--text3)')+';">'+(i+1)+'</span>';
+    var head='<div style="display:flex;align-items:center;gap:12px;">'+
+      '<div style="width:26px;height:26px;border:2px solid '+(completed?'var(--green,#4CAF50)':(active?'var(--gold)':'var(--border2)'))+';border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:'+(completed?'var(--green,#4CAF50)':'transparent')+';">'+checkInner+'</div>'+
+      '<div style="flex:1;min-width:0;"><div style="font-family:var(--font-d);font-size:16px;font-weight:800;text-transform:uppercase;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+st.mv.name+loadChip+'</div>'+
+        '<div style="font-size:12px;color:'+(completed?'var(--text3)':'var(--gold)')+';margin-top:2px;">'+(completed && st.reps? st.reps+' logged':target)+'</div></div></div>';
+    var controls='';
+    if(active){
+      var tally = (p.reps!=null) ? '<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin:14px 0 4px;">'+
+        '<div class="phx-tt-minus" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text2);cursor:pointer;">–</div>'+
+        '<div style="text-align:center;min-width:70px;"><div class="phx-tt-count" style="font-family:var(--font-d);font-size:36px;font-weight:900;color:var(--gold);line-height:1;">'+st.reps+'</div><div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-top:2px;">of '+p.reps+' reps</div></div>'+
+        '<div class="phx-tt-plus" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--gold);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;">+</div>'+
+      '</div>' : '';
+      controls = tally + '<button class="phx-step-done" style="width:100%;margin-top:8px;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Done — Next</button>';
+    }
+    return '<div class="phx-step" data-idx="'+i+'" style="background:var(--bg3);border:1px solid '+stateBorder+';border-left:3px solid '+stateBorder+';border-radius:var(--radius);padding:13px 14px;margin-bottom:8px;opacity:'+opacity+';">'+head+controls+'</div>';
+  }
+  function render(){
+    var html='', lastRound=-1;
+    steps.forEach(function(st,i){
+      if(rounds>1 && st.round!==lastRound){ lastRound=st.round; html+='<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;">Round '+(st.round+1)+' / '+rounds+'</div>'; }
+      html+=stepHtml(st,i);
     });
+    if(cur>=steps.length) html+='<div style="text-align:center;color:var(--green,#4CAF50);font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:16px 0;">All movements complete — hit Finish</div>';
+    var body=document.getElementById('phx-time-list'); if(body){ body.innerHTML=html; bindActive(); }
+  }
+  function bindActive(){
+    var block=document.querySelector('.phx-step[data-idx="'+cur+'"]'); if(!block) return;
+    var st=steps[cur], cnt=block.querySelector('.phx-tt-count');
+    var plusB=block.querySelector('.phx-tt-plus'), minusB=block.querySelector('.phx-tt-minus'), doneB=block.querySelector('.phx-step-done');
+    if(plusB) plusB.onclick=function(){ st.reps++; if(cnt) cnt.textContent=st.reps; };
+    if(minusB) minusB.onclick=function(){ if(st.reps>0) st.reps--; if(cnt) cnt.textContent=st.reps; };
+    if(doneB) doneB.onclick=function(){ st.done=true; if(st.parsed.reps!=null && st.reps===0) st.reps=st.parsed.reps; cur++; render();
+      var next=document.querySelector('.phx-step[data-idx="'+cur+'"]'); if(next && next.scrollIntoView) next.scrollIntoView({behavior:'smooth',block:'center'}); };
   }
   o.innerHTML=_phxLibHeader(s.format, s.name, null)+_phxClockBox('phx-run-clock','Elapsed')+
-    '<div style="padding:4px 16px 16px;flex:1;">'+listHtml+'</div>'+
+    '<div id="phx-time-list" style="padding:4px 16px 16px;flex:1;"></div>'+
     '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Log Time')+'</div>';
   o.querySelector('.phx-lib-back').onclick=function(){ _phxClearTick(); o.remove(); _phxOpenSessionDetail(s.id); };
+  render();
   window._phxLibTick=setInterval(function(){ elapsed++; var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(elapsed); },1000);
-  o.addEventListener('click', function(e){
-    var row=e.target.closest('.phx-run-mv'); if(!row) return;
-    var k=row.getAttribute('data-mv-key'); done[k]=!done[k];
-    var chk=row.querySelector('.phx-mv-check');
-    if(done[k]){ chk.style.background='var(--gold)'; chk.style.borderColor='var(--gold)'; chk.innerHTML='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; row.style.opacity='0.6'; }
-    else { chk.style.background='transparent'; chk.style.borderColor='var(--border2)'; chk.innerHTML=''; row.style.opacity='1'; }
-  });
-  document.getElementById('phx-run-finish').onclick=function(){ _phxClearTick(); o.remove(); _phxOpenScoreEntry(s, elapsed); };
+  document.getElementById('phx-run-finish').onclick=function(){ _phxClearTick(); o.remove();
+    var logged=steps.filter(function(st){ return st.parsed.reps!=null && st.reps>0; }).map(function(st){ return st.mv.name+' '+st.reps; });
+    _phxOpenScoreEntry(s, elapsed, { summary: logged.length? logged.join(', ') : '' });
+  };
 }
 
 // 2) AMRAP — countdown, +round, partial reps. Score = rounds.reps.
@@ -21301,29 +21296,98 @@ function _phxRenderIntervals(s){
 }
 
 // 6) CORE — sets×reps checklist (quality). Score varies (load/done/calories).
+// Parse a Core movement's detail into sets + rep label. "3 × 12 each side" -> {sets:3, repsLabel:'12 each side'}
+function _phxParseCoreDetail(d){
+  d=String(d||''); var m=d.match(/^\s*(\d+)\s*[×xX]\s*(.+)$/);
+  if(m) return { sets:parseInt(m[1],10), repsLabel:m[2].trim() };
+  return { sets:1, repsLabel:d.trim() };
+}
+// Per-exercise previous best load, read from stored per-set data in local history.
+function _phxCorePrevBest(sessionId, exName){
+  var best=null;
+  _phxHistoryFor(sessionId).forEach(function(r){ if(Array.isArray(r.sets)) r.sets.forEach(function(st){
+    if(st.ex===exName){ var l=parseFloat(st.load); if(!isNaN(l) && (best==null||l>best)) best=l; } }); });
+  return best;
+}
+// Lightweight between-sets rest timer (bottom bar; auto-dismiss or skip).
+function _phxClearRest(){ if(window._phxRestTick){ clearInterval(window._phxRestTick); window._phxRestTick=null; } }
+function _phxStartMiniRest(secs, label){
+  _phxClearRest();
+  var stale=document.getElementById('phx-core-rest'); if(stale) stale.remove();
+  var remain=secs, bar=document.createElement('div'); bar.id='phx-core-rest';
+  bar.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9600;background:var(--bg2);border-top:1px solid var(--gold);padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:14px;';
+  bar.innerHTML='<div style="flex:1;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Rest — '+(label||'next set')+'</div>'+
+    '<div id="phx-core-rest-num" style="font-family:var(--font-d);font-size:26px;font-weight:900;color:var(--gold);">'+phxFmtTime(remain)+'</div></div>'+
+    '<button id="phx-core-rest-skip" style="padding:11px 20px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text2);cursor:pointer;">Skip</button>';
+  document.body.appendChild(bar);
+  function stop(){ _phxClearRest(); var b=document.getElementById('phx-core-rest'); if(b) b.remove(); }
+  window._phxRestTick=setInterval(function(){ remain--; var n=document.getElementById('phx-core-rest-num'); if(n) n.textContent=phxFmtTime(remain); if(remain<=0) stop(); },1000);
+  document.getElementById('phx-core-rest-skip').onclick=stop;
+}
+
+// 6) CORE — set-by-set logging: each exercise's sets are rows with load + reps + tick,
+//    90s rest between sets, per-exercise previous best, per-set data saved to records.
 function _phxRenderCore(s){
-  var o=_phxRunOverlay(s), plan=phxBuildSessionPlan(s), done={};
-  var listHtml=plan.steps.map(function(m, mi){
-    return '<div class="phx-run-mv" data-mv-key="'+mi+'" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px;cursor:pointer;">'+
-      '<div class="phx-mv-check" style="width:24px;height:24px;border:2px solid var(--border2);border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;"></div>'+
-      '<div style="flex:1;"><div style="font-family:var(--font-d);font-size:15px;font-weight:700;text-transform:uppercase;color:var(--text);">'+m.name+'</div>'+
-        (m.detail?'<div style="font-size:12px;color:var(--gold);margin-top:2px;">'+m.detail+'</div>':'')+'</div></div>';
-  }).join('');
-  o.innerHTML=_phxLibHeader(s.format, s.name, null)+
-    '<div style="padding:16px;flex:1;">'+
-      (s.note?'<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;">'+s.note+'</div>':'')+
-      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Tap each as you complete it</div>'+listHtml+
-    '</div>'+
-    '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Log')+'</div>';
-  o.querySelector('.phx-lib-back').onclick=function(){ o.remove(); _phxOpenSessionDetail(s.id); };
-  o.addEventListener('click', function(e){
-    var row=e.target.closest('.phx-run-mv'); if(!row) return;
-    var k=row.getAttribute('data-mv-key'); done[k]=!done[k];
-    var chk=row.querySelector('.phx-mv-check');
-    if(done[k]){ chk.style.background='var(--gold)'; chk.style.borderColor='var(--gold)'; chk.innerHTML='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; row.style.opacity='0.6'; }
-    else { chk.style.background='transparent'; chk.style.borderColor='var(--border2)'; chk.innerHTML=''; row.style.opacity='1'; }
+  var o=_phxRunOverlay(s), plan=phxBuildSessionPlan(s);
+  var exs=plan.steps.map(function(m){ var pc=_phxParseCoreDetail(m.detail); var rn=(pc.repsLabel.match(/^\s*(\d+)/)||[])[1]||''; return { name:m.name, detail:m.detail, sets:pc.sets, repsLabel:pc.repsLabel, repNum:rn }; });
+  var totalSets=0; exs.forEach(function(e){ totalSets+=e.sets; });
+  var confirmedCount=0;
+  var html='';
+  exs.forEach(function(e, ei){
+    var pb=_phxCorePrevBest(s.id, e.name);
+    html+='<div style="margin-bottom:18px;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">'+
+        '<div style="font-family:var(--font-d);font-size:15px;font-weight:800;text-transform:uppercase;color:var(--text);">'+e.name+'</div>'+
+        (pb!=null?'<div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;color:var(--gold);border:1px solid var(--gold);padding:2px 8px;border-radius:10px;white-space:nowrap;">PB '+pb+'kg</div>':'')+
+      '</div>';
+    for(var si=1; si<=e.sets; si++){
+      html+='<div class="phx-core-set" data-ex="'+ei+'" data-set="'+si+'" style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:6px;">'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);width:42px;flex-shrink:0;">Set '+si+'</div>'+
+        '<input class="phx-cs-load" type="number" inputmode="decimal" placeholder="kg" style="width:66px;flex-shrink:0;padding:9px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:15px;font-weight:800;text-align:center;">'+
+        '<input class="phx-cs-reps" type="text" inputmode="numeric" value="'+e.repNum+'" placeholder="'+e.repsLabel+'" style="flex:1;min-width:0;padding:9px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:15px;font-weight:800;text-align:center;">'+
+        '<div class="phx-cs-tick" style="width:40px;height:40px;flex-shrink:0;border:2px solid var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;"></div>'+
+      '</div>';
+    }
+    html+='<div style="font-size:11px;color:var(--text3);">Target: '+e.repsLabel+' · '+e.sets+' sets</div></div>';
   });
-  document.getElementById('phx-run-finish').onclick=function(){ o.remove(); _phxOpenScoreEntry(s, null); };
+  o.innerHTML=_phxLibHeader(s.format, s.name, null)+
+    '<div style="padding:16px 16px 130px;flex:1;">'+
+      (s.note?'<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px;">'+s.note+'</div>':'')+
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Log each set — load, reps, tick to confirm (90s rest)</div>'+html+
+    '</div>'+
+    '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Save Sets')+'</div>';
+  o.querySelector('.phx-lib-back').onclick=function(){ _phxClearRest(); o.remove(); _phxOpenSessionDetail(s.id); };
+  o.addEventListener('click', function(e){
+    var tick=e.target.closest('.phx-cs-tick'); if(!tick) return;
+    var row=tick.closest('.phx-core-set'); var confirmed=row.getAttribute('data-confirmed')==='1';
+    if(!confirmed){
+      row.setAttribute('data-confirmed','1'); confirmedCount++;
+      tick.style.background='var(--green,#4CAF50)'; tick.style.borderColor='var(--green,#4CAF50)';
+      tick.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+      row.style.opacity='0.75';
+      if(confirmedCount<totalSets) _phxStartMiniRest(90, 'next set');
+    } else {
+      row.setAttribute('data-confirmed','0'); confirmedCount--;
+      tick.style.background='transparent'; tick.style.borderColor='var(--border2)'; tick.innerHTML=''; row.style.opacity='1';
+    }
+  });
+  document.getElementById('phx-run-finish').onclick=function(){
+    _phxClearRest();
+    var sets=[], top=0;
+    o.querySelectorAll('.phx-core-set').forEach(function(row){
+      var ei=parseInt(row.getAttribute('data-ex'),10);
+      var loadV=parseFloat(row.querySelector('.phx-cs-load').value);
+      var repsV=(row.querySelector('.phx-cs-reps').value||'').trim();
+      var confirmed=row.getAttribute('data-confirmed')==='1';
+      if(confirmed || !isNaN(loadV) || repsV){
+        sets.push({ ex:exs[ei].name, set:parseInt(row.getAttribute('data-set'),10), load:(isNaN(loadV)?'':loadV), reps:repsV });
+        if(!isNaN(loadV) && loadV>top) top=loadV;
+      }
+    });
+    var summary=sets.filter(function(x){ return x.load!==''; }).map(function(x){ return x.load+'kg×'+(x.reps||'?'); }).join(', ');
+    o.remove();
+    _phxOpenScoreEntry(s, (s.scoreType==='load'?top:null), { sets:sets, summary:summary });
+  };
 }
 
 // ─────────────────────────── Score entry ───────────────────────────────────
@@ -21365,7 +21429,7 @@ function _phxCollectScore(s){
   if(t==='emom_rounds'||t==='reps'||t==='calories'){ return String(parseFloat(v('phx-sc-num'))||0); }
   return 'done';
 }
-function _phxOpenScoreEntry(s, suggested){
+function _phxOpenScoreEntry(s, suggested, extra){
   _phxClearTick();
   var o=_phxLibOverlay('phx-lib-score',9580), accent = s.cat==='WOD' ? _phxTierColour(s.tier) : 'var(--blue,#4A90D9)';
   o.innerHTML=_phxLibHeader('Log Your Score', s.name, null)+
@@ -21382,7 +21446,7 @@ function _phxOpenScoreEntry(s, suggested){
   o.querySelector('.phx-lib-back').onclick=function(){ o.remove(); };
   document.getElementById('phx-sc-save').onclick=function(){
     var raw=_phxCollectScore(s), notes=(document.getElementById('phx-sc-notes')||{}).value||'';
-    var rec=_phxSaveScore(s, raw, notes);
+    var rec=_phxSaveScore(s, raw, notes, extra);
     o.remove(); _phxScoreSaved(s, rec);
   };
 }

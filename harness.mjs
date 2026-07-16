@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.112'", 'version is 4.9.112');
+has("var APP_VERSION='4.9.113'", 'version is 4.9.113');
 
 // ── v4.9.110 Programme Audit ────────────────────────────────────────────────
 has('window.blabOpenAudit = function', 'audit entry blabOpenAudit present');
@@ -187,23 +187,28 @@ try {
   new vm.Script(libSlice).runInContext(sb2);
   const wods = sb2.phxAllWods(), core = sb2.phxAllCore(), all = sb2.phxAllSessions();
   wods.length===44 ? ok('exactly 44 WODs') : bad('expected 44 WODs, got '+wods.length);
-  core.length===26 ? ok('exactly 26 Core sessions') : bad('expected 26 Core, got '+core.length);
-  all.length===70  ? ok('70 total sessions') : bad('expected 70 sessions, got '+all.length);
+  core.length===16 ? ok('exactly 16 Core sessions (v4.9.113: Circuit + Endurance Grind dropped)') : bad('expected 16 Core, got '+core.length);
+  all.length===60  ? ok('60 total sessions') : bad('expected 60 sessions, got '+all.length);
   sb2.phxWodsByTier('TITAN').length===6   ? ok('6 Titan WODs') : bad('Titan count '+sb2.phxWodsByTier('TITAN').length);
   sb2.phxWodsByTier('LEGEND').length===38 ? ok('38 Legend WODs') : bad('Legend count '+sb2.phxWodsByTier('LEGEND').length);
   // Legend group + Core type distribution
   const gp={}; all.filter(s=>s.tier==='LEGEND').forEach(s=>gp[s.group]=(gp[s.group]||0)+1);
   (gp.Norse===12&&gp.Greek===13&&gp.Historical===8&&gp.Implements===5) ? ok('Legend groups 12/13/8/5') : bad('Legend groups wrong: '+JSON.stringify(gp));
-  const ctExpect={'Anti-Rotation':5,'Rotational Power':5,'Loaded Strength':6,'Circuit':5,'Endurance Grind':5};
+  const ctExpect={'Anti-Rotation':5,'Rotational Power':5,'Loaded Strength':6};
   const ct={}; core.forEach(c=>ct[c.coreType]=(ct[c.coreType]||0)+1);
-  JSON.stringify(ct)===JSON.stringify(ctExpect) ? ok('Core types 5/5/6/5/5') : bad('Core types wrong: '+JSON.stringify(ct));
+  JSON.stringify(ct)===JSON.stringify(ctExpect) ? ok('Core types 5/5/6 (purely trunk)') : bad('Core types wrong: '+JSON.stringify(ct));
+  // every remaining core session is trunk-only — no running / rowing-machine / assault-bike
+  // (resistance "Row" moves like Cable Row / Plank Row are core work, not conditioning)
+  const cardio=/\b(run|running|assault bike|bike|erg|jog|swim|treadmill|sprint|rowing machine)\b/i;
+  const cardioHit=core.filter(c=> (c.movements||[]).some(m=>cardio.test(m.name)));
+  cardioHit.length===0 ? ok('no conditioning (run/row-machine/bike) movements in Core') : bad('Core has cardio movements: '+cardioHit.map(c=>c.id).join(', '));
   // Unique ids + every session builds a renderer plan without throwing
   const ids=new Set(); let dup=0, built=0, perr=0; const rSeen=new Set();
   for(const s of all){ if(ids.has(s.id)) dup++; ids.add(s.id); rSeen.add(s.renderer);
     try { const p=sb2.phxBuildSessionPlan(s); if(p&&p.id) built++; }
     catch(e){ perr++; console.log('  \x1b[31m✗ '+s.id+' plan build: '+e.message+'\x1b[0m'); } }
-  dup===0 ? ok('all 70 session ids unique') : bad(dup+' duplicate session ids');
-  (built===70&&perr===0) ? ok('all 70 sessions build a renderer plan without errors') : bad(built+'/70 built, '+perr+' errors');
+  dup===0 ? ok('all session ids unique') : bad(dup+' duplicate session ids');
+  (built===all.length&&perr===0) ? ok('all '+all.length+' sessions build a renderer plan without errors') : bad(built+'/'+all.length+' built, '+perr+' errors');
   ['time','amrap','load','emom','intervals','core'].forEach(r=> rSeen.has(r)?ok('renderer exercised: '+r):bad('renderer never used: '+r));
   sb2.phxFmtTime(754)==='12:34' ? ok('phxFmtTime 754→12:34') : bad('phxFmtTime broken');
   sb2.phxIsBetter('time',700,800)===true ? ok('time score: lower is better') : bad('time compare broken');
@@ -219,6 +224,23 @@ has('function _phxRenderLoad',      'renderer: FOR LOAD');
 has('function _phxRenderEmom',      'renderer: EMOM');
 has('function _phxRenderIntervals', 'renderer: SPRINT INTERVALS');
 has('function _phxRenderCore',      'renderer: CORE');
+// v4.9.113 FIX 1 — chipper per-movement blocks (load chip + rep counter, in-order)
+has('function _phxParseMoveDetail', 'FIX1: chipper movement parser (reps/load/dist)');
+has("class=\"phx-tt-count\"", 'FIX1: per-movement rep counter');
+has("class=\"phx-step-done\"", 'FIX1: per-movement Done — Next (in-order)');
+// v4.9.113 FIX 2 — core set-by-set logging
+has('function _phxParseCoreDetail', 'FIX2: core set parser');
+has('function _phxCorePrevBest',    'FIX2: core per-exercise previous best');
+has('function _phxStartMiniRest',   'FIX2: core 90s rest timer between sets');
+has("class=\"phx-cs-load\"", 'FIX2: per-set load input');
+has("class=\"phx-cs-reps\"", 'FIX2: per-set reps input');
+has('_phxStartMiniRest(90', 'FIX2: rest defaults to 90s');
+has("sets:(extra&&extra.sets)||null", 'FIX2: per-set data saved to record');
+// v4.9.113 FIX 3 — Circuit + Endurance Grind categories dropped
+hasNot("coreType:'Circuit'",         'FIX3: Circuit category removed');
+hasNot("coreType:'Endurance Grind'", 'FIX3: Endurance Grind category removed');
+hasNot("id:'core-ci-phoenix'",       'FIX3: Phoenix Circuit removed');
+hasNot("id:'core-en-rowcore'",       'FIX3: Row + Core removed');
 has('function _phxOpenScoreEntry',  'score entry screen');
 has('function renderRecords',       'RECORDS scoreboard renderer');
 has("sb.from('wod_scores')",        'scores persist to Supabase wod_scores');

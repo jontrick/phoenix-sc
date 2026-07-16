@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.110'", 'version is 4.9.110');
+has("var APP_VERSION='4.9.111'", 'version is 4.9.111');
 
 // ── v4.9.110 Programme Audit ────────────────────────────────────────────────
 has('window.blabOpenAudit = function', 'audit entry blabOpenAudit present');
@@ -169,7 +169,14 @@ has("records[ex.name+'_result']", 'result capture prev surfaced');
 // Previous-best surfacing
 has("ex._blabFmt === 'percentage_sets' && (ex.prev_amrap_reps||0)", 'percentage_sets shows last-week top set');
 has("ex._blabFmt === 'max_reps_sets' && (ex.prev_best||0)", 'max_reps_sets prev-best banner');
-has('function blabPrevBestBanner(value)', 'prev-best banner helper present');
+has('function blabPrevBestBanner(value, label, suffix)', 'prev-best banner helper present (labelled + suffix variant)');
+
+// ── v4.9.111 Weekly progression wording ──────────────────────────────────────
+has("blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':''), 'Last week')", '#1 percentage_sets banner labelled "Last week:"');
+has("phxEx.coaching_note = 'Beat last week: '+phxEx.prev_best+' reps'", '#2 max_reps dynamic "Beat last week:" note');
+has('color:var(--gold);margin-bottom:6px;">Last week: ', '#3 superset A/B prev labelled "Last week:"');
+has("(fmt==='interval'?' — beat it.':'')", '#5 interval run appends "— beat it."');
+has("var _pbSuffix = (ex._timeRecordKey==='100_pushups_time') ? ' — beat it.' : ''", '#6 100 Push-ups afap banner suffix (complexes stay plain)');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

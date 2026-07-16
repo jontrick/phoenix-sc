@@ -3578,7 +3578,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.110';
+var APP_VERSION='4.9.111';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4244,7 +4244,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card A
       h += '<div style="background:var(--bg2);border:2px solid '+(state.aOk?'#3a7d44':'var(--gold)')+';border-radius:12px;padding:14px;margin-bottom:8px;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">A &mdash; '+ex.name+'</div>'+
-        ((ex.prev_wt_a||ex.prev_reps_a)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+(ex.prev_wt_a?ex.prev_wt_a+'kg':'')+(ex.prev_wt_a&&ex.prev_reps_a?' &times; ':'')+(ex.prev_reps_a?ex.prev_reps_a+' reps':'')+'</div>':'')+
+        ((ex.prev_wt_a||ex.prev_reps_a)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Last week: '+(ex.prev_wt_a?ex.prev_wt_a+'kg':'')+(ex.prev_wt_a&&ex.prev_reps_a?' &times; ':'')+(ex.prev_reps_a?ex.prev_reps_a+' reps':'')+'</div>':'')+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+ex.reps+'</div>';
       if(state.aOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadA?state.loadA+'kg &middot; ':'')+state.aReps+' reps</div>';
@@ -4262,7 +4262,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card B
       h += '<div style="background:var(--bg2);border:2px solid '+(state.bOk?'#3a7d44':state.aOk?'var(--gold)':'var(--border2)')+';border-radius:12px;padding:14px;margin-bottom:8px;opacity:'+(state.aOk?'1':'0.5')+';transition:opacity 0.2s;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">B &mdash; '+m.name+'</div>'+
-        ((ex.prev_wt_b||ex.prev_reps_b)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Prev: '+(ex.prev_wt_b?ex.prev_wt_b+'kg':'')+(ex.prev_wt_b&&ex.prev_reps_b?' &times; ':'')+(ex.prev_reps_b?ex.prev_reps_b+' reps':'')+'</div>':'')+
+        ((ex.prev_wt_b||ex.prev_reps_b)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Last week: '+(ex.prev_wt_b?ex.prev_wt_b+'kg':'')+(ex.prev_wt_b&&ex.prev_reps_b?' &times; ':'')+(ex.prev_reps_b?ex.prev_reps_b+' reps':'')+'</div>':'')+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+m.reps+'</div>';
       if(state.bOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadB?state.loadB+'kg &middot; ':'')+state.bReps+' reps</div>';
@@ -4480,7 +4480,8 @@ window._blabBuildRunBlock = function(ex, idx){
     : fmt==='steady_state' ? ['Count-up timer','20-30 min']
     : ['20s on / 10s off', (ex._blabTargetRounds?('Target '+ex._blabTargetRounds+' rounds'):'Log rounds')];
   var btnLabel = fmt==='tabata' ? 'Start Tabata →' : fmt==='steady_state' ? 'Start Cardio →' : 'Start Run →';
-  var pb = ex.prev_best ? (fmt==='tabata' ? ('Previous best: '+ex.prev_best+' rounds') : ('Previous best: '+blabFmt(ex.prev_best))) : '';
+  // v4.9.111: the 1.6km run appends "— beat it." to its previous-best line (steady_state / tabata unchanged).
+  var pb = ex.prev_best ? (fmt==='tabata' ? ('Previous best: '+ex.prev_best+' rounds') : ('Previous best: '+blabFmt(ex.prev_best)+(fmt==='interval'?' — beat it.':''))) : '';
   var header = document.createElement('div');
   header.style.cssText = 'padding:16px;';
   header.innerHTML =
@@ -4605,6 +4606,12 @@ window.blabToPhoenixSession = function(sess, week, day){
       // reads these off the mapped exercise object; the mapper previously dropped them.
       phxEx.prev_best = ex.prev_best || 0;
       phxEx.prev_best_wt = ex.prev_best_wt || 0;
+      // v4.9.111: once a prior result exists, turn the coaching note into a progression cue —
+      // "Beat last week: X reps @ Ykg. Same weight." First time out (no prev) keeps the setup note.
+      // The W12 bench test is excluded (its own load-choice flow, not a same-weight rep-beat).
+      if(!ex.bench_test && phxEx.prev_best){
+        phxEx.coaching_note = 'Beat last week: '+phxEx.prev_best+' reps'+(phxEx.prev_best_wt?' @ '+phxEx.prev_best_wt+'kg':'')+'. Same weight.';
+      }
       // v4.9.108: W12 bench test — load choice + dedicated record keys.
       phxEx.bench_test = ex.bench_test || false;
       phxEx.load_choices = ex.load_choices || null;
@@ -4713,12 +4720,14 @@ function blabFmt(s){ var m=Math.floor(s/60); return m+':'+(s%60<10?'0':'')+s%60;
 // v4.9.103: prominent gold "PREVIOUS BEST" banner, pinned to the top of a BLAB
 // runner screen so the target is visible through the countdown, every set, and the
 // completion screen. `value` is the pre-formatted best (e.g. "6:30" or "22 reps @ 27.5kg").
-function blabPrevBestBanner(value){
+// v4.9.111: optional `label` (default "Previous Best") and `suffix` so callers can render
+// "Last week: …" (percentage_sets) or append "— beat it." (100 Push-ups) without a second helper.
+function blabPrevBestBanner(value, label, suffix){
   if(!value) return '';
   return '<div style="text-align:center;background:var(--gold-dim);border:1px solid var(--gold);'+
     'border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;">'+
       '<span style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;'+
-      'text-transform:uppercase;color:var(--gold);">Previous Best: '+value+'</span>'+
+      'text-transform:uppercase;color:var(--gold);">'+(label||'Previous Best')+': '+value+(suffix||'')+'</span>'+
     '</div>';
 }
 
@@ -4887,11 +4896,14 @@ function blabRenderAfap(ex,st,body){
   if(!st.afapLoad) st.afapLoad=ex.suggested_load||ex._blabSuggestedLoad||0;
   if(!st.afapSetTimes) st.afapSetTimes=[];
   if(!st.afapSetStart) st.afapSetStart=0;
+  // v4.9.111: the 100 Push-ups for-time effort gets a "— beat it." nudge on its PREVIOUS BEST
+  // banner; complexes (Barbell/DB/BeZercher/Core Circuit) keep the plain "PREVIOUS BEST: M:SS".
+  var _pbSuffix = (ex._timeRecordKey==='100_pushups_time') ? ' — beat it.' : '';
   // Countdown before first set
   if(typeof st.afapCountdown==='undefined') st.afapCountdown=5;
   if(st.afapCountdown>0 && st.afapSet===1 && st.afapIdx===-1){
     body.innerHTML=
-      blabPrevBestBanner((ex.prev_best||0)?blabFmt(ex.prev_best):'')+
+      blabPrevBestBanner((ex.prev_best||0)?blabFmt(ex.prev_best):'', null, _pbSuffix)+
       '<div style="text-align:center;padding:60px 20px;">'+
         '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:16px;">Get ready</div>'+
         '<div style="font-family:var(--font-d);font-size:120px;font-weight:900;color:var(--gold);line-height:1;" id="afap-countdown">'+st.afapCountdown+'</div>'+
@@ -4920,7 +4932,7 @@ function blabRenderAfap(ex,st,body){
 
   // v4.9.103: prominent gold PREVIOUS BEST banner, pinned to the very top so it stays
   // visible through every set and the completion screen (not just a small pre-start note).
-  h+=blabPrevBestBanner(prevBest?blabFmt(prevBest):'');
+  h+=blabPrevBestBanner(prevBest?blabFmt(prevBest):'', null, _pbSuffix);
 
   // Load chip at top
   if(ex.has_load){
@@ -24520,7 +24532,8 @@ function openTodaySession(){
     }
     // v4.9.108: percentage_sets surfaces last week's top-set result ("X reps @ Ykg").
     if(ex._blabFmt === 'percentage_sets' && (ex.prev_amrap_reps||0)){
-      prevBestSection = blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':'')+' — last week, top set');
+      // v4.9.111: label as "Last week: X reps @ Ykg" (top AMRAP set from the prior week's block).
+      prevBestSection = blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':''), 'Last week');
     }
     // v4.9.108: W12 bench-test load-choice chips fill the set-1 load input (84kg / 102kg).
     var loadChoiceSection = '';

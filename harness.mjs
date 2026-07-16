@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.111'", 'version is 4.9.111');
+has("var APP_VERSION='4.9.112'", 'version is 4.9.112');
 
 // ── v4.9.110 Programme Audit ────────────────────────────────────────────────
 has('window.blabOpenAudit = function', 'audit entry blabOpenAudit present');
@@ -177,6 +177,65 @@ has("phxEx.coaching_note = 'Beat last week: '+phxEx.prev_best+' reps'", '#2 max_
 has('color:var(--gold);margin-bottom:6px;">Last week: ', '#3 superset A/B prev labelled "Last week:"');
 has("(fmt==='interval'?' — beat it.':'')", '#5 interval run appends "— beat it."');
 has("var _pbSuffix = (ex._timeRecordKey==='100_pushups_time') ? ' — beat it.' : ''", '#6 100 Push-ups afap banner suffix (complexes stay plain)');
+
+// ── 4. v4.9.112 STATIC LIBRARY — execute PHX_LIB + phxBuildSessionPlan × 70 ──
+console.log('\nLibrary check — v4.9.112 static WOD + Core library (executes all 70 sessions):');
+try {
+  const libSlice = extract('function _phxMv(name, detail){', 'var PHX_SCORE_KEY=');
+  const sb2 = { console };
+  vm.createContext(sb2);
+  new vm.Script(libSlice).runInContext(sb2);
+  const wods = sb2.phxAllWods(), core = sb2.phxAllCore(), all = sb2.phxAllSessions();
+  wods.length===44 ? ok('exactly 44 WODs') : bad('expected 44 WODs, got '+wods.length);
+  core.length===26 ? ok('exactly 26 Core sessions') : bad('expected 26 Core, got '+core.length);
+  all.length===70  ? ok('70 total sessions') : bad('expected 70 sessions, got '+all.length);
+  sb2.phxWodsByTier('TITAN').length===6   ? ok('6 Titan WODs') : bad('Titan count '+sb2.phxWodsByTier('TITAN').length);
+  sb2.phxWodsByTier('LEGEND').length===38 ? ok('38 Legend WODs') : bad('Legend count '+sb2.phxWodsByTier('LEGEND').length);
+  // Legend group + Core type distribution
+  const gp={}; all.filter(s=>s.tier==='LEGEND').forEach(s=>gp[s.group]=(gp[s.group]||0)+1);
+  (gp.Norse===12&&gp.Greek===13&&gp.Historical===8&&gp.Implements===5) ? ok('Legend groups 12/13/8/5') : bad('Legend groups wrong: '+JSON.stringify(gp));
+  const ctExpect={'Anti-Rotation':5,'Rotational Power':5,'Loaded Strength':6,'Circuit':5,'Endurance Grind':5};
+  const ct={}; core.forEach(c=>ct[c.coreType]=(ct[c.coreType]||0)+1);
+  JSON.stringify(ct)===JSON.stringify(ctExpect) ? ok('Core types 5/5/6/5/5') : bad('Core types wrong: '+JSON.stringify(ct));
+  // Unique ids + every session builds a renderer plan without throwing
+  const ids=new Set(); let dup=0, built=0, perr=0; const rSeen=new Set();
+  for(const s of all){ if(ids.has(s.id)) dup++; ids.add(s.id); rSeen.add(s.renderer);
+    try { const p=sb2.phxBuildSessionPlan(s); if(p&&p.id) built++; }
+    catch(e){ perr++; console.log('  \x1b[31m✗ '+s.id+' plan build: '+e.message+'\x1b[0m'); } }
+  dup===0 ? ok('all 70 session ids unique') : bad(dup+' duplicate session ids');
+  (built===70&&perr===0) ? ok('all 70 sessions build a renderer plan without errors') : bad(built+'/70 built, '+perr+' errors');
+  ['time','amrap','load','emom','intervals','core'].forEach(r=> rSeen.has(r)?ok('renderer exercised: '+r):bad('renderer never used: '+r));
+  sb2.phxFmtTime(754)==='12:34' ? ok('phxFmtTime 754→12:34') : bad('phxFmtTime broken');
+  sb2.phxIsBetter('time',700,800)===true ? ok('time score: lower is better') : bad('time compare broken');
+  sb2.phxIsBetter('load',120,100)===true ? ok('load score: higher is better') : bad('load compare broken');
+} catch(e){ bad('library execution failed: '+e.message); }
+
+// Feature assertions — v4.9.112 rebuild present
+has('window._phxOpenSessionLibrary = function', 'session library entry (Add Session)');
+has('window._phxOpenSessionDetail = function', 'session detail screen');
+has('function _phxRenderTime',      'renderer: AFAP / FOR TIME');
+has('function _phxRenderAmrap',     'renderer: AMRAP');
+has('function _phxRenderLoad',      'renderer: FOR LOAD');
+has('function _phxRenderEmom',      'renderer: EMOM');
+has('function _phxRenderIntervals', 'renderer: SPRINT INTERVALS');
+has('function _phxRenderCore',      'renderer: CORE');
+has('function _phxOpenScoreEntry',  'score entry screen');
+has('function renderRecords',       'RECORDS scoreboard renderer');
+has("sb.from('wod_scores')",        'scores persist to Supabase wod_scores');
+has('id="screen-records"',          'RECORDS screen present');
+has('navTo(\'records\')',           'RECORDS nav route wired');
+has('>Records<',                    'RECORDS nav/sidebar label present');
+// Legacy WOD system removed
+hasNot('function openPhoenixWOD',        'legacy openPhoenixWOD removed');
+hasNot('function renderDailyWOD',        'legacy renderDailyWOD removed');
+hasNot('function _phxGenerateDailyWOD',  'legacy _phxGenerateDailyWOD removed');
+hasNot('function _detectWODFormat',      'legacy _detectWODFormat removed');
+hasNot('function openWODLibrary',        'legacy openWODLibrary removed');
+hasNot('function generateCustomWOD',     'legacy generateCustomWOD removed');
+hasNot('function openBenchmarkLibrary',  'legacy openBenchmarkLibrary removed');
+hasNot('function phxWodTierColour',      'legacy phxWodTierColour removed');
+hasNot('window._wlibSetFilter',          'legacy _wlib browser removed');
+hasNot('id="screen-wod-library"',        'legacy WOD Library screen removed');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

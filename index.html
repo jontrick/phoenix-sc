@@ -3578,7 +3578,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.113';
+var APP_VERSION='4.9.114';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21172,14 +21172,18 @@ function _phxRenderAmrap(s){
 }
 
 // 3) FOR LOAD — set rows with weight input. Score = top weight (+finisher).
+//    v4.9.114: each set now has a tick to confirm; confirming a non-final set fires the
+//    full-screen gold rest overlay (3 min default) — same as BLAB / Core.
 function _phxRenderLoad(s){
   var o=_phxRunOverlay(s), plan=phxBuildSessionPlan(s), best=_phxBestFor(s);
+  var totalSets=plan.sets, confirmedCount=0;
   var rows='';
   for(var i=1;i<=plan.sets;i++){
-    rows+='<div style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">'+
-      '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:1px;color:var(--text3);width:64px;">Set '+i+'</div>'+
-      '<div style="flex:1;font-size:12px;color:var(--text3);">'+plan.repScheme+' reps</div>'+
-      '<input class="phx-load-set" data-set="'+i+'" type="number" inputmode="decimal" placeholder="kg" style="width:90px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:800;text-align:center;">'+
+    rows+='<div class="phx-load-row" data-set="'+i+'" style="display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">'+
+      '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:1px;color:var(--text3);width:56px;flex-shrink:0;">Set '+i+'</div>'+
+      '<div style="flex:1;min-width:0;font-size:12px;color:var(--text3);">'+plan.repScheme+' reps</div>'+
+      '<input class="phx-load-set" data-set="'+i+'" type="number" inputmode="decimal" placeholder="kg" style="width:82px;flex-shrink:0;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:800;text-align:center;">'+
+      '<div class="phx-load-tick" style="width:40px;height:40px;flex-shrink:0;border:2px solid var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;"></div>'+
     '</div>';
   }
   var finisherHtml = plan.finisher ? '<div style="margin-top:14px;background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;">'+
@@ -21190,11 +21194,29 @@ function _phxRenderLoad(s){
     '<div style="padding:16px;flex:1;">'+
       '<div style="text-align:center;margin-bottom:14px;"><div style="font-family:var(--font-d);font-size:18px;font-weight:800;text-transform:uppercase;color:var(--text);">'+plan.movement+'</div>'+
         (best?'<div style="font-size:12px;color:var(--gold);margin-top:4px;">Previous best: '+phxFormatScore(s.scoreType,best.score)+'</div>':'')+'</div>'+
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;text-align:center;">Log load, tick to confirm (3 min rest)</div>'+
       rows+finisherHtml+
     '</div>'+
     '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Log Top Set')+'</div>';
-  o.querySelector('.phx-lib-back').onclick=function(){ o.remove(); _phxOpenSessionDetail(s.id); };
+  o.querySelector('.phx-lib-back').onclick=function(){ _phxClearRest(); o.remove(); _phxOpenSessionDetail(s.id); };
+  // v4.9.114: tick to confirm each set; confirming a non-final set fires the full-screen
+  // gold rest overlay (3 min = 180s default for FOR LOAD).
+  o.addEventListener('click', function(e){
+    var tick=e.target.closest('.phx-load-tick'); if(!tick) return;
+    var row=tick.closest('.phx-load-row'); var confirmed=row.getAttribute('data-confirmed')==='1';
+    if(!confirmed){
+      row.setAttribute('data-confirmed','1'); confirmedCount++;
+      tick.style.background='var(--green,#4CAF50)'; tick.style.borderColor='var(--green,#4CAF50)';
+      tick.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+      row.style.opacity='0.75';
+      if(confirmedCount<totalSets) startRestTimer(180, 'Next set', '', plan.repScheme+' reps', '', true);
+    } else {
+      row.setAttribute('data-confirmed','0'); confirmedCount--;
+      tick.style.background='transparent'; tick.style.borderColor='var(--border2)'; tick.innerHTML=''; row.style.opacity='1';
+    }
+  });
   document.getElementById('phx-run-finish').onclick=function(){
+    _phxClearRest();
     var top=0; o.querySelectorAll('.phx-load-set').forEach(function(inp){ var v=parseFloat(inp.value); if(!isNaN(v)&&v>top) top=v; });
     if(plan.finisher){ var f=document.getElementById('phx-load-finisher'); var fr=f?parseInt(f.value,10):0; o.remove(); _phxOpenScoreEntry(s, top+'kg + '+(isNaN(fr)?0:fr)); }
     else { o.remove(); _phxOpenScoreEntry(s, top); }
@@ -21309,21 +21331,19 @@ function _phxCorePrevBest(sessionId, exName){
     if(st.ex===exName){ var l=parseFloat(st.load); if(!isNaN(l) && (best==null||l>best)) best=l; } }); });
   return best;
 }
-// Lightweight between-sets rest timer (bottom bar; auto-dismiss or skip).
-function _phxClearRest(){ if(window._phxRestTick){ clearInterval(window._phxRestTick); window._phxRestTick=null; } }
-function _phxStartMiniRest(secs, label){
-  _phxClearRest();
-  var stale=document.getElementById('phx-core-rest'); if(stale) stale.remove();
-  var remain=secs, bar=document.createElement('div'); bar.id='phx-core-rest';
-  bar.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9600;background:var(--bg2);border-top:1px solid var(--gold);padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:14px;';
-  bar.innerHTML='<div style="flex:1;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Rest — '+(label||'next set')+'</div>'+
-    '<div id="phx-core-rest-num" style="font-family:var(--font-d);font-size:26px;font-weight:900;color:var(--gold);">'+phxFmtTime(remain)+'</div></div>'+
-    '<button id="phx-core-rest-skip" style="padding:11px 20px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text2);cursor:pointer;">Skip</button>';
-  document.body.appendChild(bar);
-  function stop(){ _phxClearRest(); var b=document.getElementById('phx-core-rest'); if(b) b.remove(); }
-  window._phxRestTick=setInterval(function(){ remain--; var n=document.getElementById('phx-core-rest-num'); if(n) n.textContent=phxFmtTime(remain); if(remain<=0) stop(); },1000);
-  document.getElementById('phx-core-rest-skip').onclick=stop;
+// v4.9.114: Core + FOR-LOAD WOD sets now route inter-set rest through the shared full-screen
+// #rest-overlay (gold countdown, same as BLAB / main lift) via startRestTimer(). _phxClearRest
+// tears down both the legacy mini-bar AND the full-screen overlay so leaving mid-rest is clean.
+function _phxClearRest(){
+  if(window._phxRestTick){ clearInterval(window._phxRestTick); window._phxRestTick=null; }
+  var b=document.getElementById('phx-core-rest'); if(b) b.remove();
+  if(rtInterval){ clearInterval(rtInterval); rtInterval=null; }
+  var ro=document.getElementById('rest-overlay'); if(ro) ro.classList.remove('active');
+  rtDoneCb=null;
+  if(typeof releaseWakeLock==='function') releaseWakeLock();
 }
+// v4.9.114: legacy _phxStartMiniRest (bottom-bar mini timer) removed — Core + FOR-LOAD now
+// use the shared full-screen startRestTimer() gold overlay for parity with BLAB / main lift.
 
 // 6) CORE — set-by-set logging: each exercise's sets are rows with load + reps + tick,
 //    90s rest between sets, per-exercise previous best, per-set data saved to records.
@@ -21365,7 +21385,8 @@ function _phxRenderCore(s){
       tick.style.background='var(--green,#4CAF50)'; tick.style.borderColor='var(--green,#4CAF50)';
       tick.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
       row.style.opacity='0.75';
-      if(confirmedCount<totalSets) _phxStartMiniRest(90, 'next set');
+      // v4.9.114: full-screen gold rest overlay (parity with BLAB), 90s default for Core.
+      if(confirmedCount<totalSets) startRestTimer(90, 'Next set', '', '', '', true);
     } else {
       row.setAttribute('data-confirmed','0'); confirmedCount--;
       tick.style.background='transparent'; tick.style.borderColor='var(--border2)'; tick.innerHTML=''; row.style.opacity='1';

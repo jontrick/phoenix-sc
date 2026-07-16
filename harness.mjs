@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.113'", 'version is 4.9.113');
+has("var APP_VERSION='4.9.114'", 'version is 4.9.114');
 
 // ── v4.9.110 Programme Audit ────────────────────────────────────────────────
 has('window.blabOpenAudit = function', 'audit entry blabOpenAudit present');
@@ -231,10 +231,13 @@ has("class=\"phx-step-done\"", 'FIX1: per-movement Done — Next (in-order)');
 // v4.9.113 FIX 2 — core set-by-set logging
 has('function _phxParseCoreDetail', 'FIX2: core set parser');
 has('function _phxCorePrevBest',    'FIX2: core per-exercise previous best');
-has('function _phxStartMiniRest',   'FIX2: core 90s rest timer between sets');
 has("class=\"phx-cs-load\"", 'FIX2: per-set load input');
 has("class=\"phx-cs-reps\"", 'FIX2: per-set reps input');
-has('_phxStartMiniRest(90', 'FIX2: rest defaults to 90s');
+// v4.9.114 — Core + FOR-LOAD WOD sets route inter-set rest through the shared full-screen
+// #rest-overlay (gold countdown) via startRestTimer(), not the legacy mini bottom bar.
+has("startRestTimer(90, 'Next set'", 'FIX2: core rest fires full-screen 90s overlay');
+has("startRestTimer(180, 'Next set'", 'FIX2: FOR-LOAD WOD set rest fires full-screen 3-min overlay');
+has("class=\"phx-load-tick\"", 'FIX2: FOR-LOAD per-set tick to confirm');
 has("sets:(extra&&extra.sets)||null", 'FIX2: per-set data saved to record');
 // v4.9.113 FIX 3 — Circuit + Endurance Grind categories dropped
 hasNot("coreType:'Circuit'",         'FIX3: Circuit category removed');

@@ -94,7 +94,18 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.114'", 'version is 4.9.114');
+has("var APP_VERSION='4.9.115'", 'version is 4.9.115');
+
+// ── v4.9.115 PHX_LIB prescribed-load audit (Category A + B) ──────────────────
+has("_phxMv('Wall Ball','50 reps · 9kg')",           'Kronos Wall Ball load');
+has("_phxMv('Sandbag Over Shoulder','30 reps · 60kg')", 'Kronos Sandbag Over Shoulder load');
+has("_phxMv('Sandbag Carry','200m · 60kg')",         'Atlas/Ragnarok Sandbag Carry load');
+has("_phxMv('Sled Drag','40m · 90kg')",              'Fenrir Sled Drag load');
+has("_phxMv('Sandbag Bear-Hug Carry','40m · 60kg')", 'Fenrir Sandbag Bear-Hug Carry load');
+has("_phxMv('Bulgarian Split Squat','21-15-9 each leg · bodyweight')", 'Loki Bulgarian Split Squat load');
+has("_phxMv('DB Squat','R1 · 20kg')",                'Spartacus DB load (20kg) in detail');
+has("_phxMv('DB Thruster','R8 · 20kg')",             'Spartacus DB Thruster load in detail');
+has("_phxMv('Power Clean','5 · build to max')",      'Samurai barbell build-to-max in detail');
 
 // ── v4.9.110 Programme Audit ────────────────────────────────────────────────
 has('window.blabOpenAudit = function', 'audit entry blabOpenAudit present');

@@ -3578,7 +3578,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.116';
+var APP_VERSION='4.9.117';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3983,7 +3983,14 @@ window.blabOpenSession = function(week, day){
     window._phxWarmupSkipNext = true; // skip warmup for BLAB
     // Set up completion callback
     window._blabSessionCompleteCallback = function(){ window.blabCompleteSession(week, day); };
-    openTodaySession();
+    // v4.9.117: wrap the renderer launch so a downstream error surfaces instead of silently
+    // failing the tap (the tile onclick swallows uncaught errors).
+    try {
+      openTodaySession();
+    } catch(e){
+      console.error('[PHX] blabOpenSession → openTodaySession threw for W'+week+'D'+day+':', e);
+      alert('Could not open the session: '+(e && e.message ? e.message : e));
+    }
     return;
   }
 };
@@ -23205,6 +23212,10 @@ function openTodaySession(){
   //   core_circuit  → AMRAP timer + swipe-to-complete (existing core circuit renderer)
   //   core_strength → standard sets/reps/RPE strength renderer (fall through)
   //   core (bare)   → legacy fallback to the standalone picker for older programmes
+  // v4.9.117: restore sessTypeStr declaration — dropped in the v4.9.112 WOD-block removal,
+  // which left the core/walk/run routing below throwing ReferenceError and silently killing
+  // every session launch (BLAB + AI programme).
+  var sessTypeStr = String(sess.session_type||'').toLowerCase();
   if(sessTypeStr === 'core_circuit'){
     coreSession = {
       num:'coach',

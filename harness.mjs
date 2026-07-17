@@ -94,7 +94,16 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.116'", 'version is 4.9.116');
+has("var APP_VERSION='4.9.117'", 'version is 4.9.117');
+
+// ── v4.9.117 session-launch regression guards ────────────────────────────────
+// sessTypeStr must be declared in openTodaySession (its removal in v4.9.112 made every
+// session launch throw ReferenceError before reaching the renderer).
+has("var sessTypeStr = String(sess.session_type||'').toLowerCase();", 'openTodaySession declares sessTypeStr');
+// The routing that reads sessTypeStr must exist (proves the guard above covers the real usage).
+has("if(sessTypeStr === 'core_circuit'){", 'sessTypeStr routing present');
+// blabOpenSession wraps the renderer launch so downstream errors surface, not silently swallowed.
+has('[PHX] blabOpenSession → openTodaySession threw', 'blabOpenSession try/catch logs renderer errors');
 
 // ── v4.9.115 PHX_LIB prescribed-load audit (Category A + B) ──────────────────
 has("_phxMv('Wall Ball','50 reps · 9kg')",           'Kronos Wall Ball load');

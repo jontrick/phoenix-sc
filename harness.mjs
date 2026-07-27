@@ -94,7 +94,71 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.117'", 'version is 4.9.117');
+has("var APP_VERSION='4.9.118'", 'version is 4.9.118');
+
+// ── v4.9.118 TIMER FIXES (screen lock / wake lock / count-in) ────────────────
+// FIX 1 — timestamp-derived clocks + visibility resync.
+has('function _phxStampTimerStart(){ window._phxTimerStart = Date.now();', 'FIX1: _phxStampTimerStart stamps window._phxTimerStart');
+has('function _phxElapsedSince(from)', 'FIX1: _phxElapsedSince derives seconds from a timestamp');
+has('Math.floor((Date.now() - t)/1000)', 'FIX1: elapsed = floor((now - start)/1000)');
+has('function _phxRegisterTimer(resync)', 'FIX1: resync handler registry');
+has('function _phxUnregisterTimer()', 'FIX1: resync handler teardown');
+has("if(document.visibilityState !== 'visible') return;\n  var live =", 'FIX1: visibilitychange→visible hook for timed sessions');
+has('var fn = window._phxTimerResync;\n  if(fn){ try{ fn(); }', 'FIX1: visible → active session recalculates elapsed');
+// every timed renderer must be timestamp-driven + registered
+has('function _blabElapsedNow(st)', 'FIX1: BLAB runner elapsed from timestamps');
+has('_phxRegisterTimer(function(){\n    var s = window._blabWoState;', 'FIX1: BLAB runner registers a resync');
+has('function paintTime(){ elapsed=_phxElapsedSince();', 'FIX1: WOD count-up clock from timestamp');
+has('remain = plan.durationSec - _phxElapsedSince();', 'FIX1: AMRAP remaining from timestamp');
+has('var gone=_phxElapsedSince(minStart);', 'FIX1: EMOM minute from timestamp');
+has('clk=_phxElapsedSince(phStart)', 'FIX1: interval work phase from timestamp');
+has('coreAmrapEnd = Date.now() + (coreSecsLeft*1000);', 'FIX1: Core circuit runs off an end timestamp');
+has('_phxRegisterTimer(_phxUpdateCoreAmrap);', 'FIX1: Core circuit registers a resync');
+has('_phxRegisterTimer(paintAmrap);', 'FIX1: AMRAP registers a resync');
+has('_phxRegisterTimer(paintEmom);', 'FIX1: EMOM registers a resync');
+has('_phxRegisterTimer(paintInt);', 'FIX1: intervals register a resync');
+has('_phxRegisterTimer(updateCoreTimer);', 'FIX1: 20-min core registers a resync');
+// the old tick-counter clocks must be gone
+hasNot('st.elapsed++;', 'FIX1: BLAB tick-counter elapsed++ removed');
+hasNot('setInterval(function(){ elapsed++;', 'FIX1: WOD tick-counter elapsed++ removed');
+hasNot('setInterval(function(){ remain--;', 'FIX1: AMRAP tick-counter remain-- removed');
+hasNot('setInterval(function(){ secLeft--;', 'FIX1: EMOM tick-counter secLeft-- removed');
+hasNot('coreSecsLeft--;', 'FIX1: Core circuit tick-counter decrement removed');
+// FIX 2 — wake lock held for every timed session, re-requested after a screen lock.
+has('if(wakeLock && !wakeLock.released) return;', 'FIX2: released sentinel replaced, live one never duplicated');
+has('if(live) requestWakeLock();', 'FIX2: wake lock re-requested when the page becomes visible');
+has('function showCountIn(callback){\n  // Kill any prior count-in still running before we start a new one\n  _phxCancelCountIn();\n  requestWakeLock();', 'FIX2: wake lock held through the count-in');
+hasNot("navigator.wakeLock.request('screen').then(function(lock){", 'FIX2: BLAB inline wakeLock request replaced by shared helper');
+// FIX 3 — one 5-4-3-2-1-GO! count-in before every timed session, never scored.
+has("numEl.textContent='5';", 'FIX3: count-in opens on 5 (not 6)');
+has("var label = (el>=5) ? 'GO!' : String(5-el);", 'FIX3: 5,4,3,2,1 then GO!');
+has('if(el>=6){\n      clearInterval(iv);', 'FIX3: hands over one second after GO!');
+hasNot('st.afapCountdown', 'FIX3: BLAB afap inline 5→0 countdown removed');
+hasNot('id="afap-countdown"', 'FIX3: afap-countdown element removed');
+[
+  ["showCountIn(function(){\n      // The user may have backed out of the runner during the count-in", 'BLAB runner (complex/run/interval/tabata)'],
+  ["showCountIn(function(){\n    if(!document.body.contains(o)) return; // left the runner during the count-in\n    requestWakeLock();\n    _phxStampTimerStart();\n    paintTime();", 'WOD count-up'],
+  ["paintAmrap();\n    window._phxLibTick=setInterval(paintAmrap,1000);", 'WOD AMRAP'],
+  ["minStart=_phxStampTimerStart();", 'WOD EMOM'],
+  ["_phxStampTimerStart();\n    startWork();", 'WOD sprint intervals'],
+  ["showCountIn(function(){\n    if(!document.getElementById('core-timer-display')) return;", 'Core 20-min timer'],
+  ["showCountIn(function(){\n          if(!cfRunning) return; // stopped / left during the count-in", 'CrossFit benchmark WOD'],
+  ["showCountIn(function(){\n          if(!karenRunning) return; // stopped / left during the count-in", 'Karen benchmark WOD'],
+].forEach(([needle, label]) => has(needle, 'FIX3: count-in gates the clock — ' + label));
+// rest is a phase inside a live session — the lock must survive it
+has('function _phxReleaseWakeLockIfIdle(){\n  if(!window._phxTimerResync) releaseWakeLock();', 'FIX2: rest end keeps the lock while a session is registered');
+has('    _phxReleaseWakeLockIfIdle();\n    // v4.9.97: fire-and-clear the completion callback', 'FIX2: rest-overlay completion uses the guarded release');
+// a cancelled count-in must never leave a runner frozen at 0:00
+has('if(!window._blabWoTimer && !window._countInState && !st.resting && !st._finished) _blabStartClock();', 'FIX3: BLAB runner self-heals if its count-in was cancelled');
+has('window._blabWoState._finished = true', 'FIX3: finished/exited runner cannot restart its clock');
+// the count-in itself must never stamp the session clock
+{
+  const i = html.indexOf('function showCountIn(callback){');
+  const j = html.indexOf('window.showCountIn = showCountIn;', i);
+  (i > 0 && j > i && !html.slice(i, j).includes('_phxTimerStart'))
+    ? ok('FIX3: showCountIn never stamps _phxTimerStart (count-in is unscored)')
+    : bad('FIX3: showCountIn must not touch _phxTimerStart');
+}
 
 // ── v4.9.117 session-launch regression guards ────────────────────────────────
 // sessTypeStr must be declared in openTodaySession (its removal in v4.9.112 made every

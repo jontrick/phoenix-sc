@@ -3578,7 +3578,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.117';
+var APP_VERSION='4.9.118';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4678,13 +4678,70 @@ window.blabToPhoenixSession = function(sess, week, day){
 
 // v4.9.108: blabBuildExCard + blabLaunchExercise (dead overlay card path) removed.
 
+// ── v4.9.118 BLAB runner clock (FIX 1) ──────────────────────────────────────
+// The runner's elapsed time is derived from timestamps, not a tick counter, so a locked
+// screen cannot lose time: elapsed = _elapsedBase (banked work segments) + the live segment
+// since _segStart. Rest stays excluded from elapsed exactly as before — entering rest banks
+// the segment (_blabPauseClock) and leaving it opens a new one (_blabResumeClock).
+function _blabElapsedNow(st){
+  if(!st) return 0;
+  return (st._elapsedBase||0) + (st._segStart ? Math.floor((Date.now()-st._segStart)/1000) : 0);
+}
+function _blabPaintElapsed(st){
+  if(!st) return;
+  st.elapsed = _blabElapsedNow(st);
+  var et = document.getElementById('blab-elapsed');
+  if(et) et.textContent = blabFmt(st.elapsed);
+}
+function _blabPauseClock(){
+  var st=window._blabWoState; if(!st) return;
+  st._elapsedBase = _blabElapsedNow(st);
+  st._segStart = 0;
+  st.elapsed = st._elapsedBase;
+}
+function _blabResumeClock(){
+  var st=window._blabWoState; if(!st) return;
+  if(!st._segStart) st._segStart = Date.now();
+}
+function _blabStopClock(){
+  if(window._blabWoTimer){ clearInterval(window._blabWoTimer); window._blabWoTimer=null; }
+  _blabPauseClock();
+  _phxUnregisterTimer();
+}
+// Starts the session clock at exactly 0:00. Called only after the count-in has finished.
+function _blabStartClock(){
+  var st=window._blabWoState; if(!st) return;
+  st._elapsedBase = 0; st._segStart = Date.now(); st.elapsed = 0;
+  _phxStampTimerStart();
+  _blabPaintElapsed(st);
+  if(window._blabWoTimer) clearInterval(window._blabWoTimer);
+  window._blabWoTimer = setInterval(function(){
+    var s = window._blabWoState;
+    if(!s) return;
+    if(s.resting){
+      // v4.9.97: when the global #rest-overlay owns this rest, it drives the countdown +
+      // resume callback — the runner's own per-second loop must stand down.
+      if(s.globalRestActive) return;
+      s.restSec = Math.max(0, s.restSec - 1);
+      var re = document.getElementById('blab-rest-cd');
+      if(re) re.textContent = blabFmt(s.restSec);
+      // v4.9.98 BUG 2.1: clear globalRestActive alongside resting so this fallback branch can't
+      // orphan the runner either (defensive — this branch is unreachable while the overlay owns rest).
+      if(s.restSec <= 0){ s.resting=false; s.globalRestActive=false; _blabResumeClock(); window._blabWoRender(); }
+    } else {
+      _blabPaintElapsed(s);
+    }
+  }, 1000);
+  _phxRegisterTimer(function(){
+    var s = window._blabWoState;
+    if(s && !s.resting) _blabPaintElapsed(s);
+  });
+}
+
 window.blabRunWorkout = function(ex, idx){
-  // Prevent screen timeout during workout
-  if('wakeLock' in navigator){
-    navigator.wakeLock.request('screen').then(function(lock){
-      window._blabWakeLock = lock;
-    }).catch(function(){});
-  }
+  // Prevent screen timeout during workout (v4.9.118 FIX 2: shared lock helper, so the
+  // visibilitychange hook can re-acquire it after an iOS screen lock).
+  requestWakeLock();
   var overlay = document.getElementById('blab-workout-overlay');
   var body = document.getElementById('blab-wo-body');
   var eyebrow = document.getElementById('blab-wo-eyebrow');
@@ -4694,31 +4751,32 @@ window.blabRunWorkout = function(ex, idx){
   eyebrow.textContent = 'Exercise ' + (idx+1);
   title.textContent = ex.name;
   back.onclick = function(){
-    if(window._blabWoTimer){ clearInterval(window._blabWoTimer); window._blabWoTimer=null; }
+    _phxCancelCountIn();
+    if(window._blabWoState) window._blabWoState._finished = true;
+    _blabStopClock();
+    releaseWakeLock();
     overlay.style.display='none';
   };
-  window._blabWoState = {ex:ex, elapsed:0, restSec:0, resting:false};
-  if(window._blabWoTimer) clearInterval(window._blabWoTimer);
-  window._blabWoTimer = setInterval(function(){
-    var st = window._blabWoState;
-    if(!st) return;
-    if(st.resting){
-      // v4.9.97: when the global #rest-overlay owns this rest, it drives the countdown +
-      // resume callback — the runner's own per-second loop must stand down.
-      if(st.globalRestActive) return;
-      st.restSec = Math.max(0, st.restSec - 1);
-      var re = document.getElementById('blab-rest-cd');
-      if(re) re.textContent = blabFmt(st.restSec);
-      // v4.9.98 BUG 2.1: clear globalRestActive alongside resting so this fallback branch can't
-      // orphan the runner either (defensive — this branch is unreachable while the overlay owns rest).
-      if(st.restSec <= 0){ st.resting=false; st.globalRestActive=false; window._blabWoRender(); }
-    } else {
-      st.elapsed++;
-      var et = document.getElementById('blab-elapsed');
-      if(et) et.textContent = blabFmt(st.elapsed);
-    }
-  }, 1000);
+  window._blabWoState = {ex:ex, elapsed:0, restSec:0, resting:false, _elapsedBase:0, _segStart:0};
+  if(window._blabWoTimer){ clearInterval(window._blabWoTimer); window._blabWoTimer=null; }
   overlay.style.display='block';
+  // v4.9.118 FIX 3: every timed BLAB format (complex/AFAP, 1.6km run interval, steady state,
+  // tabata) gets the shared 5-4-3-2-1-GO! count-in first. The clock only starts — at 0:00 —
+  // once GO! has passed, so no count-in second is ever scored. Untimed formats (total rep
+  // goal: rest as needed, elapsed is informational only) start their clock immediately.
+  // The count-in is opened BEFORE the first render so _blabWoRender's self-heal (below) can
+  // tell "count-in pending" apart from "clock failed to start".
+  var _fmt = String(ex.format||'');
+  if(['afap','interval','steady_state','tabata'].indexOf(_fmt) >= 0){
+    showCountIn(function(){
+      // The user may have backed out of the runner during the count-in.
+      if(overlay.style.display==='none' || !window._blabWoState) return;
+      _blabStartClock();
+      window._blabWoRender();
+    });
+  } else {
+    _blabStartClock();
+  }
   window._blabWoRender();
 };
 
@@ -4743,6 +4801,10 @@ window._blabWoRender = function(){
   var body=document.getElementById('blab-wo-body');
   if(!st||!body) return;
   var ex=st.ex, fmt=ex.format;
+  // v4.9.118: self-heal. A tab change cancels any in-flight count-in (the navTo interceptor),
+  // which would otherwise leave a still-open runner sitting at 0:00 with no clock. If the runner
+  // is live, unfinished, not resting, and neither a clock nor a count-in is pending, start it.
+  if(!window._blabWoTimer && !window._countInState && !st.resting && !st._finished) _blabStartClock();
   if(st.resting){
     // v4.9.97: route the runner's inter-set rest through the global full-screen #rest-overlay
     // (startRestTimer) instead of the old inline 72px countdown, for parity with the main lift.
@@ -4750,6 +4812,9 @@ window._blabWoRender = function(){
     // the completion callback clears the rest flags and re-renders the next set.
     if(!st.globalRestActive){
       st.globalRestActive = true;
+      // v4.9.118 FIX 1: bank the work segment so rest is excluded from elapsed even though
+      // elapsed is now timestamp-derived. The rest countdown itself is rtEndTime-driven.
+      _blabPauseClock();
       // v4.9.98 BUG 2.3: tag this rest with a generation token. rtDoneCb/#rest-overlay are global
       // singletons shared with the main-lift path; if another startRestTimer call replaces our
       // callback mid-rest, a late-firing stale callback must NOT clobber the (possibly new) runner
@@ -4759,6 +4824,7 @@ window._blabWoRender = function(){
         if(window._blabRestGen !== _restGen) return; // stale → no-op
         var s2 = window._blabWoState;
         if(s2){ s2.resting=false; s2.restSec=0; s2.globalRestActive=false; }
+        _blabResumeClock(); // v4.9.118 FIX 1: reopen the work segment
         window._blabWoRender();
       });
     }
@@ -4777,7 +4843,7 @@ window._blabWoRender = function(){
 // v4.9.98 BUG 2.1: also clear globalRestActive. If an inline handler clears resting but leaves
 // globalRestActive=true, the NEXT set's rest sees the `if(!st.globalRestActive)` guard as false,
 // never starts the overlay, and the runner timer stands down — orphaning the runner in rest.
-window._blabSkipRest=function(){ var st=window._blabWoState; if(st){st.resting=false;st.restSec=0;st.globalRestActive=false;} window._blabWoRender(); };
+window._blabSkipRest=function(){ var st=window._blabWoState; if(st){st.resting=false;st.restSec=0;st.globalRestActive=false;} _blabResumeClock(); window._blabWoRender(); };
 window._blabAddRest=function(s){ var st=window._blabWoState; if(st) st.restSec+=s; var el=document.getElementById('blab-rest-cd'); if(el) el.textContent=blabFmt(st.restSec); };
 // v4.9.92: centralized BLAB block-completion. The four BLAB custom-block formats
 // (superset / afap / total_rep_goal / interval) bypass the standard Phoenix set-row
@@ -4806,7 +4872,12 @@ window._blabBlockComplete = function(idx, ex, setRows){
 };
 
 window._blabWoDone=function(){
-  if(window._blabWoTimer){clearInterval(window._blabWoTimer);window._blabWoTimer=null;}
+  // v4.9.118: banks the final segment into st.elapsed and unregisters the visibility resync
+  // before any record is read/saved below.
+  _phxCancelCountIn();
+  if(window._blabWoState) window._blabWoState._finished = true; // no clock restart after this
+  _blabStopClock();
+  releaseWakeLock();
   if(window._blabWakeLock){ window._blabWakeLock.release().catch(function(){}); window._blabWakeLock=null; }
   // v4.9.93 FIX 2: afap completion summary — total time, per-set split times, and comparison
   // to previous best. Previously only fired for loaded complexes (has_load); now covers every
@@ -4906,31 +4977,11 @@ function blabRenderAfap(ex,st,body){
   // v4.9.111: the 100 Push-ups for-time effort gets a "— beat it." nudge on its PREVIOUS BEST
   // banner; complexes (Barbell/DB/BeZercher/Core Circuit) keep the plain "PREVIOUS BEST: M:SS".
   var _pbSuffix = (ex._timeRecordKey==='100_pushups_time') ? ' — beat it.' : '';
-  // Countdown before first set
-  if(typeof st.afapCountdown==='undefined') st.afapCountdown=5;
-  if(st.afapCountdown>0 && st.afapSet===1 && st.afapIdx===-1){
-    body.innerHTML=
-      blabPrevBestBanner((ex.prev_best||0)?blabFmt(ex.prev_best):'', null, _pbSuffix)+
-      '<div style="text-align:center;padding:60px 20px;">'+
-        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:16px;">Get ready</div>'+
-        '<div style="font-family:var(--font-d);font-size:120px;font-weight:900;color:var(--gold);line-height:1;" id="afap-countdown">'+st.afapCountdown+'</div>'+
-        '<div style="font-size:14px;color:var(--text2);margin-top:16px;">'+ex.name+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:8px;">'+(st.afapLoad?st.afapLoad+'kg bar':'')+'</div>'+
-      '</div>';
-    if(!st._countInterval){
-      st._countInterval = setInterval(function(){
-        st.afapCountdown--;
-        var el=document.getElementById('afap-countdown');
-        if(el) el.textContent=st.afapCountdown;
-        if(st.afapCountdown<=0){
-          clearInterval(st._countInterval);
-          delete st._countInterval;
-          window._blabWoRender();
-        }
-      },1000);
-    }
-    return;
-  }
+  // v4.9.118 FIX 3: the old inline "Get ready" countdown lived here and was wrong twice over —
+  // it painted six ticks (5,4,3,2,1,0) and the runner's elapsed clock was already running
+  // underneath it, so those seconds were scored. It is gone: blabRunWorkout now runs the shared
+  // showCountIn (5,4,3,2,1,GO!) BEFORE starting the clock, so this renderer only ever draws a
+  // live set with the clock already at 0:00.
   var totalSets=ex.sets||1, movs=ex.movements||ex._blabMovements||[];
   var rps=ex.reps_per_set, curReps=rps?rps[st.afapSet-1]:null;
   var prevBest=ex.prev_best||0;
@@ -4999,6 +5050,9 @@ window._blabAfapLoadAdj=function(delta){
 window._blabAfapTick=function(i){
   var st=window._blabWoState; if(!st) return;
   if(i!==st.afapIdx+1) return;
+  // v4.9.118: refresh elapsed from the timestamp before any split is recorded, so a split is
+  // never up to a second stale (or stale by the whole locked period after a screen lock).
+  if(!st.resting) _blabPaintElapsed(st);
   st.afapIdx=i;
   var movs=st.ex.movements||st.ex._blabMovements||[];
   if(st.afapIdx>=movs.length-1){
@@ -5010,7 +5064,10 @@ window._blabAfapTick=function(i){
     if(st.afapSet<tot){
       st.afapSet++;
       st.afapIdx=-1;
-      st.afapSetStart=st.elapsed+(st.ex.rest||90);
+      // v4.9.118: the next set's split starts from the elapsed clock as it stands now. The old
+      // "+rest" offset assumed elapsed advanced through rest — it never has (the runner clock
+      // stands down while resting), so it made every split after set 1 short by the rest length.
+      st.afapSetStart=st.elapsed;
       st.resting=true;
       st.restSec=st.ex.rest||90;
     }
@@ -8175,6 +8232,7 @@ function phxStandaloneCoreTap(){
 function _phxBrowseAllCore(){
   try { if(coreTimerInterval) clearInterval(coreTimerInterval); } catch(_e){}
   try { if(corePrepInterval) clearInterval(corePrepInterval); } catch(_e){}
+  try { _phxCancelCountIn(); coreAmrapEnd=0; _phxUnregisterTimer(); } catch(_e){}
   try { releaseWakeLock(); } catch(_e){}
   var fmt = (coreSession && coreSession._format === 'strength') ? 'strength' : 'circuit';
   navTo('today');
@@ -8995,25 +9053,73 @@ var rtDoneCb=null;
 var rtEndTime=0;
 var wakeLock=null;
 
+// ── v4.9.118 TIMER RESILIENCE (FIX 1) ───────────────────────────────────────
+// iOS suspends setInterval the instant the screen locks, so any clock that counts by
+// incrementing a variable once per tick silently loses the whole locked period. The rule
+// for every timed session in this app is therefore:
+//   1. stamp window._phxTimerStart = Date.now() at the moment the session clock reaches
+//      0:00 — i.e. AFTER the count-in, never during it (see FIX 3 / showCountIn),
+//   2. derive the displayed time from that timestamp, never from a tick counter, and
+//   3. register a resync handler via _phxRegisterTimer() so visibilitychange→visible
+//      recomputes + repaints immediately on unlock instead of waiting for the next tick.
+// _phxTimerStart is global on purpose: it is the one record of when the live session began,
+// independent of whichever renderer's closure owns the display.
+window._phxTimerStart = 0;
+window._phxTimerResync = null;
+function _phxStampTimerStart(){ window._phxTimerStart = Date.now(); return window._phxTimerStart; }
+// Whole seconds since the session stamp, or since `from` for renderers that also track a
+// segment/phase start (BLAB rest-excluded elapsed, EMOM minute, interval work/rest phase).
+function _phxElapsedSince(from){
+  var t = from || window._phxTimerStart;
+  if(!t) return 0;
+  return Math.max(0, Math.floor((Date.now() - t)/1000));
+}
+function _phxRegisterTimer(resync){ window._phxTimerResync = (typeof resync==='function') ? resync : null; }
+function _phxUnregisterTimer(){ window._phxTimerResync = null; window._phxTimerStart = 0; }
+
 async function requestWakeLock(){
   try{
     if('wakeLock' in navigator){
+      // v4.9.118 FIX 2: iOS releases the sentinel when the screen locks, so a released one
+      // must be replaced — but re-requesting while one is still live would orphan (leak) it.
+      if(wakeLock && !wakeLock.released) return;
       wakeLock=await navigator.wakeLock.request('screen');
     }
   }catch(e){}
 }
 function releaseWakeLock(){
-  if(wakeLock){wakeLock.release();wakeLock=null;}
+  if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock=null; }
 }
+
+// v4.9.118 FIX 1 + FIX 2: the single visibility hook for timed sessions. It NEVER routes
+// (see the v4.7.41 rule at the auth block) — it only re-acquires the screen wake lock that
+// iOS dropped at screen-lock and asks the live session to recompute its clock from its
+// stored start timestamp, so a session that ran through a screen lock stays accurate.
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState !== 'visible') return;
+  var live = !!(window._phxTimerResync || rtInterval || wakeLock || window._blabWakeLock);
+  if(live) requestWakeLock();
+  // The rest overlay is already rtEndTime-driven; repaint it now instead of up to 500ms late.
+  if(rtInterval){ try{ updateRTDisplay(); }catch(e){} }
+  var fn = window._phxTimerResync;
+  if(fn){ try{ fn(); }catch(e){ console.warn('[PHX] timer resync failed:', e); } }
+});
 
 // v4.7.10: cancellable count-in.
 // showCountIn now publishes its interval handle + overlay node + callback to window._countInState
 // so any later "modal closed" / "user navigated away" path can call _phxCancelCountIn() to kill it.
 // Without this, the interval lives in a private closure and fires its callback 5s later — invoking
 // startWODTimer against whatever modal happens to be open at that moment, which is the v4.7.9 bug.
+// v4.9.118 FIX 3: THE count-in for every timed session in the app. Timestamp-driven, so it
+// shows exactly 5 → 4 → 3 → 2 → 1 → GO! (one second each, GO! held for its own second) and
+// hands over at t0+6s even if the screen locks mid-count-in. It NEVER stamps
+// window._phxTimerStart — the callback owns that — so not one count-in second can reach the
+// session clock: the session starts at exactly 0:00 after GO!.
+// v4.9.118 FIX 2: holds the screen wake lock through the count-in too.
 function showCountIn(callback){
   // Kill any prior count-in still running before we start a new one
   _phxCancelCountIn();
+  requestWakeLock();
   var overlay=document.createElement('div');
   overlay.id='count-in-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
@@ -9022,24 +9128,32 @@ function showCountIn(callback){
   numEl.textContent='5';
   overlay.appendChild(numEl);
   document.body.appendChild(overlay);
-  var count=5;
+  var t0=Date.now(), shown='5';
+  // Polled at 100ms (not 1000ms) so the label is right within a tenth of a second of an
+  // unlock; the label itself is a pure function of elapsed whole seconds.
   var iv=setInterval(function(){
-    count--;
-    if(count>0){
-      numEl.style.transform='scale(0.7)';numEl.style.opacity='0.3';
-      setTimeout(function(){numEl.textContent=count;numEl.style.transform='scale(1)';numEl.style.opacity='1';},80);
-    } else if(count===0){
-      numEl.style.transform='scale(0.7)';numEl.style.opacity='0.3';
-      setTimeout(function(){numEl.textContent='GO!';numEl.style.transform='scale(1.2)';numEl.style.opacity='1';},80);
-    } else {
+    var el=Math.floor((Date.now()-t0)/1000); // 0..5 → "5".."1", 5 → "GO!"
+    if(el>=6){
       clearInterval(iv);
       overlay.remove();
       window._countInState = null; // normal completion — clear before firing callback
       if(callback) callback();
+      return;
     }
-  },1000);
+    var label = (el>=5) ? 'GO!' : String(5-el);
+    if(label!==shown){
+      shown=label;
+      numEl.style.transform='scale(0.7)';numEl.style.opacity='0.3';
+      setTimeout(function(){
+        numEl.textContent=shown;
+        numEl.style.transform=(shown==='GO!')?'scale(1.2)':'scale(1)';
+        numEl.style.opacity='1';
+      },80);
+    }
+  },100);
   window._countInState = {iv: iv, overlay: overlay, callback: callback};
 }
+window.showCountIn = showCountIn;
 
 // v4.7.15 FIX 3 (global): one place that hides every ad surface in the app when the user is Pro.
 // Called on every showScreen / navTo so newly-entered screens get gated immediately. Selectors:
@@ -9133,17 +9247,26 @@ function updateRTDisplay(){
   document.getElementById('rt-bar').style.width=(rtTotal>0?(remaining/rtTotal*100):0)+'%';
   if(remaining<=0){
     clearInterval(rtInterval);
+    rtInterval=null;
     document.getElementById('rest-overlay').classList.remove('active');
-    releaseWakeLock();
+    _phxReleaseWakeLockIfIdle();
     // v4.9.97: fire-and-clear the completion callback (e.g. resume the BLAB runner).
     if(rtDoneCb){ var cb=rtDoneCb; rtDoneCb=null; cb(); }
   }
+}
+// v4.9.118 FIX 2: rest is a phase INSIDE a live session (BLAB runner, Core, FOR LOAD). Handing
+// the screen lock back when the rest timer ends would let the phone sleep for the remainder of
+// the workout, so only release when no timed session is registered.
+function _phxReleaseWakeLockIfIdle(){
+  if(!window._phxTimerResync) releaseWakeLock();
 }
 document.addEventListener('DOMContentLoaded',function(){
   var rtSkip=document.getElementById('rt-skip');
   if(rtSkip)rtSkip.addEventListener('click',function(){
     if(rtInterval)clearInterval(rtInterval);
+    rtInterval=null;
     document.getElementById('rest-overlay').classList.remove('active');
+    _phxReleaseWakeLockIfIdle(); // v4.9.118 FIX 2 (keeps the lock if a session is still live)
     // v4.9.97: skipping rest must also resume the BLAB runner, same as natural completion.
     if(rtDoneCb){ var cb=rtDoneCb; rtDoneCb=null; cb(); }
   });
@@ -9829,16 +9952,26 @@ function openCoreSession(coreNum) {
   showScreen('screen-session');
 }
 
+// v4.9.118 FIX 3: 5-4-3-2-1-GO! before the 20-minute clock, which then starts from a fresh
+// end-timestamp (FIX 1) — so the count-in costs the athlete nothing.
 function startCoreTimer(){
-  coreTimerEnd = Date.now() + (CORE_TIMER_DURATION * 1000);
-  requestWakeLock();
-  if(coreTimerInterval) clearInterval(coreTimerInterval);
-  coreTimerInterval = setInterval(updateCoreTimer, 500);
+  showCountIn(function(){
+    if(!document.getElementById('core-timer-display')) return; // navigated away mid-count-in
+    coreTimerEnd = Date.now() + (CORE_TIMER_DURATION * 1000);
+    _phxStampTimerStart();
+    requestWakeLock();
+    if(coreTimerInterval) clearInterval(coreTimerInterval);
+    coreTimerInterval = setInterval(updateCoreTimer, 500);
+    _phxRegisterTimer(updateCoreTimer);
+    updateCoreTimer();
+  });
 }
 
 function stopCoreTimer(){
+  _phxCancelCountIn();
   if(coreTimerInterval) clearInterval(coreTimerInterval);
   coreTimerEnd = 0;
+  _phxUnregisterTimer();
   releaseWakeLock();
   var el = document.getElementById('core-timer-display');
   if(el) el.textContent = '20:00';
@@ -9846,12 +9979,13 @@ function stopCoreTimer(){
 
 function updateCoreTimer(){
   var el = document.getElementById('core-timer-display');
-  if(!el) return;
+  if(!el || !coreTimerEnd) return;
   var remaining = Math.max(0, Math.ceil((coreTimerEnd - Date.now())/1000));
   var m = Math.floor(remaining/60), s = remaining%60;
   el.textContent = m+':'+(s<10?'0':'')+s;
   if(remaining<=0){
     clearInterval(coreTimerInterval);
+    _phxUnregisterTimer();
     releaseWakeLock();
     el.textContent = 'DONE!';
   }
@@ -9902,6 +10036,10 @@ function startCorePrepCountdown(){
   document.getElementById('session-back-btn').onclick=function(){
     if(coreTimerInterval)clearInterval(coreTimerInterval);
     if(corePrepInterval)clearInterval(corePrepInterval);
+    _phxCancelCountIn();
+    coreAmrapEnd=0;
+    _phxUnregisterTimer();
+    releaseWakeLock();
     navTo('today');
   };
   buildWarmupBlocks('core',body);
@@ -9915,26 +10053,39 @@ function startCorePrepCountdown(){
   });
 }
 
+// Reached from startCorePrepCountdown, i.e. AFTER the shared 5-4-3-2-1-GO! count-in (FIX 3),
+// so the clock below starts on its full duration with no count-in seconds spent.
+// v4.9.118 FIX 1: the remaining time is computed from a stored end timestamp instead of a
+// per-tick decrement, so a screen lock mid-circuit can't stall or skew the clock.
+var coreAmrapEnd = 0;
+function _phxUpdateCoreAmrap(){
+  if(!coreAmrapEnd) return;
+  coreSecsLeft = Math.max(0, Math.ceil((coreAmrapEnd - Date.now())/1000));
+  var el=document.getElementById('core-timer');
+  if(el){
+    var m=Math.floor(coreSecsLeft/60),s=coreSecsLeft%60;
+    el.textContent=m+':'+(s<10?'0':'')+s;
+  }
+  if(coreSecsLeft<=0){
+    if(coreTimerInterval) clearInterval(coreTimerInterval);
+    coreAmrapEnd=0;
+    _phxUnregisterTimer();
+    releaseWakeLock();
+    showCoreEndPrompt();
+  }
+}
 function startCoreAMRAP(){
   // Circuit duration may be specified per session; default 20 min when missing.
   var dur = (coreSession && coreSession.duration_min) ? coreSession.duration_min : 20;
   coreSecsLeft = dur*60;
+  coreAmrapEnd = Date.now() + (coreSecsLeft*1000);
+  _phxStampTimerStart();
   requestWakeLock();
   renderCoreScreen();
   if(coreTimerInterval)clearInterval(coreTimerInterval);
-  coreTimerInterval=setInterval(function(){
-    coreSecsLeft--;
-    var el=document.getElementById('core-timer');
-    if(el){
-      var m=Math.floor(coreSecsLeft/60),s=coreSecsLeft%60;
-      el.textContent=m+':'+(s<10?'0':'')+s;
-    }
-    if(coreSecsLeft<=0){
-      clearInterval(coreTimerInterval);
-      releaseWakeLock();
-      showCoreEndPrompt();
-    }
-  },1000);
+  coreTimerInterval=setInterval(_phxUpdateCoreAmrap,1000);
+  _phxRegisterTimer(_phxUpdateCoreAmrap);
+  _phxUpdateCoreAmrap();
 }
 
 function getCoreExercises(){
@@ -10452,25 +10603,41 @@ function openKarenSession(){
     var display=document.getElementById('karen-timer-display');
     if(startBtn) startBtn.addEventListener('click',function(){
       if(!karenRunning){
-        karenStart=Date.now();
         karenRunning=true;
         startBtn.textContent='Stop';
         startBtn.style.background='var(--red)';
         requestWakeLock();
-        karenInterval=setInterval(function(){
-          var elapsed=Math.floor((Date.now()-karenStart)/1000);
-          var m=Math.floor(elapsed/60),s=elapsed%60;
-          if(display) display.textContent=m+':'+(s<10?'0':'')+s;
-        },500);
+        // v4.9.118 FIX 3: count-in first, clock starts at 0:00 after GO!. FIX 1 + FIX 2: the
+        // clock is derived from karenStart and repaints on unlock via the resync registry.
+        showCountIn(function(){
+          if(!karenRunning) return; // stopped / left during the count-in
+          display=document.getElementById('karen-timer-display');
+          if(!display) return;
+          requestWakeLock();
+          karenStart=_phxStampTimerStart();
+          var paint=function(){
+            var elapsed=_phxElapsedSince(karenStart);
+            var m=Math.floor(elapsed/60),s=elapsed%60;
+            if(display) display.textContent=m+':'+(s<10?'0':'')+s;
+          };
+          karenInterval=setInterval(paint,500);
+          _phxRegisterTimer(paint);
+          paint();
+        });
       } else {
+        _phxCancelCountIn();
         clearInterval(karenInterval);karenRunning=false;
+        _phxUnregisterTimer();
         startBtn.textContent='Start Timer';
         startBtn.style.background='var(--orange)';
         releaseWakeLock();
       }
     });
     if(resetBtn) resetBtn.addEventListener('click',function(){
+      _phxCancelCountIn();
       clearInterval(karenInterval);karenRunning=false;karenStart=0;
+      _phxUnregisterTimer();
+      releaseWakeLock();
       if(display) display.textContent='0:00';
       if(startBtn){startBtn.textContent='Start Timer';startBtn.style.background='var(--orange)';}
     });
@@ -10504,12 +10671,12 @@ function openKarenSession(){
       localStorage.setItem('phoenix_session_logs',JSON.stringify(logs2));
       var _karenReps=parseInt(repsEl?repsEl.value:0)||0;
       supabaseCompleteSession({total_reps:_karenReps,notes:notesEl?notesEl.value:'',details:{session_id:'karen-core',week:currentProgWeek||1,karenTime:timerEl?timerEl.textContent:'',karenReps:repsEl?repsEl.value:'150'}});
-      clearInterval(karenInterval);releaseWakeLock();
+      _phxCancelCountIn();clearInterval(karenInterval);_phxUnregisterTimer();releaseWakeLock();
       navTo('today');
     }
   });
   body.appendChild(finBtn);
-  document.getElementById('session-back-btn').onclick=function(){clearInterval(karenInterval);releaseWakeLock();navTo('today');};
+  document.getElementById('session-back-btn').onclick=function(){_phxCancelCountIn();clearInterval(karenInterval);_phxUnregisterTimer();releaseWakeLock();navTo('today');};
   supabaseStartSession('wod','Karen + Core','karen-core');
   showScreen('screen-session');
 }
@@ -10732,30 +10899,47 @@ function openCFSession(name){
         startBtn.textContent='Stop';
         startBtn.style.opacity='0.7';
         requestWakeLock();
-        if(isAMRAP){
-          cfTimerEnd=Date.now()+(cf.timeCap*1000);
-          cfTimerInterval=setInterval(function(){
-            var rem=Math.max(0,Math.ceil((cfTimerEnd-Date.now())/1000));
-            var m=Math.floor(rem/60),s=rem%60;
-            if(display) display.textContent=m+':'+(s<10?'0':'')+s;
-            if(rem<=0){clearInterval(cfTimerInterval);cfRunning=false;releaseWakeLock();if(display)display.textContent='TIME!';}
-          },500);
-        } else {
-          cfTimerStart=Date.now();
-          cfTimerInterval=setInterval(function(){
-            var el=Math.floor((Date.now()-cfTimerStart)/1000);
-            var m=Math.floor(el/60),s=el%60;
-            if(display) display.textContent=m+':'+(s<10?'0':'')+s;
-          },500);
-        }
+        // v4.9.118 FIX 3: 5-4-3-2-1-GO! before the WOD clock; the clock then starts at 0:00
+        // (or on the full cap for an AMRAP) so the count-in never lands in the score.
+        showCountIn(function(){
+          if(!cfRunning) return; // stopped / left during the count-in
+          display=document.getElementById('cf-timer-display');
+          if(!display) return;
+          requestWakeLock();
+          _phxStampTimerStart();
+          var paint;
+          if(isAMRAP){
+            cfTimerEnd=Date.now()+(cf.timeCap*1000);
+            paint=function(){
+              var rem=Math.max(0,Math.ceil((cfTimerEnd-Date.now())/1000));
+              var m=Math.floor(rem/60),s=rem%60;
+              if(display) display.textContent=m+':'+(s<10?'0':'')+s;
+              if(rem<=0){clearInterval(cfTimerInterval);cfRunning=false;_phxUnregisterTimer();releaseWakeLock();if(display)display.textContent='TIME!';}
+            };
+          } else {
+            cfTimerStart=window._phxTimerStart;
+            paint=function(){
+              var el=_phxElapsedSince(cfTimerStart);
+              var m=Math.floor(el/60),s=el%60;
+              if(display) display.textContent=m+':'+(s<10?'0':'')+s;
+            };
+          }
+          cfTimerInterval=setInterval(paint,500);
+          _phxRegisterTimer(paint);
+          paint();
+        });
       } else {
+        _phxCancelCountIn();
         clearInterval(cfTimerInterval);cfRunning=false;
+        _phxUnregisterTimer();
         startBtn.textContent='Start';startBtn.style.opacity='1';
         releaseWakeLock();
       }
     });
     if(resetBtn) resetBtn.addEventListener('click',function(){
+      _phxCancelCountIn();
       clearInterval(cfTimerInterval);cfRunning=false;
+      _phxUnregisterTimer();
       if(display) display.textContent=isAMRAP?'20:00':'0:00';
       if(startBtn){startBtn.textContent='Start';startBtn.style.opacity='1';}
       releaseWakeLock();
@@ -10769,7 +10953,8 @@ function openCFSession(name){
   var finBtn=document.createElement('button');finBtn.className='finish-btn';finBtn.textContent='Complete Session';
   finBtn.addEventListener('click',function(){
     if(confirm('Mark session as complete?')){
-      clearInterval(cfTimerInterval);cfRunning=false;releaseWakeLock();
+      _phxCancelCountIn();
+      clearInterval(cfTimerInterval);cfRunning=false;_phxUnregisterTimer();releaseWakeLock();
       var display2=document.getElementById('cf-timer-display');
       var roundsEl=document.getElementById('cf-rounds');
       var repsEl=document.getElementById('cf-reps');
@@ -10792,7 +10977,7 @@ function openCFSession(name){
     }
   });
   body.appendChild(finBtn);
-  document.getElementById('session-back-btn').onclick=function(){clearInterval(cfTimerInterval);cfRunning=false;releaseWakeLock();navTo('today');};
+  document.getElementById('session-back-btn').onclick=function(){_phxCancelCountIn();clearInterval(cfTimerInterval);cfRunning=false;_phxUnregisterTimer();releaseWakeLock();navTo('today');};
   supabaseStartSession('wod',name,'cf-'+name.toLowerCase());
   showScreen('screen-session');
 }
@@ -21050,7 +21235,14 @@ window._phxOpenSessionDetail = function(id, backCtx){
 
 // ─────────────────────────── Live session runner ───────────────────────────
 window._phxLibTick=null;
-function _phxClearTick(){ if(window._phxLibTick){ clearInterval(window._phxLibTick); window._phxLibTick=null; } }
+// v4.9.118: tearing down a WOD clock also cancels any count-in still on screen, drops the
+// visibility resync handler and releases the wake lock — one exit path for every renderer.
+function _phxClearTick(){
+  if(window._phxLibTick){ clearInterval(window._phxLibTick); window._phxLibTick=null; }
+  if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();
+  if(typeof _phxUnregisterTimer==='function') _phxUnregisterTimer();
+  if(typeof releaseWakeLock==='function') releaseWakeLock();
+}
 function _phxStartSession(id){
   var s=phxSessionById(id); if(!s) return;
   _phxClearTick();
@@ -21138,8 +21330,18 @@ function _phxRenderTime(s){
     '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Log Time')+'</div>';
   o.querySelector('.phx-lib-back').onclick=function(){ _phxClearTick(); o.remove(); _phxOpenSessionDetail(s.id); };
   render();
-  window._phxLibTick=setInterval(function(){ elapsed++; var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(elapsed); },1000);
-  document.getElementById('phx-run-finish').onclick=function(){ _phxClearTick(); o.remove();
+  // v4.9.118 FIX 3: 5-4-3-2-1-GO! first; FIX 1: the count-up clock is then derived from the
+  // start timestamp, so time spent with the screen locked is still counted correctly.
+  function paintTime(){ elapsed=_phxElapsedSince(); var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(elapsed); }
+  showCountIn(function(){
+    if(!document.body.contains(o)) return; // left the runner during the count-in
+    requestWakeLock();
+    _phxStampTimerStart();
+    paintTime();
+    window._phxLibTick=setInterval(paintTime,1000);
+    _phxRegisterTimer(paintTime);
+  });
+  document.getElementById('phx-run-finish').onclick=function(){ paintTime(); _phxClearTick(); o.remove();
     var logged=steps.filter(function(st){ return st.parsed.reps!=null && st.reps>0; }).map(function(st){ return st.mv.name+' '+st.reps; });
     _phxOpenScoreEntry(s, elapsed, { summary: logged.length? logged.join(', ') : '' });
   };
@@ -21172,9 +21374,24 @@ function _phxRenderAmrap(s){
   document.getElementById('phx-rep-plus').onclick=function(){ partial++; paint(); };
   document.getElementById('phx-rep-minus').onclick=function(){ if(partial>0) partial--; paint(); };
   function finish(){ if(ended) return; ended=true; _phxClearTick(); o.remove(); _phxOpenScoreEntry(s, rounds+' + '+partial); }
-  window._phxLibTick=setInterval(function(){ remain--; var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(remain);
-    if(remain<=0){ finish(); } },1000);
   var el0=document.getElementById('phx-run-clock'); if(el0) el0.textContent=phxFmtTime(remain);
+  // v4.9.118 FIX 3: the AMRAP window opens on its full duration only after GO!.
+  // FIX 1: remaining time is durationSec minus elapsed-since-start, never a decrement, so a
+  // screen lock can't hand back extra minutes (or eat them).
+  function paintAmrap(){
+    if(ended) return;
+    remain = plan.durationSec - _phxElapsedSince();
+    var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(Math.max(0,remain));
+    if(remain<=0) finish();
+  }
+  showCountIn(function(){
+    if(!document.body.contains(o)) return; // left the runner during the count-in
+    requestWakeLock();
+    _phxStampTimerStart();
+    paintAmrap();
+    window._phxLibTick=setInterval(paintAmrap,1000);
+    _phxRegisterTimer(paintAmrap);
+  });
   document.getElementById('phx-run-finish').onclick=finish;
 }
 
@@ -21247,17 +21464,37 @@ function _phxRenderEmom(s){
     '</div>'+
     '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Log Score')+'</div>';
   o.querySelector('.phx-lib-back').onclick=function(){ _phxClearTick(); o.remove(); _phxOpenSessionDetail(s.id); };
-  function advance(){ minute++; secLeft=60;
+  // v4.9.118 FIX 1: each minute is measured from a timestamp (minStart) instead of a decrement.
+  // advance() takes the new minute's start so an auto-expiry can roll the window forward by
+  // exact 60s steps — that way a screen lock spanning several minutes settles on the right
+  // minute instead of drifting.
+  var minStart=0;
+  function advance(newStart){ minute++; secLeft=60; minStart=newStart||Date.now();
     if(minute>=plan.minutes){ finish(); return; }
     var mn=document.getElementById('phx-emom-min'); if(mn) mn.textContent=minute+1;
     var mv=document.getElementById('phx-emom-mv'); if(mv) mv.textContent=curMv().name;
     var dt=document.getElementById('phx-emom-detail'); if(dt) dt.textContent=curMv().detail;
   }
+  function paintEmom(){
+    if(ended || !minStart) return;
+    var gone=_phxElapsedSince(minStart);
+    while(gone>=60){ advance(minStart+60000); if(ended) return; gone-=60; }
+    secLeft=Math.max(0,60-gone);
+    var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(secLeft);
+  }
   function paintDone(){ var b=document.getElementById('phx-emom-done'); if(b) b.textContent='Mark Minute Done ('+doneCount+')'; }
   function finish(){ if(ended) return; ended=true; _phxClearTick(); o.remove();
     if(plan.scoreMode==='load') _phxOpenScoreEntry(s, null); else _phxOpenScoreEntry(s, doneCount); }
-  document.getElementById('phx-emom-done').onclick=function(){ doneCount++; paintDone(); advance(); };
-  window._phxLibTick=setInterval(function(){ secLeft--; var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(secLeft); if(secLeft<=0) advance(); },1000);
+  document.getElementById('phx-emom-done').onclick=function(){ doneCount++; paintDone(); advance(); paintEmom(); };
+  // v4.9.118 FIX 3: minute 1 begins only after the 5-4-3-2-1-GO! count-in.
+  showCountIn(function(){
+    if(!document.body.contains(o)) return; // left the runner during the count-in
+    requestWakeLock();
+    minStart=_phxStampTimerStart();
+    paintEmom();
+    window._phxLibTick=setInterval(paintEmom,1000);
+    _phxRegisterTimer(paintEmom);
+  });
   document.getElementById('phx-run-finish').onclick=finish;
 }
 
@@ -21289,19 +21526,28 @@ function _phxRenderIntervals(s){
     var html=arr.map(function(v,i){ return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-family:var(--font-d);font-size:13px;"><span style="color:var(--text3);text-transform:uppercase;">'+label(i)+'</span><span style="color:var(--text);font-weight:800;">'+(plan.countReps?(v+' reps'):phxFmtTime(v))+'</span></div>'; }).join('');
     var l=document.getElementById('phx-int-log'); if(l) l.innerHTML=html;
   }
-  function startWork(){ phase='work'; clk=0; curReps=0;
+  // v4.9.118 FIX 1: work + rest phases are measured from phStart (a timestamp) rather than a
+  // per-tick ++/--, so a split logged after a screen lock is the real elapsed work time.
+  var phStart=0;
+  function startWork(){ phase='work'; clk=0; curReps=0; phStart=Date.now();
     var e=document.getElementById('phx-int-eff'); if(e) e.textContent='Effort '+(effort+1)+' / '+plan.efforts;
     var p=document.getElementById('phx-int-phase'); if(p){ p.textContent=label(effort); p.style.color='var(--gold)'; }
     var rp=document.getElementById('phx-int-reps'); if(rp) rp.textContent='0';
     var a=document.getElementById('phx-int-action'); if(a){ a.textContent=plan.countReps?'Log Round':'Log Split'; a.style.display='block'; }
     setClock();
   }
-  function startRest(){ phase='rest'; clk=plan.restSec;
+  function startRest(){ phase='rest'; clk=plan.restSec; phStart=Date.now();
     var p=document.getElementById('phx-int-phase'); if(p){ p.textContent='Rest'; p.style.color='var(--text3)'; }
     var a=document.getElementById('phx-int-action'); if(a) a.style.display='none';
     setClock();
   }
+  function paintInt(){
+    if(ended || !phStart) return;
+    if(phase==='work'){ clk=_phxElapsedSince(phStart); setClock(); if(plan.workSec>0 && clk>=plan.workSec) logEffort(); }
+    else { clk=Math.max(0, plan.restSec-_phxElapsedSince(phStart)); setClock(); if(clk<=0) startWork(); }
+  }
   function logEffort(){
+    if(phase==='work' && phStart) clk=_phxElapsedSince(phStart); // log the true split, not a stale tick
     if(plan.countReps) reps.push(curReps); else splits.push(clk);
     repaintLog(); effort++;
     if(effort>=plan.efforts){ finish(); return; }
@@ -21317,11 +21563,15 @@ function _phxRenderIntervals(s){
   }
   document.getElementById('phx-int-action').onclick=logEffort;
   document.getElementById('phx-run-finish').onclick=finish;
-  startWork();
-  window._phxLibTick=setInterval(function(){
-    if(phase==='work'){ clk++; setClock(); if(plan.workSec>0 && clk>=plan.workSec){ logEffort(); } }
-    else { clk--; setClock(); if(clk<=0) startWork(); }
-  },1000);
+  // v4.9.118 FIX 3: effort 1 starts at 0:00 only after the 5-4-3-2-1-GO! count-in.
+  showCountIn(function(){
+    if(!document.body.contains(o)) return; // left the runner during the count-in
+    requestWakeLock();
+    _phxStampTimerStart();
+    startWork();
+    window._phxLibTick=setInterval(paintInt,1000);
+    _phxRegisterTimer(paintInt);
+  });
 }
 
 // 6) CORE — sets×reps checklist (quality). Score varies (load/done/calories).
@@ -21347,7 +21597,9 @@ function _phxClearRest(){
   if(rtInterval){ clearInterval(rtInterval); rtInterval=null; }
   var ro=document.getElementById('rest-overlay'); if(ro) ro.classList.remove('active');
   rtDoneCb=null;
-  if(typeof releaseWakeLock==='function') releaseWakeLock();
+  // v4.9.118 FIX 2: keep the screen awake if a timed session is still running under this rest.
+  if(typeof _phxReleaseWakeLockIfIdle==='function') _phxReleaseWakeLockIfIdle();
+  else if(typeof releaseWakeLock==='function') releaseWakeLock();
 }
 // v4.9.114: legacy _phxStartMiniRest (bottom-bar mini timer) removed — Core + FOR-LOAD now
 // use the shared full-screen startRestTimer() gold overlay for parity with BLAB / main lift.

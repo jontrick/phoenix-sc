@@ -94,9 +94,9 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.131'", 'version is 4.9.131');
+has("var APP_VERSION='4.9.132'", 'version is 4.9.132');
 
-// ── Priority 12 — Nordic Planks timed holds ───────────────────────────────────
+// ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
 has('hold_secs:25', 'NP: W2 hold_secs:25');
 has('hold_secs:30', 'NP: W3/W8 hold_secs:30');
@@ -108,6 +108,22 @@ has('window._phxStartHoldTimer = function(secs)', 'NP: _phxStartHoldTimer functi
 has("'s Hold</button>'", 'NP: hold timer button injected in session block');
 has("lbl.textContent     = 'HOLD'", 'NP: rest overlay label changed to HOLD');
 has("skipBtn.textContent = 'Done'", 'NP: skip button relabelled Done for holds');
+
+// ── Nutrition Engine (v4.9.132) ───────────────────────────────────────────────
+has('function nutGetState()', 'NUT: nutGetState defined');
+has('function nutSaveState(s)', 'NUT: nutSaveState defined');
+has('function nutCalcTargets(', 'NUT: nutCalcTargets defined');
+has('function nutAdjustForToday(', 'NUT: nutAdjustForToday defined');
+has('function nutRenderTile()', 'NUT: nutRenderTile defined');
+has('function openNutritionScreen()', 'NUT: openNutritionScreen defined');
+has('function nutRenderScreen()', 'NUT: nutRenderScreen defined');
+has('function nutOpenSetup()', 'NUT: nutOpenSetup defined');
+has('function nutOpenMealLog(slot)', 'NUT: nutOpenMealLog defined');
+has('function nutSaveCheckin()', 'NUT: nutSaveCheckin defined');
+has("id=\"screen-nutrition\"", 'NUT: #screen-nutrition HTML screen added');
+has("'nutrition':'screen-nutrition'", 'NUT: navigation route wired');
+has("if(tab==='nutrition')", 'NUT: navTo renders nutrition screen');
+has("nutRenderTile()", 'NUT: Today tile replaced with live render');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

@@ -3330,9 +3330,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <!-- NUTRITION -->
   <div class="sidebar-section">
     <div class="sidebar-section-label">Nutrition</div>
-    <div class="sidebar-item" onclick="_sidebarComingSoon('View Week')">
-      <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg></div>
-      <div><div class="sidebar-item-text" style="color:var(--text2);">View Week</div><div class="sidebar-item-sub">Weekly meal plan — coming soon</div></div>
+    <div class="sidebar-item" onclick="closeSidebar();openNutritionScreen()">
+      <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg></div>
+      <div><div class="sidebar-item-text">Nutrition</div><div class="sidebar-item-sub">Macro tracking &middot; Daily log &middot; Check-in</div></div>
     </div>
     <div class="sidebar-item" onclick="_sidebarComingSoon('Add Recipe')">
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg></div>
@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.131';
+var APP_VERSION='4.9.132';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7995,7 +7995,9 @@ function navTo(tab){
     // v4.7.38 BUILD 1: landing + auth + alpha-welcome reachable via navTo.
     'auth':'screen-auth','landing':'screen-landing','alpha-welcome':'screen-alpha-welcome',
     // v4.7.39 CHANGE 2: Agoge intro (opt-in explanation) reachable via navTo.
-    'agoge-intro':'screen-agoge-intro'};
+    'agoge-intro':'screen-agoge-intro',
+    // v4.9.132: nutrition screen
+    'nutrition':'screen-nutrition'};
   if(map[tab]){
     showScreen(map[tab]);
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -8010,6 +8012,7 @@ function navTo(tab){
   if(tab==='my-coach') openMyCoach();
   if(tab==='agoge') openAgoge();
   if(tab==='records') renderRecords();
+  if(tab==='nutrition'){ _nutTab='today'; if(typeof nutRenderScreen==='function') nutRenderScreen(); }
 }
 
 // v4.7.40: legacy screen-onboard removed. The questionnaire (FQ) is the single
@@ -16708,6 +16711,42 @@ function setupSplashButtons(){
   </div>
 </div>
 
+<!-- NUTRITION SCREEN (v4.9.132) -->
+<div id="screen-nutrition" class="screen">
+  <div class="app-header">
+    <button onclick="navTo('today')" style="background:none;border:none;color:var(--text2);padding:8px 6px 8px 0;cursor:pointer;display:flex;align-items:center;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="header-logo">PHOENIX <span>NUTRITION</span></div>
+    <button onclick="nutOpenSetup()" style="background:none;border:none;color:var(--text3);padding:8px;cursor:pointer;touch-action:manipulation;" title="Setup">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+  <div id="nut-screen-body" style="padding:0 0 100px;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
+  <div class="bottom-nav">
+    <div class="nav-item" id="nav-today-nut" onclick="navTo('today')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span class="nav-label">Today</span>
+    </div>
+    <div class="nav-item" id="nav-programme-nut" onclick="navTo('programme')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="nav-label">Programme</span>
+    </div>
+    <div class="nav-item active" id="nav-nutrition-nut">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      <span class="nav-label">Nutrition</span>
+    </div>
+    <div class="nav-item" id="nav-records-nut" onclick="navTo('records')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      <span class="nav-label">Records</span>
+    </div>
+    <div class="nav-item" id="nav-athlete-nut" onclick="navTo('athlete')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span class="nav-label">Athlete</span>
+    </div>
+  </div>
+</div>
+
 <!-- REST TIMER OVERLAY -->
 <div class="rest-overlay" id="rest-overlay">
   <!-- v4.7.15 FIX 3: ad banners hide for Pro accounts; gate enforced in startRestTimer. -->
@@ -17495,8 +17534,9 @@ function renderTodayScreen(){
   // v4.9.93 FIX 5: "This Week's Schedule" tile removed — render call dropped.
   // v4.7.61: show today's core format badge (CIRCUIT / STRENGTH) on the Core tile.
   if(typeof _phxRenderCoreTileFormat==='function') _phxRenderCoreTileFormat();
-  // v4.9.121: nutrition placeholder tile
-  if(typeof _renderTodayNutritionPlaceholder==='function') _renderTodayNutritionPlaceholder();
+  // v4.9.132: live nutrition tile (falls back to placeholder if not set up)
+  if(typeof nutRenderTile==='function') nutRenderTile();
+  else if(typeof _renderTodayNutritionPlaceholder==='function') _renderTodayNutritionPlaceholder();
 }
 
 // ── Today screen helpers (Priority 2) ────────────────────────────
@@ -17541,6 +17581,446 @@ function _renderTodayNutritionPlaceholder(){
     '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Fat</div><div style="height:4px;background:var(--border);border-radius:2px;"></div></div>' +
     '</div>' +
     '</div>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NUTRITION ENGINE (v4.9.132) — Phase 1: Macro targets + daily tracking
+// Supabase SQL to run in dashboard before enabling sync:
+//   See HANDOFF_5.md §Supabase Tables — Nutrition
+// All data local-first (localStorage). Supabase sync added in Phase 2.
+// ─────────────────────────────────────────────────────────────────────────────
+
+var _nutTab = 'today';
+
+function _nutKey(){
+  var uid = (typeof athlete !== 'undefined' && athlete && athlete.id) ? athlete.id : 'guest';
+  return 'phx_nut_v1_' + uid;
+}
+
+function nutGetState(){
+  try { var r = localStorage.getItem(_nutKey()); return r ? JSON.parse(r) : null; } catch(e){ return null; }
+}
+
+function nutSaveState(s){
+  try { localStorage.setItem(_nutKey(), JSON.stringify(s)); } catch(e){}
+}
+
+function _nutToday(){
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Mifflin-St Jeor TDEE → goal-adjusted macro targets
+function nutCalcTargets(bw_kg, height_cm, age_yr, sex, goal){
+  var w = parseFloat(bw_kg) || 80;
+  var h = parseFloat(height_cm) || 175;
+  var a = parseFloat(age_yr) || 30;
+  var bmr = (sex === 'f')
+    ? Math.round(10*w + 6.25*h - 5*a - 161)
+    : Math.round(10*w + 6.25*h - 5*a + 5);
+  var tdee = Math.round(bmr * 1.55);
+  var kcal, prot;
+  if(goal === 'fat_loss'){     kcal = Math.round(tdee * 0.80); prot = Math.round(w * 2.2); }
+  else if(goal === 'hypertrophy'){ kcal = Math.round(tdee * 1.10); prot = Math.round(w * 2.0); }
+  else if(goal === 'strength'){ kcal = tdee; prot = Math.round(w * 1.8); }
+  else {                        kcal = tdee; prot = Math.round(w * 1.6); } // maintenance
+  var fat  = Math.round((kcal * 0.25) / 9);
+  var carbs = Math.max(0, Math.round((kcal - prot*4 - fat*9) / 4));
+  return { kcal: kcal, protein_g: prot, carbs_g: carbs, fat_g: fat };
+}
+
+// Adjust macro targets for today based on BLAB session type
+function nutAdjustForToday(base){
+  if(!base) return base;
+  var adj = { kcal: base.kcal, protein_g: base.protein_g, carbs_g: base.carbs_g, fat_g: base.fat_g, note: '' };
+  try {
+    var bs = (typeof blabGetState === 'function') ? blabGetState() : null;
+    if(!bs || !bs.active){ adj.note = 'Rest day — targets reduced'; adj.carbs_g = Math.max(0, adj.carbs_g - 30); adj.kcal = Math.max(1200, adj.kcal - 120); return adj; }
+    var nextDay = (bs.last_completed_day || 0) + 1;
+    if(nextDay > 4){ adj.note = 'Rest day — targets reduced'; adj.carbs_g = Math.max(0, adj.carbs_g - 30); adj.kcal = Math.max(1200, adj.kcal - 120); }
+    else if(nextDay === 2 || nextDay === 4){ adj.carbs_g += 40; adj.kcal += 160; adj.note = (nextDay === 4 ? 'Lower Power' : 'Lower Body') + ' day — +40g carbs added'; }
+    else { adj.note = 'Upper Body day — standard targets'; }
+  } catch(e){}
+  return adj;
+}
+
+// Sum macros logged across all meals for a day-state object
+function _nutDayTotals(dayData){
+  var t = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+  if(!dayData || !Array.isArray(dayData.meals)) return t;
+  dayData.meals.forEach(function(m){ t.kcal += m.kcal||0; t.protein_g += m.protein_g||0; t.carbs_g += m.carbs_g||0; t.fat_g += m.fat_g||0; });
+  return t;
+}
+
+// Render Today nutrition tile (replaces placeholder)
+function nutRenderTile(){
+  var tile = document.getElementById('today-nutrition-tile');
+  if(!tile) return;
+  var ns = nutGetState();
+  if(!ns || !ns.setup_done){
+    tile.innerHTML =
+      '<div onclick="openNutritionScreen()" style="background:var(--bg2);border:1px dashed var(--gold);border-radius:var(--radius);padding:14px 16px;cursor:pointer;">' +
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Nutrition</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+      '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Set up your macro targets to start tracking.</div>' +
+      '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">SET UP ›</div>' +
+      '</div></div>';
+    return;
+  }
+  var today = _nutToday();
+  var targets = nutAdjustForToday(ns.targets);
+  var dayData = (ns.daily && ns.daily[today]) || { meals: [] };
+  var logged = _nutDayTotals(dayData);
+  var remKcal = Math.max(0, targets.kcal - logged.kcal);
+  var pPct = Math.min(100, targets.protein_g ? Math.round(logged.protein_g / targets.protein_g * 100) : 0);
+  var cPct = Math.min(100, targets.carbs_g   ? Math.round(logged.carbs_g   / targets.carbs_g   * 100) : 0);
+  var fPct = Math.min(100, targets.fat_g     ? Math.round(logged.fat_g     / targets.fat_g     * 100) : 0);
+  var kcalColor = (logged.kcal > targets.kcal) ? 'var(--gold)' : 'var(--text)';
+  tile.innerHTML =
+    '<div onclick="openNutritionScreen()" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;">' +
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Nutrition</div>' +
+    '<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">' +
+    '<div><div style="font-family:var(--font-d);font-size:40px;font-weight:900;line-height:1;color:'+kcalColor+';">'+remKcal+'</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:2px;">kcal remaining · '+targets.kcal+' target</div></div>' +
+    '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">'+(logged.kcal||0)+' logged</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;">' +
+    _nutMacroBar('P', logged.protein_g, targets.protein_g, pPct, '#4CAF50') +
+    _nutMacroBar('C', logged.carbs_g,   targets.carbs_g,   cPct, 'var(--gold)') +
+    _nutMacroBar('F', logged.fat_g,     targets.fat_g,     fPct, '#FF6B6B') +
+    '</div>' +
+    (targets.note ? '<div style="font-size:10px;color:var(--text3);margin-top:8px;font-style:italic;">'+targets.note+'</div>' : '') +
+    '</div>';
+}
+
+function _nutMacroBar(label, logged, target, pct, color){
+  return '<div style="flex:1;">' +
+    '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:3px;">' +
+    '<span>' + label + '</span><span>' + (logged||0) + '/' + (target||0) + 'g</span></div>' +
+    '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;">' +
+    '<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:2px;transition:width 0.4s;"></div>' +
+    '</div></div>';
+}
+
+// Open nutrition screen (or setup if not configured)
+function openNutritionScreen(){
+  var ns = nutGetState();
+  if(!ns || !ns.setup_done){ nutOpenSetup(); return; }
+  navTo('nutrition');
+}
+
+// navTo('nutrition') renders this
+function nutRenderScreen(){
+  var body = document.getElementById('nut-screen-body');
+  if(!body) return;
+  var ns = nutGetState();
+  if(!ns || !ns.setup_done){ body.innerHTML = '<div style="padding:24px;text-align:center;"><div style="color:var(--text2);margin-bottom:16px;">Set up your nutrition targets to get started.</div><button onclick="nutOpenSetup()" class="btn-primary" style="width:100%;">Set Up Nutrition</button></div>'; return; }
+  var tabs = [{key:'today',label:'TODAY'},{key:'meals',label:'MEALS'},{key:'checkin',label:'CHECK-IN'}];
+  var tabBar = '<div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg);">' +
+    tabs.map(function(t){ var act = _nutTab === t.key; return '<button data-nut-tab="'+t.key+'" style="flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid '+(act?'var(--gold)':'transparent')+';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(act?'var(--gold)':'var(--text3)')+';cursor:pointer;touch-action:manipulation;">'+t.label+'</button>'; }).join('') + '</div>';
+  var content = '';
+  if(_nutTab === 'today')   content = _nutTabToday(ns);
+  else if(_nutTab === 'meals')   content = _nutTabMeals(ns);
+  else                           content = _nutTabCheckin(ns);
+  body.innerHTML = tabBar + '<div style="padding:16px;">' + content + '</div>';
+  body.querySelectorAll('[data-nut-tab]').forEach(function(btn){
+    btn.addEventListener('click', function(){ _nutTab = btn.getAttribute('data-nut-tab'); nutRenderScreen(); });
+  });
+  body.querySelectorAll('[data-nut-meal]').forEach(function(btn){
+    btn.addEventListener('click', function(){ nutOpenMealLog(btn.getAttribute('data-nut-meal')); });
+  });
+  var saveCI = body.querySelector('#nut-save-checkin');
+  if(saveCI) saveCI.addEventListener('click', nutSaveCheckin);
+  _nutWireFeelingBtns();
+  // Reset feeling selection to what was already saved today
+  var _todayData = (nutGetState() && nutGetState().daily && nutGetState().daily[_nutToday()]) || {};
+  _nutFeelingVal = _todayData.feeling || 0;
+}
+
+function _nutTabToday(ns){
+  var today = _nutToday();
+  var targets = nutAdjustForToday(ns.targets);
+  var dayData = (ns.daily && ns.daily[today]) || { meals: [] };
+  var logged = _nutDayTotals(dayData);
+  var remKcal = targets.kcal - logged.kcal;
+  var remColor = remKcal < 0 ? 'var(--gold)' : 'var(--text)';
+  var pPct = Math.min(100, targets.protein_g ? Math.round(logged.protein_g / targets.protein_g * 100) : 0);
+  var cPct = Math.min(100, targets.carbs_g   ? Math.round(logged.carbs_g   / targets.carbs_g   * 100) : 0);
+  var fPct = Math.min(100, targets.fat_g     ? Math.round(logged.fat_g     / targets.fat_g     * 100) : 0);
+  var goalLabels = { fat_loss: 'Fat Loss', hypertrophy: 'Hypertrophy', strength: 'Strength', maintenance: 'Maintenance' };
+  var h = '<div style="text-align:center;margin-bottom:20px;">' +
+    '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;line-height:1;color:'+remColor+';">' + (remKcal < 0 ? '+'+Math.abs(remKcal) : remKcal) + '</div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-top:4px;">kcal ' + (remKcal < 0 ? 'over target' : 'remaining') + ' · ' + targets.kcal + ' daily target</div>' +
+    (targets.note ? '<div style="font-size:11px;color:var(--gold);margin-top:6px;font-style:italic;">'+targets.note+'</div>' : '') +
+    '</div>';
+  h += '<div style="display:flex;gap:12px;margin-bottom:20px;">' +
+    _nutBigMacro('Protein', logged.protein_g, targets.protein_g, pPct, '#4CAF50') +
+    _nutBigMacro('Carbs',   logged.carbs_g,   targets.carbs_g,   cPct, 'var(--gold)') +
+    _nutBigMacro('Fat',     logged.fat_g,     targets.fat_g,     fPct, '#FF6B6B') +
+    '</div>';
+  h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Goal &middot; ' + (goalLabels[ns.goal] || 'Maintenance') + '</div>';
+  h += '<div style="display:flex;justify-content:space-around;text-align:center;">';
+  h += _nutStatBox('Protein', targets.protein_g + 'g');
+  h += _nutStatBox('Carbs',   targets.carbs_g   + 'g');
+  h += _nutStatBox('Fat',     targets.fat_g     + 'g');
+  h += _nutStatBox('Calories', targets.kcal + '');
+  h += '</div></div>';
+  h += '<div style="text-align:center;"><button data-nut-meal="quick" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;">+ Log a Meal</button></div>';
+  return h;
+}
+
+function _nutBigMacro(label, logged, target, pct, color){
+  return '<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;">' +
+    '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">' + label + '</div>' +
+    '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:' + color + ';">' + (logged||0) + '</div>' +
+    '<div style="font-size:10px;color:var(--text3);">/ ' + (target||0) + 'g</div>' +
+    '<div style="height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:2px;"></div></div>' +
+    '</div>';
+}
+
+function _nutStatBox(label, value){
+  return '<div><div style="font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text);">' + value + '</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' + label + '</div></div>';
+}
+
+function _nutTabMeals(ns){
+  var today = _nutToday();
+  var dayData = (ns.daily && ns.daily[today]) || { meals: [] };
+  var slots = ['Breakfast', 'Lunch', 'Dinner', 'Pre-workout', 'Snack'];
+  var h = '<div style="margin-bottom:12px;font-size:12px;color:var(--text3);">' + today + ' · Tap to log</div>';
+  slots.forEach(function(slot){
+    var slotMeals = dayData.meals.filter(function(m){ return m.slot === slot; });
+    var slotKcal = slotMeals.reduce(function(a,m){ return a + (m.kcal||0); }, 0);
+    var slotP = slotMeals.reduce(function(a,m){ return a + (m.protein_g||0); }, 0);
+    h += '<div style="display:flex;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
+    h += '<div style="flex:1;">';
+    h += '<div style="font-weight:700;color:var(--text);margin-bottom:2px;">' + slot + '</div>';
+    if(slotMeals.length){
+      h += '<div style="font-size:11px;color:var(--text3);">' + slotKcal + ' kcal · ' + slotP + 'g protein</div>';
+    } else {
+      h += '<div style="font-size:11px;color:var(--text3);">Not logged</div>';
+    }
+    h += '</div>';
+    h += '<button data-nut-meal="' + slot + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
+    h += '</div>';
+  });
+  h += '<div style="margin-top:20px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-size:11px;color:var(--text3);line-height:1.6;">' +
+    '<strong style="color:var(--text2);">Phase 2:</strong> Component-based meal builder with AUSNUT food database coming next. For now, log your macros manually per meal.' +
+    '</div>';
+  return h;
+}
+
+function _nutTabCheckin(ns){
+  var today = _nutToday();
+  var dayData = (ns.daily && ns.daily[today]) || {};
+  var feeling = dayData.feeling || 0;
+  var weight  = dayData.weight_kg || '';
+  var feelingBtns = '';
+  for(var i=1;i<=10;i++){
+    var active = feeling === i;
+    feelingBtns += '<button data-feeling="'+i+'" style="width:32px;height:32px;border-radius:50%;border:1px solid '+(active?'var(--gold)':'var(--border2)')+';background:'+(active?'var(--gold)':'var(--bg2)')+';color:'+(active?'#000':'var(--text2)')+';font-family:var(--font-d);font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;">'+i+'</button>';
+  }
+  var h = '<div style="margin-bottom:20px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">How are you feeling today?</div>';
+  h += '<div id="nut-feeling-btns" style="display:flex;gap:6px;flex-wrap:wrap;">' + feelingBtns + '</div>';
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:6px;display:flex;justify-content:space-between;"><span>Low energy</span><span>Peak</span></div>';
+  h += '</div>';
+  h += '<div style="margin-bottom:20px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Weight</div>';
+  h += '<div style="display:flex;align-items:center;gap:10px;">';
+  h += '<input type="number" id="nut-weight-input" inputmode="decimal" step="0.1" placeholder="kg" value="'+weight+'" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;">';
+  h += '<div style="font-size:13px;color:var(--text3);">kg</div>';
+  h += '</div></div>';
+  h += '<button id="nut-save-checkin" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;">Save Check-in</button>';
+  if(dayData.feeling){ h += '<div style="text-align:center;margin-top:10px;font-size:11px;color:var(--text3);">Checked in ✔ Feeling: ' + dayData.feeling + '/10' + (dayData.weight_kg ? ' · ' + dayData.weight_kg + 'kg' : '') + '</div>'; }
+  return h;
+}
+
+// Wires up feeling button taps in check-in tab
+var _nutFeelingVal = 0;
+function _nutWireFeelingBtns(){
+  var container = document.getElementById('nut-feeling-btns');
+  if(!container) return;
+  container.querySelectorAll('[data-feeling]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      _nutFeelingVal = parseInt(btn.getAttribute('data-feeling'));
+      container.querySelectorAll('[data-feeling]').forEach(function(b){
+        var active = parseInt(b.getAttribute('data-feeling')) === _nutFeelingVal;
+        b.style.background = active ? 'var(--gold)' : 'var(--bg2)';
+        b.style.borderColor = active ? 'var(--gold)' : 'var(--border2)';
+        b.style.color = active ? '#000' : 'var(--text2)';
+      });
+    });
+  });
+}
+
+function nutSaveCheckin(){
+  var ns = nutGetState();
+  if(!ns) return;
+  var today = _nutToday();
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[today]) ns.daily[today] = { meals: [] };
+  var feelingEl = document.getElementById('nut-feeling-btns');
+  var weightEl  = document.getElementById('nut-weight-input');
+  var feeling = _nutFeelingVal || (ns.daily[today].feeling || 0);
+  var weight  = weightEl ? parseFloat(weightEl.value) || 0 : 0;
+  if(feeling > 0) ns.daily[today].feeling = feeling;
+  if(weight > 0)  ns.daily[today].weight_kg = weight;
+  nutSaveState(ns);
+  nutRenderScreen();
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+}
+
+// Meal log modal
+function nutOpenMealLog(slot){
+  var old = document.getElementById('nut-meal-modal');
+  if(old) old.remove();
+  var slotLabel = slot === 'quick' ? 'Log a Meal' : slot;
+  var ov = document.createElement('div');
+  ov.id = 'nut-meal-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-end;';
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;padding:24px 20px 40px;max-height:85vh;overflow-y:auto;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text);margin-bottom:4px;">' + slotLabel + '</div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Enter what you ate</div>' +
+    '<div style="margin-bottom:12px;"><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px;">MEAL NAME (optional)</label><input type="text" id="nut-ml-name" placeholder="e.g. Chicken and rice" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;box-sizing:border-box;outline:none;"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">' +
+    _nutMlInput('nut-ml-kcal', 'CALORIES', 'kcal', 'e.g. 600') +
+    _nutMlInput('nut-ml-prot', 'PROTEIN', 'g', 'e.g. 45') +
+    _nutMlInput('nut-ml-carbs','CARBS', 'g', 'e.g. 60') +
+    _nutMlInput('nut-ml-fat',  'FAT', 'g', 'e.g. 20') +
+    '</div>' +
+    '<div style="display:flex;gap:10px;">' +
+    '<button id="nut-ml-cancel" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;">Cancel</button>' +
+    '<button id="nut-ml-save" style="flex:2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;">Save Meal</button>' +
+    '</div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#nut-ml-cancel').addEventListener('click', function(){ ov.remove(); });
+  ov.querySelector('#nut-ml-save').addEventListener('click', function(){
+    var name  = (ov.querySelector('#nut-ml-name').value || '').trim() || slotLabel;
+    var kcal  = parseFloat(ov.querySelector('#nut-ml-kcal').value)  || 0;
+    var prot  = parseFloat(ov.querySelector('#nut-ml-prot').value)  || 0;
+    var carbs = parseFloat(ov.querySelector('#nut-ml-carbs').value) || 0;
+    var fat   = parseFloat(ov.querySelector('#nut-ml-fat').value)   || 0;
+    if(!kcal && !prot && !carbs && !fat){ ov.remove(); return; }
+    var ns = nutGetState();
+    if(!ns) return;
+    var today = _nutToday();
+    if(!ns.daily) ns.daily = {};
+    if(!ns.daily[today]) ns.daily[today] = { meals: [] };
+    ns.daily[today].meals.push({ slot: (slot === 'quick' ? 'Snack' : slot), name: name, kcal: kcal, protein_g: prot, carbs_g: carbs, fat_g: fat, at: new Date().toISOString() });
+    nutSaveState(ns);
+    ov.remove();
+    nutRenderScreen();
+    nutRenderTile();
+  });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+}
+
+function _nutMlInput(id, label, unit, ph){
+  return '<div><label style="font-size:10px;color:var(--text3);letter-spacing:1px;font-family:var(--font-d);display:block;margin-bottom:4px;">' + label + ' (' + unit + ')</label>' +
+    '<input type="number" id="' + id + '" inputmode="decimal" placeholder="' + ph + '" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;outline:none;"></div>';
+}
+
+// Setup modal — collect goal, height, age, sex; calculate macros
+function nutOpenSetup(){
+  var old = document.getElementById('nut-setup-modal');
+  if(old) old.remove();
+  var ns = nutGetState() || {};
+  var ov = document.createElement('div');
+  ov.id = 'nut-setup-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9600;display:flex;align-items:flex-end;';
+  var goals = [
+    { key:'fat_loss',     label:'Fat Loss',     sub:'–20% calories · 2.2g/kg protein' },
+    { key:'hypertrophy',  label:'Hypertrophy',  sub:'+10% calories · 2.0g/kg protein' },
+    { key:'strength',     label:'Strength',     sub:'Maintenance calories · 1.8g/kg' },
+    { key:'maintenance',  label:'Maintenance',  sub:'TDEE · 1.6g/kg protein' }
+  ];
+  var currentGoal = ns.goal || 'hypertrophy';
+  var goalCards = goals.map(function(g){
+    var act = currentGoal === g.key;
+    return '<button data-goal="'+g.key+'" style="display:block;width:100%;text-align:left;padding:12px 14px;background:'+(act?'rgba(200,150,62,0.15)':'var(--bg3)')+';border:1px solid '+(act?'var(--gold)':'var(--border)')+';border-radius:var(--radius);margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
+      '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:'+(act?'var(--gold)':'var(--text)')+';">' + g.label + '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + g.sub + '</div>' +
+      '</button>';
+  }).join('');
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;padding:24px 20px 44px;max-height:92vh;overflow-y:auto;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Nutrition Setup</div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:20px;">Your goal + stats → daily macro targets</div>' +
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Goal</div>' +
+    '<div id="nut-goal-cards">' + goalCards + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:16px;margin-bottom:16px;">' +
+    _nutSetupInput('nut-su-height', 'HEIGHT', 'cm', (ns.profile && ns.profile.height_cm) || '') +
+    _nutSetupInput('nut-su-age',    'AGE',    'yrs', (ns.profile && ns.profile.age) || '') +
+    '<div><label style="font-size:10px;color:var(--text3);letter-spacing:1px;font-family:var(--font-d);display:block;margin-bottom:4px;">SEX</label>' +
+    '<select id="nut-su-sex" style="width:100%;padding:10px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-weight:700;appearance:none;text-align:center;outline:none;">' +
+    '<option value="m"'+ ((ns.profile && ns.profile.sex === 'm') ? ' selected' : '') +'>M</option>' +
+    '<option value="f"'+ ((ns.profile && ns.profile.sex === 'f') ? ' selected' : '') +'>F</option>' +
+    '</select></div>' +
+    '</div>' +
+    '<div id="nut-su-preview" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;min-height:48px;"></div>' +
+    '<div style="display:flex;gap:10px;">' +
+    '<button id="nut-su-cancel" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Cancel</button>' +
+    '<button id="nut-su-save" style="flex:2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;">Save Targets</button>' +
+    '</div>' +
+    '<div style="margin-top:14px;font-size:10px;color:var(--text3);line-height:1.5;text-align:center;">Targets based on Mifflin-St Jeor BMR &times; 1.55 activity multiplier.<br>Not medical advice. Consult a professional for specific dietary needs.</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  var _suGoal = currentGoal;
+  function _suUpdatePreview(){
+    var h   = parseFloat(ov.querySelector('#nut-su-height').value) || (ns.profile && ns.profile.height_cm) || 0;
+    var a   = parseFloat(ov.querySelector('#nut-su-age').value)    || (ns.profile && ns.profile.age) || 0;
+    var sex = ov.querySelector('#nut-su-sex').value;
+    var bw  = (typeof athlete !== 'undefined' && athlete && athlete.bw) ? parseFloat(athlete.bw) : 80;
+    var prev = ov.querySelector('#nut-su-preview');
+    if(!h || !a){ prev.innerHTML = '<div style="font-size:12px;color:var(--text3);">Enter height and age to preview targets.</div>'; return; }
+    var t = nutCalcTargets(bw, h, a, sex, _suGoal);
+    prev.innerHTML = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Preview Targets · ' + bw + 'kg bodyweight</div>' +
+      '<div style="display:flex;justify-content:space-around;text-align:center;">' +
+      _nutStatBox('Calories', t.kcal+'') + _nutStatBox('Protein', t.protein_g+'g') + _nutStatBox('Carbs', t.carbs_g+'g') + _nutStatBox('Fat', t.fat_g+'g') +
+      '</div>';
+  }
+  ov.querySelectorAll('[data-goal]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      _suGoal = btn.getAttribute('data-goal');
+      ov.querySelectorAll('[data-goal]').forEach(function(b){
+        var act2 = b.getAttribute('data-goal') === _suGoal;
+        b.style.background = act2 ? 'rgba(200,150,62,0.15)' : 'var(--bg3)';
+        b.style.borderColor = act2 ? 'var(--gold)' : 'var(--border)';
+        b.querySelector('div').style.color = act2 ? 'var(--gold)' : 'var(--text)';
+      });
+      _suUpdatePreview();
+    });
+  });
+  ['#nut-su-height','#nut-su-age','#nut-su-sex'].forEach(function(sel){
+    var el = ov.querySelector(sel); if(el) el.addEventListener('input', _suUpdatePreview);
+  });
+  ov.querySelector('#nut-su-cancel').addEventListener('click', function(){ ov.remove(); });
+  ov.querySelector('#nut-su-save').addEventListener('click', function(){
+    var h   = parseFloat(ov.querySelector('#nut-su-height').value) || 0;
+    var a   = parseFloat(ov.querySelector('#nut-su-age').value)    || 0;
+    var sex = ov.querySelector('#nut-su-sex').value;
+    if(!h || !a){ ov.querySelector('#nut-su-preview').innerHTML = '<div style="font-size:12px;color:#ff4444;">Please enter height and age.</div>'; return; }
+    var bw = (typeof athlete !== 'undefined' && athlete && athlete.bw) ? parseFloat(athlete.bw) : 80;
+    var targets = nutCalcTargets(bw, h, a, sex, _suGoal);
+    var newState = nutGetState() || {};
+    newState.setup_done = true;
+    newState.goal = _suGoal;
+    newState.profile = { height_cm: h, age: a, sex: sex };
+    newState.targets = targets;
+    if(!newState.daily) newState.daily = {};
+    nutSaveState(newState);
+    ov.remove();
+    nutRenderTile();
+    navTo('nutrition');
+  });
+  _suUpdatePreview();
+}
+
+function _nutSetupInput(id, label, unit, val){
+  return '<div><label style="font-size:10px;color:var(--text3);letter-spacing:1px;font-family:var(--font-d);display:block;margin-bottom:4px;">' + label + ' (' + unit + ')</label>' +
+    '<input type="number" id="' + id + '" inputmode="decimal" placeholder="' + unit + '" value="' + (val||'') + '" style="width:100%;padding:10px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;outline:none;"></div>';
 }
 
 window._phxRenderCoreTileFormat = function(){

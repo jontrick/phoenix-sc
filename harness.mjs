@@ -94,7 +94,19 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.126'", 'version is 4.9.126');
+has("var APP_VERSION='4.9.127'", 'version is 4.9.127');
+
+// ── Priority 8 — Smart Add Session Recommendation Engine ─────────────────────
+has('function _phxSmartRecommend()', 'P8: _phxSmartRecommend defined');
+has('function _phxOpenSmartAddSession()', 'P8: _phxOpenSmartAddSession defined');
+has('_phxOpenSmartAddSession()', 'P8: _phxOpenSessionLibrary delegates to smart overlay');
+has("rec.type==='BLAB'", 'P8: BLAB recommendation type handled');
+has("isDeload", 'P8: deload week detection present');
+has("blabDoneToday", 'P8: blabDoneToday signal present');
+has("coreDays>=7", 'P8: core frequency check present');
+has("wodDays>=2", 'P8: WOD frequency check present');
+has("data-act=\"start-rec\"", 'P8: start-rec action wired in overlay');
+has("data-act=\"choose\"", 'P8: choose action wired for alternatives');
 
 // ── Priority 6 — Standalone Timer ────────────────────────────────────────────
 has('function openStandaloneTimer()', 'P6: openStandaloneTimer defined (full implementation)');
@@ -111,7 +123,7 @@ has('function _phxOpenExPicker(', 'P7: _phxOpenExPicker defined');
 has('function _phxLoadCustomTemplates(', 'P7: _phxLoadCustomTemplates defined');
 has('function _phxSaveCustomTemplate(', 'P7: _phxSaveCustomTemplate defined');
 has("var _phxExLib = [", 'P7: exercise library array defined');
-has("value:'CUSTOM'", 'P7: CUSTOM option wired in session library picker');
+has("key==='CUSTOM'", 'P7: CUSTOM (Build Your Own) wired in session chooser');
 has("window._todaySession = sess;", 'P7: custom session assigned to _todaySession on start');
 has("phx_custom_templates", 'P7: template storage key in localStorage');
 

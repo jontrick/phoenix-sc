@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.126';
+var APP_VERSION='4.9.127';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21535,32 +21535,190 @@ function _phxLibHeader(eyebrow, title, right, onBack){
 }
 
 // ─────────────────────────── Flow: entry + pickers ─────────────────────────
-window._phxOpenSessionLibrary = function(){
+// ── SMART ADD SESSION — Priority 8 ────────────────────────────────
+
+function _phxSmartRecommend(){
+  var bs = (typeof blabGetState==='function') ? blabGetState() : null;
+  var blabActive = !!(bs && bs.active);
+  var blabWeek = bs ? (bs.week||1) : 1;
+  var isDeload = blabWeek===5 || blabWeek===10;
+  var lastDay = bs ? (bs.last_completed_day||0) : 0;
+  var nextDay = lastDay>=4 ? 1 : lastDay+1;
+  var blabDoneToday = !!(bs && bs.last_completed_date &&
+    new Date(bs.last_completed_date).toDateString()===new Date().toDateString());
+  var allBlabDone = lastDay>=4;
+
+  var now = new Date();
+  var hour = now.getHours();
+  var dow = now.getDay();
+  var isMorning = hour>=5 && hour<13;
+  var isEvening = hour>=17;
+
+  var dayNames = ['Upper Strength','Upper Hypertrophy','Lower Hypertrophy','Lower Power'];
+  var msPerDay = 86400000;
+  var nowMs = now.getTime();
+
+  var scores = (typeof _phxScoresAll==='function') ? _phxScoresAll() : [];
+  function lastScore(fn){
+    var m=scores.filter(fn);
+    if(!m.length) return null;
+    var lat=m.reduce(function(a,b){ return a.date>b.date?a:b; });
+    return { days:Math.floor((nowMs-new Date(lat.date).getTime())/msPerDay) };
+  }
+  var lastWod  = lastScore(function(s){ return s.cat==='WOD'&&(s.tier==='CONDITIONING'||s.tier==='TITAN'); });
+  var lastCore = lastScore(function(s){ return s.cat==='CORE'; });
+  var lastAero = lastScore(function(s){ return s.cat==='WOD'&&s.tier==='AEROBIC'; });
+  var wodDays  = lastWod  ? lastWod.days  : 999;
+  var coreDays = lastCore ? lastCore.days : 999;
+  var aeroDays = lastAero ? lastAero.days : 999;
+
+  // Deload week → aerobic
+  if(blabActive && isDeload){
+    return {type:'AEROBIC',name:'Aerobic Session',duration:35,
+      reason:'Deload week — keep intensity low and recover',
+      action:function(){ _phxOpenTierPicker(); }};
+  }
+  // Sunday + all BLAB done → aerobic
+  if(dow===0 && allBlabDone){
+    return {type:'AEROBIC',name:'Aerobic Session',duration:40,
+      reason:'Sunday + all BLAB done this week — steady-state recovery',
+      action:function(){ _phxOpenTierPicker(); }};
+  }
+  // Morning + BLAB due + not done today → BLAB
+  if(blabActive && !isDeload && isMorning && !blabDoneToday){
+    return {type:'BLAB',name:dayNames[nextDay-1]||('Day '+nextDay),duration:nextDay===4?70:60,
+      reason:'Week '+blabWeek+' Day '+nextDay+' — your scheduled session',
+      action:function(){ window.blabOpenSession(blabWeek,nextDay); }};
+  }
+  // BLAB due, not evening, not done today
+  if(blabActive && !isDeload && !blabDoneToday && !isEvening){
+    return {type:'BLAB',name:dayNames[nextDay-1]||('Day '+nextDay),duration:nextDay===4?70:60,
+      reason:'Week '+blabWeek+' Day '+nextDay+' is due',
+      action:function(){ window.blabOpenSession(blabWeek,nextDay); }};
+  }
+  // Core not done in 7+ days
+  if(coreDays>=7){
+    return {type:'CORE',name:'Core Session',duration:25,
+      reason:coreDays>=999?'No core session logged — get one in':'Core last done '+coreDays+' days ago',
+      action:function(){ _phxOpenCoreTypePickerLib(); }};
+  }
+  // Evening + BLAB done today → core top-up
+  if(isEvening && blabDoneToday){
+    return {type:'CORE',name:'Core Session',duration:25,
+      reason:'Evening extra — complements your session today',
+      action:function(){ _phxOpenCoreTypePickerLib(); }};
+  }
+  // WOD 2+ days overdue
+  if(wodDays>=2){
+    return {type:'WOD',name:'Conditioning WOD',duration:30,
+      reason:wodDays>=999?'No WOD logged — time to hit one':'Last WOD was '+wodDays+' days ago',
+      action:function(){ _phxOpenTierPicker(); }};
+  }
+  // Aerobic not done this week
+  if(aeroDays>=7){
+    return {type:'AEROBIC',name:'Aerobic Session',duration:40,
+      reason:'No aerobic session this week — add some endurance work',
+      action:function(){ _phxOpenTierPicker(); }};
+  }
+  // BLAB default
+  if(blabActive && !isDeload){
+    return {type:'BLAB',name:dayNames[nextDay-1]||('Day '+nextDay),duration:60,
+      reason:'Continue your programme — Week '+blabWeek+' Day '+nextDay,
+      action:function(){ window.blabOpenSession(blabWeek,nextDay); }};
+  }
+  // Fallback
+  return {type:'WOD',name:'Conditioning WOD',duration:30,
+    reason:'Pick a WOD from the library',
+    action:function(){ _phxOpenTierPicker(); }};
+}
+
+function _phxOpenSmartAddSession(){
+  var old=document.getElementById('phx-smart-add'); if(old) old.remove();
+  var ov=document.createElement('div');
+  ov.id='phx-smart-add';
+  ov.style.cssText='position:fixed;inset:0;z-index:9600;background:var(--bg);display:flex;flex-direction:column;overflow-y:auto;';
+
+  var rec = _phxSmartRecommend();
+  var isGold = rec.type==='BLAB'||rec.type==='WOD';
+  var accent = isGold ? 'var(--gold)' : '#4A90D9';
+  var btnColor = isGold ? '#000' : '#fff';
+  var badgeLabel = rec.type==='BLAB' ? 'PROGRAMME' : rec.type;
+  var startLabel = rec.type==='BLAB' ? 'Start Workout' : 'Start Session';
+
+  // "Or choose" tiles
+  var bs = (typeof blabGetState==='function') ? blabGetState() : null;
+  var blabActive = !!(bs && bs.active);
+  var blabWeek = bs ? (bs.week||1) : 1;
+  var lastDay = bs ? (bs.last_completed_day||0) : 0;
+  var nextDay = lastDay>=4 ? 1 : lastDay+1;
+  var dayNames = ['Upper Strength','Upper Hypertrophy','Lower Hypertrophy','Lower Power'];
   var templates = _phxLoadCustomTemplates();
-  var opts = [
-    {value:'WOD',  label:'WOD',  sub:'14 conditioning WODs + 5 aerobic sessions'},
-    {value:'CORE', label:'Core', sub:'Rotational power · core strength — 6 sessions'},
-    {value:'CUSTOM', label:'Build Your Own', sub:'Create a custom session from scratch'}
-  ];
+
+  function tile(key, label, sub, accentColor){
+    var c = accentColor||'var(--border2)';
+    return '<div data-act="choose" data-key="'+key+'" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-left:3px solid '+c+';border-radius:var(--radius);margin-bottom:8px;cursor:pointer;">'+
+      '<div><div style="font-family:var(--font-d);font-size:15px;font-weight:800;color:var(--text);">'+label+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+sub+'</div></div>'+
+      '<div style="font-size:20px;color:var(--text3);">&#8250;</div></div>';
+  }
+
+  var tilesHtml = '';
+  if(blabActive) tilesHtml += tile('BLAB','BLAB Programme','Week '+blabWeek+' Day '+nextDay+' — '+( dayNames[nextDay-1]||'Strength'),'var(--gold)');
+  tilesHtml += tile('WOD','Conditioning WOD','14 benchmark WODs','var(--gold)');
+  tilesHtml += tile('AEROBIC','Aerobic Session','5 endurance sessions','#4A90D9');
+  tilesHtml += tile('CORE','Core Session','Rotational power + core strength — 6 sessions','#4A90D9');
+  tilesHtml += tile('CUSTOM','Build Your Own','Custom session from scratch','var(--border2)');
   if(templates.length){
     templates.forEach(function(t){
-      opts.push({value:'tpl:'+t.id, label:t.name, sub:t.exercises.length+' exercises · saved session'});
+      tilesHtml += tile('tpl:'+t.id, t.name, t.exercises.length+' exercises — saved session','var(--border2)');
     });
   }
-  _phxOpenBottomSheet({
-    title:'Add a Session', subtitle:'Pick a category or build your own',
-    options: opts,
-    onSelect:function(cat){
-      if(cat==='WOD') _phxOpenTierPicker();
-      else if(cat==='CORE') _phxOpenCoreTypePickerLib();
-      else if(cat==='CUSTOM') openCustomSessionBuilder();
-      else if(String(cat).indexOf('tpl:')===0){
-        var tid = parseInt(String(cat).slice(4));
-        var tpl = templates.filter(function(t){ return t.id===tid; })[0];
-        if(tpl) openCustomSessionBuilder(tpl.exercises, tpl.name);
+
+  ov.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;">ADD SESSION</div>'+
+      '<button data-act="close" style="background:none;border:none;font-size:26px;color:var(--text3);cursor:pointer;padding:4px 8px;line-height:1;">&#215;</button>'+
+    '</div>'+
+    '<div style="padding:20px 20px 8px;">'+
+      '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">RECOMMENDED</div>'+
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid '+accent+';border-radius:var(--radius);padding:20px;">'+
+        '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:'+accent+';margin-bottom:8px;">'+badgeLabel+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--text);margin-bottom:4px;">'+rec.name+'</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-bottom:16px;">~'+rec.duration+' min &nbsp;&middot;&nbsp; '+rec.reason+'</div>'+
+        '<button data-act="start-rec" style="width:100%;padding:14px;background:'+accent+';color:'+btnColor+';border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;cursor:pointer;">'+startLabel+'</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:8px 20px 32px;">'+
+      '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;margin-top:12px;">OR CHOOSE</div>'+
+      tilesHtml+
+    '</div>';
+
+  ov.addEventListener('click',function(e){
+    var el=e.target.closest('[data-act]'); if(!el) return;
+    var a=el.getAttribute('data-act');
+    if(a==='close'){ ov.remove(); }
+    else if(a==='start-rec'){ ov.remove(); try{ rec.action(); }catch(err){ console.error('[SAS]',err); } }
+    else if(a==='choose'){
+      var key=el.getAttribute('data-key');
+      ov.remove();
+      if(key==='BLAB'){ if(bs) window.blabOpenSession(bs.week||1,nextDay); }
+      else if(key==='WOD') _phxOpenTierPicker();
+      else if(key==='AEROBIC') _phxOpenTierPicker();
+      else if(key==='CORE') _phxOpenCoreTypePickerLib();
+      else if(key==='CUSTOM') openCustomSessionBuilder();
+      else if(String(key).indexOf('tpl:')===0){
+        var tid=parseInt(String(key).slice(4));
+        var tpl=templates.filter(function(t){ return t.id===tid; })[0];
+        if(tpl) openCustomSessionBuilder(tpl.exercises,tpl.name);
       }
     }
   });
+
+  document.body.appendChild(ov);
+}
+
+window._phxOpenSessionLibrary = function(){
+  _phxOpenSmartAddSession();
 };
 
 function _phxOpenTierPicker(){

@@ -4,72 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#c8963e">
-<!-- TEMP DEBUG PANEL (v4.9.102): capture [PHX][DBG] logs + force-clear BLAB, show on ?debug=1 -->
-<script>
-(function(){
-  if(new URLSearchParams(location.search).get('debug')!=='1') return;
-  var captured=[];
-  var origLog=console.log.bind(console);
-  console.log=function(){
-    try{
-      var args=Array.prototype.slice.call(arguments);
-      var first=args.length?String(args[0]):'';
-      if(first.indexOf('[PHX][DBG]')!==-1){
-        captured.push(args.map(function(a){
-          if(typeof a==='object'){try{return JSON.stringify(a);}catch(e){return String(a);}}
-          return String(a);
-        }).join(' '));
-        renderPanel();
-      }
-    }catch(e){}
-    return origLog.apply(console,arguments);
-  };
-  var panel=null,body=null;
-  function ensurePanel(){
-    if(panel)return;
-    panel=document.createElement('div');
-    panel.id='phx-debug-panel';
-    panel.style.cssText='position:fixed;left:0;right:0;bottom:0;max-height:40vh;z-index:2147483647;'+
-      'background:#0a0a0a;border-top:2px solid #c8963e;color:#e8d9b0;font:11px/1.4 monospace;'+
-      'overflow-y:auto;padding:6px 10px;box-shadow:0 -4px 12px rgba(0,0,0,.6);box-sizing:border-box;';
-    var bar=document.createElement('div');
-    bar.style.cssText='display:flex;justify-content:space-between;align-items:center;'+
-      'position:sticky;top:0;background:#0a0a0a;border-bottom:1px solid #c8963e;'+
-      'padding:2px 0 4px;margin-bottom:4px;color:#c8963e;font-weight:bold;';
-    var title=document.createElement('span');title.textContent='[PHX][DBG] console';
-    var right=document.createElement('span');
-    right.style.cssText='display:flex;gap:12px;align-items:center;';
-    var fix=document.createElement('span');fix.textContent='⟳ force-clear BLAB';
-    fix.style.cssText='cursor:pointer;color:#e05c2a;';
-    fix.onclick=function(){
-      if(window.blabForceClearLocal){
-        var ok=window.blabForceClearLocal();
-        console.log('[PHX][DBG] force-clear BLAB triggered, result =',ok,'— reload to see Today tile');
-      } else { console.log('[PHX][DBG] blabForceClearLocal not available yet'); }
-    };
-    var close=document.createElement('span');close.textContent='✕ close';
-    close.style.cssText='cursor:pointer;color:#c8963e;';
-    close.onclick=function(){panel.style.display='none';};
-    right.appendChild(fix);right.appendChild(close);
-    bar.appendChild(title);bar.appendChild(right);
-    body=document.createElement('div');
-    body.style.cssText='white-space:pre-wrap;word-break:break-word;';
-    panel.appendChild(bar);panel.appendChild(body);
-    document.body.appendChild(panel);
-  }
-  function renderPanel(){
-    if(!document.body)return;
-    ensurePanel();
-    body.textContent=captured.join('\n');
-    panel.scrollTop=panel.scrollHeight;
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',renderPanel);
-  }else{
-    renderPanel();
-  }
-})();
-</script>
 <link rel="manifest" href="manifest.json">
 <title>PROJECT PHOENIX PLAN</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
@@ -3578,7 +3512,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.118';
+var APP_VERSION='4.9.119';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4676,8 +4610,6 @@ window.blabToPhoenixSession = function(sess, week, day){
   };
 };
 
-// v4.9.108: blabBuildExCard + blabLaunchExercise (dead overlay card path) removed.
-
 // ── v4.9.118 BLAB runner clock (FIX 1) ──────────────────────────────────────
 // The runner's elapsed time is derived from timestamps, not a tick counter, so a locked
 // screen cannot lose time: elapsed = _elapsedBase (banked work segments) + the live segment
@@ -4930,7 +4862,6 @@ function blabDots(total, cur){
 function blabElapsed(st){ return '<div style="text-align:center;font-family:var(--font-d);font-size:11px;color:var(--text3);margin:12px 0;">Time: <span id="blab-elapsed">'+blabFmt(st.elapsed)+'</span></div>'; }
 function blabFinishBtn(label){ return '<button onclick="window._blabWoDone()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-top:8px;">'+(label||'Complete \u2713')+'</button>'; }
 
-// v4.9.108: blabRenderPct/_blabPctDone/blabRenderSuper/_blabSuperA/_blabSuperB removed (dead).
 // TOTAL REP GOAL
 function blabRenderTR(ex,st,body){
   if(!st.trTotal) st.trTotal=0;
@@ -5075,7 +5006,6 @@ window._blabAfapTick=function(i){
   window._blabWoRender();
 };
 
-// v4.9.108: blabRenderMaxReps/_blabMrDone/blabRenderStd removed (dead).
 // INTERVAL RUN
 function blabRenderRun(ex,st,body){
   body.innerHTML=

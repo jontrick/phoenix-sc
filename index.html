@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.129';
+var APP_VERSION='4.9.130';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4777,7 +4777,20 @@ window._blabBuildSupersetBlock = function(ex, idx){
     }
   }
 
+  function ssPrevBanner(prevSets,prevWt,prevReps){
+    if(prevSets&&prevSets.length){
+      return '<div style="font-size:10px;color:var(--gold);margin-bottom:6px;">Last session: '+
+        prevSets.map(function(s,i){ return 'S'+(i+1)+': '+(s.wt?s.wt+'kg':'')+(s.reps?' &times; '+s.reps:''); }).join(' &middot; ')+'</div>';
+    }
+    if(prevWt||prevReps){
+      return '<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Last session: '+(prevWt?prevWt+'kg':'')+(prevWt&&prevReps?' &times; ':'')+(prevReps?prevReps+' reps':'')+'</div>';
+    }
+    return '';
+  }
+
   function renderSS(){
+    var _banA=ssPrevBanner(ex.prev_sets_a,ex.prev_wt_a,ex.prev_reps_a);
+    var _banB=ssPrevBanner(ex.prev_sets_b,ex.prev_wt_b,ex.prev_reps_b);
     var allDone = state.set > totalSets;
     var h = '';
 
@@ -4794,7 +4807,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card A
       h += '<div style="background:var(--bg2);border:2px solid '+(state.aOk?'#3a7d44':'var(--gold)')+';border-radius:12px;padding:14px;margin-bottom:8px;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">A &mdash; '+ex.name+'</div>'+
-        ((ex.prev_wt_a||ex.prev_reps_a)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Last week: '+(ex.prev_wt_a?ex.prev_wt_a+'kg':'')+(ex.prev_wt_a&&ex.prev_reps_a?' &times; ':'')+(ex.prev_reps_a?ex.prev_reps_a+' reps':'')+'</div>':'')+
+        _banA+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+ex.reps+'</div>';
       if(state.aOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadA?state.loadA+'kg &middot; ':'')+state.aReps+' reps</div>';
@@ -4812,7 +4825,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
       // Card B
       h += '<div style="background:var(--bg2);border:2px solid '+(state.bOk?'#3a7d44':state.aOk?'var(--gold)':'var(--border2)')+';border-radius:12px;padding:14px;margin-bottom:8px;opacity:'+(state.aOk?'1':'0.5')+';transition:opacity 0.2s;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">B &mdash; '+m.name+'</div>'+
-        ((ex.prev_wt_b||ex.prev_reps_b)?'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Last week: '+(ex.prev_wt_b?ex.prev_wt_b+'kg':'')+(ex.prev_wt_b&&ex.prev_reps_b?' &times; ':'')+(ex.prev_reps_b?ex.prev_reps_b+' reps':'')+'</div>':'')+
+        _banB+
         '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+m.reps+'</div>';
       if(state.bOk){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadB?state.loadB+'kg &middot; ':'')+state.bReps+' reps</div>';
@@ -4889,6 +4902,13 @@ window._blabBuildSupersetBlock = function(ex, idx){
             if(last.a) bs.records[ex2.name+'_reps'] = last.a;
             if(partner.name && last.kb) bs.records[partner.name+'_wt'] = last.kb;
             if(partner.name && last.b) bs.records[partner.name+'_reps'] = last.b;
+            st.log.forEach(function(l,li){
+              var sn=li+1;
+              if(l.ka) bs.records[ex2.name+'_wt_set'+sn]=l.ka;
+              if(l.a) bs.records[ex2.name+'_reps_set'+sn]=l.a;
+              if(partner.name&&l.kb) bs.records[partner.name+'_wt_set'+sn]=l.kb;
+              if(partner.name&&l.b) bs.records[partner.name+'_reps_set'+sn]=l.b;
+            });
             window.blabSaveState(bs);
           }
         }
@@ -5113,6 +5133,16 @@ window.blabToPhoenixSession = function(sess, week, day){
       // v4.9.106: carry previous reps too so the renderer shows LOAD × REPS for A and B.
       phxEx.prev_reps_a = _ssRec[ex.movements[0].name+'_reps'] || 0;
       phxEx.prev_reps_b = _ssRec[ex.movements[1].name+'_reps'] || 0;
+      var _ssPA=[],_ssPB=[];
+      for(var _sn=1;_sn<=6;_sn++){
+        var _swtA=_ssRec[ex.movements[0].name+'_wt_set'+_sn]; if(!_swtA) break;
+        _ssPA.push({wt:_swtA,reps:_ssRec[ex.movements[0].name+'_reps_set'+_sn]||0});
+      }
+      for(var _sni=1;_sni<=6;_sni++){
+        var _swtB=_ssRec[ex.movements[1].name+'_wt_set'+_sni]; if(!_swtB) break;
+        _ssPB.push({wt:_swtB,reps:_ssRec[ex.movements[1].name+'_reps_set'+_sni]||0});
+      }
+      phxEx.prev_sets_a=_ssPA; phxEx.prev_sets_b=_ssPB;
 
     } else if(fmt === 'total_rep_goal'){
       phxEx.sets = 1;
@@ -9783,13 +9813,13 @@ function releaseWakeLock(){
 // stored start timestamp, so a session that ran through a screen lock stays accurate.
 document.addEventListener('visibilitychange', function(){
   if(document.visibilityState !== 'visible') return;
-  var live = !!(window._phxTimerResync || rtInterval || wakeLock || window._blabWakeLock);
-  if(live) requestWakeLock();
+  requestWakeLock();
   // The rest overlay is already rtEndTime-driven; repaint it now instead of up to 500ms late.
   if(rtInterval){ try{ updateRTDisplay(); }catch(e){} }
   var fn = window._phxTimerResync;
   if(fn){ try{ fn(); }catch(e){ console.warn('[PHX] timer resync failed:', e); } }
 });
+requestWakeLock(); // persistent: hold screen wake lock for entire PWA session
 
 // v4.7.10: cancellable count-in.
 // showCountIn now publishes its interval handle + overlay node + callback to window._countInState
@@ -9944,7 +9974,7 @@ function updateRTDisplay(){
 // the screen lock back when the rest timer ends would let the phone sleep for the remainder of
 // the workout, so only release when no timed session is registered.
 function _phxReleaseWakeLockIfIdle(){
-  if(!window._phxTimerResync) releaseWakeLock();
+  if(!window._phxTimerResync){ releaseWakeLock(); requestWakeLock(); }
 }
 document.addEventListener('DOMContentLoaded',function(){
   var rtSkip=document.getElementById('rt-skip');
@@ -22026,9 +22056,9 @@ function _phxRenderTime(s){
     var controls='';
     if(active){
       var tally = (p.reps!=null) ? '<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin:14px 0 4px;">'+
-        '<div class="phx-tt-minus" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text2);cursor:pointer;">–</div>'+
+        '<button class="phx-tt-minus" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--border2);background:none;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text2);cursor:pointer;touch-action:manipulation;">–</button>'+
         '<div style="text-align:center;min-width:70px;"><div class="phx-tt-count" style="font-family:var(--font-d);font-size:36px;font-weight:900;color:var(--gold);line-height:1;">'+st.reps+'</div><div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-top:2px;">of '+p.reps+' reps</div></div>'+
-        '<div class="phx-tt-plus" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--gold);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;">+</div>'+
+        '<button class="phx-tt-plus" style="width:42px;height:42px;border-radius:50%;border:1px solid var(--gold);background:none;color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;touch-action:manipulation;">+</button>'+
       '</div>' : '';
       controls = tally + '<button class="phx-step-done" style="width:100%;margin-top:8px;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Done — Next</button>';
     }

@@ -94,7 +94,28 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.129'", 'version is 4.9.129');
+has("var APP_VERSION='4.9.130'", 'version is 4.9.130');
+
+// ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
+// Bug 1: Superset per-set data
+has('function ssPrevBanner(', 'P11-B1: ssPrevBanner helper defined');
+has('_banA=ssPrevBanner(', 'P11-B1: _banA computed from ssPrevBanner');
+has('_banB=ssPrevBanner(', 'P11-B1: _banB computed from ssPrevBanner');
+has("bs.records[ex2.name+'_wt_set'+sn]", 'P11-B1: per-set weight saved by set number');
+has("bs.records[ex2.name+'_reps_set'+sn]", 'P11-B1: per-set reps saved by set number');
+has("phxEx.prev_sets_a=_ssPA", 'P11-B1: prev_sets_a passed to renderer');
+has("phxEx.prev_sets_b=_ssPB", 'P11-B1: prev_sets_b passed to renderer');
+// Bug 2: iOS tap counter — button elements with touch-action
+has("class=\"phx-tt-minus\"", 'P11-B2: phx-tt-minus exists');
+has("touch-action:manipulation", 'P11-B2: touch-action:manipulation on tap counter buttons');
+hasNot('<div class="phx-tt-minus"', 'P11-B2: phx-tt-minus is now a button (not a div)');
+hasNot('<div class="phx-tt-plus"', 'P11-B2: phx-tt-plus is now a button (not a div)');
+// Bug 3: Persistent wake lock
+has("requestWakeLock(); // persistent", 'P11-B3: persistent wake lock requested on load');
+has("function _phxReleaseWakeLockIfIdle", 'P11-B3: _phxReleaseWakeLockIfIdle still present');
+has("releaseWakeLock(); requestWakeLock();", 'P11-B3: re-acquires lock after idle release');
+// Bug 4: Week 2 superset reps — verified correct
+has("var a12 = (w === 1) ? 15 : 12", 'P11-B4: Week 2 superset reps = 12 (not 15)');
 
 // ── Priority 10 — Records Tab Enhancement ────────────────────────────────────
 has("var _phxRecTab = 'wod'", 'P10: _phxRecTab tab state variable');
@@ -170,7 +191,7 @@ has('function _phxElapsedSince(from)', 'FIX1: _phxElapsedSince derives seconds f
 has('Math.floor((Date.now() - t)/1000)', 'FIX1: elapsed = floor((now - start)/1000)');
 has('function _phxRegisterTimer(resync)', 'FIX1: resync handler registry');
 has('function _phxUnregisterTimer()', 'FIX1: resync handler teardown');
-has("if(document.visibilityState !== 'visible') return;\n  var live =", 'FIX1: visibilitychange→visible hook for timed sessions');
+has("if(document.visibilityState !== 'visible') return;\n  requestWakeLock();", 'FIX1: visibilitychange→visible hook for timed sessions');
 has('var fn = window._phxTimerResync;\n  if(fn){ try{ fn(); }', 'FIX1: visible → active session recalculates elapsed');
 // every timed renderer must be timestamp-driven + registered
 has('function _blabElapsedNow(st)', 'FIX1: BLAB runner elapsed from timestamps');
@@ -193,7 +214,7 @@ hasNot('setInterval(function(){ secLeft--;', 'FIX1: EMOM tick-counter secLeft-- 
 hasNot('coreSecsLeft--;', 'FIX1: Core circuit tick-counter decrement removed');
 // FIX 2 — wake lock held for every timed session, re-requested after a screen lock.
 has('if(wakeLock && !wakeLock.released) return;', 'FIX2: released sentinel replaced, live one never duplicated');
-has('if(live) requestWakeLock();', 'FIX2: wake lock re-requested when the page becomes visible');
+has('requestWakeLock(); // persistent', 'FIX2: wake lock re-requested when the page becomes visible (persistent)');
 has('function showCountIn(callback){\n  // Kill any prior count-in still running before we start a new one\n  _phxCancelCountIn();\n  requestWakeLock();', 'FIX2: wake lock held through the count-in');
 hasNot("navigator.wakeLock.request('screen').then(function(lock){", 'FIX2: BLAB inline wakeLock request replaced by shared helper');
 // FIX 3 — one 5-4-3-2-1-GO! count-in before every timed session, never scored.
@@ -213,7 +234,7 @@ hasNot('id="afap-countdown"', 'FIX3: afap-countdown element removed');
   ["showCountIn(function(){\n          if(!karenRunning) return; // stopped / left during the count-in", 'Karen benchmark WOD'],
 ].forEach(([needle, label]) => has(needle, 'FIX3: count-in gates the clock — ' + label));
 // rest is a phase inside a live session — the lock must survive it
-has('function _phxReleaseWakeLockIfIdle(){\n  if(!window._phxTimerResync) releaseWakeLock();', 'FIX2: rest end keeps the lock while a session is registered');
+has('function _phxReleaseWakeLockIfIdle(){\n  if(!window._phxTimerResync){ releaseWakeLock(); requestWakeLock(); }', 'FIX2: rest end keeps the lock while a session is registered');
 has('    _phxReleaseWakeLockIfIdle();\n    // v4.9.97: fire-and-clear the completion callback', 'FIX2: rest-overlay completion uses the guarded release');
 // a cancelled count-in must never leave a runner frozen at 0:00
 has('if(!window._blabWoTimer && !window._countInState && !st.resting && !st._finished) _blabStartClock();', 'FIX3: BLAB runner self-heals if its count-in was cancelled');
@@ -323,7 +344,7 @@ has('function blabPrevBestBanner(value, label, suffix)', 'prev-best banner helpe
 // ── v4.9.111 Weekly progression wording ──────────────────────────────────────
 has("blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':''), 'Last week')", '#1 percentage_sets banner labelled "Last week:"');
 has("phxEx.coaching_note = 'Beat last week: '+phxEx.prev_best+' reps'", '#2 max_reps dynamic "Beat last week:" note');
-has('color:var(--gold);margin-bottom:6px;">Last week: ', '#3 superset A/B prev labelled "Last week:"');
+has('Last session: ', '#3 superset A/B prev banner shows last session data');
 has("(fmt==='interval'?' — beat it.':'')", '#5 interval run appends "— beat it."');
 has("var _pbSuffix = (ex._timeRecordKey==='100_pushups_time') ? ' — beat it.' : ''", '#6 100 Push-ups afap banner suffix (complexes stay plain)');
 

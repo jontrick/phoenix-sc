@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.124';
+var APP_VERSION='4.9.125';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4113,7 +4113,256 @@ window.blabOpenViewProg = function(){
 };
 
 function openStandaloneTimer(){
-  _sidebarComingSoon('Standalone Timer');
+  var ex=document.getElementById('standalone-timer-overlay');
+  if(ex) ex.remove();
+  var ov=document.createElement('div');
+  ov.id='standalone-timer-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:9800;background:var(--bg);display:flex;flex-direction:column;overscroll-behavior:contain;';
+
+  var activeTab='stopwatch';
+  var ticker=null;
+  var sw={running:false,accMs:0,startMs:0,laps:[]};
+  var cd={running:false,totalMs:300000,accMs:300000,startMs:0};
+  var tb={running:false,phase:'work',round:1,rounds:8,workSec:20,restSec:10,phaseEndMs:0,displayRemain:20};
+
+  function beep(freq,dur){
+    try{
+      var ctx=new(window.AudioContext||window.webkitAudioContext)();
+      var o=ctx.createOscillator();var g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.frequency.value=freq||880;o.start();
+      g.gain.setValueAtTime(0.5,ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+(dur||0.3));
+      o.stop(ctx.currentTime+(dur||0.3));
+    }catch(e){}
+  }
+  function vib(pat){try{if(navigator.vibrate)navigator.vibrate(pat);}catch(e){}}
+  function stopTicker(){if(ticker){clearInterval(ticker);ticker=null;}}
+  function fmtMs(ms){
+    var t=Math.max(0,ms);
+    return (Math.floor(t/60000)<10?'0':'')+Math.floor(t/60000)+':'+(Math.floor((t%60000)/1000)<10?'0':'')+Math.floor((t%60000)/1000)+'.'+(Math.floor((t%1000)/10)<10?'0':'')+Math.floor((t%1000)/10);
+  }
+  function fmtSec(s){
+    var t=Math.max(0,Math.round(s));
+    return (Math.floor(t/60)<10?'0':'')+Math.floor(t/60)+':'+(t%60<10?'0':'')+t%60;
+  }
+  function tbFmt(s){
+    var t=Math.max(0,Math.ceil(s));
+    if(t<60) return String(t);
+    return Math.floor(t/60)+':'+(t%60<10?'0':'')+t%60;
+  }
+  function btnS(bg,gold){
+    return 'flex:1;padding:14px 10px;background:'+bg+';color:'+(gold?'#000':'var(--text)')+';border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:16px;font-weight:800;cursor:pointer;';
+  }
+
+  // ── STOPWATCH ──
+  function swElapsed(){return sw.running?sw.accMs+(Date.now()-sw.startMs):sw.accMs;}
+  function swRenderDisplay(){
+    var el=ov.querySelector('#stimer-sw-disp');
+    if(el) el.textContent=fmtMs(swElapsed());
+    var lEl=ov.querySelector('#stimer-sw-laps');
+    if(lEl) lEl.innerHTML=sw.laps.slice().reverse().map(function(l,i){
+      return '<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);"><span style="font-family:var(--font-d);font-size:12px;color:var(--text3);">Lap '+(sw.laps.length-i)+'</span><span style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);">'+fmtMs(l)+'</span></div>';
+    }).join('');
+  }
+  function swRenderButtons(){
+    var b=ov.querySelector('#stimer-sw-btns');if(!b)return;
+    if(sw.running){
+      b.innerHTML='<button data-act="sw-pause" style="'+btnS('var(--gold)',true)+'">Pause</button><button data-act="sw-lap" style="'+btnS('var(--bg3)',false)+'">Lap</button>';
+    }else if(sw.accMs>0){
+      b.innerHTML='<button data-act="sw-resume" style="'+btnS('var(--gold)',true)+'">Resume</button><button data-act="sw-reset" style="'+btnS('#555',false)+'">Reset</button>';
+    }else{
+      b.innerHTML='<button data-act="sw-start" style="'+btnS('var(--gold)',true)+';width:100%;text-align:center;">Start</button>';
+    }
+  }
+  function swStart(){sw.running=true;sw.startMs=Date.now();stopTicker();ticker=setInterval(swRenderDisplay,50);swRenderButtons();}
+  function swPause(){sw.accMs=swElapsed();sw.running=false;stopTicker();swRenderDisplay();swRenderButtons();}
+  function swReset(){stopTicker();sw={running:false,accMs:0,startMs:0,laps:[]};swRenderDisplay();swRenderButtons();}
+  function swLap(){if(!sw.running)return;sw.laps.push(swElapsed());swRenderDisplay();}
+
+  // ── COUNTDOWN ──
+  function cdRemain(){return cd.running?Math.max(0,cd.accMs-(Date.now()-cd.startMs)):cd.accMs;}
+  function cdRenderDisplay(){
+    var r=cdRemain();
+    var el=ov.querySelector('#stimer-cd-disp');
+    if(el){el.textContent=fmtSec(r/1000);el.style.color=(r===0&&!cd.running)?'var(--gold)':'var(--text)';}
+    if(r<=0&&cd.running){
+      cd.running=false;cd.accMs=0;stopTicker();
+      beep(1200,0.2);setTimeout(function(){beep(1200,0.2);},300);setTimeout(function(){beep(1200,0.5);},600);
+      vib([200,100,200,100,400]);cdRenderButtons();
+    }
+  }
+  function cdRenderButtons(){
+    var b=ov.querySelector('#stimer-cd-btns');if(!b)return;
+    if(cd.running){
+      b.innerHTML='<button data-act="cd-add60" style="'+btnS('#555',false)+'">+1 min</button><button data-act="cd-add30" style="'+btnS('#555',false)+'">+30s</button><button data-act="cd-pause" style="'+btnS('var(--gold)',true)+'">Pause</button>';
+    }else if(cd.accMs>0){
+      b.innerHTML='<button data-act="cd-start" style="'+btnS('var(--gold)',true)+'">Start</button><button data-act="cd-reset" style="'+btnS('#555',false)+'">Reset</button>';
+    }else{
+      b.innerHTML='<button style="'+btnS('#444',false)+';width:100%;opacity:0.5;">Set a time above</button>';
+    }
+  }
+  function cdStart(){if(cd.accMs<=0)return;cd.running=true;cd.startMs=Date.now();stopTicker();ticker=setInterval(cdRenderDisplay,250);cdRenderButtons();}
+  function cdPause(){cd.accMs=cdRemain();cd.running=false;stopTicker();cdRenderDisplay();cdRenderButtons();}
+  function cdReset(){stopTicker();cd.running=false;cd.accMs=cd.totalMs;cdRenderDisplay();cdRenderButtons();}
+  function cdAdd(ms){cd.accMs=Math.min(cdRemain()+ms,5999000);cd.totalMs=cd.accMs;if(cd.running)cd.startMs=Date.now();cdRenderDisplay();}
+  function cdSetFromInputs(){
+    var mEl=ov.querySelector('#stimer-cd-min');var sEl=ov.querySelector('#stimer-cd-sec');
+    var ms=Math.max(0,Math.min((parseInt((mEl&&mEl.value)||0))*60+(parseInt((sEl&&sEl.value)||0)),5999))*1000;
+    cd.totalMs=ms;cd.accMs=ms;cdRenderDisplay();cdRenderButtons();
+  }
+
+  // ── TABATA ──
+  function tbRenderDisplay(){
+    var phEl=ov.querySelector('#stimer-tb-phase');
+    var tmEl=ov.querySelector('#stimer-tb-time');
+    var rdEl=ov.querySelector('#stimer-tb-round');
+    var bgEl=ov.querySelector('#stimer-tb-phasebg');
+    if(!phEl)return;
+    var isDone=tb.phase==='done';var isWork=tb.phase==='work';
+    phEl.textContent=isDone?'COMPLETE':(isWork?'WORK':'REST');
+    phEl.style.color=isDone?'#000':'#fff';
+    if(tmEl){tmEl.textContent=isDone?'':tbFmt(tb.displayRemain);tmEl.style.color=isDone?'#000':'#fff';}
+    if(rdEl){rdEl.textContent=isDone?('All '+tb.rounds+' rounds done!'):('Round '+tb.round+' / '+tb.rounds);rdEl.style.color=isDone?'rgba(0,0,0,0.7)':'rgba(255,255,255,0.8)';}
+    if(bgEl)bgEl.style.background=isDone?'var(--gold)':(isWork?'#c0392b':'#27ae60');
+  }
+  function tbRenderButtons(){
+    var b=ov.querySelector('#stimer-tb-btns');if(!b)return;
+    if(tb.running){
+      b.innerHTML='<button data-act="tb-stop" style="'+btnS('#555',false)+'">Stop &amp; Reset</button>';
+    }else if(tb.phase==='done'){
+      b.innerHTML='<button data-act="tb-reset" style="'+btnS('var(--gold)',true)+'">Go Again</button>';
+    }else{
+      b.innerHTML='<button data-act="tb-start" style="'+btnS('var(--gold)',true)+'">Start Tabata</button>';
+    }
+  }
+  function tbTick(){
+    if(!tb.running)return;
+    var remain=(tb.phaseEndMs-Date.now())/1000;
+    if(remain<=0){
+      if(tb.phase==='work'){
+        tb.phase='rest';tb.phaseEndMs=Date.now()+tb.restSec*1000;
+        beep(880,0.15);vib(150);remain=tb.restSec;
+      }else{
+        tb.round++;
+        if(tb.round>tb.rounds){
+          tb.phase='done';tb.running=false;stopTicker();
+          beep(1200,0.2);setTimeout(function(){beep(1200,0.2);},300);setTimeout(function(){beep(1200,0.6);},600);
+          vib([200,100,200,100,500]);
+          tb.displayRemain=0;tbRenderDisplay();tbRenderButtons();return;
+        }
+        tb.phase='work';tb.phaseEndMs=Date.now()+tb.workSec*1000;
+        beep(1200,0.2);vib(300);remain=tb.workSec;
+      }
+    }
+    tb.displayRemain=Math.max(0,remain);tbRenderDisplay();
+  }
+  function tbStart(){
+    if(tb.running||tb.phase==='done')return;
+    tb.running=true;tb.phaseEndMs=Date.now()+tb.workSec*1000;tb.displayRemain=tb.workSec;
+    stopTicker();ticker=setInterval(tbTick,100);
+    tbRenderDisplay();tbRenderButtons();beep(1200,0.2);vib(300);
+  }
+  function tbReset(){
+    stopTicker();tb.running=false;tb.phase='work';tb.round=1;tb.displayRemain=tb.workSec;
+    tbRenderDisplay();tbRenderButtons();
+  }
+  function tbApplyConfig(){
+    var wEl=ov.querySelector('#stimer-tb-work');var rEl=ov.querySelector('#stimer-tb-rest');var nEl=ov.querySelector('#stimer-tb-rounds');
+    tb.workSec=Math.max(1,Math.min(parseInt((wEl&&wEl.value)||20),600));
+    tb.restSec=Math.max(1,Math.min(parseInt((rEl&&rEl.value)||10),600));
+    tb.rounds=Math.max(1,Math.min(parseInt((nEl&&nEl.value)||8),99));
+    tbReset();
+  }
+
+  // ── TABS ──
+  function tabBtn(key,label){
+    var active=activeTab===key;
+    return '<button data-act="tab-'+key+'" style="flex:1;padding:10px 0;border:none;border-radius:var(--radius);background:'+(active?'var(--gold)':'var(--bg2)')+';color:'+(active?'#000':'var(--text3)')+';font-family:var(--font-d);font-size:11px;font-weight:800;letter-spacing:1px;cursor:pointer;text-transform:uppercase;">'+label+'</button>';
+  }
+  function renderTabs(){
+    var el=ov.querySelector('#stimer-tabs');
+    if(el) el.innerHTML=tabBtn('stopwatch','Stopwatch')+tabBtn('countdown','Countdown')+tabBtn('tabata','Tabata');
+  }
+  function switchTab(t){
+    stopTicker();
+    if(activeTab==='stopwatch'&&sw.running){sw.accMs=swElapsed();sw.running=false;}
+    if(activeTab==='countdown'&&cd.running){cd.accMs=cdRemain();cd.running=false;}
+    if(activeTab==='tabata'&&tb.running){tb.running=false;}
+    activeTab=t;renderContent();
+  }
+
+  function renderContent(){
+    renderTabs();
+    var c=ov.querySelector('#stimer-content');if(!c)return;
+    if(activeTab==='stopwatch'){
+      c.innerHTML=
+        '<div id="stimer-sw-disp" style="font-family:var(--font-d);font-size:60px;font-weight:900;color:var(--gold);text-align:center;letter-spacing:2px;padding:36px 0 16px;">00:00.00</div>'+
+        '<div id="stimer-sw-btns" style="display:flex;gap:10px;padding:0 20px;"></div>'+
+        '<div id="stimer-sw-laps" style="flex:1;overflow-y:auto;padding:12px 20px;"></div>';
+      swRenderDisplay();swRenderButtons();
+    }else if(activeTab==='countdown'){
+      c.innerHTML=
+        '<div style="padding:24px 20px 8px;display:flex;justify-content:center;gap:12px;align-items:flex-end;">'+
+          '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:5px;">MIN</div><input id="stimer-cd-min" type="number" min="0" max="99" value="5" style="width:70px;padding:10px 6px;background:var(--bg2);border:2px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:26px;font-weight:900;text-align:center;"></div>'+
+          '<div style="font-family:var(--font-d);font-size:32px;font-weight:900;color:var(--text3);margin-bottom:14px;">:</div>'+
+          '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:5px;">SEC</div><input id="stimer-cd-sec" type="number" min="0" max="59" value="0" style="width:70px;padding:10px 6px;background:var(--bg2);border:2px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:26px;font-weight:900;text-align:center;"></div>'+
+        '</div>'+
+        '<div id="stimer-cd-disp" style="font-family:var(--font-d);font-size:72px;font-weight:900;color:var(--text);text-align:center;padding:12px 0 20px;letter-spacing:2px;">05:00</div>'+
+        '<div id="stimer-cd-btns" style="display:flex;gap:10px;padding:0 20px;"></div>';
+      cdRenderDisplay();cdRenderButtons();
+    }else if(activeTab==='tabata'){
+      c.innerHTML=
+        '<div style="display:flex;gap:8px;padding:16px 16px 8px;justify-content:center;">'+
+          '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:4px;">WORK (s)</div><input id="stimer-tb-work" type="number" min="1" max="600" value="20" style="width:60px;padding:8px 4px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:900;text-align:center;"></div>'+
+          '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:4px;">REST (s)</div><input id="stimer-tb-rest" type="number" min="1" max="600" value="10" style="width:60px;padding:8px 4px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:900;text-align:center;"></div>'+
+          '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:4px;">ROUNDS</div><input id="stimer-tb-rounds" type="number" min="1" max="99" value="8" style="width:60px;padding:8px 4px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:900;text-align:center;"></div>'+
+        '</div>'+
+        '<div id="stimer-tb-phasebg" style="margin:8px 16px;border-radius:var(--radius);padding:28px;text-align:center;background:#c0392b;transition:background 0.3s;">'+
+          '<div id="stimer-tb-phase" style="font-family:var(--font-d);font-size:28px;font-weight:900;color:#fff;letter-spacing:4px;margin-bottom:6px;">WORK</div>'+
+          '<div id="stimer-tb-time" style="font-family:var(--font-d);font-size:72px;font-weight:900;color:#fff;line-height:1;">20</div>'+
+          '<div id="stimer-tb-round" style="font-family:var(--font-d);font-size:11px;color:rgba(255,255,255,0.8);letter-spacing:2px;margin-top:6px;">Round 1 / 8</div>'+
+        '</div>'+
+        '<div id="stimer-tb-btns" style="display:flex;gap:10px;padding:10px 16px;"></div>';
+      tbRenderDisplay();tbRenderButtons();
+    }
+  }
+
+  ov.innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text);">TIMER</div>'+
+      '<button data-act="close" style="background:none;border:none;font-size:26px;color:var(--text3);cursor:pointer;padding:4px 8px;line-height:1;">&#215;</button>'+
+    '</div>'+
+    '<div id="stimer-tabs" style="display:flex;gap:6px;padding:10px 16px;"></div>'+
+    '<div id="stimer-content" style="flex:1;display:flex;flex-direction:column;overflow-y:auto;"></div>';
+
+  ov.addEventListener('click',function(e){
+    var el=e.target.closest('[data-act]');if(!el)return;
+    var a=el.getAttribute('data-act');
+    if(a==='close'){stopTicker();ov.remove();}
+    else if(a==='sw-start'||a==='sw-resume') swStart();
+    else if(a==='sw-pause') swPause();
+    else if(a==='sw-reset') swReset();
+    else if(a==='sw-lap') swLap();
+    else if(a==='cd-start') cdStart();
+    else if(a==='cd-pause') cdPause();
+    else if(a==='cd-reset') cdReset();
+    else if(a==='cd-add60') cdAdd(60000);
+    else if(a==='cd-add30') cdAdd(30000);
+    else if(a==='tb-start') tbStart();
+    else if(a==='tb-stop'||a==='tb-reset') tbReset();
+    else if(a==='tab-stopwatch') switchTab('stopwatch');
+    else if(a==='tab-countdown') switchTab('countdown');
+    else if(a==='tab-tabata') switchTab('tabata');
+  });
+  ov.addEventListener('change',function(e){
+    var id=e.target.id;
+    if(id==='stimer-cd-min'||id==='stimer-cd-sec') cdSetFromInputs();
+    if(id==='stimer-tb-work'||id==='stimer-tb-rest'||id==='stimer-tb-rounds') tbApplyConfig();
+  });
+
+  document.body.appendChild(ov);
+  renderContent();
 }
 
 // ── BLAB custom block builders (Phoenix-styled) ──────────────────

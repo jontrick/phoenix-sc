@@ -94,7 +94,16 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.124'", 'version is 4.9.124');
+has("var APP_VERSION='4.9.125'", 'version is 4.9.125');
+
+// ── Priority 6 — Standalone Timer ────────────────────────────────────────────
+has('function openStandaloneTimer()', 'P6: openStandaloneTimer defined (full implementation)');
+has("activeTab='stopwatch'", 'P6: stopwatch tab mode present');
+has("activeTab==='countdown'", 'P6: countdown tab mode present');
+has("activeTab==='tabata'", 'P6: tabata tab mode present');
+has('function tbTick()', 'P6: tbTick — tabata phase engine defined');
+has('function cdAdd(ms)', 'P6: cdAdd — countdown +1min/+30s defined');
+has("data-act=\"tab-'+key+'\"", 'P6: tab delegation — data-act tab buttons built dynamically');
 
 // ── v4.9.118 TIMER FIXES (screen lock / wake lock / count-in) ────────────────
 // FIX 1 — timestamp-derived clocks + visibility resync.

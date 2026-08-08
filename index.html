@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.130';
+var APP_VERSION='4.9.131';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5228,6 +5228,9 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.reps = String(ex.reps || 10);
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'standard_sets';
+      // v4.9.131: timed-hold exercises carry hold_secs through so the session renderer
+      // can inject a countdown timer button (e.g. Nordic Planks).
+      if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs; phxEx.reps = ex.hold_secs+'s'; }
       // v4.9.108: result capture for "record …" cues (sled/prowler/tests). autoLogSet writes
       // records[name+'_result']; the generic block surfaces the prior result.
       if(ex.note && /record/i.test(ex.note)){
@@ -6157,27 +6160,27 @@ window.blabGetSessionData = function(week, day){
         prev_best:rec('Max Height Box Jumps_height'), record_key:'Max Height Box Jumps_height'});
     }
 
-    // ── SLOT 3: NORDIC PLANKS ─────────────────────────────────────────────────────
-    if(w === 1) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'5 eccentric', rest:120,
-      note:'Lower as slowly as possible — 3-5 seconds down. This is hamstring armour. Use hands to push back up.'});
-    else if(w === 2) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'5 eccentric', rest:120,
-      note:'Slightly slower descent than W1. Use hands to push back up.'});
-    else if(w === 3) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'6 eccentric', rest:120,
-      note:'One more rep per set. Control every inch of the descent.'});
-    else if(w === 4) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'8 eccentric', rest:120,
-      note:'Block 1 peak. Lower as slowly as possible. Use hands to push back up.'});
-    else if(w === 6) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'6 eccentric', rest:120,
-      note:'Block 2 — one more set than Block 1 peak. Control the descent.'});
-    else if(w === 7) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric', rest:120,
-      note:'Load increasing each week. Control every rep.'});
-    else if(w === 8) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric', rest:120,
-      note:'Hold at Block 2 peak. Lower slowly, use hands to push back up.'});
-    else if(w === 9) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric', rest:120,
-      note:'Maintain Block 2 peak. Control every rep.'});
-    else if(w === 11) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric + 2s pause', rest:120,
-      note:'Lower slowly, pause 2 seconds at bottom before pushing back up. Peak difficulty.'});
-    else if(w === 12) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric + 2s pause', rest:120,
-      note:'Final week. Lower slowly, pause 2 seconds at bottom. Leave nothing.'});
+    // ── SLOT 3: NORDIC PLANKS (timed holds) ──────────────────────────────────────
+    if(w === 1) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:20, rest:120,
+      note:'Kneel with feet anchored. Lean forward and hold isometrically. Brace glutes and hamstrings hard. Use the timer.'});
+    else if(w === 2) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:25, rest:120,
+      note:'5 more seconds than W1. Stay rigid — no hip drop. Fight for every second.'});
+    else if(w === 3) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:30, rest:120,
+      note:'30 seconds. Full tension throughout. Brace core, squeeze glutes, fire hamstrings.'});
+    else if(w === 4) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:35, rest:120,
+      note:'Block 1 peak hold. 35 seconds — this is where hamstring armour is built.'});
+    else if(w === 6) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:20, rest:120,
+      note:'Block 2 resets duration — but adds a 4th set. Build the base again.'});
+    else if(w === 7) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:25, rest:120,
+      note:'4 sets × 25s. Stay locked — no hip sag, no relaxing between reps.'});
+    else if(w === 8) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:30, rest:120,
+      note:'4 sets × 30s. Matching Block 1 peak but with an extra set. Strong.'});
+    else if(w === 9) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:35, rest:120,
+      note:'Block 2 peak. 4 × 35s. Hold the position like your hamstrings depend on it — they do.'});
+    else if(w === 11) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:40, rest:120,
+      note:'Block 3. 40 seconds. This is the top of the strength curve — full tension, no compromise.'});
+    else if(w === 12) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:45, rest:120,
+      note:'Final week. 45 seconds. Leave everything in it. This is your benchmark hold.'});
 
     // ── SLOT 4: KB ACCESSORY ──────────────────────────────────────────────────────
     if(w === 1) exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:4, reps:10, rest:90,
@@ -9976,6 +9979,24 @@ function updateRTDisplay(){
 function _phxReleaseWakeLockIfIdle(){
   if(!window._phxTimerResync){ releaseWakeLock(); requestWakeLock(); }
 }
+// v4.9.131: hold timer — repurposes the gold rest overlay with "HOLD" label for
+// timed-hold exercises (Nordic Planks etc.). Restores labels on completion/skip.
+window._phxStartHoldTimer = function(secs){
+  var lbl = document.querySelector('#rest-overlay .rest-timer-label');
+  var skipBtn = document.getElementById('rt-skip');
+  var addBtn  = document.getElementById('rt-rest-add');
+  var selector= document.getElementById('rt-rest-selector');
+  if(lbl)     lbl.textContent     = 'HOLD';
+  if(skipBtn) skipBtn.textContent = 'Done';
+  startRestTimer(secs, '', '', '', '', true, function(){
+    var l2=document.querySelector('#rest-overlay .rest-timer-label');
+    var s2=document.getElementById('rt-skip');
+    if(l2) l2.textContent='Rest';
+    if(s2) s2.textContent='Skip Rest';
+  });
+  if(addBtn)  addBtn.style.display  = 'none';
+  if(selector)selector.style.display= 'none';
+};
 document.addEventListener('DOMContentLoaded',function(){
   var rtSkip=document.getElementById('rt-skip');
   if(rtSkip)rtSkip.addEventListener('click',function(){
@@ -24610,16 +24631,24 @@ function openTodaySession(){
         '</div>'+
       '</div>';
     }
+    // v4.9.131: hold timer button for timed-hold exercises (Nordic Planks etc.)
+    var holdTimerSection = '';
+    if(ex._holdSecs){
+      holdTimerSection = '<div style="text-align:center;padding:4px 0 8px;">'+
+        '<button type="button" onclick="window._phxStartHoldTimer('+ex._holdSecs+')" style="padding:10px 28px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;">&#9654; Start '+ex._holdSecs+'s Hold</button>'+
+        '</div>';
+    }
     block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
       '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
-      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+'</div>'+
+      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
       targetSection+
       customiseControlsHTML+
       '</div></div>'+
       prevBestSection+
       loadChoiceSection+
+      holdTimerSection+
       setsHTML+
       resultCaptureSection;
     body.appendChild(block);

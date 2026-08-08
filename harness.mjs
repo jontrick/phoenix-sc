@@ -94,7 +94,20 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.130'", 'version is 4.9.130');
+has("var APP_VERSION='4.9.131'", 'version is 4.9.131');
+
+// ── Priority 12 — Nordic Planks timed holds ───────────────────────────────────
+has('hold_secs:20', 'NP: W1 hold_secs:20');
+has('hold_secs:25', 'NP: W2 hold_secs:25');
+has('hold_secs:30', 'NP: W3/W8 hold_secs:30');
+has('hold_secs:35', 'NP: W4/W9 hold_secs:35');
+has('hold_secs:40', 'NP: W11 hold_secs:40');
+has('hold_secs:45', 'NP: W12 hold_secs:45');
+has('if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs', 'NP: _holdSecs carried through blabToPhoenixSession');
+has('window._phxStartHoldTimer = function(secs)', 'NP: _phxStartHoldTimer function defined');
+has("'s Hold</button>'", 'NP: hold timer button injected in session block');
+has("lbl.textContent     = 'HOLD'", 'NP: rest overlay label changed to HOLD');
+has("skipBtn.textContent = 'Done'", 'NP: skip button relabelled Done for holds');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

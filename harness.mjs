@@ -94,7 +94,23 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.127'", 'version is 4.9.127');
+has("var APP_VERSION='4.9.128'", 'version is 4.9.128');
+
+// ── Priority 9 — Holiday Reset Mechanism ─────────────────────────────────────
+has('function openBlabAdjust()', 'P9: openBlabAdjust defined');
+has('window._blabPause=function()', 'P9: _blabPause defined');
+has('window._blabResume=function()', 'P9: _blabResume defined');
+has('window._blabOpenReset=function()', 'P9: _blabOpenReset defined');
+has("closeSidebar();openBlabAdjust()", 'P9: sidebar Adjust Programme wired');
+has("bs.paused=true", 'P9: pause flag set in _blabPause');
+has("bs.paused=false", 'P9: paused cleared in _blabResume and reset');
+has("if(_bs.paused)", 'P9: paused state branch in Today card');
+has("Programme Paused", 'P9: paused card title renders');
+has("_blabResume()", 'P9: Resume button calls _blabResume');
+has("_blabOpenReset()", 'P9: Reset button calls _blabOpenReset');
+has("confirm-reset", 'P9: confirm-reset action in reset overlay');
+has("rst-bench", 'P9: bench input in reset form');
+has("records:bs.records", 'P9: records preserved on reset');
 
 // ── Priority 8 — Smart Add Session Recommendation Engine ─────────────────────
 has('function _phxSmartRecommend()', 'P8: _phxSmartRecommend defined');

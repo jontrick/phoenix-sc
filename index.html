@@ -3286,9 +3286,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
       <div><div class="sidebar-item-text">Audit Programme</div><div class="sidebar-item-sub">Tap session &#8594; see all exercises</div></div>
     </div>
-    <div class="sidebar-item" onclick="_sidebarComingSoon('Adjust Programme')">
+    <div class="sidebar-item" onclick="closeSidebar();openBlabAdjust()">
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="16" cy="6" r="2" fill="var(--bg2)"/><circle cx="8" cy="12" r="2" fill="var(--bg2)"/><circle cx="16" cy="18" r="2" fill="var(--bg2)"/></svg></div>
-      <div><div class="sidebar-item-text" style="color:var(--text2);">Adjust Programme</div><div class="sidebar-item-sub">Week &amp; block adjustments — coming soon</div></div>
+      <div><div class="sidebar-item-text">Adjust Programme</div><div class="sidebar-item-sub">Pause · Reset maxes</div></div>
     </div>
   </div>
   <!-- THEMES -->
@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.127';
+var APP_VERSION='4.9.128';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4110,6 +4110,119 @@ window.blabOpenViewProg = function(){
   ov.innerHTML = h;
   document.body.appendChild(ov);
   window.scrollTo(0,0);
+};
+
+// ── BLAB PROGRAMME ADJUSTMENTS (Pause / Reset) ────────────────────────────────
+function openBlabAdjust(){
+  var old=document.getElementById('blab-adjust-ov'); if(old) old.remove();
+  var ov=document.createElement('div');
+  ov.id='blab-adjust-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:9800;background:var(--bg);display:flex;flex-direction:column;';
+  ov.innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text);">ADJUST PROGRAMME</div>'+
+      '<button data-act="close" style="background:none;border:none;font-size:28px;color:var(--text3);cursor:pointer;padding:4px 8px;line-height:1;">&#215;</button>'+
+    '</div>'+
+    '<div style="padding:20px;flex:1;overflow-y:auto;">'+
+      '<div data-act="pause" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;margin-bottom:12px;cursor:pointer;">'+
+        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);margin-bottom:5px;">Pause Programme</div>'+
+        '<div style="font-size:13px;color:var(--text3);line-height:1.5;">Going away? Saves your current week and day. Resume when you are back.</div>'+
+      '</div>'+
+      '<div data-act="reset" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;cursor:pointer;">'+
+        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);margin-bottom:5px;">Reset to Week 1</div>'+
+        '<div style="font-size:13px;color:var(--text3);line-height:1.5;">Back from a long break? Enter new 1-rep maxes and restart from Week 1. Records are kept.</div>'+
+      '</div>'+
+    '</div>';
+  ov.addEventListener('click',function(e){
+    var el=e.target.closest('[data-act]'); if(!el) return;
+    var a=el.getAttribute('data-act');
+    if(a==='close'){ ov.remove(); }
+    else if(a==='pause'){ ov.remove(); window._blabPause(); }
+    else if(a==='reset'){ ov.remove(); window._blabOpenReset(); }
+  });
+  document.body.appendChild(ov);
+}
+
+window._blabPause=function(){
+  var bs=(typeof blabGetState==='function')?blabGetState():null;
+  if(!bs||!bs.active) return;
+  if(bs.paused){ if(typeof renderTodayScreen==='function') renderTodayScreen(); return; }
+  bs.paused=true;
+  bs.pausedAt=new Date().toISOString();
+  bs.pausedWeek=bs.week;
+  bs.pausedDay=bs.last_completed_day;
+  if(typeof blabSaveState==='function') blabSaveState(bs);
+  if(typeof renderTodayScreen==='function') renderTodayScreen();
+  if(typeof navTo==='function') navTo('today');
+};
+
+window._blabResume=function(){
+  var bs=(typeof blabGetState==='function')?blabGetState():null;
+  if(!bs) return;
+  bs.paused=false;
+  delete bs.pausedAt; delete bs.pausedWeek; delete bs.pausedDay;
+  if(typeof blabSaveState==='function') blabSaveState(bs);
+  if(typeof renderTodayScreen==='function') renderTodayScreen();
+};
+
+window._blabOpenReset=function(){
+  var bs=(typeof blabGetState==='function')?blabGetState():null;
+  if(!bs) return;
+  var old=document.getElementById('blab-reset-ov'); if(old) old.remove();
+  var ov=document.createElement('div');
+  ov.id='blab-reset-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:9810;background:var(--bg);display:flex;flex-direction:column;overflow-y:auto;';
+  var cx=bs.maxes||{};
+  function row(label,id,val,unit){
+    return '<div style="margin-bottom:14px;">'+
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;">'+label+' ('+unit+')</div>'+
+      '<input id="'+id+'" type="number" min="0" value="'+val+'" placeholder="0" inputmode="decimal" style="width:100%;box-sizing:border-box;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:900;">'+
+    '</div>';
+  }
+  ov.innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text);">RESET PROGRAMME</div>'+
+      '<button data-act="close" style="background:none;border:none;font-size:28px;color:var(--text3);cursor:pointer;padding:4px 8px;line-height:1;">&#215;</button>'+
+    '</div>'+
+    '<div style="padding:20px;">'+
+      '<div style="font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:20px;">Enter your current 1-rep maxes. Programme restarts from Week 1 Day 1 with these loads. Records are kept.</div>'+
+      row('Bench Press 1RM','rst-bench',cx.bench||'','kg')+
+      row('Squat 1RM','rst-squat',cx.squat||'','kg')+
+      row('Deadlift 1RM','rst-dead',cx.deadlift||'','kg')+
+      row('Chin-up Max','rst-chin',bs.chin_max||'','reps')+
+      '<div id="rst-err" style="color:var(--orange,#ff6b2b);font-size:13px;min-height:18px;margin-bottom:8px;"></div>'+
+      '<div style="background:rgba(255,80,0,0.08);border:1px solid rgba(255,80,0,0.25);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--orange,#ff6b2b);">'+
+        'Resets to Week 1 Day 1. Week '+bs.week+' Day '+(bs.last_completed_day||0)+' progress will be cleared. Records are kept.'+
+      '</div>'+
+      '<button data-act="confirm-reset" style="width:100%;padding:14px;background:var(--orange,#ff6b2b);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;color:#fff;cursor:pointer;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;">Confirm Reset</button>'+
+      '<button data-act="close" style="width:100%;padding:12px;background:none;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text3);cursor:pointer;">Cancel</button>'+
+    '</div>';
+  ov.addEventListener('click',function(e){
+    var el=e.target.closest('[data-act]'); if(!el) return;
+    var a=el.getAttribute('data-act');
+    if(a==='close'){ ov.remove(); }
+    else if(a==='confirm-reset'){
+      var b=parseFloat((ov.querySelector('#rst-bench')||{}).value||0)||0;
+      var sq=parseFloat((ov.querySelector('#rst-squat')||{}).value||0)||0;
+      var dl=parseFloat((ov.querySelector('#rst-dead')||{}).value||0)||0;
+      var ch=parseInt((ov.querySelector('#rst-chin')||{}).value||0)||0;
+      var errEl=ov.querySelector('#rst-err');
+      if(!b||!sq||!dl){ if(errEl) errEl.textContent='Enter Bench, Squat and Deadlift maxes to continue.'; return; }
+      var newState={
+        active:true, paused:false,
+        week:1, last_completed_day:0, last_completed_date:null,
+        maxes:{bench:b,squat:sq,deadlift:dl},
+        chin_max:ch, chin_established:ch>0,
+        squat_var:bs.squat_var||'back', dl_var:bs.dl_var||'conventional',
+        records:bs.records||{}, log:[]
+      };
+      if(typeof blabSaveState==='function') blabSaveState(newState);
+      ov.remove();
+      if(typeof renderTodayScreen==='function') renderTodayScreen();
+      if(typeof navTo==='function') navTo('today');
+    }
+  });
+  document.body.appendChild(ov);
 };
 
 function openStandaloneTimer(){
@@ -17225,6 +17338,24 @@ function renderTodayScreen(){
         if(_nextDay === 4 && _lastDay === 2 && _bs.last_completed_date){
           var _hrs = (new Date() - new Date(_bs.last_completed_date)) / 3600000;
           if(_hrs < 47) _canTrain = false;
+        }
+        // PAUSED STATE — takes priority over all other card states
+        if(_bs.paused){
+          var _pausedDays = _bs.pausedAt ? Math.floor((Date.now()-new Date(_bs.pausedAt).getTime())/86400000) : 0;
+          var _pausedStr = _pausedDays===0?'Paused today':(_pausedDays===1?'Paused 1 day ago':'Paused '+_pausedDays+' days ago');
+          _inner.innerHTML =
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">BLAB · Week '+_week+'</div>'+
+            '<div class="game-card-title" style="font-size:28px;color:var(--text2);">Programme Paused</div>'+
+            '<div style="font-size:13px;color:var(--text3);margin-top:6px;">'+_pausedStr+' &nbsp;·&nbsp; Will resume at Week '+_week+' Day '+_nextDay+'</div>'+
+            '<div style="display:flex;gap:10px;margin-top:16px;">'+
+              '<button onclick="event.stopPropagation();window._blabResume()" style="flex:1;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;color:#000;cursor:pointer;text-transform:uppercase;letter-spacing:1px;">Resume</button>'+
+              '<button onclick="event.stopPropagation();window._blabOpenReset()" style="flex:1;padding:14px;background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:800;color:var(--text2);cursor:pointer;">Reset Maxes</button>'+
+            '</div>';
+          _card.style.border = '1px solid var(--border)';
+          _card.style.cursor = 'default';
+          _card.removeAttribute('onclick');
+          _renderTodayRemainingRow(_bs, _nextDay, _weekDone);
+          return;
         }
         var _startBtn = '<div style="margin-top:16px;"><button onclick="event.stopPropagation();" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
         if(_weekDone){

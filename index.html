@@ -1724,40 +1724,38 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
        left as a no-op div so any code that still queries '#weight-checkin-banner' is a no-op. -->
   <div id="weight-checkin-banner" style="display:none;"></div>
   <div style="padding:0 16px 100px;">
-    <!-- Row 1: Full width prescribed workout -->
-    <div id="card-today-session" class="game-card" onclick="openTodaySession()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--gold);">
-      <div class="game-card-inner" style="padding:18px;">
-        <div class="game-card-eyebrow">
-          <span class="game-card-eyebrow-sm">Your Programme</span>
-        </div>
+    <!-- NEXT SESSION — main tile, prominent gold border -->
+    <div id="card-today-session" class="game-card" onclick="openTodaySession()" style="margin-bottom:12px;border:2px solid var(--gold);cursor:pointer;">
+      <div class="game-card-inner" style="padding:20px;">
+        <div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Next Session</div>
         <div class="game-card-title" id="today-session-name" style="font-size:28px;">Today’s Session</div>
-        <div class="game-card-sub" id="today-session-detail">Start training</div>
-        <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
-      </div>
-    </div>
-    <!-- Add Session — tap to pick from the hardcoded WOD/Core session library -->
-    <div id="card-add-session" class="game-card" onclick="_phxOpenSessionLibrary()" style="margin-bottom:10px;border:1px dashed var(--border2);border-left:3px solid var(--border2);opacity:0.8;">
-      <div class="game-card-inner" style="padding:14px 18px;">
-        <div class="game-card-eyebrow">
-          <span class="game-card-eyebrow-sm" style="color:var(--text3);">Today</span>
+        <div class="game-card-sub" id="today-session-detail" style="margin-top:4px;">Start training</div>
+        <div style="margin-top:16px;">
+          <button id="today-start-btn" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start &#8594;</button>
         </div>
-        <div class="game-card-title" style="font-size:20px;color:var(--text2);">+ Add a Session</div>
-        <div class="game-card-sub" style="color:var(--text3);">Pick a WOD or Core session from the library</div>
       </div>
     </div>
-    <!-- Walk / Run — full width standalone tile -->
+    <!-- This week’s remaining sessions -->
+    <div id="today-remaining-row" style="margin-bottom:12px;"></div>
+    <!-- Nutrition placeholder (Phase 2) -->
+    <div id="today-nutrition-tile" style="margin-bottom:12px;"></div>
+    <!-- + Add Session -->
+    <div id="card-add-session" class="game-card" onclick="_phxOpenSessionLibrary()" style="margin-bottom:10px;border:1px dashed var(--border2);opacity:0.8;">
+      <div class="game-card-inner" style="padding:14px 18px;">
+        <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Today</div>
+        <div class="game-card-title" style="font-size:20px;color:var(--text2);">+ Add a Session</div>
+        <div class="game-card-sub" style="color:var(--text3);">WOD · Core · Aerobic · Custom</div>
+      </div>
+    </div>
+    <!-- Walk / Run -->
     <div id="card-walk" class="game-card" onclick="openWalkLog()" style="margin-bottom:10px;border:1px solid var(--border);border-left:3px solid var(--green,#4CAF50);">
       <div class="game-card-inner" style="padding:18px;">
-        <div class="game-card-eyebrow">
-          <span class="game-card-eyebrow-sm">Add On</span>
-        </div>
-        <div class="game-card-title" style="font-size:24px;">Walk / Run</div>
-        <div class="game-card-sub">GPS tracked session</div>
-        <div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>
+        <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Add On</div>
+        <div class="game-card-title" style="font-size:22px;">Walk / Run</div>
+        <div class="game-card-sub">GPS tracked &#8901; distance &#8901; pace</div>
+        <div class="game-card-action" style="font-size:12px;margin-top:8px;">Start &#8594;</div>
       </div>
     </div>
-    <!-- v4.9.93 FIX 5: "This Week's Schedule" tile removed. -->
-    <!-- v4.9.93 FIX 4: subtle version label at the very bottom of the Today screen. -->
     <div id="today-version-display" style="text-align:center;font-size:10px;letter-spacing:1px;color:var(--text3);padding:14px 0 4px;"></div>
   </div>
 </div>
@@ -3448,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.120';
+var APP_VERSION='4.9.121';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16579,40 +16577,43 @@ function renderTodayScreen(){
         var _nextDay = _lastDay === 0 ? 1 : (_lastDay % 4) + 1;
         var _weekDone = _lastDay === 4;
         var _week = _bs.week || 1;
-        var _dayLabels = ['','Upper Body','Lower Body','Upper Body — Chins','Deadlift + Power'];
+        var _dayLabels = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
         // 48hr rule Day2→Day4
         var _canTrain = true;
         if(_nextDay === 4 && _lastDay === 2 && _bs.last_completed_date){
           var _hrs = (new Date() - new Date(_bs.last_completed_date)) / 3600000;
           if(_hrs < 47) _canTrain = false;
         }
+        var _startBtn = '<div style="margin-top:16px;"><button onclick="event.stopPropagation();" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
         if(_weekDone){
           _inner.innerHTML =
-            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week ' + _week + ' Complete</span></div>' +
-            '<div class="game-card-title" style="font-size:22px;">Week ' + _week + ' Done</div>' +
-            '<div class="game-card-sub" style="margin-top:6px;">All 4 sessions complete. Ready for Week ' + (_week+1) + '.</div>' +
-            '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Check in →</div>';
-          _card.style.borderLeftColor = 'var(--gold)';
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">BLAB · Week ' + _week + ' Complete</div>' +
+            '<div class="game-card-title" style="font-size:30px;">Week ' + _week + ' Done</div>' +
+            '<div style="font-size:13px;color:var(--text2);margin-top:6px;">All 4 sessions complete. Ready for Week ' + (_week+1) + '.</div>' +
+            '<div style="margin-top:16px;"><button onclick="event.stopPropagation();window.blabOpenCheckin&&window.blabOpenCheckin();" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Check In →</button></div>';
+          _card.style.border = '2px solid var(--gold)';
           _card.style.cursor = 'pointer';
           _card.setAttribute('onclick', 'window.blabOpenCheckin && window.blabOpenCheckin()');
         } else if(!_canTrain){
           _inner.innerHTML =
-            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week ' + _week + '</span></div>' +
-            '<div class="game-card-title" style="font-size:22px;">Rest Day</div>' +
-            '<div class="game-card-sub" style="margin-top:6px;">Day 4 needs 48hrs after squats. Back tomorrow.</div>';
-          _card.style.borderLeftColor = 'var(--border2)';
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">BLAB · Week ' + _week + '</div>' +
+            '<div class="game-card-title" style="font-size:30px;">Rest Day</div>' +
+            '<div style="font-size:13px;color:var(--text2);margin-top:6px;">Day 4 requires 48hrs after lower body. Back tomorrow.</div>';
+          _card.style.border = '1px solid var(--border)';
           _card.style.cursor = 'default';
           _card.removeAttribute('onclick');
         } else {
           _inner.innerHTML =
-            '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">BLAB · Week ' + _week + ' · Day ' + _nextDay + '</span></div>' +
-            '<div class="game-card-title" style="font-size:24px;">' + _dayLabels[_nextDay] + '</div>' +
-            '<div class="game-card-sub" style="margin-top:6px;">Built Like A Badass</div>' +
-            '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
-          _card.style.borderLeftColor = 'var(--gold)';
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">BLAB · Week ' + _week + ' · Day ' + _nextDay + '</div>' +
+            '<div class="game-card-title" style="font-size:30px;">' + _dayLabels[_nextDay] + '</div>' +
+            '<div style="font-size:13px;color:var(--text2);margin-top:6px;">Built Like A Badass · DeFranco Protocol</div>' +
+            _startBtn;
+          _card.style.border = '2px solid var(--gold)';
           _card.style.cursor = 'pointer';
           _card.setAttribute('onclick', 'window.blabOpenSession(' + _week + ',' + _nextDay + ')');
         }
+        // Render remaining sessions row for this week
+        _renderTodayRemainingRow(_bs, _nextDay, _weekDone);
         return; // skip AI programme inject
       }
       if(!athlete || !athlete.aiProgramme || !athlete.aiProgramme.week) return;
@@ -16636,11 +16637,11 @@ function renderTodayScreen(){
       var _exs = (_s.exercises||[]).slice(0,3).map(function(e){return e.name;}).join(' · ');
       if(!_exs && _s.wod && _s.wod.movements) _exs = (_s.wod.movements||[]).slice(0,3).map(function(m){return m.name;}).join(' · ');
       _inner.innerHTML =
-        '<div class="game-card-eyebrow"><span class="game-card-eyebrow-sm">'+_day+' · Week '+(athlete.currentWeek||1)+'</span></div>'+
-        '<div class="game-card-title" id="today-session-name" style="font-size:26px;">'+_name+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">'+_day+' · Week '+(athlete.currentWeek||1)+'</div>'+
+        '<div class="game-card-title" id="today-session-name" style="font-size:28px;">'+_name+'</div>'+
         '<div class="game-card-sub" id="today-session-detail" style="margin-top:4px;">'+_sub+(_exs?'<br><span style="font-size:11px;color:var(--text3);">'+_exs+'</span>':'')+'</div>'+
-        '<div class="game-card-action" style="font-size:12px;margin-top:10px;">Start →</div>';
-      _card.style.borderLeftColor = 'var(--gold)';
+        '<div style="margin-top:16px;"><button style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
+      _card.style.border = '2px solid var(--gold)';
       _card.style.cursor = 'pointer';
       _card.setAttribute('onclick','openTodaySession()');
       window._todaySession = _s;
@@ -16671,14 +16672,54 @@ function renderTodayScreen(){
   // v4.9.93 FIX 5: "This Week's Schedule" tile removed — render call dropped.
   // v4.7.61: show today's core format badge (CIRCUIT / STRENGTH) on the Core tile.
   if(typeof _phxRenderCoreTileFormat==='function') _phxRenderCoreTileFormat();
+  // v4.9.121: nutrition placeholder tile
+  if(typeof _renderTodayNutritionPlaceholder==='function') _renderTodayNutritionPlaceholder();
 }
 
-// v4.7.62 — populate the Core tile's format badge + sub-text + click handler. The tile is the
-// standalone Core add-on (Funnel 1) — tapping it AI-generates today's session by default,
-// caches the result in localStorage, and falls back to the static picker on timeout/failure.
-// This funnel is independent of coach-assigned core sessions, which live on athlete.aiProgramme
-// and render through the standard session flow (see openTodaySession core_circuit / core_strength).
-// v4.8.6: updated to show all 5 core type labels on the tile badge
+// ── Today screen helpers (Priority 2) ────────────────────────────
+function _renderTodayRemainingRow(bs, nextDay, weekDone){
+  var row = document.getElementById('today-remaining-row');
+  if(!row) return;
+  // No remaining tiles if week is done or on Day 4 (last day)
+  if(weekDone || nextDay >= 4){ row.innerHTML = ''; return; }
+  var week = bs.week || 1;
+  var dayLabels = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
+  var remaining = [];
+  for(var d = nextDay + 1; d <= 4; d++) remaining.push(d);
+  if(!remaining.length){ row.innerHTML = ''; return; }
+  var h = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">This Week</div>';
+  h += '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;">';
+  for(var i=0; i<remaining.length; i++){
+    var dd = remaining[i];
+    var nm = dayLabels[dd] || ('Day '+dd);
+    h += '<div onclick="window.blabOpenAuditDay('+week+','+dd+',false)" style="flex:0 0 auto;width:calc(50% - 4px);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Day '+dd+'</div>';
+    h += '<div style="font-family:var(--font-d);font-size:15px;font-weight:700;color:var(--text);line-height:1.2;">'+nm+'</div>';
+    h += '<div style="font-size:10px;color:var(--text3);margin-top:4px;letter-spacing:1px;">Upcoming · tap to preview</div>';
+    h += '</div>';
+  }
+  h += '</div>';
+  row.innerHTML = h;
+}
+
+function _renderTodayNutritionPlaceholder(){
+  var tile = document.getElementById('today-nutrition-tile');
+  if(!tile) return;
+  tile.innerHTML =
+    '<div style="background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);padding:14px 16px;opacity:0.7;">' +
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Nutrition</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
+    '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;color:var(--text3);">—</div>' +
+    '<div style="font-size:11px;color:var(--text3);text-align:right;line-height:1.5;">kcal remaining<br>Daily tracking · Phase 2</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;">' +
+    '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Protein</div><div style="height:4px;background:var(--border);border-radius:2px;"></div></div>' +
+    '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Carbs</div><div style="height:4px;background:var(--border);border-radius:2px;"></div></div>' +
+    '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Fat</div><div style="height:4px;background:var(--border);border-radius:2px;"></div></div>' +
+    '</div>' +
+    '</div>';
+}
+
 window._phxRenderCoreTileFormat = function(){
   var card = document.getElementById('card-core');
   if(!card) return;

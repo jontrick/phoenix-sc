@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.123'", 'version is 4.9.123');
+has("var APP_VERSION='4.9.124'", 'version is 4.9.124');
 
 // ── v4.9.118 TIMER FIXES (screen lock / wake lock / count-in) ────────────────
 // FIX 1 — timestamp-derived clocks + visibility resync.
@@ -173,12 +173,10 @@ has('[PHX] blabOpenSession → openTodaySession threw', 'blabOpenSession try/cat
 has("_phxMv('Wall Ball','50 reps · 9kg')",           'Kronos Wall Ball load');
 has("_phxMv('Sandbag Over Shoulder','30 reps · 25kg')", 'Kronos Sandbag Over Shoulder load');
 has("_phxMv('Sandbag Carry','200m · 30kg')",         'Atlas/Ragnarok Sandbag Carry load');
-has("_phxMv('Sled Drag','40m · 90kg')",              'Fenrir Sled Drag load');
-has("_phxMv('Sandbag Bear-Hug Carry','40m · 30kg')", 'Fenrir Sandbag Bear-Hug Carry load');
-has("_phxMv('Bulgarian Split Squat','21-15-9 each leg · bodyweight')", 'Loki Bulgarian Split Squat load');
-has("_phxMv('DB Squat','R1 · 20kg')",                'Spartacus DB load (20kg) in detail');
-has("_phxMv('DB Thruster','R8 · 20kg')",             'Spartacus DB Thruster load in detail');
-has("_phxMv('Power Clean','5 · build to max')",      'Samurai barbell build-to-max in detail');
+has("id:'wod-ragnar'",                                'Ragnar AMRAP 25 present');
+has("id:'wod-hammerfall'",                            'Hammerfall 21-15-9 present');
+has("id:'aerobic-the-row'",                           'Aerobic: The Row present');
+has("id:'aerobic-long-run'",                          'Aerobic: The Long Run present');
 
 // ── v4.9.110 Programme Audit ────────────────────────────────────────────────
 has('window.blabOpenAudit = function', 'audit entry blabOpenAudit present');
@@ -270,14 +268,11 @@ try {
   vm.createContext(sb2);
   new vm.Script(libSlice).runInContext(sb2);
   const wods = sb2.phxAllWods(), core = sb2.phxAllCore(), all = sb2.phxAllSessions();
-  wods.length===44 ? ok('exactly 44 WODs') : bad('expected 44 WODs, got '+wods.length);
+  wods.length===19 ? ok('exactly 19 WODs (14 Conditioning + 5 Aerobic)') : bad('expected 19 WODs, got '+wods.length);
   core.length===6  ? ok('exactly 6 Core sessions (v4.9.123: R1/R2/R3 + S1/S2/S3)') : bad('expected 6 Core, got '+core.length);
-  all.length===50  ? ok('50 total sessions') : bad('expected 50 sessions, got '+all.length);
-  sb2.phxWodsByTier('TITAN').length===6   ? ok('6 Titan WODs') : bad('Titan count '+sb2.phxWodsByTier('TITAN').length);
-  sb2.phxWodsByTier('LEGEND').length===38 ? ok('38 Legend WODs') : bad('Legend count '+sb2.phxWodsByTier('LEGEND').length);
-  // Legend group + Core type distribution
-  const gp={}; all.filter(s=>s.tier==='LEGEND').forEach(s=>gp[s.group]=(gp[s.group]||0)+1);
-  (gp.Norse===12&&gp.Greek===13&&gp.Historical===8&&gp.Implements===5) ? ok('Legend groups 12/13/8/5') : bad('Legend groups wrong: '+JSON.stringify(gp));
+  all.length===25  ? ok('25 total sessions') : bad('expected 25 sessions, got '+all.length);
+  sb2.phxWodsByTier('CONDITIONING').length===14 ? ok('14 Conditioning WODs') : bad('Conditioning count '+sb2.phxWodsByTier('CONDITIONING').length);
+  sb2.phxWodsByTier('AEROBIC').length===5       ? ok('5 Aerobic sessions') : bad('Aerobic count '+sb2.phxWodsByTier('AEROBIC').length);
   const ctExpect={'Rotational Focus':3,'Core Strength':3};
   const ct={}; core.forEach(c=>ct[c.coreType]=(ct[c.coreType]||0)+1);
   JSON.stringify(ct)===JSON.stringify(ctExpect) ? ok('Core types 3/3 (Rotational Focus + Core Strength)') : bad('Core types wrong: '+JSON.stringify(ct));
@@ -293,7 +288,7 @@ try {
     catch(e){ perr++; console.log('  \x1b[31m✗ '+s.id+' plan build: '+e.message+'\x1b[0m'); } }
   dup===0 ? ok('all session ids unique') : bad(dup+' duplicate session ids');
   (built===all.length&&perr===0) ? ok('all '+all.length+' sessions build a renderer plan without errors') : bad(built+'/'+all.length+' built, '+perr+' errors');
-  ['time','amrap','load','emom','intervals','core'].forEach(r=> rSeen.has(r)?ok('renderer exercised: '+r):bad('renderer never used: '+r));
+  ['time','amrap','intervals','core'].forEach(r=> rSeen.has(r)?ok('renderer exercised: '+r):bad('renderer never used: '+r));
   sb2.phxFmtTime(754)==='12:34' ? ok('phxFmtTime 754→12:34') : bad('phxFmtTime broken');
   sb2.phxIsBetter('time',700,800)===true ? ok('time score: lower is better') : bad('time compare broken');
   sb2.phxIsBetter('load',120,100)===true ? ok('load score: higher is better') : bad('load compare broken');

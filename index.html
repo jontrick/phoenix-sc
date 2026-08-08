@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.123';
+var APP_VERSION='4.9.124';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20699,292 +20699,130 @@ function _phxMv(name, detail){ return {name:name, detail:detail||''}; }
 
 var PHX_LIB = {
 
-// ══════════════════════════ TITAN WODS (6) ══════════════════════════
+// ══════════════════════════ CONDITIONING WODS (14) ══════════════════════════
 WOD: [
-  { id:'titan-kronos', name:'Kronos', cat:'WOD', tier:'TITAN', group:'Titan',
+  { id:'titan-kronos', name:'Kronos', cat:'WOD', tier:'CONDITIONING',
     format:'FOR TIME — CHIPPER', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'Work top to bottom, one movement at a time. Pace the row or pay later.',
+    note:'Work top to bottom. Pace the row or pay later.',
     movements:[ _phxMv('Row','2000m'), _phxMv('Wall Ball','50 reps · 9kg'), _phxMv('Sandbag Over Shoulder','30 reps · 25kg'),
       _phxMv('Thruster','20 reps @ 60kg'), _phxMv('Pull-Up','20 reps'), _phxMv('Run','1.6km') ],
     config:{ chipper:true } },
 
-  { id:'titan-atlas', name:'Atlas', cat:'WOD', tier:'TITAN', group:'Titan',
+  { id:'titan-atlas', name:'Atlas', cat:'WOD', tier:'CONDITIONING',
     format:'FOR TIME', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'Loaded carries. You cannot put it down — drop = restart that segment. Sub: replace Yoke Walk with extra Farmers Walk 200m.',
+    note:'Loaded carries. You cannot put it down — drop = restart that segment.',
     movements:[ _phxMv('Farmers Walk','400m · 32kg each hand'), _phxMv('Sandbag Carry','200m · 30kg'),
       _phxMv('Overhead KB Carry','100m · 24kg each') ],
     config:{ chipper:true } },
 
-  { id:'titan-prometheus', name:'Prometheus', cat:'WOD', tier:'TITAN', group:'Titan',
-    format:'FOR LOAD — 5 sets', renderer:'load', scoreType:'load', scoreLabel:'Top weight (kg)',
-    note:'Tempo Back Squat — 5s eccentric, 3s pause at the bottom, explosive drive. A rep without the tempo does not count.',
-    movements:[ _phxMv('Tempo Back Squat','5×3 · build to max') ],
-    config:{ sets:5, repScheme:'3', movement:'Tempo Back Squat' } },
-
-  { id:'titan-tartarus', name:'Tartarus', cat:'WOD', tier:'TITAN', group:'Titan',
+  { id:'titan-tartarus', name:'Tartarus', cat:'WOD', tier:'CONDITIONING',
     format:'SPRINT INTERVALS', renderer:'intervals', scoreType:'avg_split', scoreLabel:'Avg 500m split',
     note:'6 × 500m Row, rest 3 min between efforts. Log each split. The dark place is the point.',
     movements:[ _phxMv('500m Row Sprint','×6 · rest 3 min') ],
     config:{ efforts:6, work:'500m Row', restSec:180 } },
 
-  { id:'titan-leviathan', name:'Leviathan', cat:'WOD', tier:'TITAN', group:'Titan',
+  { id:'titan-leviathan', name:'Leviathan', cat:'WOD', tier:'CONDITIONING',
     format:'AFAP — 400 reps', renderer:'time', scoreType:'time', scoreLabel:'Total time',
     note:'400 reps in order. The total is non-negotiable.',
     movements:[ _phxMv('Air Squat','100 reps'), _phxMv('Push-Up','100 reps'), _phxMv('Pull-Up','100 reps'), _phxMv('Burpee','100 reps') ],
     config:{ chipper:true } },
 
-  { id:'titan-ragnarok', name:'Ragnarok', cat:'WOD', tier:'TITAN', group:'Titan',
+  { id:'titan-ragnarok', name:'Ragnarok', cat:'WOD', tier:'CONDITIONING',
     format:'FOR TIME — CHIPPER', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'Every domain in one workout. Sub Bar Muscle-Up: Pull-Up + Dip.',
-    movements:[ _phxMv('Row','1000m'), _phxMv('Power Snatch','30 reps @ 40kg'), _phxMv('Bar Muscle-Up','20 reps'),
-      _phxMv('Sandbag Carry','200m · 30kg'), _phxMv('Box Jump','30 reps @ 60cm'), _phxMv('Run','800m'),
-      _phxMv('Clean & Jerk','20 reps @ 50kg'), _phxMv('Burpee Over Bar','20 reps') ],
+    note:'Every domain in one workout. Push press from rack if needed.',
+    movements:[ _phxMv('Row','1000m'), _phxMv('Push Press','30 reps @ 40kg'), _phxMv('Tricep Dips','20 reps'),
+      _phxMv('Sandbag Carry','200m · 30kg'), _phxMv('Box Jump','30 reps @ 24"'),
+      _phxMv('Run','800m'), _phxMv('Hang Clean','20 reps @ 40kg'), _phxMv('Chest to Floor Burpees','20 reps') ],
     config:{ chipper:true } },
-],
 
-// ══════════════════════════ LEGEND WODS (38) ══════════════════════════
-// Norse (12) · Greek (13) · Historical (8) · Implements (5)
-LEGEND: [
-  // --- NORSE (12) ---
-  { id:'legend-odin', name:'Odin', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'FOR LOAD — 5 sets', renderer:'load', scoreType:'load', scoreLabel:'Top weight (kg)',
-    note:'Tempo Front Squat — 5s eccentric, 3s pause, 1s drive. 5×3 building to max.',
-    movements:[ _phxMv('Tempo Front Squat','5×3 · build to max') ],
-    config:{ sets:5, repScheme:'3', movement:'Tempo Front Squat' } },
-
-  { id:'legend-thor', name:'Thor', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'EMOM 16', renderer:'emom', scoreType:'load', scoreLabel:'Top weight (kg)',
-    note:'Every minute: 3 Power Cleans, building weight each set. Every pull is a max-intent pull.',
-    movements:[ _phxMv('Power Clean','3 reps / min · build') ],
-    config:{ minutes:16, scoreMode:'load', pattern:[ _phxMv('Power Clean','3 reps · build weight') ] } },
-
-  { id:'legend-loki', name:'Loki', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'FOR TIME — 21-15-9 (each side)', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'21-15-9 each side. Asymmetry punishes lazy bracing.',
-    movements:[ _phxMv('Bulgarian Split Squat','21-15-9 each leg · bodyweight'), _phxMv('Single-Arm KB Push Press','21-15-9 each · 24kg'),
-      _phxMv('Single-Leg RDL','21-15-9 each · 24kg') ],
-    config:{ chipper:true, scheme:'21-15-9' } },
-
-  { id:'legend-fenrir', name:'Fenrir', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'5 ROUNDS — AFAP', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'5 rounds. Brace like the wolf is fighting back. Sub Rope Pull: 15 seated cable rows.',
-    movements:[ _phxMv('Sled Drag','40m · 90kg'), _phxMv('Sandbag Bear-Hug Carry','40m · 30kg'), _phxMv('Rope Pull','15m') ],
-    config:{ chipper:true, rounds:5 } },
-
-  { id:'legend-hela', name:'Hela', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'AFAP — 21-15-9', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'21-15-9. Relentless posterior-chain grinding.',
-    movements:[ _phxMv('KB Swing','21-15-9 · 32kg'), _phxMv('Romanian Deadlift','21-15-9 · 80kg'),
-      _phxMv('Good Morning','21-15-9 · 40kg'), _phxMv('Hip Thrust','21-15-9 · 100kg') ],
-    config:{ chipper:true, scheme:'21-15-9' } },
-
-  { id:'legend-ragnar', name:'Ragnar', cat:'WOD', tier:'LEGEND', group:'Norse',
+  { id:'wod-ragnar', name:'Ragnar', cat:'WOD', tier:'CONDITIONING',
     format:'AMRAP 25', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 25 minutes. The complete warrior.',
-    movements:[ _phxMv('Power Clean','5 @ 70kg'), _phxMv('Pull-Up','10'), _phxMv('Box Jump','15 @ 60cm'), _phxMv('Run','200m') ],
+    note:'25 min AMRAP. Pace the cleans — they will catch you.',
+    movements:[ _phxMv('Power Clean','5 reps @ 70kg'), _phxMv('Pull-Up','10 reps'),
+      _phxMv('Box Jump','15 reps @ 24"'), _phxMv('Run','200m') ],
     config:{ durationMin:25 } },
 
-  { id:'legend-sigurd', name:'Sigurd', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'EMOM 18', renderer:'emom', scoreType:'emom_rounds', scoreLabel:'Minutes completed',
-    note:'Rotate every minute. Reset each minute — quality over speed. Sub HSPU: Pike Push-Up.',
-    movements:[ _phxMv('Min 1 — Snatch','2 @ 60% 1RM'), _phxMv('Min 2 — Clean & Jerk','2 @ 65% 1RM'), _phxMv('Min 3 — Strict HSPU','5') ],
-    config:{ minutes:18, scoreMode:'rounds',
-      pattern:[ _phxMv('Snatch','2 @ 60%'), _phxMv('Clean & Jerk','2 @ 65%'), _phxMv('Strict HSPU','5') ] } },
-
-  { id:'legend-freya', name:'Freya', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'6 ROUNDS — AFAP', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'6 rounds. Explosive, not rushed — reset between every jump.',
-    movements:[ _phxMv('Med Ball Slam','10 @ 10kg'), _phxMv('Broad Jump','5'), _phxMv('KB Swing','15 @ 24kg') ],
-    config:{ chipper:true, rounds:6 } },
-
-  { id:'legend-skadi', name:'Skadi', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'SPRINT INTERVALS', renderer:'intervals', scoreType:'avg_split', scoreLabel:'Avg 1km split',
-    note:'5 × 1km Row, rest 4 min between. The rower remembers.',
-    movements:[ _phxMv('1km Row','×5 · rest 4 min') ],
-    config:{ efforts:5, work:'1km Row', restSec:240 } },
-
-  { id:'legend-heimdall', name:'Heimdall', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'EMOM 16', renderer:'emom', scoreType:'load', scoreLabel:'Top complex weight (kg)',
-    note:'Min 1 complex (build), Min 2 pull-ups. The watcher sees every loose link.',
-    movements:[ _phxMv('Min 1 — Clean Complex','Power Clean + Hang Clean + Front Squat + Push Jerk · build'), _phxMv('Min 2 — Strict Pull-Up','5') ],
-    config:{ minutes:16, scoreMode:'load',
-      pattern:[ _phxMv('Clean Complex','1 complex · build'), _phxMv('Strict Pull-Up','5') ] } },
-
-  { id:'legend-jormungandr', name:'Jormungandr', cat:'WOD', tier:'LEGEND', group:'Norse',
-    format:'AMRAP 30', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'Continuous flow — no transition rest. Find a pace you can hold for 30 minutes.',
-    movements:[ _phxMv('Run','400m'), _phxMv('Thruster','15 @ 40kg'), _phxMv('Pull-Up','10'), _phxMv('KB Swing','20 @ 24kg') ],
-    config:{ durationMin:30 } },
-
-  { id:'legend-valkyrie', name:'Valkyrie', cat:'WOD', tier:'LEGEND', group:'Norse',
+  { id:'wod-valkyrie', name:'Valkyrie', cat:'WOD', tier:'CONDITIONING',
     format:'4 ROUNDS — AFAP', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'4 rounds. No drop on the carry.',
-    movements:[ _phxMv('Farmers Carry','100m · 24kg each'), _phxMv('Sprint','100m'), _phxMv('Burpee','10') ],
+    note:'4 rounds. Each carry and sprint length is 25m — tap each one as completed.',
+    movements:[ _phxMv('Farmers Carry','8 lengths × 25m · 24kg each hand'),
+      _phxMv('Sprint','8 lengths × 25m'), _phxMv('Burpees','10 reps') ],
     config:{ chipper:true, rounds:4 } },
 
-  // --- GREEK (13) ---
-  { id:'legend-achilles', name:'Achilles', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'5×5 + MAX REP FINISHER', renderer:'load', scoreType:'load_reps', scoreLabel:'Top weight + finisher reps',
-    note:'Back Squat 5×5 building, then max reps at 70% of your top set. Log top weight and the finisher reps.',
-    movements:[ _phxMv('Back Squat','5×5 · build'), _phxMv('Finisher','Max reps @ 70%') ],
-    config:{ sets:5, repScheme:'5', movement:'Back Squat', finisher:true } },
-
-  { id:'legend-ajax', name:'Ajax', cat:'WOD', tier:'LEGEND', group:'Greek',
+  { id:'wod-ajax', name:'Ajax', cat:'WOD', tier:'CONDITIONING',
     format:'AMRAP 20', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 20 minutes.',
-    movements:[ _phxMv('DB Thruster','10 @ 22.5kg'), _phxMv('Box Jump','15 @ 60cm'), _phxMv('Push-Up','20') ],
+    note:'20 min AMRAP. Thrusters hurt more than you think by round 5.',
+    movements:[ _phxMv('DB Thrusters','10 reps · 22.5kg'), _phxMv('Box Jump','15 reps @ 24"'), _phxMv('Push-Up','20 reps') ],
     config:{ durationMin:20 } },
 
-  { id:'legend-odysseus', name:'Odysseus', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'FOR TIME — 10 rounds', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'10 rounds. A long journey — pace it.',
-    movements:[ _phxMv('Deadlift','10 @ 100kg'), _phxMv('Hand-Release Push-Up','10') ],
-    config:{ chipper:true, rounds:10 } },
+  { id:'wod-hermes', name:'Hermes', cat:'WOD', tier:'CONDITIONING',
+    format:'FOR TIME — 100 reps', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'100 Wall Balls for time. Break early, stay moving.',
+    movements:[ _phxMv('Wall Ball','100 reps · 9kg') ],
+    config:{ chipper:true } },
 
-  { id:'legend-hercules', name:'Hercules', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'FOR LOAD — 5 sets', renderer:'load', scoreType:'load', scoreLabel:'Top weight (kg)',
-    note:'Bench Press 5×3 building to max.',
-    movements:[ _phxMv('Bench Press','5×3 · build to max') ],
-    config:{ sets:5, repScheme:'3', movement:'Bench Press' } },
+  { id:'wod-centurion', name:'Centurion', cat:'WOD', tier:'CONDITIONING',
+    format:'FOR TIME — 100 reps', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'100 Burpees for time. Chest to floor, full lockout at top.',
+    movements:[ _phxMv('Burpee','100 reps') ],
+    config:{ chipper:true } },
 
-  { id:'legend-leonidas', name:'Leonidas', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'7 ROUNDS — AFAP', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'7 rounds. Stand and deliver.',
-    movements:[ _phxMv('Deadlift','7 @ 100kg'), _phxMv('Burpee Pull-Up','7'), _phxMv('KB Swing','7 @ 32kg') ],
-    config:{ chipper:true, rounds:7 } },
-
-  { id:'legend-socrates', name:'Socrates', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'EMOM 15', renderer:'emom', scoreType:'emom_rounds', scoreLabel:'Minutes completed',
-    note:'Rotate every minute for 15 minutes.',
-    movements:[ _phxMv('Min 1 — Strict Pull-Up','5'), _phxMv('Min 2 — Push-Up','10'), _phxMv('Min 3 — Air Squat','15') ],
-    config:{ minutes:15, scoreMode:'rounds',
-      pattern:[ _phxMv('Strict Pull-Up','5'), _phxMv('Push-Up','10'), _phxMv('Air Squat','15') ] } },
-
-  { id:'legend-ares', name:'Ares', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'AMRAP 15', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 15 minutes.',
-    movements:[ _phxMv('Power Clean','5 @ 80kg'), _phxMv('Toes-to-Bar','10'), _phxMv('Wall Ball','15 @ 9kg') ],
-    config:{ durationMin:15 } },
-
-  { id:'legend-poseidon', name:'Poseidon', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'SPRINT INTERVALS', renderer:'intervals', scoreType:'avg_split', scoreLabel:'Avg 200m split',
-    note:'8 × 200m Run, rest 90s between.',
-    movements:[ _phxMv('200m Run','×8 · rest 90s') ],
-    config:{ efforts:8, work:'200m Run', restSec:90 } },
-
-  { id:'legend-hades', name:'Hades', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'FOR TIME — 50-40-30-20-10', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'50-40-30-20-10 of each. Descend into the underworld.',
-    movements:[ _phxMv('KB Swing','50-40-30-20-10 · 24kg'), _phxMv('Push-Up','50-40-30-20-10') ],
-    config:{ chipper:true, scheme:'50-40-30-20-10' } },
-
-  { id:'legend-apollo', name:'Apollo', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'FOR LOAD — 5 sets', renderer:'load', scoreType:'load', scoreLabel:'Top weight (kg)',
-    note:'Overhead Press 5×3 building to max.',
-    movements:[ _phxMv('Overhead Press','5×3 · build to max') ],
-    config:{ sets:5, repScheme:'3', movement:'Overhead Press' } },
-
-  { id:'legend-artemis', name:'Artemis', cat:'WOD', tier:'LEGEND', group:'Greek',
+  { id:'wod-viking', name:'Viking', cat:'WOD', tier:'CONDITIONING',
     format:'5 ROUNDS — AFAP', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'5 rounds. The huntress does not tire.',
-    movements:[ _phxMv('Run','400m'), _phxMv('DB Lunge','20 @ 20kg each'), _phxMv('Pull-Up','15') ],
+    note:'5 rounds. Snatches load the posterior chain — hold position.',
+    movements:[ _phxMv('DB Snatch','10 reps each arm · 22.5kg'), _phxMv('Wall Ball','20 reps · 9kg'), _phxMv('Air Squat','30 reps') ],
     config:{ chipper:true, rounds:5 } },
 
-  { id:'legend-dionysus', name:'Dionysus', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'AMRAP 12', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 12 minutes.',
-    movements:[ _phxMv('Hang Power Clean','10 @ 60kg'), _phxMv('Box Jump','10 @ 60cm'), _phxMv('Toes-to-Bar','10') ],
-    config:{ durationMin:12 } },
-
-  { id:'legend-hermes', name:'Hermes', cat:'WOD', tier:'LEGEND', group:'Greek',
-    format:'FOR TIME — 100 reps', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'100 Wall Balls for time. Fast feet.',
-    movements:[ _phxMv('Wall Ball','100 @ 9kg') ],
-    config:{ chipper:true } },
-
-  // --- HISTORICAL (8) ---
-  { id:'legend-spartacus', name:'Spartacus', cat:'WOD', tier:'LEGEND', group:'Historical',
-    format:'8 ROUNDS — 40s / 20s', renderer:'intervals', scoreType:'reps', scoreLabel:'Total reps',
-    note:'8 rounds: 40s work / 20s rest. Same 20kg DB throughout. Count every rep. New movement each round.',
-    movements:[ _phxMv('DB Squat','R1 · 20kg'), _phxMv('DB Row','R2 · 20kg'), _phxMv('DB Lunge','R3 · 20kg'), _phxMv('DB Push Press','R4 · 20kg'),
-      _phxMv('DB Deadlift','R5 · 20kg'), _phxMv('DB Swing','R6 · 20kg'), _phxMv('DB Step-Up','R7 · 20kg'), _phxMv('DB Thruster','R8 · 20kg') ],
-    config:{ efforts:8, work:'40s work', restSec:20, workSec:40, countReps:true,
-      labels:['DB Squat','DB Row','DB Lunge','DB Push Press','DB Deadlift','DB Swing','DB Step-Up','DB Thruster'] } },
-
-  { id:'legend-centurion', name:'Centurion', cat:'WOD', tier:'LEGEND', group:'Historical',
-    format:'FOR TIME — 100 reps', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'100 Burpees for time. Hold the line.',
-    movements:[ _phxMv('Burpee','100') ],
-    config:{ chipper:true } },
-
-  { id:'legend-gladiator', name:'Gladiator', cat:'WOD', tier:'LEGEND', group:'Historical',
-    format:'AMRAP 20', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 20 minutes.',
-    movements:[ _phxMv('Deadlift','5 @ 120kg'), _phxMv('Pull-Up','10'), _phxMv('Box Jump','15 @ 60cm') ],
-    config:{ durationMin:20 } },
-
-  { id:'legend-samurai', name:'Samurai', cat:'WOD', tier:'LEGEND', group:'Historical',
-    format:'EMOM 20', renderer:'emom', scoreType:'load', scoreLabel:'Top weight (kg)',
-    note:'Same barbell, build weight. Min 4 is rest. The two-sword path.',
-    movements:[ _phxMv('Min 1 — Power Clean','5 · build to max'), _phxMv('Min 2 — Front Squat','5 · build to max'), _phxMv('Min 3 — Push Jerk','5 · build to max'), _phxMv('Min 4 — Rest','') ],
-    config:{ minutes:20, scoreMode:'load',
-      pattern:[ _phxMv('Power Clean','5 · build to max'), _phxMv('Front Squat','5 · build to max'), _phxMv('Push Jerk','5 · build to max'), _phxMv('Rest','') ] } },
-
-  { id:'legend-viking', name:'Viking', cat:'WOD', tier:'LEGEND', group:'Historical',
-    format:'5 ROUNDS — AFAP', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'5 rounds. Raid and return.',
-    movements:[ _phxMv('DB Snatch','10 each arm @ 22.5kg'), _phxMv('Wall Ball','20 @ 9kg'), _phxMv('Air Squat','30') ],
-    config:{ chipper:true, rounds:5 } },
-
-  { id:'legend-spartan', name:'Spartan', cat:'WOD', tier:'LEGEND', group:'Historical',
-    format:'FOR TIME — 300 reps', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'The 300. Work top to bottom.',
-    movements:[ _phxMv('Pull-Up','25'), _phxMv('Deadlift','50 @ 60kg'), _phxMv('Push-Up','50'), _phxMv('Box Jump','50'),
-      _phxMv('Floor Wiper','50'), _phxMv('KB Clean & Press','25 @ 24kg'), _phxMv('Pull-Up','50') ],
-    config:{ chipper:true } },
-
-  { id:'legend-warrior', name:'Warrior', cat:'WOD', tier:'LEGEND', group:'Historical',
-    format:'AMRAP 25', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 25 minutes.',
-    movements:[ _phxMv('Thruster','10 @ 50kg'), _phxMv('Pull-Up','10'), _phxMv('Box Jump','10 @ 60cm') ],
-    config:{ durationMin:25 } },
-
-  { id:'legend-legionnaire', name:'Legionnaire', cat:'WOD', tier:'LEGEND', group:'Historical',
+  { id:'wod-leg-run', name:'Legionnaire RUN', cat:'WOD', tier:'CONDITIONING',
     format:'SPRINT INTERVALS', renderer:'intervals', scoreType:'avg_split', scoreLabel:'Avg 100m split',
-    note:'10 × 100m Sprint, rest 60s between.',
+    note:'10 × 100m Sprint. Full rest between efforts — speed, not fatigue.',
     movements:[ _phxMv('100m Sprint','×10 · rest 60s') ],
     config:{ efforts:10, work:'100m Sprint', restSec:60 } },
 
-  // --- IMPLEMENTS (5) ---
-  { id:'legend-ironclad', name:'Ironclad', cat:'WOD', tier:'LEGEND', group:'Implements',
-    format:'FOR LOAD — 3 attempts', renderer:'load', scoreType:'load', scoreLabel:'Heaviest load (kg total)',
-    note:'Farmers Walk 50m for max load. 3 attempts — build each attempt.',
-    movements:[ _phxMv('Farmers Walk','50m · max load · 3 attempts') ],
-    config:{ sets:3, repScheme:'50m', movement:'Farmers Walk 50m' } },
+  { id:'wod-leg-row', name:'Legionnaire ROW', cat:'WOD', tier:'CONDITIONING',
+    format:'SPRINT INTERVALS', renderer:'intervals', scoreType:'avg_split', scoreLabel:'Avg 100m split',
+    note:'10 × 100m Row. Max output each effort. Log your split.',
+    movements:[ _phxMv('100m Row','×10 · rest 60s') ],
+    config:{ efforts:10, work:'100m Row', restSec:60 } },
 
-  { id:'legend-thunderstrike', name:'Thunderstrike', cat:'WOD', tier:'LEGEND', group:'Implements',
-    format:'FOR TIME — 5 rounds', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'5 rounds.',
-    movements:[ _phxMv('DB Clean & Press','10 @ 22.5kg each'), _phxMv('KB Swing','15 @ 32kg'), _phxMv('Box Jump','20') ],
-    config:{ chipper:true, rounds:5 } },
-
-  { id:'legend-stonecrusher', name:'Stonecrusher', cat:'WOD', tier:'LEGEND', group:'Implements',
-    format:'FOR LOAD — 3 attempts', renderer:'load', scoreType:'load', scoreLabel:'Heaviest load (kg)',
-    note:'Sandbag Carry 100m for max load. 3 attempts — build each attempt.',
-    movements:[ _phxMv('Sandbag Carry','100m · max load · 3 attempts') ],
-    config:{ sets:3, repScheme:'100m', movement:'Sandbag Carry 100m' } },
-
-  { id:'legend-ironborn', name:'Ironborn', cat:'WOD', tier:'LEGEND', group:'Implements',
-    format:'AMRAP 18', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
-    note:'As many rounds as possible in 18 minutes.',
-    movements:[ _phxMv('DB Thruster','5 @ 22.5kg each'), _phxMv('Pull-Up','10'), _phxMv('KB Swing','15 @ 24kg') ],
-    config:{ durationMin:18 } },
-
-  { id:'legend-hammerfall', name:'Hammerfall', cat:'WOD', tier:'LEGEND', group:'Implements',
+  { id:'wod-hammerfall', name:'Hammerfall', cat:'WOD', tier:'CONDITIONING',
     format:'FOR TIME — 21-15-9', renderer:'time', scoreType:'time', scoreLabel:'Total time',
-    note:'21-15-9. Bring the hammer down.',
-    movements:[ _phxMv('DB Snatch','21-15-9 each arm · 22.5kg'), _phxMv('Burpee Box Jump','21-15-9 @ 60cm') ],
-    config:{ chipper:true, scheme:'21-15-9' } },
+    note:'21-15-9. Switch arms freely on the snatch. Bring the hammer down.',
+    movements:[ _phxMv('KB Snatch','21-15-9 each arm · 24kg'), _phxMv('Burpee Box Jump','21-15-9 · 24"') ],
+    config:{ chipper:true } },
+],
+
+// ══════════════════════════ AEROBIC SESSIONS (5) ══════════════════════════
+AEROBIC: [
+  { id:'aerobic-the-row', name:'The Row', cat:'WOD', tier:'AEROBIC',
+    format:'FOR TIME — 5km Row', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'5km Row AFAP. Pace the first 2km or blow up. Your split is your score.',
+    movements:[ _phxMv('Row','5000m') ],
+    config:{ chipper:true } },
+
+  { id:'aerobic-runrow', name:'Run/Row', cat:'WOD', tier:'AEROBIC',
+    format:'FOR TIME — 4km', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'2km Run + 2km Row AFAP. Transition is part of the workout.',
+    movements:[ _phxMv('Run','2000m'), _phxMv('Row','2000m') ],
+    config:{ chipper:true } },
+
+  { id:'aerobic-grind', name:'The Grind', cat:'WOD', tier:'AEROBIC',
+    format:'FOR TIME — INTERVALS', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'1km Row, 800m Run, 1km Row, 800m Run. Pace evenly — the second row will hurt.',
+    movements:[ _phxMv('Row','1000m'), _phxMv('Run','800m'), _phxMv('Row','1000m'), _phxMv('Run','800m') ],
+    config:{ chipper:true } },
+
+  { id:'aerobic-long-run', name:'The Long Run', cat:'WOD', tier:'AEROBIC',
+    format:'FOR TIME — 5km Run', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'5km Run AFAP. No equipment — just you and the road.',
+    movements:[ _phxMv('Run','5000m') ],
+    config:{ chipper:true } },
+
+  { id:'aerobic-bikerow', name:'Bike/Row', cat:'WOD', tier:'AEROBIC',
+    format:'FOR TIME — CHIPPER', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'4km Assault Bike + 2km Row + 4km Assault Bike AFAP. Legs burning by the second bike.',
+    movements:[ _phxMv('Assault Bike','4000m'), _phxMv('Row','2000m'), _phxMv('Assault Bike','4000m') ],
+    config:{ chipper:true } },
 ],
 
 // ══════════════════════════ CORE LIBRARY (26) ══════════════════════════
@@ -21056,7 +20894,7 @@ CORE: [
 };
 
 // ─────────────────────────── Accessors ─────────────────────────────────────
-function phxAllWods(){ return PHX_LIB.WOD.concat(PHX_LIB.LEGEND); }
+function phxAllWods(){ return PHX_LIB.WOD.concat(PHX_LIB.AEROBIC||[]); }
 function phxAllCore(){ return PHX_LIB.CORE; }
 function phxAllSessions(){ return phxAllWods().concat(phxAllCore()); }
 function phxSessionById(id){ var a=phxAllSessions(); for(var i=0;i<a.length;i++){ if(a[i].id===id) return a[i]; } return null; }
@@ -21184,7 +21022,7 @@ async function _phxSyncScoresFromCloud(){
 }
 
 // ─────────────────────────── UI: colours + overlay helper ──────────────────
-function _phxTierColour(tier){ if(tier==='TITAN') return 'var(--gold)'; if(tier==='LEGEND') return '#CC3333'; return 'var(--text3)'; }
+function _phxTierColour(tier){ if(tier==='CONDITIONING'||tier==='TITAN') return 'var(--gold)'; if(tier==='AEROBIC') return 'var(--blue,#4A90D9)'; if(tier==='LEGEND') return '#CC3333'; return 'var(--text3)'; }
 function _phxLibOverlay(id, z){
   var stale=document.getElementById(id); if(stale) stale.remove();
   var o=document.createElement('div'); o.id=id;
@@ -21215,10 +21053,10 @@ window._phxOpenSessionLibrary = function(){
 
 function _phxOpenTierPicker(){
   _phxOpenBottomSheet({
-    title:'WOD — Choose Tier', subtitle:'Titan = signature grinders · Legend = named benchmarks',
+    title:'WOD — Choose Type', subtitle:'Conditioning = benchmark WODs · Aerobic = endurance sessions',
     options:[
-      {value:'TITAN',  label:'Titan',  sub:'6 signature WODs'},
-      {value:'LEGEND', label:'Legend', sub:'38 named WODs — Norse, Greek, Historical, Implements'}
+      {value:'CONDITIONING', label:'Conditioning', sub:'14 benchmark WODs'},
+      {value:'AEROBIC',      label:'Aerobic',      sub:'5 endurance sessions'}
     ],
     cancelLabel:'Back', onCancel:function(){ window._phxOpenSessionLibrary(); },
     onSelect:function(tier){ _phxOpenWodGrid(tier); }
@@ -21251,18 +21089,9 @@ function _phxTileHtml(s){
 
 function _phxOpenWodGrid(tier){
   var wods=phxWodsByTier(tier), o=_phxLibOverlay('phx-lib-grid',9520);
-  var body='';
-  if(tier==='LEGEND'){
-    ['Norse','Greek','Historical','Implements'].forEach(function(gr){
-      var items=wods.filter(function(w){ return w.group===gr; });
-      if(!items.length) return;
-      body+='<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin:14px 0 8px;">'+gr+' · '+items.length+'</div>'+
-        items.map(_phxTileHtml).join('');
-    });
-  } else {
-    body=wods.map(_phxTileHtml).join('');
-  }
-  o.innerHTML=_phxLibHeader((tier==='TITAN'?'Titan':'Legend')+' WODs', 'Pick a WOD', wods.length+'', null)+
+  var body=wods.map(_phxTileHtml).join('');
+  var label=tier==='AEROBIC'?'Aerobic Sessions':'Conditioning WODs';
+  o.innerHTML=_phxLibHeader(label, 'Pick a WOD', wods.length+'', null)+
     '<div style="padding:8px 16px 40px;">'+body+'</div>';
   o.querySelector('.phx-lib-back').onclick=function(){ o.remove(); _phxOpenTierPicker(); };
   o.addEventListener('click', function(e){ var t=e.target.closest('.phx-lib-tile'); if(t){ o.remove(); _phxOpenSessionDetail(t.getAttribute('data-sess-id'),'grid:'+tier); } });
@@ -21302,7 +21131,7 @@ window._phxOpenSessionDetail = function(id, backCtx){
     });
   }
 
-  o.innerHTML=_phxLibHeader((s.cat==='WOD'?(s.tier==='TITAN'?'Titan':'Legend')+(s.group&&s.group!=='Titan'?' · '+s.group:''):'Core · '+s.coreType), s.name, s.format.split(' —')[0], null)+
+  o.innerHTML=_phxLibHeader((s.cat==='WOD'?(s.tier==='AEROBIC'?'Aerobic':'Conditioning'):'Core · '+s.coreType), s.name, s.format.split(' —')[0], null)+
     '<div style="padding:16px;flex:1;">'+
       (s.note?'<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid '+accent+';border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">'+
         '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:'+accent+';margin-bottom:6px;">How It Works</div>'+
@@ -21847,7 +21676,7 @@ function _phxScoreSaved(s, rec){
 // ─────────────────────────── RECORDS scoreboard ────────────────────────────
 function _phxRecordRow(s){
   var best=_phxBestFor(s), hist=_phxHistoryFor(s.id), accent = s.cat==='WOD' ? _phxTierColour(s.tier) : 'var(--blue,#4A90D9)';
-  var badge = s.cat==='WOD' ? (s.tier==='TITAN'?'TITAN':'LEGEND') : (s.coreType||'CORE');
+  var badge = s.cat==='WOD' ? (s.tier||'WOD') : (s.coreType||'CORE');
   return '<div class="phx-rec-row" data-sess-id="'+s.id+'" style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid '+accent+';border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">'+
     '<div style="flex:1;min-width:0;">'+
       '<div style="display:flex;align-items:center;gap:8px;"><div style="font-family:var(--font-d);font-size:15px;font-weight:800;text-transform:uppercase;color:var(--text);">'+s.name+'</div>'+
@@ -21895,7 +21724,7 @@ window._phxOpenHistory = function(id){
       '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:'+(r.is_pb?'var(--gold)':'var(--text)')+';">'+phxFormatScore(s.scoreType,r.score)+(r.is_pb?' ★':'')+'</div>'+
     '</div>';
   }).join('');
-  o.innerHTML=_phxLibHeader(s.cat==='WOD'?(s.tier==='TITAN'?'Titan':'Legend'):'Core · '+s.coreType, s.name, hist.length+' attempts', null)+
+  o.innerHTML=_phxLibHeader(s.cat==='WOD'?(s.tier==='AEROBIC'?'Aerobic':'Conditioning'):'Core · '+s.coreType, s.name, hist.length+' attempts', null)+
     '<div style="padding:16px;flex:1;">'+
       '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px;text-align:center;">'+
         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Personal Best</div>'+

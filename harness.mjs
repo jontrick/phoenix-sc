@@ -94,7 +94,27 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.128'", 'version is 4.9.128');
+has("var APP_VERSION='4.9.129'", 'version is 4.9.129');
+
+// ── Priority 10 — Records Tab Enhancement ────────────────────────────────────
+has("var _phxRecTab = 'wod'", 'P10: _phxRecTab tab state variable');
+has('function _phxRecTabWod()', 'P10: _phxRecTabWod defined');
+has('function _phxRecTabStrength()', 'P10: _phxRecTabStrength defined');
+has('function _phxRecTabBlab()', 'P10: _phxRecTabBlab defined');
+has('function _phxAmrapChart(', 'P10: _phxAmrapChart bar chart helper defined');
+has("data-rec-tab", 'P10: tab buttons use data-rec-tab attribute');
+has("key:'wod'", 'P10: WOD / CORE tab defined');
+has("key:'strength'", 'P10: STRENGTH tab defined');
+has("key:'blab'", 'P10: BLAB tab defined');
+has("_maxwt", 'P10: heaviest set reads _maxwt records');
+has("chin_max", 'P10: chin-up max shown in BLAB tab');
+has("100_pushups_time", 'P10: 100 push-up time benchmark in BLAB tab');
+has("Barbell Complex_time", "P10: Barbell Complex time benchmark in BLAB tab");
+has("1.6km", "P10: 1.6km run benchmark in BLAB tab");
+has("_amrap_w", 'P10: AMRAP per-week data used in charts');
+has("HEAVIEST SET LOGGED", 'P10: heaviest set section header');
+has("BLAB BENCHMARKS", 'P10: BLAB benchmarks section header');
+has("1-REP MAXES", 'P10: 1RM section header in STRENGTH tab');
 
 // ── Priority 9 — Holiday Reset Mechanism ─────────────────────────────────────
 has('function openBlabAdjust()', 'P9: openBlabAdjust defined');

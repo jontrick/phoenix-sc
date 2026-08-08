@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.128';
+var APP_VERSION='4.9.129';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16635,7 +16635,6 @@ function setupSplashButtons(){
     </div>
   </div>
   <div style="padding:14px 16px 100px;">
-    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Your Best Scores · WOD &amp; Core</div>
     <div id="phx-records-body"></div>
   </div>
   <div class="bottom-nav">
@@ -22475,6 +22474,8 @@ function _phxScoreSaved(s, rec){
 }
 
 // ─────────────────────────── RECORDS scoreboard ────────────────────────────
+var _phxRecTab = 'wod';
+
 function _phxRecordRow(s){
   var best=_phxBestFor(s), hist=_phxHistoryFor(s.id), accent = s.cat==='WOD' ? _phxTierColour(s.tier) : 'var(--blue,#4A90D9)';
   var badge = s.cat==='WOD' ? (s.tier||'WOD') : (s.coreType||'CORE');
@@ -22495,25 +22496,150 @@ function renderRecords(){
 }
 function _phxPaintRecords(){
   var body=document.getElementById('phx-records-body'); if(!body) return;
+  var tabs=[{key:'wod',label:'WOD / CORE'},{key:'strength',label:'STRENGTH'},{key:'blab',label:'BLAB'}];
+  var tabBar='<div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:18px;">'+
+    tabs.map(function(t){
+      var active=_phxRecTab===t.key;
+      return '<button data-rec-tab="'+t.key+'" style="flex:1;padding:10px 4px;background:'+(active?'var(--gold)':'transparent')+';border:none;font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:'+(active?'#000':'var(--text3)')+';cursor:pointer;border-right:1px solid var(--border);">'+t.label+'</button>';
+    }).join('')+'</div>';
+
+  var content='';
+  if(_phxRecTab==='wod') content=_phxRecTabWod();
+  else if(_phxRecTab==='strength') content=_phxRecTabStrength();
+  else content=_phxRecTabBlab();
+
+  body.innerHTML=tabBar+content;
+  body.querySelectorAll('[data-rec-tab]').forEach(function(btn){
+    btn.onclick=function(){ _phxRecTab=btn.getAttribute('data-rec-tab'); _phxPaintRecords(); };
+  });
+  if(_phxRecTab==='wod'){
+    body.querySelectorAll('.phx-rec-row').forEach(function(row){
+      row.onclick=function(){ _phxOpenHistory(row.getAttribute('data-sess-id')); };
+    });
+  }
+}
+
+function _phxRecTabWod(){
   var scores=_phxScoresAll();
   var total=scores.length, pbs=scores.filter(function(r){ return r.is_pb; }).length;
   var html='<div style="display:flex;gap:8px;margin-bottom:16px;">'+
     '<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;"><div style="font-family:var(--font-d);font-size:26px;font-weight:900;color:var(--gold);">'+total+'</div><div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Sessions Logged</div></div>'+
     '<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center;"><div style="font-family:var(--font-d);font-size:26px;font-weight:900;color:var(--text);">'+pbs+'</div><div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Personal Bests</div></div></div>';
-
-  function section(title, list){
+  function section(title,list){
     var attempted=list.filter(function(s){ return _phxHistoryFor(s.id).length>0; });
     if(!attempted.length) return '';
     return '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin:18px 0 10px;">'+title+' · '+attempted.length+'</div>'+attempted.map(_phxRecordRow).join('');
   }
-  var wodSec=section('WODs', phxAllWods());
-  var coreSec=section('Core', phxAllCore());
-  if(!wodSec && !coreSec){
-    html+='<div style="text-align:center;padding:60px 20px;"><div style="font-size:15px;color:var(--text3);line-height:1.6;">No sessions logged yet.<br>Tap <b style="color:var(--gold);">+ Add a Session</b> on Today to start building your records.</div></div>';
-  } else { html+=wodSec+coreSec; }
-  body.innerHTML=html;
-  var scr=document.getElementById('phx-records-body');
-  if(scr){ scr.querySelectorAll('.phx-rec-row').forEach(function(row){ row.onclick=function(){ _phxOpenHistory(row.getAttribute('data-sess-id')); }; }); }
+  var wodSec=section('WODs',phxAllWods()), coreSec=section('Core',phxAllCore());
+  if(!wodSec&&!coreSec) html+='<div style="text-align:center;padding:60px 20px;"><div style="font-size:15px;color:var(--text3);line-height:1.6;">No sessions logged yet.<br>Tap <b style="color:var(--gold);">+ Add a Session</b> on Today to start.</div></div>';
+  else html+=wodSec+coreSec;
+  return html;
+}
+
+function _phxRecTabStrength(){
+  var bs=(typeof blabGetState==='function')?blabGetState():null;
+  var rec=(bs&&bs.records)||{}, maxes=(bs&&bs.maxes)||{};
+  var html='';
+  var lifts=[{key:'bench',label:'Bench Press'},{key:'squat',label:'Squat'},{key:'deadlift',label:'Deadlift'}];
+  var anyMaxes=lifts.some(function(l){ return maxes[l.key]; });
+  if(anyMaxes){
+    html+='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">1-REP MAXES</div>';
+    lifts.forEach(function(l){
+      if(!maxes[l.key]) return;
+      var chart=_phxAmrapChart(l.key,rec);
+      html+='<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+          '<div style="font-family:var(--font-d);font-size:15px;font-weight:800;text-transform:uppercase;color:var(--text);">'+l.label+'</div>'+
+          '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:var(--gold);">'+maxes[l.key]+'<span style="font-size:12px;font-weight:600;color:var(--text3);"> kg</span></div>'+
+        '</div>'+chart+'</div>';
+    });
+  }
+  var exMaxes=[];
+  Object.keys(rec).forEach(function(k){
+    if(k.slice(-6)==='_maxwt'&&rec[k]) exMaxes.push({name:k.slice(0,-6),wt:rec[k]});
+  });
+  exMaxes.sort(function(a,b){ return b.wt-a.wt; });
+  if(exMaxes.length){
+    html+='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin:'+(anyMaxes?'18':'0')+'px 0 10px;">HEAVIEST SET LOGGED</div>';
+    exMaxes.forEach(function(e){
+      html+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'+
+        '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:var(--text2);">'+e.name+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:var(--text);">'+e.wt+'<span style="font-size:11px;font-weight:500;color:var(--text3);"> kg</span></div>'+
+      '</div>';
+    });
+  }
+  if(!anyMaxes&&!exMaxes.length) html='<div style="text-align:center;padding:60px 20px;"><div style="font-size:15px;color:var(--text3);line-height:1.6;">No strength data yet.<br>Complete BLAB sessions to start tracking.</div></div>';
+  return html;
+}
+
+function _phxAmrapChart(liftKey,rec){
+  var weeks=[];
+  for(var w=1;w<=12;w++){
+    var r=rec[liftKey+'_amrap_w'+w], wt=rec[liftKey+'_amrap_w'+w+'_wt'];
+    if(r) weeks.push({w:w,reps:r,wt:wt||0});
+  }
+  if(!weeks.length) return '';
+  var maxReps=Math.max.apply(null,weeks.map(function(x){ return x.reps; }));
+  var bars=weeks.map(function(x){
+    var h=Math.round((x.reps/maxReps)*32)+4;
+    var isPeak=x.reps===maxReps;
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;">'+
+      '<div style="font-size:8px;color:var(--text3);">'+x.reps+'</div>'+
+      '<div style="width:100%;height:'+h+'px;background:var(--gold);border-radius:2px;opacity:'+(isPeak?'1':'0.5')+';" title="W'+x.w+': '+x.reps+' reps'+(x.wt?' @ '+x.wt+'kg':'')+'">&nbsp;</div>'+
+      '<div style="font-size:8px;color:var(--text3);">W'+x.w+'</div>'+
+    '</div>';
+  }).join('');
+  var last=weeks[weeks.length-1];
+  return '<div style="margin-top:10px;">'+
+    '<div style="display:flex;gap:3px;align-items:flex-end;height:58px;">'+bars+'</div>'+
+    '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Latest: '+last.reps+' reps'+(last.wt?' @ '+last.wt+'kg':'')+' (W'+last.w+')</div>'+
+  '</div>';
+}
+
+function _phxRecTabBlab(){
+  var bs=(typeof blabGetState==='function')?blabGetState():null;
+  var rec=(bs&&bs.records)||{};
+  function fmtS(s){ if(!s) return null; s=Math.floor(s); return Math.floor(s/60)+':'+(s%60<10?'0':'')+s%60; }
+  var benches=[
+    {label:'Barbell Complex',val:fmtS(rec['Barbell Complex_time']),note:'Weeks 1-5'},
+    {label:'DB Complex',val:fmtS(rec['DB Complex_time']),note:'Weeks 6-8'},
+    {label:'BeZercher Complex',val:fmtS(rec['BeZercher Complex_time']),note:'Weeks 9-12'},
+    {label:'BW Complex',val:fmtS(rec['bw_complex_time']),note:'Week 4 finisher'},
+    {label:'100 Push-ups',val:fmtS(rec['100_pushups_time']),note:'Unbroken challenge'},
+    {label:'1.6km Run',val:fmtS(rec['1.6km']),note:'Lower is better'},
+    {label:'Tabata Rounds',val:rec['tabata_rounds']?rec['tabata_rounds']+' rounds':null,note:'Jump rope'},
+    {label:'Chin-up Max',val:bs&&bs.chin_max?bs.chin_max+' reps':null,note:'Established W1 Day 3'}
+  ];
+  var hasAny=benches.some(function(r){ return r.val; });
+  var html='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">BLAB BENCHMARKS</div>';
+  if(!hasAny) return html+'<div style="text-align:center;padding:60px 20px;"><div style="font-size:15px;color:var(--text3);line-height:1.6;">No benchmarks yet.<br>Complete BLAB sessions to start tracking.</div></div>';
+  benches.forEach(function(r){
+    var active=!!r.val;
+    html+='<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid '+(active?'var(--gold)':'var(--border)')+';border-radius:var(--radius);padding:12px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;">'+
+      '<div>'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:800;text-transform:uppercase;color:var(--text);">'+r.label+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+r.note+'</div>'+
+      '</div>'+
+      '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:'+(active?'var(--gold)':'var(--text3)')+';">'+(r.val||'—')+'</div>'+
+    '</div>';
+  });
+  var hasAmrap=Object.keys(rec).some(function(k){ return k.indexOf('_amrap_w')!==-1; });
+  if(hasAmrap){
+    html+='<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin:18px 0 10px;">MAIN LIFT AMRAP HISTORY</div>';
+    ['bench','squat','deadlift'].forEach(function(lift){
+      var wkRows=[];
+      for(var w=1;w<=12;w++){
+        var r=rec[lift+'_amrap_w'+w], wt=rec[lift+'_amrap_w'+w+'_wt'];
+        if(r) wkRows.push('W'+w+': '+r+' reps'+(wt?' @ '+wt+'kg':''));
+      }
+      if(!wkRows.length) return;
+      html+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;">'+
+        '<div style="font-family:var(--font-d);font-size:13px;font-weight:800;text-transform:uppercase;color:var(--text2);margin-bottom:5px;">'+lift.charAt(0).toUpperCase()+lift.slice(1)+'</div>'+
+        '<div style="font-size:12px;color:var(--text3);line-height:1.9;">'+wkRows.join(' &nbsp;·&nbsp; ')+'</div>'+
+      '</div>';
+    });
+  }
+  return html;
 }
 window._phxOpenHistory = function(id){
   var s=phxSessionById(id); if(!s) return;

@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.121'", 'version is 4.9.121');
+has("var APP_VERSION='4.9.122'", 'version is 4.9.122');
 
 // ── v4.9.118 TIMER FIXES (screen lock / wake lock / count-in) ────────────────
 // FIX 1 — timestamp-derived clocks + visibility resync.
@@ -211,10 +211,10 @@ has('function blabRenderRun', 'blabRenderRun kept');
 
 // Day 2 main lift by block
 has("w <= 5 ? 'Free Back Squat' : w <= 10 ? 'Conventional Deadlift' : 'Squat or Deadlift (your choice)'", 'Day2 main lift by block (squat/deadlift/choice)');
-// Day 4 power + conditioning, not deadlift
-has("name:'Power + Conditioning'", 'Day4 is Power + Conditioning');
-has("name:'Conditioning Finisher', format:'tabata'", 'Day4 conditioning finisher (tabata)');
-has("name:'Power + Conditioning — Deload'", 'Day4 deload variant (no conditioning finisher)');
+// Day 4 Lower Power — full 12-week spec
+has("name:'Lower Power'", 'Day4 is Lower Power');
+has("name:'Prowler Push'", 'Day4 Prowler Push finisher present');
+has("name:'Lower Power — Deload'", 'Day4 deload variant (Lower Power)');
 
 // Complex sets override
 has("({1:2,2:2,3:2,4:4,5:1,6:3,7:3,8:3,9:3,10:1,11:4,12:5})[w]", 'complexSets override array (spec)');

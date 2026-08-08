@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.121';
+var APP_VERSION='4.9.122';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5436,32 +5436,179 @@ window.blabGetSessionData = function(week, day){
   // ── DAY 4: POWER + CONDITIONING (not in the PDF — Vision addition) ─────────────
   if(d === 4){
     var exs4 = [];
-    if(isDeload){
-      // Halved volume, NO conditioning finisher.
-      exs4.push(w === 5
-        ? {name:'Box Jumps', format:'standard_sets', sets:2, reps:5, note:'BW only. Step down between reps — full reset. Deload: crisp, not maximal.'}
-        : {name:'Kneeling Jumps', format:'standard_sets', sets:2, reps:5, note:'BW only. Drop to knees, explode up. Deload: crisp, not maximal.'});
-      exs4.push({name:'Single Leg RDL', format:'standard_sets', sets:2, reps:'10 each leg', note:'BW or light DBs. Control the descent — feel the hamstring/glute, not the load.'});
-      return {name:'Power + Conditioning — Deload', week:w, day:d, exercises:exs4};
+    // Helper: build N identical sets at pct% of maxKg for reps
+    function d4pct(maxKg, pct, reps, count){
+      var a = [];
+      for(var i = 0; i < count; i++) a.push({pct:pct, kg:p(maxKg,pct), reps:reps, amrap:false});
+      return a;
     }
 
-    // Explosive movement (3-4 sets)
-    if(w <= 2) exs4.push({name:'Box Jumps', format:'standard_sets', sets:4, reps:5, note:'Step down between reps — full reset. Land soft, absorb the impact.'});
-    else if(w <= 4) exs4.push({name:'Broad Jumps', format:'standard_sets', sets:4, reps:5, note:'Max horizontal distance. Stick the landing, no stumble.'});
-    else if(w <= 7) exs4.push({name:'Depth Drops into Broad Jump', format:'standard_sets', sets:4, reps:5, note:'Step off a low box, land, immediately broad jump. Reactive power.'});
-    else if(w <= 9) exs4.push({name:'Med Ball Slams', format:'standard_sets', sets:4, reps:8, note:'Full overhead extension, slam hard, catch on the bounce.'});
-    else exs4.push({name:'Kneeling Jumps', format:'standard_sets', sets:3, reps:5, note:'Drop to knees, explode to standing. Peak-week CNS primer.'});
+    // ── DELOAD W5: Push Press + Box Jumps + Banded KB Swing ──────────────────────
+    if(w === 5){
+      var pp5kg = p(B,50);
+      exs4.push({name:'Push Press', format:'percentage_sets', blab_lift:'bench', rest:120,
+        sets:[{pct:50,kg:pp5kg,reps:5,amrap:false},{pct:50,kg:pp5kg,reps:5,amrap:false},{pct:50,kg:pp5kg,reps:5,amrap:false}],
+        note:'Dip and drive. Use leg drive to initiate, press to lockout. Technical focus — deload week.'});
+      exs4.push({name:'Box Jumps', format:'standard_sets', sets:2, reps:5, rest:120,
+        note:'24". Submaximal — no max effort. Maintain the pattern. Step down between reps.',
+        prev_best:rec('Box Jumps_height'), record_key:'Box Jumps_height'});
+      exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:2, reps:10, rest:90,
+        note:'16kg KB + light band. Easy effort — deload week.',
+        prev_best:rec('Banded KB Swing_load'), record_key:'Banded KB Swing_load'});
+      return {name:'Lower Power — Deload', week:w, day:d, exercises:exs4};
+    }
 
-    // Posterior chain accessory (NOT a % main lift)
-    if(w <= 4) exs4.push(SS('Single Leg RDL / Ab Wheel Rollouts', 3, 90, 'Single Leg RDL (DB)', '10 each leg', 'Ab Wheel Rollouts', '10 reps'));
-    else if(w <= 9) exs4.push(SS('Barbell Hip Thrust / Pallof Press', 3, 90, 'Barbell Hip Thrust', '12 reps', 'Pallof Press', '12 each side'));
-    else exs4.push(SS('Single Leg Hip Thrust / DB Side Bends', 3, 90, 'Single Leg Hip Thrust', '10 each leg', 'DB Side Bends', '15 each side'));
+    // ── DELOAD W10: Banded Deadlift + Box Jumps + Banded KB Swing ────────────────
+    if(w === 10){
+      exs4.push({name:'Banded Deadlift', format:'percentage_sets', blab_lift:'deadlift', rest:120,
+        sets:d4pct(D,50,3,3),
+        note:'Deload means easy. Light band. Bar speed focus — reinforce the pattern, not the load.'});
+      exs4.push({name:'Box Jumps', format:'standard_sets', sets:2, reps:5, rest:120,
+        note:'24". Submaximal — maintain reactive capacity. Step down between reps.',
+        prev_best:rec('Box Jumps_height'), record_key:'Box Jumps_height'});
+      exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:2, reps:10, rest:90,
+        note:'16kg KB + light band. Easy effort.',
+        prev_best:rec('Banded KB Swing_load'), record_key:'Banded KB Swing_load'});
+      return {name:'Lower Power — Deload', week:w, day:d, exercises:exs4};
+    }
 
-    // Conditioning finisher — assault bike tabata OR prowler OR jump rope intervals
-    var cTr = ({6:'8-10',7:'10-12',8:'12-14',9:'14-16'})[w] || (w <= 4 ? '6-8' : 'Max');
-    exs4.push({name:'Conditioning Finisher', format:'tabata', target_rounds:cTr, prev_best:rec('tabata_rounds'),
-      note:'Pick one: Assault Bike Tabata (20s/10s), heavy Prowler pushes (20m), or Jump Rope intervals. Target '+cTr+' rounds — log the rounds you complete.'});
-    return {name:'Power + Conditioning', week:w, day:d, exercises:exs4};
+    // ── SLOT 1: MAIN LIFT ─────────────────────────────────────────────────────────
+    if(w === 1) exs4.push({name:'Banded Deadlift', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,60,3,4), note:'Drive through the floor. Bar speed is the goal — not max load. Keep band tension consistent.'});
+    else if(w === 2) exs4.push({name:'Rack Pull', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,70,4,4), note:'Bar set just below knee. Pull the slack out before driving. Think: push the floor away. Handle more than your floor pull.'});
+    else if(w === 3) exs4.push({name:'Banded Deadlift', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,65,3,5), note:'Same bar speed focus. If it slows down — that\'s too heavy. Reduce load, keep speed.'});
+    else if(w === 4) exs4.push({name:'Hang Clean', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,65,3,4), note:'Start from mid-thigh hang. Violent hip extension, high pull, fast elbows. Rate of force development.'});
+    else if(w === 6) exs4.push({name:'Banded Deadlift', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,65,3,4), note:'Speed is everything. Contrast session to heavy Day 2 DL. Light bands, fast bar.'});
+    else if(w === 7) exs4.push({name:'Rack Pull', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,75,4,4), note:'Heavier than W2. Overload without full floor-pull fatigue. Squeeze the bar before you pull.'});
+    else if(w === 8) exs4.push({name:'Hang Clean', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,70,3,4), note:'You\'re stronger now. More aggressive hip snap. Catch should feel automatic.'});
+    else if(w === 9) exs4.push({name:'Push Press', format:'percentage_sets', blab_lift:'bench', rest:180,
+      sets:d4pct(B,65,4,4), note:'Aggressive dip and drive. Most athletic lift in the programme — full body power chain.'});
+    else if(w === 11) exs4.push({name:'Rack Pull', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,80,3,5), note:'Peak load of the programme. Set up perfectly. Pull the slack out, brace hard, drive. PR territory.'});
+    else if(w === 12) exs4.push({name:'Hang Clean', format:'percentage_sets', blab_lift:'deadlift', rest:180,
+      sets:d4pct(D,75,3,5), note:'12 weeks of power work pays off here. Go heavier than you think. Fast hips, fast elbows.'});
+
+    // ── SLOT 2: JUMP / PLYOMETRIC ─────────────────────────────────────────────────
+    if(w <= 4){
+      var bjSets4 = (w === 4) ? 5 : 4;
+      var bjNote4 = w === 1 ? '24". Step down — never jump down. Full hip extension at top. Log height (inches).'
+        : w === 2 ? '24". Same as W1. Step down between reps. Log height (inches).'
+        : w === 3 ? 'Attempt 30" if 24" felt comfortable W1-2. Log height achieved (inches).'
+        : '5 sets — accumulation peak. Full reset between reps. Log height (inches).';
+      exs4.push({name:'Box Jumps', format:'standard_sets', sets:bjSets4, reps:5, rest:120,
+        note:bjNote4, prev_best:rec('Box Jumps_height'), record_key:'Box Jumps_height'});
+    } else if(w === 6 || w === 7){
+      exs4.push({name:'Depth Drops into Box Jump', format:'standard_sets', sets:4, reps:5, rest:120,
+        note:'Step off 30cm box, land, immediately jump onto target box (24"+). Minimal ground contact — reactive.',
+        prev_best:rec('Depth Drops into Box Jump_height'), record_key:'Depth Drops into Box Jump_height'});
+    } else if(w === 8 || w === 9){
+      exs4.push({name:'Broad Jumps', format:'standard_sets', sets:4, reps:5, rest:120,
+        note:w === 8 ? 'Max horizontal distance. Stick the landing. Drive arms hard. Log distance (m).'
+          : 'Match or beat W8 distance. Log distance (m).',
+        prev_best:rec('Broad Jumps_dist'), record_key:'Broad Jumps_dist'});
+    } else if(w === 11 || w === 12){
+      exs4.push({name:'Max Height Box Jumps', format:'standard_sets', sets:5, reps:3, rest:120,
+        note:w === 11 ? 'True max height each set. Full rest between reps. Log height (inches) — Block 3 baseline.'
+          : 'Match or beat W11. Log final height (inches) — your 12-week power benchmark.',
+        prev_best:rec('Max Height Box Jumps_height'), record_key:'Max Height Box Jumps_height'});
+    }
+
+    // ── SLOT 3: NORDIC PLANKS ─────────────────────────────────────────────────────
+    if(w === 1) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'5 eccentric', rest:120,
+      note:'Lower as slowly as possible — 3-5 seconds down. This is hamstring armour. Use hands to push back up.'});
+    else if(w === 2) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'5 eccentric', rest:120,
+      note:'Slightly slower descent than W1. Use hands to push back up.'});
+    else if(w === 3) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'6 eccentric', rest:120,
+      note:'One more rep per set. Control every inch of the descent.'});
+    else if(w === 4) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, reps:'8 eccentric', rest:120,
+      note:'Block 1 peak. Lower as slowly as possible. Use hands to push back up.'});
+    else if(w === 6) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'6 eccentric', rest:120,
+      note:'Block 2 — one more set than Block 1 peak. Control the descent.'});
+    else if(w === 7) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric', rest:120,
+      note:'Load increasing each week. Control every rep.'});
+    else if(w === 8) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric', rest:120,
+      note:'Hold at Block 2 peak. Lower slowly, use hands to push back up.'});
+    else if(w === 9) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric', rest:120,
+      note:'Maintain Block 2 peak. Control every rep.'});
+    else if(w === 11) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric + 2s pause', rest:120,
+      note:'Lower slowly, pause 2 seconds at bottom before pushing back up. Peak difficulty.'});
+    else if(w === 12) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, reps:'8 eccentric + 2s pause', rest:120,
+      note:'Final week. Lower slowly, pause 2 seconds at bottom. Leave nothing.'});
+
+    // ── SLOT 4: KB ACCESSORY ──────────────────────────────────────────────────────
+    if(w === 1) exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:4, reps:10, rest:90,
+      note:'24kg KB + light band. Hinge hard, drive hips through. Band adds resistance at the top.',
+      prev_best:rec('Banded KB Swing_load'), record_key:'Banded KB Swing_load'});
+    else if(w === 2) exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:4, reps:12, rest:90,
+      note:'24kg + band. 2 more reps than W1. Drive hips through.',
+      prev_best:rec('Banded KB Swing_load'), record_key:'Banded KB Swing_load'});
+    else if(w === 3) exs4.push({name:'Banded KB Romanian Deadlift', format:'standard_sets', sets:4, reps:'10 each side', rest:90,
+      note:'24kg + band. Slow eccentric. Feel the hamstring load. Drive hips back not down.',
+      prev_best:rec('Banded KB Romanian Deadlift_load'), record_key:'Banded KB Romanian Deadlift_load'});
+    else if(w === 4) exs4.push({name:'Banded KB Good Morning', format:'standard_sets', sets:4, reps:12, rest:90,
+      note:'16kg KB + band. Soft knees, hinge from hips, feel the hamstring stretch at bottom.',
+      prev_best:rec('Banded KB Good Morning_load'), record_key:'Banded KB Good Morning_load'});
+    else if(w === 6) exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:4, reps:10, rest:90,
+      note:'24kg + medium band. Back to swings for Block 2. Hinge hard, drive hips.',
+      prev_best:rec('Banded KB Swing_load'), record_key:'Banded KB Swing_load'});
+    else if(w === 7) exs4.push({name:'Banded KB Romanian Deadlift', format:'standard_sets', sets:4, reps:'12 each side', rest:90,
+      note:'28kg if available, otherwise 24kg + heavier band. Slow eccentric.',
+      prev_best:rec('Banded KB Romanian Deadlift_load'), record_key:'Banded KB Romanian Deadlift_load'});
+    else if(w === 8) exs4.push({name:'Banded KB Good Morning', format:'standard_sets', sets:4, reps:12, rest:90,
+      note:'20kg + band. Hinge from hips, feel the hamstring stretch at bottom.',
+      prev_best:rec('Banded KB Good Morning_load'), record_key:'Banded KB Good Morning_load'});
+    else if(w === 9) exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:5, reps:10, rest:90,
+      note:'More sets pre-deload. 24kg + medium band. Hinge hard, drive hips.',
+      prev_best:rec('Banded KB Swing_load'), record_key:'Banded KB Swing_load'});
+    else if(w === 11) exs4.push({name:'Banded KB Good Morning', format:'standard_sets', sets:4, reps:15, rest:90,
+      note:'Higher reps Block 3. 20kg + medium band. Hinge from hips, feel the hamstring stretch.',
+      prev_best:rec('Banded KB Good Morning_load'), record_key:'Banded KB Good Morning_load'});
+    else if(w === 12) exs4.push({name:'Banded KB Swing', format:'standard_sets', sets:5, reps:10, rest:90,
+      note:'24kg + medium band. All-out effort on last set. Final benchmark.',
+      prev_best:rec('Banded KB Swing_load'), record_key:'Banded KB Swing_load'});
+
+    // ── SLOT 5: CONDITIONING FINISHER ─────────────────────────────────────────────
+    if(w === 1) exs4.push({name:'Prowler Push', format:'standard_sets', sets:4, reps:'20m', rest:120,
+      note:'Low handles, forward lean, short fast steps. Record load — sets your baseline.',
+      prev_best:rec('Prowler Push_load'), record_key:'Prowler Push_load'});
+    else if(w === 2) exs4.push({name:'Prowler Push', format:'standard_sets', sets:4, reps:'20m', rest:120,
+      note:'Increase load from W1 if W1 felt manageable. Log load.',
+      prev_best:rec('Prowler Push_load'), record_key:'Prowler Push_load'});
+    else if(w === 3) exs4.push({name:'Prowler Push', format:'standard_sets', sets:4, reps:'20m', rest:120,
+      note:'Match or beat W2 load. Log load.',
+      prev_best:rec('Prowler Push_load'), record_key:'Prowler Push_load'});
+    else if(w === 4) exs4.push({name:'Prowler Push + Pull', format:'superset', sets:3, rest:120,
+      movements:[{name:'Prowler Push',reps:'20m'},{name:'Prowler Pull',reps:'20m'}],
+      note:'Push first, turn around, pull back. One length each = one set. Log load.',
+      prev_best:rec('Prowler Push + Pull_load'), record_key:'Prowler Push + Pull_load'});
+    else if(w === 6) exs4.push({name:'Prowler Pull', format:'standard_sets', sets:4, reps:'20m', rest:120,
+      note:'Face away from sled, pull by rope hand-over-hand. Posterior chain dominant. Log load.',
+      prev_best:rec('Prowler Pull_load'), record_key:'Prowler Pull_load'});
+    else if(w === 7) exs4.push({name:'Prowler Pull', format:'standard_sets', sets:4, reps:'20m', rest:120,
+      note:'Match or beat W6 load. Log load.',
+      prev_best:rec('Prowler Pull_load'), record_key:'Prowler Pull_load'});
+    else if(w === 8) exs4.push({name:'Prowler Push + Pull', format:'superset', sets:4, rest:120,
+      movements:[{name:'Prowler Push',reps:'20m'},{name:'Prowler Pull',reps:'20m'}],
+      note:'Increase sets from W4. Push first, pull back. Log load.',
+      prev_best:rec('Prowler Push + Pull_load'), record_key:'Prowler Push + Pull_load'});
+    else if(w === 9) exs4.push({name:'Prowler Push', format:'standard_sets', sets:4, reps:'20m', rest:120,
+      note:'Max load you can move with good mechanics. Log load.',
+      prev_best:rec('Prowler Push_load'), record_key:'Prowler Push_load'});
+    else if(w === 11) exs4.push({name:'Prowler Push + Pull', format:'superset', sets:3, rest:120,
+      movements:[{name:'Prowler Push',reps:'20m'},{name:'Prowler Pull',reps:'20m'}],
+      note:'Heavy. Log load — this is your prowler benchmark.',
+      prev_best:rec('Prowler Push + Pull_load'), record_key:'Prowler Push + Pull_load'});
+    else if(w === 12) exs4.push({name:'Prowler Push', format:'standard_sets', sets:5, reps:'20m', rest:120,
+      note:'Max load. Final benchmark. Record this load — Block 2 starts here.',
+      prev_best:rec('Prowler Push_load'), record_key:'Prowler Push_load'});
+
+    return {name:'Lower Power', week:w, day:d, exercises:exs4};
   }
 
   return null;

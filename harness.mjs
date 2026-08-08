@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.122'", 'version is 4.9.122');
+has("var APP_VERSION='4.9.123'", 'version is 4.9.123');
 
 // ── v4.9.118 TIMER FIXES (screen lock / wake lock / count-in) ────────────────
 // FIX 1 — timestamp-derived clocks + visibility resync.
@@ -271,16 +271,16 @@ try {
   new vm.Script(libSlice).runInContext(sb2);
   const wods = sb2.phxAllWods(), core = sb2.phxAllCore(), all = sb2.phxAllSessions();
   wods.length===44 ? ok('exactly 44 WODs') : bad('expected 44 WODs, got '+wods.length);
-  core.length===16 ? ok('exactly 16 Core sessions (v4.9.113: Circuit + Endurance Grind dropped)') : bad('expected 16 Core, got '+core.length);
-  all.length===60  ? ok('60 total sessions') : bad('expected 60 sessions, got '+all.length);
+  core.length===6  ? ok('exactly 6 Core sessions (v4.9.123: R1/R2/R3 + S1/S2/S3)') : bad('expected 6 Core, got '+core.length);
+  all.length===50  ? ok('50 total sessions') : bad('expected 50 sessions, got '+all.length);
   sb2.phxWodsByTier('TITAN').length===6   ? ok('6 Titan WODs') : bad('Titan count '+sb2.phxWodsByTier('TITAN').length);
   sb2.phxWodsByTier('LEGEND').length===38 ? ok('38 Legend WODs') : bad('Legend count '+sb2.phxWodsByTier('LEGEND').length);
   // Legend group + Core type distribution
   const gp={}; all.filter(s=>s.tier==='LEGEND').forEach(s=>gp[s.group]=(gp[s.group]||0)+1);
   (gp.Norse===12&&gp.Greek===13&&gp.Historical===8&&gp.Implements===5) ? ok('Legend groups 12/13/8/5') : bad('Legend groups wrong: '+JSON.stringify(gp));
-  const ctExpect={'Anti-Rotation':5,'Rotational Power':5,'Loaded Strength':6};
+  const ctExpect={'Rotational Focus':3,'Core Strength':3};
   const ct={}; core.forEach(c=>ct[c.coreType]=(ct[c.coreType]||0)+1);
-  JSON.stringify(ct)===JSON.stringify(ctExpect) ? ok('Core types 5/5/6 (purely trunk)') : bad('Core types wrong: '+JSON.stringify(ct));
+  JSON.stringify(ct)===JSON.stringify(ctExpect) ? ok('Core types 3/3 (Rotational Focus + Core Strength)') : bad('Core types wrong: '+JSON.stringify(ct));
   // every remaining core session is trunk-only — no running / rowing-machine / assault-bike
   // (resistance "Row" moves like Cable Row / Plank Row are core work, not conditioning)
   const cardio=/\b(run|running|assault bike|bike|erg|jog|swim|treadmill|sprint|rowing machine)\b/i;

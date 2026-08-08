@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.125'", 'version is 4.9.125');
+has("var APP_VERSION='4.9.126'", 'version is 4.9.126');
 
 // ── Priority 6 — Standalone Timer ────────────────────────────────────────────
 has('function openStandaloneTimer()', 'P6: openStandaloneTimer defined (full implementation)');
@@ -104,6 +104,16 @@ has("activeTab==='tabata'", 'P6: tabata tab mode present');
 has('function tbTick()', 'P6: tbTick — tabata phase engine defined');
 has('function cdAdd(ms)', 'P6: cdAdd — countdown +1min/+30s defined');
 has("data-act=\"tab-'+key+'\"", 'P6: tab delegation — data-act tab buttons built dynamically');
+
+// ── Priority 7 — Custom Session Builder ──────────────────────────────────────
+has('function openCustomSessionBuilder(', 'P7: openCustomSessionBuilder defined');
+has('function _phxOpenExPicker(', 'P7: _phxOpenExPicker defined');
+has('function _phxLoadCustomTemplates(', 'P7: _phxLoadCustomTemplates defined');
+has('function _phxSaveCustomTemplate(', 'P7: _phxSaveCustomTemplate defined');
+has("var _phxExLib = [", 'P7: exercise library array defined');
+has("value:'CUSTOM'", 'P7: CUSTOM option wired in session library picker');
+has("window._todaySession = sess;", 'P7: custom session assigned to _todaySession on start');
+has("phx_custom_templates", 'P7: template storage key in localStorage');
 
 // ── v4.9.118 TIMER FIXES (screen lock / wake lock / count-in) ────────────────
 // FIX 1 — timestamp-derived clocks + visibility resync.

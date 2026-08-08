@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.125';
+var APP_VERSION='4.9.126';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4363,6 +4363,252 @@ function openStandaloneTimer(){
 
   document.body.appendChild(ov);
   renderContent();
+}
+
+// ── CUSTOM SESSION BUILDER (Priority 7) ──────────────────────────
+
+var _phxExLib = [
+  'Bench Press','Incline Bench Press','Close-Grip Bench Press','DB Incline Press','DB Flat Press','Cable Fly',
+  'Overhead Press','Push Press','Arnold Press','Lateral Raise','Front Raise','Face Pull','Rear Delt Fly',
+  'Squat','Front Squat','Goblet Squat','Leg Press','Split Squat','Step Up','Leg Extension','Hamstring Curl',
+  'Deadlift','Romanian Deadlift','Sumo Deadlift','Banded Deadlift','Rack Pull','Trap Bar Deadlift','Nordic Curl',
+  'Pull-Up','Chin-Up','Lat Pulldown','Inverted Row','DB Row','Barbell Row','Cable Row','Face Pull',
+  'Bicep Curl','Barbell Curl','Hammer Curl','Tricep Pushdown','Skull Crusher','Tricep Dip','JM Press',
+  'Hang Clean','Power Clean','Hang Snatch','KB Swing','KB Clean','KB Press','KB Goblet Squat',
+  'Box Jump','Broad Jump','Depth Jump','Jump Squat','Med Ball Slam','Med Ball Throw',
+  'Prowler Push','Prowler Pull','Sled Drag','Farmers Carry','Sandbag Carry','Yoke Walk',
+  'Ring Dip','Push-Up','Pull-Up','Dip','Muscle-Up','Handstand Push-Up',
+  'Plank','Side Plank','Palof Press','Landmine Rotation','Ab Wheel','Hanging Leg Raise',
+  'Row','Run','Assault Bike','Ski Erg','Jump Rope','Burpee','Wall Ball','Thruster',
+  'Calf Raise','Shrug','Hip Thrust','Good Morning','Back Extension','Nordic Hamstring Curl'
+];
+
+function _phxLoadCustomTemplates(){
+  try{ return JSON.parse(localStorage.getItem('phx_custom_templates')||'[]'); }catch(e){ return []; }
+}
+function _phxSaveCustomTemplate(name, exercises){
+  var templates = _phxLoadCustomTemplates();
+  templates.push({id:Date.now(), name:name||'My Session', exercises:exercises, createdAt:new Date().toISOString()});
+  try{ localStorage.setItem('phx_custom_templates', JSON.stringify(templates)); }catch(e){}
+}
+function _phxDeleteCustomTemplate(id){
+  var templates = _phxLoadCustomTemplates().filter(function(t){ return t.id!==id; });
+  try{ localStorage.setItem('phx_custom_templates', JSON.stringify(templates)); }catch(e){}
+}
+
+function openCustomSessionBuilder(initExercises, initName){
+  var ex = document.getElementById('phx-custom-builder'); if(ex) ex.remove();
+  var ov = document.createElement('div');
+  ov.id = 'phx-custom-builder';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9700;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;';
+
+  var sessionName = initName || '';
+  var exercises = (initExercises || []).map(function(e){ return Object.assign({},e); });
+
+  function hdr(){
+    return '<div style="display:flex;align-items:center;gap:12px;padding:16px 20px 12px;border-bottom:1px solid var(--border);">'+
+      '<button data-act="back" style="background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;padding:0 4px;">&#8592;</button>'+
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;flex:1;">BUILD SESSION</div>'+
+    '</div>';
+  }
+
+  function exCard(ex, i){
+    var load = ex.load || '';
+    var detail = ex.sets+'×'+ex.reps+(load?' @ '+load:'')+(ex.rest_sec?' · '+ex.rest_sec+'s rest':'');
+    return '<div data-exidx="'+i+'" style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-family:var(--font-d);font-size:15px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ex.name+'</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+detail+'</div>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">'+
+        (i>0?'<button data-act="up" data-idx="'+i+'" style="background:none;border:1px solid var(--border);border-radius:4px;font-size:12px;color:var(--text3);cursor:pointer;padding:2px 6px;">&#9650;</button>':'<div style="height:22px;"></div>')+
+        (i<exercises.length-1?'<button data-act="dn" data-idx="'+i+'" style="background:none;border:1px solid var(--border);border-radius:4px;font-size:12px;color:var(--text3);cursor:pointer;padding:2px 6px;">&#9660;</button>':'<div style="height:22px;"></div>')+
+      '</div>'+
+      '<button data-act="del" data-idx="'+i+'" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0 4px;flex-shrink:0;">&#215;</button>'+
+    '</div>';
+  }
+
+  function render(){
+    var nameVal = sessionName;
+    var content =
+      '<div style="flex:1;overflow-y:auto;padding:16px 20px 8px;">'+
+        '<div style="margin-bottom:16px;">'+
+          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:6px;">SESSION NAME (OPTIONAL)</div>'+
+          '<input id="csb-name" type="text" value="'+nameVal.replace(/"/g,'&quot;')+'" placeholder="e.g. Monday Push" style="width:100%;box-sizing:border-box;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:15px;">'+
+        '</div>'+
+        '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:10px;">EXERCISES ('+exercises.length+')</div>'+
+        (exercises.length===0?'<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px;">No exercises yet — tap below to add</div>':exercises.map(exCard).join(''))+
+      '</div>'+
+      '<div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">'+
+        '<button data-act="add-ex" style="width:100%;padding:13px;background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:14px;font-weight:800;cursor:pointer;">+ Add Exercise</button>'+
+        (exercises.length>0?
+          '<div style="display:flex;gap:8px;">'+
+            '<button data-act="start" style="flex:1;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:14px;font-weight:900;cursor:pointer;">Start Session</button>'+
+            '<button data-act="save-tpl" style="padding:13px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:700;cursor:pointer;">Save</button>'+
+          '</div>'
+        : '')+
+      '</div>';
+    ov.querySelector('#csb-body').innerHTML = content;
+  }
+
+  ov.innerHTML = hdr() + '<div id="csb-body" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div>';
+
+  ov.addEventListener('click', function(e){
+    var el = e.target.closest('[data-act]'); if(!el) return;
+    var a = el.getAttribute('data-act');
+    var nameEl = ov.querySelector('#csb-name');
+    if(nameEl) sessionName = nameEl.value.trim();
+
+    if(a==='back'){ ov.remove(); window._phxOpenSessionLibrary(); }
+    else if(a==='up'){
+      var i=parseInt(el.getAttribute('data-idx'));
+      var tmp=exercises[i-1]; exercises[i-1]=exercises[i]; exercises[i]=tmp;
+      render();
+    }
+    else if(a==='dn'){
+      var i=parseInt(el.getAttribute('data-idx'));
+      var tmp=exercises[i+1]; exercises[i+1]=exercises[i]; exercises[i]=tmp;
+      render();
+    }
+    else if(a==='del'){
+      var i=parseInt(el.getAttribute('data-idx'));
+      exercises.splice(i,1); render();
+    }
+    else if(a==='add-ex'){
+      _phxOpenExPicker(function(newEx){ exercises.push(newEx); render(); });
+    }
+    else if(a==='start'){
+      if(exercises.length===0) return;
+      var sName = sessionName || new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+      var sess = {
+        name: sName,
+        session_type: 'custom',
+        day: 'Custom',
+        duration_min: Math.max(20, exercises.length*15),
+        exercises: exercises.map(function(e){
+          return { name:e.name, sets:parseInt(e.sets)||3, reps:String(e.reps||'8'), rest_sec:parseInt(e.rest_sec)||90, load_guidance:String(e.load||''), coaching_note:'' };
+        })
+      };
+      window._todaySession = sess;
+      window._phxWarmupSkipNext = true;
+      window._blabSessionCompleteCallback = function(){
+        var wodId = 'custom-'+Date.now();
+        if(typeof _phxSaveScore==='function') _phxSaveScore(wodId, 0, 'done', sName);
+      };
+      ov.remove();
+      try{ openTodaySession(); }catch(err){ console.error('[CSB] openTodaySession failed:',err); }
+    }
+    else if(a==='save-tpl'){
+      var sName = sessionName || 'My Session';
+      _phxSaveCustomTemplate(sName, exercises.map(function(e){ return Object.assign({},e); }));
+      var btn = el;
+      btn.textContent = 'Saved!';
+      btn.style.color = 'var(--gold)';
+      setTimeout(function(){ if(btn.parentNode){ btn.textContent='Save'; btn.style.color='var(--text2)'; } }, 1500);
+    }
+  });
+
+  ov.addEventListener('input', function(e){
+    if(e.target.id==='csb-name') sessionName=e.target.value.trim();
+  });
+
+  document.body.appendChild(ov);
+  render();
+}
+
+function _phxOpenExPicker(onAdd){
+  var old = document.getElementById('phx-ex-picker'); if(old) old.remove();
+  var pv = document.createElement('div');
+  pv.id = 'phx-ex-picker';
+  pv.style.cssText = 'position:fixed;inset:0;z-index:9750;background:var(--bg);display:flex;flex-direction:column;';
+
+  var filtered = _phxExLib.slice();
+  var selected = '';
+
+  // Config state
+  var cfg = { sets:'3', reps:'8', load:'', rest_sec:'90' };
+
+  function listHtml(){
+    var items = filtered.map(function(n){
+      var active = n===selected;
+      return '<div data-exname="'+n+'" style="padding:12px 16px;border-bottom:1px solid var(--border);font-size:15px;color:'+(active?'#000':'var(--text)')+';background:'+(active?'var(--gold)':'transparent')+';cursor:pointer;">'+n+'</div>';
+    }).join('');
+    return items || '<div style="padding:16px;color:var(--text3);font-size:13px;text-align:center;">No matches — use the name above as a free-text exercise</div>';
+  }
+
+  function configHtml(){
+    if(!selected) return '';
+    return '<div style="padding:14px 16px;background:var(--bg2);border-top:2px solid var(--gold);">'+
+      '<div style="font-family:var(--font-d);font-size:11px;font-weight:800;letter-spacing:2px;color:var(--gold);margin-bottom:12px;text-transform:uppercase;">'+selected+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;">'+
+        '<div><div style="font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">SETS</div><input id="cfg-sets" type="number" min="1" max="20" value="'+cfg.sets+'" style="width:100%;padding:8px 6px;background:var(--bg3,var(--bg));border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:900;text-align:center;box-sizing:border-box;"></div>'+
+        '<div><div style="font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">REPS</div><input id="cfg-reps" type="text" value="'+cfg.reps+'" placeholder="8" style="width:100%;padding:8px 6px;background:var(--bg3,var(--bg));border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:900;text-align:center;box-sizing:border-box;"></div>'+
+        '<div><div style="font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">LOAD</div><input id="cfg-load" type="text" value="'+cfg.load+'" placeholder="kg" style="width:100%;padding:8px 6px;background:var(--bg3,var(--bg));border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:900;text-align:center;box-sizing:border-box;"></div>'+
+        '<div><div style="font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">REST (s)</div><input id="cfg-rest" type="number" min="0" max="600" value="'+cfg.rest_sec+'" style="width:100%;padding:8px 6px;background:var(--bg3,var(--bg));border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:900;text-align:center;box-sizing:border-box;"></div>'+
+      '</div>'+
+      '<button data-act="add-confirmed" style="width:100%;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:15px;font-weight:900;cursor:pointer;">Add to Session</button>'+
+    '</div>';
+  }
+
+  function render(){
+    var srchVal = (pv.querySelector('#ex-search')||{}).value || '';
+    pv.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px 10px;border-bottom:1px solid var(--border);">'+
+        '<button data-act="close" style="background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;padding:0 4px;">&#8592;</button>'+
+        '<input id="ex-search" type="text" placeholder="Search or type exercise name..." value="'+srchVal.replace(/"/g,'&quot;')+'" style="flex:1;padding:9px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:15px;">'+
+      '</div>'+
+      '<div id="ex-list" style="flex:1;overflow-y:auto;">'+listHtml()+'</div>'+
+      configHtml();
+
+    var searchEl = pv.querySelector('#ex-search');
+    if(searchEl){
+      searchEl.focus();
+      searchEl.addEventListener('input', function(){
+        var q = searchEl.value.trim().toLowerCase();
+        filtered = !q ? _phxExLib.slice() : _phxExLib.filter(function(n){ return n.toLowerCase().indexOf(q)>-1; });
+        pv.querySelector('#ex-list').innerHTML = listHtml();
+      });
+    }
+    // Re-wire config inputs
+    ['cfg-sets','cfg-reps','cfg-load','cfg-rest'].forEach(function(id){
+      var el = pv.querySelector('#'+id); if(!el) return;
+      el.addEventListener('input', function(){
+        cfg.sets = (pv.querySelector('#cfg-sets')||{}).value || '3';
+        cfg.reps = (pv.querySelector('#cfg-reps')||{}).value || '8';
+        cfg.load = (pv.querySelector('#cfg-load')||{}).value || '';
+        cfg.rest_sec = (pv.querySelector('#cfg-rest')||{}).value || '90';
+      });
+    });
+  }
+
+  pv.addEventListener('click', function(e){
+    var nameEl = e.target.closest('[data-exname]');
+    if(nameEl){
+      selected = nameEl.getAttribute('data-exname');
+      render(); return;
+    }
+    var actEl = e.target.closest('[data-act]'); if(!actEl) return;
+    var a = actEl.getAttribute('data-act');
+    if(a==='close'){ pv.remove(); }
+    else if(a==='add-confirmed'){
+      // Capture current input values
+      var sEl=pv.querySelector('#cfg-sets'); var rEl=pv.querySelector('#cfg-reps');
+      var lEl=pv.querySelector('#cfg-load'); var tEl=pv.querySelector('#cfg-rest');
+      var exName = selected || (pv.querySelector('#ex-search')||{}).value || '';
+      if(!exName) return;
+      onAdd({
+        name: exName,
+        sets: parseInt((sEl&&sEl.value)||3)||3,
+        reps: (rEl&&rEl.value)||'8',
+        load: (lEl&&lEl.value)||'',
+        rest_sec: parseInt((tEl&&tEl.value)||90)||90
+      });
+      pv.remove();
+    }
+  });
+
+  document.body.appendChild(pv);
+  render();
 }
 
 // ── BLAB custom block builders (Phoenix-styled) ──────────────────
@@ -21290,13 +21536,30 @@ function _phxLibHeader(eyebrow, title, right, onBack){
 
 // ─────────────────────────── Flow: entry + pickers ─────────────────────────
 window._phxOpenSessionLibrary = function(){
+  var templates = _phxLoadCustomTemplates();
+  var opts = [
+    {value:'WOD',  label:'WOD',  sub:'14 conditioning WODs + 5 aerobic sessions'},
+    {value:'CORE', label:'Core', sub:'Rotational power · core strength — 6 sessions'},
+    {value:'CUSTOM', label:'Build Your Own', sub:'Create a custom session from scratch'}
+  ];
+  if(templates.length){
+    templates.forEach(function(t){
+      opts.push({value:'tpl:'+t.id, label:t.name, sub:t.exercises.length+' exercises · saved session'});
+    });
+  }
   _phxOpenBottomSheet({
-    title:'Add a Session', subtitle:'Pick a category from the library',
-    options:[
-      {value:'WOD',  label:'WOD',  sub:'Titan & Legend conditioning — 44 workouts'},
-      {value:'CORE', label:'Core', sub:'Anti-rotation · rotational power · loaded · circuits · endurance'}
-    ],
-    onSelect:function(cat){ if(cat==='WOD') _phxOpenTierPicker(); else _phxOpenCoreTypePickerLib(); }
+    title:'Add a Session', subtitle:'Pick a category or build your own',
+    options: opts,
+    onSelect:function(cat){
+      if(cat==='WOD') _phxOpenTierPicker();
+      else if(cat==='CORE') _phxOpenCoreTypePickerLib();
+      else if(cat==='CUSTOM') openCustomSessionBuilder();
+      else if(String(cat).indexOf('tpl:')===0){
+        var tid = parseInt(String(cat).slice(4));
+        var tpl = templates.filter(function(t){ return t.id===tid; })[0];
+        if(tpl) openCustomSessionBuilder(tpl.exercises, tpl.name);
+      }
+    }
   });
 };
 

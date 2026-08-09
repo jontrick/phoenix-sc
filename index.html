@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.132';
+var APP_VERSION='4.9.133';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17643,11 +17643,22 @@ function nutAdjustForToday(base){
   return adj;
 }
 
-// Sum macros logged across all meals for a day-state object
+// Sum macros — handles both old flat-array format and new slot/component format
 function _nutDayTotals(dayData){
   var t = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
-  if(!dayData || !Array.isArray(dayData.meals)) return t;
-  dayData.meals.forEach(function(m){ t.kcal += m.kcal||0; t.protein_g += m.protein_g||0; t.carbs_g += m.carbs_g||0; t.fat_g += m.fat_g||0; });
+  if(!dayData) return t;
+  if(dayData.meals && !Array.isArray(dayData.meals)){
+    // new component format
+    var _NUT_SLOT_KEYS = ['breakfast','lunch','dinner','snack','post_workout'];
+    _NUT_SLOT_KEYS.forEach(function(sl){
+      var m = dayData.meals[sl]; if(!m || !m.components) return;
+      m.components.forEach(function(c){ var f=(c.qty_g||0)/100; t.kcal+=Math.round((c.k||0)*f); t.protein_g+=(c.p||0)*f; t.carbs_g+=(c.c||0)*f; t.fat_g+=(c.f||0)*f; });
+    });
+  } else if(Array.isArray(dayData.meals)){
+    dayData.meals.forEach(function(m){ t.kcal+=m.kcal||0; t.protein_g+=m.protein_g||0; t.carbs_g+=m.carbs_g||0; t.fat_g+=m.fat_g||0; });
+  }
+  (dayData.supplements||[]).forEach(function(s){ t.kcal+=s.kcal||0; t.protein_g+=s.p||0; t.carbs_g+=s.c||0; t.fat_g+=s.f||0; });
+  t.protein_g=Math.round(t.protein_g*10)/10; t.carbs_g=Math.round(t.carbs_g*10)/10; t.fat_g=Math.round(t.fat_g*10)/10;
   return t;
 }
 
@@ -17728,6 +17739,23 @@ function nutRenderScreen(){
   body.querySelectorAll('[data-nut-meal]').forEach(function(btn){
     btn.addEventListener('click', function(){ nutOpenMealLog(btn.getAttribute('data-nut-meal')); });
   });
+  // Meal builder data-attribute wiring
+  body.querySelectorAll('[data-nut-pick]').forEach(function(btn){
+    var parts = btn.getAttribute('data-nut-pick').split('|');
+    btn.addEventListener('click', function(){ nutOpenFoodPicker(parts[0], parts[1]); });
+  });
+  body.querySelectorAll('[data-nut-rm]').forEach(function(btn){
+    var parts = btn.getAttribute('data-nut-rm').split('|');
+    btn.addEventListener('click', function(){ nutRemoveComponent(parts[0], parts[1], parseInt(parts[2])); });
+  });
+  body.querySelectorAll('[data-nut-supp]').forEach(function(btn){
+    var dk = btn.getAttribute('data-nut-supp');
+    btn.addEventListener('click', function(){ nutOpenSuppModal(dk); });
+  });
+  body.querySelectorAll('[data-nut-rm-s]').forEach(function(btn){
+    var parts = btn.getAttribute('data-nut-rm-s').split('|');
+    btn.addEventListener('click', function(){ nutRemoveSupp(parts[0], parseInt(parts[1])); });
+  });
   var saveCI = body.querySelector('#nut-save-checkin');
   if(saveCI) saveCI.addEventListener('click', nutSaveCheckin);
   _nutWireFeelingBtns();
@@ -17784,41 +17812,85 @@ function _nutStatBox(label, value){
 }
 
 function _nutTabMeals(ns){
-  var today = _nutToday();
-  var dayData = (ns.daily && ns.daily[today]) || { meals: [] };
-  var slots = ['Breakfast', 'Lunch', 'Dinner', 'Pre-workout', 'Snack'];
-  var h = '<div style="margin-bottom:12px;font-size:12px;color:var(--text3);">' + today + ' · Tap to log</div>';
-  slots.forEach(function(slot){
-    var slotMeals = dayData.meals.filter(function(m){ return m.slot === slot; });
-    var slotKcal = slotMeals.reduce(function(a,m){ return a + (m.kcal||0); }, 0);
-    var slotP = slotMeals.reduce(function(a,m){ return a + (m.protein_g||0); }, 0);
-    h += '<div style="display:flex;align-items:center;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
-    h += '<div style="flex:1;">';
-    h += '<div style="font-weight:700;color:var(--text);margin-bottom:2px;">' + slot + '</div>';
-    if(slotMeals.length){
-      h += '<div style="font-size:11px;color:var(--text3);">' + slotKcal + ' kcal · ' + slotP + 'g protein</div>';
-    } else {
-      h += '<div style="font-size:11px;color:var(--text3);">Not logged</div>';
+  if(!_nutMealDate) _nutMealDate = _nutToday();
+  var dk = _nutMealDate;
+  var dayData = (ns.daily && ns.daily[dk]) || {};
+  var targets = nutAdjustForToday(ns.targets);
+  var totals  = _nutDayTotals(dayData);
+  var isToday = (dk === _nutToday());
+  var dp = new Date(dk + 'T12:00:00');
+  var dayLabel = isToday ? 'Today' : dp.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+  var kPct=Math.min(100,targets.kcal?Math.round(totals.kcal/targets.kcal*100):0);
+  var pPct=Math.min(100,targets.protein_g?Math.round(totals.protein_g/targets.protein_g*100):0);
+  var cPct=Math.min(100,targets.carbs_g?Math.round(totals.carbs_g/targets.carbs_g*100):0);
+  var fPct=Math.min(100,targets.fat_g?Math.round(totals.fat_g/targets.fat_g*100):0);
+  var h = '';
+  // Date nav
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">';
+  h += '<button onclick="_nutMealNav(-1)" style="width:36px;height:36px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&#8249;</button>';
+  h += '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:13px;font-weight:900;color:var(--text);">' + dayLabel + '</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">' + dk + '</div></div>';
+  h += '<button onclick="_nutMealNav(1)" style="width:36px;height:36px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&#8250;</button>';
+  h += '</div>';
+  // Day macro summary
+  var kcalColor = totals.kcal > targets.kcal ? 'var(--gold)' : 'var(--text)';
+  h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">';
+  h += '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:' + kcalColor + ';">' + totals.kcal + '</div>';
+  h += '<div style="font-size:11px;color:var(--text3);">of ' + targets.kcal + ' kcal &middot; ' + Math.max(0, targets.kcal - totals.kcal) + ' remaining</div>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:8px;">';
+  h += _nutMacroBar('P', totals.protein_g, targets.protein_g, pPct, '#4CAF50');
+  h += _nutMacroBar('C', totals.carbs_g,   targets.carbs_g,   cPct, 'var(--gold)');
+  h += _nutMacroBar('F', totals.fat_g,     targets.fat_g,     fPct, '#FF6B6B');
+  h += '</div>';
+  if(targets.note) h += '<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">' + targets.note + '</div>';
+  h += '</div>';
+  // Meal slots
+  var _SLOTS     = ['breakfast','lunch','dinner','snack','post_workout'];
+  var _SLOT_LBLS = {breakfast:'Breakfast',lunch:'Lunch',dinner:'Dinner',snack:'Snack',post_workout:'Post-Workout'};
+  _SLOTS.forEach(function(slot){
+    var mealData = (dayData.meals && !Array.isArray(dayData.meals)) ? (dayData.meals[slot] || {components:[]}) : {components:[]};
+    var comps = mealData.components || [];
+    var mKcal = 0, mProt = 0;
+    comps.forEach(function(c){ var f=(c.qty_g||0)/100; mKcal+=Math.round((c.k||0)*f); mProt+=Math.round((c.p||0)*f*10)/10; });
+    var hasFood = comps.length > 0;
+    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
+    h += '<div style="display:flex;align-items:center;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
+    h += '<div style="flex:1;"><div style="font-weight:700;color:var(--text);font-size:14px;">' + _SLOT_LBLS[slot] + '</div>';
+    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
+    h += '</div>';
+    h += '<button data-nut-pick="' + slot + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
+    h += '</div>';
+    if(hasFood){
+      h += '<div style="padding:6px 14px 10px;">';
+      comps.forEach(function(c, idx){
+        var cKcal = Math.round((c.k||0)*(c.qty_g||0)/100);
+        var cProt = Math.round((c.p||0)*(c.qty_g||0)/100*10)/10;
+        var sb = c.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '';
+        h += '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);">';
+        h += '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + c.n + sb + '</div>';
+        h += '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cKcal + ' kcal &middot; P' + cProt + 'g</div></div>';
+        h += '<button data-nut-rm="' + slot + '|' + dk + '|' + idx + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
+        h += '</div>';
+      });
+      h += '</div>';
     }
     h += '</div>';
-    h += '<button data-nut-meal="' + slot + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
-    h += '</div>';
   });
-  h += '<div style="margin-top:20px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-size:11px;color:var(--text3);line-height:1.6;">' +
-    '<strong style="color:var(--text2);">Phase 2:</strong> Component-based meal builder with AUSNUT food database coming next. For now, log your macros manually per meal.' +
-    '</div>';
+  // Supplements section
+  h += _nutSuppSection(dayData, dk);
   return h;
 }
 
 function _nutTabCheckin(ns){
-  var today = _nutToday();
+  var today   = _nutToday();
   var dayData = (ns.daily && ns.daily[today]) || {};
   var feeling = dayData.feeling || 0;
   var weight  = dayData.weight_kg || '';
   var feelingBtns = '';
   for(var i=1;i<=10;i++){
-    var active = feeling === i;
-    feelingBtns += '<button data-feeling="'+i+'" style="width:32px;height:32px;border-radius:50%;border:1px solid '+(active?'var(--gold)':'var(--border2)')+';background:'+(active?'var(--gold)':'var(--bg2)')+';color:'+(active?'#000':'var(--text2)')+';font-family:var(--font-d);font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;">'+i+'</button>';
+    var active = (feeling === i);
+    feelingBtns += '<button data-feeling="' + i + '" style="width:32px;height:32px;border-radius:50%;border:1px solid ' + (active ? 'var(--gold)' : 'var(--border2)') + ';background:' + (active ? 'var(--gold)' : 'var(--bg2)') + ';color:' + (active ? '#000' : 'var(--text2)') + ';font-family:var(--font-d);font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;">' + i + '</button>';
   }
   var h = '<div style="margin-bottom:20px;">';
   h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">How are you feeling today?</div>';
@@ -17828,11 +17900,12 @@ function _nutTabCheckin(ns){
   h += '<div style="margin-bottom:20px;">';
   h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Weight</div>';
   h += '<div style="display:flex;align-items:center;gap:10px;">';
-  h += '<input type="number" id="nut-weight-input" inputmode="decimal" step="0.1" placeholder="kg" value="'+weight+'" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;">';
+  h += '<input type="number" id="nut-weight-input" inputmode="decimal" step="0.1" placeholder="kg" value="' + weight + '" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;">';
   h += '<div style="font-size:13px;color:var(--text3);">kg</div>';
   h += '</div></div>';
-  h += '<button id="nut-save-checkin" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;">Save Check-in</button>';
-  if(dayData.feeling){ h += '<div style="text-align:center;margin-top:10px;font-size:11px;color:var(--text3);">Checked in ✔ Feeling: ' + dayData.feeling + '/10' + (dayData.weight_kg ? ' · ' + dayData.weight_kg + 'kg' : '') + '</div>'; }
+  h += '<button id="nut-save-checkin" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;margin-bottom:20px;">Save Check-in</button>';
+  if(dayData.feeling){ h += '<div style="text-align:center;margin-bottom:20px;font-size:11px;color:var(--text3);">Checked in ✔ Feeling: ' + dayData.feeling + '/10' + (dayData.weight_kg ? ' · ' + dayData.weight_kg + 'kg' : '') + '</div>'; }
+  h += _nutWeeklyAssessment(ns);
   return h;
 }
 
@@ -18021,6 +18094,625 @@ function nutOpenSetup(){
 function _nutSetupInput(id, label, unit, val){
   return '<div><label style="font-size:10px;color:var(--text3);letter-spacing:1px;font-family:var(--font-d);display:block;margin-bottom:4px;">' + label + ' (' + unit + ')</label>' +
     '<input type="number" id="' + id + '" inputmode="decimal" placeholder="' + unit + '" value="' + (val||'') + '" style="width:100%;padding:10px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;outline:none;"></div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// NUTRITION PHASE 2 — MEAL BUILDER + SUPPLEMENTS + WEEKLY ASSESSMENT
+// ═══════════════════════════════════════════════════════════════════════
+
+var _nutMealDate     = null;
+var _nutPickerSlot   = null;
+var _nutPickerDate   = null;
+var _nutPickerCat    = 'all';
+var _nutPickerSearch = '';
+var _nutPickerSelId  = null;
+var _nutPickerQty    = 150;
+
+var _NUT_FOODS = [
+  // PROTEIN RAW
+  {id:'p1',  cat:'protein', state:'raw',    n:'Chicken breast (skinless)',     k:110, p:23, c:0,  f:2},
+  {id:'p2',  cat:'protein', state:'raw',    n:'Chicken thigh (skinless)',      k:160, p:20, c:0,  f:9},
+  {id:'p3',  cat:'protein', state:'raw',    n:'Turkey breast (skinless)',      k:112, p:24, c:0,  f:2},
+  {id:'p4',  cat:'protein', state:'raw',    n:'Beef mince (5% fat)',           k:129, p:23, c:0,  f:4},
+  {id:'p5',  cat:'protein', state:'raw',    n:'Beef rump steak',               k:175, p:22, c:0,  f:10},
+  {id:'p6',  cat:'protein', state:'raw',    n:'Beef strips (lean)',            k:160, p:22, c:0,  f:8},
+  {id:'p7',  cat:'protein', state:'raw',    n:'Kangaroo mince',                k:98,  p:21, c:0,  f:2},
+  {id:'p8',  cat:'protein', state:'raw',    n:'Atlantic salmon (farmed)',      k:203, p:20, c:0,  f:13},
+  {id:'p9',  cat:'protein', state:'raw',    n:'Barramundi fillet',             k:96,  p:20, c:0,  f:2},
+  {id:'p10', cat:'protein', state:'raw',    n:'King prawns (shelled)',         k:90,  p:19, c:1,  f:1},
+  {id:'p11', cat:'protein', state:'raw',    n:'Whole eggs',                    k:143, p:13, c:1,  f:10},
+  {id:'p12', cat:'protein', state:'raw',    n:'Egg whites',                    k:52,  p:11, c:1,  f:0},
+  {id:'p13', cat:'protein', state:'raw',    n:'Firm tofu',                     k:140, p:17, c:2,  f:8},
+  {id:'p14', cat:'protein', state:'raw',    n:'Pork tenderloin',               k:145, p:22, c:0,  f:6},
+  {id:'p15', cat:'protein', state:'raw',    n:'Greek yogurt (full fat)',       k:97,  p:9,  c:4,  f:5},
+  {id:'p16', cat:'protein', state:'raw',    n:'Greek yogurt (0% fat)',         k:59,  p:10, c:4,  f:0},
+  {id:'p17', cat:'protein', state:'raw',    n:'Cottage cheese (low fat)',      k:87,  p:12, c:6,  f:2},
+  {id:'p18', cat:'protein', state:'raw',    n:'Full-cream milk per 100ml',     k:63,  p:3,  c:5,  f:4},
+  {id:'p19', cat:'protein', state:'raw',    n:'Skim milk per 100ml',           k:36,  p:4,  c:5,  f:0},
+  // PROTEIN COOKED
+  {id:'pc1', cat:'protein', state:'cooked', n:'Chicken breast (grilled)',      k:165, p:31, c:0,  f:4},
+  {id:'pc2', cat:'protein', state:'cooked', n:'Chicken thigh (grilled)',       k:218, p:26, c:0,  f:12},
+  {id:'pc3', cat:'protein', state:'cooked', n:'Turkey breast (roasted)',       k:150, p:30, c:0,  f:3},
+  {id:'pc4', cat:'protein', state:'cooked', n:'Beef mince (cooked, drained)', k:165, p:28, c:0,  f:5},
+  {id:'pc5', cat:'protein', state:'cooked', n:'Beef rump (grilled medium)',    k:234, p:30, c:0,  f:13},
+  {id:'pc6', cat:'protein', state:'cooked', n:'Beef strips (stir-fried)',      k:210, p:28, c:0,  f:11},
+  {id:'pc7', cat:'protein', state:'cooked', n:'Kangaroo mince (cooked)',       k:130, p:27, c:0,  f:3},
+  {id:'pc8', cat:'protein', state:'cooked', n:'Atlantic salmon (baked)',       k:240, p:25, c:0,  f:15},
+  {id:'pc9', cat:'protein', state:'cooked', n:'Barramundi (baked)',            k:130, p:27, c:0,  f:3},
+  {id:'pc10',cat:'protein', state:'cooked', n:'Tuna in springwater (drained)', k:100, p:23, c:0,  f:1},
+  {id:'pc11',cat:'protein', state:'cooked', n:'King prawns (cooked)',          k:105, p:23, c:1,  f:2},
+  {id:'pc12',cat:'protein', state:'cooked', n:'Eggs hard boiled',              k:143, p:13, c:1,  f:10},
+  {id:'pc13',cat:'protein', state:'cooked', n:'Tofu (pan-fried)',              k:175, p:20, c:2,  f:10},
+  {id:'pc14',cat:'protein', state:'cooked', n:'Pork tenderloin (roasted)',     k:195, p:30, c:0,  f:8},
+  // CARB RAW / DRY
+  {id:'cr1', cat:'carb', state:'raw',    n:'Basmati rice (dry)',              k:356, p:7,  c:78, f:1},
+  {id:'cr2', cat:'carb', state:'raw',    n:'Brown rice (dry)',                k:362, p:7,  c:76, f:3},
+  {id:'cr3', cat:'carb', state:'raw',    n:'Jasmine rice (dry)',              k:358, p:7,  c:79, f:1},
+  {id:'cr4', cat:'carb', state:'raw',    n:'White potato (raw)',              k:77,  p:2,  c:17, f:0},
+  {id:'cr5', cat:'carb', state:'raw',    n:'Sweet potato (raw)',              k:86,  p:2,  c:20, f:0},
+  {id:'cr6', cat:'carb', state:'raw',    n:'Pasta penne or spaghetti (dry)', k:371, p:13, c:74, f:2},
+  {id:'cr7', cat:'carb', state:'raw',    n:'Rolled oats (dry)',               k:389, p:11, c:66, f:7},
+  {id:'cr8', cat:'carb', state:'raw',    n:'Quinoa (dry)',                    k:368, p:14, c:64, f:6},
+  {id:'cr9', cat:'carb', state:'raw',    n:'Rice noodles (dry)',              k:364, p:6,  c:83, f:1},
+  {id:'cr10',cat:'carb', state:'raw',    n:'Red lentils (dry)',               k:339, p:24, c:60, f:1},
+  {id:'cr11',cat:'carb', state:'raw',    n:'Banana (raw)',                    k:89,  p:1,  c:23, f:0},
+  {id:'cr12',cat:'carb', state:'raw',    n:'Apple (raw)',                     k:52,  p:0,  c:14, f:0},
+  {id:'cr13',cat:'carb', state:'raw',    n:'Blueberries fresh or frozen',     k:57,  p:1,  c:14, f:0},
+  {id:'cr14',cat:'carb', state:'raw',    n:'Rice cakes plain',                k:388, p:7,  c:85, f:3},
+  {id:'cr15',cat:'carb', state:'raw',    n:'Corn Thins plain',                k:384, p:8,  c:82, f:2},
+  // CARB COOKED
+  {id:'cc1', cat:'carb', state:'cooked', n:'Basmati rice (cooked)',           k:130, p:3,  c:28, f:0},
+  {id:'cc2', cat:'carb', state:'cooked', n:'Brown rice (cooked)',             k:132, p:3,  c:28, f:1},
+  {id:'cc3', cat:'carb', state:'cooked', n:'Jasmine rice (cooked)',           k:129, p:3,  c:28, f:0},
+  {id:'cc4', cat:'carb', state:'cooked', n:'White potato (boiled)',           k:72,  p:2,  c:17, f:0},
+  {id:'cc5', cat:'carb', state:'cooked', n:'Sweet potato (baked)',            k:90,  p:2,  c:21, f:0},
+  {id:'cc6', cat:'carb', state:'cooked', n:'Pasta (cooked al dente)',         k:131, p:5,  c:26, f:1},
+  {id:'cc7', cat:'carb', state:'cooked', n:'Rolled oats (cooked w water)',    k:71,  p:2,  c:12, f:1},
+  {id:'cc8', cat:'carb', state:'cooked', n:'Quinoa (cooked)',                 k:120, p:4,  c:22, f:2},
+  {id:'cc9', cat:'carb', state:'cooked', n:'Udon noodles (cooked)',           k:130, p:4,  c:26, f:1},
+  {id:'cc10',cat:'carb', state:'cooked', n:'Red lentils (cooked)',            k:116, p:9,  c:20, f:0},
+  {id:'cc11',cat:'carb', state:'cooked', n:'Sourdough bread',                 k:274, p:10, c:54, f:2},
+  {id:'cc12',cat:'carb', state:'cooked', n:'Chickpeas (canned, drained)',     k:120, p:8,  c:18, f:2},
+  {id:'cc13',cat:'carb', state:'cooked', n:'Corn frozen kernels (cooked)',    k:86,  p:3,  c:19, f:1},
+  // VEGETABLES
+  {id:'v1',  cat:'veg', state:'raw', n:'Broccolini',                          k:35,  p:3,  c:5,  f:0},
+  {id:'v2',  cat:'veg', state:'raw', n:'Broccoli',                            k:34,  p:3,  c:7,  f:0},
+  {id:'v3',  cat:'veg', state:'raw', n:'Baby spinach',                        k:23,  p:3,  c:4,  f:0},
+  {id:'v4',  cat:'veg', state:'raw', n:'Bok choy',                            k:13,  p:2,  c:2,  f:0},
+  {id:'v5',  cat:'veg', state:'raw', n:'Red capsicum',                        k:31,  p:1,  c:6,  f:0},
+  {id:'v6',  cat:'veg', state:'raw', n:'Edamame shelled frozen',              k:121, p:11, c:9,  f:5},
+  {id:'v7',  cat:'veg', state:'raw', n:'Green beans',                         k:31,  p:2,  c:7,  f:0},
+  {id:'v8',  cat:'veg', state:'raw', n:'Asparagus',                           k:20,  p:2,  c:4,  f:0},
+  {id:'v9',  cat:'veg', state:'raw', n:'Zucchini',                            k:17,  p:1,  c:3,  f:0},
+  {id:'v10', cat:'veg', state:'raw', n:'Cauliflower',                         k:25,  p:2,  c:5,  f:0},
+  {id:'v11', cat:'veg', state:'raw', n:'Cherry tomatoes',                     k:18,  p:1,  c:4,  f:0},
+  {id:'v12', cat:'veg', state:'raw', n:'Sugar snap peas',                     k:42,  p:3,  c:8,  f:0},
+  {id:'v13', cat:'veg', state:'raw', n:'Cucumber',                            k:15,  p:1,  c:3,  f:0},
+  {id:'v14', cat:'veg', state:'raw', n:'Carrot',                              k:41,  p:1,  c:10, f:0},
+  // SAUCE
+  {id:'s1',  cat:'sauce', state:'raw', n:'Teriyaki sauce',                    k:90,  p:3,  c:19, f:0},
+  {id:'s2',  cat:'sauce', state:'raw', n:'Soy sauce regular',                 k:53,  p:8,  c:5,  f:0},
+  {id:'s3',  cat:'sauce', state:'raw', n:'Low-sodium soy sauce',              k:40,  p:6,  c:4,  f:0},
+  {id:'s4',  cat:'sauce', state:'raw', n:'Coconut aminos',                    k:50,  p:1,  c:12, f:0},
+  {id:'s5',  cat:'sauce', state:'raw', n:'Oyster sauce',                      k:100, p:3,  c:20, f:1},
+  {id:'s6',  cat:'sauce', state:'raw', n:'Fish sauce',                        k:35,  p:5,  c:4,  f:0},
+  {id:'s7',  cat:'sauce', state:'raw', n:'Miso paste white',                  k:200, p:12, c:26, f:6},
+  {id:'s8',  cat:'sauce', state:'raw', n:'Tomato passata',                    k:35,  p:2,  c:7,  f:0},
+  {id:'s9',  cat:'sauce', state:'raw', n:'Sweet chilli sauce',                k:133, p:0,  c:33, f:0},
+  {id:'s10', cat:'sauce', state:'raw', n:'Sriracha',                          k:95,  p:2,  c:18, f:1},
+  {id:'s11', cat:'sauce', state:'raw', n:'Olive oil extra virgin',            k:884, p:0,  c:0,  f:100},
+  {id:'s12', cat:'sauce', state:'raw', n:'Sesame oil',                        k:884, p:0,  c:0,  f:100},
+  {id:'s13', cat:'sauce', state:'raw', n:'Lemon juice fresh',                 k:22,  p:0,  c:8,  f:0},
+  {id:'s14', cat:'sauce', state:'raw', n:'Honey',                             k:304, p:0,  c:82, f:0},
+  // EXTRAS
+  {id:'e1',  cat:'extras', state:'raw', n:'Avocado',                          k:160, p:2,  c:9,  f:15},
+  {id:'e2',  cat:'extras', state:'raw', n:'Sesame seeds raw',                 k:573, p:18, c:23, f:50},
+  {id:'e3',  cat:'extras', state:'raw', n:'Cheddar cheese',                   k:403, p:25, c:1,  f:34},
+  {id:'e4',  cat:'extras', state:'raw', n:'Feta cheese',                      k:264, p:14, c:4,  f:21},
+  {id:'e5',  cat:'extras', state:'raw', n:'Parmesan grated',                  k:431, p:38, c:4,  f:29},
+  {id:'e6',  cat:'extras', state:'raw', n:'Almonds raw',                      k:579, p:21, c:22, f:50},
+  {id:'e7',  cat:'extras', state:'raw', n:'Cashews raw',                      k:553, p:18, c:30, f:44},
+  {id:'e8',  cat:'extras', state:'raw', n:'Walnuts raw',                      k:654, p:15, c:14, f:65},
+  {id:'e9',  cat:'extras', state:'raw', n:'Natural peanut butter',            k:588, p:25, c:20, f:50},
+  {id:'e10', cat:'extras', state:'raw', n:'Tahini',                           k:595, p:17, c:21, f:54},
+  {id:'e11', cat:'extras', state:'raw', n:'Hummus',                           k:177, p:8,  c:17, f:10},
+  {id:'e12', cat:'extras', state:'raw', n:'Sunflower seeds',                  k:584, p:21, c:20, f:51},
+  // SUPPLEMENTS
+  {id:'su1', cat:'supp', state:'raw', n:'Whey protein concentrate (generic)', k:390, p:80, c:7,  f:5},
+  {id:'su2', cat:'supp', state:'raw', n:'Whey protein isolate (generic)',     k:380, p:90, c:3,  f:1},
+  {id:'su3', cat:'supp', state:'raw', n:'Creatine monohydrate per 5g serve',  k:0,   p:0,  c:0,  f:0},
+  {id:'su4', cat:'supp', state:'raw', n:'BCAA powder unflavoured',            k:40,  p:7,  c:0,  f:0},
+  {id:'su5', cat:'supp', state:'raw', n:'Fish oil per 1g softgel',            k:9,   p:0,  c:0,  f:1},
+  {id:'su6', cat:'supp', state:'raw', n:'Magnesium glycinate 500mg tab',      k:0,   p:0,  c:0,  f:0},
+  {id:'su7', cat:'supp', state:'raw', n:'Vitamin D3 1000IU tab',              k:0,   p:0,  c:0,  f:0},
+  {id:'su8', cat:'supp', state:'raw', n:'Mass gainer generic per 100g',       k:400, p:25, c:70, f:5},
+  {id:'su9', cat:'supp', state:'raw', n:'Pre-workout powder generic',         k:30,  p:0,  c:6,  f:0}
+];
+
+function _nutGetFoods(){ return _NUT_FOODS; }
+
+function _nutMealNav(dir){
+  if(!_nutMealDate) _nutMealDate = _nutToday();
+  var d = new Date(_nutMealDate + 'T12:00:00');
+  d.setDate(d.getDate() + dir);
+  var nxt = d.toISOString().slice(0,10);
+  if(nxt > _nutToday()) return;
+  _nutMealDate = nxt;
+  nutRenderScreen();
+}
+
+function _nutSuppSection(dayData, dateKey){
+  var supps = dayData.supplements || [];
+  var st = {kcal:0, p:0, c:0, f:0};
+  supps.forEach(function(s){ st.kcal+=s.kcal||0; st.p+=s.p||0; st.c+=s.c||0; st.f+=s.f||0; });
+  var h = '<div style="margin-top:16px;">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Supplements' + (supps.length ? ' &middot; ' + st.kcal + ' kcal' : '') + '</div>';
+  h += '<button data-nut-supp="' + dateKey + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:5px 12px;cursor:pointer;touch-action:manipulation;">+ Add</button>';
+  h += '</div>';
+  if(supps.length){
+    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;">';
+    supps.forEach(function(s, idx){
+      var macParts = [];
+      if(s.p) macParts.push('P' + s.p + 'g');
+      if(s.c) macParts.push('C' + s.c + 'g');
+      if(s.f) macParts.push('F' + s.f + 'g');
+      h += '<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">';
+      h += '<div style="flex:1;min-width:0;">';
+      h += '<div style="font-size:12px;font-weight:600;color:var(--text);">' + s.name + '</div>';
+      h += '<div style="font-size:11px;color:var(--text3);">' + s.serve + s.unit + ' &middot; ' + (s.kcal||0) + ' kcal' + (macParts.length ? ' &middot; ' + macParts.join(' ') : '') + '</div>';
+      h += '</div>';
+      h += '<button data-nut-rm-s="' + dateKey + '|' + idx + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  } else {
+    h += '<div style="background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);padding:14px;text-align:center;font-size:12px;color:var(--text3);">Creatine, whey, fish oil, pre-workout&hellip;</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function nutOpenFoodPicker(slot, dateKey){
+  _nutPickerSlot   = slot;
+  _nutPickerDate   = dateKey;
+  _nutPickerCat    = 'all';
+  _nutPickerSearch = '';
+  _nutPickerSelId  = null;
+  _nutPickerQty    = 150;
+  var old = document.getElementById('nut-food-picker');
+  if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'nut-food-picker';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-end;';
+  var slotLabels = {breakfast:'Breakfast',lunch:'Lunch',dinner:'Dinner',snack:'Snack',post_workout:'Post-Workout'};
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88vh;">' +
+    '<div style="padding:16px 16px 10px;flex-shrink:0;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Add to ' + (slotLabels[slot]||slot) + '</div>' +
+    '<button id="nut-fp-close" style="width:28px;height:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:16px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<input type="text" id="nut-fp-search" placeholder="Search foods…" inputmode="search" autocomplete="off" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;box-sizing:border-box;outline:none;margin-bottom:10px;">' +
+    '<div id="nut-fp-cats" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;"></div>' +
+    '</div>' +
+    '<div id="nut-fp-list" style="flex:1;overflow-y:auto;padding:0 16px 16px;"></div>' +
+    '<div id="nut-fp-add-bar" style="display:none;padding:12px 16px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;">' +
+    '<div id="nut-fp-preview" style="font-size:11px;color:var(--text3);margin-bottom:8px;text-align:center;min-height:14px;"></div>' +
+    '<div style="display:flex;gap:10px;align-items:center;">' +
+    '<input type="number" id="nut-fp-qty" inputmode="decimal" value="150" min="1" style="width:80px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;flex-shrink:0;">' +
+    '<span style="font-size:12px;color:var(--text3);flex-shrink:0;">g</span>' +
+    '<button id="nut-fp-add-btn" style="flex:1;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;">Add Food</button>' +
+    '</div></div></div>';
+  document.body.appendChild(ov);
+  _nutRenderFoodPickerCats(ov);
+  _nutRenderFoodPickerList(ov);
+  ov.querySelector('#nut-fp-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  ov.querySelector('#nut-fp-search').addEventListener('input', function(e){
+    _nutPickerSearch = e.target.value.toLowerCase();
+    _nutPickerSelId  = null;
+    ov.querySelector('#nut-fp-add-bar').style.display = 'none';
+    _nutRenderFoodPickerList(ov);
+  });
+  ov.querySelector('#nut-fp-qty').addEventListener('input', function(){
+    _nutPickerQty = parseFloat(this.value) || 0;
+    _nutUpdatePickerPreview(ov);
+  });
+  ov.querySelector('#nut-fp-add-btn').addEventListener('click', function(){
+    if(!_nutPickerSelId) return;
+    var food = _nutGetFoods().filter(function(f){ return f.id === _nutPickerSelId; })[0];
+    if(!food) return;
+    var qty = parseFloat(ov.querySelector('#nut-fp-qty').value) || 100;
+    nutAddComponent(_nutPickerSlot, _nutPickerDate, food, qty);
+    ov.remove();
+    nutRenderScreen();
+  });
+}
+
+function _nutRenderFoodPickerCats(ov){
+  var cats = [
+    {key:'all',label:'All'},
+    {key:'protein',label:'Protein'},
+    {key:'carb',label:'Carbs'},
+    {key:'veg',label:'Veg'},
+    {key:'sauce',label:'Sauce'},
+    {key:'extras',label:'Extras'},
+    {key:'supp',label:'Supps'}
+  ];
+  var container = ov.querySelector('#nut-fp-cats');
+  container.innerHTML = cats.map(function(cat){
+    var act = _nutPickerCat === cat.key;
+    return '<button data-fp-cat="' + cat.key + '" style="flex-shrink:0;padding:5px 12px;background:' +
+      (act ? 'var(--gold)' : 'var(--bg3)') +
+      ';border:1px solid ' + (act ? 'var(--gold)' : 'var(--border2)') +
+      ';border-radius:20px;color:' + (act ? '#000' : 'var(--text3)') +
+      ';font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">' +
+      cat.label + '</button>';
+  }).join('');
+  container.querySelectorAll('[data-fp-cat]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      _nutPickerCat   = btn.getAttribute('data-fp-cat');
+      _nutPickerSelId = null;
+      ov.querySelector('#nut-fp-add-bar').style.display = 'none';
+      _nutRenderFoodPickerCats(ov);
+      _nutRenderFoodPickerList(ov);
+    });
+  });
+}
+
+function _nutRenderFoodPickerList(ov){
+  var foods    = _nutGetFoods();
+  var q        = _nutPickerSearch;
+  var filtered = foods.filter(function(f){
+    if(_nutPickerCat !== 'all' && f.cat !== _nutPickerCat) return false;
+    if(q && f.n.toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  var list = ov.querySelector('#nut-fp-list');
+  if(!filtered.length){
+    list.innerHTML = '<div style="text-align:center;padding:30px 0;font-size:13px;color:var(--text3);">No foods found</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(function(f){
+    var sel = _nutPickerSelId === f.id;
+    var sb  = f.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '';
+    return '<div data-fp-food="' + f.id + '" style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;background:' +
+      (sel ? 'rgba(200,150,62,0.08)' : 'transparent') + ';">' +
+      '<div style="flex:1;min-width:0;">' +
+      '<div style="font-size:13px;font-weight:' + (sel ? '700' : '500') + ';color:' + (sel ? 'var(--gold)' : 'var(--text)') + ';">' + f.n + sb + '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + f.k + ' kcal &middot; P' + f.p + 'g &middot; C' + f.c + 'g &middot; F' + f.f + 'g <span style="opacity:0.5;">per 100g</span></div>' +
+      '</div>' +
+      (sel ? '<div style="color:var(--gold);font-size:18px;margin-left:8px;flex-shrink:0;">&#10003;</div>' : '') +
+      '</div>';
+  }).join('');
+  list.querySelectorAll('[data-fp-food]').forEach(function(row){
+    row.addEventListener('click', function(){
+      _nutPickerSelId = row.getAttribute('data-fp-food');
+      ov.querySelector('#nut-fp-add-bar').style.display = '';
+      var qtyEl = ov.querySelector('#nut-fp-qty');
+      if(qtyEl){ qtyEl.value = '150'; _nutPickerQty = 150; }
+      _nutUpdatePickerPreview(ov);
+      _nutRenderFoodPickerList(ov);
+    });
+  });
+}
+
+function _nutUpdatePickerPreview(ov){
+  var food = _nutGetFoods().filter(function(f){ return f.id === _nutPickerSelId; })[0];
+  if(!food) return;
+  var qty  = _nutPickerQty || 0;
+  var fac  = qty / 100;
+  var prev = ov.querySelector('#nut-fp-preview');
+  if(prev) prev.innerHTML =
+    '<strong style="color:var(--text);">' + food.n + '</strong> &mdash; ' + qty + 'g = ' +
+    '<span style="color:var(--text);">' + Math.round((food.k||0)*fac) + ' kcal</span>' +
+    ' &middot; P' + (Math.round((food.p||0)*fac*10)/10) + 'g' +
+    ' &middot; C' + (Math.round((food.c||0)*fac*10)/10) + 'g' +
+    ' &middot; F' + (Math.round((food.f||0)*fac*10)/10) + 'g';
+}
+
+function nutAddComponent(slot, dateKey, food, qty){
+  var ns = nutGetState();
+  if(!ns) return;
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[dateKey]) ns.daily[dateKey] = {};
+  var day = ns.daily[dateKey];
+  if(!day.meals || Array.isArray(day.meals)) day.meals = {};
+  if(!day.meals[slot]) day.meals[slot] = {components:[]};
+  day.meals[slot].components.push({
+    id:    food.id    || '',
+    n:     food.n     || food.name || '',
+    cat:   food.cat   || '',
+    state: food.state || 'raw',
+    qty_g: parseFloat(qty) || 100,
+    k: food.k || 0,
+    p: food.p || 0,
+    c: food.c || 0,
+    f: food.f || 0
+  });
+  nutSaveState(ns);
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+}
+
+function nutRemoveComponent(slot, dateKey, idx){
+  var ns = nutGetState();
+  if(!ns || !ns.daily || !ns.daily[dateKey]) return;
+  var day = ns.daily[dateKey];
+  if(!day.meals || !day.meals[slot] || !day.meals[slot].components) return;
+  day.meals[slot].components.splice(idx, 1);
+  nutSaveState(ns);
+  nutRenderScreen();
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+}
+
+function nutOpenSuppModal(dateKey){
+  var old = document.getElementById('nut-supp-modal');
+  if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id  = 'nut-supp-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-end;';
+  var _tab     = 'search';
+  var _searchQ = '';
+  var _selId   = null;
+  var _serve   = 30;
+
+  function _suppPreviewStr(food, serve){
+    var fac = serve / 100;
+    return food.n + ' &mdash; ' + serve + 'g = <strong style="color:var(--text);">' +
+      Math.round((food.k||0)*fac) + ' kcal</strong>' +
+      ' &middot; P' + (Math.round((food.p||0)*fac*10)/10) + 'g' +
+      ' &middot; C' + (Math.round((food.c||0)*fac*10)/10) + 'g' +
+      ' &middot; F' + (Math.round((food.f||0)*fac*10)/10) + 'g';
+  }
+
+  function _buildSearchTab(){
+    var suppFoods = _nutGetFoods().filter(function(f){ return f.cat === 'supp'; });
+    if(_searchQ) suppFoods = suppFoods.filter(function(f){ return f.n.toLowerCase().indexOf(_searchQ) >= 0; });
+    var listH = suppFoods.map(function(f){
+      var sel = _selId === f.id;
+      return '<div data-sm-food="' + f.id + '" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;background:' +
+        (sel ? 'rgba(200,150,62,0.08)' : 'transparent') + ';">' +
+        '<div style="font-size:13px;font-weight:' + (sel ? '700' : '500') + ';color:' + (sel ? 'var(--gold)' : 'var(--text)') + ';">' + f.n + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);">' + f.k + ' kcal &middot; P' + f.p + 'g &middot; C' + f.c + 'g &middot; F' + f.f + 'g per 100g</div>' +
+        '</div>';
+    }).join('') || '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">No supplements found</div>';
+    var addBarH = _selId ?
+      '<div style="padding:12px 16px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;">' +
+      '<div id="sm-prev" style="font-size:11px;color:var(--text3);margin-bottom:8px;text-align:center;min-height:14px;"></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;">' +
+      '<input type="number" id="sm-serve-qty" value="' + _serve + '" inputmode="decimal" style="width:70px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;flex-shrink:0;">' +
+      '<span style="font-size:12px;color:var(--text3);">g</span>' +
+      '<button id="sm-add-btn" style="flex:1;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;">Add</button>' +
+      '</div></div>'
+      :
+      '<div style="padding:14px 16px;background:var(--bg2);border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--text3);">Select a supplement above</div>';
+    return '<div style="padding:0 16px;flex-shrink:0;">' +
+      '<input type="text" id="sm-search" placeholder="Search…" inputmode="search" autocomplete="off" value="' + _searchQ.replace(/"/g,'') + '" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;box-sizing:border-box;outline:none;margin-bottom:10px;">' +
+      '</div>' +
+      '<div id="sm-list" style="flex:1;overflow-y:auto;padding:0 16px;">' + listH + '</div>' +
+      addBarH;
+  }
+
+  function _buildManualTab(){
+    return '<div style="padding:0 16px 16px;overflow-y:auto;">' +
+      '<div style="margin-bottom:10px;"><label style="font-size:10px;color:var(--text3);font-family:var(--font-d);letter-spacing:1px;display:block;margin-bottom:4px;">NAME</label>' +
+      '<input type="text" id="sm-man-name" placeholder="e.g. Creatine monohydrate" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;box-sizing:border-box;outline:none;"></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
+      _nutMlInput('sm-man-serve','SERVE','g','e.g. 5') +
+      _nutMlInput('sm-man-kcal','CALORIES','kcal','e.g. 0') +
+      _nutMlInput('sm-man-prot','PROTEIN','g','e.g. 0') +
+      _nutMlInput('sm-man-carb','CARBS','g','e.g. 0') +
+      _nutMlInput('sm-man-fat','FAT','g','e.g. 0') +
+      '</div>' +
+      '<button id="sm-man-add" style="width:100%;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;">Add Supplement</button>' +
+      '</div>';
+  }
+
+  function _buildOuter(tabContent){
+    var tStyle = function(t){
+      return 'flex:1;padding:10px;background:none;border:none;border-bottom:2px solid ' +
+        (_tab===t ? 'var(--gold)' : 'transparent') +
+        ';font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:' +
+        (_tab===t ? 'var(--gold)' : 'var(--text3)') +
+        ';cursor:pointer;touch-action:manipulation;';
+    };
+    return '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88vh;">' +
+      '<div style="padding:16px 16px 0;flex-shrink:0;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+      '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Add Supplement</div>' +
+      '<button id="sm-close" style="width:28px;height:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:16px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+      '</div>' +
+      '<div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:12px;">' +
+      '<button data-sm-tab="search" style="' + tStyle('search') + '">Search</button>' +
+      '<button data-sm-tab="manual" style="' + tStyle('manual') + '">Manual Entry</button>' +
+      '</div></div>' +
+      tabContent +
+      '</div>';
+  }
+
+  function rerender(){
+    ov.innerHTML = _buildOuter(_tab === 'search' ? _buildSearchTab() : _buildManualTab());
+    wireEvents();
+  }
+
+  function wireEvents(){
+    var cl = ov.querySelector('#sm-close');
+    if(cl) cl.addEventListener('click', function(){ ov.remove(); });
+    ov.querySelectorAll('[data-sm-tab]').forEach(function(btn){
+      btn.addEventListener('click', function(){ _tab = btn.getAttribute('data-sm-tab'); _selId = null; rerender(); });
+    });
+    var srch = ov.querySelector('#sm-search');
+    if(srch) srch.addEventListener('input', function(){
+      _searchQ = this.value.toLowerCase();
+      _selId   = null;
+      rerender();
+      var s2 = ov.querySelector('#sm-search');
+      if(s2){ s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); }
+    });
+    ov.querySelectorAll('[data-sm-food]').forEach(function(row){
+      row.addEventListener('click', function(){ _selId = row.getAttribute('data-sm-food'); rerender(); });
+    });
+    var serveEl = ov.querySelector('#sm-serve-qty');
+    if(serveEl){
+      serveEl.addEventListener('input', function(){
+        _serve = parseFloat(this.value) || 0;
+        var food = _nutGetFoods().filter(function(f){ return f.id === _selId; })[0];
+        var prev = ov.querySelector('#sm-prev');
+        if(food && prev) prev.innerHTML = _suppPreviewStr(food, _serve);
+      });
+      var food0 = _nutGetFoods().filter(function(f){ return f.id === _selId; })[0];
+      var prev0 = ov.querySelector('#sm-prev');
+      if(food0 && prev0) prev0.innerHTML = _suppPreviewStr(food0, _serve);
+    }
+    var addBtn = ov.querySelector('#sm-add-btn');
+    if(addBtn) addBtn.addEventListener('click', function(){
+      if(!_selId) return;
+      var food = _nutGetFoods().filter(function(f){ return f.id === _selId; })[0];
+      if(!food) return;
+      var serve = parseFloat(ov.querySelector('#sm-serve-qty').value) || 5;
+      var fac   = serve / 100;
+      nutAddSupp(dateKey, {name:food.n, serve:serve, unit:'g', kcal:Math.round((food.k||0)*fac), p:Math.round((food.p||0)*fac*10)/10, c:Math.round((food.c||0)*fac*10)/10, f:Math.round((food.f||0)*fac*10)/10});
+      ov.remove();
+      nutRenderScreen();
+    });
+    var manAdd = ov.querySelector('#sm-man-add');
+    if(manAdd) manAdd.addEventListener('click', function(){
+      var nameEl  = ov.querySelector('#sm-man-name');
+      var name    = nameEl ? nameEl.value.trim() : '';
+      if(!name) return;
+      var serveEl2 = ov.querySelector('#sm-man-serve');
+      var kcalEl  = ov.querySelector('#sm-man-kcal');
+      var protEl  = ov.querySelector('#sm-man-prot');
+      var carbEl  = ov.querySelector('#sm-man-carb');
+      var fatEl   = ov.querySelector('#sm-man-fat');
+      var serve2  = parseFloat(serveEl2 ? serveEl2.value : 0) || 0;
+      nutAddSupp(dateKey, {
+        name:  name,
+        serve: serve2 || 1,
+        unit:  'g',
+        kcal:  parseFloat(kcalEl ? kcalEl.value : 0) || 0,
+        p:     parseFloat(protEl ? protEl.value : 0) || 0,
+        c:     parseFloat(carbEl ? carbEl.value : 0) || 0,
+        f:     parseFloat(fatEl  ? fatEl.value  : 0) || 0
+      });
+      ov.remove();
+      nutRenderScreen();
+    });
+    ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  }
+
+  rerender();
+  document.body.appendChild(ov);
+}
+
+function nutAddSupp(dateKey, supp){
+  var ns = nutGetState();
+  if(!ns) return;
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[dateKey]) ns.daily[dateKey] = {};
+  if(!ns.daily[dateKey].supplements) ns.daily[dateKey].supplements = [];
+  ns.daily[dateKey].supplements.push(supp);
+  nutSaveState(ns);
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+}
+
+function nutRemoveSupp(dateKey, idx){
+  var ns = nutGetState();
+  if(!ns || !ns.daily || !ns.daily[dateKey]) return;
+  if(!ns.daily[dateKey].supplements) return;
+  ns.daily[dateKey].supplements.splice(idx, 1);
+  nutSaveState(ns);
+  nutRenderScreen();
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+}
+
+function _nutWeeklyAssessment(ns){
+  if(!ns || !ns.daily) return '';
+  var days = [];
+  for(var i = 0; i < 14; i++){
+    var d = new Date();
+    d.setDate(d.getDate() - i);
+    var dk = d.toISOString().slice(0,10);
+    var dd  = ns.daily[dk] || {};
+    var tot = _nutDayTotals(dd);
+    days.push({date:dk, weight:dd.weight_kg||null, kcal:tot.kcal, p:tot.protein_g, hasLog:tot.kcal>0});
+  }
+  var withWeight = days.filter(function(d){ return d.weight; });
+  var withFood   = days.filter(function(d){ return d.hasLog; });
+  if(withWeight.length < 2){
+    return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">' +
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Weekly Assessment</div>' +
+      '<div style="font-size:12px;color:var(--text3);line-height:1.5;">Log your weight on at least 2 separate days to see your trend assessment.</div></div>';
+  }
+  var newest   = withWeight[0];
+  var oldest   = withWeight[withWeight.length-1];
+  var wDelta   = Math.round((newest.weight - oldest.weight) * 10) / 10;
+  var daysSpan = withWeight.length;
+  var avgKcal  = withFood.length ? Math.round(withFood.reduce(function(a,d){ return a+d.kcal; },0) / withFood.length) : 0;
+  var tgtKcal  = (ns.targets && ns.targets.kcal) || 0;
+  var tgtProt  = (ns.targets && ns.targets.protein_g) || 0;
+  var daysHitP = withFood.filter(function(d){ return d.p >= tgtProt * 0.9; }).length;
+  var goal     = ns.goal || 'maintenance';
+  var verdict  = '', vColor = 'var(--text3)';
+  if(goal === 'fat_loss'){
+    if(wDelta <= -0.2 && wDelta >= -1.5){ verdict = 'On track — steady weight loss'; vColor = '#4CAF50'; }
+    else if(wDelta > 0.2){               verdict = 'Weight trending up — review daily intake'; vColor = 'var(--gold)'; }
+    else if(wDelta < -1.5){              verdict = 'Dropping fast — slight increase helps muscle retention'; vColor = 'var(--gold)'; }
+    else {                               verdict = 'Weight stable — small deficit may be needed'; vColor = 'var(--text3)'; }
+  } else if(goal === 'hypertrophy'){
+    if(wDelta >= 0.1 && wDelta <= 1.0){ verdict = 'On track — healthy gaining rate'; vColor = '#4CAF50'; }
+    else if(wDelta < 0){                verdict = 'Weight dropping — eat more to support growth'; vColor = 'var(--gold)'; }
+    else if(wDelta > 1.0){              verdict = 'Gaining fast — watch the rate for lean gains'; vColor = 'var(--gold)'; }
+    else {                              verdict = 'Weight stable — slight calorie increase may help'; vColor = 'var(--text3)'; }
+  } else if(goal === 'strength'){
+    if(Math.abs(wDelta) <= 0.5){ verdict = 'Weight stable — good for strength phase'; vColor = '#4CAF50'; }
+    else if(wDelta > 0.5){       verdict = 'Gaining — keep an eye on the rate'; vColor = 'var(--text3)'; }
+    else {                       verdict = 'Losing — ensure enough calories for recovery'; vColor = 'var(--gold)'; }
+  } else {
+    if(Math.abs(wDelta) <= 0.3){ verdict = 'Maintaining well'; vColor = '#4CAF50'; }
+    else {                       verdict = 'Weight moving — adjust intake to maintain'; vColor = 'var(--gold)'; }
+  }
+  var wArrow = wDelta > 0.1 ? '↑' : wDelta < -0.1 ? '↓' : '→';
+  var wColor = goal === 'fat_loss' ? (wDelta < 0 ? '#4CAF50' : 'var(--gold)') :
+               goal === 'hypertrophy' ? (wDelta > 0 ? '#4CAF50' : 'var(--gold)') : 'var(--text)';
+  var kcalDiff = avgKcal - tgtKcal;
+  // Mini weight sparkline
+  var chartDays = days.slice(0,7).reverse();
+  var wVals  = chartDays.map(function(d){ return d.weight; }).filter(Boolean);
+  var minW   = wVals.length ? Math.min.apply(null,wVals) - 0.3 : 0;
+  var maxW   = wVals.length ? Math.max.apply(null,wVals) + 0.3 : 1;
+  var chartH = 36;
+  var chartBars = chartDays.map(function(d){
+    var dayLbl = new Date(d.date + 'T12:00:00').toLocaleDateString('en-AU',{weekday:'narrow'});
+    if(!d.weight) return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:' + (chartH+18) + 'px;"><div style="height:' + chartH + 'px;"></div><div style="font-size:8px;color:var(--border2);">' + dayLbl + '</div></div>';
+    var pct = maxW > minW ? (d.weight - minW) / (maxW - minW) : 0.5;
+    var bH  = Math.max(4, Math.round(pct * chartH));
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:' + (chartH+18) + 'px;">' +
+      '<div style="font-size:7px;color:var(--text3);">' + d.weight + '</div>' +
+      '<div style="width:80%;max-width:18px;height:' + bH + 'px;background:var(--gold);border-radius:2px 2px 0 0;"></div>' +
+      '<div style="font-size:8px;color:var(--text3);">' + dayLbl + '</div>' +
+      '</div>';
+  }).join('');
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:14px;">Weekly Assessment</div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:14px;">';
+  h += '<div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:' + wColor + ';">' + wArrow + ' ' + Math.abs(wDelta) + 'kg</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' + daysSpan + '-day weight</div></div>';
+  h += '<div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:' + (Math.abs(kcalDiff)<100 ? '#4CAF50' : 'var(--gold)') + ';">' + (avgKcal||'—') + '</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">avg kcal &middot; tgt ' + tgtKcal + '</div></div>';
+  h += '<div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:' + (daysHitP>=5 ? '#4CAF50' : 'var(--gold)') + ';">' + daysHitP + '/' + (withFood.length||7) + '</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">days hit protein</div></div>';
+  h += '</div>';
+  if(wVals.length >= 3) h += '<div style="display:flex;align-items:flex-end;gap:3px;margin-bottom:14px;padding:8px;background:var(--bg3);border-radius:var(--radius);">' + chartBars + '</div>';
+  h += '<div style="background:var(--bg3);border-left:3px solid ' + vColor + ';border-radius:0 var(--radius) var(--radius) 0;padding:10px 12px;">';
+  h += '<div style="font-size:12px;color:' + vColor + ';font-weight:600;">' + verdict + '</div>';
+  if(kcalDiff !== 0 && avgKcal > 0) h += '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Avg intake ' + Math.abs(kcalDiff) + ' kcal ' + (kcalDiff > 0 ? 'above' : 'below') + ' target</div>';
+  h += '</div></div>';
+  return h;
 }
 
 window._phxRenderCoreTileFormat = function(){

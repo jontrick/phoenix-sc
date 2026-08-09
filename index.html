@@ -3334,21 +3334,21 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg></div>
       <div><div class="sidebar-item-text">Nutrition</div><div class="sidebar-item-sub">Macro tracking &middot; Daily log &middot; Check-in</div></div>
     </div>
-    <div class="sidebar-item" onclick="_sidebarComingSoon('Add Recipe')">
+    <div class="sidebar-item" onclick="closeSidebar();nutOpenRecipeBuilder()">
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg></div>
-      <div><div class="sidebar-item-text" style="color:var(--text2);">Add Recipe</div><div class="sidebar-item-sub">Coming soon</div></div>
+      <div><div class="sidebar-item-text">Add Recipe</div><div class="sidebar-item-sub">Save a meal template for quick re-use</div></div>
     </div>
-    <div class="sidebar-item" onclick="_sidebarComingSoon('Add Food')">
+    <div class="sidebar-item" onclick="closeSidebar();nutOpenCustomFoodModal()">
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
-      <div><div class="sidebar-item-text" style="color:var(--text2);">Add Food</div><div class="sidebar-item-sub">Coming soon</div></div>
+      <div><div class="sidebar-item-text">Add Food</div><div class="sidebar-item-sub">Add a custom food with your own macros</div></div>
     </div>
-    <div class="sidebar-item" onclick="_sidebarComingSoon('Create Week')">
+    <div class="sidebar-item" onclick="closeSidebar();_nutGoToWeekAndCreate()">
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
-      <div><div class="sidebar-item-text" style="color:var(--text2);">Create Week</div><div class="sidebar-item-sub">Coming soon</div></div>
+      <div><div class="sidebar-item-text">Create Week</div><div class="sidebar-item-sub">Fill the week with a meal template</div></div>
     </div>
-    <div class="sidebar-item" onclick="_sidebarComingSoon('Shop')">
+    <div class="sidebar-item" onclick="closeSidebar();nutOpenShopList()">
       <div class="sidebar-item-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
-      <div><div class="sidebar-item-text" style="color:var(--text2);">Shop</div><div class="sidebar-item-sub">Create / View shopping list — coming soon</div></div>
+      <div><div class="sidebar-item-text">Shop</div><div class="sidebar-item-sub">Weekly grocery list from your meal plan</div></div>
     </div>
   </div>
   <!-- STANDALONE TIMER -->
@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.135';
+var APP_VERSION='4.9.136';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18351,6 +18351,9 @@ function _nutRenderFoodPickerCats(ov){
     {key:'extras',label:'Extras'},
     {key:'supp',label:'Supps'}
   ];
+  var _ns = nutGetState && nutGetState();
+  var _hasRecipes = _ns && _ns.recipes && _ns.recipes.length > 0;
+  if(_hasRecipes) cats.push({key:'recipe',label:'Recipes'});
   var container = ov.querySelector('#nut-fp-cats');
   container.innerHTML = cats.map(function(cat){
     var act = _nutPickerCat === cat.key;
@@ -18373,6 +18376,39 @@ function _nutRenderFoodPickerCats(ov){
 }
 
 function _nutRenderFoodPickerList(ov){
+  // Recipe category: show saved recipes, apply all components on tap
+  if(_nutPickerCat === 'recipe'){
+    var _rns = nutGetState && nutGetState();
+    var _recipes = (_rns && _rns.recipes) ? _rns.recipes : [];
+    var list = ov.querySelector('#nut-fp-list');
+    ov.querySelector('#nut-fp-add-bar').style.display = 'none';
+    if(!_recipes.length){
+      list.innerHTML = '<div style="text-align:center;padding:30px 0;font-size:13px;color:var(--text3);">No saved recipes yet.</div>';
+      return;
+    }
+    list.innerHTML = _recipes.map(function(rec){
+      var totK=0, totP=0;
+      (rec.components||[]).forEach(function(c){ totK+=Math.round((c.k||0)*(c.qty_g||0)/100); totP+=Math.round((c.p||0)*(c.qty_g||0)/100*10)/10; });
+      return '<div data-fp-recipe="'+rec.id+'" style="padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+        '<div><div style="font-size:14px;font-weight:700;color:var(--text);">'+rec.name+'</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+(rec.components||[]).length+' components &middot; '+totK+' kcal &middot; P'+totP+'g</div></div>' +
+        '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">APPLY ›</div>' +
+        '</div></div>';
+    }).join('');
+    list.querySelectorAll('[data-fp-recipe]').forEach(function(row){
+      row.addEventListener('click', function(){
+        var recId = row.getAttribute('data-fp-recipe');
+        var rns2 = nutGetState && nutGetState();
+        var rec = ((rns2 && rns2.recipes)||[]).filter(function(r){ return r.id===recId; })[0];
+        if(!rec) return;
+        (rec.components||[]).forEach(function(c){ nutAddComponent(_nutPickerSlot, _nutPickerDate, c, c.qty_g||150); });
+        ov.remove();
+        nutRenderScreen();
+      });
+    });
+    return;
+  }
   var foods    = _nutGetFoods();
   var q        = _nutPickerSearch;
   var filtered = foods.filter(function(f){
@@ -18630,6 +18666,262 @@ function _nutApplyWeekTemplate(template){
   });
   nutSaveState(ns);
   nutRenderScreen();
+}
+
+// ── Recipe Builder ────────────────────────────────────────────────────────────
+function nutOpenRecipeBuilder(){
+  var old = document.getElementById('nut-recipe-builder');
+  if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'nut-recipe-builder';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;';
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;max-height:90vh;display:flex;flex-direction:column;">' +
+    '<div style="padding:20px 20px 12px;flex-shrink:0;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">New Recipe</div>' +
+    '<button id="nut-rb-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<input id="nut-rb-name" type="text" placeholder="Recipe name (e.g. Chicken Bowl)" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;margin-bottom:4px;">' +
+    '<div id="nut-rb-err" style="display:none;font-size:11px;color:#FF6B6B;padding:4px 2px;"></div>' +
+    '</div>' +
+    '<div style="padding:0 20px;flex-shrink:0;"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">COMPONENTS</div></div>' +
+    '<div id="nut-rb-list" style="flex:1;overflow-y:auto;padding:0 20px;"></div>' +
+    '<div style="padding:12px 20px 20px;flex-shrink:0;">' +
+    '<button id="nut-rb-add-comp" style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;margin-bottom:10px;">+ ADD COMPONENT</button>' +
+    '<button id="nut-rb-save" style="width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SAVE RECIPE</button>' +
+    '</div></div>';
+  document.body.appendChild(ov);
+  var _rbComps = [];
+  function _rbRender(){
+    var list = ov.querySelector('#nut-rb-list');
+    if(!_rbComps.length){
+      list.innerHTML = '<div style="text-align:center;padding:20px 0;font-size:12px;color:var(--text3);">No components yet — tap Add Component</div>';
+      return;
+    }
+    list.innerHTML = _rbComps.map(function(c, i){
+      var cK = Math.round((c.k||0)*(c.qty_g||0)/100);
+      var cP = Math.round((c.p||0)*(c.qty_g||0)/100*10)/10;
+      return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">' +
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:var(--text);">' + c.n + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cK + ' kcal &middot; P' + cP + 'g</div></div>' +
+        '<button data-rb-rm="' + i + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>' +
+        '</div>';
+    }).join('');
+    list.querySelectorAll('[data-rb-rm]').forEach(function(btn){
+      btn.addEventListener('click', function(){ _rbComps.splice(parseInt(btn.getAttribute('data-rb-rm')), 1); _rbRender(); });
+    });
+  }
+  _rbRender();
+  ov.querySelector('#nut-rb-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  ov.querySelector('#nut-rb-add-comp').addEventListener('click', function(){
+    _nutOpenPickerForRecipe(function(food, qty){
+      _rbComps.push({n:food.n, cat:food.cat, k:food.k, p:food.p, c:food.c, f:food.f, qty_g:qty, state:food.state||'raw'});
+      _rbRender();
+    });
+  });
+  ov.querySelector('#nut-rb-save').addEventListener('click', function(){
+    var name = (ov.querySelector('#nut-rb-name').value || '').trim();
+    var errEl = ov.querySelector('#nut-rb-err');
+    if(!name){ errEl.textContent = 'Please enter a recipe name.'; errEl.style.display = ''; ov.querySelector('#nut-rb-name').focus(); return; }
+    if(!_rbComps.length){ errEl.textContent = 'Add at least one component.'; errEl.style.display = ''; return; }
+    errEl.style.display = 'none';
+    var ns = nutGetState();
+    if(!ns.recipes) ns.recipes = [];
+    ns.recipes.push({id:'rec_' + String(Date.now()), name: name, components: JSON.parse(JSON.stringify(_rbComps))});
+    nutSaveState(ns);
+    ov.remove();
+    nutRenderScreen();
+  });
+}
+
+// Mini food picker used by recipe builder — calls onAdd(food, qty) on confirm
+function _nutOpenPickerForRecipe(onAdd){
+  var old = document.getElementById('nut-fp-recipe');
+  if(old) old.remove();
+  var _rCat = 'all', _rSearch = '', _rSelId = null;
+  var ov = document.createElement('div');
+  ov.id = 'nut-fp-recipe';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9700;display:flex;align-items:flex-end;';
+  var _rCats = [{key:'all',label:'All'},{key:'protein',label:'Protein'},{key:'carb',label:'Carbs'},{key:'veg',label:'Veg'},{key:'sauce',label:'Sauce'},{key:'extras',label:'Extras'}];
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:80vh;">' +
+    '<div style="padding:14px 16px 10px;flex-shrink:0;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;color:var(--gold);">Pick Component</div>' +
+    '<button id="nut-fpr-close" style="width:28px;height:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:16px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<input type="text" id="nut-fpr-search" placeholder="Search foods…" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:13px;box-sizing:border-box;outline:none;margin-bottom:8px;">' +
+    '<div id="nut-fpr-cats" style="display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;"></div>' +
+    '</div>' +
+    '<div id="nut-fpr-list" style="flex:1;overflow-y:auto;padding:0 16px;"></div>' +
+    '<div id="nut-fpr-bar" style="display:none;padding:10px 16px 16px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;">' +
+    '<div style="display:flex;gap:8px;align-items:center;">' +
+    '<input type="number" id="nut-fpr-qty" value="150" min="1" style="width:72px;padding:8px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;">' +
+    '<span style="font-size:12px;color:var(--text3);">g</span>' +
+    '<button id="nut-fpr-add" style="flex:1;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">ADD</button>' +
+    '</div></div></div>';
+  document.body.appendChild(ov);
+  function _rRenderCats(){
+    var c = ov.querySelector('#nut-fpr-cats');
+    c.innerHTML = _rCats.map(function(cat){
+      var a = _rCat === cat.key;
+      return '<button data-fpr-cat="'+cat.key+'" style="flex-shrink:0;padding:4px 10px;background:'+(a?'var(--gold)':'var(--bg3)')+';border:1px solid '+(a?'var(--gold)':'var(--border2)')+';border-radius:20px;color:'+(a?'#000':'var(--text3)')+';font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">'+cat.label+'</button>';
+    }).join('');
+    c.querySelectorAll('[data-fpr-cat]').forEach(function(b){
+      b.addEventListener('click', function(){ _rCat = b.getAttribute('data-fpr-cat'); _rSelId = null; ov.querySelector('#nut-fpr-bar').style.display='none'; _rRenderCats(); _rRenderList(); });
+    });
+  }
+  function _rRenderList(){
+    var foods = _nutGetFoods().filter(function(f){ return (_rCat==='all'||f.cat===_rCat) && (!_rSearch||f.n.toLowerCase().indexOf(_rSearch)>=0); });
+    var list = ov.querySelector('#nut-fpr-list');
+    if(!foods.length){ list.innerHTML='<div style="padding:24px;text-align:center;font-size:12px;color:var(--text3);">No foods found</div>'; return; }
+    list.innerHTML = foods.map(function(f){
+      var s = _rSelId===f.id;
+      return '<div data-fpr-food="'+f.id+'" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;background:'+(s?'rgba(200,150,62,0.08)':'transparent')+';"><div style="font-size:13px;font-weight:'+(s?'700':'500')+';color:'+(s?'var(--gold)':'var(--text)')+';">'+f.n+'</div><div style="font-size:11px;color:var(--text3);">'+f.k+' kcal &middot; P'+f.p+'g per 100g</div></div>';
+    }).join('');
+    list.querySelectorAll('[data-fpr-food]').forEach(function(row){
+      row.addEventListener('click', function(){ _rSelId=row.getAttribute('data-fpr-food'); ov.querySelector('#nut-fpr-bar').style.display=''; _rRenderList(); });
+    });
+  }
+  _rRenderCats(); _rRenderList();
+  ov.querySelector('#nut-fpr-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target===ov) ov.remove(); });
+  ov.querySelector('#nut-fpr-search').addEventListener('input', function(e){ _rSearch=e.target.value.toLowerCase(); _rSelId=null; ov.querySelector('#nut-fpr-bar').style.display='none'; _rRenderList(); });
+  ov.querySelector('#nut-fpr-add').addEventListener('click', function(){
+    if(!_rSelId) return;
+    var food = _nutGetFoods().filter(function(f){ return f.id===_rSelId; })[0];
+    if(!food) return;
+    var qty = parseFloat(ov.querySelector('#nut-fpr-qty').value)||100;
+    ov.remove();
+    onAdd(food, qty);
+  });
+}
+
+// ── Shopping List ─────────────────────────────────────────────────────────────
+function nutOpenShopList(){
+  var ns = nutGetState();
+  var today = _nutToday();
+  var monStr = _nutWeekStart(today);
+  var days = [], i;
+  for(i=0;i<7;i++){
+    var _d = new Date(monStr + 'T12:00:00');
+    _d.setDate(_d.getDate() + i);
+    days.push(_d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0'));
+  }
+  // Aggregate ingredients across the week
+  var items = {};
+  days.forEach(function(dk){
+    var dayData = (ns && ns.daily && ns.daily[dk]) || {};
+    var meals = (dayData.meals && !Array.isArray(dayData.meals)) ? dayData.meals : {};
+    Object.keys(meals).forEach(function(slot){
+      var comps = (meals[slot].components) || [];
+      comps.forEach(function(c){
+        var key = c.n;
+        if(!items[key]) items[key] = {n:c.n, cat:c.cat||'extras', qty:0};
+        items[key].qty += (c.qty_g || 0);
+      });
+    });
+  });
+  var CAT_ORDER  = ['protein','carb','veg','sauce','extras'];
+  var CAT_LABELS = {protein:'Protein', carb:'Carbs', veg:'Vegetables', sauce:'Sauces', extras:'Extras'};
+  var grouped = {};
+  Object.keys(items).forEach(function(k){
+    var cat = items[k].cat;
+    if(!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(items[k]);
+  });
+  var hasItems = Object.keys(items).length > 0;
+  var listHtml = '';
+  if(!hasItems){
+    listHtml = '<div style="text-align:center;padding:40px 0;font-size:13px;color:var(--text3);">No meals planned this week.<br>Use Create Week to get started.</div>';
+  } else {
+    CAT_ORDER.forEach(function(cat){
+      if(!grouped[cat] || !grouped[cat].length) return;
+      listHtml += '<div style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;color:var(--text3);margin:14px 0 6px;">' + CAT_LABELS[cat].toUpperCase() + '</div>';
+      grouped[cat].forEach(function(item){
+        var qtyStr = item.qty >= 1000 ? (item.qty/1000).toFixed(2)+'kg' : item.qty+'g';
+        var safeId = 'slc_' + item.n.replace(/[^a-zA-Z0-9]/g,'_');
+        listHtml +=
+          '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">' +
+          '<div id="'+safeId+'" data-sl-check style="width:22px;height:22px;flex-shrink:0;border:2px solid var(--border2);border-radius:5px;margin-right:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;"></div>' +
+          '<div style="flex:1;"><div class="sl-name" style="font-size:13px;color:var(--text);">'+item.n+'</div>' +
+          '<div style="font-size:11px;color:var(--text3);">'+qtyStr+' total this week</div></div>' +
+          '</div>';
+      });
+    });
+  }
+  var old = document.getElementById('nut-shop-list');
+  if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'nut-shop-list';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-end;';
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88vh;">' +
+    '<div style="padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border);">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Shopping List</div>' +
+    '<button id="nut-sl-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:3px;">This week &middot; tap to tick off</div>' +
+    '</div>' +
+    '<div id="nut-sl-body" style="flex:1;overflow-y:auto;padding:0 20px 8px;">' + listHtml + '</div>' +
+    (hasItems ?
+      '<div style="padding:12px 20px 20px;flex-shrink:0;">' +
+      '<button id="nut-sl-copy" style="width:100%;padding:13px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">COPY TO CLIPBOARD</button>' +
+      '</div>' : '') +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#nut-sl-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  // Tick-off checkboxes
+  ov.querySelectorAll('[data-sl-check]').forEach(function(box){
+    box.addEventListener('click', function(){
+      var checked = box.getAttribute('data-checked') === '1';
+      if(checked){
+        box.removeAttribute('data-checked');
+        box.style.cssText = 'width:22px;height:22px;flex-shrink:0;border:2px solid var(--border2);border-radius:5px;margin-right:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;';
+        box.innerHTML = '';
+        var nameEl = box.parentElement.querySelector('.sl-name');
+        if(nameEl) nameEl.style.textDecoration = '';
+      } else {
+        box.setAttribute('data-checked','1');
+        box.style.cssText = 'width:22px;height:22px;flex-shrink:0;border:2px solid var(--gold);background:var(--gold);border-radius:5px;margin-right:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;';
+        box.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>';
+        var nameEl = box.parentElement.querySelector('.sl-name');
+        if(nameEl) nameEl.style.textDecoration = 'line-through';
+      }
+    });
+  });
+  // Copy to clipboard
+  var copyBtn = ov.querySelector('#nut-sl-copy');
+  if(copyBtn){
+    copyBtn.addEventListener('click', function(){
+      var text = 'Shopping List\n\n';
+      CAT_ORDER.forEach(function(cat){
+        if(!grouped[cat] || !grouped[cat].length) return;
+        text += CAT_LABELS[cat] + '\n';
+        grouped[cat].forEach(function(item){
+          var qStr = item.qty >= 1000 ? (item.qty/1000).toFixed(2)+'kg' : item.qty+'g';
+          text += '  ' + item.n + ' — ' + qStr + '\n';
+        });
+        text += '\n';
+      });
+      if(navigator.clipboard){ navigator.clipboard.writeText(text); }
+      copyBtn.textContent = 'COPIED!';
+      setTimeout(function(){ copyBtn.textContent = 'COPY TO CLIPBOARD'; }, 2000);
+    });
+  }
+}
+
+// Navigate to Nutrition WEEK tab and launch Create Week picker
+function _nutGoToWeekAndCreate(){
+  var ns = nutGetState();
+  if(!ns || !ns.setup_done){ nutOpenSetup(); return; }
+  _nutTab = 'week';
+  navTo('nutrition');
+  setTimeout(function(){ _nutCreateWeekPlan(); }, 350);
 }
 
 function nutAddComponent(slot, dateKey, food, qty){

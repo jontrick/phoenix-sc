@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.133';
+var APP_VERSION='4.9.134';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20822,6 +20822,113 @@ function _phxLoadWeekCustomSessions(weekStart){
 function _phxSaveWeekCustomSessions(weekStart, byDay){
   try { localStorage.setItem('phoenix_week_custom_sessions_'+weekStart, JSON.stringify(byDay||{})); } catch(_e){}
 }
+function _phxWeekSmartRec(dayName, slotKey, byDay){
+  var counts = {wod:0, core:0, strength:0, walk:0};
+  var dayCounts = {wod:0, core:0, strength:0};
+  Object.keys(byDay||{}).forEach(function(d){
+    (byDay[d]||[]).forEach(function(s){
+      var t = String(s.session_type||'').toLowerCase();
+      var isW = t.indexOf('wod') >= 0;
+      var isC = t.indexOf('core') >= 0;
+      var isS = !isW && !isC && (t.indexOf('strength') >= 0 || _phxIsStrengthSessionType(t));
+      var isWk = t.indexOf('walk') >= 0;
+      if(isW){ counts.wod++; if(d===dayName) dayCounts.wod++; }
+      else if(isC){ counts.core++; if(d===dayName) dayCounts.core++; }
+      else if(isS){ counts.strength++; if(d===dayName) dayCounts.strength++; }
+      else if(isWk) counts.walk++;
+    });
+  });
+  if(dayCounts.core === 0 && counts.core < 2) return {type:'Core', reason:'Core only '+counts.core+'x this week'};
+  if(dayCounts.wod === 0 && counts.wod < 2) return {type:'WOD', reason:counts.wod===0 ? 'No WOD this week yet' : 'Second WOD of the week'};
+  if(counts.walk === 0) return {type:'Walk', reason:'Active recovery not logged yet'};
+  return null;
+}
+
+function _phxWireWeekPlanDrag(container, weekStartISO){
+  if(container._wpDragBound){
+    container.removeEventListener('touchstart', container._wpDragBound.ts);
+    container.removeEventListener('touchmove',  container._wpDragBound.tm);
+    container.removeEventListener('touchend',   container._wpDragBound.te);
+  }
+  var HOLD_MS = 380;
+  var ghost = null, srcEl = null, srcDay = '', srcCidx = -1, ghostDy = 0;
+  var dragging = false, holdTimer = null;
+
+  function _cleanup(){
+    clearTimeout(holdTimer); holdTimer = null; dragging = false;
+    if(ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    ghost = null;
+    container.querySelectorAll('[data-wp-day]').forEach(function(el){
+      el.style.opacity = ''; el.style.outline = '';
+    });
+  }
+
+  function _findDropTarget(dayName, cy){
+    var tiles = container.querySelectorAll('[data-wp-day="'+dayName+'"]');
+    var best = null;
+    for(var i=0;i<tiles.length;i++){
+      var r = tiles[i].getBoundingClientRect();
+      if(cy < r.top + r.height/2) return tiles[i];
+      best = tiles[i];
+    }
+    return best;
+  }
+
+  function onTouchStart(e){
+    var tile = e.target.closest('[data-wp-day]');
+    if(!tile) return;
+    srcEl   = tile;
+    srcDay  = tile.getAttribute('data-wp-day');
+    srcCidx = parseInt(tile.getAttribute('data-wp-cidx'));
+    if(isNaN(srcCidx) || srcCidx < 0) return;
+    var touch = e.touches[0];
+    var r = tile.getBoundingClientRect();
+    ghostDy = touch.clientY - r.top;
+    holdTimer = setTimeout(function(){
+      dragging = true;
+      ghost = tile.cloneNode(true);
+      ghost.removeAttribute('data-wp-day');
+      ghost.style.cssText = 'position:fixed;left:'+r.left+'px;width:'+r.width+'px;top:'+(touch.clientY-ghostDy)+'px;z-index:9800;opacity:0.92;pointer-events:none;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.55);';
+      document.body.appendChild(ghost);
+      tile.style.opacity = '0.2';
+    }, HOLD_MS);
+  }
+
+  function onTouchMove(e){
+    if(!dragging){ clearTimeout(holdTimer); holdTimer = null; return; }
+    e.preventDefault();
+    var cy = e.touches[0].clientY;
+    if(ghost) ghost.style.top = (cy - ghostDy) + 'px';
+    container.querySelectorAll('[data-wp-day="'+srcDay+'"]').forEach(function(el){ el.style.outline = ''; });
+    var drop = _findDropTarget(srcDay, cy);
+    if(drop && drop !== srcEl) drop.style.outline = '2px solid var(--gold)';
+  }
+
+  function onTouchEnd(e){
+    clearTimeout(holdTimer); holdTimer = null;
+    if(!dragging){ _cleanup(); return; }
+    var cy = e.changedTouches[0].clientY;
+    var dropEl = _findDropTarget(srcDay, cy);
+    var dropCidx = dropEl ? parseInt(dropEl.getAttribute('data-wp-cidx')) : -1;
+    _cleanup();
+    if(dropCidx < 0 || dropCidx === srcCidx || isNaN(dropCidx)) return;
+    var byDay = _phxLoadWeekCustomSessions(weekStartISO);
+    var arr = byDay[srcDay] || [];
+    if(srcCidx >= arr.length) return;
+    var item = arr.splice(srcCidx, 1)[0];
+    dropCidx = Math.min(dropCidx, arr.length);
+    arr.splice(dropCidx, 0, item);
+    byDay[srcDay] = arr;
+    _phxSaveWeekCustomSessions(weekStartISO, byDay);
+    _phxRenderWeekPlan();
+  }
+
+  container.addEventListener('touchstart', onTouchStart, {passive:true});
+  container.addEventListener('touchmove',  onTouchMove,  {passive:false});
+  container.addEventListener('touchend',   onTouchEnd,   {passive:true});
+  container._wpDragBound = {ts:onTouchStart, tm:onTouchMove, te:onTouchEnd};
+}
+
 async function _phxMirrorWeekCustomToSupabase(weekStart, byDay, weekNumber){
   if(!sb || !currentSession || !currentSession.user) return;
   try {
@@ -21091,7 +21198,10 @@ async function _phxRenderWeekPlan(){
         var isDone = !!completedKeys[dayName+'|'+String(sess.session_type||'').toLowerCase()];
         var isSkipped = !!swaps[sid+'|skipped'];
         var isCustom = !!sess._custom;
-        html += '<div style="position:relative;background:var(--bg3);border-left:3px solid '+ps.border+';border-radius:var(--radius);padding:10px 12px;margin-top:'+(sIdx?'8':'0')+'px;cursor:pointer;" onclick="window._phxWeekTileTap(\''+sid+'\',\''+dayName+'\')">';
+        var _custIdx = -1;
+        if(isCustom){ if(!_custCountByDay[dayName]) _custCountByDay[dayName]=0; _custIdx=_custCountByDay[dayName]++; }
+        var _tileDA = isCustom ? ' data-wp-day="'+dayName+'" data-wp-cidx="'+_custIdx+'"' : '';
+        html += '<div'+_tileDA+' style="position:relative;background:var(--bg3);border-left:3px solid '+ps.border+';border-radius:var(--radius);padding:10px 12px;margin-top:'+(sIdx?'8':'0')+'px;cursor:pointer;" onclick="window._phxWeekTileTap(\''+sid+'\',\''+dayName+'\')">';
         html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
         html += '<div style="flex:1;min-width:0;">';
         // v4.7.58: custom WOD shows its sub-type in the meta row (e.g. "60 min · AM · Metabolic Circuit").
@@ -21130,6 +21240,7 @@ async function _phxRenderWeekPlan(){
     html += '</div>';
   });
   container.innerHTML = html;
+  _phxWireWeekPlanDrag(container, weekStartISO);
   // Stash for the tap dispatcher
   window._phxWeekPlanState = {byDay: byDay, weekStartISO: weekStartISO, weekN: weekN};
   // Confirm button — for now just shows a toast-style alert and returns.
@@ -21223,15 +21334,19 @@ window._phxOpenAddSessionSheet = function(dayName, slotKey){
     _phxRenderWeekPlan();
   }
   function _openMainPicker(){
+    var _liveByDay = (state.byDay && typeof state.byDay === 'object') ? state.byDay : {};
+    var _rec = _phxWeekSmartRec(dayName, slotKey, _liveByDay);
+    var _baseOpts = [
+      {value:'Strength', label:'Strength', sub:'Heavy compound lifts + accessories'},
+      {value:'WOD',      label:'WOD',      sub:'Mixed-modal conditioning'},
+      {value:'Core',     label:'Core',     sub:'Trunk + bracing work'},
+      {value:'Walk',     label:'Walk',     sub:'Zone 2 / recovery walk'}
+    ];
+    var _opts = _rec ? [{value:_rec.type, label:'⚡ '+_rec.type, sub:'Recommended · '+_rec.reason}].concat(_baseOpts) : _baseOpts;
     _phxOpenBottomSheet({
       title: dayName+' '+slotKey.toUpperCase(),
       subtitle: 'Add a session',
-      options: [
-        {value:'Strength', label:'Strength', sub:'Heavy compound lifts + accessories'},
-        {value:'WOD',      label:'WOD',      sub:'Mixed-modal conditioning'},
-        {value:'Core',     label:'Core',     sub:'Trunk + bracing work'},
-        {value:'Walk',     label:'Walk',     sub:'Zone 2 / recovery walk'}
-      ],
+      options: _opts,
       onSelect: function(sessionType){
         if(sessionType === 'WOD'){
           _phxOpenWodTypePicker({

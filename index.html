@@ -3351,6 +3351,14 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div><div class="sidebar-item-text">Shop</div><div class="sidebar-item-sub">Weekly grocery list from your meal plan</div></div>
     </div>
   </div>
+  <!-- PEPTIDE PORTAL -->
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Peptide Portal</div>
+    <div class="sidebar-item" onclick="closeSidebar();navTo('peptide')">
+      <div class="sidebar-item-icon" style="color:#7B68EE;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg></div>
+      <div><div class="sidebar-item-text">Today's Doses</div><div class="sidebar-item-sub">Daily schedule &middot; Protocol &middot; Order</div></div>
+    </div>
+  </div>
   <!-- STANDALONE TIMER -->
   <div class="sidebar-section">
     <div class="sidebar-section-label">Standalone Timer</div>
@@ -3446,7 +3454,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.137';
+var APP_VERSION='4.9.138';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6976,7 +6984,7 @@ async function _loadProfileAndRouteInner(){
     // Restore last non-today tab after PWA reload (iOS kills PWA context on sleep/low-memory).
     try {
       var _restoreTab = localStorage.getItem('phx_lastTab_v1');
-      var _safeRestoreTabs = ['nutrition','records','workout','settings'];
+      var _safeRestoreTabs = ['nutrition','records','workout','settings','peptide'];
       if(_restoreTab && _safeRestoreTabs.indexOf(_restoreTab) >= 0){
         setTimeout(function(){ if(typeof navTo==='function') navTo(_restoreTab); }, 400);
       }
@@ -8021,6 +8029,7 @@ function navTo(tab){
   if(tab==='agoge') openAgoge();
   if(tab==='records') renderRecords();
   if(tab==='nutrition'){ _nutTab='today'; if(typeof nutRenderScreen==='function') nutRenderScreen(); }
+  if(tab==='peptide'){ _pepTab='today'; if(typeof pepRenderScreen==='function') pepRenderScreen(); var _paBtn=document.getElementById('pep-add-btn'); if(_paBtn) _paBtn.onclick=function(){ if(_pepTab==='protocol') pepOpenAddStack(); else if(_pepTab==='order') pepOpenOrderPicker(); else { _pepTab='protocol'; pepRenderScreen(); } }; }
 }
 
 // v4.7.40: legacy screen-onboard removed. The questionnaire (FQ) is the single
@@ -16755,6 +16764,40 @@ function setupSplashButtons(){
   </div>
 </div>
 
+<!-- PEPTIDE PORTAL SCREEN -->
+<div id="screen-peptide" class="screen">
+  <div class="app-header">
+    <button onclick="navTo('today')" style="background:none;border:none;color:var(--text2);padding:8px 6px 8px 0;cursor:pointer;display:flex;align-items:center;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="header-logo" style="color:#7B68EE;">PEPTIDE <span style="color:var(--text);">PORTAL</span></div>
+    <button id="pep-add-btn" style="background:none;border:none;color:#7B68EE;padding:8px;cursor:pointer;touch-action:manipulation;font-size:22px;line-height:1;">+</button>
+  </div>
+  <div id="pep-screen-body" style="padding:0 0 100px;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
+  <div class="bottom-nav">
+    <div class="nav-item" onclick="navTo('today')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span class="nav-label">Today</span>
+    </div>
+    <div class="nav-item" onclick="navTo('programme')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="nav-label">Programme</span>
+    </div>
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+      <span class="nav-label">Peptides</span>
+    </div>
+    <div class="nav-item" onclick="navTo('records')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      <span class="nav-label">Records</span>
+    </div>
+    <div class="nav-item" onclick="navTo('athlete')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span class="nav-label">Athlete</span>
+    </div>
+  </div>
+</div>
+
 <!-- REST TIMER OVERLAY -->
 <div class="rest-overlay" id="rest-overlay">
   <!-- v4.7.15 FIX 3: ad banners hide for Pro accounts; gate enforced in startRestTimer. -->
@@ -19046,6 +19089,635 @@ function _nutGoToWeekAndCreate(){
   navTo('nutrition');
   setTimeout(function(){ _nutCreateWeekPlan(); }, 350);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PEPTIDE PORTAL — v4.9.138
+// State: localStorage("peptide_v1_{uid}") + profiles.peptide_state (Supabase)
+// Tabs: TODAY | PROTOCOL | ORDER
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _pepTab = "today";
+
+// ── Compound library ──────────────────────────────────────────────────────
+var _PEP_COMPOUNDS = [
+  {id:"retatrutide",   name:"Retatrutide",        cat:"Metabolic", dose:6,    doseUnit:"mg",  freq:"weekly",                       timing:"Friday AM — fasted",            notes:"RT10: 30u=6mg (0.5mL BAC). RT30: 100u=6mg (5mL BAC)."},
+  {id:"ipamorelin",    name:"Ipamorelin",          cat:"GH/IGF",   dose:0.2,  doseUnit:"mg",  freq:"6 days on / 1 day off",         timing:"Before bed — fasted",           notes:"Inject FIRST. CJC follows 15 min later. Mon off."},
+  {id:"cjc1295",       name:"CJC-1295 No DAC",    cat:"GH/IGF",   dose:0.15, doseUnit:"mg",  freq:"6 days on / 1 day off",         timing:"Before bed — +15 min after Ipa",notes:"Always inject 15 min AFTER Ipamorelin."},
+  {id:"bpc157",        name:"BPC-157",             cat:"Repair",   dose:0.5,  doseUnit:"mg",  freq:"daily",                         timing:"Any time",                      notes:"500mcg/day SubQ. No fasting required."},
+  {id:"ta1",           name:"Thymosin Alpha-1",    cat:"Immune",   dose:1.6,  doseUnit:"mg",  freq:"Wed + Sat",                     timing:"Any time",                      notes:"Week 1: 0.8mg. Week 2+: 1.6mg. Wed and Sat only."},
+  {id:"motsc",         name:"MOTS-c",              cat:"Metabolic",dose:10,   doseUnit:"mg",  freq:"every 5 days",                  timing:"Fasted AM",                     notes:"4 injections every 5 days fasted. Then 4 months OFF."},
+  {id:"klow",          name:"Klow Blend",          cat:"Repair",   dose:14,   doseUnit:"units",freq:"eod",                          timing:"Any time",                      notes:"Tong KLOW80: BPC-157+GHK-Cu+TB-500+KPV. 14 units/dose."},
+  {id:"bpc_ghkcu_tb",  name:"BBG70 Blend",         cat:"Repair",   dose:14,   doseUnit:"units",freq:"eod",                          timing:"Any time",                      notes:"Tong BBG70: BPC-157 10mg+GHK-Cu 50mg+TB-500 10mg per vial."},
+  {id:"ghkcu",         name:"GHK-Cu",              cat:"Anti-ageing",dose:1,  doseUnit:"mg",  freq:"daily",                         timing:"Before bed",                    notes:"1mg Days 1-15, 2mg Days 16-30. 30 on / 30 off."},
+  {id:"tb500",         name:"TB-500",              cat:"Repair",   dose:2,    doseUnit:"mg",  freq:"2x/week",                       timing:"Any time",                      notes:"Loading 2mg 2x/wk Wks 1-4. Maintenance 1.25mg/wk Wks 5-8."},
+  {id:"nad",           name:"NAD+",                cat:"Longevity",dose:100,  doseUnit:"mg",  freq:"3x/week Mon/Wed/Fri",           timing:"Morning — NOT before bed",      notes:"SubQ NAD+. Week 1: 50mg. Week 2+: 100mg. Never PM."},
+  {id:"5amq",          name:"5-Amino-1MQ",         cat:"Metabolic",dose:0.5,  doseUnit:"mg",  freq:"daily",                         timing:"Fasted AM",                     notes:"Wks 1-2: 500mcg fasted AM. Wk 3+: 1mg."},
+  {id:"tesamorelin",   name:"Tesamorelin",         cat:"GH/IGF",   dose:1,    doseUnit:"mg",  freq:"6 days on / 1 day off",         timing:"Before bed",                    notes:"Wks 1-2: 1mg. Wk 3+: 2mg. Replaces CJC in advanced protocols."},
+  {id:"epitalon",      name:"Epitalon",            cat:"Longevity",dose:0.5,  doseUnit:"mg",  freq:"20 consecutive nights",         timing:"Before bed",                    notes:"500mcg/night for 20 nights. 6-month break between courses."},
+  {id:"dsip",          name:"DSIP",                cat:"Sleep",    dose:0.25, doseUnit:"mg",  freq:"as needed",                     timing:"30 min before bed",             notes:"200-300mcg pre-sleep. Modulates cortisol and stress response."},
+  {id:"semax",         name:"Semax",               cat:"Cognitive",dose:0.2,  doseUnit:"mg",  freq:"daily",                         timing:"Morning",                       notes:"200-600mcg/day. BDNF upregulator. Nasal or SubQ."},
+  {id:"selank",        name:"Selank",              cat:"Cognitive",dose:0.25, doseUnit:"mg",  freq:"daily",                         timing:"Any time",                      notes:"250mcg/day. Anxiolytic without sedation."},
+  {id:"semaglutide",   name:"Semaglutide",         cat:"Metabolic",dose:0.25, doseUnit:"mg",  freq:"weekly",                        timing:"Any day — same day weekly",     notes:"Titrate: 0.25mg Wks 1-4, 0.5mg Wks 5-8, 1mg Wks 9-12."},
+  {id:"tirzepatide",   name:"Tirzepatide",         cat:"Metabolic",dose:2.5,  doseUnit:"mg",  freq:"weekly",                        timing:"Any day — same day weekly",     notes:"Titrate: 2.5mg Wks 1-4, 5mg Wks 5-8, 7.5mg+ Wks 9-12."},
+  {id:"cagrilintide",  name:"Cagrilintide",        cat:"Metabolic",dose:0.3,  doseUnit:"mg",  freq:"weekly",                        timing:"Any day",                       notes:"0.3mg weekly titrating to 2.4mg. Powerful with semaglutide."},
+  {id:"liraglutide",   name:"Liraglutide",         cat:"Metabolic",dose:0.6,  doseUnit:"mg",  freq:"daily",                         timing:"Any time — same time daily",    notes:"Titrate from 0.6mg. Max 3mg/day."},
+  {id:"igf1lr3",       name:"IGF-1 LR3",           cat:"GH/IGF",   dose:0.05, doseUnit:"mg",  freq:"daily",                         timing:"Post-workout or AM",            notes:"20-50mcg/day. Extreme caution — insulin-like effects."},
+  {id:"ghrp2",         name:"GHRP-2",              cat:"GH/IGF",   dose:0.1,  doseUnit:"mg",  freq:"daily",                         timing:"Fasted AM",                     notes:"100mcg fasted 3x/day or 200-300mcg before bed."},
+  {id:"sermorelin",    name:"Sermorelin",          cat:"GH/IGF",   dose:0.3,  doseUnit:"mg",  freq:"daily",                         timing:"Before bed — fasted",           notes:"200-300mcg before bed. Gentlest GHRH."},
+  {id:"hexarelin",     name:"Hexarelin",           cat:"GH/IGF",   dose:0.1,  doseUnit:"mg",  freq:"daily",                         timing:"Fasted",                        notes:"100mcg max. Most potent GHRP. 8-week limit — desensitises."},
+  {id:"pinealon",      name:"Pinealon",            cat:"Longevity",dose:0.2,  doseUnit:"mg",  freq:"10 days",                       timing:"Before bed",                    notes:"200mcg/night for 10 nights. Neuroprotective pineal support."},
+  {id:"ara290",        name:"Ara-290",             cat:"Repair",   dose:0.4,  doseUnit:"mg",  freq:"daily",                         timing:"Any time",                      notes:"400mcg/day for 28 days. Peripheral neuropathy repair."},
+  {id:"kpv",           name:"KPV",                 cat:"Repair",   dose:0.5,  doseUnit:"mg",  freq:"daily",                         timing:"Any time",                      notes:"500mcg-1mg/day SubQ or oral. Gut anti-inflammatory."},
+  {id:"p21",           name:"P21",                 cat:"Cognitive",dose:0.3,  doseUnit:"mg",  freq:"daily",                         timing:"Morning",                       notes:"300mcg/day intranasal or SubQ. Potent neurogenic."},
+  {id:"ss31",          name:"SS-31",               cat:"Longevity",dose:0.5,  doseUnit:"mg",  freq:"daily",                         timing:"Any time",                      notes:"500mcg/day SubQ. Mitochondrial membrane stabiliser."},
+  {id:"humanin",       name:"Humanin",             cat:"Longevity",dose:0.5,  doseUnit:"mg",  freq:"3x/week",                       timing:"Any time",                      notes:"500mcg 3x/week. Neuroprotective mitochondrial peptide."},
+  {id:"gonadorelin",   name:"Gonadorelin",         cat:"Hormonal", dose:0.1,  doseUnit:"mg",  freq:"2x/week",                       timing:"Any time",                      notes:"100mcg 2x/week. Maintains LH/FSH during TRT."},
+  {id:"kisspeptin",    name:"KissPeptin-10",       cat:"Hormonal", dose:0.05, doseUnit:"mg",  freq:"2x/week",                       timing:"Any time",                      notes:"50mcg pulsatile. LH surge stimulation."},
+  {id:"pt141",         name:"PT-141",              cat:"Other",    dose:1,    doseUnit:"mg",  freq:"as needed",                     timing:"1-2 hrs before",                notes:"1-2mg as needed, 1-2 hours before."},
+  {id:"ll37",          name:"LL-37",               cat:"Immune",   dose:0.1,  doseUnit:"mg",  freq:"daily",                         timing:"Any time",                      notes:"100mcg/day. Antimicrobial. Wound healing."},
+  {id:"thymalin",      name:"Thymalin",            cat:"Immune",   dose:0.5,  doseUnit:"mg",  freq:"10 days",                       timing:"Any time",                      notes:"500mcg/day for 10 days. Thymus regeneration."},
+  {id:"bronchogen",    name:"Bronchogen",          cat:"Organ",    dose:0.2,  doseUnit:"mg",  freq:"10 days",                       timing:"Any time",                      notes:"200mcg/day for 10 days. Bronchial tissue repair."},
+  {id:"cardiogen",     name:"Cardiogen",           cat:"Organ",    dose:0.2,  doseUnit:"mg",  freq:"10 days",                       timing:"Any time",                      notes:"200mcg/day for 10 days. Cardiac tissue support."},
+  {id:"foxo4",         name:"FOXO4-DRI",           cat:"Longevity",dose:1,    doseUnit:"mg",  freq:"eod",                           timing:"Any time",                      notes:"1mg EOD for 3 injections (senolytic). Once every 6 months."},
+  {id:"slu322",        name:"SLU-PP-322",          cat:"Metabolic",dose:0.5,  doseUnit:"mg",  freq:"daily",                         timing:"AM",                            notes:"DMSO required. Mix: 10mg + 0.9mL DMSO + 0.1mL BAC."},
+  {id:"oxytocin",      name:"Oxytocin",            cat:"Other",    dose:0.1,  doseUnit:"mg",  freq:"as needed",                     timing:"Any time",                      notes:"100mcg SubQ or intranasal as needed."},
+  {id:"aod9604",       name:"AOD-9604",            cat:"Metabolic",dose:0.3,  doseUnit:"mg",  freq:"daily",                         timing:"Fasted AM",                     notes:"300mcg fasted AM or before fasted cardio."},
+  {id:"crystagen",     name:"Crystagen",           cat:"Repair",   dose:0.2,  doseUnit:"mg",  freq:"10 days",                       timing:"Any time",                      notes:"200mcg/day for 10 days. Cartilage and connective tissue."},
+  {id:"cortagen",      name:"Cortagen",            cat:"Organ",    dose:0.2,  doseUnit:"mg",  freq:"10 days",                       timing:"Any time",                      notes:"200mcg/day for 10 days. Vascular and colon support."}
+];
+
+// ── Tong catalogue (July 2026 price list — AUD) ───────────────────────────
+var _PEP_TONG = [
+  {cat:"RT5",   name:"Retatrutide 5mg",              mg:5,   aud:83},
+  {cat:"RT10",  name:"Retatrutide 10mg",             mg:10,  aud:125},
+  {cat:"RT20",  name:"Retatrutide 20mg",             mg:20,  aud:216},
+  {cat:"RT30",  name:"Retatrutide 30mg",             mg:30,  aud:290},
+  {cat:"IP5",   name:"Ipamorelin 5mg",               mg:5,   aud:62},
+  {cat:"IP10",  name:"Ipamorelin 10mg",              mg:10,  aud:120},
+  {cat:"CND5",  name:"CJC-1295 No DAC 5mg",          mg:5,   aud:136},
+  {cat:"CND10", name:"CJC-1295 No DAC 10mg",         mg:10,  aud:261},
+  {cat:"CP10",  name:"CJC-1295 No DAC 5mg + IPA 5mg",mg:10,  aud:161},
+  {cat:"BC5",   name:"BPC-157 5mg",                  mg:5,   aud:74},
+  {cat:"BC10",  name:"BPC-157 10mg",                 mg:10,  aud:87},
+  {cat:"BB10",  name:"BPC 5mg + TB-500 5mg (BB10)",  mg:10,  aud:158},
+  {cat:"BB20",  name:"BPC 10mg + TB-500 10mg (BB20)",mg:20,  aud:290},
+  {cat:"BBG70", name:"GLOW/BBG Blend 70mg",          mg:70,  aud:286},
+  {cat:"KLOW80",name:"Klow Blend 80mg (KLOW80)",     mg:80,  aud:357},
+  {cat:"TA5",   name:"Thymosin Alpha-1 5mg",         mg:5,   aud:145},
+  {cat:"TA10",  name:"Thymosin Alpha-1 10mg",        mg:10,  aud:270},
+  {cat:"MS10",  name:"MOTS-c 10mg",                  mg:10,  aud:100},
+  {cat:"MS40",  name:"MOTS-c 40mg",                  mg:40,  aud:290},
+  {cat:"ET10",  name:"Epitalon 10mg",                mg:10,  aud:91},
+  {cat:"ET50",  name:"Epitalon 50mg",                mg:50,  aud:248},
+  {cat:"DS5",   name:"DSIP 5mg",                     mg:5,   aud:62},
+  {cat:"XA5",   name:"Semax 5mg",                    mg:5,   aud:67},
+  {cat:"CU50",  name:"GHK-Cu 50mg",                  mg:50,  aud:54},
+  {cat:"CU100", name:"GHK-Cu 100mg",                 mg:100, aud:62},
+  {cat:"BT5",   name:"TB-500 5mg",                   mg:5,   aud:125},
+  {cat:"BT10",  name:"TB-500 10mg",                  mg:10,  aud:228},
+  {cat:"NJ100", name:"NAD+ 100mg",                   mg:100, aud:62},
+  {cat:"NJ500", name:"NAD+ 500mg",                   mg:500, aud:120},
+  {cat:"NJ1000",name:"NAD+ 1000mg",                  mg:1000,aud:228},
+  {cat:"TSM5",  name:"Tesamorelin 5mg",               mg:5,   aud:158},
+  {cat:"TSM10", name:"Tesamorelin 10mg",              mg:10,  aud:290},
+  {cat:"5AM",   name:"5-Amino-1MQ 5mg",              mg:5,   aud:67},
+  {cat:"10AM",  name:"5-Amino-1MQ 10mg",             mg:10,  aud:107},
+  {cat:"SM5",   name:"Semaglutide 5mg",               mg:5,   aud:54},
+  {cat:"SM10",  name:"Semaglutide 10mg",              mg:10,  aud:74},
+  {cat:"TR10",  name:"Tirzepatide 10mg",              mg:10,  aud:78},
+  {cat:"TR20",  name:"Tirzepatide 20mg",              mg:20,  aud:125},
+  {cat:"CGL5",  name:"Cagrilintide 5mg",              mg:5,   aud:178},
+  {cat:"SK5",   name:"Selank 5mg",                    mg:5,   aud:62},
+  {cat:"RA10",  name:"Ara-290 10mg",                  mg:10,  aud:103},
+  {cat:"KPV5",  name:"KPV 5mg",                       mg:5,   aud:71},
+  {cat:"P210",  name:"P21 10mg",                      mg:10,  aud:125},
+  {cat:"BA10",  name:"BAC Water 10mL",                mg:0,   aud:10},
+  {cat:"AA10",  name:"Acetic Acid Water 0.6% 10mL",   mg:0,   aud:10}
+];
+
+// ── State management ──────────────────────────────────────────────────────
+function pepGetState(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid) return {stacks:[], checked:{}, cart:[]};
+    var raw = localStorage.getItem("peptide_v1_" + uid);
+    if(!raw) return {stacks:[], checked:{}, cart:[]};
+    return JSON.parse(raw);
+  } catch(_e){ return {stacks:[], checked:{}, cart:[]}; }
+}
+
+function pepSaveState(ps){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid) return;
+    localStorage.setItem("peptide_v1_" + uid, JSON.stringify(ps));
+    _pepMirrorToCloud(ps);
+  } catch(_e){}
+}
+
+var _pepMirrorTimer = null;
+function _pepMirrorToCloud(ps){
+  clearTimeout(_pepMirrorTimer);
+  _pepMirrorTimer = setTimeout(function(){
+    try {
+      var uid = currentSession && currentSession.user && currentSession.user.id;
+      if(!uid || !sb) return;
+      sb.from("profiles").update({peptide_state: ps}).eq("id", uid).then(function(){});
+    } catch(_e){}
+  }, 2000);
+}
+
+function pepRestoreFromCloud(profileRow){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid || !profileRow || !profileRow.peptide_state) return;
+    var cloud = profileRow.peptide_state;
+    var local = localStorage.getItem("peptide_v1_" + uid);
+    if(local) return; // local takes priority
+    localStorage.setItem("peptide_v1_" + uid, JSON.stringify(cloud));
+  } catch(_e){}
+}
+
+function _pepCompound(id){
+  for(var i=0;i<_PEP_COMPOUNDS.length;i++){ if(_PEP_COMPOUNDS[i].id===id) return _PEP_COMPOUNDS[i]; }
+  return null;
+}
+
+function _pepToday(){
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+// ── Scheduling engine ─────────────────────────────────────────────────────
+function _pepGetDoses(ps){
+  var today = _pepToday();
+  var d = new Date(today + "T12:00:00");
+  var dow = d.getDay(); // 0=Sun,1=Mon,...,6=Sat
+  var morning = [], anytime = [], evening = [];
+
+  (ps.stacks || []).forEach(function(stack){
+    if(stack.status && stack.status !== "instock") return;
+    if(!stack.startDate) return;
+    var c = _pepCompound(stack.compoundId);
+    if(!c) return;
+
+    var startD = new Date(stack.startDate + "T12:00:00");
+    var dayNum = Math.round((d - startD) / 86400000);
+    if(dayNum < 0) return;
+
+    // Off-cycle check
+    if(stack.cycleWeeks && !stack.continuous){
+      var cycleLen = stack.cycleWeeks * 7;
+      var offLen = (stack.offWeeks || 0) * 7;
+      var fullLen = cycleLen + offLen;
+      if(fullLen > 0 && dayNum % fullLen >= cycleLen) return;
+    }
+
+    var freq = (stack.freq || c.freq || "daily").toLowerCase();
+    var shouldDose = false;
+
+    if(freq.indexOf("daily") >= 0 || freq.indexOf("every day") >= 0){
+      shouldDose = true;
+    } else if(freq.indexOf("eod") >= 0 || freq.indexOf("every other day") >= 0){
+      shouldDose = dayNum % 2 === 0;
+    } else if(freq.indexOf("wed") >= 0 && freq.indexOf("sat") >= 0){
+      shouldDose = dow === 3 || dow === 6;
+    } else if(freq.indexOf("every 5 day") >= 0){
+      shouldDose = dayNum % 5 === 0 && dayNum < 20;
+    } else if(freq.indexOf("20 consecutive") >= 0 || freq.indexOf("20 night") >= 0){
+      shouldDose = dayNum < 20;
+    } else if(freq.indexOf("10 day") >= 0){
+      shouldDose = dayNum < 10;
+    } else if(freq.indexOf("3x/week") >= 0 || freq.indexOf("mon/wed/fri") >= 0){
+      shouldDose = dow === 1 || dow === 3 || dow === 5;
+    } else if(freq.indexOf("2x/week") >= 0){
+      shouldDose = dow === startD.getDay() || dow === (startD.getDay() + 3) % 7;
+    } else if(freq.indexOf("6 day") >= 0){
+      shouldDose = dow !== 1;
+    } else if(freq.indexOf("weekly") >= 0){
+      shouldDose = dow === startD.getDay();
+    } else if(freq.indexOf("needed") >= 0){
+      shouldDose = false;
+    } else {
+      shouldDose = true;
+    }
+
+    if(!shouldDose) return;
+
+    var timing = (c.timing || "").toLowerCase();
+    var dose = stack.dose != null ? stack.dose : c.dose;
+    var item = {id:stack.compoundId, name:c.name, cat:c.cat, dose:dose, doseUnit:c.doseUnit, timing:c.timing, notes:c.notes};
+
+    if(timing.indexOf("fasted am") >= 0 || timing.indexOf("morning") >= 0) morning.push(item);
+    else if(timing.indexOf("bed") >= 0 || timing.indexOf("evening") >= 0) evening.push(item);
+    else anytime.push(item);
+  });
+
+  return {morning:morning, anytime:anytime, evening:evening};
+}
+
+// ── Main renderer ─────────────────────────────────────────────────────────
+function pepRenderScreen(){
+  var body = document.getElementById("pep-screen-body");
+  if(!body) return;
+  var ps = pepGetState();
+  var tabs = [{key:"today",label:"TODAY"},{key:"protocol",label:"PROTOCOL"},{key:"order",label:"ORDER"}];
+  var tabBar = "<div style=\"display:flex;border-bottom:1px solid var(--border);background:var(--bg);\">" +
+    tabs.map(function(t){
+      var act = _pepTab === t.key;
+      return "<button data-pep-tab=\"" + t.key + "\" style=\"flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid " + (act?"#7B68EE":"transparent") + ";font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:" + (act?"#7B68EE":"var(--text3)") + ";cursor:pointer;touch-action:manipulation;\">" + t.label + "</button>";
+    }).join("") + "</div>";
+  var content = "";
+  if(_pepTab === "today")    content = _pepTabToday(ps);
+  else if(_pepTab === "protocol") content = _pepTabProtocol(ps);
+  else                       content = _pepTabOrder(ps);
+  body.innerHTML = tabBar + "<div style=\"padding:16px;\">" + content + "</div>";
+  body.querySelectorAll("[data-pep-tab]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      _pepTab = btn.getAttribute("data-pep-tab");
+      pepRenderScreen();
+    });
+  });
+  body.querySelectorAll("[data-pep-check]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepToggleDose(btn.getAttribute("data-pep-check")); });
+  });
+  body.querySelectorAll("[data-pep-rm]").forEach(function(btn){
+    var idx = parseInt(btn.getAttribute("data-pep-rm"));
+    btn.addEventListener("click", function(){ pepRemoveStack(idx); });
+  });
+  body.querySelectorAll("[data-pep-edit]").forEach(function(btn){
+    var idx = parseInt(btn.getAttribute("data-pep-edit"));
+    btn.addEventListener("click", function(){ pepOpenEditStack(idx); });
+  });
+  body.querySelectorAll("[data-pep-cart-rm]").forEach(function(btn){
+    var idx = parseInt(btn.getAttribute("data-pep-cart-rm"));
+    btn.addEventListener("click", function(){ pepCartRemove(idx); });
+  });
+  body.querySelectorAll("[data-pep-cart-qty]").forEach(function(btn){
+    var parts = btn.getAttribute("data-pep-cart-qty").split("|");
+    btn.addEventListener("click", function(){ pepCartUpdateQty(parseInt(parts[0]), parseInt(parts[1])); });
+  });
+  var addBtn = body.querySelector("#pep-add-stack");
+  if(addBtn) addBtn.addEventListener("click", pepOpenAddStack);
+  var orderPick = body.querySelector("#pep-order-pick");
+  if(orderPick) orderPick.addEventListener("click", pepOpenOrderPicker);
+  var copyBtn = body.querySelector("#pep-copy-order");
+  if(copyBtn) copyBtn.addEventListener("click", pepCopyOrder);
+}
+
+// ── TODAY tab ─────────────────────────────────────────────────────────────
+function _pepTabToday(ps){
+  var today = _pepToday();
+  var checked = (ps.checked && ps.checked[today]) || [];
+  var doses = _pepGetDoses(ps);
+  var total = doses.morning.length + doses.anytime.length + doses.evening.length;
+
+  if(total === 0 && (ps.stacks||[]).length === 0){
+    return "<div style=\"text-align:center;padding:48px 0;\">" +
+      "<div style=\"font-size:48px;margin-bottom:16px;\">&#128137;</div>" +
+      "<div style=\"font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text2);margin-bottom:8px;\">No protocol set up yet</div>" +
+      "<div style=\"font-size:13px;color:var(--text3);margin-bottom:24px;\">Add compounds in the PROTOCOL tab to see your daily schedule</div>" +
+      "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:13px;font-weight:900;padding:14px 28px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:2px;\">Set Up Protocol</button>" +
+      "</div>";
+  }
+
+  if(total === 0){
+    var d = new Date(today + "T12:00:00");
+    var dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    return "<div style=\"text-align:center;padding:48px 0;color:var(--text3);\">" +
+      "<div style=\"font-size:48px;margin-bottom:12px;\">&#10003;</div>" +
+      "<div style=\"font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text2);margin-bottom:6px;\">Rest Day</div>" +
+      "<div style=\"font-size:13px;\">No doses scheduled for " + dayNames[d.getDay()] + "</div>" +
+      "</div>";
+  }
+
+  var doneCount = 0;
+  var allItems = doses.morning.concat(doses.anytime).concat(doses.evening);
+  allItems.forEach(function(item){ if(checked.indexOf(item.id) >= 0) doneCount++; });
+
+  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + doneCount + " / " + total + " done</div>";
+  h += "<div style=\"height:4px;flex:1;background:var(--bg3);border-radius:2px;margin:0 12px;overflow:hidden;\"><div style=\"height:4px;width:" + Math.round(doneCount/total*100) + "%;background:#7B68EE;border-radius:2px;\"></div></div>";
+  h += "<div style=\"font-size:11px;color:" + (doneCount===total?"#7B68EE":"var(--text3)") + ";\">" + today + "</div>";
+  h += "</div>";
+
+  function renderSection(label, items){
+    if(!items.length) return "";
+    var s = "<div style=\"font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;\">" + label + "</div>";
+    items.forEach(function(item){
+      var done = checked.indexOf(item.id) >= 0;
+      s += "<div style=\"display:flex;align-items:flex-start;gap:12px;background:var(--bg2);border:1px solid " + (done?"#7B68EE":"var(--border)") + ";border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;" + (done?"opacity:0.6;":"") + "\">";
+      s += "<button data-pep-check=\"" + item.id + "\" style=\"flex-shrink:0;width:26px;height:26px;border-radius:50%;border:2px solid " + (done?"#7B68EE":"var(--border2)") + ";background:" + (done?"#7B68EE":"transparent") + ";cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;\">";
+      if(done) s += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='14' height='14'><polyline points='20 6 9 17 4 12'/></svg>";
+      s += "</button>";
+      s += "<div style=\"flex:1;min-width:0;\">";
+      s += "<div style=\"font-weight:700;font-size:14px;color:var(--text);\">" + item.name + "</div>";
+      s += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;margin-top:2px;\">" + item.dose + item.doseUnit + "</div>";
+      s += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + item.timing + "</div>";
+      if(item.notes) s += "<div style=\"font-size:10px;color:var(--text3);margin-top:4px;font-style:italic;\">" + item.notes + "</div>";
+      s += "</div></div>";
+    });
+    return s;
+  }
+
+  h += renderSection("Morning / Fasted AM", doses.morning);
+  h += renderSection("Any Time", doses.anytime);
+  h += renderSection("Evening / Pre-Sleep", doses.evening);
+  return h;
+}
+
+function pepToggleDose(compoundId){
+  var ps = pepGetState();
+  var today = _pepToday();
+  if(!ps.checked) ps.checked = {};
+  if(!ps.checked[today]) ps.checked[today] = [];
+  var idx = ps.checked[today].indexOf(compoundId);
+  if(idx >= 0) ps.checked[today].splice(idx, 1);
+  else ps.checked[today].push(compoundId);
+  pepSaveState(ps);
+  pepRenderScreen();
+}
+
+// ── PROTOCOL tab ──────────────────────────────────────────────────────────
+function _pepTabProtocol(ps){
+  var stacks = ps.stacks || [];
+  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + stacks.length + " compound" + (stacks.length !== 1 ? "s" : "") + "</div>";
+  h += "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add</button>";
+  h += "</div>";
+  if(stacks.length === 0){
+    h += "<div style=\"text-align:center;padding:32px 0;color:var(--text3);font-size:13px;\">No compounds in your protocol yet.<br>Tap + Add to start.</div>";
+    return h;
+  }
+  var statusColors = {instock:"#4CAF50", pipeline:"var(--gold)", onorder:"#7B68EE", complete:"var(--text3)"};
+  var statusLabels = {instock:"In Stock", pipeline:"Pipeline", onorder:"On Order", complete:"Complete"};
+  stacks.forEach(function(stack, idx){
+    var c = _pepCompound(stack.compoundId);
+    var cName = c ? c.name : stack.compoundId;
+    var status = stack.status || "instock";
+    var statusColor = statusColors[status] || "var(--text3)";
+    var statusLabel = statusLabels[status] || status;
+    h += "<div style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;\">";
+    h += "<div style=\"display:flex;align-items:flex-start;justify-content:space-between;gap:8px;\">";
+    h += "<div style=\"flex:1;min-width:0;\">";
+    h += "<div style=\"display:flex;align-items:center;gap:8px;margin-bottom:4px;\">";
+    h += "<div style=\"font-weight:700;font-size:15px;color:var(--text);\">" + cName + "</div>";
+    h += "<span style=\"font-size:9px;font-weight:800;padding:2px 6px;border-radius:10px;background:" + statusColor + "22;color:" + statusColor + ";\">" + statusLabel + "</span>";
+    h += "</div>";
+    h += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;\">" + (stack.dose || (c&&c.dose)||"?") + (c?c.doseUnit:"mg") + "</div>";
+    h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">";
+    h += "Start: " + (stack.startDate || "—");
+    if(stack.cycleWeeks) h += " &middot; " + stack.cycleWeeks + "wk on";
+    if(stack.offWeeks) h += " / " + stack.offWeeks + "wk off";
+    if(stack.continuous) h += " &middot; Continuous";
+    h += "</div>";
+    if(stack.notes) h += "<div style=\"font-size:11px;color:var(--text3);margin-top:4px;font-style:italic;\">" + stack.notes + "</div>";
+    h += "</div>";
+    h += "<div style=\"display:flex;gap:6px;flex-shrink:0;\">";
+    h += "<button data-pep-edit=\"" + idx + "\" style=\"width:30px;height:30px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:12px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;\">";
+    h += "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' width='13' height='13'><path d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'/><path d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'/></svg>";
+    h += "</button>";
+    h += "<button data-pep-rm=\"" + idx + "\" style=\"width:30px;height:30px;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:18px;line-height:1;cursor:pointer;touch-action:manipulation;\">&times;</button>";
+    h += "</div></div></div>";
+  });
+  return h;
+}
+
+function pepOpenAddStack(){
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  var cats = ["All"];
+  _PEP_COMPOUNDS.forEach(function(c){ if(cats.indexOf(c.cat)<0) cats.push(c.cat); });
+  var _activeCat = "All";
+
+  function renderPicker(){
+    var filtered = _activeCat === "All" ? _PEP_COMPOUNDS : _PEP_COMPOUNDS.filter(function(c){ return c.cat===_activeCat; });
+    var catChips = cats.map(function(cat){
+      var act = _activeCat === cat;
+      return "<button data-pep-cat=\"" + cat + "\" style=\"padding:6px 12px;border-radius:20px;border:1px solid " + (act?"#7B68EE":"var(--border2)") + ";background:" + (act?"#7B68EE22":"none") + ";color:" + (act?"#7B68EE":"var(--text3)") + ";font-family:var(--font-d);font-size:10px;font-weight:800;cursor:pointer;touch-action:manipulation;white-space:nowrap;\">" + cat + "</button>";
+    }).join("");
+    var rows = filtered.map(function(c){
+      return "<div data-pep-pick=\"" + c.id + "\" style=\"padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;\">" +
+        "<div style=\"font-weight:700;font-size:14px;color:var(--text);\">" + c.name + "</div>" +
+        "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + c.cat + " &middot; " + c.dose + c.doseUnit + " &middot; " + c.freq + "</div>" +
+        "</div>";
+    }).join("");
+    ov.innerHTML = "<div style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;max-height:85vh;display:flex;flex-direction:column;\">" +
+      "<div style=\"padding:16px 16px 0;display:flex;align-items:center;justify-content:space-between;\">" +
+      "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;\">ADD COMPOUND</div>" +
+      "<button id=\"pep-pick-close\" style=\"width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;\">&times;</button>" +
+      "</div>" +
+      "<div style=\"padding:10px 16px;display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;\">" + catChips + "</div>" +
+      "<div style=\"overflow-y:auto;flex:1;\">" + rows + "</div>" +
+      "</div>";
+    document.body.appendChild(ov);
+    document.getElementById("pep-pick-close").addEventListener("click", function(){ ov.remove(); });
+    ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+    ov.querySelectorAll("[data-pep-cat]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        _activeCat = btn.getAttribute("data-pep-cat");
+        ov.remove();
+        renderPicker();
+      });
+    });
+    ov.querySelectorAll("[data-pep-pick]").forEach(function(row){
+      row.addEventListener("click", function(){
+        ov.remove();
+        var cid = row.getAttribute("data-pep-pick");
+        pepOpenEditStack(-1, cid);
+      });
+    });
+  }
+  renderPicker();
+}
+
+function pepOpenEditStack(idx, newId){
+  var ps = pepGetState();
+  var isNew = idx < 0;
+  var stack = isNew ? {compoundId: newId||"", status:"instock", continuous:false} : Object.assign({}, ps.stacks[idx]);
+  var c = _pepCompound(stack.compoundId);
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  var title = (isNew && c) ? "Add " + c.name : (c ? "Edit " + c.name : "Edit Stack");
+  ov.innerHTML = "<div style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88vh;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;\">" + title + "</div>" +
+    "<button id=\"pep-edit-close\" style=\"width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;\">&times;</button>" +
+    "</div>" +
+    (c ? "<div style=\"font-size:12px;color:var(--text3);margin-bottom:16px;font-style:italic;\">" + c.notes + "</div>" : "") +
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;\">" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Dose (" + (c?c.doseUnit:"mg") + ")</label><br>" +
+    "<input id=\"pep-e-dose\" type=\"number\" step=\"0.01\" value=\"" + (stack.dose!=null?stack.dose:(c?c.dose:"")) + "\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Start Date</label><br>" +
+    "<input id=\"pep-e-start\" type=\"date\" value=\"" + (stack.startDate || _pepToday()) + "\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "</div>" +
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;\">" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Cycle Weeks</label><br>" +
+    "<input id=\"pep-e-cycle\" type=\"number\" step=\"1\" value=\"" + (stack.cycleWeeks||"") + "\" placeholder=\"blank = no limit\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Off Weeks</label><br>" +
+    "<input id=\"pep-e-off\" type=\"number\" step=\"1\" value=\"" + (stack.offWeeks||"") + "\" placeholder=\"0\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "</div>" +
+    "<div style=\"margin-bottom:12px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Status</label><br>" +
+    "<select id=\"pep-e-status\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\">" +
+    ["instock","pipeline","onorder","complete"].map(function(s){ return "<option value=\"" + s + "\"" + (stack.status===s?" selected":"") + ">" + {instock:"In Stock",pipeline:"Pipeline",onorder:"On Order",complete:"Complete"}[s] + "</option>"; }).join("") +
+    "</select></div>" +
+    "<div style=\"margin-bottom:16px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Notes (optional)</label><br>" +
+    "<textarea id=\"pep-e-notes\" rows=\"2\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;resize:none;\">" + (stack.notes||"") + "</textarea></div>" +
+    "<button id=\"pep-e-save\" style=\"width:100%;padding:14px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Save</button>" +
+    "</div>";
+  document.body.appendChild(ov);
+  document.getElementById("pep-edit-close").addEventListener("click", function(){ ov.remove(); });
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+  document.getElementById("pep-e-save").addEventListener("click", function(){
+    var saved = {
+      compoundId: stack.compoundId,
+      dose:       parseFloat(document.getElementById("pep-e-dose").value)||null,
+      startDate:  document.getElementById("pep-e-start").value || _pepToday(),
+      cycleWeeks: parseInt(document.getElementById("pep-e-cycle").value)||null,
+      offWeeks:   parseInt(document.getElementById("pep-e-off").value)||0,
+      status:     document.getElementById("pep-e-status").value,
+      notes:      document.getElementById("pep-e-notes").value.trim()
+    };
+    if(!ps.stacks) ps.stacks = [];
+    if(isNew) ps.stacks.push(saved);
+    else ps.stacks[idx] = saved;
+    pepSaveState(ps);
+    ov.remove();
+    _pepTab = "protocol";
+    pepRenderScreen();
+  });
+}
+
+function pepRemoveStack(idx){
+  var ps = pepGetState();
+  ps.stacks.splice(idx, 1);
+  pepSaveState(ps);
+  pepRenderScreen();
+}
+
+// ── ORDER tab ─────────────────────────────────────────────────────────────
+function _pepTabOrder(ps){
+  var cart = ps.cart || [];
+  var total = 0;
+  cart.forEach(function(item){ total += (item.aud || 0) * (item.qty || 1); });
+  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + cart.length + " item" + (cart.length!==1?"s":"") + "</div>";
+  h += "<button id=\"pep-order-pick\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add Item</button>";
+  h += "</div>";
+  if(cart.length === 0){
+    h += "<div style=\"text-align:center;padding:32px 0;color:var(--text3);font-size:13px;\">Your order cart is empty.<br>Add items from the Tong catalogue.</div>";
+    return h;
+  }
+  cart.forEach(function(item, idx){
+    h += "<div style=\"display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;\">";
+    h += "<div style=\"flex:1;min-width:0;\"><div style=\"font-weight:700;font-size:13px;color:var(--text);\">" + item.name + "</div>";
+    h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + item.cat + " &middot; $" + item.aud + " AUD per box</div></div>";
+    h += "<div style=\"display:flex;align-items:center;gap:6px;flex-shrink:0;\">";
+    h += "<button data-pep-cart-qty=\"" + idx + "|-1\" style=\"width:28px;height:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;font-size:16px;color:var(--text2);cursor:pointer;touch-action:manipulation;line-height:1;\">-</button>";
+    h += "<span style=\"font-family:var(--font-d);font-size:14px;font-weight:900;width:24px;text-align:center;\">" + (item.qty||1) + "</span>";
+    h += "<button data-pep-cart-qty=\"" + idx + "|1\" style=\"width:28px;height:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;font-size:16px;color:var(--text2);cursor:pointer;touch-action:manipulation;line-height:1;\">+</button>";
+    h += "<button data-pep-cart-rm=\"" + idx + "\" style=\"width:28px;height:28px;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:4px;\">&times;</button>";
+    h += "</div></div>";
+  });
+  var shipping = 115 * 1.45;
+  h += "<div style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-top:8px;\">";
+  h += "<div style=\"display:flex;justify-content:space-between;font-size:13px;color:var(--text3);margin-bottom:4px;\"><span>Items</span><span>$" + total + " AUD</span></div>";
+  h += "<div style=\"display:flex;justify-content:space-between;font-size:13px;color:var(--text3);margin-bottom:8px;\"><span>Shipping (~$115 USD)</span><span>~$" + Math.round(shipping) + " AUD</span></div>";
+  h += "<div style=\"display:flex;justify-content:space-between;font-family:var(--font-d);font-size:17px;font-weight:900;color:#7B68EE;\"><span>Total</span><span>~$" + (total + Math.round(shipping)) + " AUD</span></div>";
+  h += "</div>";
+  h += "<button id=\"pep-copy-order\" style=\"width:100%;margin-top:12px;padding:14px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Copy Order Summary</button>";
+  return h;
+}
+
+function pepOpenOrderPicker(){
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  var rows = _PEP_TONG.map(function(item){
+    return "<div data-pep-tong-pick=\"" + item.cat + "\" style=\"display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;\">" +
+      "<div><div style=\"font-weight:600;font-size:13px;color:var(--text);\">" + item.name + "</div>" +
+      "<div style=\"font-size:11px;color:var(--text3);\">" + item.cat + "</div></div>" +
+      "<div style=\"font-family:var(--font-d);font-weight:900;font-size:14px;color:#7B68EE;\">$" + item.aud + "</div>" +
+      "</div>";
+  }).join("");
+  ov.innerHTML = "<div style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;max-height:85vh;display:flex;flex-direction:column;\">" +
+    "<div style=\"padding:16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;\">TONG CATALOGUE — AUD</div>" +
+    "<button id=\"pep-tong-close\" style=\"width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;\">&times;</button>" +
+    "</div>" +
+    "<div style=\"overflow-y:auto;flex:1;\">" + rows + "</div>" +
+    "</div>";
+  document.body.appendChild(ov);
+  document.getElementById("pep-tong-close").addEventListener("click", function(){ ov.remove(); });
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+  ov.querySelectorAll("[data-pep-tong-pick]").forEach(function(row){
+    row.addEventListener("click", function(){
+      var catNo = row.getAttribute("data-pep-tong-pick");
+      ov.remove();
+      var tong = null;
+      for(var i=0;i<_PEP_TONG.length;i++){ if(_PEP_TONG[i].cat===catNo){ tong=_PEP_TONG[i]; break; } }
+      if(!tong) return;
+      pepCartAdd(tong.cat, tong.name, tong.aud);
+    });
+  });
+}
+
+function pepCartAdd(catNo, name, aud){
+  var ps = pepGetState();
+  if(!ps.cart) ps.cart = [];
+  for(var i=0;i<ps.cart.length;i++){
+    if(ps.cart[i].cat===catNo){ ps.cart[i].qty = (ps.cart[i].qty||1)+1; pepSaveState(ps); pepRenderScreen(); return; }
+  }
+  ps.cart.push({cat:catNo, name:name, aud:aud, qty:1});
+  pepSaveState(ps);
+  pepRenderScreen();
+}
+
+function pepCartRemove(idx){
+  var ps = pepGetState();
+  ps.cart.splice(idx, 1);
+  pepSaveState(ps);
+  pepRenderScreen();
+}
+
+function pepCartUpdateQty(idx, delta){
+  var ps = pepGetState();
+  if(!ps.cart || !ps.cart[idx]) return;
+  ps.cart[idx].qty = Math.max(1, (ps.cart[idx].qty||1) + delta);
+  pepSaveState(ps);
+  pepRenderScreen();
+}
+
+function pepCopyOrder(){
+  var ps = pepGetState();
+  var cart = ps.cart || [];
+  if(cart.length === 0) return;
+  var lines = ["Tong Peptide Order — " + _pepToday(), ""];
+  cart.forEach(function(item){
+    lines.push(item.cat + " x" + (item.qty||1) + "  —  " + item.name + "  ($" + item.aud + " AUD/box)");
+  });
+  var total = 0;
+  cart.forEach(function(item){ total += (item.aud||0)*(item.qty||1); });
+  lines.push("");
+  lines.push("Items: $" + total + " AUD");
+  lines.push("Shipping: ~$167 AUD");
+  lines.push("Total: ~$" + (total + 167) + " AUD");
+  try {
+    navigator.clipboard.writeText(lines.join("\n")).then(function(){
+      var btn = document.getElementById("pep-copy-order");
+      if(btn){ btn.textContent = "Copied!"; setTimeout(function(){ if(btn) btn.textContent = "Copy Order Summary"; }, 2000); }
+    });
+  } catch(_e){}
+}
+
+// ── Cloud restore hook (call from blabRestoreFromCloud equivalent) ─────────
+// Wire into background profile refresh at _loadProfileAndRouteInner
+(function(){
+  var _origBg = window._phxOnProfileFetched;
+  window._phxOnProfileFetched = function(row){
+    if(typeof _origBg === "function") _origBg(row);
+    if(typeof pepRestoreFromCloud === "function") pepRestoreFromCloud(row);
+  };
+})();
 
 function nutAddComponent(slot, dateKey, food, qty){
   var ns = nutGetState();

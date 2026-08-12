@@ -3446,7 +3446,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.136';
+var APP_VERSION='4.9.137';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6973,6 +6973,14 @@ async function _loadProfileAndRouteInner(){
     } catch(_e){}
     if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
     navTo('today');
+    // Restore last non-today tab after PWA reload (iOS kills PWA context on sleep/low-memory).
+    try {
+      var _restoreTab = localStorage.getItem('phx_lastTab_v1');
+      var _safeRestoreTabs = ['nutrition','records','workout','settings'];
+      if(_restoreTab && _safeRestoreTabs.indexOf(_restoreTab) >= 0){
+        setTimeout(function(){ if(typeof navTo==='function') navTo(_restoreTab); }, 400);
+      }
+    } catch(_re){}
     // Background profile refresh — non-blocking, never re-routes.
     try {
       sb.from('profiles').select('*').eq('id', session.user.id).single().then(function(pRes){
@@ -17446,7 +17454,7 @@ function renderTodayScreen(){
           _renderTodayRemainingRow(_bs, _nextDay, _weekDone);
           return;
         }
-        var _startBtn = '<div style="margin-top:16px;"><button onclick="event.stopPropagation();" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
+        var _startBtn = '<div style="margin-top:16px;"><button onclick="event.stopPropagation();window.blabOpenSession(' + _week + ',' + _nextDay + ');" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
         if(_weekDone){
           _inner.innerHTML =
             '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">BLAB · Week ' + _week + ' Complete</div>' +
@@ -17725,14 +17733,14 @@ function nutRenderScreen(){
   if(!body) return;
   var ns = nutGetState();
   if(!ns || !ns.setup_done){ body.innerHTML = '<div style="padding:24px;text-align:center;"><div style="color:var(--text2);margin-bottom:16px;">Set up your nutrition targets to get started.</div><button onclick="nutOpenSetup()" class="btn-primary" style="width:100%;">Set Up Nutrition</button></div>'; return; }
-  var tabs = [{key:'today',label:'TODAY'},{key:'meals',label:'MEALS'},{key:'week',label:'WEEK'},{key:'checkin',label:'CHECK-IN'}];
+  var tabs = [{key:'today',label:'TODAY'},{key:'recipes',label:'RECIPES'},{key:'week',label:'WEEK'}];
   var tabBar = '<div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg);">' +
     tabs.map(function(t){ var act = _nutTab === t.key; return '<button data-nut-tab="'+t.key+'" style="flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid '+(act?'var(--gold)':'transparent')+';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(act?'var(--gold)':'var(--text3)')+';cursor:pointer;touch-action:manipulation;">'+t.label+'</button>'; }).join('') + '</div>';
   var content = '';
-  if(_nutTab === 'today')        content = _nutTabToday(ns);
-  else if(_nutTab === 'meals')   content = _nutTabMeals(ns);
-  else if(_nutTab === 'week')    content = _nutTabWeek(ns);
-  else                           content = _nutTabCheckin(ns);
+  if(_nutTab === 'today')          content = _nutTabToday(ns);
+  else if(_nutTab === 'recipes')   content = _nutTabRecipes(ns);
+  else if(_nutTab === 'week')      content = _nutTabWeek(ns);
+  else                             content = _nutTabToday(ns);
   body.innerHTML = tabBar + '<div style="padding:16px;">' + content + '</div>';
   body.querySelectorAll('[data-nut-tab]').forEach(function(btn){
     btn.addEventListener('click', function(){ _nutTab = btn.getAttribute('data-nut-tab'); nutRenderScreen(); });
@@ -17763,6 +17771,16 @@ function nutRenderScreen(){
   });
   var cwBtn = body.querySelector('[data-nut-create-week]');
   if(cwBtn) cwBtn.addEventListener('click', _nutCreateWeekPlan);
+  var newRecBtn = body.querySelector('#nut-new-recipe-btn');
+  if(newRecBtn) newRecBtn.addEventListener('click', nutOpenRecipeBuilder);
+  body.querySelectorAll('[data-nut-recipe-del]').forEach(function(btn){
+    var ri = parseInt(btn.getAttribute('data-nut-recipe-del'));
+    btn.addEventListener('click', function(){ _nutRecipeDelete(ri); });
+  });
+  body.querySelectorAll('[data-nut-recipe-apply]').forEach(function(btn){
+    var ri = parseInt(btn.getAttribute('data-nut-recipe-apply'));
+    btn.addEventListener('click', function(){ _nutRecipeApplyPrompt(ri); });
+  });
   var saveCI = body.querySelector('#nut-save-checkin');
   if(saveCI) saveCI.addEventListener('click', nutSaveCheckin);
   _nutWireFeelingBtns();
@@ -17774,33 +17792,86 @@ function nutRenderScreen(){
 function _nutTabToday(ns){
   var today = _nutToday();
   var targets = nutAdjustForToday(ns.targets);
-  var dayData = (ns.daily && ns.daily[today]) || { meals: [] };
+  var dayData = (ns.daily && ns.daily[today]) || {};
   var logged = _nutDayTotals(dayData);
   var remKcal = targets.kcal - logged.kcal;
   var remColor = remKcal < 0 ? 'var(--gold)' : 'var(--text)';
   var pPct = Math.min(100, targets.protein_g ? Math.round(logged.protein_g / targets.protein_g * 100) : 0);
   var cPct = Math.min(100, targets.carbs_g   ? Math.round(logged.carbs_g   / targets.carbs_g   * 100) : 0);
   var fPct = Math.min(100, targets.fat_g     ? Math.round(logged.fat_g     / targets.fat_g     * 100) : 0);
-  var goalLabels = { fat_loss: 'Fat Loss', hypertrophy: 'Hypertrophy', strength: 'Strength', maintenance: 'Maintenance' };
-  var h = '<div style="text-align:center;margin-bottom:20px;">' +
+  var h = '<div style="text-align:center;margin-bottom:16px;">' +
     '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;line-height:1;color:'+remColor+';">' + (remKcal < 0 ? '+'+Math.abs(remKcal) : remKcal) + '</div>' +
-    '<div style="font-size:12px;color:var(--text3);margin-top:4px;">kcal ' + (remKcal < 0 ? 'over target' : 'remaining') + ' · ' + targets.kcal + ' daily target</div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-top:4px;">kcal ' + (remKcal < 0 ? 'over target' : 'remaining') + ' &middot; ' + targets.kcal + ' daily target</div>' +
     (targets.note ? '<div style="font-size:11px;color:var(--gold);margin-top:6px;font-style:italic;">'+targets.note+'</div>' : '') +
     '</div>';
-  h += '<div style="display:flex;gap:12px;margin-bottom:20px;">' +
+  h += '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
     _nutBigMacro('Protein', logged.protein_g, targets.protein_g, pPct, '#4CAF50') +
     _nutBigMacro('Carbs',   logged.carbs_g,   targets.carbs_g,   cPct, 'var(--gold)') +
     _nutBigMacro('Fat',     logged.fat_g,     targets.fat_g,     fPct, '#FF6B6B') +
     '</div>';
-  h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;">';
-  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Goal &middot; ' + (goalLabels[ns.goal] || 'Maintenance') + '</div>';
-  h += '<div style="display:flex;justify-content:space-around;text-align:center;">';
-  h += _nutStatBox('Protein', targets.protein_g + 'g');
-  h += _nutStatBox('Carbs',   targets.carbs_g   + 'g');
-  h += _nutStatBox('Fat',     targets.fat_g     + 'g');
-  h += _nutStatBox('Calories', targets.kcal + '');
-  h += '</div></div>';
-  h += '<div style="text-align:center;"><button data-nut-meal="quick" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;">+ Log a Meal</button></div>';
+  // Meal slots for today
+  var _SLOTS     = ['breakfast','lunch','dinner','snack','post_workout'];
+  var _SLOT_LBLS = {breakfast:'Breakfast',lunch:'Lunch',dinner:'Dinner',snack:'Snack',post_workout:'Post-Workout'};
+  _SLOTS.forEach(function(slot){
+    var mealData = (dayData.meals && !Array.isArray(dayData.meals)) ? (dayData.meals[slot] || {components:[]}) : {components:[]};
+    var comps = mealData.components || [];
+    var mKcal = 0, mProt = 0;
+    comps.forEach(function(c){ var f=(c.qty_g||0)/100; mKcal+=Math.round((c.k||0)*f); mProt+=Math.round((c.p||0)*f*10)/10; });
+    var hasFood = comps.length > 0;
+    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
+    h += '<div style="display:flex;align-items:center;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
+    h += '<div style="flex:1;"><div style="font-weight:700;color:var(--text);font-size:14px;">' + _SLOT_LBLS[slot] + '</div>';
+    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
+    h += '</div>';
+    h += '<button data-nut-pick="' + slot + '|' + today + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
+    h += '</div>';
+    if(hasFood){
+      h += '<div style="padding:6px 14px 10px;">';
+      comps.forEach(function(c, idx){
+        var cKcal = Math.round((c.k||0)*(c.qty_g||0)/100);
+        var cProt = Math.round((c.p||0)*(c.qty_g||0)/100*10)/10;
+        var sb = c.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '';
+        h += '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);">';
+        h += '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + c.n + sb + '</div>';
+        h += '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cKcal + ' kcal &middot; P' + cProt + 'g</div></div>';
+        h += '<button data-nut-rm="' + slot + '|' + today + '|' + idx + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+  h += _nutSuppSection(dayData, today);
+  return h;
+}
+
+function _nutTabRecipes(ns){
+  var recipes = ns.recipes || [];
+  var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">';
+  h += '<div style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">' + recipes.length + ' Recipe' + (recipes.length !== 1 ? 's' : '') + '</div>';
+  h += '<button id="nut-new-recipe-btn" style="background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;">+ New Recipe</button>';
+  h += '</div>';
+  if(recipes.length === 0){
+    h += '<div style="text-align:center;padding:40px 0;color:var(--text3);">';
+    h += '<div style="font-size:40px;margin-bottom:12px;">&#127859;</div>';
+    h += '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text2);margin-bottom:8px;">No recipes saved</div>';
+    h += '<div style="font-size:12px;">Save a meal combo for quick re-use</div>';
+    h += '</div>';
+  } else {
+    recipes.forEach(function(r, ri){
+      var totalKcal = 0, totalProt = 0;
+      (r.components || []).forEach(function(c){ var f=(c.qty_g||0)/100; totalKcal+=Math.round((c.k||0)*f); totalProt+=Math.round((c.p||0)*f*10)/10; });
+      h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;">';
+      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">';
+      h += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:4px;">' + r.name + '</div>';
+      h += '<div style="font-size:11px;color:var(--text3);">' + totalKcal + ' kcal &middot; P' + totalProt + 'g &middot; ' + (r.components||[]).length + ' items</div></div>';
+      h += '<div style="display:flex;gap:8px;flex-shrink:0;">';
+      h += '<button data-nut-recipe-del="' + ri + '" style="width:28px;height:28px;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:28px;text-align:center;cursor:pointer;touch-action:manipulation;">&times;</button>';
+      h += '<button data-nut-recipe-apply="' + ri + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">Apply</button>';
+      h += '</div></div>';
+      h += '</div>';
+    });
+  }
   return h;
 }
 
@@ -18797,6 +18868,58 @@ function _nutOpenPickerForRecipe(onAdd){
     ov.remove();
     onAdd(food, qty);
   });
+}
+
+// ── Recipe helpers ────────────────────────────────────────────────────────────
+function _nutRecipeDelete(ri){
+  var ns = nutGetState();
+  if(!ns || !ns.recipes) return;
+  ns.recipes.splice(ri, 1);
+  nutSaveState(ns);
+  nutRenderScreen();
+}
+
+function _nutApplyRecipe(ri, slot, dateKey){
+  var ns = nutGetState();
+  if(!ns || !ns.recipes) return;
+  var recipe = ns.recipes[ri];
+  if(!recipe || !recipe.components) return;
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[dateKey]) ns.daily[dateKey] = {};
+  var day = ns.daily[dateKey];
+  if(!day.meals || Array.isArray(day.meals)) day.meals = {};
+  if(!day.meals[slot]) day.meals[slot] = {components:[]};
+  recipe.components.forEach(function(c){
+    day.meals[slot].components.push(Object.assign({}, c));
+  });
+  nutSaveState(ns);
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+  _nutTab = 'today';
+  nutRenderScreen();
+}
+
+function _nutRecipeApplyPrompt(ri){
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9700;display:flex;align-items:flex-end;';
+  var today = _nutToday();
+  var SLOTS = [{k:'breakfast',l:'Breakfast'},{k:'lunch',l:'Lunch'},{k:'dinner',l:'Dinner'},{k:'snack',l:'Snack'},{k:'post_workout',l:'Post-Workout'}];
+  var rows = SLOTS.map(function(s){
+    return '<button data-slot="' + s.k + '" style="width:100%;padding:14px 16px;background:none;border:none;border-bottom:1px solid var(--border);text-align:left;font-size:15px;color:var(--text);cursor:pointer;touch-action:manipulation;">' + s.l + '</button>';
+  }).join('');
+  ov.innerHTML = '<div style="width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;box-sizing:border-box;">' +
+    '<div style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:16px;">ADD RECIPE TO</div>' +
+    rows +
+    '<button id="nut-rap-cancel" style="width:100%;padding:14px;background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;touch-action:manipulation;margin-top:8px;">Cancel</button>' +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.querySelectorAll('[data-slot]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      ov.remove();
+      _nutApplyRecipe(ri, btn.getAttribute('data-slot'), today);
+    });
+  });
+  document.getElementById('nut-rap-cancel').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
 }
 
 // ── Shopping List ─────────────────────────────────────────────────────────────
@@ -28425,10 +28548,7 @@ function _phxIsOnSessionScreen(){
 }
 
 function _phxConfirmLeaveActiveSession(){
-  // Only prompt if we're currently inside a session screen with an active id
-  if(!currentSupabaseSessionId) return true;
-  if(!_phxIsOnSessionScreen()) return true;
-  return confirm('You have an active session. If you leave, your logged sets are saved but your place in the session will be lost. Continue anyway?');
+  return true;
 }
 
 // Intercept navTo
@@ -28439,6 +28559,12 @@ if(typeof navTo==='function'){
     // v4.7.10: any tab change cancels an in-flight count-in. The user is leaving the WOD context,
     // so we must not let a 5-second-old start tap fire startWODTimer against whatever screen they land on.
     if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();
+    // Screen persistence: save last non-session tab so iOS PWA reload can restore it.
+    if(tab && tab !== 'today' && tab !== 'session' && tab !== 'auth' && tab !== 'landing') {
+      try { localStorage.setItem('phx_lastTab_v1', tab); } catch(_e){}
+    } else if(tab === 'today') {
+      try { localStorage.removeItem('phx_lastTab_v1'); } catch(_e){}
+    }
     return _origNavTo.apply(this, arguments);
   };
 }
@@ -28447,9 +28573,6 @@ if(typeof navTo==='function'){
 if(typeof showScreen==='function'){
   var _origShowScreen = showScreen;
   window.showScreen = function(id){
-    if(id !== 'screen-session' && _phxIsOnSessionScreen() && currentSupabaseSessionId){
-      if(!confirm('You have an active session. If you leave, your logged sets are saved but your place in the session will be lost. Continue anyway?')) return;
-    }
     var result = _origShowScreen.apply(this, arguments);
     if(id === 'screen-session') _phxRestoreSessionVisualState();
     // v4.7.15 FIX 3: every navigation reapplies the ad gate so any newly-rendered ad slot is hidden for Pro.

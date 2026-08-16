@@ -3454,7 +3454,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.139';
+var APP_VERSION='4.9.140';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17903,12 +17903,23 @@ function _nutTabRecipes(ns){
     h += '</div>';
   } else {
     recipes.forEach(function(r, ri){
-      var totalKcal = 0, totalProt = 0;
-      (r.components || []).forEach(function(c){ var f=(c.qty_g||0)/100; totalKcal+=Math.round((c.k||0)*f); totalProt+=Math.round((c.p||0)*f*10)/10; });
+      var totalKcal = 0, totalProt = 0, totalCarb = 0, totalFat = 0;
+      (r.components || []).forEach(function(c){ var f=(c.qty_g||0)/100; totalKcal+=Math.round((c.k||0)*f); totalProt+=(c.p||0)*f; totalCarb+=(c.c||0)*f; totalFat+=(c.f||0)*f; });
+      totalProt = Math.round(totalProt*10)/10; totalCarb = Math.round(totalCarb*10)/10; totalFat = Math.round(totalFat*10)/10;
+      var hasCW = r.cookedWeight_g && r.cookedWeight_g > 0;
+      var serveG = r.serveSize_g || r.cookedWeight_g || 0;
+      var perServeK = hasCW ? Math.round(totalKcal / r.cookedWeight_g * serveG) : 0;
+      var perServeP = hasCW ? Math.round(totalProt / r.cookedWeight_g * serveG * 10)/10 : 0;
       h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;">';
       h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">';
       h += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:4px;">' + r.name + '</div>';
-      h += '<div style="font-size:11px;color:var(--text3);">' + totalKcal + ' kcal &middot; P' + totalProt + 'g &middot; ' + (r.components||[]).length + ' items</div></div>';
+      if(hasCW){
+        h += '<div style="font-size:11px;color:var(--gold);font-weight:600;margin-bottom:2px;">Per serve (' + Math.round(serveG) + 'g): ' + perServeK + ' kcal &middot; P' + perServeP + 'g</div>';
+        h += '<div style="font-size:10px;color:var(--text3);">' + (r.components||[]).length + ' ingredients &middot; ' + r.cookedWeight_g + 'g cooked</div>';
+      } else {
+        h += '<div style="font-size:11px;color:var(--text3);">' + totalKcal + ' kcal &middot; P' + totalProt + 'g &middot; ' + (r.components||[]).length + ' items</div>';
+      }
+      h += '</div>';
       h += '<div style="display:flex;gap:8px;flex-shrink:0;">';
       h += '<button data-nut-recipe-del="' + ri + '" style="width:28px;height:28px;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:28px;text-align:center;cursor:pointer;touch-action:manipulation;">&times;</button>';
       h += '<button data-nut-recipe-apply="' + ri + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">Apply</button>';
@@ -18226,6 +18237,7 @@ var _nutMealDate     = null;
 var _nutPickerSlot   = null;
 var _nutPickerDate   = null;
 var _nutPickerCat    = 'all';
+var _nutPickerState  = 'all';
 var _nutPickerSearch = '';
 var _nutPickerSelId  = null;
 var _nutPickerQty    = 150;
@@ -18403,6 +18415,7 @@ function nutOpenFoodPicker(slot, dateKey){
   _nutPickerSlot   = slot;
   _nutPickerDate   = dateKey;
   _nutPickerCat    = 'all';
+  _nutPickerState  = 'all';
   _nutPickerSearch = '';
   _nutPickerSelId  = null;
   _nutPickerQty    = 150;
@@ -18421,6 +18434,7 @@ function nutOpenFoodPicker(slot, dateKey){
     '</div>' +
     '<input type="text" id="nut-fp-search" placeholder="Search foods…" inputmode="search" autocomplete="off" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;box-sizing:border-box;outline:none;margin-bottom:10px;">' +
     '<div id="nut-fp-cats" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;"></div>' +
+    '<div id="nut-fp-state" style="display:flex;gap:6px;margin-top:8px;"></div>' +
     '</div>' +
     '<div id="nut-fp-list" style="flex:1;overflow-y:auto;padding:0 16px 16px;"></div>' +
     '<div id="nut-fp-add-bar" style="display:none;padding:12px 16px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;">' +
@@ -18488,6 +18502,23 @@ function _nutRenderFoodPickerCats(ov){
       _nutRenderFoodPickerList(ov);
     });
   });
+  var stateRow = ov.querySelector('#nut-fp-state');
+  if(stateRow){
+    var stateOpts = [{key:'all',label:'All'},{key:'raw',label:'Raw'},{key:'cooked',label:'Cooked'}];
+    stateRow.innerHTML = stateOpts.map(function(s){
+      var act = _nutPickerState === s.key;
+      return '<button data-fp-state="'+s.key+'" style="flex-shrink:0;padding:4px 12px;background:'+(act?'rgba(200,150,62,0.2)':'var(--bg3)')+';border:1px solid '+(act?'var(--gold)':'var(--border2)')+';border-radius:20px;color:'+(act?'var(--gold)':'var(--text3)')+';font-family:var(--font-d);font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">'+s.label+'</button>';
+    }).join('');
+    stateRow.querySelectorAll('[data-fp-state]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        _nutPickerState = btn.getAttribute('data-fp-state');
+        _nutPickerSelId = null;
+        ov.querySelector('#nut-fp-add-bar').style.display = 'none';
+        _nutRenderFoodPickerCats(ov);
+        _nutRenderFoodPickerList(ov);
+      });
+    });
+  }
 }
 
 function _nutRenderFoodPickerList(ov){
@@ -18528,6 +18559,7 @@ function _nutRenderFoodPickerList(ov){
   var q        = _nutPickerSearch;
   var filtered = foods.filter(function(f){
     if(_nutPickerCat !== 'all' && f.cat !== _nutPickerCat) return false;
+    if(_nutPickerState !== 'all' && (f.state || 'raw') !== _nutPickerState) return false;
     if(q && f.n.toLowerCase().indexOf(q) < 0) return false;
     return true;
   });
@@ -18803,33 +18835,71 @@ function nutOpenRecipeBuilder(){
     '<div style="padding:0 20px;flex-shrink:0;"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">COMPONENTS</div></div>' +
     '<div id="nut-rb-list" style="flex:1;overflow-y:auto;padding:0 20px;"></div>' +
     '<div style="padding:12px 20px 20px;flex-shrink:0;">' +
+    '<div id="nut-rb-totals" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;font-size:11px;color:var(--text3);"></div>' +
     '<button id="nut-rb-add-comp" style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;margin-bottom:10px;">+ ADD COMPONENT</button>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+    '<div><label style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);">Cooked dish weight (g)</label>' +
+    '<input id="nut-rb-cooked" type="number" inputmode="decimal" placeholder="e.g. 1200" style="width:100%;margin-top:4px;padding:9px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;outline:none;"></div>' +
+    '<div><label style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);">Serving size (g) <span style="font-weight:400;opacity:0.6;">optional</span></label>' +
+    '<input id="nut-rb-serve" type="number" inputmode="decimal" placeholder="e.g. 280" style="width:100%;margin-top:4px;padding:9px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;outline:none;"></div>' +
+    '</div>' +
+    '<div id="nut-rb-cooked-preview" style="display:none;background:rgba(200,150,62,0.08);border:1px solid rgba(200,150,62,0.3);border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;font-size:11px;color:var(--text3);"></div>' +
     '<button id="nut-rb-save" style="width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SAVE RECIPE</button>' +
     '</div></div>';
   document.body.appendChild(ov);
   var _rbComps = [];
+  function _rbTotals(){
+    var tK=0,tP=0,tC=0,tF=0;
+    _rbComps.forEach(function(c){ var f=(c.qty_g||0)/100; tK+=Math.round((c.k||0)*f); tP+=(c.p||0)*f; tC+=(c.c||0)*f; tF+=(c.f||0)*f; });
+    return {k:tK, p:Math.round(tP*10)/10, c:Math.round(tC*10)/10, f:Math.round(tF*10)/10};
+  }
+  function _rbUpdateCookedPreview(){
+    var cw = parseFloat(ov.querySelector('#nut-rb-cooked').value)||0;
+    var sw = parseFloat(ov.querySelector('#nut-rb-serve').value)||0;
+    var prev = ov.querySelector('#nut-rb-cooked-preview');
+    if(!prev) return;
+    if(!cw || !_rbComps.length){ prev.style.display='none'; return; }
+    var t = _rbTotals();
+    var perG_K = t.k / cw, perG_P = t.p / cw, perG_C = t.c / cw, perG_F = t.f / cw;
+    var serveG = sw || cw;
+    var sK = Math.round(perG_K*serveG), sP = Math.round(perG_P*serveG*10)/10, sC = Math.round(perG_C*serveG*10)/10, sF = Math.round(perG_F*serveG*10)/10;
+    prev.style.display = '';
+    prev.innerHTML = '<span style="color:var(--gold);font-weight:700;">Per serve (' + Math.round(serveG) + 'g):</span> ' + sK + ' kcal &middot; P' + sP + 'g &middot; C' + sC + 'g &middot; F' + sF + 'g' +
+      '<br><span style="opacity:0.7;">Per 100g cooked: ' + Math.round(perG_K*100) + ' kcal &middot; P' + Math.round(perG_P*100*10)/10 + 'g</span>';
+  }
   function _rbRender(){
     var list = ov.querySelector('#nut-rb-list');
+    var totEl = ov.querySelector('#nut-rb-totals');
     if(!_rbComps.length){
       list.innerHTML = '<div style="text-align:center;padding:20px 0;font-size:12px;color:var(--text3);">No components yet — tap Add Component</div>';
+      if(totEl) totEl.style.display = 'none';
       return;
+    }
+    var t = _rbTotals();
+    if(totEl){
+      totEl.style.display = '';
+      totEl.innerHTML = 'Total raw: <strong style="color:var(--text);">' + t.k + ' kcal</strong> &middot; P' + t.p + 'g &middot; C' + t.c + 'g &middot; F' + t.f + 'g';
     }
     list.innerHTML = _rbComps.map(function(c, i){
       var cK = Math.round((c.k||0)*(c.qty_g||0)/100);
       var cP = Math.round((c.p||0)*(c.qty_g||0)/100*10)/10;
+      var stateTag = c.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,0.08);color:var(--text3);margin-left:5px;">R</span>';
       return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">' +
-        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:var(--text);">' + c.n + '</div>' +
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:var(--text);">' + c.n + stateTag + '</div>' +
         '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cK + ' kcal &middot; P' + cP + 'g</div></div>' +
         '<button data-rb-rm="' + i + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>' +
         '</div>';
     }).join('');
     list.querySelectorAll('[data-rb-rm]').forEach(function(btn){
-      btn.addEventListener('click', function(){ _rbComps.splice(parseInt(btn.getAttribute('data-rb-rm')), 1); _rbRender(); });
+      btn.addEventListener('click', function(){ _rbComps.splice(parseInt(btn.getAttribute('data-rb-rm')), 1); _rbRender(); _rbUpdateCookedPreview(); });
     });
+    _rbUpdateCookedPreview();
   }
   _rbRender();
   ov.querySelector('#nut-rb-close').addEventListener('click', function(){ ov.remove(); });
   ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  ov.querySelector('#nut-rb-cooked').addEventListener('input', _rbUpdateCookedPreview);
+  ov.querySelector('#nut-rb-serve').addEventListener('input', _rbUpdateCookedPreview);
   ov.querySelector('#nut-rb-add-comp').addEventListener('click', function(){
     _nutOpenPickerForRecipe(function(food, qty){
       _rbComps.push({n:food.n, cat:food.cat, k:food.k, p:food.p, c:food.c, f:food.f, qty_g:qty, state:food.state||'raw'});
@@ -18842,9 +18912,14 @@ function nutOpenRecipeBuilder(){
     if(!name){ errEl.textContent = 'Please enter a recipe name.'; errEl.style.display = ''; ov.querySelector('#nut-rb-name').focus(); return; }
     if(!_rbComps.length){ errEl.textContent = 'Add at least one component.'; errEl.style.display = ''; return; }
     errEl.style.display = 'none';
+    var cookedW = parseFloat(ov.querySelector('#nut-rb-cooked').value)||0;
+    var serveW  = parseFloat(ov.querySelector('#nut-rb-serve').value)||0;
     var ns = nutGetState();
     if(!ns.recipes) ns.recipes = [];
-    ns.recipes.push({id:'rec_' + String(Date.now()), name: name, components: JSON.parse(JSON.stringify(_rbComps))});
+    var rec = {id:'rec_' + String(Date.now()), name: name, components: JSON.parse(JSON.stringify(_rbComps))};
+    if(cookedW > 0){ rec.cookedWeight_g = cookedW; }
+    if(serveW > 0){ rec.serveSize_g = serveW; }
+    ns.recipes.push(rec);
     nutSaveState(ns);
     ov.remove();
     nutRenderScreen();
@@ -18933,9 +19008,27 @@ function _nutApplyRecipe(ri, slot, dateKey){
   var day = ns.daily[dateKey];
   if(!day.meals || Array.isArray(day.meals)) day.meals = {};
   if(!day.meals[slot]) day.meals[slot] = {components:[]};
-  recipe.components.forEach(function(c){
-    day.meals[slot].components.push(Object.assign({}, c));
-  });
+  if(recipe.cookedWeight_g && recipe.cookedWeight_g > 0){
+    var tK=0, tP=0, tC=0, tF=0;
+    (recipe.components||[]).forEach(function(c){ var f=(c.qty_g||0)/100; tK+=(c.k||0)*f; tP+=(c.p||0)*f; tC+=(c.c||0)*f; tF+=(c.f||0)*f; });
+    var cw = recipe.cookedWeight_g;
+    var serveG = recipe.serveSize_g || cw;
+    day.meals[slot].components.push({
+      n: recipe.name,
+      cat: 'recipe',
+      k: Math.round(tK / cw * 100),
+      p: Math.round(tP / cw * 100 * 10) / 10,
+      c: Math.round(tC / cw * 100 * 10) / 10,
+      f: Math.round(tF / cw * 100 * 10) / 10,
+      qty_g: serveG,
+      state: 'cooked',
+      isRecipe: true
+    });
+  } else {
+    recipe.components.forEach(function(c){
+      day.meals[slot].components.push(Object.assign({}, c));
+    });
+  }
   nutSaveState(ns);
   if(typeof nutRenderTile === 'function') nutRenderTile();
   _nutTab = 'today';

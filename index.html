@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.154';
+var APP_VERSION='4.9.155';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3637,14 +3637,20 @@ window._blabSendCloud = function(uid, payload, useKeepalive){
           'Prefer':'return=minimal'
         },
         body: JSON.stringify({ blab_state: payload })
-      }).catch(function(){});
-    } catch(_){}
+      }).then(function(r){
+        // v4.9.155: keepalive path used to swallow. This is the write that fires when the PWA
+        // is backgrounded mid-session — the one that most needs to be visible when it fails.
+        if(r && !r.ok && typeof _phxRecordWriteError === 'function') _phxRecordWriteError('_blabSendCloud.keepalive', {message:'HTTP ' + r.status, code:String(r.status)}, payload);
+      }).catch(function(e){
+        if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('_blabSendCloud.keepalive.reject', e, payload);
+      });
+    } catch(e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('_blabSendCloud.keepalive.throw', e, payload); }
   } else {
     try {
       sb.from('profiles').update({ blab_state: payload }).eq('id', uid)
-        .then(function(res){ if(res && res.error) console.warn('[PHX] blab cloud sync failed:', res.error); })
-        .catch(function(e){ console.warn('[PHX] blab cloud sync error:', e); });
-    } catch(e){ console.warn('[PHX] blab cloud sync threw:', e); }
+        .then(function(res){ if(res && res.error){ console.warn('[PHX] blab cloud sync failed:', res.error); if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('_blabSendCloud.update', res.error, payload); } })
+        .catch(function(e){ console.warn('[PHX] blab cloud sync error:', e); if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('_blabSendCloud.update.reject', e, payload); });
+    } catch(e){ console.warn('[PHX] blab cloud sync threw:', e); if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('_blabSendCloud.update.throw', e, payload); }
   }
 };
 
@@ -7345,25 +7351,65 @@ function showMigrationModal(localAthlete,session){
 // + the payload to localStorage under key `phx_last_write_error`. The user can recover
 // it later from Safari's URL bar by typing `javascript:alert(phxLastError())` — useful
 // when Mac/iPhone Safari web inspector isn't available.
+// v4.9.155 PRIVACY: this snapshot lives in plaintext localStorage and is dumpable from the
+// Safari URL bar. It therefore stores payload SHAPE (key names, array/string lengths) — never
+// values — and only the error code + a truncated message. `details` and `hint` are deliberately
+// NOT recorded: Postgres/PostgREST echo the offending value in those fields (e.g. a bad date,
+// a duplicate key). Keeps the latest under phx_last_write_error (Diagnostic panel reads it)
+// plus a ring of the last 8 under phx_write_errors so several failing writers stay visible.
+function _phxShapeOf(v, depth){
+  depth = depth || 0;
+  try {
+    if(v == null) return v === null ? 'null' : 'undefined';
+    if(Array.isArray(v)) return 'array[' + v.length + ']';
+    var t = typeof v;
+    if(t === 'string') return 'string(' + v.length + ')';
+    if(t === 'number' || t === 'boolean') return t;
+    if(t === 'object'){
+      var keys = Object.keys(v);
+      if(depth >= 1) return 'object{' + keys.length + ' keys}';
+      var o = {};
+      keys.slice(0, 40).forEach(function(k){ o[k] = _phxShapeOf(v[k], depth + 1); });
+      if(keys.length > 40) o['…'] = (keys.length - 40) + ' more keys';
+      return o;
+    }
+    return t;
+  } catch(_e){ return '[unshapeable]'; }
+}
 function _phxRecordWriteError(context, err, payload){
   try {
+    var msg = (err && err.message) || String(err || '');
+    if(msg.length > 200) msg = msg.slice(0, 200) + '…';
     var snap = {
       ts: new Date().toISOString(),
       context: context || '',
-      message: (err && err.message) || String(err || ''),
+      message: msg,
       code: (err && err.code) || null,
-      details: (err && err.details) || null,
-      hint: (err && err.hint) || null,
-      payload_preview: (function(){
-        try {
-          var s = JSON.stringify(payload);
-          return s.length > 2000 ? s.slice(0, 2000) + '…(truncated)' : s;
-        } catch(_e){ return '[unserialisable payload]'; }
-      })()
+      payload_shape: _phxShapeOf(payload)
     };
-    localStorage.setItem('phx_last_write_error', JSON.stringify(snap, null, 2));
+    var txt = JSON.stringify(snap, null, 2);
+    localStorage.setItem('phx_last_write_error', txt);
+    var ring = [];
+    try { ring = JSON.parse(localStorage.getItem('phx_write_errors') || '[]'); if(!Array.isArray(ring)) ring = []; } catch(_r){ ring = []; }
+    ring.push(snap);
+    while(ring.length > 8) ring.shift();
+    localStorage.setItem('phx_write_errors', JSON.stringify(ring));
   } catch(_e){}
 }
+// ====== v4.9.155 SHARED RESTORE HOOK (PM-owned) ======
+// window._phxOnProfileFetched(row) is called at BOTH profile-fetch sites in
+// _loadProfileAndRouteInner, AFTER blabRestoreFromCloud. Domain restores chain here.
+// This wrapper is shared plumbing: domain chats add their restore call via the PM,
+// they do not reassign the hook themselves. Order: peptides, then nutrition.
+(function(){
+  var _origBg = window._phxOnProfileFetched;
+  window._phxOnProfileFetched = function(row){
+    if(typeof _origBg === "function") _origBg(row);
+    if(typeof pepRestoreFromCloud === "function" && pepRestoreFromCloud(row)) _pepAfterRestore();
+    if(typeof nutRestoreRecipesFromCloud === "function") nutRestoreRecipesFromCloud(row);
+  };
+})();
+
 // v4.7.45 hotfix: helper the user can call from Safari's URL bar to retrieve the
 // last write-failure snapshot. Type `javascript:alert(phxLastError())` in the address bar.
 window.phxLastError = function(){
@@ -22056,16 +22102,7 @@ function pepCopyOrder(){
   } catch(_e){}
 }
 
-// ── Cloud restore hook (call from blabRestoreFromCloud equivalent) ─────────
-// Wire into background profile refresh at _loadProfileAndRouteInner
-(function(){
-  var _origBg = window._phxOnProfileFetched;
-  window._phxOnProfileFetched = function(row){
-    if(typeof _origBg === "function") _origBg(row);
-    if(typeof pepRestoreFromCloud === "function" && pepRestoreFromCloud(row)) _pepAfterRestore();
-    if(typeof nutRestoreRecipesFromCloud === "function") nutRestoreRecipesFromCloud(row);
-  };
-})();
+// v4.9.155: the shared _phxOnProfileFetched wrapper moved to PM plumbing next to _phxRecordWriteError.
 
 function nutAddComponent(slot, dateKey, food, qty){
   var ns = nutGetState();

@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.154'", 'version is 4.9.154');
+has("var APP_VERSION='4.9.155'", 'version is 4.9.155');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -928,7 +928,7 @@ hasNot('if(local) return; // local takes priority',
     : bad('PEP: restore ' + label + ' — got ' + got));
 })();
 
-// v4.9.154 mirror hygiene — no medical data to the cloud, no swallowed errors
+// v4.9.155 mirror hygiene — no medical data to the cloud, no swallowed errors
 has('function _pepCloudPayload(ps)',   'PEP: cloud payload builder present');
 has('function _pepErrorSummary(ps)',   'PEP: scrubbed diagnostic summary present');
 has('window._pepFlushCloud = function()', 'PEP: pagehide flush present');
@@ -1006,6 +1006,32 @@ hasNot('Deload week 4."', 'DELOAD: stale "Deload week 4" gone from coach-note ex
 has('RPE average > 9.5 two consecutive weeks',   'DELOAD: unscheduled RPE trigger intact');
 has('completion rate < 60% two consecutive weeks','DELOAD: unscheduled completion trigger intact');
 has('overreaching triad',                         'DELOAD: overreaching triad trigger intact');
+
+// ── v4.9.155 [PM] Write-error diagnostics + BLAB mirror instrumentation ────────
+// _phxRecordWriteError must redact: shape only, no details/hint, message truncated, ring of 8.
+has('payload_shape: _phxShapeOf(payload)',          'DIAG: snapshot stores payload SHAPE not values');
+hasNot('payload_preview:',                          'DIAG: raw payload_preview removed');
+hasNot("details: (err && err.details) || null",     'DIAG: details (value-echoing) not recorded');
+hasNot("hint: (err && err.hint) || null",           'DIAG: hint (value-echoing) not recorded');
+has("if(msg.length > 200) msg = msg.slice(0, 200)", 'DIAG: message truncated to 200');
+has("localStorage.setItem('phx_write_errors', JSON.stringify(ring))", 'DIAG: ring buffer written');
+has('while(ring.length > 8) ring.shift();',         'DIAG: ring capped at 8');
+// _blabSendCloud: BOTH branches record. Keepalive is the pagehide write — must not swallow.
+has("_phxRecordWriteError('_blabSendCloud.keepalive'",        'BLAB MIRROR: keepalive HTTP failure recorded');
+has("_phxRecordWriteError('_blabSendCloud.keepalive.reject'", 'BLAB MIRROR: keepalive rejection recorded');
+has("_phxRecordWriteError('_blabSendCloud.update'",           'BLAB MIRROR: update res.error recorded');
+has("_phxRecordWriteError('_blabSendCloud.update.reject'",    'BLAB MIRROR: update rejection recorded');
+hasNot("}).catch(function(){});\n    } catch(_){}",           'BLAB MIRROR: keepalive no longer swallows');
+// Shared restore hook lives in PM plumbing, exactly once, and still chains both domains.
+{
+  const n = (html.match(/window\._phxOnProfileFetched = function\(row\)\{/g) || []).length;
+  n === 1 ? ok('HOOK: _phxOnProfileFetched wrapper defined exactly once') : bad(`HOOK: wrapper defined ${n} times`);
+  const idxHook = html.indexOf('SHARED RESTORE HOOK (PM-owned)');
+  const idxPep  = html.indexOf('function pepGetState(');
+  (idxHook > 0 && idxHook < idxPep) ? ok('HOOK: wrapper relocated to PM plumbing (before peptide block)') : bad('HOOK: wrapper still inside peptide block');
+}
+has('pepRestoreFromCloud(row)) _pepAfterRestore();', 'HOOK: chains peptide restore + repaint');
+has('nutRestoreRecipesFromCloud(row);',              'HOOK: chains nutrition restore');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

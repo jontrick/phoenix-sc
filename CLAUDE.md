@@ -89,7 +89,13 @@ BLAB state lives in `localStorage('blab_v1_{userId}')`. It also mirrors to `prof
 
 Always increment `APP_VERSION` in index.html. Format: `4.9.XXX`. The version shows at the bottom of the Today screen — Jon uses it to confirm the PWA has updated.
 
-### 8. Archive dead code
+### 8. Cloud writes never swallow errors; diagnostics never store values
+
+Every Supabase write — supabase-js `.update/.upsert/.insert`, AND raw `fetch` to the REST endpoint (keepalive/pagehide paths included) — must route failures through `_phxRecordWriteError(context, err, payload)`. Never `.then(function(){})`, never `.catch(function(){})`, never a bare `console.warn` (invisible on iPhone). Both mirrors and one-off writes. Two missing columns went unnoticed for 7–9 versions because three mirrors swallowed (2026-08-18).
+
+`_phxRecordWriteError` stores payload **shape** (key names, array/string lengths) — never values — and only the error `code` plus a message truncated to 200 chars. `details`/`hint` are deliberately not recorded because Postgres echoes the offending value there. So it is safe to pass the real payload; the redaction is enforced inside the helper, not by caller discipline. It keeps the latest under `phx_last_write_error` (Settings → Diagnostic) plus a ring of 8 under `phx_write_errors`.
+
+### 9. Archive dead code
 
 Dead/unused code goes to `blab_archive.js` in the repo root — never left in index.html. Index.html must stay lean.
 

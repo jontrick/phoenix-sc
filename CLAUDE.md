@@ -284,12 +284,25 @@ Harness must cover at minimum:
 
 ---
 
+## THREE GATES — ALL MUST BE GREEN BEFORE EVERY PUSH
+
+```bash
+node runtime_check.mjs      # 1. every script block parses + top level executes (6/6)
+node harness.mjs            # 2. static assertions — strings/structures that must exist / must not come back
+node functional_check.mjs   # 3. calls the app's real functions in a sandbox — logic inside function bodies
+```
+
+Each catches what the others cannot. Proven 2026-08-18: inverting newest-wins inside `pepRestoreFromCloud` (Jon reinstalls → loses protocol) passed gate 1 AND gate 2, failed gate 3 with named got/want failures.
+
+Functional tests live in `tests/<domain>.mjs` — one file per domain, own sandbox each. API: `export default function({ test, assert, app, signIn, seed, read, reset })`. `app.<fn>` is every top-level `function`/`var` in index.html (`let`/`const` are not reachable — JS rule). `signIn(uid)` sets currentSession; `seed(key, obj|string|null)` / `read(key)` / `reset()` drive localStorage. `node functional_check.mjs <domain>` runs one file. Run all three unpiped.
+
 ## METRICS FOR A GOOD BUILD
 
 A build is complete when:
 1. `node runtime_check.mjs` — RUNTIME CHECK CLEAN, exit 0
 2. `node harness.mjs` — all tests pass
-3. `git push origin main` — succeeds
+3. `node functional_check.mjs` — FUNCTIONAL CHECK CLEAN
+4. `git push origin main` — succeeds
 4. Version number visible on Jon's phone after PWA refresh
 5. The specific thing that was broken is now fixed on the live app
 

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.166';
+var APP_VERSION='4.9.167';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23255,6 +23255,16 @@ function submitWeightCheckin(){
   athlete.lastWeightCheckin=new Date().toISOString();
   athlete.bw=w;
   saveAthlete(athlete);
+  // v4.9.167 (PM ruling, 2026-08-18): the dated nutrition daily weigh-in is the
+  // authoritative weight record — it is what macro targets are recalculated from.
+  // athlete.bw above stays as the snapshot the rest of the app reads, so this is an
+  // addition, not a replacement. Deliberately called WITHOUT a date key: letting
+  // nutRecordWeight default to Nutrition's own _nutToday() keeps the date convention
+  // owned by one domain, so any fix there propagates here instead of forking.
+  if(typeof nutRecordWeight === 'function'){
+    try { nutRecordWeight(w); }
+    catch(_nw){ console.warn('[PHX] nutRecordWeight failed:', _nw); }
+  }
   var banner=document.getElementById('weight-checkin-banner');
   if(banner) banner.style.display='none';
 }

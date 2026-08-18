@@ -595,4 +595,63 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(inner.innerHTML.length > 50, `branch ${i} rendered real content`);
     });
   });
+
+  // ── Weekly check-in feeds the nutrition weight log (v4.9.167) ─────────────
+  // PM ruling 2026-08-18: the dated nutrition daily weigh-in is the authoritative
+  // weight record — macro targets are recalculated from it. Nutrition found that
+  // the weight Jon logs never reached targets at all. athlete.bw stays as the
+  // snapshot the rest of the app reads, so this is an addition, not a swap.
+  //
+  // These drive submitWeightCheckin itself, not nutRecordWeight — per the standard
+  // that came out of .165, calling the helper a function uses does not cover the
+  // function. That means stubbing the input element it reads, because the sandbox's
+  // getElementById hands back a fresh object on every call.
+
+  const driveCheckin = (kg, { withNutrition = true } = {}) => {
+    reset();
+    signIn(UID);
+    app.athlete = { id: UID, name: 'Jon', bw: 0, weightLog: [] };
+    if (withNutrition) {
+      // Minimal nutrition state — enough for nutGetState() to return an object.
+      seed(`phx_nut_v1_${UID}`, { profile: { weight_kg: 80, height_cm: 180, age: 40, sex: 'male' }, goal: 'maintain', daily: {}, targets: {} });
+    }
+    const input = { value: String(kg), style: {} };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'weight-checkin-input' ? input : realGet.call(app.document, id));
+    try { app.submitWeightCheckin(); }
+    finally { app.document.getElementById = realGet; }
+  };
+
+  // Nutrition's own date convention — nutRecordWeight defaults to _nutToday(), which
+  // is toISOString().slice(0,10), i.e. UTC. Asserted against the same expression on
+  // purpose: this test must track what the app actually does, not what I assume.
+  const nutTodayKey = () => new Date().toISOString().slice(0, 10);
+
+  test('a weekly weigh-in reaches the nutrition daily log', () => {
+    driveCheckin(84.5);
+    const ns = read(`phx_nut_v1_${UID}`);
+    assert.ok(ns.daily[nutTodayKey()], 'a daily record exists for today');
+    assert.equal(ns.daily[nutTodayKey()].weight_kg, 84.5, 'and it holds the submitted weight');
+  });
+
+  test('the weekly weigh-in still updates athlete.bw as well', () => {
+    driveCheckin(84.5);
+    assert.equal(app.athlete.bw, 84.5, 'athlete.bw remains the snapshot');
+    assert.equal(app.athlete.weightLog.length, 1, 'and the weight log still gets its entry');
+  });
+
+  test('with no nutrition state, the check-in still works and does not throw', () => {
+    // Jon may never have opened Nutrition. nutRecordWeight returns false and writes
+    // nothing — deliberate, per Nutrition's contract. The check-in must not care.
+    driveCheckin(84.5, { withNutrition: false });
+    assert.equal(app.athlete.bw, 84.5, 'athlete.bw updated regardless');
+    assert.equal(read(`phx_nut_v1_${UID}`), null, 'and no nutrition state was invented');
+  });
+
+  test('an out-of-range weight writes nothing anywhere', () => {
+    driveCheckin(500);
+    assert.equal(app.athlete.bw, 0, 'athlete.bw untouched');
+    const ns = read(`phx_nut_v1_${UID}`);
+    assert.equal(Object.keys(ns.daily).length, 0, 'and nothing reached the nutrition log');
+  });
 }

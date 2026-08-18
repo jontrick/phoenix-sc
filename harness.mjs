@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.166'", 'version is 4.9.166');
+has("var APP_VERSION='4.9.167'", 'version is 4.9.167');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1289,6 +1289,22 @@ has('id="nav-programme4"',         'NAV: calendar screen carries the bottom nav'
   if (!missing.length) ok('TODAY: every blabCal* name that is called is also defined');
   else bad(`TODAY: called but never defined — ${missing.join(', ')}. ` +
            `runtime_check cannot see this (function bodies never run); it reaches the athlete as a dead button.`);
+})();
+
+// ── Weekly check-in feeds the nutrition weight log (v4.9.167) ───────────────
+console.log('\nWeight check-in → nutrition:');
+has('nutRecordWeight(w);',                  'WEIGHT: check-in records to the nutrition daily log');
+has("typeof nutRecordWeight === 'function'",'WEIGHT: call is typeof-guarded across domains');
+has('athlete.bw=w;',                        'WEIGHT: athlete.bw snapshot still written');
+// The call must come AFTER the athlete write, so a throw in Nutrition's code can
+// never cost the weigh-in Jon just entered.
+(() => {
+  const fn = html.slice(html.indexOf('function submitWeightCheckin'));
+  const body = fn.slice(0, fn.indexOf('\n}'));
+  const bw  = body.indexOf('athlete.bw=w;');
+  const nut = body.indexOf('nutRecordWeight(w);');
+  if (bw > -1 && nut > -1 && bw < nut) ok('WEIGHT: athlete.bw is written before the cross-domain call');
+  else bad(`WEIGHT: nutRecordWeight at ${nut}, athlete.bw at ${bw} — the athlete write must come first so a fault in another domain cannot lose the weigh-in.`);
 })();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);

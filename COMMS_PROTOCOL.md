@@ -106,6 +106,15 @@ Worktree-session quirk (Training, 2026-08-18): the harness refuses compound shel
 - **"The test passes" and "the test proves what I said" are different claims.** Only report the second. Invert the specific guard you are crediting, not a neighbour.
 - **Parked work**: if a small change must wait for a domain's next push, commit it to your `worktree-<domain>` branch and push the BRANCH (CLAUDE.md rule 2 — in-progress work is never local-only), with no APP_VERSION bump and a commit-message note that the next push must bump.
 
+## DATE / DAY-KEY RULE (2026-08-18, after the UTC day-key incident)
+
+- Jon trains at 04:30 Brisbane (UTC+10). `toISOString().slice(0,10)` / `.split('T')[0]` is the UTC day — anything before 10:00 local files under yesterday. That was true of the nutrition day key, every coach payload's `today_date`, and every set log.
+- **Persist instants as UTC ISO strings** (`new Date().toISOString()`) — a true moment in time, correct to store.
+- **Derive day keys at READ time** via the shared PM helper `_phxLocalISO(new Date(instant))`. Never store a local day-string alongside a stored instant — two facts that can disagree.
+- **Bare day-keys** (a record that IS a day, e.g. `ns.daily[key]`, set-log `entry.date`, calendar entries) are stored as local Y-M-D via `_phxLocalISO()`.
+- Sweep rule (Training): the pattern to hunt is a LOCAL-derived Date serialised with `toISOString`, or a UTC instant string-sliced and compared against a local day key — not `toISOString` alone; instant-writers are correct as they stand.
+- History keyed the old way is left as-is (off by one only for pre-10:00 entries; a blanket shift would corrupt afternoon ones). Reader-side conversion heals comparisons retroactively without migration.
+
 ## RESTORE / MERGE RULES (Jon's rulings, 2026-08-18 — do not reopen without him)
 
 - **Common rule, all stores:** newest `_ts` wins; ISO string stamped on WRITE only; 7-row table (see Peptides' spec in `pepRestoreFromCloud`); ties → local; `_bak` one generation before any overwrite; restore returns boolean, true only when local was replaced.

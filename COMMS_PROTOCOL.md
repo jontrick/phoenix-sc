@@ -101,6 +101,14 @@ Worktree-session quirk (Training, 2026-08-18): the harness refuses compound shel
 - **A sandbox that supplies the value under test cannot test it** (Nutrition, 2026-08-18): a stub that pre-sets the storage key let a fresh-install restore write to the `guest` key and pass every gate. In functional tests, `signIn(uid)`, seed the inputs, and let the code under test derive its own keys/paths.
 - Functional tests: `tests/<domain>.mjs`, one per domain, own sandbox each. Stage it with your push.
 
+## RESTORE / MERGE RULES (Jon's rulings, 2026-08-18 — do not reopen without him)
+
+- **Common rule, all stores:** newest `_ts` wins; ISO string stamped on WRITE only; 7-row table (see Peptides' spec in `pepRestoreFromCloud`); ties → local; `_bak` one generation before any overwrite; restore returns boolean, true only when local was replaced.
+- **BLAB only:** progress can never go backwards — cloud may not lower `(week*4)+last_completed_day`; blocked regressions recorded via `_phxRecordWriteError('blabRestore.progressGuard')`. Also: an inactive local stub never shadows an active cloud programme.
+- **Peptides:** exactly one side with non-empty `stacks` wins regardless of `_ts` (read side); mirror refuses to overwrite a non-empty cloud `stacks` with an empty one (write side, `_pepStubWouldClobber`).
+- **Nutrition recipes:** NO empty-stub guard — an empty envelope only ever comes from Jon deleting his last recipe (user intent); a guard would undelete.
+- **The axis that decides whether a store needs an empty-stub guard is the ORIGIN of the empty value.** If a `getState()` SYNTHESISES a valid-looking empty object on cache miss and any write path persists it with a fresh `_ts`, a harmless tap on a new device manufactures a "newer" state that shadows the real one (and mirrors the wipe up). Guard it. If empty can only arise from a user deletion, don't — respect it. Sweep 2026-08-18: `pepGetState` (fixed .159), `blabGetState` (guarded .158), `nutGetRecipes` (no constructor, exempt), `nutGetState` (synthesises, but has NO cloud restore path today — **latent: whoever adds a nutrition-state restore must add the guard in the same commit**).
+
 The commit message tag `[TRAINING]` / `[NUTRITION]` / `[PEPTIDES]` / `[PM]` is mandatory. It is the only reliable "who shipped what" record.
 
 Because your worktree contains ONLY your edits, `git add index.html` can no longer sweep anyone else. This is what makes CLAUDE.md rule 3 (one logical change per commit) honourable again.

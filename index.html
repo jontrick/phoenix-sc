@@ -1823,6 +1823,41 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 </div>
 
+<!-- BLAB TRAINING CALENDAR (v4.9.141) -->
+<div id="screen-blab-calendar" class="screen">
+<div class="app-header">
+  <div class="icon-btn" onclick="navTo('programme')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+  <div class="header-logo">BLAB <span>CALENDAR</span></div>
+  <div style="width:36px"></div>
+</div>
+<div style="padding:14px 16px 200px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
+    <div onclick="_blabCalShiftWeek(-1)" style="width:38px;height:38px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div id="blab-cal-range" onclick="_blabCalThisWeek()" style="flex:1;text-align:center;font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);cursor:pointer;">This Week</div>
+    <div onclick="_blabCalShiftWeek(1)" style="width:38px;height:38px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+  </div>
+  <div id="blab-cal-grid"></div>
+  <div style="font-size:11px;color:var(--text3);line-height:1.6;padding:4px 2px;">Hold a session to drag it to another day, or tap it for options.</div>
+</div>
+<!-- SESSION QUEUE — unscheduled BLAB sessions, draggable onto any day -->
+<div id="blab-cal-queue-wrap" style="position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--bg2);border-top:1px solid var(--border2);padding:10px 16px 16px;box-shadow:0 -8px 30px rgba(0,0,0,0.5);">
+  <div onclick="_blabCalToggleQueue()" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding-bottom:8px;">
+    <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">Session Queue</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div id="blab-cal-queue-count" style="font-size:10px;color:var(--text3);letter-spacing:1px;"></div>
+      <div id="blab-cal-queue-toggle" style="font-size:12px;color:var(--text3);">&#9662;</div>
+    </div>
+  </div>
+  <div id="blab-cal-queue" style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;"></div>
+</div>
+</div>
+
 <!-- STATS SCREEN -->
 <div id="screen-stats" class="screen">
 <div class="app-header">
@@ -3454,7 +3489,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.140';
+var APP_VERSION='4.9.141';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8014,7 +8049,9 @@ function navTo(tab){
     'agoge-intro':'screen-agoge-intro',
     // v4.9.132: nutrition screen
     'nutrition':'screen-nutrition',
-    'peptide':'screen-peptide'};
+    'peptide':'screen-peptide',
+    // v4.9.141: BLAB training calendar
+    'blab-calendar':'screen-blab-calendar'};
   if(map[tab]){
     showScreen(map[tab]);
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -8029,6 +8066,7 @@ function navTo(tab){
   if(tab==='my-coach') openMyCoach();
   if(tab==='agoge') openAgoge();
   if(tab==='records') renderRecords();
+  if(tab==='blab-calendar'){ if(typeof _blabCalRender==='function') _blabCalRender(); }
   if(tab==='nutrition'){ _nutTab='today'; if(typeof nutRenderScreen==='function') nutRenderScreen(); }
   if(tab==='peptide'){ _pepTab='today'; if(typeof pepRenderScreen==='function') pepRenderScreen(); var _paBtn=document.getElementById('pep-add-btn'); if(_paBtn) _paBtn.onclick=function(){ if(_pepTab==='protocol') pepOpenAddStack(); else if(_pepTab==='order') pepOpenOrderPicker(); else { _pepTab='protocol'; pepRenderScreen(); } }; }
 }
@@ -19289,6 +19327,104 @@ var _PEP_TONG = [
   {cat:"AA10",  name:"Acetic Acid Water 0.6% 10mL",   mg:0,   aud:10}
 ];
 
+// -- Reconstitution defaults (vial size + BAC water) -----------------------
+// U-100 insulin syringe: 100 units = 1.0 mL.
+//   concentration (mg/mL) = vialMg / waterMl
+//   mL to draw            = doseMg / concentration
+//   units to draw         = mL * 100
+// Per-stack vialMg / waterMl (set in the edit sheet) always override these.
+var _PEP_RECON = {
+  retatrutide:{vialMg:10,  waterMl:0.5},
+  ipamorelin: {vialMg:5,   waterMl:2},
+  cjc1295:    {vialMg:5,   waterMl:2},
+  bpc157:     {vialMg:5,   waterMl:2},
+  ta1:        {vialMg:5,   waterMl:2},
+  motsc:      {vialMg:10,  waterMl:0.5},
+  klow:       {vialMg:80,  waterMl:2},
+  bpc_ghkcu_tb:{vialMg:70, waterMl:2},
+  ghkcu:      {vialMg:50,  waterMl:5},
+  tb500:      {vialMg:10,  waterMl:2},
+  nad:        {vialMg:500, waterMl:5},
+  "5amq":     {vialMg:5,   waterMl:1},
+  tesamorelin:{vialMg:10,  waterMl:2},
+  epitalon:   {vialMg:10,  waterMl:2},
+  dsip:       {vialMg:5,   waterMl:2},
+  semax:      {vialMg:5,   waterMl:2},
+  selank:     {vialMg:5,   waterMl:2},
+  semaglutide:{vialMg:5,   waterMl:2},
+  tirzepatide:{vialMg:10,  waterMl:2},
+  cagrilintide:{vialMg:5,  waterMl:2},
+  liraglutide:{vialMg:5,   waterMl:2},
+  igf1lr3:    {vialMg:1,   waterMl:1},
+  ghrp2:      {vialMg:5,   waterMl:2},
+  sermorelin: {vialMg:5,   waterMl:2},
+  hexarelin:  {vialMg:5,   waterMl:2},
+  pinealon:   {vialMg:10,  waterMl:2},
+  ara290:     {vialMg:4,   waterMl:1},
+  kpv:        {vialMg:5,   waterMl:2},
+  p21:        {vialMg:10,  waterMl:2},
+  ss31:       {vialMg:5,   waterMl:2},
+  humanin:    {vialMg:5,   waterMl:2},
+  gonadorelin:{vialMg:5,   waterMl:2},
+  kisspeptin: {vialMg:5,   waterMl:2},
+  pt141:      {vialMg:10,  waterMl:2},
+  ll37:       {vialMg:5,   waterMl:2},
+  thymalin:   {vialMg:10,  waterMl:2},
+  bronchogen: {vialMg:10,  waterMl:2},
+  cardiogen:  {vialMg:10,  waterMl:2},
+  cortagen:   {vialMg:10,  waterMl:2},
+  crystagen:  {vialMg:10,  waterMl:2},
+  foxo4:      {vialMg:5,   waterMl:2},
+  slu322:     {vialMg:10,  waterMl:1},
+  oxytocin:   {vialMg:2,   waterMl:1},
+  aod9604:    {vialMg:5,   waterMl:2}
+};
+
+function _pepNum(n){
+  if(n == null || isNaN(n)) return "";
+  var r = Math.round(n * 100) / 100;
+  return String(r);
+}
+
+// Human-readable dose. mg values under 1 render as mcg.
+function _pepFmtDose(dose, unit){
+  if(dose == null || isNaN(dose)) return "";
+  if(unit === "units") return _pepNum(dose) + "u";
+  if(unit === "mg" && dose > 0 && dose < 1) return Math.round(dose * 1000) + "mcg";
+  return _pepNum(dose) + (unit || "mg");
+}
+
+// Resolved reconstitution for a stack. Stack overrides beat compound defaults.
+function _pepRecon(stack, c){
+  var def = (c && _PEP_RECON[c.id]) || {};
+  var vialMg  = (stack && stack.vialMg  != null && stack.vialMg  !== "")  ? parseFloat(stack.vialMg)  : def.vialMg;
+  var waterMl = (stack && stack.waterMl != null && stack.waterMl !== "")  ? parseFloat(stack.waterMl) : def.waterMl;
+  if(!vialMg || !waterMl || vialMg <= 0 || waterMl <= 0) return null;
+  return {vialMg:vialMg, waterMl:waterMl, conc: vialMg / waterMl};
+}
+
+// What to actually draw up. Returns {units, ml, conc} or null when recon is unknown.
+// Compounds dosed directly in syringe units (blends) bypass the mg maths.
+function _pepDraw(dose, doseUnit, recon){
+  if(dose == null || isNaN(dose) || dose <= 0) return null;
+  if(doseUnit === "units") return {units: dose, ml: dose / 100, conc: recon ? recon.conc : null};
+  if(!recon) return null;
+  var ml = dose / recon.conc;
+  return {units: ml * 100, ml: ml, conc: recon.conc};
+}
+
+// "20u / 0.20mL" - the line Jon reads at the bench.
+function _pepDrawText(draw){
+  if(!draw) return "";
+  return _pepNum(draw.units) + "u / " + (Math.round(draw.ml * 100) / 100).toFixed(2) + "mL";
+}
+
+// "5mg in 2mL = 2.5mg/mL"
+function _pepReconText(recon){
+  if(!recon) return "";
+  return _pepNum(recon.vialMg) + "mg in " + _pepNum(recon.waterMl) + "mL = " + _pepNum(recon.conc) + "mg/mL";
+}
+
 // ── State management ──────────────────────────────────────────────────────
 function pepGetState(){
   try {
@@ -19343,8 +19479,8 @@ function _pepToday(){
 }
 
 // ── Scheduling engine ─────────────────────────────────────────────────────
-function _pepGetDoses(ps){
-  var today = _pepToday();
+function _pepGetDoses(ps, dateStr){
+  var today = dateStr || _pepToday();
   var d = new Date(today + "T12:00:00");
   var dow = d.getDay(); // 0=Sun,1=Mon,...,6=Sat
   var morning = [], anytime = [], evening = [];
@@ -19400,7 +19536,10 @@ function _pepGetDoses(ps){
 
     var timing = (c.timing || "").toLowerCase();
     var dose = stack.dose != null ? stack.dose : c.dose;
-    var item = {id:stack.compoundId, name:c.name, cat:c.cat, dose:dose, doseUnit:c.doseUnit, timing:c.timing, notes:c.notes};
+    var recon = _pepRecon(stack, c);
+    var item = {id:stack.compoundId, name:c.name, cat:c.cat, dose:dose, doseUnit:c.doseUnit,
+                timing:c.timing, notes:c.notes, dayNum:dayNum,
+                recon:recon, draw:_pepDraw(dose, c.doseUnit, recon)};
 
     if(timing.indexOf("fasted am") >= 0 || timing.indexOf("morning") >= 0) morning.push(item);
     else if(timing.indexOf("bed") >= 0 || timing.indexOf("evening") >= 0) evening.push(item);
@@ -19506,7 +19645,10 @@ function _pepTabToday(ps){
       s += "</button>";
       s += "<div style=\"flex:1;min-width:0;\">";
       s += "<div style=\"font-weight:700;font-size:14px;color:var(--text);\">" + item.name + "</div>";
-      s += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;margin-top:2px;\">" + item.dose + item.doseUnit + "</div>";
+      s += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;margin-top:2px;\">" + _pepFmtDose(item.dose, item.doseUnit) +
+           (item.draw ? "<span style=\"color:var(--text2);font-weight:700;\"> &middot; " + _pepDrawText(item.draw) + "</span>" : "") + "</div>";
+      if(item.recon) s += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + _pepReconText(item.recon) + "</div>";
+      else s += "<div style=\"font-size:10px;color:var(--gold);margin-top:2px;\">Set vial size + BAC water to see units</div>";
       s += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + item.timing + "</div>";
       if(item.notes) s += "<div style=\"font-size:10px;color:var(--text3);margin-top:4px;font-style:italic;\">" + item.notes + "</div>";
       s += "</div></div>";
@@ -19558,7 +19700,13 @@ function _pepTabProtocol(ps){
     h += "<div style=\"font-weight:700;font-size:15px;color:var(--text);\">" + cName + "</div>";
     h += "<span style=\"font-size:9px;font-weight:800;padding:2px 6px;border-radius:10px;background:" + statusColor + "22;color:" + statusColor + ";\">" + statusLabel + "</span>";
     h += "</div>";
-    h += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;\">" + (stack.dose || (c&&c.dose)||"?") + (c?c.doseUnit:"mg") + "</div>";
+    var _pDose  = (stack.dose != null ? stack.dose : (c && c.dose));
+    var _pUnit  = c ? c.doseUnit : "mg";
+    var _pRecon = _pepRecon(stack, c);
+    var _pDraw  = _pepDraw(_pDose, _pUnit, _pRecon);
+    h += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;\">" + (_pDose != null ? _pepFmtDose(_pDose, _pUnit) : "?") +
+         (_pDraw ? "<span style=\"color:var(--text2);\"> &middot; " + _pepDrawText(_pDraw) + "</span>" : "") + "</div>";
+    if(_pRecon) h += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + _pepReconText(_pRecon) + "</div>";
     h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">";
     h += "Start: " + (stack.startDate || "—");
     if(stack.cycleWeeks) h += " &middot; " + stack.cycleWeeks + "wk on";
@@ -19630,6 +19778,7 @@ function pepOpenEditStack(idx, newId){
   var isNew = idx < 0;
   var stack = isNew ? {compoundId: newId||"", status:"instock", continuous:false} : Object.assign({}, ps.stacks[idx]);
   var c = _pepCompound(stack.compoundId);
+  var _rDef = (c && _PEP_RECON[c.id]) || {};
   var ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
   var title = (isNew && c) ? "Add " + c.name : (c ? "Edit " + c.name : "Edit Stack");
@@ -19651,6 +19800,14 @@ function pepOpenEditStack(idx, newId){
     "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Off Weeks</label><br>" +
     "<input id=\"pep-e-off\" type=\"number\" step=\"1\" value=\"" + (stack.offWeeks||"") + "\" placeholder=\"0\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\"></div>" +
     "</div>" +
+    "<div style=\"font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:8px;\">Reconstitution</div>" +
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;\">" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Vial (mg)</label><br>" +
+    "<input id=\"pep-e-vial\" type=\"number\" step=\"0.1\" value=\"" + (stack.vialMg != null && stack.vialMg !== "" ? stack.vialMg : (_rDef.vialMg != null ? _rDef.vialMg : "")) + "\" placeholder=\"vial size\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">BAC Water (mL)</label><br>" +
+    "<input id=\"pep-e-water\" type=\"number\" step=\"0.1\" value=\"" + (stack.waterMl != null && stack.waterMl !== "" ? stack.waterMl : (_rDef.waterMl != null ? _rDef.waterMl : "")) + "\" placeholder=\"mL added\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "</div>" +
+    "<div id=\"pep-e-draw\" style=\"background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px;\"></div>" +
     "<div style=\"margin-bottom:12px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Status</label><br>" +
     "<select id=\"pep-e-status\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\">" +
     ["instock","pipeline","onorder","complete"].map(function(s){ return "<option value=\"" + s + "\"" + (stack.status===s?" selected":"") + ">" + {instock:"In Stock",pipeline:"Pipeline",onorder:"On Order",complete:"Complete"}[s] + "</option>"; }).join("") +
@@ -19662,6 +19819,33 @@ function pepOpenEditStack(idx, newId){
   document.body.appendChild(ov);
   document.getElementById("pep-edit-close").addEventListener("click", function(){ ov.remove(); });
   ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+
+  // Live draw-up preview - recalculates as dose / vial / water are typed.
+  function _pepEditPreview(){
+    var box = document.getElementById("pep-e-draw");
+    if(!box) return;
+    var dose  = parseFloat(document.getElementById("pep-e-dose").value);
+    var unit  = c ? c.doseUnit : "mg";
+    var recon = _pepRecon({vialMg: document.getElementById("pep-e-vial").value,
+                           waterMl: document.getElementById("pep-e-water").value}, c);
+    var draw  = _pepDraw(dose, unit, recon);
+    if(!draw){
+      box.innerHTML = "<div style=\"font-size:12px;color:var(--text3);\">Enter dose, vial size and water volume to calculate units.</div>";
+      return;
+    }
+    box.innerHTML =
+      "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;\">Draw up</div>" +
+      "<div style=\"font-family:var(--font-d);font-size:24px;font-weight:900;color:#7B68EE;line-height:1;\">" + _pepDrawText(draw) + "</div>" +
+      "<div style=\"font-size:11px;color:var(--text3);margin-top:6px;\">" + _pepFmtDose(dose, unit) + " per dose" + (recon ? " &middot; " + _pepReconText(recon) : "") + "</div>" +
+      (draw.units > 100 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Over 100 units - more than one full U-100 syringe. Use less water.</div>" : "") +
+      (draw.units > 0 && draw.units < 3 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Under 3 units - hard to measure accurately. Use more water.</div>" : "");
+  }
+  ["pep-e-dose","pep-e-vial","pep-e-water"].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener("input", _pepEditPreview);
+  });
+  _pepEditPreview();
+
   document.getElementById("pep-e-save").addEventListener("click", function(){
     var saved = {
       compoundId: stack.compoundId,
@@ -19669,6 +19853,8 @@ function pepOpenEditStack(idx, newId){
       startDate:  document.getElementById("pep-e-start").value || _pepToday(),
       cycleWeeks: parseInt(document.getElementById("pep-e-cycle").value)||null,
       offWeeks:   parseInt(document.getElementById("pep-e-off").value)||0,
+      vialMg:     parseFloat(document.getElementById("pep-e-vial").value)||null,
+      waterMl:    parseFloat(document.getElementById("pep-e-water").value)||null,
       status:     document.getElementById("pep-e-status").value,
       notes:      document.getElementById("pep-e-notes").value.trim()
     };
@@ -22698,6 +22884,819 @@ function _phxRecoveryNoteForAdd(dayName, sessionType, byDay){
   }
   return {kind:'ok', text:'Good addition. Your week is balanced.'};
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// BLAB TRAINING CALENDAR (v4.9.141)
+// Weekly drag-and-drop scheduler for BLAB sessions. BLAB stays SEQUENTIAL
+// (W1D1 -> W1D2 -> ... -> W12D4) but is NOT calendar-locked: the athlete drags
+// each session onto whatever calendar day suits. A BLAB "week" of 4 sessions can
+// start on any day and may span two ISO calendar weeks.
+//
+// Storage: localStorage('blab_calendar_v1_{uid}') is the synchronous source of
+// truth. It is mirrored into blab_state.calendar (jsonb) via blabSaveState so it
+// survives a PWA reinstall — same debounced cloud path as the rest of BLAB.
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _BLAB_CAL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+var _BLAB_DAY_LABELS = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
+var _blabCalWeekOffset = 0;   // 0 = current ISO week, -1 = last, +1 = next
+var _blabCalQueueOpen = true;
+
+// ── Date helpers (LOCAL dates — never toISOString, Brisbane is UTC+10) ──────
+function _blabCalISO(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _blabCalParse(iso){
+  if(!iso) return null;
+  var p = String(iso).split('-');
+  if(p.length !== 3) return null;
+  var d = new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+  d.setHours(0,0,0,0);
+  return d;
+}
+function _blabCalToday(){ var d = new Date(); d.setHours(0,0,0,0); return d; }
+function _blabCalTodayISO(){ return _blabCalISO(_blabCalToday()); }
+function _blabCalAddDays(d, n){ var r = new Date(d.getTime()); r.setDate(r.getDate()+n); r.setHours(0,0,0,0); return r; }
+function _blabCalMonday(d){
+  var r = new Date(d.getTime()); r.setHours(0,0,0,0);
+  var dow = r.getDay();               // 0=Sun..6=Sat
+  r.setDate(r.getDate() - (dow === 0 ? 6 : dow-1));
+  return r;
+}
+function _blabCalDayDiff(a, b){ return Math.round((a.getTime() - b.getTime()) / 86400000); }
+var _BLAB_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _blabCalFmtShort(d){ return d.getDate()+' '+_BLAB_MON[d.getMonth()]; }
+
+// ── Storage ────────────────────────────────────────────────────────────────
+function _blabCalKey(){
+  var uid = currentSession && currentSession.user && currentSession.user.id;
+  return uid ? 'blab_calendar_v1_'+uid : 'blab_calendar_v1';
+}
+function _blabCalDefault(){ return { sessions: [], customs: [] }; }
+function _blabCalNormalise(c){
+  if(!c || typeof c !== 'object') return _blabCalDefault();
+  return {
+    sessions: Array.isArray(c.sessions) ? c.sessions : [],
+    customs:  Array.isArray(c.customs)  ? c.customs  : []
+  };
+}
+window.blabCalGet = function(){
+  try {
+    var raw = localStorage.getItem(_blabCalKey());
+    if(raw) return _blabCalNormalise(JSON.parse(raw));
+  } catch(_e){}
+  // No local copy — fall back to the cloud mirror held inside blab_state.
+  try {
+    var s = window.blabGetState();
+    if(s && s.calendar) return _blabCalNormalise(s.calendar);
+  } catch(_e2){}
+  return _blabCalDefault();
+};
+window.blabCalSave = function(cal){
+  if(window._blabDryRun) return;   // audit / dry-run never persists
+  var c = _blabCalNormalise(cal);
+  try { localStorage.setItem(_blabCalKey(), JSON.stringify(c)); } catch(_e){}
+  // Mirror into blab_state.calendar so the existing debounced Supabase sync carries it.
+  try {
+    var s = window.blabGetState();
+    if(s){ s.calendar = c; window.blabSaveState(s); }
+  } catch(_e2){}
+};
+// Hydrate the local key from the cloud mirror after blabRestoreFromCloud runs.
+window.blabCalHydrateFromState = function(){
+  try {
+    if(localStorage.getItem(_blabCalKey())) return false;
+    var s = window.blabGetState();
+    if(!s || !s.calendar) return false;
+    localStorage.setItem(_blabCalKey(), JSON.stringify(_blabCalNormalise(s.calendar)));
+    return true;
+  } catch(_e){ return false; }
+};
+
+// ── Entry identity + lookup ────────────────────────────────────────────────
+function _blabCalEntryId(e){
+  if(!e) return '';
+  return e.custom ? ('c:'+e.id) : ('b:'+e.blabWeek+':'+e.blabDay);
+}
+function _blabCalAllEntries(cal){
+  var c = cal || window.blabCalGet();
+  var out = [];
+  c.sessions.forEach(function(s){ out.push(s); });
+  c.customs.forEach(function(s){ s.custom = true; out.push(s); });
+  return out;
+}
+function _blabCalEntriesOn(dateISO, cal){
+  return _blabCalAllEntries(cal).filter(function(e){
+    return e.scheduledDate === dateISO && e.status !== 'skipped';
+  });
+}
+function _blabCalFindBlab(w, d, cal){
+  var c = cal || window.blabCalGet();
+  for(var i=0;i<c.sessions.length;i++){
+    if(c.sessions[i].blabWeek === w && c.sessions[i].blabDay === d) return c.sessions[i];
+  }
+  return null;
+}
+function _blabCalIsStrength(e){
+  if(!e) return false;
+  if(!e.custom) return true;                       // every BLAB session is strength
+  return String(e.cat||'').toUpperCase() === 'STRENGTH';
+}
+
+// ── Programme sequence + queue ─────────────────────────────────────────────
+// BLAB is a fixed 12-week x 4-day block. The queue is the next unscheduled
+// sessions in strict order from the athlete's current position.
+function _blabCalSeqAfter(w, d){
+  if(d >= 4) return (w >= 12) ? null : {w: w+1, d: 1};
+  return {w: w, d: d+1};
+}
+window._blabCalQueue = function(limit){
+  var lim = limit || 5;
+  var s = window.blabGetState();
+  if(!s) return [];
+  var cal = window.blabCalGet();
+  var w = s.week || 1;
+  var d = (s.last_completed_day || 0) + 1;
+  if(d > 4){ w = w + 1; d = 1; }
+  var out = [], guard = 0;
+  while(out.length < lim && w <= 12 && guard < 60){
+    guard++;
+    var existing = _blabCalFindBlab(w, d, cal);
+    if(!existing || existing.status === 'skipped'){
+      out.push({blabWeek: w, blabDay: d});
+    }
+    var nx = _blabCalSeqAfter(w, d);
+    if(!nx) break;
+    w = nx.w; d = nx.d;
+  }
+  return out;
+};
+function _blabCalLabel(w, d){ return 'W'+w+' D'+d+' — '+(_BLAB_DAY_LABELS[d] || ('Day '+d)); }
+// Key-lift summary pulled straight from the live session builder so the queue card
+// always matches what the session will actually render.
+function _blabCalKeyLifts(w, d){
+  try {
+    var sess = window.blabGetSessionData(w, d);
+    if(!sess || !Array.isArray(sess.exercises)) return '';
+    var names = [];
+    for(var i=0;i<sess.exercises.length && names.length<3;i++){
+      var n = sess.exercises[i] && sess.exercises[i].name;
+      if(n) names.push(String(n).replace(/\s*\(.*?\)\s*/g,' ').trim());
+    }
+    return names.join(' · ');
+  } catch(_e){ return ''; }
+}
+
+// ── Rule 1: 48h hard gate (Day 4 must not land within 48h of Day 2) ────────
+// Reference date = the completion date of that week's Day 2 if it has been done,
+// otherwise its scheduled date, otherwise the legacy last_completed_date path.
+// Pure date maths, so it spans ISO week boundaries correctly.
+window._blabCalDay2RefDate = function(blabWeek){
+  var cal = window.blabCalGet();
+  var d2 = _blabCalFindBlab(blabWeek, 2, cal);
+  if(d2 && d2.status !== 'skipped'){
+    var ref = d2.completedDate || d2.scheduledDate;
+    var parsed = _blabCalParse(ref);
+    if(parsed) return parsed;
+  }
+  var s = window.blabGetState();
+  if(s && s.last_completed_day === 2 && s.last_completed_date){
+    var legacy = new Date(s.last_completed_date);
+    legacy.setHours(0,0,0,0);
+    return legacy;
+  }
+  return null;
+};
+// Returns the set of ISO dates blocked for a given Day 4 placement.
+function _blabCalBlockedFor(blabWeek){
+  var ref = window._blabCalDay2RefDate(blabWeek);
+  if(!ref) return {};
+  var blocked = {};
+  blocked[_blabCalISO(ref)] = true;
+  blocked[_blabCalISO(_blabCalAddDays(ref, 1))] = true;
+  return blocked;
+}
+// Drop validation. Returns {ok, reason}. Only the 48h gate is blocking.
+window._blabCalCanDrop = function(item, dateISO){
+  if(!item || item.custom) return {ok:true, reason:''};
+  if(item.blabDay !== 4) return {ok:true, reason:''};
+  var ref = window._blabCalDay2RefDate(item.blabWeek);
+  if(!ref) return {ok:true, reason:''};
+  var target = _blabCalParse(dateISO);
+  if(!target) return {ok:true, reason:''};
+  if(_blabCalDayDiff(target, ref) < 2){
+    return {ok:false, reason:'Day 4 requires 48h after lower body'};
+  }
+  return {ok:true, reason:''};
+};
+
+// ── Rules 2-4: non-blocking advisories for the rendered week ───────────────
+// Returns {byDate: {iso: {consecutive:bool, sameDay:bool, sameDayNote:'', deload:bool}}}
+window._blabCalWarnings = function(weekDates){
+  var cal = window.blabCalGet();
+  var all = _blabCalAllEntries(cal).filter(function(e){ return e.status !== 'skipped'; });
+  var byDate = {};
+  weekDates.forEach(function(d){ byDate[_blabCalISO(d)] = {consecutive:false, sameDay:false, sameDayNote:'', deload:false}; });
+
+  // Rule 4 — deload badge. BLAB deload weeks are 5 / 10 / 15 (isDeload()).
+  var _isDl = (typeof isDeload === 'function') ? isDeload : function(w){ return w===5||w===10||w===15; };
+  all.forEach(function(e){
+    if(!e.custom && _isDl(e.blabWeek) && byDate[e.scheduledDate]) byDate[e.scheduledDate].deload = true;
+  });
+
+  // Rule 3 — two strength sessions on the same calendar day. Reuses the existing
+  // _phxRecoveryNoteForAdd logic by adapting the calendar day into its byDay shape.
+  Object.keys(byDate).forEach(function(iso){
+    var onDay = all.filter(function(e){ return e.scheduledDate === iso && _blabCalIsStrength(e); });
+    if(onDay.length >= 2){
+      byDate[iso].sameDay = true;
+      var note = '';
+      if(typeof _phxRecoveryNoteForAdd === 'function'){
+        var dt = _blabCalParse(iso);
+        var dayName = dt ? _BLAB_CAL_DAYS[(dt.getDay()+6)%7] : 'Monday';
+        var byDay = {}; byDay[dayName] = onDay.map(function(){ return {session_type:'strength'}; });
+        try {
+          var r = _phxRecoveryNoteForAdd(dayName, 'strength', byDay);
+          if(r && r.kind === 'warn') note = r.text;
+        } catch(_e){}
+      }
+      byDate[iso].sameDayNote = note || 'Two strength sessions on the same day may affect recovery.';
+    }
+  });
+
+  // Rule 2 — 3+ strength sessions on consecutive calendar days. Scans the whole
+  // calendar (not just the visible week) so a run that straddles the week edge
+  // still lights up the days that are on screen.
+  var strengthDays = {};
+  all.forEach(function(e){ if(_blabCalIsStrength(e)) strengthDays[e.scheduledDate] = true; });
+  var isoList = Object.keys(strengthDays).sort();
+  var run = [];
+  function _flushRun(){
+    if(run.length >= 3) run.forEach(function(iso){ if(byDate[iso]) byDate[iso].consecutive = true; });
+    run = [];
+  }
+  for(var i=0;i<isoList.length;i++){
+    if(!run.length){ run.push(isoList[i]); continue; }
+    var prev = _blabCalParse(run[run.length-1]);
+    var cur  = _blabCalParse(isoList[i]);
+    if(prev && cur && _blabCalDayDiff(cur, prev) === 1) run.push(isoList[i]);
+    else { _flushRun(); run.push(isoList[i]); }
+  }
+  _flushRun();
+  return {byDate: byDate};
+};
+
+// ── Smart recommendation for an empty day ─────────────────────────────────
+// Layers a "Rest" rule on top of the existing _phxWeekSmartRec heuristic.
+window._blabCalSmartRec = function(dateISO, weekDates){
+  var cal = window.blabCalGet();
+  var all = _blabCalAllEntries(cal).filter(function(e){ return e.status !== 'skipped'; });
+  var dt = _blabCalParse(dateISO);
+  if(!dt) return null;
+  function _strengthOn(d){
+    var iso = _blabCalISO(d);
+    return all.some(function(e){ return e.scheduledDate === iso && _blabCalIsStrength(e); });
+  }
+  // Rest — sandwiched between two strength days.
+  if(_strengthOn(_blabCalAddDays(dt,-1)) && _strengthOn(_blabCalAddDays(dt,1))){
+    return {type:'Rest', reason:'Strength either side — take the day'};
+  }
+  // Otherwise defer to the existing week heuristic, fed the calendar week.
+  if(typeof _phxWeekSmartRec !== 'function') return null;
+  var byDay = {};
+  _BLAB_CAL_DAYS.forEach(function(n){ byDay[n] = []; });
+  weekDates.forEach(function(d){
+    var iso = _blabCalISO(d);
+    var name = _BLAB_CAL_DAYS[(d.getDay()+6)%7];
+    all.filter(function(e){ return e.scheduledDate === iso; }).forEach(function(e){
+      byDay[name].push({session_type: e.custom ? String(e.cat||'').toLowerCase() : 'strength'});
+    });
+  });
+  var dayName = _BLAB_CAL_DAYS[(dt.getDay()+6)%7];
+  try { return _phxWeekSmartRec(dayName, 'am', byDay); } catch(_e){ return null; }
+};
+
+// ── Toast (DOM only — native dialogs are banned on iOS PWA) ────────────────
+window._blabCalToast = function(msg, kind){
+  var old = document.getElementById('blab-cal-toast');
+  if(old) old.remove();
+  var isErr = (kind === 'error');
+  var t = document.createElement('div');
+  t.id = 'blab-cal-toast';
+  t.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:120px;z-index:10600;max-width:88%;'+
+    'padding:12px 18px;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;'+
+    'letter-spacing:1px;text-align:center;line-height:1.4;pointer-events:none;'+
+    (isErr ? 'background:var(--orange);color:#fff;' : 'background:var(--gold);color:#000;');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  if(typeof vib === 'function'){ try { vib(isErr ? 120 : 40); } catch(_e){} }
+  setTimeout(function(){ var el = document.getElementById('blab-cal-toast'); if(el) el.remove(); }, 2600);
+};
+
+// ── Mutations ─────────────────────────────────────────────────────────────
+window._blabCalPlace = function(item, dateISO){
+  var gate = window._blabCalCanDrop(item, dateISO);
+  if(!gate.ok){ window._blabCalToast(gate.reason, 'error'); return false; }
+  var cal = window.blabCalGet();
+  if(item.custom){
+    var found = null;
+    for(var i=0;i<cal.customs.length;i++){ if(cal.customs[i].id === item.id){ found = cal.customs[i]; break; } }
+    if(found) found.scheduledDate = dateISO;
+    else cal.customs.push({id:item.id, cat:item.cat, libId:item.libId||null, label:item.label, scheduledDate:dateISO, status:'pending'});
+  } else {
+    var b = _blabCalFindBlab(item.blabWeek, item.blabDay, cal);
+    if(b){ b.scheduledDate = dateISO; if(b.status === 'skipped') b.status = 'pending'; }
+    else cal.sessions.push({blabWeek:item.blabWeek, blabDay:item.blabDay, scheduledDate:dateISO, status:'pending'});
+  }
+  window.blabCalSave(cal);
+  return true;
+};
+window._blabCalUnschedule = function(entryId){
+  var cal = window.blabCalGet();
+  cal.sessions = cal.sessions.filter(function(s){ return _blabCalEntryId(s) !== entryId; });
+  cal.customs  = cal.customs.filter(function(s){ s.custom = true; return _blabCalEntryId(s) !== entryId; });
+  window.blabCalSave(cal);
+  _blabCalRender();
+};
+// Called from blabCompleteSession — stamps the calendar entry as done so it drops
+// out of the queue and keeps its real completion date for the 48h gate.
+window.blabCalMarkCompleted = function(week, day){
+  if(window._blabDryRun) return;
+  var cal = window.blabCalGet();
+  var e = _blabCalFindBlab(week, day, cal);
+  var todayISO = _blabCalTodayISO();
+  if(e){ e.status = 'completed'; e.completedDate = todayISO; }
+  else cal.sessions.push({blabWeek:week, blabDay:day, scheduledDate:todayISO, status:'completed', completedDate:todayISO});
+  window.blabCalSave(cal);
+};
+
+// ── Today integration ─────────────────────────────────────────────────────
+// The pending BLAB session scheduled for today, if any. Today card reads this.
+window.blabCalTodayEntry = function(){
+  var cal = window.blabCalGet();
+  var todayISO = _blabCalTodayISO();
+  for(var i=0;i<cal.sessions.length;i++){
+    var s = cal.sessions[i];
+    if(s.scheduledDate === todayISO && s.status !== 'completed' && s.status !== 'skipped') return s;
+  }
+  return null;
+};
+// Upcoming scheduled BLAB sessions from today onward (for the Today tiles).
+window.blabCalUpcoming = function(limit){
+  var cal = window.blabCalGet();
+  var todayISO = _blabCalTodayISO();
+  return cal.sessions
+    .filter(function(s){ return s.status !== 'completed' && s.status !== 'skipped' && s.scheduledDate >= todayISO; })
+    .sort(function(a,b){ return a.scheduledDate < b.scheduledDate ? -1 : (a.scheduledDate > b.scheduledDate ? 1 : a.blabDay - b.blabDay); })
+    .slice(0, limit || 3);
+};
+
+// ── Screen open / week navigation ─────────────────────────────────────────
+window.blabCalOpen = function(){
+  _blabCalWeekOffset = 0;
+  showScreen('screen-blab-calendar');
+  _blabCalRender();
+};
+window._blabCalShiftWeek = function(n){ _blabCalWeekOffset += n; _blabCalRender(); };
+window._blabCalThisWeek = function(){ _blabCalWeekOffset = 0; _blabCalRender(); };
+
+function _blabCalVisibleWeek(){
+  var mon = _blabCalMonday(_blabCalToday());
+  mon = _blabCalAddDays(mon, _blabCalWeekOffset * 7);
+  var out = [];
+  for(var i=0;i<7;i++) out.push(_blabCalAddDays(mon, i));
+  return out;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+window._blabCalRender = function(){
+  var grid = document.getElementById('blab-cal-grid');
+  if(!grid) return;
+  var s = window.blabGetState();
+  if(!s || !s.active){
+    grid.innerHTML = '<div style="padding:50px 20px;text-align:center;">'+
+      '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;">No BLAB Programme</div>'+
+      '<div style="font-size:13px;color:var(--text2);line-height:1.6;">Start the BLAB block to schedule sessions.</div></div>';
+    var qw = document.getElementById('blab-cal-queue-wrap');
+    if(qw) qw.style.display = 'none';
+    return;
+  }
+  var week = _blabCalVisibleWeek();
+  var warn = window._blabCalWarnings(week);
+  var cal  = window.blabCalGet();
+  var todayISO = _blabCalTodayISO();
+
+  var rangeEl = document.getElementById('blab-cal-range');
+  if(rangeEl){
+    var lbl = _blabCalFmtShort(week[0])+' – '+_blabCalFmtShort(week[6]);
+    if(_blabCalWeekOffset === 0) lbl = 'This Week · '+lbl;
+    else if(_blabCalWeekOffset === 1) lbl = 'Next Week · '+lbl;
+    else if(_blabCalWeekOffset === -1) lbl = 'Last Week · '+lbl;
+    rangeEl.textContent = lbl;
+  }
+
+  grid.innerHTML = week.map(function(d){
+    var iso = _blabCalISO(d);
+    var isToday = (iso === todayISO);
+    var isPast = (iso < todayISO);
+    var w = warn.byDate[iso] || {};
+    var entries = _blabCalEntriesOn(iso, cal);
+    var dayName = _BLAB_CAL_DAYS[(d.getDay()+6)%7];
+
+    var borderCol = isToday ? 'var(--gold)' : 'var(--border)';
+    var borderW = isToday ? '2px' : '1px';
+    if(w.consecutive || w.sameDay) borderCol = 'var(--orange)';
+
+    var h = '<div data-cal-date="'+iso+'" style="background:var(--bg2);border:'+borderW+' solid '+borderCol+';'+
+      'border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;'+(isPast?'opacity:0.55;':'')+'transition:border-color 0.12s,background 0.12s;">';
+
+    // Header row — day name, date, badges
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:'+(entries.length?'10px':'6px')+';">';
+    h += '<div style="display:flex;align-items:baseline;gap:8px;">';
+    h += '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(isToday?'var(--gold)':'var(--text)')+';">'+dayName.substring(0,3)+'</div>';
+    h += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);">'+_blabCalFmtShort(d)+'</div>';
+    if(isToday) h += '<div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;color:#000;background:var(--gold);padding:2px 6px;border-radius:3px;">TODAY</div>';
+    h += '</div>';
+    h += '<div style="display:flex;gap:5px;align-items:center;">';
+    if(w.deload) h += '<div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:2px;color:var(--gold);border:1px solid var(--gold);padding:2px 6px;border-radius:3px;">DELOAD</div>';
+    if(w.consecutive) h += '<div title="3+ strength days in a row" style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--orange);border:1px solid var(--orange);padding:2px 6px;border-radius:3px;">3+ IN A ROW</div>';
+    if(w.sameDay) h += '<div style="font-family:var(--font-d);font-size:8px;font-weight:700;letter-spacing:1.5px;color:var(--orange);border:1px solid var(--orange);padding:2px 6px;border-radius:3px;">2× STRENGTH</div>';
+    h += '</div></div>';
+
+    // Scheduled sessions
+    entries.forEach(function(e){
+      var eid = _blabCalEntryId(e);
+      var done = (e.status === 'completed');
+      var title = e.custom ? (e.label || e.cat || 'Session') : _blabCalLabel(e.blabWeek, e.blabDay);
+      var sub = e.custom ? String(e.cat||'').toUpperCase() : _blabCalKeyLifts(e.blabWeek, e.blabDay);
+      var accent = done ? 'var(--text3)' : (e.custom ? 'var(--text2)' : 'var(--gold)');
+      h += '<div data-cal-drag="'+eid+'" data-cal-entry="'+eid+'" '+
+           'style="background:var(--bg3);border-left:3px solid '+accent+';border-radius:var(--radius);'+
+           'padding:9px 11px;margin-bottom:6px;cursor:pointer;'+(done?'opacity:0.6;':'')+'">'+
+             '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'+
+               '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;letter-spacing:0.5px;color:var(--text);'+(done?'text-decoration:line-through;':'')+'">'+title+'</div>'+
+               (done?'<div style="font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;color:var(--gold);">DONE</div>':
+                     '<div style="font-size:14px;color:var(--text3);line-height:1;">⠿</div>')+
+             '</div>'+
+             (sub?'<div style="font-size:10px;color:var(--text3);margin-top:3px;line-height:1.4;">'+sub+'</div>':'')+
+           '</div>';
+    });
+
+    if(w.sameDayNote){
+      h += '<div style="font-size:10px;color:var(--orange);line-height:1.4;margin-bottom:6px;">'+w.sameDayNote+'</div>';
+    }
+
+    // Empty day — smart recommendation chip + add button
+    if(!entries.length){
+      var rec = window._blabCalSmartRec(iso, week);
+      h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
+      h += '<div data-cal-add="'+iso+'" style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1.5px;'+
+           'color:var(--text3);border:1px dashed var(--border2);border-radius:var(--radius);padding:6px 12px;cursor:pointer;">+ ADD</div>';
+      if(rec){
+        var recType = String(rec.type||'');
+        var isRest = recType.toLowerCase() === 'rest';
+        h += '<div data-cal-rec="'+iso+'" data-cal-rec-type="'+recType+'" '+
+             'style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;color:'+(isRest?'var(--text3)':'var(--gold)')+';'+
+             'border:1px solid '+(isRest?'var(--border2)':'var(--gold)')+';border-radius:var(--radius);padding:6px 10px;'+(isRest?'':'cursor:pointer;')+'">'+
+             (isRest?'REST':'⚡ '+recType.toUpperCase()+' RECOMMENDED')+'</div>';
+        h += '<div style="font-size:10px;color:var(--text3);flex-basis:100%;line-height:1.4;">'+(rec.reason||'')+'</div>';
+      }
+      h += '</div>';
+    } else {
+      h += '<div data-cal-add="'+iso+'" style="font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;'+
+           'color:var(--text3);cursor:pointer;padding-top:2px;">+ ADD ANOTHER</div>';
+    }
+    h += '</div>';
+    return h;
+  }).join('');
+
+  _blabCalRenderQueue();
+  _blabCalWireGrid(grid);
+};
+
+// ── Queue panel ───────────────────────────────────────────────────────────
+window._blabCalRenderQueue = function(){
+  var wrap = document.getElementById('blab-cal-queue-wrap');
+  var body = document.getElementById('blab-cal-queue');
+  if(!wrap || !body) return;
+  wrap.style.display = '';
+  var q = window._blabCalQueue(5);
+  var countEl = document.getElementById('blab-cal-queue-count');
+  if(countEl) countEl.textContent = q.length ? (q.length+' unscheduled') : 'all scheduled';
+  body.style.display = _blabCalQueueOpen ? 'flex' : 'none';
+  var toggleEl = document.getElementById('blab-cal-queue-toggle');
+  if(toggleEl) toggleEl.textContent = _blabCalQueueOpen ? '▾' : '▴';
+  if(!q.length){
+    body.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px 2px;line-height:1.5;">Every remaining BLAB session is on the calendar.</div>';
+    return;
+  }
+  body.innerHTML = q.map(function(it){
+    var qid = 'q:'+it.blabWeek+':'+it.blabDay;
+    var lifts = _blabCalKeyLifts(it.blabWeek, it.blabDay);
+    var _isDl = (typeof isDeload === 'function') ? isDeload : function(w){ return w===5||w===10||w===15; };
+    var dl = _isDl(it.blabWeek);
+    return '<div data-cal-drag="'+qid+'" data-cal-queue="'+it.blabWeek+':'+it.blabDay+'" '+
+      'style="flex:0 0 auto;width:200px;background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);'+
+      'border-radius:var(--radius);padding:10px 12px;cursor:grab;">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;">'+
+          '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--gold);">W'+it.blabWeek+' D'+it.blabDay+'</div>'+
+          (dl?'<div style="font-family:var(--font-d);font-size:8px;letter-spacing:1.5px;color:var(--gold);border:1px solid var(--gold);padding:1px 5px;border-radius:3px;">DELOAD</div>':'')+
+        '</div>'+
+        '<div style="font-family:var(--font-d);font-size:14px;font-weight:900;color:var(--text);line-height:1.2;">'+(_BLAB_DAY_LABELS[it.blabDay]||('Day '+it.blabDay))+'</div>'+
+        (lifts?'<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.4;">'+lifts+'</div>':'')+
+      '</div>';
+  }).join('');
+};
+window._blabCalToggleQueue = function(){ _blabCalQueueOpen = !_blabCalQueueOpen; _blabCalRenderQueue(); };
+
+// ── Item resolution ───────────────────────────────────────────────────────
+// Turns a [data-cal-drag] element into a placeable item. Returns null for
+// completed sessions — those are history and must not move.
+function _blabCalResolveItem(el){
+  if(!el) return null;
+  var q = el.getAttribute('data-cal-queue');
+  if(q){
+    var qp = q.split(':');
+    return {blabWeek: parseInt(qp[0],10), blabDay: parseInt(qp[1],10)};
+  }
+  var eid = el.getAttribute('data-cal-entry');
+  if(!eid) return null;
+  var cal = window.blabCalGet();
+  if(eid.charAt(0) === 'b'){
+    var bp = eid.split(':');
+    var w = parseInt(bp[1],10), d = parseInt(bp[2],10);
+    var b = _blabCalFindBlab(w, d, cal);
+    if(b && b.status === 'completed') return null;
+    return {blabWeek: w, blabDay: d};
+  }
+  var cid = eid.slice(2);
+  for(var i=0;i<cal.customs.length;i++){
+    if(cal.customs[i].id === cid){
+      var c = cal.customs[i];
+      if(c.status === 'completed') return null;
+      return {custom:true, id:c.id, cat:c.cat, libId:c.libId, label:c.label};
+    }
+  }
+  return null;
+}
+
+// ── Drag + tap wiring (touch first, mouse for desktop testing) ────────────
+// Modelled on _phxWireWeekPlanDrag: 380ms hold arms the drag, a floating ghost
+// follows the finger, and elementFromPoint resolves the day tile underneath.
+function _blabCalWireGrid(){
+  var scr = document.getElementById('screen-blab-calendar');
+  if(!scr || scr._blabCalWired) return;
+  scr._blabCalWired = true;
+
+  var HOLD_MS = 380;
+  var holdTimer = null, dragging = false, ghost = null;
+  var srcEl = null, srcItem = null, ghostDX = 0, ghostDY = 0;
+  var lastTile = null, blockedSet = {};
+  var startX = 0, startY = 0;
+
+  function _clearHighlights(){
+    Array.prototype.forEach.call(scr.querySelectorAll('[data-cal-date]'), function(el){
+      el.style.outline = '';
+      el.style.background = 'var(--bg2)';
+    });
+  }
+  function _paintBlocked(){
+    Array.prototype.forEach.call(scr.querySelectorAll('[data-cal-date]'), function(el){
+      if(blockedSet[el.getAttribute('data-cal-date')]){
+        el.style.outline = '2px solid var(--orange)';
+        el.style.background = 'var(--orange-dim, rgba(224,92,42,0.15))';
+      }
+    });
+  }
+  function _cleanup(){
+    clearTimeout(holdTimer); holdTimer = null;
+    dragging = false;
+    if(ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    ghost = null;
+    if(srcEl) srcEl.style.opacity = '';
+    srcEl = null; srcItem = null; lastTile = null; blockedSet = {};
+    _clearHighlights();
+    document.body.style.overflow = '';
+  }
+  function _tileAt(x, y){
+    var el = document.elementFromPoint(x, y);
+    return el ? el.closest('[data-cal-date]') : null;
+  }
+
+  function _down(x, y, target){
+    var el = target && target.closest ? target.closest('[data-cal-drag]') : null;
+    if(!el) return;
+    var item = _blabCalResolveItem(el);
+    if(!item) return;
+    srcEl = el; srcItem = item;
+    startX = x; startY = y;
+    var r = el.getBoundingClientRect();
+    ghostDX = x - r.left; ghostDY = y - r.top;
+    holdTimer = setTimeout(function(){
+      dragging = true;
+      window._blabCalJustDragged = true;
+      if(typeof vib === 'function'){ try { vib(30); } catch(_e){} }
+      ghost = el.cloneNode(true);
+      ghost.removeAttribute('data-cal-drag');
+      ghost.removeAttribute('data-cal-entry');
+      ghost.removeAttribute('data-cal-queue');
+      ghost.style.cssText = 'position:fixed;left:'+(x-ghostDX)+'px;top:'+(y-ghostDY)+'px;width:'+r.width+'px;'+
+        'z-index:10500;opacity:0.94;pointer-events:none;border-radius:var(--radius);box-shadow:0 10px 40px rgba(0,0,0,0.6);';
+      document.body.appendChild(ghost);
+      el.style.opacity = '0.2';
+      // Pre-paint the days blocked by the 48h gate for this Day 4 session.
+      if(!item.custom && item.blabDay === 4) blockedSet = _blabCalBlockedFor(item.blabWeek);
+      _paintBlocked();
+    }, HOLD_MS);
+  }
+  function _move(x, y, ev){
+    if(!dragging){
+      // Moved before the hold armed — treat as a scroll, cancel the pending drag.
+      if(holdTimer && (Math.abs(x-startX) > 8 || Math.abs(y-startY) > 8)){ clearTimeout(holdTimer); holdTimer = null; srcEl = null; srcItem = null; }
+      return;
+    }
+    if(ev && ev.cancelable) ev.preventDefault();
+    if(ghost){ ghost.style.left = (x-ghostDX)+'px'; ghost.style.top = (y-ghostDY)+'px'; }
+    _clearHighlights(); _paintBlocked();
+    var tile = _tileAt(x, y);
+    lastTile = tile;
+    if(tile){
+      var iso = tile.getAttribute('data-cal-date');
+      if(blockedSet[iso]){
+        tile.style.outline = '2px solid var(--orange)';
+        tile.style.background = 'var(--orange-dim, rgba(224,92,42,0.15))';
+      } else {
+        tile.style.outline = '2px solid var(--gold)';
+        tile.style.background = 'var(--gold-dim, rgba(200,150,62,0.15))';
+      }
+    }
+  }
+  function _up(x, y){
+    if(!dragging){ _cleanup(); return; }
+    var tile = _tileAt(x, y) || lastTile;
+    var item = srcItem;
+    _cleanup();
+    if(!tile || !item) return;
+    var iso = tile.getAttribute('data-cal-date');
+    if(window._blabCalPlace(item, iso)){
+      var lbl = item.custom ? (item.label||'Session') : ('W'+item.blabWeek+' D'+item.blabDay);
+      var dt = _blabCalParse(iso);
+      window._blabCalToast(lbl+' → '+(dt ? _BLAB_CAL_DAYS[(dt.getDay()+6)%7]+' '+_blabCalFmtShort(dt) : iso));
+    }
+    _blabCalRender();
+  }
+
+  scr.addEventListener('touchstart', function(e){
+    var t = e.touches[0]; _down(t.clientX, t.clientY, e.target);
+  }, {passive:true});
+  scr.addEventListener('touchmove', function(e){
+    var t = e.touches[0]; _move(t.clientX, t.clientY, e);
+  }, {passive:false});
+  scr.addEventListener('touchend', function(e){
+    var t = e.changedTouches[0]; _up(t.clientX, t.clientY);
+  }, {passive:true});
+  scr.addEventListener('touchcancel', function(){ _cleanup(); }, {passive:true});
+
+  scr.addEventListener('mousedown', function(e){ if(e.button === 0) _down(e.clientX, e.clientY, e.target); });
+  document.addEventListener('mousemove', function(e){ if(srcEl) _move(e.clientX, e.clientY, e); });
+  document.addEventListener('mouseup', function(e){ if(srcEl) _up(e.clientX, e.clientY); });
+
+  // Taps — swallowed when a drag just finished so a drop does not also open a sheet.
+  scr.addEventListener('click', function(e){
+    if(window._blabCalJustDragged){ window._blabCalJustDragged = false; return; }
+    var addEl = e.target.closest('[data-cal-add]');
+    if(addEl){ window._blabCalOpenAddSheet(addEl.getAttribute('data-cal-add')); return; }
+    var recEl = e.target.closest('[data-cal-rec]');
+    if(recEl){
+      var rt = String(recEl.getAttribute('data-cal-rec-type')||'');
+      if(rt.toLowerCase() === 'rest') return;
+      window._blabCalOpenAddSheet(recEl.getAttribute('data-cal-rec'), rt);
+      return;
+    }
+    var entEl = e.target.closest('[data-cal-entry]');
+    if(entEl){ window._blabCalEntryTap(entEl.getAttribute('data-cal-entry')); return; }
+  });
+}
+
+// ── Entry tap sheet — preview / start / move / unschedule ─────────────────
+window._blabCalEntryTap = function(entryId){
+  var cal = window.blabCalGet();
+  var entry = null;
+  _blabCalAllEntries(cal).forEach(function(e){ if(_blabCalEntryId(e) === entryId) entry = e; });
+  if(!entry) return;
+  var isBlab = !entry.custom;
+  var title = isBlab ? _blabCalLabel(entry.blabWeek, entry.blabDay) : (entry.label || 'Session');
+  var isToday = (entry.scheduledDate === _blabCalTodayISO());
+
+  if(entry.status === 'completed'){
+    _phxOpenBottomSheet({
+      title: title, subtitle: 'Completed',
+      options: [{value:'preview', label:'View Session', sub:'Read-only breakdown'}],
+      onSelect: function(){ if(isBlab && typeof window.blabOpenAuditDay === 'function') window.blabOpenAuditDay(entry.blabWeek, entry.blabDay, false); }
+    });
+    return;
+  }
+
+  var opts = [];
+  if(isToday) opts.push({value:'start', label:'Start Session', sub:'Scheduled for today'});
+  if(isBlab) opts.push({value:'preview', label:'Preview Session', sub:'See the full build first'});
+  opts.push({value:'move',   label:'Move to Another Day', sub:'Pick a day this week'});
+  opts.push({value:'remove', label:'Unschedule', sub:'Back to the queue', danger:true});
+
+  _phxOpenBottomSheet({
+    title: title,
+    subtitle: entry.scheduledDate,
+    options: opts,
+    onSelect: function(v){
+      if(v === 'start'){
+        if(isBlab && typeof window.blabOpenSession === 'function') window.blabOpenSession(entry.blabWeek, entry.blabDay);
+        else if(entry.libId && typeof openPhxSession === 'function') openPhxSession(entry.libId);
+      }
+      else if(v === 'preview'){ if(typeof window.blabOpenAuditDay === 'function') window.blabOpenAuditDay(entry.blabWeek, entry.blabDay, false); }
+      else if(v === 'move'){ window._blabCalOpenMoveSheet(entryId); }
+      else if(v === 'remove'){ window._blabCalUnschedule(entryId); window._blabCalToast('Unscheduled'); }
+    }
+  });
+};
+
+// Non-drag fallback for moving a session — every day of the visible week, with
+// 48h-blocked days marked and rejected on selection.
+window._blabCalOpenMoveSheet = function(entryId){
+  var cal = window.blabCalGet();
+  var entry = null;
+  _blabCalAllEntries(cal).forEach(function(e){ if(_blabCalEntryId(e) === entryId) entry = e; });
+  if(!entry) return;
+  var item = entry.custom
+    ? {custom:true, id:entry.id, cat:entry.cat, libId:entry.libId, label:entry.label}
+    : {blabWeek:entry.blabWeek, blabDay:entry.blabDay};
+  var week = _blabCalVisibleWeek();
+  var opts = week.map(function(d){
+    var iso = _blabCalISO(d);
+    var gate = window._blabCalCanDrop(item, iso);
+    var name = _BLAB_CAL_DAYS[(d.getDay()+6)%7];
+    return {
+      value: iso,
+      label: name+' '+_blabCalFmtShort(d),
+      sub: gate.ok ? (iso === entry.scheduledDate ? 'Currently here' : 'Available') : gate.reason,
+      danger: !gate.ok
+    };
+  });
+  _phxOpenBottomSheet({
+    title: 'Move Session',
+    subtitle: entry.custom ? (entry.label||'Session') : _blabCalLabel(entry.blabWeek, entry.blabDay),
+    options: opts,
+    current: entry.scheduledDate,
+    onSelect: function(iso){
+      if(window._blabCalPlace(item, iso)) window._blabCalToast('Moved');
+      _blabCalRender();
+    }
+  });
+};
+
+// ── Add custom session (WOD / Core from PHX_LIB) ──────────────────────────
+window._blabCalOpenAddSheet = function(dateISO, presetType){
+  function _pickFromLib(cat){
+    var list = [];
+    try {
+      if(cat === 'WOD') list = (typeof phxAllWods === 'function') ? phxAllWods() : [];
+      else list = (typeof phxAllCore === 'function') ? phxAllCore() : [];
+    } catch(_e){ list = []; }
+    if(!list.length){ window._blabCalToast('Library unavailable', 'error'); return; }
+    _phxOpenBottomSheet({
+      title: cat === 'WOD' ? 'Pick a WOD' : 'Pick a Core Session',
+      subtitle: dateISO,
+      options: list.map(function(x){
+        return {value:x.id, label:x.name, sub:[x.tier||x.coreType||'', x.format||''].filter(Boolean).join(' · ')};
+      }),
+      onCancel: function(){ _openMain(); },
+      cancelLabel: 'Back',
+      onSelect: function(libId){
+        var picked = null;
+        for(var i=0;i<list.length;i++){ if(list[i].id === libId){ picked = list[i]; break; } }
+        if(!picked) return;
+        window._blabCalPlace({custom:true, id:'x'+String(Date.now())+String(Math.floor(Math.random()*1000)),
+          cat:cat, libId:picked.id, label:picked.name}, dateISO);
+        window._blabCalToast(picked.name+' added');
+        _blabCalRender();
+      }
+    });
+  }
+  function _openMain(){
+    var dt = _blabCalParse(dateISO);
+    _phxOpenBottomSheet({
+      title: dt ? (_BLAB_CAL_DAYS[(dt.getDay()+6)%7]+' '+_blabCalFmtShort(dt)) : 'Add Session',
+      subtitle: 'Add a session',
+      options: [
+        {value:'WOD',  label:'WOD',  sub:'Mixed-modal conditioning from the library'},
+        {value:'CORE', label:'Core', sub:'Trunk and bracing work from the library'}
+      ],
+      onSelect: function(cat){ _pickFromLib(cat); }
+    });
+  }
+  var pre = String(presetType||'').toUpperCase();
+  if(pre === 'WOD' || pre === 'CORE') _pickFromLib(pre);
+  else _openMain();
+};
+
 
 // v4.7.57: open the bottom sheet for the empty-slot "+ Add Session" CTA. Picking writes the
 // custom session to localStorage + best-effort to Supabase, then re-renders the week.

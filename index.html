@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.156';
+var APP_VERSION='4.9.157';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17788,9 +17788,19 @@ function _renderTodayNutritionPlaceholder(){
 var _nutTab = 'today';
 var _nutWeekMode = 'overview';   // WEEK tab: 'overview' | 'plan'
 
+// v4.9.157: same identity rule as _nutRecipeKey — session first, athlete as
+// fallback. No live bug here today because nutrition state is not cloud-restored,
+// but it is the same landmine: anything firing before `athlete` is assigned would
+// read and write a 'guest' key. Steady state is unchanged (the two ids are the
+// same value), and no migration is needed because every write path to this key
+// is UI-driven and cannot run before the profile has loaded.
 function _nutKey(){
-  var uid = (typeof athlete !== 'undefined' && athlete && athlete.id) ? athlete.id : 'guest';
-  return 'phx_nut_v1_' + uid;
+  var uid = null;
+  try {
+    if(typeof currentSession !== 'undefined' && currentSession && currentSession.user) uid = currentSession.user.id;
+  } catch(_e){}
+  if(!uid && typeof athlete !== 'undefined' && athlete && athlete.id) uid = athlete.id;
+  return 'phx_nut_v1_' + (uid || 'guest');
 }
 
 function nutGetState(){
@@ -19454,9 +19464,28 @@ function _nutRecCatLabel(k){
   return 'Other';
 }
 
+// v4.9.157: the session is the authoritative identity here, not `athlete`.
+// The restore hook fires from _loadProfileAndRouteInner BEFORE `athlete` is
+// assigned on the awaited (fresh install / new device) path, so keying off
+// `athlete` alone fell back to 'guest' and wrote the restored library to a key
+// nothing ever reads again — silently losing the recipes on the exact
+// lost-phone case restore exists for. athlete remains the fallback so a
+// signed-out-but-cached read still finds its own data.
 function _nutRecipeKey(){
-  var uid = (typeof athlete !== 'undefined' && athlete && athlete.id) ? athlete.id : 'guest';
-  return 'phx_recipes_v1_' + uid;
+  var uid = null;
+  try {
+    if(typeof currentSession !== 'undefined' && currentSession && currentSession.user) uid = currentSession.user.id;
+  } catch(_e){}
+  if(!uid && typeof athlete !== 'undefined' && athlete && athlete.id) uid = athlete.id;
+  return 'phx_recipes_v1_' + (uid || 'guest');
+}
+
+// Counts only. This lands in localStorage via _phxRecordWriteError and is
+// readable from the URL bar with phxLastError(), so no recipe names or gram
+// weights may appear in it.
+function _nutErrorSummary(env){
+  var arr = (env && env.recipes) ? env.recipes : (Array.isArray(env) ? env : null);
+  return { count: Array.isArray(arr) ? arr.length : 0 };
 }
 
 // v4.9.155: recipes are stored as an envelope {_ts, recipes:[...]} so the copy
@@ -19504,7 +19533,7 @@ var _nutRecMirrorTimer = null;
 function _nutRecipesMirrorToCloud(env){
   clearTimeout(_nutRecMirrorTimer);
   _nutRecMirrorTimer = setTimeout(function(){
-    var n = (env && env.recipes) ? env.recipes.length : 0;
+    var summary = _nutErrorSummary(env);
     try {
       var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
       if(!uid || typeof sb === 'undefined' || !sb) return;
@@ -19512,18 +19541,18 @@ function _nutRecipesMirrorToCloud(env){
       sb.from('profiles').update({nut_recipes: env}).eq('id', uid).then(
         function(res){
           if(res && res.error && typeof _phxRecordWriteError === 'function'){
-            _phxRecordWriteError('_nutRecipesMirrorToCloud', res.error, {count: n});
+            _phxRecordWriteError('_nutRecipesMirrorToCloud', res.error, summary);
           }
         },
         function(e){
           if(typeof _phxRecordWriteError === 'function'){
-            _phxRecordWriteError('_nutRecipesMirrorToCloud.rejected', e, {count: n});
+            _phxRecordWriteError('_nutRecipesMirrorToCloud.rejected', e, summary);
           }
         }
       );
     } catch(e){
       if(typeof _phxRecordWriteError === 'function'){
-        _phxRecordWriteError('_nutRecipesMirrorToCloud.threw', e, {count: n});
+        _phxRecordWriteError('_nutRecipesMirrorToCloud.threw', e, summary);
       }
     }
   }, 2000);
@@ -19548,7 +19577,8 @@ function _nutRecipesMirrorToCloud(env){
 // Returns TRUE only when local was actually replaced — callers repaint on true.
 function nutRestoreRecipesFromCloud(profileRow){
   try {
-    if(!profileRow || !profileRow.nut_recipes) return false;
+    var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
+    if(!uid || !profileRow || !profileRow.nut_recipes) return false;
     var cloud = profileRow.nut_recipes;
     var key = _nutRecipeKey();
     var rawLocal = localStorage.getItem(key);

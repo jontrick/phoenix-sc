@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.156'", 'version is 4.9.156');
+has("var APP_VERSION='4.9.157'", 'version is 4.9.157');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -128,7 +128,8 @@ has("nutRenderTile()", 'NUT: Today tile replaced with live render');
 // ── Weekly Prep — single-serve recipes + prep aggregator (v4.9.144) ──────────
 has('function nutGetRecipes()', 'PREP: nutGetRecipes defined');
 has('function nutSaveRecipes(list)', 'PREP: nutSaveRecipes defined');
-has("'phx_recipes_v1_' + uid", 'PREP: recipes stored under phx_recipes_v1_{uid}');
+has("'phx_recipes_v1_' + (uid || 'guest')", 'PREP: recipes stored under phx_recipes_v1_{uid}');
+has('if(!uid && typeof athlete', 'PREP: key prefers the session, falls back to athlete');
 has('function _nutRecipesMirrorToCloud(', 'PREP: Supabase mirror defined');
 has('function nutRestoreRecipesFromCloud(', 'PREP: cloud restore defined');
 has('nutRestoreRecipesFromCloud(row)', 'PREP: cloud restore wired into profile load');
@@ -156,7 +157,7 @@ hasNot("var _recipes = (_rns && _rns.recipes) ? _rns.recipes : [];", 'PREP: food
 console.log('\nExecution check — Weekly Prep aggregator:');
 try {
   const srcPrep = extract('var _NUT_REC_CATS = [', '\n// ── Week planner view');
-  const sandbox = { console, athlete: { id: 'harness' } };
+  const sandbox = { console, athlete: { id: 'harness' }, currentSession: { user: { id: 'harness' } } };
   sandbox.localStorage = {
     _d: {},
     getItem(k){ return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
@@ -359,7 +360,8 @@ has('function _nutRecipesFrom(', 'RESTORE: envelope reader defined (bare array s
 has("_ts: new Date().toISOString()", 'RESTORE: save stamps ISO _ts');
 has("cloudWins = ct > lt", 'RESTORE: strict newer-than, so ties fall to local');
 has("_phxRecordWriteError('_nutRecipesMirrorToCloud'", 'MIRROR: write errors recorded, not swallowed');
-has("{count: n}", 'MIRROR: payload is a count, never recipe values');
+has('function _nutErrorSummary(', 'MIRROR: diagnostic summary helper defined');
+has('_nutErrorSummary(env)', 'MIRROR: payload is a count, never recipe values');
 hasNot(".then(function(){}, function(){});", 'MIRROR: empty swallowing callbacks gone');
 
 // ── Today screen: meal tick-off + water counter (v4.9.145) ──────────────────
@@ -396,7 +398,7 @@ try {
   const srcPrep2 = extract('var _NUT_REC_CATS = [', '\n// ── Week planner view');
   const srcToday = extract('var _NUT_WATER_GLASS_ML', '\n// ── Today screen: planned meals')
                  + extract('// ── Today screen: water counter', '\nfunction nutRenderWaterTile()');
-  const sb2 = { console, athlete: { id: 'harness2' } };
+  const sb2 = { console, athlete: { id: 'harness2' }, currentSession: { user: { id: 'harness2' } } };
   sb2.localStorage = {
     _d: {},
     getItem(k){ return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },

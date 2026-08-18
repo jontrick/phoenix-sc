@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.146';
+var APP_VERSION='4.9.147';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7059,6 +7059,8 @@ async function _loadProfileAndRouteInner(){
         if(pRes && pRes.data && !pRes.error){
           // v4.9.99: hydrate BLAB state from server if local was wiped (PWA reinstall).
           window._lastProfileRow = pRes.data; // v4.9.102: cache for blabForceClearLocal recovery
+          // v4.9.147: fire domain restore hooks (peptide_state, nut_recipes) — hook was defined but never called.
+          try { if(typeof window._phxOnProfileFetched === 'function') window._phxOnProfileFetched(pRes.data); } catch(_e){}
           if(window.blabRestoreFromCloud && window.blabRestoreFromCloud(pRes.data)){
             try { if(typeof renderTodayScreen==='function') renderTodayScreen(); } catch(_e){}
           }
@@ -7089,6 +7091,8 @@ async function _loadProfileAndRouteInner(){
     // renderTodayScreen() in the routing block picks up the restored BLAB tile.
     window._lastProfileRow = profile; // v4.9.102: cache for blabForceClearLocal recovery
     try { if(window.blabRestoreFromCloud) window.blabRestoreFromCloud(profile); } catch(_e){}
+    // v4.9.147: fire domain restore hooks (peptide_state, nut_recipes) — hook was defined but never called.
+    try { if(typeof window._phxOnProfileFetched === 'function') window._phxOnProfileFetched(profile); } catch(_e){}
     if(profile&&!profile.name&&currentSession&&currentSession.user&&currentSession.user.user_metadata&&currentSession.user.user_metadata.name){
       profile.name=currentSession.user.user_metadata.name;
     }

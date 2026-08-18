@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.143'", 'version is 4.9.143');
+has("var APP_VERSION='4.9.144'", 'version is 4.9.144');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -457,6 +457,114 @@ hasNot('function openBenchmarkLibrary',  'legacy openBenchmarkLibrary removed');
 hasNot('function phxWodTierColour',      'legacy phxWodTierColour removed');
 hasNot('window._wlibSetFilter',          'legacy _wlib browser removed');
 hasNot('id="screen-wod-library"',        'legacy WOD Library screen removed');
+
+// ── BLAB TRAINING CALENDAR (v4.9.144) ───────────────────────────────────────
+console.log('\nBLAB Training Calendar — static wiring:');
+has('id="screen-blab-calendar"',      'CAL: calendar screen present');
+has("'blab-calendar':'screen-blab-calendar'", 'CAL: navTo route wired');
+has('id="prog-blab-cal-tile"',        'CAL: Programme tab entry point');
+has('window.blabCalOpen',             'CAL: blabCalOpen exported');
+has('window.blabCalTodayEntry',       'CAL: Today card reads scheduled session');
+has('window.blabCalMarkCompleted',    'CAL: completion stamps the calendar entry');
+has('window._blabCalDay2RefDate',     'CAL: 48h gate reads scheduled Day 2');
+has('blabCalMarkCompleted(week, day)','CAL: hooked into blabCompleteSession');
+has('blabCalHydrateFromState',        'CAL: cloud mirror rehydrated on restore');
+has("localStorage.setItem(_blabCalKey()", 'CAL: writes blab_calendar_v1_{uid}');
+has('s.calendar = c',                 'CAL: mirrors into blab_state.calendar');
+
+console.log('\nBLAB Training Calendar — rule execution:');
+try {
+  const srcCal = extract('var _BLAB_CAL_DAYS =', '// ── Screen open / week navigation');
+  const store = {};
+  const sandbox = {
+    window: {}, console,
+    currentSession: { user: { id: 'u1' } },
+    localStorage: {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = v; },
+      removeItem: (k) => { delete store[k]; }
+    },
+    isDeload: (w) => w === 5 || w === 10 || w === 15,
+    _phxWeekSmartRec: () => null,
+    _phxRecoveryNoteForAdd: () => ({ kind: 'warn', text: 'two strength' })
+  };
+  let blabState = { active: true, week: 1, last_completed_day: 0, maxes:{bench:100,squat:140,deadlift:180} };
+  sandbox.window.blabGetState = () => blabState;
+  sandbox.window.blabSaveState = (s) => { blabState = s; };
+  sandbox.window.blabGetSessionData = () => ({ exercises: [{ name: 'Bench Press' }] });
+  vm.createContext(sandbox);
+  new vm.Script(srcCal).runInContext(sandbox);
+  const W = sandbox.window;
+
+  // ── 48h hard gate, including across an ISO week boundary ──
+  // Day 2 scheduled Sunday 2026-08-23 → Day 4 blocked Sun + Mon, allowed Tue.
+  W.blabCalSave({ sessions: [{ blabWeek:1, blabDay:2, scheduledDate:'2026-08-23', status:'pending' }], customs: [] });
+  const d4 = { blabWeek:1, blabDay:4 };
+  W._blabCalCanDrop(d4, '2026-08-23').ok === false ? ok('CAL: Day 4 blocked on the Day 2 date itself') : bad('CAL: Day 4 should be blocked same-day');
+  W._blabCalCanDrop(d4, '2026-08-24').ok === false ? ok('CAL: Day 4 blocked 24h after Day 2 (crosses week boundary)') : bad('CAL: Day 4 should be blocked at +1 day');
+  W._blabCalCanDrop(d4, '2026-08-25').ok === true  ? ok('CAL: Day 4 allowed at +48h (Sun → Tue across weeks)') : bad('CAL: Day 4 should be allowed at +2 days');
+  (W._blabCalCanDrop(d4, '2026-08-24').reason === 'Day 4 requires 48h after lower body')
+    ? ok('CAL: blocking reason text matches spec') : bad('CAL: wrong blocking reason text');
+  // Non-Day-4 sessions are never gated.
+  W._blabCalCanDrop({ blabWeek:1, blabDay:3 }, '2026-08-23').ok === true
+    ? ok('CAL: gate only applies to Day 4') : bad('CAL: gate wrongly applied to Day 3');
+  // No Day 2 reference at all → no gate.
+  W.blabCalSave({ sessions: [], customs: [] });
+  W._blabCalCanDrop(d4, '2026-08-23').ok === true
+    ? ok('CAL: no Day 2 scheduled → Day 4 ungated') : bad('CAL: ungated case wrongly blocked');
+
+  // ── Queue: sequential, skips scheduled, stops at W12D4 ──
+  W.blabCalSave({ sessions: [{ blabWeek:1, blabDay:2, scheduledDate:'2026-08-20', status:'pending' }], customs: [] });
+  const q = W._blabCalQueue(4);
+  (q[0].blabDay === 1 && q[1].blabDay === 3 && q[2].blabDay === 4)
+    ? ok('CAL: queue skips already-scheduled sessions, keeps order') : bad('CAL: queue order/skip wrong — ' + JSON.stringify(q));
+  blabState = { active:true, week:12, last_completed_day:3, maxes:{bench:100,squat:140,deadlift:180} };
+  W.blabCalSave({ sessions: [], customs: [] });
+  const qEnd = W._blabCalQueue(5);
+  (qEnd.length === 1 && qEnd[0].blabWeek === 12 && qEnd[0].blabDay === 4)
+    ? ok('CAL: queue terminates at W12 D4') : bad('CAL: queue overran the 12-week block — ' + JSON.stringify(qEnd));
+  blabState = { active:true, week:1, last_completed_day:0, maxes:{bench:100,squat:140,deadlift:180} };
+
+  // ── Warnings: 3-in-a-row, same-day double, deload badge ──
+  const mkWeek = (isoMon) => { const out = []; const [y,mo,dd] = isoMon.split('-').map(Number);
+    for (let i=0;i<7;i++){ const d = new Date(y, mo-1, dd+i); out.push(d); } return out; };
+  W.blabCalSave({ sessions: [
+    { blabWeek:1, blabDay:1, scheduledDate:'2026-08-17', status:'pending' },
+    { blabWeek:1, blabDay:2, scheduledDate:'2026-08-18', status:'pending' },
+    { blabWeek:1, blabDay:3, scheduledDate:'2026-08-19', status:'pending' }
+  ], customs: [] });
+  const warn = W._blabCalWarnings(mkWeek('2026-08-17'));
+  (warn.byDate['2026-08-17'].consecutive && warn.byDate['2026-08-18'].consecutive && warn.byDate['2026-08-19'].consecutive)
+    ? ok('CAL: 3 consecutive strength days flagged amber') : bad('CAL: consecutive-strength run not flagged');
+  warn.byDate['2026-08-20'].consecutive === false
+    ? ok('CAL: non-consecutive day left unflagged') : bad('CAL: false positive on consecutive run');
+  W.blabCalSave({ sessions: [
+    { blabWeek:1, blabDay:1, scheduledDate:'2026-08-17', status:'pending' },
+    { blabWeek:1, blabDay:2, scheduledDate:'2026-08-17', status:'pending' }
+  ], customs: [] });
+  const warn2 = W._blabCalWarnings(mkWeek('2026-08-17'));
+  warn2.byDate['2026-08-17'].sameDay ? ok('CAL: two strength sessions on one day flagged') : bad('CAL: same-day double not flagged');
+  warn2.byDate['2026-08-17'].sameDayNote ? ok('CAL: same-day note reuses _phxRecoveryNoteForAdd') : bad('CAL: same-day note missing');
+  W.blabCalSave({ sessions: [{ blabWeek:5, blabDay:1, scheduledDate:'2026-08-17', status:'pending' }], customs: [] });
+  W._blabCalWarnings(mkWeek('2026-08-17')).byDate['2026-08-17'].deload
+    ? ok('CAL: deload week 5 badges the tile') : bad('CAL: deload badge missing for week 5');
+  W.blabCalSave({ sessions: [{ blabWeek:4, blabDay:1, scheduledDate:'2026-08-17', status:'pending' }], customs: [] });
+  W._blabCalWarnings(mkWeek('2026-08-17')).byDate['2026-08-17'].deload === false
+    ? ok('CAL: non-deload week not badged') : bad('CAL: false deload badge');
+
+  // ── Today integration + completion ──
+  const todayISO = (() => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+  W.blabCalSave({ sessions: [{ blabWeek:2, blabDay:3, scheduledDate:todayISO, status:'pending' }], customs: [] });
+  const te = W.blabCalTodayEntry();
+  (te && te.blabWeek === 2 && te.blabDay === 3)
+    ? ok('CAL: Today card resolves the session scheduled for today') : bad('CAL: blabCalTodayEntry did not resolve todays session');
+  W.blabCalMarkCompleted(2, 3);
+  W.blabCalTodayEntry() === null ? ok('CAL: completed session drops off the Today card') : bad('CAL: completed session still returned as today');
+  W._blabCalQueue(3).some(x => x.blabWeek === 2 && x.blabDay === 3) === false
+    ? ok('CAL: completed session leaves the queue') : bad('CAL: completed session still queued');
+} catch (e) {
+  bad('CAL: calendar rule execution failed — ' + e.message);
+}
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

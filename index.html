@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.157';
+var APP_VERSION='4.9.158';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3594,6 +3594,10 @@ window.blabSaveState = function(state){
   // every mid-session write (records, chin_max, tabata_rounds, etc.) and the cloud mirror
   // in a single place — no logging, no state change while auditing.
   if(window._blabDryRun) return;
+  // v4.9.158: stamp on write, never on read. ISO 8601 string — compared with Date.parse(),
+  // never string-compared. Every BLAB mutation funnels through here, so this is the one
+  // place the clock is touched. The calendar rides inside state.calendar and inherits it.
+  try { if(state && typeof state === 'object') state._ts = new Date().toISOString(); } catch(_ts){}
   var uid = currentSession && currentSession.user && currentSession.user.id;
   try {
     var key = uid ? 'blab_v1_' + uid : 'blab_v1';
@@ -3681,48 +3685,120 @@ try {
 // server holds a saved blab_state, hydrate localStorage from it. Local is authoritative
 // whenever present — we only fill the gap, never clobber a live local session. Pass the
 // already-fetched profile row to avoid an extra round-trip (both load paths select('*')).
+// v4.9.158 — RESTORE RESOLUTION. Common spec (Peptides/Nutrition/Training) plus one
+// BLAB-only rule Jon ruled on 2026-08-18.
+//
+// Resolution table, first match wins:
+//   1. no local value                     -> CLOUD   (the lost-phone case)
+//   2. local present but unparseable      -> CLOUD
+//   3. both stamped, cloud._ts > local._ts -> CLOUD  ** progress guard applies
+//   4. both stamped, otherwise            -> LOCAL   (ties included)
+//   5. cloud stamped, local unstamped     -> CLOUD   ** progress guard applies
+//   6. local stamped, cloud unstamped     -> LOCAL
+//   7. neither stamped                    -> LOCAL
+//
+// PROGRESS GUARD (BLAB only — Jon: "progress wins"): a newer timestamp must never roll
+// training progress backwards. It applies to rows 3 and 5, the only rows where cloud
+// replaces a VALID local state, so this can only ever DECLINE to overwrite — never make
+// cloud win a row it would otherwise lose. Strictly-less blocks; equal passes. A stale
+// second device with a recent write cannot wipe a session Jon actually logged.
+//
+// Anything replaced is kept one generation at blab_v1_{uid}_bak, never chained.
+// Returns true ONLY when local was actually replaced — the caller repaints on true.
+window.blabProgressScore = function(s){
+  if(!s || typeof s !== 'object') return -1;
+  var w = parseInt(s.week, 10); if(isNaN(w)) w = 0;
+  var d = parseInt(s.last_completed_day, 10); if(isNaN(d)) d = 0;
+  return (w * 4) + d;
+};
+
+function _blabBackupLocal(key, rawLocal){
+  try { if(rawLocal != null) localStorage.setItem(key + '_bak', rawLocal); } catch(_e){}
+}
+
+function _blabApplyCloud(key, cloud, rawLocal){
+  _blabBackupLocal(key, rawLocal);
+  localStorage.setItem(key, JSON.stringify(cloud));
+  // v4.9.143: the training calendar rides inside blab_state.calendar — rehydrate its
+  // own localStorage key from the restored blob.
+  if(typeof window.blabCalHydrateFromState === 'function'){
+    try { window.blabCalHydrateFromState(); } catch(_che){ console.warn('[PHX] blabCalHydrateFromState failed:', _che); }
+  }
+}
+
 window.blabRestoreFromCloud = function(profileRow){
   try {
     var uid = currentSession && currentSession.user && currentSession.user.id;
-    console.log('[PHX][DBG] blabRestoreFromCloud called. uid =', uid, '| profileRow present =', !!profileRow);
-    if(!uid || !profileRow) { console.log('[PHX][DBG] blabRestoreFromCloud abort: no uid or no profileRow'); return false; }
+    if(!uid || !profileRow) return false;
     var cloud = profileRow.blab_state;
-    console.log('[PHX][DBG] cloud blab_state present =', cloud != null, '| cloud.active =', (cloud && typeof cloud === 'object') ? cloud.active : '(string/unknown)');
-    if(cloud == null) { console.log('[PHX][DBG] blabRestoreFromCloud abort: cloud blab_state is null'); return false; }
+    if(cloud == null) return false;
+    // blab_state has been written as both an object and a JSON string over its life.
+    if(typeof cloud === 'string'){
+      try { cloud = JSON.parse(cloud); } catch(_pe){ return false; }
+    }
+    if(!cloud || typeof cloud !== 'object') return false;
+
     var key = 'blab_v1_' + uid;
-    // v4.9.100: content-aware guard. Local is authoritative ONLY if it holds a valid,
-    // ACTIVE state — a stale/inactive/empty stub must not shadow an active cloud state.
-    // v4.9.102: progress-aware tiebreak. When BOTH local and cloud are active, prefer
-    // whichever is further ahead by last_completed_day. A stale local stub (active:true
-    // but last_completed_day:0) must not shadow a cloud state that is further along.
-    var localRaw = localStorage.getItem(key);
-    console.log('[PHX][DBG] localRaw present =', !!localRaw);
-    if(localRaw){
-      try {
-        var ls = JSON.parse(localRaw);
-        console.log('[PHX][DBG] localRaw.active =', ls && ls.active);
-        if(ls && ls.active){
-          var cloudObj = (typeof cloud === 'string') ? JSON.parse(cloud) : cloud;
-          var localDay = (ls && ls.last_completed_day) || 0;
-          var cloudDay = (cloudObj && cloudObj.last_completed_day) || 0;
-          console.log('[PHX][DBG] both active. localDay =', localDay, '| cloudDay =', cloudDay);
-          if(cloudDay > localDay){
-            console.log('[PHX][DBG] cloud is further ahead — cloud wins');
-          } else {
-            console.log('[PHX][DBG] blabRestoreFromCloud abort: local active and >= cloud, keeping local');
-            return false;
-          }
-        }
-      } catch(_){ console.log('[PHX][DBG] localRaw parse failed'); }
+    var rawLocal = localStorage.getItem(key);
+
+    // Row 1 — nothing local. This is the phone-loss path; cloud wins outright.
+    if(!rawLocal){
+      _blabApplyCloud(key, cloud, null);
+      console.log('[PHX] BLAB state restored from cloud (no local copy)');
+      return true;
     }
-    localStorage.setItem(key, typeof cloud === 'string' ? cloud : JSON.stringify(cloud));
-    // v4.9.143: the training calendar rides inside blab_state.calendar — rehydrate its
-    // own localStorage key from the restored blob.
-    if(typeof window.blabCalHydrateFromState === 'function'){
-      try { window.blabCalHydrateFromState(); } catch(_che){ console.warn('[PHX] blabCalHydrateFromState failed:', _che); }
+
+    var local = null;
+    try { local = JSON.parse(rawLocal); } catch(_e){ local = null; }
+    // Row 2 — unreadable local is worse than the cloud copy by definition.
+    if(!local || typeof local !== 'object'){
+      _blabApplyCloud(key, cloud, rawLocal);
+      console.log('[PHX] BLAB state restored from cloud (local copy unreadable)');
+      return true;
     }
-    console.log('[PHX] BLAB state restored from Supabase');
-    console.log('[PHX][DBG] blabRestoreFromCloud SUCCESS: wrote cloud state to', key);
+
+    // Preserves the v4.9.100 rule the generic table would otherwise drop: an inactive
+    // local stub must not shadow a real, active cloud programme. An inactive local has
+    // no training progress to protect, so the progress guard does not apply here.
+    if(local.active !== true && cloud.active === true){
+      _blabApplyCloud(key, cloud, rawLocal);
+      console.log('[PHX] BLAB state restored from cloud (local inactive, cloud active)');
+      return true;
+    }
+
+    var lt = Date.parse(local._ts || '');
+    var ct = Date.parse(cloud._ts || '');
+    var localStamped = !isNaN(lt), cloudStamped = !isNaN(ct);
+
+    var cloudWins;
+    if(localStamped && cloudStamped)        cloudWins = ct > lt;   // rows 3 / 4 — ties keep local
+    else if(cloudStamped && !localStamped)  cloudWins = true;      // row 5
+    else                                    cloudWins = false;     // rows 6 / 7
+
+    if(!cloudWins) return false;
+
+    // Progress guard — rows 3 and 5 only.
+    var localScore = window.blabProgressScore(local);
+    var cloudScore = window.blabProgressScore(cloud);
+    if(cloudScore < localScore){
+      console.warn('[PHX] BLAB restore blocked: cloud is newer but behind (' +
+        'cloud W' + (cloud.week||0) + 'D' + (cloud.last_completed_day||0) + ' score ' + cloudScore + ' < ' +
+        'local W' + (local.week||0) + 'D' + (local.last_completed_day||0) + ' score ' + localScore + ')');
+      // Visible in Settings -> Diagnostic. This means a stale device is trying to
+      // overwrite a logged session; Jon would otherwise never know it happened.
+      if(typeof _phxRecordWriteError === 'function'){
+        try {
+          _phxRecordWriteError('blabRestore.progressGuard',
+            new Error('cloud newer but behind: cloud ' + cloudScore + ' < local ' + localScore),
+            { cloud: cloud, local: local });
+        } catch(_re){}
+      }
+      return false;
+    }
+
+    _blabApplyCloud(key, cloud, rawLocal);
+    console.log('[PHX] BLAB state restored from cloud (cloud ' + (cloud._ts||'unstamped') +
+      ' newer than local ' + (local._ts||'unstamped') + ')');
     return true;
   } catch(e){ console.warn('[PHX] blabRestoreFromCloud error:', e); return false; }
 };

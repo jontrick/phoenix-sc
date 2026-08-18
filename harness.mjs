@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.157'", 'version is 4.9.157');
+has("var APP_VERSION='4.9.158'", 'version is 4.9.158');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1117,6 +1117,23 @@ hasNot("}).catch(function(){});\n    } catch(_){}",           'BLAB MIRROR: keep
 }
 has('pepRestoreFromCloud(row)) _pepAfterRestore();', 'HOOK: chains peptide restore + repaint');
 has('nutRestoreRecipesFromCloud(row)) _nutAfterRestore();', 'HOOK: chains nutrition restore + repaint');
+
+// ── BLAB restore resolution (v4.9.158) ──────────────────────────────────────
+// Jon ruled 2026-08-18: newest _ts wins, EXCEPT it may never roll training
+// progress backwards. Behaviour is covered by tests/training.mjs; these pin the
+// shape so the old local-wins rule cannot creep back in.
+console.log('\nBLAB restore resolution:');
+has('state._ts = new Date().toISOString()',  'RESTORE: blabSaveState stamps _ts on write');
+has('window.blabProgressScore',              'RESTORE: progress score helper present');
+has('function _blabBackupLocal',             'RESTORE: one-generation backup helper');
+has("localStorage.setItem(key + '_bak', rawLocal)", 'RESTORE: backup writes to _bak key');
+has('if(cloudScore < localScore){',          'RESTORE: progress guard blocks a behind-but-newer cloud');
+has("_phxRecordWriteError('blabRestore.progressGuard'", 'RESTORE: blocked restore is recorded for Diagnostic');
+has('cloudWins = ct > lt;',                  'RESTORE: strict newer-wins, ties keep local');
+has('if(local.active !== true && cloud.active === true)', 'RESTORE: inactive local stub cannot shadow active cloud');
+// The pre-v4.9.158 rule: local won whenever it was active, regardless of stamps.
+hasNot("if(cloudDay > localDay){",           'RESTORE: old local-wins tiebreak removed');
+hasNot('blabRestoreFromCloud abort: local active and >= cloud', 'RESTORE: old local-wins log line removed');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -104,6 +104,100 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(!isNaN(Date.parse(saved._ts)), '_ts is a parseable ISO date');
   });
 
+  // ── Empty-stub guard (v4.9.159) ────────────────────────────────────────────
+  // Live data-loss bug on .158, found by asking whether the app can manufacture
+  // an empty protocol with a fresh _ts without Jon intending to clear anything.
+  // It can: pepGetState() invents {stacks:[],checked:{},cart:[]} whenever the key
+  // is absent, and every save path persists it. On a new phone, one tap before
+  // the profile row lands stamped an empty protocol "now", which then beat the
+  // real cloud copy on timestamp. Every case below FAILS on .158.
+
+  const REAL_CLOUD = {
+    stacks: [
+      { compoundId: 'retatrutide', dose: 6, startDate: '2026-07-01' },
+      { compoundId: 'bpc157', dose: 0.5, startDate: '2026-07-01' },
+      { compoundId: 'ta1', dose: 1.6, startDate: '2026-07-01' },
+    ],
+    checked: {}, cart: [], notes: [{ text: 'months of logged responses' }],
+    _ts: NEWER,
+  };
+  const freshDevice = () => { reset(); signIn(UID); };
+  const stacksAfterRestore = () => {
+    app.pepRestoreFromCloud({ peptide_state: REAL_CLOUD });
+    const s = read(KEY);
+    return s && s.stacks ? s.stacks.length : 0;
+  };
+
+  test('adding a cart item on a new phone cannot wipe the protocol', () => {
+    freshDevice();
+    app.pepCartAdd('BC10', 'BPC-157 10mg', 87);
+    assert.equal(stacksAfterRestore(), 3, 'protocol survived a pre-restore cart tap');
+  });
+
+  test('ticking a dose on a new phone cannot wipe the protocol', () => {
+    freshDevice();
+    app.pepToggleDose('bpc157');
+    assert.equal(stacksAfterRestore(), 3, 'protocol survived a pre-restore dose tick');
+  });
+
+  test('opening the BLOODS tab on a new phone cannot wipe the protocol', () => {
+    freshDevice();
+    const ps = app.pepGetState();
+    ps.bloods = [];
+    app.pepSaveState(ps);          // what pepBloodsLoad does after a fetch
+    assert.equal(stacksAfterRestore(), 3, 'protocol survived a pre-restore bloods load');
+  });
+
+  test('a cloud stub cannot wipe a real local protocol', () => {
+    // The symmetric case: the stub mirrors UP, so without this one tap on a new
+    // phone would propagate the wipe to a device that was working fine.
+    reset(); signIn(UID);
+    seed(KEY, { stacks: [{ compoundId: 'retatrutide' }, { compoundId: 'bpc157' }], checked: {}, cart: [], _ts: OLDER });
+    app.pepRestoreFromCloud({ peptide_state: { stacks: [], checked: {}, cart: [], _ts: NEWER } });
+    assert.equal(read(KEY).stacks.length, 2, 'local protocol survived a newer cloud stub');
+  });
+
+  test('deliberately clearing the protocol still clears — the guard must not undelete', () => {
+    reset(); signIn(UID);
+    seed(KEY, { stacks: [{ compoundId: 'ta1' }], checked: {}, cart: [], _ts: OLDER });
+    app.pepRemoveStack(0);                                   // Jon removes his last compound
+    assert.equal(read(KEY).stacks.length, 0, 'local cleared');
+    // Cloud has caught up within a debounce: both sides empty -> table decides, no resurrection.
+    app.pepRestoreFromCloud({ peptide_state: { stacks: [], checked: {}, cart: [], _ts: NEWER } });
+    assert.equal(read(KEY).stacks.length, 0, 'stayed cleared');
+  });
+
+  test('the discarded stub is recoverable from the backup key', () => {
+    freshDevice();
+    app.pepCartAdd('BC10', 'BPC-157 10mg', 87);
+    app.pepRestoreFromCloud({ peptide_state: REAL_CLOUD });
+    const bak = read(`${KEY}_bak`);
+    assert.ok(bak, 'backup written');
+    assert.equal(bak.cart.length, 1, 'the discarded tap is in the backup');
+  });
+
+  // Write side — a stub must not reach the server either, or it sits there
+  // looking authoritative to anything else that reads the column.
+  test('the mirror refuses to overwrite a real cloud protocol with an empty one', () => {
+    app.window._lastProfileRow = { peptide_state: { stacks: [{ compoundId: 'retatrutide' }], _ts: OLDER } };
+    assert.equal(app._pepStubWouldClobber({ stacks: [], _ts: NEWER }), true, 'stub write declined');
+  });
+
+  test('the mirror always sends a real protocol', () => {
+    app.window._lastProfileRow = { peptide_state: { stacks: [{ compoundId: 'retatrutide' }], _ts: OLDER } };
+    assert.equal(app._pepStubWouldClobber({ stacks: [{ compoundId: 'ta1' }], _ts: NEWER }), false, 'real write allowed');
+  });
+
+  test('the mirror sends an empty state when the cloud is empty too — a real clear', () => {
+    app.window._lastProfileRow = { peptide_state: { stacks: [], _ts: OLDER } };
+    assert.equal(app._pepStubWouldClobber({ stacks: [], _ts: NEWER }), false, 'clear propagates');
+  });
+
+  test('a missing cached profile row never blocks a real write', () => {
+    app.window._lastProfileRow = null;
+    assert.equal(app._pepStubWouldClobber({ stacks: [], _ts: NEWER }), false, 'sends when cache is absent');
+  });
+
   // ── Storage key derivation ─────────────────────────────────────────────────
   // Nutrition shipped a fresh-install bug where the restore wrote to a "_guest"
   // key because it derived from athlete.id, which is null when the hook fires —

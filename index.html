@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.158';
+var APP_VERSION='4.9.159';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20752,10 +20752,38 @@ function _pepMirrorToCloud(ps){
 // v4.9.154: errors are surfaced, not swallowed. The empty .then(function(){})
 // this replaces is why a missing peptide_state column went unnoticed for 12
 // versions — every write failed silently from v4.9.138 onward.
+// v4.9.159: the read-side guard stops a stub WINNING, but without this a stub
+// still reaches the server and sits there looking authoritative to anything else
+// that reads the column. Declines the write when local has no protocol and the
+// last-known cloud copy does. Records the refusal rather than dropping it
+// silently — an invisible skipped write is how the mirror hid for 12 versions.
+// If the cached profile row is unavailable we send: never block a real write on
+// a missing cache.
+function _pepStubWouldClobber(payload){
+  try {
+    if(payload && payload.stacks && payload.stacks.length) return false;   // real protocol, always send
+    var row = window._lastProfileRow;
+    if(!row || !row.peptide_state) return false;                            // no cached cloud copy — send
+    var cloudStacks = row.peptide_state.stacks;
+    return !!(cloudStacks && cloudStacks.length);                           // cloud has one, we do not
+  } catch(_e){ return false; }
+}
+
 function _pepSendCloud(payload, useKeepalive){
   try {
     var uid = currentSession && currentSession.user && currentSession.user.id;
     if(!uid || payload == null) return;
+    if(_pepStubWouldClobber(payload)){
+      console.warn("[PHX] peptide mirror declined: refusing to overwrite a real cloud protocol with an empty one");
+      if(typeof _phxRecordWriteError === "function"){
+        var cloudCount = 0;
+        try { cloudCount = window._lastProfileRow.peptide_state.stacks.length; } catch(_e2){}
+        _phxRecordWriteError("pepMirror.stubSuppressed",
+          {message: "empty local stacks would have overwritten " + cloudCount + " cloud compounds", code: "STUB_SUPPRESSED"},
+          Object.assign({cloud_stacks: cloudCount}, _pepErrorSummary(payload)));
+      }
+      return;
+    }
     if(useKeepalive){
       // The SDK's promise chain can be dropped as the page goes away; a keepalive
       // PATCH lets the browser finish the request anyway. Same approach as BLAB.
@@ -20846,6 +20874,38 @@ function pepRestoreFromCloud(profileRow){
       _pepBackupLocal(key, rawLocal);
       localStorage.setItem(key, JSON.stringify(cloud));
       console.log("[PHX] peptide state restored from cloud (local copy unreadable)");
+      return true;
+    }
+
+    // v4.9.159 STUB GUARD — runs BEFORE the timestamp table.
+    //
+    // pepGetState() manufactures {stacks:[],checked:{},cart:[]} whenever the key
+    // is absent, and all 12 pepSaveState call sites will happily persist that with
+    // a fresh _ts. So on a new device, adding a cart item / ticking a dose / merely
+    // opening the BLOODS tab — before the profile row lands — writes an EMPTY
+    // protocol stamped now. Under the pure table that stub is "newer" and shadows
+    // a real cloud protocol: Jon reinstalls, taps once, loses everything.
+    //
+    // The empty value there carries no user intent — the app invented it. That is
+    // what separates this from a deliberate clear, where Jon removes his last stack
+    // and BOTH sides go empty within one debounce, so neither side "has" a protocol
+    // and the table decides exactly as before. The guard cannot undelete.
+    //
+    // stacks IS the protocol. notes / cart / checked are satellites and can never
+    // stand in for it. Symmetric on purpose: the stub also mirrors UP, so a cloud
+    // stub must not be allowed to shadow a real local protocol either — otherwise
+    // one tap on a new phone propagates the wipe to a device that was fine.
+    //
+    // The discarded side is always written to peptide_v1_{uid}_bak first, so the
+    // one pre-restore tap this throws away is recoverable.
+    var localHas = !!(local && local.stacks && local.stacks.length);
+    var cloudHas = !!(cloud && cloud.stacks && cloud.stacks.length);
+
+    if(localHas !== cloudHas){
+      if(!cloudHas) return false;   // local holds the protocol, cloud is a stub — keep local
+      _pepBackupLocal(key, rawLocal);
+      localStorage.setItem(key, JSON.stringify(cloud));
+      console.log("[PHX] peptide state restored from cloud (local was an empty stub; cloud holds " + cloud.stacks.length + " compounds)");
       return true;
     }
 

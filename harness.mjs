@@ -125,6 +125,117 @@ has("'nutrition':'screen-nutrition'", 'NUT: navigation route wired');
 has("if(tab==='nutrition')", 'NUT: navTo renders nutrition screen');
 has("nutRenderTile()", 'NUT: Today tile replaced with live render');
 
+// ── Weekly Prep — single-serve recipes + prep aggregator (v4.9.144) ──────────
+has('function nutGetRecipes()', 'PREP: nutGetRecipes defined');
+has('function nutSaveRecipes(list)', 'PREP: nutSaveRecipes defined');
+has("'phx_recipes_v1_' + uid", 'PREP: recipes stored under phx_recipes_v1_{uid}');
+has('function _nutRecipesMirrorToCloud(', 'PREP: Supabase mirror defined');
+has('function nutRestoreRecipesFromCloud(', 'PREP: cloud restore defined');
+has('nutRestoreRecipesFromCloud(row)', 'PREP: cloud restore wired into profile load');
+has('function _nutNormalizeRecipe(', 'PREP: legacy batch-recipe migration defined');
+has('function nutRecipeMacros(', 'PREP: per-serve macro calc defined');
+has('function nutRecipeServeWeight(', 'PREP: serve weight calc defined');
+has('function nutAssignRecipe(', 'PREP: week slot assignment defined');
+has('function nutBuildPrepPlan(', 'PREP: aggregator defined');
+has('function _nutPrepScale(', 'PREP: batch/yield scaling defined');
+has('function nutOpenPrepCard()', 'PREP: prep card overlay defined');
+has('function nutOpenRecipePicker(', 'PREP: recipe picker defined');
+has('function _nutWeekPlanView(', 'PREP: week PLAN view defined');
+has('function _nutPrepText(', 'PREP: plain-text export defined');
+has('function nutOpenRecipeBuilder(editId)', 'PREP: builder takes an edit id');
+has('data-nut-prep', 'PREP: WEEKLY PREP button rendered');
+has('WEEKLY PREP', 'PREP: WEEKLY PREP label present');
+has('data-nut-week-mode', 'PREP: week Overview/Plan toggle rendered');
+has('data-nut-add-recipe', 'PREP: per-slot + Recipe button rendered');
+has('data-nut-recipe-edit', 'PREP: recipe Edit button rendered');
+has("var _nutWeekMode = 'overview'", 'PREP: _nutWeekMode state var declared');
+has('recipeId: rec.id', 'PREP: assigned components carry recipeId for aggregation');
+hasNot("var _recipes = (_rns && _rns.recipes) ? _rns.recipes : [];", 'PREP: food picker no longer reads legacy ns.recipes');
+
+// ── Execute the prep aggregator against the two spec scenarios ───────────────
+console.log('\nExecution check — Weekly Prep aggregator:');
+try {
+  const srcPrep = extract('var _NUT_REC_CATS = [', '\n// ── Week planner view');
+  const sandbox = { console, athlete: { id: 'harness' } };
+  sandbox.localStorage = {
+    _d: {},
+    getItem(k){ return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
+    setItem(k, v){ this._d[k] = String(v); },
+    removeItem(k){ delete this._d[k]; }
+  };
+  sandbox.setTimeout = () => 0;
+  sandbox.clearTimeout = () => {};
+  let _ns = { setup_done: true, targets: {}, daily: {} };
+  sandbox.nutGetState = () => _ns;
+  sandbox.nutSaveState = (s) => { _ns = s; };
+  sandbox.nutRenderTile = () => {};
+  sandbox._nutToday = () => '2026-08-19';                       // a Wednesday
+  sandbox._nutWeekStart = () => '2026-08-17';                   // that week's Monday
+  vm.createContext(sandbox);
+  const srcText = extract('// Plain-text export of the prep plan', '\n// PEPTIDE PORTAL');
+  new vm.Script(srcPrep + '\n' + srcText).runInContext(sandbox);
+
+  const sauce = { id:'r_sauce', name:'Chilli Sauce', cat:'sauce', yield_serves:4, yield_note:'', prep_method:'Blend',
+    components:[{n:'Chilli',cat:'veg',k:40,p:2,c:9,f:0.4,qty_g:30,cooked_g:0,state:'raw'},
+                {n:'Garlic',cat:'veg',k:149,p:6.4,c:33,f:0.5,qty_g:10,cooked_g:0,state:'raw'}], macros_manual:null };
+  const bowl  = { id:'r_bowl', name:'Chicken Bowl', cat:'protein', yield_serves:1, yield_note:'', prep_method:'Grill',
+    components:[{n:'Chicken',cat:'protein',k:110,p:23,c:0,f:2,qty_g:200,cooked_g:150,state:'raw'}], macros_manual:null };
+  sandbox.nutSaveRecipes([sauce, bowl]);
+
+  const days = sandbox._nutWeekDays();
+  days.length === 7 ? ok('week resolves to 7 day keys') : bad(`week resolved to ${days.length} days`);
+
+  // Scenario 1: a sauce on Mon / Wed / Fri lunch
+  sandbox.nutAssignRecipe('r_sauce','lunch',days[0],1);
+  sandbox.nutAssignRecipe('r_sauce','lunch',days[2],1);
+  sandbox.nutAssignRecipe('r_sauce','lunch',days[4],1);
+  // Scenario 2: a second recipe on the same day (Mon dinner)
+  sandbox.nutAssignRecipe('r_bowl','dinner',days[0],1);
+
+  const plan = sandbox.nutBuildPrepPlan(days);
+  const ps = plan.filter(p => p.id === 'r_sauce')[0];
+  const pb = plan.filter(p => p.id === 'r_bowl')[0];
+
+  plan.length === 2 ? ok('two different recipes both reach the prep card') : bad(`expected 2 prep entries, got ${plan.length}`);
+  ps && ps.serves === 3 ? ok('sauce counted 3 serves across Mon/Wed/Fri') : bad(`sauce serves = ${ps && ps.serves}`);
+  ps && ps.batches === 1 && ps.servesMade === 4 && ps.leftover === 1
+    ? ok('yield 4 vs need 3 → 1 batch, 4 serves, 1 spare')
+    : bad(`sauce batching wrong: ${JSON.stringify(ps && {b:ps.batches,m:ps.servesMade,l:ps.leftover})}`);
+  ps && sandbox._nutPrepBatchLine(ps) === 'Make 1 batch (4 serves, use 3) — 1 spare'
+    ? ok('batch line reads "Make 1 batch (4 serves, use 3) — 1 spare"')
+    : bad(`batch line: ${ps && sandbox._nutPrepBatchLine(ps)}`);
+  ps && ps.ingredients[0].perBatch_g === 120 && ps.ingredients[1].perBatch_g === 40
+    ? ok('single-batch raw weights scale by yield (30g→120g, 10g→40g)')
+    : bad(`batch weights wrong: ${JSON.stringify(ps && ps.ingredients)}`);
+  pb && pb.batchMode === false && sandbox._nutPrepBatchLine(pb) === 'Make 1 individual serve'
+    ? ok('single-serve recipe reports individual serves, not batches')
+    : bad(`single-serve line: ${pb && sandbox._nutPrepBatchLine(pb)}`);
+
+  // Multi-batch rounding: 7 serves of a yield-4 recipe → 2 batches
+  sandbox.nutAssignRecipe('r_sauce','snack',days[0],4);
+  const ps2 = sandbox.nutBuildPrepPlan(days).filter(p => p.id === 'r_sauce')[0];
+  ps2 && ps2.batches === 2 && ps2.ingredients[0].total_g === 240
+    ? ok('7 serves of a yield-4 recipe → 2 batches, 240g total chilli')
+    : bad(`multi-batch wrong: ${JSON.stringify(ps2 && {b:ps2.batches,t:ps2.ingredients[0].total_g})}`);
+
+  // Legacy batch recipe migrates to the per-serve model
+  sandbox.localStorage.removeItem('phx_recipes_v1_harness');
+  _ns.recipes = [{ id:'r_old', name:'Old Bowl',
+    components:[{n:'Chicken',cat:'protein',k:110,p:23,c:0,f:2,qty_g:800,state:'raw'}],
+    cookedWeight_g:1200, serveSize_g:300 }];
+  const mig = sandbox.nutGetRecipes();
+  mig.length === 1 && mig[0].yield_serves === 4 && mig[0].components[0].qty_g === 200
+    ? ok('legacy cooked-weight recipe migrates to per-serve (800g/4 = 200g, yield 4)')
+    : bad(`legacy migration wrong: ${JSON.stringify(mig)}`);
+
+  const txt = sandbox._nutPrepText([ps], 'Mon – Sun');
+  txt.includes('CHILLI SAUCE') && txt.includes('Chilli — 120g') && txt.includes('Blend')
+    ? ok('plain-text export carries name, weights and method')
+    : bad('text export missing content');
+} catch (e) {
+  bad(`prep aggregator execution failed: ${e.message}`);
+}
+
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data
 has('function ssPrevBanner(', 'P11-B1: ssPrevBanner helper defined');

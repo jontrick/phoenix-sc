@@ -46,7 +46,7 @@ If Desktop access is blocked, clone to `/tmp/phoenix-work` as a fallback, make c
 node runtime_check.mjs
 ```
 
-Must print `RUNTIME CHECK CLEAN — 6/6 script blocks executed` and exit 0. **Anything else = do not push.**
+Must print `RUNTIME CHECK CLEAN — 6/6 script blocks executed` and exit 0. **Anything else = do not push.** Run it unpiped — `node runtime_check.mjs | tail` reports `tail`'s exit status, not the checker's.
 
 It executes EVERY inline `<script>` block of index.html in document order under browser stubs (`vm` context), reports the block + line of any top-level throw, and fails on unhandled ReferenceError/TypeError rejections. Pass a path to check a different file (`node runtime_check.mjs /path/to/index.html`).
 

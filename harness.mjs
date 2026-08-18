@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.162'", 'version is 4.9.162');
+has("var APP_VERSION='4.9.163'", 'version is 4.9.163');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1174,12 +1174,37 @@ has('window._blabCalShowEarlier', 'PERPETUAL: backward extend');
 has('window._blabCalGoToday',     'PERPETUAL: jump to today');
 has('function _blabCalWireScroll','PERPETUAL: scroll watcher');
 has('function _blabCalWeekOf',    'PERPETUAL: single-week context for smart recs');
-has('_blabCalSmartRec(iso, _blabCalWeekOf(d))', 'PERPETUAL: smart rec gets one week, not the whole window');
+has('_blabCalSmartRec(dateISO, _blabCalWeekOf(', 'PERPETUAL: smart rec gets one week, not the whole window');
 // Week paging is gone entirely — no stale callers left behind in the HTML.
 hasNot('_blabCalVisibleWeek', 'PERPETUAL: week-window builder removed');
 hasNot('_blabCalWeekOffset',  'PERPETUAL: week offset state removed');
 hasNot('_blabCalShiftWeek',   'PERPETUAL: week paging control removed');
 hasNot('_blabCalThisWeek',    'PERPETUAL: this-week reset removed');
+
+// ── Preview before adding + live suggestions (v4.9.163) ─────────────────────
+console.log('\nCalendar — preview and suggestions:');
+has('window._blabCalPreviewThenAdd',   'PREVIEW: inspect-then-schedule helper');
+has('window._blabCalSuggestFor',       'SUGGEST: concrete session proposal');
+has('window._blabCalAcceptSuggestion', 'SUGGEST: accept action');
+has('window._blabCalPlaceRest',        'REST: planned rest entry');
+has('function _blabCalIsRest',         'REST: rest classifier');
+has('data-cal-suggest=',               'SUGGEST: renders as a provisional entry on the day');
+has('SUGGESTED',                       'SUGGEST: provisional entries are badged');
+// The old category-only chip is gone.
+hasNot('data-cal-rec=',                'SUGGEST: category-only chip replaced');
+hasNot('data-cal-rec-type',            'SUGGEST: category-only chip type attribute removed');
+// _phxOpenSessionDetail gained an additive third arg; the two existing call sites
+// must keep working unchanged, so pin their count.
+has('window._phxOpenSessionDetail = function(id, backCtx, opts)', 'PREVIEW: detail view takes an opts arg');
+has("opts.actionLabel || 'Start Session →'", 'PREVIEW: default action preserved for existing callers');
+(() => {
+  // Exactly one caller may pass opts — the calendar's preview-then-add. Every other
+  // caller (nine library back-buttons and tiles) must keep the default Start action.
+  const withOpts = (html.match(/_phxOpenSessionDetail\([^)]*,\s*\{/g) || []).length;
+  if (withOpts === 1) ok('PREVIEW: exactly one caller overrides the detail-view action');
+  else bad(`PREVIEW: ${withOpts} callers pass opts to _phxOpenSessionDetail, expected 1 (the calendar). ` +
+           `Every other caller must fall through to the default Start Session action.`);
+})();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

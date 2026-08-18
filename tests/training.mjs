@@ -304,4 +304,87 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     schedule({ sessions: [S(5, 3, dayFromToday(4))], customs: [] });
     assert.equal(app.blabCalHasSchedule(), true, 'calendar takes over the Today card');
   });
+
+  // ── Preview before adding, live suggestions, planned rest (v4.9.163) ──────
+  // Jon: "can the session wod and core actually open to see what they are before
+  // accepting - also can the suggested update to the calendar live as selecting
+  // sessions - even suggested rest day?"
+
+  const REST = (date) => ({ id: 'r1', cat: 'REST', libId: null, label: 'Rest Day', scheduledDate: date, status: 'pending' });
+
+  test('a planned rest day is an entry, but never a session you can start', () => {
+    schedule({ sessions: [], customs: [REST(dayFromToday(0))] });
+    const t = app.blabCalTodaySessions();
+    assert.equal(t.length, 1, 'the planned rest is on the day');
+    const v = app.blabCalEntryView(t[0]);
+    assert.equal(v.rest, true, 'flagged as rest');
+    assert.equal(v.title, 'Rest Day', 'titled as rest');
+    assert.equal(v.onStart, '', 'no start action — there is nothing to start');
+  });
+
+  test('a planned rest does not satisfy the 48h gate the way a session would', () => {
+    // Day 2 today, rest tomorrow, Day 4 the day after. The rest must not be mistaken
+    // for the lower-body session when the gate measures back to Day 2.
+    schedule({
+      sessions: [S(5, 2, dayFromToday(0)), S(5, 4, dayFromToday(1))],
+      customs: [REST(dayFromToday(1))]
+    });
+    const day4 = app.blabCalSessionsOn(dayFromToday(1)).find(e => e.blabDay === 4);
+    assert.equal(app.blabCalEntryView(day4).blocked, true, 'Day 4 still blocked one day after Day 2');
+  });
+
+  test('a planned rest does not count towards the strength warnings', () => {
+    schedule({
+      sessions: [S(5, 1, dayFromToday(0)), S(5, 2, dayFromToday(1))],
+      customs: [REST(dayFromToday(2))]
+    });
+    const days = [0, 1, 2].map(n => new Date(new Date().setDate(new Date().getDate() + n)));
+    const w = app._blabCalWarnings(days);
+    assert.equal(w.byDate[dayFromToday(2)].consecutive, false,
+      'a rest day breaks the run rather than extending it to three');
+  });
+
+  test('a planned rest counts as the calendar being in use', () => {
+    schedule({ sessions: [], customs: [REST(dayFromToday(1))] });
+    assert.equal(app.blabCalHasSchedule(), true, 'deciding to rest is still a plan');
+  });
+
+  test('an unaccepted suggestion is never stored, so it cannot reach the Today card', () => {
+    schedule({ sessions: [], customs: [] });
+    const sug = app._blabCalSuggestFor(dayFromToday(0));
+    assert.ok(sug, 'a suggestion is offered for an empty day');
+    assert.equal(app.blabCalTodaySessions().length, 0, 'but nothing is on the calendar until accepted');
+    assert.equal(app.blabCalHasSchedule(), false, 'and it does not put the calendar in charge');
+  });
+
+  test('a suggestion names a real library session, not just a category', () => {
+    // Asserted unconditionally on purpose. An `if (sug.kind === 'session')` wrapper
+    // would let this pass silently the day the suggestion engine starts returning
+    // null or rest here — a test that can quietly stop testing is worse than none.
+    schedule({ sessions: [], customs: [] });
+    const sug = app._blabCalSuggestFor(dayFromToday(3));
+    assert.ok(sug, 'a suggestion is produced');
+    assert.equal(sug.kind, 'session', 'an empty week with no core logged suggests a session');
+    assert.ok(sug.libId, 'carries a library id');
+    assert.ok(sug.label && sug.label.length > 1, 'and a real session name');
+    assert.ok(['WOD', 'CORE'].includes(sug.cat), 'categorised');
+    const real = app.phxSessionById(sug.libId);
+    assert.ok(real, 'the id resolves to an actual PHX_LIB session');
+    assert.equal(real.name, sug.label, 'and the name matches the library');
+  });
+
+  test('accepting a rest suggestion puts a real rest entry on the day', () => {
+    schedule({ sessions: [], customs: [] });
+    app._blabCalPlaceRest(dayFromToday(2));
+    const on = app.blabCalSessionsOn(dayFromToday(2));
+    assert.equal(on.length, 1, 'rest entry placed');
+    assert.equal(on[0].cat, 'REST', 'stored as a rest entry');
+    assert.equal(app.blabCalEntryView(on[0]).rest, true, 'and reads back as rest');
+  });
+
+  test('a rest day can be unscheduled again like any other entry', () => {
+    schedule({ sessions: [], customs: [REST(dayFromToday(1))] });
+    app._blabCalUnschedule('c:r1');
+    assert.equal(app.blabCalSessionsOn(dayFromToday(1)).length, 0, 'rest removed');
+  });
 }

@@ -499,4 +499,100 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     }
     assert.ok(!after.includes(pick.libId), 'something done yesterday is not proposed again this week');
   });
+
+  // ── The Today card renderer must actually RUN (v4.9.165) ──────────────────
+  // Jon: "today screen not showing what is in calandar - just todays session start
+  // that doesnt work". Cause: the renderer called _blabCalEntryView, but the
+  // function is window.blabCalEntryView. Every call threw ReferenceError, the Today
+  // inject swallowed it, and the static "Today's Session / Start training"
+  // placeholder was left on screen with a dead button.
+  //
+  // Nothing caught it for four versions because runtime_check only executes top
+  // level (an undefined name inside a function body is invisible to it) and every
+  // functional test called window.blabCalEntryView directly instead of going
+  // through the renderer. These tests invoke the renderer itself.
+
+  const stubEl = () => {
+    const el = {
+      style: {}, innerHTML: '', _attrs: {},
+      setAttribute(k, v) { this._attrs[k] = v; },
+      removeAttribute(k) { delete this._attrs[k]; },
+      querySelector: () => null
+    };
+    return el;
+  };
+
+  test('the Today renderer runs without throwing when a session is scheduled', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    const handled = app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.equal(handled, true, 'renderer took over the card');
+    assert.ok(inner.innerHTML.includes('Upper Body — Chins'), 'it rendered the scheduled session');
+    assert.ok(inner.innerHTML.includes('Start'), 'with a start action');
+  });
+
+  test('the Today card start action targets the scheduled session', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.ok(inner.innerHTML.includes('blabOpenSession(5,3)'), 'start opens W5 D3, not a sequential guess');
+  });
+
+  test('two sessions today both render, each with its own start', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.ok(inner.innerHTML.includes('2 Sessions'), 'card says there are two');
+    assert.ok(inner.innerHTML.includes('blabOpenSession(5,3)'), 'BLAB start present');
+    assert.ok(inner.innerHTML.includes('openPhxSession'), 'custom start present');
+    assert.equal(card._attrs.onclick, undefined, 'no whole-card tap when it is ambiguous');
+  });
+
+  test('an empty day offers Confirm Rest and Add Session', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(4))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    const handled = app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.equal(handled, true, 'renderer handled the empty day');
+    assert.ok(inner.innerHTML.includes('No Session Today'), 'says so plainly');
+    assert.ok(inner.innerHTML.includes('_blabCalConfirmRestToday'), 'offers confirm rest');
+    assert.ok(inner.innerHTML.includes('_blabCalAddSessionToday'), 'offers add session');
+  });
+
+  test('confirming rest from Today writes straight to the calendar', () => {
+    schedule({ sessions: [], customs: [] });
+    app._blabCalConfirmRestToday();
+    const on = app.blabCalSessionsOn(dayFromToday(0));
+    assert.equal(on.length, 1, 'rest entry created for today');
+    assert.equal(on[0].cat, 'REST', 'stored as rest');
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.ok(inner.innerHTML.includes('You planned this one'), 'and Today reflects it immediately');
+  });
+
+  test('a planned rest day renders as planned, not as an empty day', () => {
+    schedule({ sessions: [], customs: [REST(dayFromToday(0))] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.ok(inner.innerHTML.includes('Rest Day'), 'reads as a rest day');
+    assert.ok(!inner.innerHTML.includes('No Session Today'), 'not the empty-day wording');
+    assert.ok(!inner.innerHTML.includes('Start'), 'nothing to start');
+  });
+
+  test('every name the Today renderer reaches for actually exists', () => {
+    // The specific failure was an identifier that did not resolve. Exercise all four
+    // branches — one session, two sessions, planned rest, empty — so any further
+    // undefined name in the renderer throws here rather than on Jon's phone.
+    const cases = [
+      { sessions: [S(5, 3, dayFromToday(0))], customs: [] },
+      { sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] },
+      { sessions: [], customs: [REST(dayFromToday(0))] },
+      { sessions: [S(5, 4, dayFromToday(6))], customs: [] }
+    ];
+    cases.forEach((c, i) => {
+      schedule(c);
+      const card = stubEl(), inner = stubEl();
+      app._blabRenderTodayFromCalendar(card, inner, 5);
+      assert.ok(inner.innerHTML.length > 50, `branch ${i} rendered real content`);
+    });
+  });
 }

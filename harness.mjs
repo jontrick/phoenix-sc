@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.164'", 'version is 4.9.164');
+has("var APP_VERSION='4.9.165'", 'version is 4.9.165');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1231,6 +1231,44 @@ hasNot('if(v < bestT){ bestT = v; best = x; }', 'SUGGEST: first-match-forever pi
 // 3. Hold-to-drag must not start an iOS text selection.
 has('#screen-blab-calendar,#screen-blab-calendar *', 'DRAG: selection suppressed on the calendar screen');
 has('-webkit-touch-callout:none',                     'DRAG: long-press callout suppressed');
+
+// ── Today card wiring + undefined-name sweep (v4.9.165) ─────────────────────
+console.log('\nToday card wiring:');
+// The bug: the renderer called _blabCalEntryView; the function is
+// window.blabCalEntryView. Every call threw, the inject swallowed it, and the
+// static placeholder was left with a dead Start button for four versions.
+hasNot('_blabCalEntryView(', 'TODAY: no call to the non-existent _blabCalEntryView');
+has('window.blabCalEntryView(', 'TODAY: renderer uses the real exported name');
+has('No Session Today',            'TODAY: empty day says so plainly');
+has('_blabCalConfirmRestToday',    'TODAY: confirm-rest action');
+has('_blabCalAddSessionToday',     'TODAY: add-session action');
+has('function _blabCalAfterChange','TODAY: shared repaint keeps Today and calendar in step');
+has("_phxRecordWriteError('todayCard.render'", 'TODAY: a render failure is recorded, not swallowed');
+has('Could not build today',       'TODAY: a render failure is visible on the card');
+// Programme tab must reach the calendar while BLAB is running.
+has("if(tab === 'programme' && typeof blabIsActive === 'function' && blabIsActive())", 'NAV: Programme routes to the calendar under BLAB');
+has('id="nav-programme4"',         'NAV: calendar screen carries the bottom nav');
+
+// Undefined-call sweep. The failure above was an identifier that never resolved —
+// invisible to runtime_check, which only executes top level. This pins the whole
+// class for the calendar surface: every _blabCal* / blabCal* name that is CALLED
+// must also be DEFINED somewhere.
+(() => {
+  const called  = new Set([...html.matchAll(/\b(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]));
+  const defined = new Set([
+    ...[...html.matchAll(/function\s+(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]),
+    ...[...html.matchAll(/window\.(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1]),
+    ...[...html.matchAll(/(?:var|let|const)\s+(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1])
+  ]);
+  // Compared EXACTLY. An earlier draft of this guard also accepted a name with its
+  // leading underscore stripped, which made _blabCalEntryView look defined because
+  // blabCalEntryView exists — the precise bug it was written to catch. _blabCalX and
+  // blabCalX are different identifiers and must be treated as such.
+  const missing = [...called].filter(n => !defined.has(n));
+  if (!missing.length) ok('TODAY: every blabCal* name that is called is also defined');
+  else bad(`TODAY: called but never defined — ${missing.join(', ')}. ` +
+           `runtime_check cannot see this (function bodies never run); it reaches the athlete as a dead button.`);
+})();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

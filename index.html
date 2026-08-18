@@ -1848,13 +1848,13 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 <!-- BLAB TRAINING CALENDAR (v4.9.141) -->
 <div id="screen-blab-calendar" class="screen">
 <div class="app-header">
-  <div class="icon-btn" onclick="navTo('programme')">
+  <div class="icon-btn" onclick="navTo('today')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
   </div>
   <div class="header-logo">BLAB <span>CALENDAR</span></div>
   <div style="width:36px"></div>
 </div>
-<div style="padding:14px 16px 200px;">
+<div style="padding:14px 16px 270px;">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
     <div onclick="_blabCalShowEarlier()" style="height:38px;padding:0 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);">Earlier</div>
     <div id="blab-cal-range" onclick="_blabCalGoToday()" style="flex:1;text-align:center;font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);cursor:pointer;">This Week</div>
@@ -1864,7 +1864,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div style="font-size:11px;color:var(--text3);line-height:1.6;padding:4px 2px;">Hold a session to drag it to another day, or tap it for options.</div>
 </div>
 <!-- SESSION QUEUE — unscheduled BLAB sessions, draggable onto any day -->
-<div id="blab-cal-queue-wrap" style="position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--bg2);border-top:1px solid var(--border2);padding:10px 16px 16px;box-shadow:0 -8px 30px rgba(0,0,0,0.5);">
+<div id="blab-cal-queue-wrap" style="position:fixed;left:0;right:0;bottom:60px;z-index:190;background:var(--bg2);border-top:1px solid var(--border2);padding:10px 16px 16px;box-shadow:0 -8px 30px rgba(0,0,0,0.5);">
   <div onclick="_blabCalToggleQueue()" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding-bottom:8px;">
     <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">Session Queue</div>
     <div style="display:flex;align-items:center;gap:8px;">
@@ -1873,6 +1873,24 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     </div>
   </div>
   <div id="blab-cal-queue" style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;"></div>
+</div>
+<div class="bottom-nav">
+  <div class="nav-item" onclick="navTo('today')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span class="nav-label">Today</span>
+  </div>
+  <div class="nav-item active" id="nav-programme4" onclick="navTo('programme')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <span class="nav-label">Programme</span>
+  </div>
+  <div class="nav-item" id="nav-records4" onclick="navTo('records')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+    <span class="nav-label">Records</span>
+  </div>
+  <div class="nav-item" onclick="navTo('athlete')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+    <span class="nav-label">Athlete</span>
+  </div>
 </div>
 </div>
 
@@ -3511,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.164';
+var APP_VERSION='4.9.165';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8215,6 +8233,14 @@ function navTo(tab){
     'peptide':'screen-peptide',
     // v4.9.141: BLAB training calendar
     'blab-calendar':'screen-blab-calendar'};
+  // v4.9.165: with BLAB running, Programme means the training calendar. The AI
+  // programme screen has nothing to show — it renders "No Programme Yet" — so the
+  // tab was a dead end. Non-BLAB athletes keep the original screen.
+  if(tab === 'programme' && typeof blabIsActive === 'function' && blabIsActive()){
+    document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
+    document.querySelectorAll('[id^="nav-programme"]').forEach(function(n){n.classList.add('active');});
+    if(typeof blabCalOpen === 'function'){ blabCalOpen(); return; }
+  }
   if(map[tab]){
     showScreen(map[tab]);
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -17789,7 +17815,28 @@ function renderTodayScreen(){
       _card.setAttribute('onclick','openTodaySession()');
       window._todaySession = _s;
       window._todaySessions = _todaySess;
-    } catch(_e) { console.error('[PHX] direct inject failed:', _e); }
+    } catch(_e) {
+      // v4.9.165: this used to console.error and stop, which on an iPhone means the
+      // static "Today's Session / Start training" placeholder is left on screen with
+      // a button that does nothing — indistinguishable from a working app until you
+      // tap it. A ReferenceError inside this block hid a broken Today card for four
+      // versions. Surface it instead: visible on the card, and recorded for Diagnostic.
+      console.error('[PHX] direct inject failed:', _e);
+      try { if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('todayCard.render', _e, null); } catch(_r){}
+      try {
+        var _ec = document.getElementById('card-today-session');
+        var _ei = _ec && _ec.querySelector('.game-card-inner');
+        if(_ei){
+          _ei.innerHTML =
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--orange);margin-bottom:6px;">Today</div>'+
+            '<div class="game-card-title" style="font-size:26px;">Could not build today</div>'+
+            '<div style="font-size:13px;color:var(--text2);margin-top:6px;line-height:1.5;">'+((_e && _e.message) ? String(_e.message).slice(0,120) : 'Unknown error')+'</div>'+
+            '<div style="margin-top:14px;"><button onclick="event.stopPropagation();blabCalOpen()" style="width:100%;padding:13px;background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Open Calendar</button></div>';
+          _ec.style.border = '1px solid var(--orange)';
+          _ec.removeAttribute('onclick');
+        }
+      } catch(_r2){}
+    }
   })();
 
   // Session info
@@ -17836,15 +17883,20 @@ function _blabRenderTodayFromCalendar(card, inner, weekNum){
   // Nothing scheduled today. Say so plainly rather than offering a session the
   // athlete did not plan — the calendar is the source of truth once it is in use.
   if(!today.length){
+    // v4.9.165: an empty day is a decision point, not a dead end. Offer the two things
+    // that can actually be done about it — both write straight back to the calendar.
     var next = window.blabCalNextDays(1);
     var when = next.length
-      ? ('Next: ' + next[0].label + ' — ' + _blabCalEntryView(next[0].entries[0]).title)
-      : 'Nothing scheduled. Open the calendar to plan your week.';
+      ? ('Next: ' + next[0].label + ' — ' + window.blabCalEntryView(next[0].entries[0]).title)
+      : 'Nothing scheduled yet.';
     inner.innerHTML =
       '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">BLAB · Week ' + weekNum + '</div>' +
-      '<div class="game-card-title" style="font-size:30px;">Rest Day</div>' +
+      '<div class="game-card-title" style="font-size:30px;">No Session Today</div>' +
       '<div style="font-size:13px;color:var(--text2);margin-top:6px;">' + when + '</div>' +
-      '<div style="margin-top:16px;"><button onclick="event.stopPropagation();blabCalOpen()" style="width:100%;padding:13px;background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Open Calendar</button></div>';
+      '<div style="display:flex;gap:10px;margin-top:16px;">' +
+        '<button onclick="event.stopPropagation();_blabCalConfirmRestToday()" style="flex:1;padding:14px;background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text2);cursor:pointer;">Confirm Rest</button>' +
+        '<button onclick="event.stopPropagation();_blabCalAddSessionToday()" style="flex:1;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#000;cursor:pointer;">Add Session</button>' +
+      '</div>';
     card.style.border = '1px solid var(--border)';
     card.style.cursor = 'default';
     card.removeAttribute('onclick');
@@ -17856,7 +17908,7 @@ function _blabRenderTodayFromCalendar(card, inner, weekNum){
   // session. Distinct from the "Rest Day — Next: X" shown when nothing is scheduled.
   if(today.length === 1 && today[0].custom && String(today[0].cat||'').toUpperCase() === 'REST'){
     var nx = window.blabCalNextDays(1);
-    var nxt = nx.length ? ('Next: ' + nx[0].label + ' — ' + _blabCalEntryView(nx[0].entries[0]).title) : 'Nothing scheduled after today.';
+    var nxt = nx.length ? ('Next: ' + nx[0].label + ' — ' + window.blabCalEntryView(nx[0].entries[0]).title) : 'Nothing scheduled after today.';
     inner.innerHTML =
       '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Today · Planned</div>' +
       '<div class="game-card-title" style="font-size:30px;">Rest Day</div>' +
@@ -17873,7 +17925,7 @@ function _blabRenderTodayFromCalendar(card, inner, weekNum){
           (multi ? (today.length + ' Sessions') : 'Scheduled') + '</div>';
 
   today.forEach(function(e, i){
-    var v = _blabCalEntryView(e);
+    var v = window.blabCalEntryView(e);
     if(!v) return;
     var rule = (i === today.length - 1) ? '' : 'border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:14px;';
     h += '<div style="' + rule + '">';
@@ -17900,13 +17952,33 @@ function _blabRenderTodayFromCalendar(card, inner, weekNum){
     card.style.cursor = 'default';
     card.removeAttribute('onclick');
   } else {
-    var only = _blabCalEntryView(today[0]);
+    var only = window.blabCalEntryView(today[0]);
     card.style.cursor = only && !only.blocked ? 'pointer' : 'default';
     if(only && !only.blocked && only.onStart) card.setAttribute('onclick', only.onStart);
     else card.removeAttribute('onclick');
   }
   _renderTodayNextDays();
   return true;
+}
+
+// v4.9.165 — the two actions offered when today is empty. Both go through the same
+// calendar writers as the calendar screen, so the 48h gate and every other rule apply
+// identically, and whatever is chosen is immediately visible on the calendar.
+window._blabCalConfirmRestToday = function(){
+  window._blabCalPlaceRest(_blabCalTodayISO());
+  _blabCalAfterChange();
+};
+window._blabCalAddSessionToday = function(){
+  window._blabCalOpenAddSheet(_blabCalTodayISO());
+};
+// Repaint whichever screen the athlete is actually looking at. A change made from the
+// Today card must show up on the calendar and vice versa.
+function _blabCalAfterChange(){
+  try {
+    var cs = document.getElementById('screen-blab-calendar');
+    if(cs && cs.classList && cs.classList.contains('active')){ _blabCalRender(); return; }
+  } catch(_e){}
+  try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_e2){}
 }
 
 // The row under the Today card: the next few days that actually have sessions, dated.
@@ -17918,16 +17990,17 @@ function _renderTodayNextDays(){
   if(typeof window.blabCalNextDays !== 'function'){ row.innerHTML = ''; return; }
   var days = window.blabCalNextDays(3);
   if(!days.length){ row.innerHTML = ''; return; }
+  // v4.9.165: three small tiles side by side, one per upcoming day, rather than a
+  // horizontally-scrolling strip — Jon asked for the next 3 days visible at a glance.
   var h = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Coming Up</div>';
-  h += '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;">';
+  h += '<div style="display:flex;gap:8px;">';
   days.forEach(function(d){
-    var titles = d.entries.map(function(e){ var v = _blabCalEntryView(e); return v ? v.title : ''; }).filter(Boolean);
-    h += '<div onclick="blabCalOpen()" style="flex:0 0 auto;min-width:calc(50% - 4px);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;">';
-    h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">' + d.label + ' · ' + _blabCalFmtShort(d.date) + '</div>';
-    titles.forEach(function(t, i){
-      h += '<div style="font-family:var(--font-d);font-size:' + (titles.length > 1 ? '13' : '15') + 'px;font-weight:700;color:var(--text);line-height:1.25;' + (i ? 'margin-top:3px;' : '') + '">' + t + '</div>';
-    });
-    if(titles.length > 1) h += '<div style="font-size:10px;color:var(--text3);margin-top:4px;letter-spacing:1px;">' + titles.length + ' sessions</div>';
+    var views = d.entries.map(function(e){ return window.blabCalEntryView(e); }).filter(Boolean);
+    var first = views[0];
+    h += '<div onclick="blabCalOpen()" style="flex:1 1 0;min-width:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 9px;cursor:pointer;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + d.label.slice(0,3) + ' ' + _blabCalFmtShort(d.date) + '</div>';
+    h += '<div style="font-family:var(--font-d);font-size:12px;font-weight:700;color:' + (first && first.rest ? 'var(--text2)' : 'var(--text)') + ';line-height:1.25;">' + (first ? first.title : '') + '</div>';
+    if(views.length > 1) h += '<div style="font-size:9px;color:var(--text3);margin-top:3px;letter-spacing:0.5px;">+' + (views.length - 1) + ' more</div>';
     h += '</div>';
   });
   h += '</div>';
@@ -26277,7 +26350,7 @@ window._blabCalPreviewThenAdd = function(libId, cat, dateISO, onBack){
         label: (sess && sess.name) || 'Session'
       }, dateISO);
       window._blabCalToast(((sess && sess.name) || 'Session') + ' added to ' + when);
-      _blabCalRender();
+      _blabCalAfterChange();
     }
   });
 };
@@ -26294,7 +26367,7 @@ window._blabCalPlaceRest = function(dateISO){
     label: 'Rest Day'
   }, dateISO);
   window._blabCalToast('Rest day planned');
-  _blabCalRender();
+  _blabCalAfterChange();
 };
 
 // Accept whatever the calendar is suggesting for a day. Rest is placed directly;
@@ -27765,7 +27838,11 @@ window._phxOpenAddTodaySession = function(){
           return;
         }
         if(type === 'custom'){
-          _phxShowCustomSessionBuilder(todayName, slot);
+          // v4.9.165: _phxShowCustomSessionBuilder does not exist — this threw and the
+          // option did nothing. Found by the same undefined-call sweep that caught
+          // _blabCalEntryView. Guarded until a builder exists.
+          if(typeof _phxShowCustomSessionBuilder === 'function'){ _phxShowCustomSessionBuilder(todayName, slot); }
+          else if(typeof window._blabCalToast === 'function'){ window._blabCalToast('Custom builder not available yet', 'error'); }
           return;
         }
         _phxGenerateTodaySession(type, {}, slot);

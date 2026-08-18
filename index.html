@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.155';
+var APP_VERSION='4.9.156';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7406,7 +7406,7 @@ function _phxRecordWriteError(context, err, payload){
   window._phxOnProfileFetched = function(row){
     if(typeof _origBg === "function") _origBg(row);
     if(typeof pepRestoreFromCloud === "function" && pepRestoreFromCloud(row)) _pepAfterRestore();
-    if(typeof nutRestoreRecipesFromCloud === "function") nutRestoreRecipesFromCloud(row);
+    if(typeof nutRestoreRecipesFromCloud === "function" && nutRestoreRecipesFromCloud(row)) _nutAfterRestore();
   };
 })();
 
@@ -19459,51 +19459,147 @@ function _nutRecipeKey(){
   return 'phx_recipes_v1_' + uid;
 }
 
+// v4.9.155: recipes are stored as an envelope {_ts, recipes:[...]} so the copy
+// carries its own write time. A bare array is the legacy/unstamped shape and
+// still loads — a property hung off an Array is dropped by JSON.stringify, so
+// the wrapper is required, not cosmetic.
+function _nutRecipesFrom(x){
+  if(!x) return [];
+  var arr = Array.isArray(x) ? x : x.recipes;
+  return Array.isArray(arr) ? arr : [];
+}
+
 // Canonical recipe read. On first run migrates anything left in the old
 // nutrition blob (nutGetState().recipes) into the standalone key.
 function nutGetRecipes(){
+  var key = _nutRecipeKey();
   try {
-    var raw = localStorage.getItem(_nutRecipeKey());
-    if(raw !== null){ var p = JSON.parse(raw); return Array.isArray(p) ? p : []; }
+    var raw = localStorage.getItem(key);
+    if(raw !== null) return _nutRecipesFrom(JSON.parse(raw));
   } catch(e){ return []; }
   var legacy = [];
   try { var ns = nutGetState(); legacy = (ns && ns.recipes) ? ns.recipes : []; } catch(e2){}
   var migrated = [];
   legacy.forEach(function(r){ var n = _nutNormalizeRecipe(r); if(n) migrated.push(n); });
-  // Only persist when there was actually something to migrate. Writing an empty
-  // array here makes the key exist, and nutRestoreRecipesFromCloud is local-wins —
-  // so a read before the profile row lands would block cloud restore forever.
+  // v4.9.151: only persist when there was actually something to migrate. Writing
+  // an empty array makes the key exist, and a read before the profile row lands
+  // would then look like a real local copy and block cloud restore forever.
+  // v4.9.155: written UNSTAMPED — migration happens on read, and migrated recipes
+  // are of unknown age, so a stamped cloud copy should still be able to win.
   if(migrated.length){
-    try { localStorage.setItem(_nutRecipeKey(), JSON.stringify(migrated)); } catch(e3){}
+    try { localStorage.setItem(key, JSON.stringify({recipes: migrated})); } catch(e3){}
   }
   return migrated;
 }
 
+// The single write path every recipe mutation funnels through — so this is where
+// the stamp goes. Stamp on write, never on read.
 function nutSaveRecipes(list){
-  var arr = list || [];
-  try { localStorage.setItem(_nutRecipeKey(), JSON.stringify(arr)); } catch(e){}
-  _nutRecipesMirrorToCloud(arr);
+  var env = { _ts: new Date().toISOString(), recipes: list || [] };
+  try { localStorage.setItem(_nutRecipeKey(), JSON.stringify(env)); } catch(e){}
+  _nutRecipesMirrorToCloud(env);
 }
 
 var _nutRecMirrorTimer = null;
-function _nutRecipesMirrorToCloud(list){
+function _nutRecipesMirrorToCloud(env){
   clearTimeout(_nutRecMirrorTimer);
   _nutRecMirrorTimer = setTimeout(function(){
+    var n = (env && env.recipes) ? env.recipes.length : 0;
     try {
       var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
       if(!uid || typeof sb === 'undefined' || !sb) return;
-      sb.from('profiles').update({nut_recipes: list}).eq('id', uid).then(function(){}, function(){});
-    } catch(e){}
+      // v4.9.155: never swallow. Counts only — no recipe names or weights leave here.
+      sb.from('profiles').update({nut_recipes: env}).eq('id', uid).then(
+        function(res){
+          if(res && res.error && typeof _phxRecordWriteError === 'function'){
+            _phxRecordWriteError('_nutRecipesMirrorToCloud', res.error, {count: n});
+          }
+        },
+        function(e){
+          if(typeof _phxRecordWriteError === 'function'){
+            _phxRecordWriteError('_nutRecipesMirrorToCloud.rejected', e, {count: n});
+          }
+        }
+      );
+    } catch(e){
+      if(typeof _phxRecordWriteError === 'function'){
+        _phxRecordWriteError('_nutRecipesMirrorToCloud.threw', e, {count: n});
+      }
+    }
   }, 2000);
 }
 
-// Hydrate from Supabase on profile load. Local always wins if present.
+// v4.9.155 — RESTORE RULE: newest timestamp wins (Jon's ruling, 18 Aug 2026).
+// The old rule was "local always wins", which meant a replacement device that had
+// written any recipe at all could never pull the library back down from Supabase.
+//
+// Resolution order (first match wins):
+//   1. no local                   -> CLOUD
+//   2. local unparseable          -> CLOUD
+//   3. both stamped, cloud newer  -> CLOUD
+//   4. both stamped, otherwise    -> LOCAL  (ties included — cloud-wins-on-tie
+//                                    ping-pongs between two devices sharing a clock)
+//   5. cloud stamped, local not   -> CLOUD
+//   6. local stamped, cloud not   -> LOCAL
+//   7. neither stamped            -> LOCAL
+//
+// Nothing is discarded silently: the replaced copy is kept at
+// phx_recipes_v1_{uid}_bak, one generation, never chained.
+// Returns TRUE only when local was actually replaced — callers repaint on true.
 function nutRestoreRecipesFromCloud(profileRow){
   try {
-    if(!profileRow || !profileRow.nut_recipes) return;
-    if(localStorage.getItem(_nutRecipeKey()) !== null) return;
-    localStorage.setItem(_nutRecipeKey(), JSON.stringify(profileRow.nut_recipes));
-  } catch(e){}
+    if(!profileRow || !profileRow.nut_recipes) return false;
+    var cloud = profileRow.nut_recipes;
+    var key = _nutRecipeKey();
+    var rawLocal = localStorage.getItem(key);
+
+    if(!rawLocal){
+      localStorage.setItem(key, JSON.stringify(cloud));
+      console.log('[PHX] recipes restored from cloud (no local copy)');
+      return true;
+    }
+
+    var local = null;
+    try { local = JSON.parse(rawLocal); } catch(_e){ local = null; }
+    if(!local){
+      _nutBackupLocal(key, rawLocal);
+      localStorage.setItem(key, JSON.stringify(cloud));
+      console.log('[PHX] recipes restored from cloud (local copy unreadable)');
+      return true;
+    }
+
+    var lt = Date.parse(local._ts || ''), ct = Date.parse(cloud._ts || '');
+    var localStamped = !isNaN(lt), cloudStamped = !isNaN(ct);
+
+    var cloudWins;
+    if(localStamped && cloudStamped)       cloudWins = ct > lt;
+    else if(cloudStamped && !localStamped) cloudWins = true;
+    else                                   cloudWins = false;
+
+    if(!cloudWins) return false;
+    _nutBackupLocal(key, rawLocal);
+    localStorage.setItem(key, JSON.stringify(cloud));
+    console.log('[PHX] recipes restored from cloud (cloud ' + (cloud._ts||'unstamped') + ' newer than local ' + (local._ts||'unstamped') + ')');
+    return true;
+  } catch(_e){}
+  return false;
+}
+
+// Keep the copy we are about to replace. Never more than one generation back.
+function _nutBackupLocal(key, rawLocal){
+  try { localStorage.setItem(key + '_bak', rawLocal); } catch(_e){}
+}
+
+// Repaint after a real restore. The background profile path paints Today BEFORE
+// the restore hook runs, so a fresh-install restore would otherwise sit invisible
+// until the user navigated away and back.
+function _nutAfterRestore(){
+  try { if(typeof nutRenderTile === 'function') nutRenderTile(); } catch(_e){}
+  try { if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile(); } catch(_e){}
+  try {
+    var scr = document.getElementById('screen-nutrition');
+    if(scr && scr.classList && scr.classList.contains('active') && typeof nutRenderScreen === 'function') nutRenderScreen();
+  } catch(_e){}
 }
 
 // Convert any saved recipe into the per-serve shape. Legacy batch recipes

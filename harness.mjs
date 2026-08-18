@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.155'", 'version is 4.9.155');
+has("var APP_VERSION='4.9.156'", 'version is 4.9.156');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -274,10 +274,93 @@ try {
   sandbox.localStorage.getItem(RKEY) !== null
     ? ok('a read WITH legacy data still persists the migration')
     : bad('migration no longer persists real legacy recipes');
+  // v4.9.156: migration must NOT stamp. Migrated recipes are of unknown age, so
+  // stamping them `now` would let stale local data beat a genuinely newer cloud.
+  (function(){
+    const env = JSON.parse(sandbox.localStorage.getItem(RKEY));
+    !Array.isArray(env) && env.recipes && env._ts === undefined
+      ? ok('migration writes the envelope UNSTAMPED (cannot outrank a real cloud copy)')
+      : bad(`migration stamped or wrote a bare array: ${JSON.stringify(env).slice(0,120)}`);
+  })();
   delete _ns.recipes;
+  sandbox.localStorage.removeItem(RKEY);
+
+  // ── Restore rule: newest timestamp wins — full 7-row table (v4.9.156) ─────
+  const OLD = '2026-08-01T00:00:00.000Z', NEW = '2026-08-18T00:00:00.000Z';
+  const rec  = (n) => [{ id:'r_'+n, name:n, cat:'other', yield_serves:1, components:[], yield_note:'', prep_method:'', macros_manual:null }];
+  const envq = (ts, n) => ts ? { _ts: ts, recipes: rec(n) } : { recipes: rec(n) };
+  // rawLocal: null = absent, a string = written verbatim (lets us test unparseable)
+  const table = [
+    { row:1, name:'no local -> CLOUD',                    local:null,                        cloud:envq(OLD,'cloud'), win:'cloud', restored:true  },
+    { row:2, name:'local unparseable -> CLOUD',           local:'{not json',                  cloud:envq(OLD,'cloud'), win:'cloud', restored:true  },
+    { row:3, name:'both stamped, cloud newer -> CLOUD',   local:JSON.stringify(envq(OLD,'local')), cloud:envq(NEW,'cloud'), win:'cloud', restored:true  },
+    { row:4, name:'both stamped, local newer -> LOCAL',   local:JSON.stringify(envq(NEW,'local')), cloud:envq(OLD,'cloud'), win:'local', restored:false },
+    { row:4, name:'both stamped, TIE -> LOCAL',           local:JSON.stringify(envq(OLD,'local')), cloud:envq(OLD,'cloud'), win:'local', restored:false },
+    { row:5, name:'cloud stamped, local not -> CLOUD',    local:JSON.stringify(envq(null,'local')), cloud:envq(OLD,'cloud'), win:'cloud', restored:true  },
+    { row:6, name:'local stamped, cloud not -> LOCAL',    local:JSON.stringify(envq(OLD,'local')), cloud:envq(null,'cloud'), win:'local', restored:false },
+    { row:7, name:'neither stamped -> LOCAL',             local:JSON.stringify(envq(null,'local')), cloud:envq(null,'cloud'), win:'local', restored:false },
+    { row:7, name:'legacy bare arrays both sides -> LOCAL', local:JSON.stringify(rec('local')), cloud:rec('cloud'),   win:'local', restored:false }
+  ];
+  let tableFails = 0;
+  table.forEach(t => {
+    sandbox.localStorage.removeItem(RKEY);
+    sandbox.localStorage.removeItem(RKEY + '_bak');
+    if (t.local !== null) sandbox.localStorage.setItem(RKEY, t.local);
+    const returned = sandbox.nutRestoreRecipesFromCloud({ nut_recipes: t.cloud });
+    const winner = sandbox.nutGetRecipes()[0] ? sandbox.nutGetRecipes()[0].name : '(none)';
+    const bak = sandbox.localStorage.getItem(RKEY + '_bak');
+    const bakOK = t.restored && t.local !== null ? bak === t.local : bak === null;
+    if (winner !== t.win)          { tableFails++; bad(`row ${t.row}: ${t.name} — winner was ${winner}`); }
+    else if (returned !== t.restored) { tableFails++; bad(`row ${t.row}: ${t.name} — returned ${returned}, expected ${t.restored}`); }
+    else if (!bakOK)               { tableFails++; bad(`row ${t.row}: ${t.name} — _bak wrong: ${String(bak).slice(0,40)}`); }
+  });
+  tableFails === 0
+    ? ok(`restore table: all ${table.length} cases resolve, return value and _bak correct`)
+    : bad(`${tableFails}/${table.length} restore-table cases wrong`);
+
+  // The case Jon actually cares about: lost phone, brand-new device, no local at
+  // all. Must be cloud regardless of stamping — asserted so it reads as intended.
+  sandbox.localStorage.removeItem(RKEY);
+  sandbox.nutRestoreRecipesFromCloud({ nut_recipes: rec('cloud') }) === true &&
+  sandbox.nutGetRecipes()[0].name === 'cloud'
+    ? ok('lost-phone case: no local + UNSTAMPED cloud still restores')
+    : bad('unstamped cloud did not restore onto a fresh device');
+
+  // _bak is one generation, never chained.
+  sandbox.localStorage.removeItem(RKEY); sandbox.localStorage.removeItem(RKEY + '_bak');
+  sandbox.localStorage.setItem(RKEY, JSON.stringify(envq(OLD, 'first')));
+  sandbox.nutRestoreRecipesFromCloud({ nut_recipes: envq(NEW, 'second') });
+  sandbox.nutRestoreRecipesFromCloud({ nut_recipes: envq('2026-08-19T00:00:00.000Z', 'third') });
+  JSON.parse(sandbox.localStorage.getItem(RKEY + '_bak')).recipes[0].name === 'second'
+    ? ok('_bak holds one generation only, never chained')
+    : bad('_bak chained or held the wrong generation');
+
+  // Saving stamps; the mirror receives the same envelope it wrote locally.
+  sandbox.localStorage.removeItem(RKEY);
+  sandbox.nutSaveRecipes(rec('saved'));
+  (function(){
+    const env = JSON.parse(sandbox.localStorage.getItem(RKEY));
+    const t = Date.parse(env._ts || '');
+    !isNaN(t) && Array.isArray(env.recipes) && env.recipes[0].name === 'saved'
+      ? ok('nutSaveRecipes stamps _ts as a parseable ISO string')
+      : bad(`save did not stamp correctly: ${JSON.stringify(env).slice(0,120)}`);
+  })();
+  sandbox.localStorage.removeItem(RKEY);
+  sandbox.localStorage.removeItem(RKEY + '_bak');
 } catch (e) {
   bad(`prep aggregator execution failed: ${e.message}`);
 }
+
+// The old rule is gone — a local copy must no longer win by merely existing.
+hasNot("if(localStorage.getItem(_nutRecipeKey()) !== null) return;", 'RESTORE: old local-wins early-return removed');
+has('function _nutBackupLocal(', 'RESTORE: _bak helper defined');
+has('function _nutAfterRestore(', 'RESTORE: repaint helper defined');
+has('function _nutRecipesFrom(', 'RESTORE: envelope reader defined (bare array still loads)');
+has("_ts: new Date().toISOString()", 'RESTORE: save stamps ISO _ts');
+has("cloudWins = ct > lt", 'RESTORE: strict newer-than, so ties fall to local');
+has("_phxRecordWriteError('_nutRecipesMirrorToCloud'", 'MIRROR: write errors recorded, not swallowed');
+has("{count: n}", 'MIRROR: payload is a count, never recipe values');
+hasNot(".then(function(){}, function(){});", 'MIRROR: empty swallowing callbacks gone');
 
 // ── Today screen: meal tick-off + water counter (v4.9.145) ──────────────────
 has('id="today-meals-tile"', 'TODAY: meals tile div on Today screen');
@@ -1031,7 +1114,7 @@ hasNot("}).catch(function(){});\n    } catch(_){}",           'BLAB MIRROR: keep
   (idxHook > 0 && idxHook < idxPep) ? ok('HOOK: wrapper relocated to PM plumbing (before peptide block)') : bad('HOOK: wrapper still inside peptide block');
 }
 has('pepRestoreFromCloud(row)) _pepAfterRestore();', 'HOOK: chains peptide restore + repaint');
-has('nutRestoreRecipesFromCloud(row);',              'HOOK: chains nutrition restore');
+has('nutRestoreRecipesFromCloud(row)) _nutAfterRestore();', 'HOOK: chains nutrition restore + repaint');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.167'", 'version is 4.9.167');
+has("var APP_VERSION='4.9.168'", 'version is 4.9.168');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1291,7 +1291,7 @@ has('id="nav-programme4"',         'NAV: calendar screen carries the bottom nav'
            `runtime_check cannot see this (function bodies never run); it reaches the athlete as a dead button.`);
 })();
 
-// ── Weekly check-in feeds the nutrition weight log (v4.9.167) ───────────────
+// ── Weekly check-in feeds the nutrition weight log (v4.9.168) ───────────────
 console.log('\nWeight check-in → nutrition:');
 has('nutRecordWeight(w);',                  'WEIGHT: check-in records to the nutrition daily log');
 has("typeof nutRecordWeight === 'function'",'WEIGHT: call is typeof-guarded across domains');
@@ -1307,5 +1307,9 @@ has('athlete.bw=w;',                        'WEIGHT: athlete.bw snapshot still w
   else bad(`WEIGHT: nutRecordWeight at ${nut}, athlete.bw at ${bw} — the athlete write must come first so a fault in another domain cannot lose the weigh-in.`);
 })();
 
+// ── v4.9.168 [PM] shared local date key ─────────────────────────────────────────
+has("function _phxLocalISO(d){", 'DATE: shared local-date helper exists');
+{ const n=(html.match(/today_date: _phxLocalISO\(\)/g)||[]).length; n===4 ? ok('DATE: all 4 coach payloads send LOCAL today_date') : bad(`DATE: expected 4 local today_date sites, found ${n}`); }
+hasNot("today_date: new Date().toISOString().split('T')[0]", 'DATE: coach today_date no longer UTC');
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.167';
+var APP_VERSION='4.9.168';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7498,6 +7498,17 @@ function _phxRecordWriteError(context, err, payload){
     localStorage.setItem('phx_write_errors', JSON.stringify(ring));
   } catch(_e){}
 }
+// ====== v4.9.168 SHARED LOCAL DATE KEY (PM-owned) ======
+// Canonical YYYY-MM-DD for the athlete's LOCAL calendar day. Never use
+// `toISOString().slice(0,10)` / `.split('T')[0]` as a day key — that is UTC, and Jon
+// trains at 04:30 Brisbane (UTC+10), so anything logged before 10:00 local files under
+// the previous day. Found 2026-08-18 (Training, while wiring .167). All domains key days
+// with this. Pass a Date to format a specific instant; no arg = now.
+function _phxLocalISO(d){
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 // ====== v4.9.155 SHARED RESTORE HOOK (PM-owned) ======
 // window._phxOnProfileFetched(row) is called at BOTH profile-fetch sites in
 // _loadProfileAndRouteInner, AFTER blabRestoreFromCloud. Domain restores chain here.
@@ -13622,7 +13633,7 @@ function buildAthleteProfile(trigger, checkIn){
       check_in_day: a.fqCheckInDay || 'friday',
       // v4.7.23 hotfix: today's date + timezone — computed every call so the model never has to
       // guess. Used for programme length, time-to-Combine, peaking, Agoge timeline, etc.
-      today_date: new Date().toISOString().split('T')[0],
+      today_date: _phxLocalISO(), // v4.9.168: LOCAL date — was UTC, wrong before 10:00 Brisbane
       timezone: 'Australia/Brisbane',
       current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()],
       test_scores: {
@@ -25058,7 +25069,7 @@ async function _phxBuildWeeklyRegenContext(chosenDays){
       next_week_requests: lastRow.next_week_requests
     } : null,
     next_week_schedule: {days: chosenDays},
-    today_date: new Date().toISOString().split('T')[0],
+    today_date: _phxLocalISO(), // v4.9.168: LOCAL date, was UTC
     days_to_combine: daysToCombine,
     // v4.9.1: pre-session adjustments made by athlete via the session preview (swaps, supersets).
     // These are changes the athlete made BEFORE training, giving the coach context on preferences.
@@ -29908,7 +29919,7 @@ async function sendCoachMessage(userMessage){
     total_volume_kg: recent.total_volume_kg,
     latest_checkin: recent.latestCheckin,
     // v4.7.23 hotfix: today's date so the chat coach can answer time-sensitive questions correctly.
-    today_date: new Date().toISOString().split('T')[0],
+    today_date: _phxLocalISO(), // v4.9.168: LOCAL date, was UTC
     timezone: 'Australia/Brisbane',
     current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]
   };
@@ -29984,7 +29995,7 @@ async function _mcGenerateOpeningMessage(){
     total_volume_kg: recent.total_volume_kg,
     latest_checkin: recent.latestCheckin,
     // v4.7.23 hotfix: today's date so the opening message references the right week / time-to-event.
-    today_date: new Date().toISOString().split('T')[0],
+    today_date: _phxLocalISO(), // v4.9.168: LOCAL date, was UTC
     timezone: 'Australia/Brisbane',
     current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]
   };

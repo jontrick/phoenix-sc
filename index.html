@@ -1791,6 +1791,15 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div class="header-logo">PHOENIX <span>PLAN</span></div>
 </div>
 <div class="prog-body">
+  <!-- v4.9.143: BLAB training calendar entry point -->
+  <div id="prog-blab-cal-tile" onclick="blabCalOpen()" style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <div>
+      <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:3px;">BLAB</div>
+      <div style="font-family:var(--font-d);font-size:19px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.1;">Training Calendar</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px;">Drag your sessions onto the days that suit</div>
+    </div>
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--gold)" stroke-width="2" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+  </div>
   <div class="stats-widget">
     <div class="stats-widget-title">Current Maxes</div>
     <div class="stats-grid" id="prog-stats-grid"></div>
@@ -3327,6 +3336,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
       <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="16" cy="6" r="2" fill="var(--bg2)"/><circle cx="8" cy="12" r="2" fill="var(--bg2)"/><circle cx="16" cy="18" r="2" fill="var(--bg2)"/></svg></div>
       <div><div class="sidebar-item-text">Adjust Programme</div><div class="sidebar-item-sub">Pause · Reset maxes</div></div>
     </div>
+    <div class="sidebar-item" onclick="closeSidebar();blabCalOpen()">
+      <div class="sidebar-item-icon gold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <div><div class="sidebar-item-text">Training Calendar</div><div class="sidebar-item-sub">Schedule your BLAB sessions</div></div>
+    </div>
   </div>
   <!-- THEMES -->
   <div class="sidebar-section">
@@ -3491,7 +3504,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.142';
+var APP_VERSION='4.9.144';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3693,6 +3706,11 @@ window.blabRestoreFromCloud = function(profileRow){
       } catch(_){ console.log('[PHX][DBG] localRaw parse failed'); }
     }
     localStorage.setItem(key, typeof cloud === 'string' ? cloud : JSON.stringify(cloud));
+    // v4.9.143: the training calendar rides inside blab_state.calendar — rehydrate its
+    // own localStorage key from the restored blob.
+    if(typeof window.blabCalHydrateFromState === 'function'){
+      try { window.blabCalHydrateFromState(); } catch(_che){ console.warn('[PHX] blabCalHydrateFromState failed:', _che); }
+    }
     console.log('[PHX] BLAB state restored from Supabase');
     console.log('[PHX][DBG] blabRestoreFromCloud SUCCESS: wrote cloud state to', key);
     return true;
@@ -8075,7 +8093,7 @@ function navTo(tab){
   if(tab==='records') renderRecords();
   if(tab==='blab-calendar'){ if(typeof _blabCalRender==='function') _blabCalRender(); }
   if(tab==='nutrition'){ _nutTab='today'; if(typeof nutRenderScreen==='function') nutRenderScreen(); }
-  if(tab==='peptide'){ _pepTab='today'; if(typeof pepRenderScreen==='function') pepRenderScreen(); var _paBtn=document.getElementById('pep-add-btn'); if(_paBtn) _paBtn.onclick=function(){ if(_pepTab==='protocol') pepOpenAddStack(); else if(_pepTab==='order') pepOpenOrderPicker(); else { _pepTab='protocol'; pepRenderScreen(); } }; }
+  if(tab==='peptide'){ _pepTab='today'; if(typeof pepRenderScreen==='function') pepRenderScreen(); var _paBtn=document.getElementById('pep-add-btn'); if(_paBtn) _paBtn.onclick=function(){ if(_pepTab==='protocol') pepOpenAddStack(); else if(_pepTab==='order') pepOpenOrderPicker(); else if(_pepTab==='adjust'){ var _n=document.getElementById('pep-note-input'); if(_n) _n.focus(); } else { _pepTab='protocol'; pepRenderScreen(); } }; }
 }
 
 // v4.7.40: legacy screen-onboard removed. The questionnaire (FQ) is the single
@@ -17708,6 +17726,7 @@ function _renderTodayNutritionPlaceholder(){
 // ─────────────────────────────────────────────────────────────────────────────
 
 var _nutTab = 'today';
+var _nutWeekMode = 'overview';   // WEEK tab: 'overview' | 'plan'
 
 function _nutKey(){
   var uid = (typeof athlete !== 'undefined' && athlete && athlete.id) ? athlete.id : 'guest';
@@ -17881,15 +17900,32 @@ function nutRenderScreen(){
   var cwBtn = body.querySelector('[data-nut-create-week]');
   if(cwBtn) cwBtn.addEventListener('click', _nutCreateWeekPlan);
   var newRecBtn = body.querySelector('#nut-new-recipe-btn');
-  if(newRecBtn) newRecBtn.addEventListener('click', nutOpenRecipeBuilder);
+  if(newRecBtn) newRecBtn.addEventListener('click', function(){ nutOpenRecipeBuilder(); });
   body.querySelectorAll('[data-nut-recipe-del]').forEach(function(btn){
-    var ri = parseInt(btn.getAttribute('data-nut-recipe-del'));
-    btn.addEventListener('click', function(){ _nutRecipeDelete(ri); });
+    var rid = btn.getAttribute('data-nut-recipe-del');
+    btn.addEventListener('click', function(){ _nutRecipeDelete(rid); });
+  });
+  body.querySelectorAll('[data-nut-recipe-edit]').forEach(function(btn){
+    var rid = btn.getAttribute('data-nut-recipe-edit');
+    btn.addEventListener('click', function(){ nutOpenRecipeBuilder(rid); });
   });
   body.querySelectorAll('[data-nut-recipe-apply]').forEach(function(btn){
-    var ri = parseInt(btn.getAttribute('data-nut-recipe-apply'));
-    btn.addEventListener('click', function(){ _nutRecipeApplyPrompt(ri); });
+    var rid = btn.getAttribute('data-nut-recipe-apply');
+    btn.addEventListener('click', function(){ _nutRecipeApplyPrompt(rid); });
   });
+  body.querySelectorAll('[data-nut-new-recipe]').forEach(function(btn){
+    btn.addEventListener('click', function(){ nutOpenRecipeBuilder(); });
+  });
+  body.querySelectorAll('[data-nut-week-mode]').forEach(function(btn){
+    var mo = btn.getAttribute('data-nut-week-mode');
+    btn.addEventListener('click', function(){ _nutWeekMode = mo; nutRenderScreen(); });
+  });
+  body.querySelectorAll('[data-nut-add-recipe]').forEach(function(btn){
+    var parts = btn.getAttribute('data-nut-add-recipe').split('|');
+    btn.addEventListener('click', function(){ nutOpenRecipePicker(parts[0], parts[1]); });
+  });
+  var prepBtn = body.querySelector('[data-nut-prep]');
+  if(prepBtn) prepBtn.addEventListener('click', nutOpenPrepCard);
   var saveCI = body.querySelector('#nut-save-checkin');
   if(saveCI) saveCI.addEventListener('click', nutSaveCheckin);
   _nutWireFeelingBtns();
@@ -17955,7 +17991,7 @@ function _nutTabToday(ns){
 }
 
 function _nutTabRecipes(ns){
-  var recipes = ns.recipes || [];
+  var recipes = nutGetRecipes();
   var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">';
   h += '<div style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">' + recipes.length + ' Recipe' + (recipes.length !== 1 ? 's' : '') + '</div>';
   h += '<button id="nut-new-recipe-btn" style="background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;">+ New Recipe</button>';
@@ -17964,34 +18000,42 @@ function _nutTabRecipes(ns){
     h += '<div style="text-align:center;padding:40px 0;color:var(--text3);">';
     h += '<div style="font-size:40px;margin-bottom:12px;">&#127859;</div>';
     h += '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text2);margin-bottom:8px;">No recipes saved</div>';
-    h += '<div style="font-size:12px;">Save a meal combo for quick re-use</div>';
+    h += '<div style="font-size:12px;line-height:1.6;">Build a recipe as a single serving.<br>Weekly Prep totals them across your week.</div>';
     h += '</div>';
-  } else {
-    recipes.forEach(function(r, ri){
-      var totalKcal = 0, totalProt = 0, totalCarb = 0, totalFat = 0;
-      (r.components || []).forEach(function(c){ var f=(c.qty_g||0)/100; totalKcal+=Math.round((c.k||0)*f); totalProt+=(c.p||0)*f; totalCarb+=(c.c||0)*f; totalFat+=(c.f||0)*f; });
-      totalProt = Math.round(totalProt*10)/10; totalCarb = Math.round(totalCarb*10)/10; totalFat = Math.round(totalFat*10)/10;
-      var hasCW = r.cookedWeight_g && r.cookedWeight_g > 0;
-      var serveG = r.serveSize_g || r.cookedWeight_g || 0;
-      var perServeK = hasCW ? Math.round(totalKcal / r.cookedWeight_g * serveG) : 0;
-      var perServeP = hasCW ? Math.round(totalProt / r.cookedWeight_g * serveG * 10)/10 : 0;
+    return h;
+  }
+  // Group by category so sauces / proteins / carbs read as a prep library
+  var order = _NUT_REC_CATS.map(function(c){ return c.key; });
+  var grouped = {};
+  recipes.forEach(function(r){ var k = r.cat || 'other'; if(!grouped[k]) grouped[k] = []; grouped[k].push(r); });
+  order.forEach(function(catKey){
+    var group = grouped[catKey];
+    if(!group || !group.length) return;
+    h += '<div style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;">' + _nutRecCatLabel(catKey) + '</div>';
+    group.forEach(function(r){
+      var m = nutRecipeMacros(r);
+      var y = (parseFloat(r.yield_serves) > 0) ? parseFloat(r.yield_serves) : 1;
+      var serveG = nutRecipeServeWeight(r);
       h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;">';
       h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">';
-      h += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:4px;">' + r.name + '</div>';
-      if(hasCW){
-        h += '<div style="font-size:11px;color:var(--gold);font-weight:600;margin-bottom:2px;">Per serve (' + Math.round(serveG) + 'g): ' + perServeK + ' kcal &middot; P' + perServeP + 'g</div>';
-        h += '<div style="font-size:10px;color:var(--text3);">' + (r.components||[]).length + ' ingredients &middot; ' + r.cookedWeight_g + 'g cooked</div>';
-      } else {
-        h += '<div style="font-size:11px;color:var(--text3);">' + totalKcal + ' kcal &middot; P' + totalProt + 'g &middot; ' + (r.components||[]).length + ' items</div>';
+      h += '<div style="flex:1;min-width:0;">';
+      h += '<div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:4px;">' + r.name + '</div>';
+      h += '<div style="font-size:11px;color:var(--gold);font-weight:600;">Per serve' + (serveG ? (' (' + serveG + 'g)') : '') + ': ' + m.k + ' kcal &middot; P' + m.p + 'g &middot; C' + m.c + 'g &middot; F' + m.f + 'g</div>';
+      h += '<div style="font-size:10px;color:var(--text3);margin-top:3px;">' + (r.components||[]).length + ' ingredient' + ((r.components||[]).length !== 1 ? 's' : '') +
+           (y > 1 ? (' &middot; 1 batch = ' + y + ' serves') : ' &middot; single serve') + '</div>';
+      if(r.yield_note) h += '<div style="font-size:10px;color:var(--text3);opacity:0.8;margin-top:2px;">' + r.yield_note + '</div>';
+      h += '</div>';
+      h += '<div style="display:flex;gap:6px;flex-shrink:0;">';
+      h += '<button data-nut-recipe-del="' + r.id + '" style="width:28px;height:28px;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:26px;text-align:center;padding:0;cursor:pointer;touch-action:manipulation;">&times;</button>';
+      h += '<button data-nut-recipe-edit="' + r.id + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 12px;cursor:pointer;touch-action:manipulation;">Edit</button>';
+      h += '<button data-nut-recipe-apply="' + r.id + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 12px;cursor:pointer;touch-action:manipulation;">Add</button>';
+      h += '</div></div>';
+      if(r.prep_method){
+        h += '<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.5;white-space:pre-wrap;">' + r.prep_method + '</div>';
       }
       h += '</div>';
-      h += '<div style="display:flex;gap:8px;flex-shrink:0;">';
-      h += '<button data-nut-recipe-del="' + ri + '" style="width:28px;height:28px;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:28px;text-align:center;cursor:pointer;touch-action:manipulation;">&times;</button>';
-      h += '<button data-nut-recipe-apply="' + ri + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">Apply</button>';
-      h += '</div></div>';
-      h += '</div>';
     });
-  }
+  });
   return h;
 }
 
@@ -18546,7 +18590,7 @@ function _nutRenderFoodPickerCats(ov){
     {key:'supp',label:'Supps'}
   ];
   var _ns = nutGetState && nutGetState();
-  var _hasRecipes = _ns && _ns.recipes && _ns.recipes.length > 0;
+  var _hasRecipes = (typeof nutGetRecipes === 'function') && nutGetRecipes().length > 0;
   if(_hasRecipes) cats.push({key:'recipe',label:'Recipes'});
   var container = ov.querySelector('#nut-fp-cats');
   container.innerHTML = cats.map(function(cat){
@@ -18589,8 +18633,7 @@ function _nutRenderFoodPickerCats(ov){
 function _nutRenderFoodPickerList(ov){
   // Recipe category: show saved recipes, apply all components on tap
   if(_nutPickerCat === 'recipe'){
-    var _rns = nutGetState && nutGetState();
-    var _recipes = (_rns && _rns.recipes) ? _rns.recipes : [];
+    var _recipes = nutGetRecipes();
     var list = ov.querySelector('#nut-fp-list');
     ov.querySelector('#nut-fp-add-bar').style.display = 'none';
     if(!_recipes.length){
@@ -18598,22 +18641,18 @@ function _nutRenderFoodPickerList(ov){
       return;
     }
     list.innerHTML = _recipes.map(function(rec){
-      var totK=0, totP=0;
-      (rec.components||[]).forEach(function(c){ totK+=Math.round((c.k||0)*(c.qty_g||0)/100); totP+=Math.round((c.p||0)*(c.qty_g||0)/100*10)/10; });
+      var m = nutRecipeMacros(rec);
+      var y = (parseFloat(rec.yield_serves) > 0) ? parseFloat(rec.yield_serves) : 1;
       return '<div data-fp-recipe="'+rec.id+'" style="padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;">' +
         '<div><div style="font-size:14px;font-weight:700;color:var(--text);">'+rec.name+'</div>' +
-        '<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+(rec.components||[]).length+' components &middot; '+totK+' kcal &middot; P'+totP+'g</div></div>' +
-        '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">APPLY ›</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+_nutRecCatLabel(rec.cat||'other')+' &middot; '+m.k+' kcal &middot; P'+m.p+'g per serve'+(y>1?(' &middot; batch of '+y):'')+'</div></div>' +
+        '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">ADD ›</div>' +
         '</div></div>';
     }).join('');
     list.querySelectorAll('[data-fp-recipe]').forEach(function(row){
       row.addEventListener('click', function(){
-        var recId = row.getAttribute('data-fp-recipe');
-        var rns2 = nutGetState && nutGetState();
-        var rec = ((rns2 && rns2.recipes)||[]).filter(function(r){ return r.id===recId; })[0];
-        if(!rec) return;
-        (rec.components||[]).forEach(function(c){ nutAddComponent(_nutPickerSlot, _nutPickerDate, c, c.qty_g||150); });
+        nutAssignRecipe(row.getAttribute('data-fp-recipe'), _nutPickerSlot, _nutPickerDate, 1);
         ov.remove();
         nutRenderScreen();
       });
@@ -18687,25 +18726,42 @@ function _nutWeekStart(dateKey){
 
 // ── WEEK tab ─────────────────────────────────────────────────────────────────
 function _nutTabWeek(ns){
-  var today  = _nutToday();
-  var monStr = _nutWeekStart(today);
+  var today   = _nutToday();
   var targets = ns.targets || {};
-  var days = [], i;
-  for(i=0;i<7;i++){
-    var _d = new Date(monStr + 'T12:00:00');
-    _d.setDate(_d.getDate() + i);
-    days.push(_d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0'));
-  }
-  var monD = new Date(monStr + 'T12:00:00');
+  var days    = _nutWeekDays(today);
+  var monD = new Date(days[0] + 'T12:00:00');
   var sunD = new Date(days[6] + 'T12:00:00');
   var weekTotals = {kcal:0, p:0, c:0, f:0, days:0};
   var DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var h = '';
   // Header
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">';
   h += '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--text3);">' + monD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + sunD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</div>';
-  h += '<button data-nut-create-week style="background:var(--gold);color:#000;border:none;border-radius:20px;font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1px;padding:7px 14px;cursor:pointer;touch-action:manipulation;">CREATE WEEK</button>';
+  h += '<button data-nut-create-week style="background:var(--bg3);color:var(--gold);border:1px solid var(--border2);border-radius:20px;font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1px;padding:7px 14px;cursor:pointer;touch-action:manipulation;">CREATE WEEK</button>';
   h += '</div>';
+  // Prep aggregator entry point
+  var prepPlan = nutBuildPrepPlan(days);
+  var prepServes = 0;
+  prepPlan.forEach(function(p){ prepServes += p.serves; });
+  h += '<button data-nut-prep style="width:100%;padding:15px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;margin-bottom:4px;">WEEKLY PREP</button>';
+  h += '<div style="text-align:center;font-size:10px;color:var(--text3);margin-bottom:14px;">' +
+       (prepPlan.length
+         ? (prepPlan.length + ' recipe' + (prepPlan.length !== 1 ? 's' : '') + ' &middot; ' + prepServes + ' serve' + (prepServes !== 1 ? 's' : '') + ' to prep')
+         : 'Assign recipes below to build your prep list') +
+       '</div>';
+  // Mode toggle
+  var modes = [{k:'overview',l:'Overview'},{k:'plan',l:'Plan'}];
+  h += '<div style="display:flex;gap:6px;margin-bottom:14px;">';
+  h += modes.map(function(mo){
+    var a = (_nutWeekMode === mo.k);
+    return '<button data-nut-week-mode="' + mo.k + '" style="flex:1;padding:8px;background:' + (a?'rgba(200,150,62,0.15)':'var(--bg2)') + ';border:1px solid ' + (a?'var(--gold)':'var(--border)') + ';border-radius:var(--radius);color:' + (a?'var(--gold)':'var(--text3)') + ';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">' + mo.l + '</button>';
+  }).join('');
+  h += '</div>';
+
+  if(_nutWeekMode === 'plan'){
+    return h + _nutWeekPlanView(ns, days);
+  }
+
   // Day rows
   days.forEach(function(dk, idx){
     var dayData = (ns.daily && ns.daily[dk]) || {};
@@ -18719,6 +18775,10 @@ function _nutTabWeek(ns){
       var k = 0; comps.forEach(function(c){ k += Math.round((c.k||0)*(c.qty_g||0)/100); });
       return k > 0 ? k+'k' : '–';
     }).join(' / ');
+    var recCount = 0;
+    Object.keys(meals).forEach(function(sl){
+      ((meals[sl] && meals[sl].components) || []).forEach(function(c){ if(c && c.isRecipe) recCount += (parseFloat(c.serves) || 1); });
+    });
     var dp = new Date(dk + 'T12:00:00');
     h += '<div data-nut-goto-day="'+dk+'" style="display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid '+(isToday?'var(--gold)':'var(--border)')+';border-radius:var(--radius);margin-bottom:6px;padding:10px 14px;cursor:pointer;touch-action:manipulation;">';
     h += '<div style="width:32px;text-align:center;flex-shrink:0;"><div style="font-family:var(--font-d);font-size:10px;font-weight:700;color:'+(isToday?'var(--gold)':'var(--text3)')+';">'+DOW[idx]+'</div><div style="font-size:12px;font-weight:600;color:var(--text);">'+dp.getDate()+'</div></div>';
@@ -18730,7 +18790,7 @@ function _nutTabWeek(ns){
       h += '<span style="font-size:10px;font-weight:600;color:#4CAF50;">P'+Math.round(tot.protein_g)+'g</span>';
       h += '</div>';
       h += '<div style="height:3px;background:var(--bg3);border-radius:2px;margin-bottom:3px;"><div style="width:'+kPct+'%;height:3px;background:'+(kPct>=95?'var(--gold)':'#4CAF50')+';border-radius:2px;transition:width 0.3s;"></div></div>';
-      h += '<div style="font-size:10px;color:var(--text3);">B / L / D: '+slotKcals+'</div>';
+      h += '<div style="font-size:10px;color:var(--text3);">B / L / D: '+slotKcals+ (recCount ? (' &middot; ' + recCount + ' recipe serve' + (recCount !== 1 ? 's' : '')) : '') +'</div>';
     } else {
       h += '<div style="font-size:11px;color:var(--text3);">No meals logged</div>';
     }
@@ -18880,114 +18940,190 @@ function _nutApplyWeekTemplate(template){
   nutRenderScreen();
 }
 
-// ── Recipe Builder ────────────────────────────────────────────────────────────
-function nutOpenRecipeBuilder(){
+// ── Recipe Builder — single-serve model (v4.9.141) ────────────────────────────
+// Ingredients are entered PER SERVE. Yield says how many serves one batch makes,
+// which is what the Weekly Prep aggregator uses to work out batch counts.
+// Pass a recipe id to edit an existing recipe.
+function nutOpenRecipeBuilder(editId){
   var old = document.getElementById('nut-recipe-builder');
   if(old) old.remove();
+  var existing = (editId && typeof editId === 'string') ? nutRecipeById(editId) : null;
+  var _rbComps  = existing ? JSON.parse(JSON.stringify(existing.components || [])) : [];
+  var _rbCat    = existing ? (existing.cat || 'other') : 'other';
+  var _rbManual = !!(existing && existing.macros_manual);
   var ov = document.createElement('div');
   ov.id = 'nut-recipe-builder';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;';
+  var lbl = 'font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);';
+  var inp = 'width:100%;margin-top:4px;padding:9px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;outline:none;';
+  var sect = 'font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;';
+  var mm = (existing && existing.macros_manual) || {};
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;max-height:90vh;display:flex;flex-direction:column;">' +
-    '<div style="padding:20px 20px 12px;flex-shrink:0;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">New Recipe</div>' +
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;max-height:92vh;display:flex;flex-direction:column;">' +
+    '<div style="padding:20px 20px 10px;flex-shrink:0;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">' + (existing ? 'Edit Recipe' : 'New Recipe') + '</div>' +
     '<button id="nut-rb-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
     '</div>' +
-    '<input id="nut-rb-name" type="text" placeholder="Recipe name (e.g. Chicken Bowl)" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;margin-bottom:4px;">' +
+    '<input id="nut-rb-name" type="text" placeholder="Recipe name (e.g. Chilli Sauce)" value="' + (existing ? String(existing.name).replace(/"/g,'&quot;') : '') + '" style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;">' +
     '<div id="nut-rb-err" style="display:none;font-size:11px;color:#FF6B6B;padding:4px 2px;"></div>' +
+    '<div id="nut-rb-cats" style="display:flex;gap:5px;overflow-x:auto;margin-top:8px;padding-bottom:4px;scrollbar-width:none;"></div>' +
     '</div>' +
-    '<div style="padding:0 20px;flex-shrink:0;"><div style="font-size:11px;font-weight:700;color:var(--text3);letter-spacing:1px;margin-bottom:6px;">COMPONENTS</div></div>' +
-    '<div id="nut-rb-list" style="flex:1;overflow-y:auto;padding:0 20px;"></div>' +
-    '<div style="padding:12px 20px 20px;flex-shrink:0;">' +
-    '<div id="nut-rb-totals" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:10px;font-size:11px;color:var(--text3);"></div>' +
-    '<button id="nut-rb-add-comp" style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;margin-bottom:10px;">+ ADD COMPONENT</button>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
-    '<div><label style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);">Cooked dish weight (g)</label>' +
-    '<input id="nut-rb-cooked" type="number" inputmode="decimal" placeholder="e.g. 1200" style="width:100%;margin-top:4px;padding:9px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;outline:none;"></div>' +
-    '<div><label style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);">Serving size (g) <span style="font-weight:400;opacity:0.6;">optional</span></label>' +
-    '<input id="nut-rb-serve" type="number" inputmode="decimal" placeholder="e.g. 280" style="width:100%;margin-top:4px;padding:9px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;outline:none;"></div>' +
+    '<div id="nut-rb-scroll" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 20px;">' +
+    '<div style="' + sect + '">Ingredients — per serve</div>' +
+    '<div id="nut-rb-list"></div>' +
+    '<button id="nut-rb-add-comp" style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;margin-top:10px;">+ ADD INGREDIENT</button>' +
+    '<div style="' + sect + '">Yield</div>' +
+    '<div style="display:grid;grid-template-columns:88px 1fr;gap:10px;align-items:end;">' +
+    '<div><label style="' + lbl + '">1 batch =</label>' +
+    '<input id="nut-rb-yield" type="number" inputmode="decimal" min="1" step="1" value="' + (existing ? (existing.yield_serves || 1) : 1) + '" style="' + inp + '"></div>' +
+    '<div><label style="' + lbl + '">Yield notes <span style="font-weight:400;opacity:0.6;">optional</span></label>' +
+    '<input id="nut-rb-ynote" type="text" placeholder="e.g. 1 batch = 4 serves" value="' + (existing ? String(existing.yield_note || '').replace(/"/g,'&quot;') : '') + '" style="' + inp + '"></div>' +
     '</div>' +
-    '<div id="nut-rb-cooked-preview" style="display:none;background:rgba(200,150,62,0.08);border:1px solid rgba(200,150,62,0.3);border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;font-size:11px;color:var(--text3);"></div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;">Ingredient weights above are for ONE serve. Weekly Prep multiplies them by the batch size to tell you what to cook.</div>' +
+    '<div style="' + sect + '">Macros per serve</div>' +
+    '<div id="nut-rb-auto" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 13px;font-size:12px;color:var(--text3);"></div>' +
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:9px;cursor:pointer;touch-action:manipulation;">' +
+    '<input type="checkbox" id="nut-rb-manual-tog" ' + (_rbManual ? 'checked' : '') + ' style="width:17px;height:17px;accent-color:var(--gold);">' +
+    '<span style="font-size:12px;color:var(--text2);">Enter macros manually instead</span></label>' +
+    '<div id="nut-rb-manual-box" style="display:' + (_rbManual ? 'grid' : 'none') + ';grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:9px;">' +
+    '<div><label style="' + lbl + '">kcal</label><input id="nut-rb-mk" type="number" inputmode="decimal" value="' + (mm.k || '') + '" style="' + inp + '"></div>' +
+    '<div><label style="' + lbl + '">P g</label><input id="nut-rb-mp" type="number" inputmode="decimal" value="' + (mm.p || '') + '" style="' + inp + '"></div>' +
+    '<div><label style="' + lbl + '">C g</label><input id="nut-rb-mc" type="number" inputmode="decimal" value="' + (mm.c || '') + '" style="' + inp + '"></div>' +
+    '<div><label style="' + lbl + '">F g</label><input id="nut-rb-mf" type="number" inputmode="decimal" value="' + (mm.f || '') + '" style="' + inp + '"></div>' +
+    '</div>' +
+    '<div style="' + sect + '">Prep method <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:0.6;">optional</span></div>' +
+    '<textarea id="nut-rb-prep" rows="3" placeholder="e.g. Blend everything, simmer 10 min, jar and refrigerate" style="width:100%;box-sizing:border-box;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;line-height:1.5;outline:none;resize:vertical;">' + (existing ? String(existing.prep_method || '') : '') + '</textarea>' +
+    '<div style="height:14px;"></div>' +
+    '</div>' +
+    '<div style="padding:12px 20px 20px;flex-shrink:0;border-top:1px solid var(--border);">' +
     '<button id="nut-rb-save" style="width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SAVE RECIPE</button>' +
     '</div></div>';
   document.body.appendChild(ov);
-  var _rbComps = [];
-  function _rbTotals(){
-    var tK=0,tP=0,tC=0,tF=0;
-    _rbComps.forEach(function(c){ var f=(c.qty_g||0)/100; tK+=Math.round((c.k||0)*f); tP+=(c.p||0)*f; tC+=(c.c||0)*f; tF+=(c.f||0)*f; });
-    return {k:tK, p:Math.round(tP*10)/10, c:Math.round(tC*10)/10, f:Math.round(tF*10)/10};
+
+  function _rbDraft(){
+    return {
+      components: _rbComps,
+      macros_manual: _rbManual ? {
+        k: parseFloat(ov.querySelector('#nut-rb-mk').value) || 0,
+        p: parseFloat(ov.querySelector('#nut-rb-mp').value) || 0,
+        c: parseFloat(ov.querySelector('#nut-rb-mc').value) || 0,
+        f: parseFloat(ov.querySelector('#nut-rb-mf').value) || 0
+      } : null
+    };
   }
-  function _rbUpdateCookedPreview(){
-    var cw = parseFloat(ov.querySelector('#nut-rb-cooked').value)||0;
-    var sw = parseFloat(ov.querySelector('#nut-rb-serve').value)||0;
-    var prev = ov.querySelector('#nut-rb-cooked-preview');
-    if(!prev) return;
-    if(!cw || !_rbComps.length){ prev.style.display='none'; return; }
-    var t = _rbTotals();
-    var perG_K = t.k / cw, perG_P = t.p / cw, perG_C = t.c / cw, perG_F = t.f / cw;
-    var serveG = sw || cw;
-    var sK = Math.round(perG_K*serveG), sP = Math.round(perG_P*serveG*10)/10, sC = Math.round(perG_C*serveG*10)/10, sF = Math.round(perG_F*serveG*10)/10;
-    prev.style.display = '';
-    prev.innerHTML = '<span style="color:var(--gold);font-weight:700;">Per serve (' + Math.round(serveG) + 'g):</span> ' + sK + ' kcal &middot; P' + sP + 'g &middot; C' + sC + 'g &middot; F' + sF + 'g' +
-      '<br><span style="opacity:0.7;">Per 100g cooked: ' + Math.round(perG_K*100) + ' kcal &middot; P' + Math.round(perG_P*100*10)/10 + 'g</span>';
+  function _rbUpdateMacros(){
+    var el = ov.querySelector('#nut-rb-auto');
+    if(!el) return;
+    var m = nutRecipeMacros(_rbDraft());
+    var y = parseFloat(ov.querySelector('#nut-rb-yield').value) || 1;
+    var serveG = nutRecipeServeWeight({components:_rbComps});
+    var src = _rbManual ? 'Manual entry' : (_rbComps.length ? 'Auto from food library' : 'Add ingredients or enter macros manually');
+    el.innerHTML = '<div style="font-family:var(--font-d);font-size:15px;font-weight:900;color:var(--gold);">' + m.k + ' kcal</div>' +
+      '<div style="margin-top:2px;">P' + m.p + 'g &middot; C' + m.c + 'g &middot; F' + m.f + 'g' + (serveG ? (' &middot; ' + serveG + 'g on the plate') : '') + '</div>' +
+      '<div style="font-size:10px;opacity:0.7;margin-top:4px;">' + src + (y > 1 ? (' &middot; batch of ' + y + ' = ' + Math.round(m.k * y) + ' kcal') : '') + '</div>';
+  }
+  function _rbRenderCats(){
+    var el = ov.querySelector('#nut-rb-cats');
+    el.innerHTML = _NUT_REC_CATS.map(function(c){
+      var a = (_rbCat === c.key);
+      return '<button data-rb-cat="' + c.key + '" style="flex-shrink:0;padding:5px 12px;background:' + (a?'var(--gold)':'var(--bg2)') + ';border:1px solid ' + (a?'var(--gold)':'var(--border2)') + ';border-radius:20px;color:' + (a?'#000':'var(--text3)') + ';font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">' + c.label + '</button>';
+    }).join('');
+    el.querySelectorAll('[data-rb-cat]').forEach(function(b){
+      b.addEventListener('click', function(){ _rbCat = b.getAttribute('data-rb-cat'); _rbRenderCats(); });
+    });
   }
   function _rbRender(){
     var list = ov.querySelector('#nut-rb-list');
-    var totEl = ov.querySelector('#nut-rb-totals');
     if(!_rbComps.length){
-      list.innerHTML = '<div style="text-align:center;padding:20px 0;font-size:12px;color:var(--text3);">No components yet — tap Add Component</div>';
-      if(totEl) totEl.style.display = 'none';
+      list.innerHTML = '<div style="text-align:center;padding:18px 0;font-size:12px;color:var(--text3);">No ingredients yet — tap Add Ingredient</div>';
+      _rbUpdateMacros();
       return;
     }
-    var t = _rbTotals();
-    if(totEl){
-      totEl.style.display = '';
-      totEl.innerHTML = 'Total raw: <strong style="color:var(--text);">' + t.k + ' kcal</strong> &middot; P' + t.p + 'g &middot; C' + t.c + 'g &middot; F' + t.f + 'g';
-    }
     list.innerHTML = _rbComps.map(function(c, i){
-      var cK = Math.round((c.k||0)*(c.qty_g||0)/100);
-      var cP = Math.round((c.p||0)*(c.qty_g||0)/100*10)/10;
-      var stateTag = c.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,0.08);color:var(--text3);margin-left:5px;">R</span>';
-      return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">' +
-        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;color:var(--text);">' + c.n + stateTag + '</div>' +
-        '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cK + ' kcal &middot; P' + cP + 'g</div></div>' +
+      var q  = (c.qty_g||0)/100;
+      var cK = Math.round((c.k||0)*q);
+      var cP = Math.round((c.p||0)*q*10)/10;
+      var tag = (c.state === 'cooked')
+        ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>'
+        : '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,0.08);color:var(--text3);margin-left:5px;">R</span>';
+      return '<div style="padding:10px 0;border-bottom:1px solid var(--border);">' +
+        '<div style="display:flex;align-items:center;">' +
+        '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:13px;font-weight:600;color:var(--text);">' + c.n + tag + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);">' + cK + ' kcal &middot; P' + cP + 'g per serve</div></div>' +
         '<button data-rb-rm="' + i + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>' +
-        '</div>';
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px;">' +
+        '<div><label style="' + lbl + '">Raw g / serve</label><input data-rb-raw="' + i + '" type="number" inputmode="decimal" value="' + (c.qty_g||0) + '" style="' + inp + 'padding:7px;font-size:13px;"></div>' +
+        '<div><label style="' + lbl + '">Cooked g <span style="font-weight:400;opacity:0.6;">opt</span></label><input data-rb-cooked="' + i + '" type="number" inputmode="decimal" value="' + (c.cooked_g || '') + '" style="' + inp + 'padding:7px;font-size:13px;"></div>' +
+        '</div></div>';
     }).join('');
     list.querySelectorAll('[data-rb-rm]').forEach(function(btn){
-      btn.addEventListener('click', function(){ _rbComps.splice(parseInt(btn.getAttribute('data-rb-rm')), 1); _rbRender(); _rbUpdateCookedPreview(); });
+      btn.addEventListener('click', function(){ _rbComps.splice(parseInt(btn.getAttribute('data-rb-rm')), 1); _rbRender(); });
     });
-    _rbUpdateCookedPreview();
+    list.querySelectorAll('[data-rb-raw]').forEach(function(el){
+      el.addEventListener('input', function(){
+        var i = parseInt(el.getAttribute('data-rb-raw'));
+        if(_rbComps[i]) _rbComps[i].qty_g = parseFloat(el.value) || 0;
+        _rbUpdateMacros();
+      });
+    });
+    list.querySelectorAll('[data-rb-cooked]').forEach(function(el){
+      el.addEventListener('input', function(){
+        var i = parseInt(el.getAttribute('data-rb-cooked'));
+        if(_rbComps[i]) _rbComps[i].cooked_g = parseFloat(el.value) || 0;
+        _rbUpdateMacros();
+      });
+    });
+    _rbUpdateMacros();
   }
+
+  _rbRenderCats();
   _rbRender();
   ov.querySelector('#nut-rb-close').addEventListener('click', function(){ ov.remove(); });
   ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
-  ov.querySelector('#nut-rb-cooked').addEventListener('input', _rbUpdateCookedPreview);
-  ov.querySelector('#nut-rb-serve').addEventListener('input', _rbUpdateCookedPreview);
+  ov.querySelector('#nut-rb-yield').addEventListener('input', _rbUpdateMacros);
+  ov.querySelector('#nut-rb-manual-tog').addEventListener('change', function(e){
+    _rbManual = !!e.target.checked;
+    ov.querySelector('#nut-rb-manual-box').style.display = _rbManual ? 'grid' : 'none';
+    _rbUpdateMacros();
+  });
+  ['#nut-rb-mk','#nut-rb-mp','#nut-rb-mc','#nut-rb-mf'].forEach(function(sel){
+    ov.querySelector(sel).addEventListener('input', _rbUpdateMacros);
+  });
   ov.querySelector('#nut-rb-add-comp').addEventListener('click', function(){
     _nutOpenPickerForRecipe(function(food, qty){
-      _rbComps.push({n:food.n, cat:food.cat, k:food.k, p:food.p, c:food.c, f:food.f, qty_g:qty, state:food.state||'raw'});
+      _rbComps.push({n:food.n, cat:food.cat, k:food.k, p:food.p, c:food.c, f:food.f, qty_g:qty, cooked_g:0, state:food.state||'raw'});
       _rbRender();
     });
   });
   ov.querySelector('#nut-rb-save').addEventListener('click', function(){
-    var name = (ov.querySelector('#nut-rb-name').value || '').trim();
+    var name  = (ov.querySelector('#nut-rb-name').value || '').trim();
     var errEl = ov.querySelector('#nut-rb-err');
     if(!name){ errEl.textContent = 'Please enter a recipe name.'; errEl.style.display = ''; ov.querySelector('#nut-rb-name').focus(); return; }
-    if(!_rbComps.length){ errEl.textContent = 'Add at least one component.'; errEl.style.display = ''; return; }
+    var draft = _rbDraft();
+    if(!_rbComps.length && !draft.macros_manual){ errEl.textContent = 'Add at least one ingredient, or enter macros manually.'; errEl.style.display = ''; return; }
     errEl.style.display = 'none';
-    var cookedW = parseFloat(ov.querySelector('#nut-rb-cooked').value)||0;
-    var serveW  = parseFloat(ov.querySelector('#nut-rb-serve').value)||0;
-    var ns = nutGetState();
-    if(!ns.recipes) ns.recipes = [];
-    var rec = {id:'rec_' + String(Date.now()), name: name, components: JSON.parse(JSON.stringify(_rbComps))};
-    if(cookedW > 0){ rec.cookedWeight_g = cookedW; }
-    if(serveW > 0){ rec.serveSize_g = serveW; }
-    ns.recipes.push(rec);
-    nutSaveState(ns);
+    var yieldN = parseFloat(ov.querySelector('#nut-rb-yield').value) || 1;
+    if(yieldN < 1) yieldN = 1;
+    var rec = {
+      id: existing ? existing.id : ('rec_' + String(Date.now())),
+      name: name,
+      cat: _rbCat,
+      components: JSON.parse(JSON.stringify(_rbComps)),
+      yield_serves: yieldN,
+      yield_note: (ov.querySelector('#nut-rb-ynote').value || '').trim(),
+      prep_method: (ov.querySelector('#nut-rb-prep').value || '').trim(),
+      macros_manual: draft.macros_manual
+    };
+    var list = nutGetRecipes();
+    var found = -1;
+    for(var i=0;i<list.length;i++){ if(list[i].id === rec.id){ found = i; break; } }
+    if(found >= 0) list[found] = rec; else list.push(rec);
+    nutSaveRecipes(list);
     ov.remove();
-    nutRenderScreen();
+    if(typeof nutRenderScreen === 'function') nutRenderScreen();
   });
 }
 
@@ -19055,61 +19191,29 @@ function _nutOpenPickerForRecipe(onAdd){
 }
 
 // ── Recipe helpers ────────────────────────────────────────────────────────────
-function _nutRecipeDelete(ri){
-  var ns = nutGetState();
-  if(!ns || !ns.recipes) return;
-  ns.recipes.splice(ri, 1);
-  nutSaveState(ns);
+function _nutRecipeDelete(id){
+  var list = nutGetRecipes();
+  var out = list.filter(function(r){ return r.id !== id; });
+  nutSaveRecipes(out);
   nutRenderScreen();
 }
 
-function _nutApplyRecipe(ri, slot, dateKey){
-  var ns = nutGetState();
-  if(!ns || !ns.recipes) return;
-  var recipe = ns.recipes[ri];
-  if(!recipe || !recipe.components) return;
-  if(!ns.daily) ns.daily = {};
-  if(!ns.daily[dateKey]) ns.daily[dateKey] = {};
-  var day = ns.daily[dateKey];
-  if(!day.meals || Array.isArray(day.meals)) day.meals = {};
-  if(!day.meals[slot]) day.meals[slot] = {components:[]};
-  if(recipe.cookedWeight_g && recipe.cookedWeight_g > 0){
-    var tK=0, tP=0, tC=0, tF=0;
-    (recipe.components||[]).forEach(function(c){ var f=(c.qty_g||0)/100; tK+=(c.k||0)*f; tP+=(c.p||0)*f; tC+=(c.c||0)*f; tF+=(c.f||0)*f; });
-    var cw = recipe.cookedWeight_g;
-    var serveG = recipe.serveSize_g || cw;
-    day.meals[slot].components.push({
-      n: recipe.name,
-      cat: 'recipe',
-      k: Math.round(tK / cw * 100),
-      p: Math.round(tP / cw * 100 * 10) / 10,
-      c: Math.round(tC / cw * 100 * 10) / 10,
-      f: Math.round(tF / cw * 100 * 10) / 10,
-      qty_g: serveG,
-      state: 'cooked',
-      isRecipe: true
-    });
-  } else {
-    recipe.components.forEach(function(c){
-      day.meals[slot].components.push(Object.assign({}, c));
-    });
-  }
-  nutSaveState(ns);
-  if(typeof nutRenderTile === 'function') nutRenderTile();
+// Log one serve of a recipe into a slot on the given day (defaults to today).
+function _nutApplyRecipe(id, slot, dateKey, serves){
+  nutAssignRecipe(id, slot, dateKey || _nutToday(), serves || 1);
   _nutTab = 'today';
   nutRenderScreen();
 }
 
-function _nutRecipeApplyPrompt(ri){
+function _nutRecipeApplyPrompt(id){
   var ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9700;display:flex;align-items:flex-end;';
   var today = _nutToday();
-  var SLOTS = [{k:'breakfast',l:'Breakfast'},{k:'lunch',l:'Lunch'},{k:'dinner',l:'Dinner'},{k:'snack',l:'Snack'},{k:'post_workout',l:'Post-Workout'}];
-  var rows = SLOTS.map(function(s){
+  var rows = _NUT_PLAN_SLOTS.map(function(s){
     return '<button data-slot="' + s.k + '" style="width:100%;padding:14px 16px;background:none;border:none;border-bottom:1px solid var(--border);text-align:left;font-size:15px;color:var(--text);cursor:pointer;touch-action:manipulation;">' + s.l + '</button>';
   }).join('');
   ov.innerHTML = '<div style="width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;box-sizing:border-box;">' +
-    '<div style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:16px;">ADD RECIPE TO</div>' +
+    '<div style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:16px;">ADD RECIPE TO TODAY</div>' +
     rows +
     '<button id="nut-rap-cancel" style="width:100%;padding:14px;background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;touch-action:manipulation;margin-top:8px;">Cancel</button>' +
     '</div>';
@@ -19117,10 +19221,10 @@ function _nutRecipeApplyPrompt(ri){
   ov.querySelectorAll('[data-slot]').forEach(function(btn){
     btn.addEventListener('click', function(){
       ov.remove();
-      _nutApplyRecipe(ri, btn.getAttribute('data-slot'), today);
+      _nutApplyRecipe(id, btn.getAttribute('data-slot'), today, 1);
     });
   });
-  document.getElementById('nut-rap-cancel').addEventListener('click', function(){ ov.remove(); });
+  ov.querySelector('#nut-rap-cancel').addEventListener('click', function(){ ov.remove(); });
   ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
 }
 
@@ -19250,6 +19354,565 @@ function _nutGoToWeekAndCreate(){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WEEKLY PREP — single-serve recipes + week assignment + prep aggregator
+// v4.9.141
+// Recipes: localStorage 'phx_recipes_v1_{uid}', mirrored to profiles.nut_recipes.
+// A recipe is defined PER SERVE. yield_serves says how many serves one batch
+// makes — that is what the prep aggregator uses to work out batch counts.
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _NUT_REC_CATS = [
+  {key:'sauce',   label:'Sauce'},
+  {key:'protein', label:'Protein'},
+  {key:'carb',    label:'Carb'},
+  {key:'veg',     label:'Veg'},
+  {key:'snack',   label:'Snack'},
+  {key:'other',   label:'Other'}
+];
+
+function _nutRecCatLabel(k){
+  for(var i=0;i<_NUT_REC_CATS.length;i++){ if(_NUT_REC_CATS[i].key === k) return _NUT_REC_CATS[i].label; }
+  return 'Other';
+}
+
+function _nutRecipeKey(){
+  var uid = (typeof athlete !== 'undefined' && athlete && athlete.id) ? athlete.id : 'guest';
+  return 'phx_recipes_v1_' + uid;
+}
+
+// Canonical recipe read. On first run migrates anything left in the old
+// nutrition blob (nutGetState().recipes) into the standalone key.
+function nutGetRecipes(){
+  try {
+    var raw = localStorage.getItem(_nutRecipeKey());
+    if(raw !== null){ var p = JSON.parse(raw); return Array.isArray(p) ? p : []; }
+  } catch(e){ return []; }
+  var legacy = [];
+  try { var ns = nutGetState(); legacy = (ns && ns.recipes) ? ns.recipes : []; } catch(e2){}
+  var migrated = [];
+  legacy.forEach(function(r){ var n = _nutNormalizeRecipe(r); if(n) migrated.push(n); });
+  try { localStorage.setItem(_nutRecipeKey(), JSON.stringify(migrated)); } catch(e3){}
+  return migrated;
+}
+
+function nutSaveRecipes(list){
+  var arr = list || [];
+  try { localStorage.setItem(_nutRecipeKey(), JSON.stringify(arr)); } catch(e){}
+  _nutRecipesMirrorToCloud(arr);
+}
+
+var _nutRecMirrorTimer = null;
+function _nutRecipesMirrorToCloud(list){
+  clearTimeout(_nutRecMirrorTimer);
+  _nutRecMirrorTimer = setTimeout(function(){
+    try {
+      var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
+      if(!uid || typeof sb === 'undefined' || !sb) return;
+      sb.from('profiles').update({nut_recipes: list}).eq('id', uid).then(function(){}, function(){});
+    } catch(e){}
+  }, 2000);
+}
+
+// Hydrate from Supabase on profile load. Local always wins if present.
+function nutRestoreRecipesFromCloud(profileRow){
+  try {
+    if(!profileRow || !profileRow.nut_recipes) return;
+    if(localStorage.getItem(_nutRecipeKey()) !== null) return;
+    localStorage.setItem(_nutRecipeKey(), JSON.stringify(profileRow.nut_recipes));
+  } catch(e){}
+}
+
+// Convert any saved recipe into the per-serve shape. Legacy batch recipes
+// (cookedWeight_g / serveSize_g) get their ingredient weights divided down to
+// one serve, with yield_serves set to how many serves the batch made.
+function _nutNormalizeRecipe(r){
+  if(!r) return null;
+  var out = {
+    id: r.id || ('rec_' + String(Date.now()) + '_' + Math.round(Math.random()*1000000)),
+    name: r.name || 'Recipe',
+    cat: r.cat || 'other',
+    yield_serves: (parseFloat(r.yield_serves) > 0) ? parseFloat(r.yield_serves) : 1,
+    yield_note: r.yield_note || '',
+    prep_method: r.prep_method || '',
+    macros_manual: r.macros_manual || null,
+    components: []
+  };
+  var comps = r.components || [];
+  if(!r.yield_serves && r.cookedWeight_g > 0){
+    var cw = r.cookedWeight_g;
+    var serveG = r.serveSize_g || cw;
+    var serves = Math.max(1, Math.round(cw / serveG));
+    out.yield_serves = serves;
+    if(!out.yield_note) out.yield_note = '1 batch = ' + serves + ' serve' + (serves > 1 ? 's' : '') + ' at ' + Math.round(serveG) + 'g each';
+    comps.forEach(function(c){
+      out.components.push({
+        n:c.n, cat:c.cat, k:c.k, p:c.p, c:c.c, f:c.f, state:c.state || 'raw',
+        qty_g: Math.round(((c.qty_g||0) / serves) * 10) / 10,
+        cooked_g: 0
+      });
+    });
+  } else {
+    comps.forEach(function(c){
+      out.components.push({
+        n:c.n, cat:c.cat, k:c.k, p:c.p, c:c.c, f:c.f, state:c.state || 'raw',
+        qty_g: c.qty_g || 0,
+        cooked_g: c.cooked_g || 0
+      });
+    });
+  }
+  return out;
+}
+
+function nutRecipeById(id){
+  var list = nutGetRecipes();
+  for(var i=0;i<list.length;i++){ if(list[i].id === id) return list[i]; }
+  return null;
+}
+
+// Macros for ONE serve — manual override wins, otherwise summed from the food DB
+// values already stored on each ingredient.
+function nutRecipeMacros(r){
+  if(!r) return {k:0,p:0,c:0,f:0};
+  var mm = r.macros_manual;
+  if(mm && ((mm.k||0) || (mm.p||0) || (mm.c||0) || (mm.f||0))){
+    return {k:Math.round(mm.k||0), p:Math.round((mm.p||0)*10)/10, c:Math.round((mm.c||0)*10)/10, f:Math.round((mm.f||0)*10)/10};
+  }
+  var k=0,p=0,c=0,f=0;
+  (r.components||[]).forEach(function(x){ var q=(x.qty_g||0)/100; k+=(x.k||0)*q; p+=(x.p||0)*q; c+=(x.c||0)*q; f+=(x.f||0)*q; });
+  return {k:Math.round(k), p:Math.round(p*10)/10, c:Math.round(c*10)/10, f:Math.round(f*10)/10};
+}
+
+// Plate weight of one serve — cooked weight where given, raw otherwise.
+function nutRecipeServeWeight(r){
+  var g = 0;
+  (r.components||[]).forEach(function(x){ g += ((x.cooked_g > 0) ? x.cooked_g : (x.qty_g||0)); });
+  return Math.round(g);
+}
+
+function _nutWeekDays(fromDateKey){
+  var monStr = _nutWeekStart(fromDateKey || _nutToday());
+  var out = [];
+  for(var i=0;i<7;i++){
+    var d = new Date(monStr + 'T12:00:00');
+    d.setDate(d.getDate() + i);
+    out.push(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+  }
+  return out;
+}
+
+var _NUT_PLAN_SLOTS = [
+  {k:'breakfast',    l:'Breakfast'},
+  {k:'lunch',        l:'Lunch'},
+  {k:'dinner',       l:'Dinner'},
+  {k:'snack',        l:'Snack'},
+  {k:'post_workout', l:'Post-Workout'}
+];
+
+function _nutSlotLabel(k){
+  for(var i=0;i<_NUT_PLAN_SLOTS.length;i++){ if(_NUT_PLAN_SLOTS[i].k === k) return _NUT_PLAN_SLOTS[i].l; }
+  return k;
+}
+
+// Assign N serves of a recipe to a day/slot. Logged as ONE component carrying
+// recipeId + serves so the prep aggregator can count it back out. Macros are
+// stored per-100g so the existing _nutDayTotals maths still applies.
+function nutAssignRecipe(recipeId, slot, dateKey, serves){
+  var rec = nutRecipeById(recipeId);
+  if(!rec) return;
+  var n = parseFloat(serves) || 1;
+  if(n <= 0) n = 1;
+  var m = nutRecipeMacros(rec);
+  var serveG = nutRecipeServeWeight(rec) || 100;
+  var ns = nutGetState();
+  if(!ns) return;
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[dateKey]) ns.daily[dateKey] = {};
+  var day = ns.daily[dateKey];
+  if(!day.meals || Array.isArray(day.meals)) day.meals = {};
+  if(!day.meals[slot]) day.meals[slot] = {components:[]};
+  if(!day.meals[slot].components) day.meals[slot].components = [];
+  var per100 = function(v){ return Math.round((v / serveG) * 100 * 10) / 10; };
+  day.meals[slot].components.push({
+    n: rec.name,
+    cat: 'recipe',
+    isRecipe: true,
+    recipeId: rec.id,
+    serves: n,
+    state: 'cooked',
+    qty_g: Math.round(serveG * n),
+    k: Math.round((m.k / serveG) * 100),
+    p: per100(m.p),
+    c: per100(m.c),
+    f: per100(m.f)
+  });
+  nutSaveState(ns);
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+}
+
+// ── Prep aggregator ───────────────────────────────────────────────────────
+// Walks every slot of every day in the week, totals serves per recipe, then
+// works out batches and raw ingredient weights.
+function nutBuildPrepPlan(days){
+  days = days || _nutWeekDays();
+  var ns = nutGetState() || {};
+  var byName = {};
+  nutGetRecipes().forEach(function(r){ byName[r.name] = r; });
+  var need = {};
+  days.forEach(function(dk){
+    var day = (ns.daily && ns.daily[dk]) || {};
+    var meals = (day.meals && !Array.isArray(day.meals)) ? day.meals : {};
+    Object.keys(meals).forEach(function(slot){
+      var comps = (meals[slot] && meals[slot].components) || [];
+      comps.forEach(function(c){
+        if(!c || !c.isRecipe) return;
+        var rec = c.recipeId ? nutRecipeById(c.recipeId) : byName[c.n];
+        if(!rec) return;
+        var n = parseFloat(c.serves) || 1;
+        if(!need[rec.id]) need[rec.id] = {recipe:rec, serves:0, uses:[]};
+        need[rec.id].serves += n;
+        need[rec.id].uses.push({date:dk, slot:slot, serves:n});
+      });
+    });
+  });
+  var out = [];
+  Object.keys(need).forEach(function(id){
+    out.push(_nutPrepScale(need[id].recipe, need[id].serves, need[id].uses));
+  });
+  out.sort(function(a,b){ return (b.serves - a.serves) || (a.name < b.name ? -1 : 1); });
+  return out;
+}
+
+function _nutPrepScale(rec, servesNeeded, uses){
+  var y = (parseFloat(rec.yield_serves) > 0) ? parseFloat(rec.yield_serves) : 1;
+  var batches = Math.max(1, Math.ceil(servesNeeded / y));
+  var servesMade = batches * y;
+  var m = nutRecipeMacros(rec);
+  var ing = (rec.components||[]).map(function(c){
+    var per = c.qty_g || 0;
+    return {
+      n: c.n, cat: c.cat || 'other', state: c.state || 'raw',
+      perServe_g: Math.round(per * 10) / 10,
+      perBatch_g: Math.round(per * y * 10) / 10,
+      total_g:    Math.round(per * servesMade * 10) / 10,
+      cookedTotal_g: (c.cooked_g > 0) ? Math.round(c.cooked_g * servesMade * 10) / 10 : 0
+    };
+  });
+  return {
+    id: rec.id,
+    name: rec.name,
+    cat: rec.cat || 'other',
+    serves: servesNeeded,
+    yield_serves: y,
+    batches: batches,
+    servesMade: servesMade,
+    leftover: Math.round((servesMade - servesNeeded) * 10) / 10,
+    batchMode: (y > 1),
+    ingredients: ing,
+    macrosPerServe: m,
+    totalMacros: {
+      k: Math.round(m.k * servesNeeded),
+      p: Math.round(m.p * servesNeeded * 10) / 10,
+      c: Math.round(m.c * servesNeeded * 10) / 10,
+      f: Math.round(m.f * servesNeeded * 10) / 10
+    },
+    prep_method: rec.prep_method || '',
+    yield_note: rec.yield_note || '',
+    uses: uses || []
+  };
+}
+
+// Human sentence for what to actually cook.
+function _nutPrepBatchLine(p){
+  if(!p.batchMode){
+    return 'Make ' + p.serves + ' individual serve' + (p.serves !== 1 ? 's' : '');
+  }
+  var s = 'Make ' + p.batches + ' batch' + (p.batches !== 1 ? 'es' : '') +
+          ' (' + p.servesMade + ' serve' + (p.servesMade !== 1 ? 's' : '') + ', use ' + p.serves + ')';
+  if(p.leftover > 0) s += ' — ' + p.leftover + ' spare';
+  return s;
+}
+
+function _nutFmtG(g){
+  if(g >= 1000) return (g/1000).toFixed(2) + 'kg';
+  return (Math.round(g*10)/10) + 'g';
+}
+
+// ── Week planner view (WEEK tab → PLAN mode) ──────────────────────────────
+function _nutWeekPlanView(ns, days){
+  var DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var today = _nutToday();
+  var recipes = nutGetRecipes();
+  var h = '';
+  if(!recipes.length){
+    h += '<div style="background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;margin-bottom:12px;">';
+    h += '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">No saved recipes yet. Build one first, then assign it to any day.</div>';
+    h += '<button data-nut-new-recipe style="background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:9px 16px;cursor:pointer;touch-action:manipulation;">+ New Recipe</button>';
+    h += '</div>';
+  }
+  days.forEach(function(dk, idx){
+    var day = (ns.daily && ns.daily[dk]) || {};
+    var meals = (day.meals && !Array.isArray(day.meals)) ? day.meals : {};
+    var dp = new Date(dk + 'T12:00:00');
+    var isToday = (dk === today);
+    h += '<div style="background:var(--bg2);border:1px solid ' + (isToday ? 'var(--gold)' : 'var(--border)') + ';border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">';
+    h += '<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:8px;">';
+    h += '<span style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;color:' + (isToday ? 'var(--gold)' : 'var(--text2)') + ';">' + DOW[idx].toUpperCase() + '</span>';
+    h += '<span style="font-size:11px;color:var(--text3);">' + dp.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</span>';
+    h += '</div>';
+    h += '<div style="padding:4px 14px 10px;">';
+    _NUT_PLAN_SLOTS.forEach(function(sl){
+      var comps = (meals[sl.k] && meals[sl.k].components) || [];
+      h += '<div style="padding:8px 0;border-bottom:1px solid var(--border);">';
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+      h += '<span style="font-family:var(--font-d);font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);">' + sl.l + '</span>';
+      h += '<button data-nut-add-recipe="' + sl.k + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:700;padding:4px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Recipe</button>';
+      h += '</div>';
+      if(!comps.length){
+        h += '<div style="font-size:11px;color:var(--text3);opacity:0.6;margin-top:3px;">Empty</div>';
+      } else {
+        comps.forEach(function(c, ci){
+          var f = (c.qty_g||0)/100;
+          var cK = Math.round((c.k||0)*f);
+          var cP = Math.round((c.p||0)*f*10)/10;
+          var cC = Math.round((c.c||0)*f*10)/10;
+          var cF = Math.round((c.f||0)*f*10)/10;
+          var sv = c.isRecipe ? (parseFloat(c.serves)||1) : 0;
+          var tag = c.isRecipe
+            ? '<span style="font-size:8px;font-weight:800;padding:1px 5px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:6px;">' + (sv !== 1 ? ('x' + sv + ' SERVES') : 'RECIPE') + '</span>'
+            : '';
+          h += '<div style="display:flex;align-items:center;margin-top:5px;">';
+          h += '<div style="flex:1;min-width:0;">';
+          h += '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + c.n + tag + '</div>';
+          h += '<div style="font-size:10px;color:var(--text3);">' + cK + ' kcal &middot; P' + cP + 'g &middot; C' + cC + 'g &middot; F' + cF + 'g</div>';
+          h += '</div>';
+          h += '<button data-nut-rm="' + sl.k + '|' + dk + '|' + ci + '" style="width:26px;height:26px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
+          h += '</div>';
+        });
+      }
+      h += '</div>';
+    });
+    h += '</div></div>';
+  });
+  return h;
+}
+
+// ── Recipe picker — assign N serves of a recipe to one day/slot ───────────
+function nutOpenRecipePicker(slot, dateKey){
+  var old = document.getElementById('nut-recipe-picker');
+  if(old) old.remove();
+  var recipes = nutGetRecipes();
+  var _pCat = 'all', _pSelId = null;
+  var ov = document.createElement('div');
+  ov.id = 'nut-recipe-picker';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9700;display:flex;align-items:flex-end;';
+  var dp = new Date(dateKey + 'T12:00:00');
+  var sub = _nutSlotLabel(slot) + ' &middot; ' + dp.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:82vh;">' +
+    '<div style="padding:14px 16px 10px;flex-shrink:0;">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Assign Recipe</div>' +
+    '<button id="nut-rp-close" style="width:28px;height:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:16px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;">' + sub + '</div>' +
+    '<div id="nut-rp-cats" style="display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;"></div>' +
+    '</div>' +
+    '<div id="nut-rp-list" style="flex:1;overflow-y:auto;padding:0 16px;"></div>' +
+    '<div id="nut-rp-bar" style="display:none;padding:10px 16px 16px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;">' +
+    '<div style="display:flex;gap:8px;align-items:center;">' +
+    '<input type="number" id="nut-rp-serves" value="1" min="0.5" step="0.5" inputmode="decimal" style="width:66px;padding:8px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;">' +
+    '<span style="font-size:12px;color:var(--text3);">serves</span>' +
+    '<button id="nut-rp-add" style="flex:1;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">ASSIGN</button>' +
+    '</div></div></div>';
+  document.body.appendChild(ov);
+  function renderCats(){
+    var used = {};
+    recipes.forEach(function(r){ used[r.cat || 'other'] = 1; });
+    var cats = [{key:'all',label:'All'}].concat(_NUT_REC_CATS.filter(function(c){ return used[c.key]; }));
+    var el = ov.querySelector('#nut-rp-cats');
+    el.innerHTML = cats.map(function(c){
+      var a = (_pCat === c.key);
+      return '<button data-rp-cat="' + c.key + '" style="flex-shrink:0;padding:4px 11px;background:' + (a?'var(--gold)':'var(--bg3)') + ';border:1px solid ' + (a?'var(--gold)':'var(--border2)') + ';border-radius:20px;color:' + (a?'#000':'var(--text3)') + ';font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">' + c.label + '</button>';
+    }).join('');
+    el.querySelectorAll('[data-rp-cat]').forEach(function(b){
+      b.addEventListener('click', function(){
+        _pCat = b.getAttribute('data-rp-cat'); _pSelId = null;
+        ov.querySelector('#nut-rp-bar').style.display = 'none';
+        renderCats(); renderList();
+      });
+    });
+  }
+  function renderList(){
+    var list = ov.querySelector('#nut-rp-list');
+    var shown = recipes.filter(function(r){ return _pCat === 'all' || (r.cat||'other') === _pCat; });
+    if(!shown.length){
+      list.innerHTML = '<div style="text-align:center;padding:30px 0;font-size:12px;color:var(--text3);">No recipes in this category.</div>';
+      return;
+    }
+    list.innerHTML = shown.map(function(r){
+      var m = nutRecipeMacros(r);
+      var y = (parseFloat(r.yield_serves) > 0) ? parseFloat(r.yield_serves) : 1;
+      var s = (_pSelId === r.id);
+      return '<div data-rp-rec="' + r.id + '" style="padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;background:' + (s?'rgba(200,150,62,0.08)':'transparent') + ';">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+        '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:13px;font-weight:' + (s?'700':'600') + ';color:' + (s?'var(--gold)':'var(--text)') + ';">' + r.name + '</div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + m.k + ' kcal &middot; P' + m.p + 'g &middot; C' + m.c + 'g &middot; F' + m.f + 'g per serve</div>' +
+        '</div>' +
+        '<span style="flex-shrink:0;font-family:var(--font-d);font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text3);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;">' + _nutRecCatLabel(r.cat||'other') + (y > 1 ? ' &middot; x' + y : '') + '</span>' +
+        '</div></div>';
+    }).join('');
+    list.querySelectorAll('[data-rp-rec]').forEach(function(row){
+      row.addEventListener('click', function(){
+        _pSelId = row.getAttribute('data-rp-rec');
+        ov.querySelector('#nut-rp-bar').style.display = '';
+        renderList();
+      });
+    });
+  }
+  renderCats(); renderList();
+  ov.querySelector('#nut-rp-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  ov.querySelector('#nut-rp-add').addEventListener('click', function(){
+    if(!_pSelId) return;
+    var n = parseFloat(ov.querySelector('#nut-rp-serves').value) || 1;
+    nutAssignRecipe(_pSelId, slot, dateKey, n);
+    ov.remove();
+    nutRenderScreen();
+  });
+}
+
+// ── WEEKLY PREP card ──────────────────────────────────────────────────────
+function nutOpenPrepCard(){
+  var days = _nutWeekDays();
+  var plan = nutBuildPrepPlan(days);
+  var monD = new Date(days[0] + 'T12:00:00');
+  var sunD = new Date(days[6] + 'T12:00:00');
+  var range = monD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + sunD.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  var totalServes = 0;
+  plan.forEach(function(p){ totalServes += p.serves; });
+  var body = '';
+  if(!plan.length){
+    body = '<div style="text-align:center;padding:44px 16px;color:var(--text3);">' +
+      '<div style="font-size:38px;margin-bottom:12px;">&#129379;</div>' +
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text2);margin-bottom:8px;">Nothing to prep</div>' +
+      '<div style="font-size:12px;line-height:1.6;">Assign recipes to your week in the PLAN tab and they will be totalled here.</div>' +
+      '</div>';
+  } else {
+    plan.forEach(function(p){
+      body += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;">';
+      // Title row
+      body += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;">';
+      body += '<div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:700;color:var(--text);">' + p.name + '</div>';
+      body += '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + p.serves + ' serve' + (p.serves !== 1 ? 's' : '') + ' needed this week</div></div>';
+      body += '<span style="flex-shrink:0;font-family:var(--font-d);font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--gold);border:1px solid rgba(200,150,62,0.4);border-radius:10px;padding:3px 8px;">' + _nutRecCatLabel(p.cat) + '</span>';
+      body += '</div>';
+      // Batch instruction
+      body += '<div style="background:rgba(200,150,62,0.09);border:1px solid rgba(200,150,62,0.3);border-radius:8px;padding:8px 11px;margin-bottom:10px;">';
+      body += '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;color:var(--gold);">' + _nutPrepBatchLine(p) + '</div>';
+      if(p.yield_note) body += '<div style="font-size:10px;color:var(--text3);margin-top:3px;">' + p.yield_note + '</div>';
+      body += '</div>';
+      // Ingredients
+      if(p.ingredients.length){
+        var hdr = p.batchMode
+          ? ('Ingredients — ' + (p.batches > 1 ? ('per batch / total for ' + p.batches + ' batches') : 'one batch'))
+          : ('Ingredients — total for ' + p.serves + ' serve' + (p.serves !== 1 ? 's' : ''));
+        body += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:5px;">' + hdr + '</div>';
+        p.ingredients.forEach(function(g){
+          body += '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);">';
+          body += '<span style="font-size:12px;color:var(--text);flex:1;min-width:0;">' + g.n + '</span>';
+          var right = '';
+          if(p.batchMode && p.batches > 1){
+            right = '<span style="font-size:11px;color:var(--text3);">' + _nutFmtG(g.perBatch_g) + ' &times; ' + p.batches + '</span>' +
+                    '<span style="font-family:var(--font-d);font-size:12px;font-weight:700;color:var(--gold);margin-left:8px;">' + _nutFmtG(g.total_g) + '</span>';
+          } else {
+            right = '<span style="font-family:var(--font-d);font-size:12px;font-weight:700;color:var(--gold);">' + _nutFmtG(p.batchMode ? g.perBatch_g : g.total_g) + '</span>';
+          }
+          body += '<span style="flex-shrink:0;white-space:nowrap;">' + right + '</span>';
+          body += '</div>';
+        });
+      }
+      // Macros
+      var m = p.macrosPerServe, tm = p.totalMacros;
+      body += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:9px;font-size:11px;color:var(--text3);">';
+      body += '<span>Per serve: <strong style="color:var(--text2);">' + m.k + ' kcal</strong> &middot; P' + m.p + 'g &middot; C' + m.c + 'g &middot; F' + m.f + 'g</span>';
+      body += '</div>';
+      body += '<div style="font-size:11px;color:var(--text3);margin-top:2px;">Week total: ' + tm.k + ' kcal &middot; P' + tm.p + 'g &middot; C' + tm.c + 'g &middot; F' + tm.f + 'g</div>';
+      // Prep method
+      if(p.prep_method){
+        body += '<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border);">';
+        body += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">Method</div>';
+        body += '<div style="font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap;">' + p.prep_method + '</div></div>';
+      }
+      // Where it is used
+      if(p.uses && p.uses.length){
+        var useStr = p.uses.map(function(u){
+          var d = new Date(u.date + 'T12:00:00');
+          return d.toLocaleDateString('en-AU',{weekday:'short'}) + ' ' + _nutSlotLabel(u.slot).toLowerCase() + (u.serves !== 1 ? (' x' + u.serves) : '');
+        }).join(' &middot; ');
+        body += '<div style="font-size:10px;color:var(--text3);margin-top:8px;opacity:0.8;">Used: ' + useStr + '</div>';
+      }
+      body += '</div>';
+    });
+  }
+  var old = document.getElementById('nut-prep-card');
+  if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'nut-prep-card';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9500;display:flex;align-items:flex-end;';
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:90vh;">' +
+    '<div style="padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border);">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Weekly Prep</div>' +
+    '<button id="nut-pc-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:3px;">' + range + (plan.length ? (' &middot; ' + plan.length + ' recipe' + (plan.length !== 1 ? 's' : '') + ' &middot; ' + totalServes + ' serve' + (totalServes !== 1 ? 's' : '')) : '') + '</div>' +
+    '</div>' +
+    '<div id="nut-pc-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 20px 8px;">' + body + '</div>' +
+    (plan.length ?
+      '<div style="padding:12px 20px 20px;flex-shrink:0;border-top:1px solid var(--border);">' +
+      '<button id="nut-pc-copy" style="width:100%;padding:13px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">COPY PREP LIST</button>' +
+      '</div>' : '') +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#nut-pc-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  var copyBtn = ov.querySelector('#nut-pc-copy');
+  if(copyBtn){
+    copyBtn.addEventListener('click', function(){
+      var text = _nutPrepText(plan, range);
+      try { if(navigator.clipboard) navigator.clipboard.writeText(text); } catch(e){}
+      copyBtn.textContent = 'COPIED!';
+      setTimeout(function(){ copyBtn.textContent = 'COPY PREP LIST'; }, 2000);
+    });
+  }
+}
+
+// Plain-text export of the prep plan — for Notes / shopping apps.
+function _nutPrepText(plan, range){
+  var t = 'WEEKLY PREP — ' + (range || '') + '\n\n';
+  plan.forEach(function(p){
+    t += p.name.toUpperCase() + '  [' + _nutRecCatLabel(p.cat) + ']\n';
+    t += '  ' + p.serves + ' serve' + (p.serves !== 1 ? 's' : '') + ' needed\n';
+    t += '  ' + _nutPrepBatchLine(p) + '\n';
+    if(p.ingredients.length){
+      t += '  Ingredients' + (p.batchMode && p.batches === 1 ? ' (1 batch)' : ' (total)') + ':\n';
+      p.ingredients.forEach(function(g){
+        var amt = (p.batchMode && p.batches === 1) ? g.perBatch_g : g.total_g;
+        t += '    - ' + g.n + ' — ' + _nutFmtG(amt) + '\n';
+      });
+    }
+    var m = p.macrosPerServe;
+    t += '  Per serve: ' + m.k + ' kcal, P' + m.p + 'g, C' + m.c + 'g, F' + m.f + 'g\n';
+    if(p.prep_method) t += '  Method: ' + p.prep_method + '\n';
+    t += '\n';
+  });
+  return t;
+}
+
 // PEPTIDE PORTAL — v4.9.138
 // State: localStorage("peptide_v1_{uid}") + profiles.peptide_state (Supabase)
 // Tabs: TODAY | PROTOCOL | ORDER
@@ -19581,7 +20244,7 @@ function pepRenderScreen(){
   var body = document.getElementById("pep-screen-body");
   if(!body) return;
   var ps = pepGetState();
-  var tabs = [{key:"today",label:"TODAY"},{key:"protocol",label:"PROTOCOL"},{key:"order",label:"ORDER"}];
+  var tabs = [{key:"today",label:"TODAY"},{key:"protocol",label:"PROTOCOL"},{key:"adjust",label:"ADJUST"},{key:"order",label:"ORDER"}];
   var tabBar = "<div style=\"display:flex;border-bottom:1px solid var(--border);background:var(--bg);\">" +
     tabs.map(function(t){
       var act = _pepTab === t.key;
@@ -19590,6 +20253,7 @@ function pepRenderScreen(){
   var content = "";
   if(_pepTab === "today")    content = _pepTabToday(ps);
   else if(_pepTab === "protocol") content = _pepTabProtocol(ps);
+  else if(_pepTab === "adjust")   content = _pepTabAdjust(ps);
   else                       content = _pepTabOrder(ps);
   body.innerHTML = tabBar + "<div style=\"padding:16px;\">" + content + "</div>";
   body.querySelectorAll("[data-pep-tab]").forEach(function(btn){
@@ -19623,6 +20287,13 @@ function pepRenderScreen(){
   if(orderPick) orderPick.addEventListener("click", pepOpenOrderPicker);
   var copyBtn = body.querySelector("#pep-copy-order");
   if(copyBtn) copyBtn.addEventListener("click", pepCopyOrder);
+  var advBtn = body.querySelector("#pep-advice-go");
+  if(advBtn) advBtn.addEventListener("click", pepGenerateAdvice);
+  var noteBtn = body.querySelector("#pep-note-save");
+  if(noteBtn) noteBtn.addEventListener("click", pepSaveNote);
+  body.querySelectorAll("[data-pep-note-rm]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepDeleteNote(parseInt(btn.getAttribute("data-pep-note-rm"))); });
+  });
 }
 
 // ── TODAY tab ─────────────────────────────────────────────────────────────
@@ -19996,6 +20667,234 @@ function pepRemoveStack(idx){
   pepRenderScreen();
 }
 
+// ── ADJUST tab — AI protocol review (v4.9.143) ────────────────────────────
+// Sends the live protocol + 14-day adherence + logged response notes to the
+// Phoenix Claude proxy and renders specific, protocol-aware adjustments.
+
+var PEP_ADVISOR_SYSTEM =
+  "You are the peptide protocol analyst inside the Phoenix training app. You review one athlete's live peptide protocol and their logged responses, then return specific adjustments.\n\n" +
+  "RULES:\n" +
+  "1. Every recommendation must name the actual compound from the supplied context and state the exact change: new dose, new timing, new frequency, start a cycle, stop a cycle, or hold. Generic peptide education is a failure.\n" +
+  "2. Give the reason for each change, grounded in something in the context: days on cycle, adherence, a logged note, a timing clash, or a dose sitting outside commonly cited research ranges.\n" +
+  "3. Flag timing conflicts explicitly. Examples of what to check: GHRH and GHRP secretagogues must be pulsed in the same window and away from food; anything that raises alertness scheduled before bed; NAD+ dosed in the evening; two compounds competing for the same fasted window; injection-site load on one day.\n" +
+  "4. Flag any compound that has run past its usual cycle length, is overdue an off-period, or is due to start.\n" +
+  "5. Flag any dose that is high or low versus commonly cited research ranges. Say the range you are comparing against.\n" +
+  "6. If adherence on a compound is under 70 percent, fix adherence before recommending any dose increase.\n" +
+  "7. If the protocol is sound, say so plainly. Do not invent changes to look useful.\n" +
+  "8. This is research-compound tracking, not medical care. Do not diagnose. Where a change materially affects blood glucose, blood pressure, IGF-1, thyroid or hormonal axes, say which marker to test rather than guessing.\n\n" +
+  "FORMAT (markdown-lite, max 300 words):\n" +
+  "A one or two sentence verdict on the protocol as it stands.\n" +
+  "Then up to 5 lines, each: - **Compound** - the change - the reason.\n" +
+  "Then a single line starting with **Watch:** naming the one thing to monitor this week.\n" +
+  "Be direct. No preamble, no filler, no repeated disclaimers.";
+
+// Adherence over the trailing N days, per compound: scheduled vs ticked off.
+function _pepAdherence(ps, days){
+  var out = {};
+  var now = new Date(_pepToday() + "T12:00:00");
+  for(var i = 1; i <= (days || 14); i++){
+    var d = new Date(now.getTime() - i * 86400000);
+    var key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+    var due = _pepGetDoses(ps, key);
+    var all = due.morning.concat(due.anytime).concat(due.evening);
+    var ticked = (ps.checked && ps.checked[key]) || [];
+    all.forEach(function(item){
+      if(!out[item.id]) out[item.id] = {compound:item.name, scheduled:0, taken:0};
+      out[item.id].scheduled++;
+      if(ticked.indexOf(item.id) >= 0) out[item.id].taken++;
+    });
+  }
+  return Object.keys(out).map(function(k){
+    var r = out[k];
+    r.adherence_pct = r.scheduled ? Math.round(r.taken / r.scheduled * 100) : null;
+    return r;
+  });
+}
+
+// Everything the model needs to be specific rather than generic.
+function _pepBuildContext(ps){
+  var today = _pepToday();
+  var d = new Date(today + "T12:00:00");
+  var dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var stacks = (ps.stacks || []).map(function(stack){
+    var c = _pepCompound(stack.compoundId);
+    if(!c) return null;
+    var dose  = stack.dose != null ? stack.dose : c.dose;
+    var recon = _pepRecon(stack, c);
+    var draw  = _pepDraw(dose, c.doseUnit, recon);
+    var daysOn = null, cyclePhase = null, weekOfCycle = null;
+    if(stack.startDate){
+      daysOn = Math.round((d - new Date(stack.startDate + "T12:00:00")) / 86400000);
+      if(daysOn >= 0){
+        weekOfCycle = Math.floor(daysOn / 7) + 1;
+        if(stack.cycleWeeks){
+          var onLen = stack.cycleWeeks * 7, offLen = (stack.offWeeks || 0) * 7, full = onLen + offLen;
+          cyclePhase = (full > 0 && daysOn % full >= onLen) ? "off-cycle" : "on-cycle";
+        } else cyclePhase = "continuous";
+      } else cyclePhase = "not started";
+    }
+    return {
+      compound: c.name,
+      category: c.cat,
+      dose: dose,
+      dose_unit: c.doseUnit,
+      dose_label: _pepFmtDose(dose, c.doseUnit),
+      frequency: stack.freq || c.freq,
+      timing: c.timing,
+      start_date: stack.startDate || null,
+      days_on_protocol: daysOn,
+      week_of_cycle: weekOfCycle,
+      cycle_weeks: stack.cycleWeeks || null,
+      off_weeks: stack.offWeeks || 0,
+      cycle_phase: cyclePhase,
+      status: stack.status || "instock",
+      reconstitution: recon ? {vial_mg: recon.vialMg, bac_water_ml: recon.waterMl, concentration_mg_per_ml: Math.round(recon.conc*1000)/1000} : null,
+      units_per_dose: draw ? Math.round(draw.units*10)/10 : null,
+      library_note: c.notes,
+      user_note: stack.notes || null
+    };
+  }).filter(Boolean);
+
+  var todayDoses = _pepGetDoses(ps);
+  return {
+    today_date: today,
+    day_of_week: dayNames[d.getDay()],
+    timezone: "Australia/Brisbane",
+    protocol: stacks,
+    scheduled_today: todayDoses.morning.concat(todayDoses.anytime).concat(todayDoses.evening).map(function(i){
+      return {compound: i.name, dose: _pepFmtDose(i.dose, i.doseUnit), timing: i.timing};
+    }),
+    adherence_last_14_days: _pepAdherence(ps, 14),
+    logged_responses: (ps.notes || []).slice(0, 10)
+  };
+}
+
+async function pepGenerateAdvice(){
+  var btn = document.getElementById("pep-advice-go");
+  var box = document.getElementById("pep-advice-body");
+  var ps  = pepGetState();
+  if(!(ps.stacks || []).length){
+    if(box) box.innerHTML = "<div style=\"font-size:13px;color:var(--text3);\">Add compounds to your protocol first.</div>";
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = "Analysing…"; }
+  if(box) box.innerHTML = "<div style=\"font-size:13px;color:var(--text3);\">Reviewing your protocol, adherence and notes…</div>";
+  try {
+    var ctx = _pepBuildContext(ps);
+    var prompt = "Review this peptide protocol and return adjustments.\n\n" +
+      "CONTEXT:\n```json\n" + JSON.stringify(ctx, null, 2) + "\n```";
+    var resp = await fetch("https://phoenix-coach.jon-d87.workers.dev", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 900,
+        system: PEP_ADVISOR_SYSTEM,
+        messages: [{role:"user", content: prompt}]
+      })
+    });
+    if(!resp.ok){
+      if(box) box.innerHTML = "<div style=\"font-size:13px;color:var(--gold);\">Could not reach the analyst service (HTTP " + resp.status + "). Try again shortly.</div>";
+      return;
+    }
+    var data = await resp.json();
+    var text = String((data.content && data.content[0] && data.content[0].text) || "").trim();
+    if(!text){
+      if(box) box.innerHTML = "<div style=\"font-size:13px;color:var(--gold);\">No response came back. Try again.</div>";
+      return;
+    }
+    ps.advice = {text: text, ts: new Date().toISOString(), compounds: (ps.stacks||[]).length};
+    pepSaveState(ps);
+    pepRenderScreen();
+  } catch(e){
+    console.warn("[PHX] peptide advice failed:", e);
+    if(box) box.innerHTML = "<div style=\"font-size:13px;color:var(--gold);\">Lost connection. Try again when you have signal.</div>";
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = "Get Recommendations"; }
+  }
+}
+
+function pepSaveNote(){
+  var el = document.getElementById("pep-note-input");
+  if(!el) return;
+  var txt = String(el.value || "").trim();
+  if(!txt) return;
+  var ps = pepGetState();
+  if(!ps.notes) ps.notes = [];
+  ps.notes.unshift({date: _pepToday(), ts: new Date().toISOString(), text: txt});
+  ps.notes = ps.notes.slice(0, 40);
+  pepSaveState(ps);
+  pepRenderScreen();
+}
+
+function pepDeleteNote(i){
+  var ps = pepGetState();
+  if(!ps.notes || !ps.notes[i]) return;
+  ps.notes.splice(i, 1);
+  pepSaveState(ps);
+  pepRenderScreen();
+}
+
+// Markdown-lite: escape first, then bold, headings and bullets.
+function _pepMd(text){
+  var lines = String(text).split(/\n/);
+  var out = "";
+  lines.forEach(function(raw){
+    var line = _esc(raw.trim());
+    if(!line){ out += "<div style=\"height:8px;\"></div>"; return; }
+    line = line.replace(/\*\*([^*]+)\*\*/g, "<strong style=\"color:var(--text);\">$1</strong>");
+    if(/^#{1,4}\s/.test(raw.trim())){
+      out += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin:10px 0 6px;\">" + line.replace(/^#{1,4}\s*/, "") + "</div>";
+    } else if(/^([-*•]|\d+\.)\s/.test(raw.trim())){
+      out += "<div style=\"display:flex;gap:8px;margin-bottom:6px;\"><span style=\"color:#7B68EE;flex-shrink:0;\">&bull;</span><span style=\"flex:1;\">" + line.replace(/^([-*•]|\d+\.)\s*/, "") + "</span></div>";
+    } else {
+      out += "<div style=\"margin-bottom:6px;\">" + line + "</div>";
+    }
+  });
+  return out;
+}
+
+function _pepTabAdjust(ps){
+  var stacks = ps.stacks || [];
+  var notes  = ps.notes  || [];
+  var adv    = ps.advice || null;
+
+  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Smart Protocol Review</div>";
+  h += "<div style=\"font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:14px;\">Reads your live protocol, the last 14 days of adherence and every response note below, then returns specific dose, timing and cycle changes. Research tracking only — not medical advice.</div>";
+
+  h += "<button id=\"pep-advice-go\" style=\"width:100%;padding:14px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;margin-bottom:14px;\">" + (stacks.length ? "Get Recommendations" : "Add Compounds First") + "</button>";
+
+  h += "<div id=\"pep-advice-body\" style=\"background:var(--bg2);border:1px solid " + (adv ? "#7B68EE" : "var(--border)") + ";border-radius:var(--radius);padding:16px;margin-bottom:20px;font-size:13px;color:var(--text2);line-height:1.6;\">";
+  if(adv){
+    var when = "";
+    try { when = new Date(adv.ts).toLocaleDateString(); } catch(_e){ when = adv.ts ? String(adv.ts).slice(0,10) : ""; }
+    h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Last review &middot; " + _esc(when) + "</div>";
+    h += _pepMd(adv.text);
+  } else {
+    h += "<div style=\"color:var(--text3);\">No review yet. Log how you are responding below, then run a review.</div>";
+  }
+  h += "</div>";
+
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;\">Log a Response</div>";
+  h += "<div style=\"font-size:12px;color:var(--text3);margin-bottom:8px;\">Sleep, energy, hunger, joint pain, injection-site reaction, water retention, anything you notice. These feed the next review.</div>";
+  h += "<textarea id=\"pep-note-input\" rows=\"3\" placeholder=\"e.g. Sleep deeper since adding Ipa but groggy until 7am. Left knee pain down noticeably.\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;resize:none;margin-bottom:8px;\"></textarea>";
+  h += "<button id=\"pep-note-save\" style=\"width:100%;padding:12px;background:transparent;border:1px solid #7B68EE;border-radius:var(--radius);color:#7B68EE;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;margin-bottom:20px;\">Save Note</button>";
+
+  if(notes.length){
+    h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;\">Recent Notes</div>";
+    notes.slice(0, 12).forEach(function(n, i){
+      h += "<div style=\"display:flex;gap:10px;align-items:flex-start;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;\">";
+      h += "<div style=\"flex:1;min-width:0;\">";
+      h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:4px;\">" + _esc(n.date || "") + "</div>";
+      h += "<div style=\"font-size:13px;color:var(--text2);line-height:1.5;\">" + _esc(n.text || "") + "</div>";
+      h += "</div>";
+      h += "<button data-pep-note-rm=\"" + i + "\" style=\"flex-shrink:0;width:26px;height:26px;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;\">&times;</button>";
+      h += "</div>";
+    });
+  }
+  return h;
+}
+
 // ── ORDER tab ─────────────────────────────────────────────────────────────
 function _pepTabOrder(ps){
   var cart = ps.cart || [];
@@ -20117,6 +21016,7 @@ function pepCopyOrder(){
   window._phxOnProfileFetched = function(row){
     if(typeof _origBg === "function") _origBg(row);
     if(typeof pepRestoreFromCloud === "function") pepRestoreFromCloud(row);
+    if(typeof nutRestoreRecipesFromCloud === "function") nutRestoreRecipesFromCloud(row);
   };
 })();
 

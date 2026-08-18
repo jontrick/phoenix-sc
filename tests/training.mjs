@@ -387,4 +387,116 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._blabCalUnschedule('c:r1');
     assert.equal(app.blabCalSessionsOn(dayFromToday(1)).length, 0, 'rest removed');
   });
+  // ── Completion must not drop the calendar mirror (v4.9.164) ───────────────
+  // Jon: "todays upper not in there that completed - giving a recommended".
+  // blabCompleteSession captured state, then blabCalMarkCompleted saved the
+  // calendar into a FRESH copy of that state, then the stale capture was written
+  // back — silently discarding calendar from blab_state on every completion.
+  // Invisible on the device that did the work, fatal on the next reinstall:
+  // blabCalHydrateFromState rebuilds the local calendar from blab_state.calendar,
+  // which was empty, so the whole schedule came back blank.
+
+  test('completing a session keeps the calendar in the cloud mirror', () => {
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 5, last_completed_day: 0, maxes: { bench: 130, squat: 150, deadlift: 170 } });
+    seed(`blab_calendar_v1_${UID}`, { sessions: [], customs: [] });
+
+    app.blabCompleteSession(5, 1);
+
+    const state = read(KEY);
+    assert.ok(state.calendar, 'blab_state carries the calendar after a completion');
+    assert.equal(state.calendar.sessions.length, 1, 'the completed session is in the mirror');
+    assert.equal(state.calendar.sessions[0].status, 'completed', 'and it is marked completed');
+  });
+
+  test('a reinstall after completing rebuilds the same calendar', () => {
+    // The exact sequence that lost Jon's schedule: complete, wipe local (reinstall),
+    // restore from the cloud row, rehydrate the calendar.
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 5, last_completed_day: 0, maxes: { bench: 130, squat: 150, deadlift: 170 } });
+    seed(`blab_calendar_v1_${UID}`, { sessions: [S(5, 2, dayFromToday(2))], customs: [] });
+
+    app.blabCompleteSession(5, 1);
+    const mirrored = read(KEY);
+
+    // Reinstall: everything local is gone.
+    reset();
+    signIn(UID);
+    app.blabRestoreFromCloud({ blab_state: mirrored });
+
+    const cal = read(`blab_calendar_v1_${UID}`);
+    assert.ok(cal, 'calendar rebuilt after reinstall');
+    assert.equal(cal.sessions.length, 2, 'both the completed session and the scheduled one survived');
+  });
+
+  test('a completed session still shows on its own calendar day', () => {
+    schedule({ sessions: [{ ...S(5, 1, dayFromToday(0)), status: 'completed' }], customs: [] });
+    const cal = read(`blab_calendar_v1_${UID}`);
+    const onDay = app._blabCalAllEntries(cal).filter(e => e.scheduledDate === dayFromToday(0) && e.status !== 'skipped');
+    assert.equal(onDay.length, 1, 'the day cell still has the finished session — history is visible there');
+  });
+
+  test('a day whose only session is completed is not offered a suggestion', () => {
+    schedule({ sessions: [{ ...S(5, 1, dayFromToday(1)), status: 'completed' }], customs: [] });
+    const cal = read(`blab_calendar_v1_${UID}`);
+    const onDay = app._blabCalAllEntries(cal).filter(e => e.scheduledDate === dayFromToday(1) && e.status !== 'skipped');
+    assert.equal(onDay.length, 1, 'the day is not empty, so the render never reaches the suggestion branch');
+  });
+
+  // ── Suggestions must vary (v4.9.165) ──────────────────────────────────────
+  // Jon: "all recommended are rotational power". With no training history every
+  // candidate ranked equal, the running-best comparison never fired a second time,
+  // and the picker returned list[0] on every day forever.
+
+  test('a week of suggestions is not the same session over and over', () => {
+    schedule({ sessions: [], customs: [] });
+    const ids = [];
+    for (let n = 0; n < 7; n++) {
+      const s = app._blabCalSuggestFor(dayFromToday(n));
+      if (s && s.kind === 'session') ids.push(s.libId);
+    }
+    assert.ok(ids.length >= 5, 'suggestions were produced across the week');
+    assert.ok(new Set(ids).size > 1, `expected variety, got only ${[...new Set(ids)].join(', ')}`);
+  });
+
+  test('the same day always suggests the same thing, so a re-render does not flicker', () => {
+    schedule({ sessions: [], customs: [] });
+    const a = app._blabCalSuggestFor(dayFromToday(3));
+    const b = app._blabCalSuggestFor(dayFromToday(3));
+    assert.equal(a.libId, b.libId, 'stable for a given date');
+  });
+
+  test('a session already on the calendar is not suggested again elsewhere', () => {
+    schedule({ sessions: [], customs: [] });
+    const first = app._blabCalSuggestFor(dayFromToday(1));
+    assert.ok(first && first.libId, 'a suggestion exists to begin with');
+    // Accept it, then check no other day proposes the same session.
+    app._blabCalPlace({ custom: true, id: 'x1', cat: first.cat, libId: first.libId, label: first.label }, dayFromToday(1));
+    const others = [];
+    for (let n = 2; n < 9; n++) {
+      const s = app._blabCalSuggestFor(dayFromToday(n));
+      if (s && s.kind === 'session') others.push(s.libId);
+    }
+    assert.ok(!others.includes(first.libId), 'the scheduled session is not proposed a second time');
+  });
+
+  test('a session finished this week is not immediately suggested again', () => {
+    schedule({ sessions: [], customs: [] });
+    const pick = app._blabCalSuggestFor(dayFromToday(2));
+    app._blabCalPlace({ custom: true, id: 'x2', cat: pick.cat, libId: pick.libId, label: pick.label }, dayFromToday(-1));
+    // Mark it done yesterday.
+    const cal = read(`blab_calendar_v1_${UID}`);
+    cal.customs[0].status = 'completed';
+    cal.customs[0].completedDate = dayFromToday(-1);
+    seed(`blab_calendar_v1_${UID}`, cal);
+
+    const after = [];
+    for (let n = 0; n < 6; n++) {
+      const s = app._blabCalSuggestFor(dayFromToday(n));
+      if (s && s.kind === 'session') after.push(s.libId);
+    }
+    assert.ok(!after.includes(pick.libId), 'something done yesterday is not proposed again this week');
+  });
 }

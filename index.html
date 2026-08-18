@@ -204,6 +204,13 @@ body.font-sharp{--font-d:"Oswald",sans-serif;--font-b:"DM Sans",sans-serif;}
 .skin-name{font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:4px;text-align:center;}
 .skin-lock{position:absolute;top:4px;right:4px;font-size:10px;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+/* v4.9.166: the calendar is driven by hold-to-drag, and on iOS a long press starts a
+   text selection and can raise the callout menu — Jon: "when holding and dragging card
+   it highlights everything". The global rule above only kills the grey tap flash, not
+   selection. Scoped to this screen so text stays selectable everywhere else. Scrolling
+   is unaffected: nothing here blocks touch, the drag handler only preventDefaults on
+   touchmove once the 380ms hold has already fired. */
+#screen-blab-calendar,#screen-blab-calendar *{-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;-webkit-touch-callout:none;}
 body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height:100vh;overflow-x:hidden;}
 .screen{display:none;min-height:100vh;flex-direction:column;}
 .screen.active{display:flex;}
@@ -3504,7 +3511,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.163';
+var APP_VERSION='4.9.164';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6409,17 +6416,22 @@ window.blabCompleteSession = function(week, day){
   s.last_completed_date = new Date().toISOString();
   if(!s.log) s.log = [];
   s.log.push({week:week, day:day, date:s.last_completed_date});
-  // v4.9.141: mark the calendar entry done so it leaves the scheduler queue and
-  // keeps its real completion date for the 48h gate.
-  if(typeof window.blabCalMarkCompleted === 'function'){
-    try { window.blabCalMarkCompleted(week, day); } catch(_ce){ console.warn('[PHX] blabCalMarkCompleted failed:', _ce); }
-  }
   if(day === 4){
     s.week = week + 1;
     s.last_completed_day = 0;
     window._blabWeekDone = true;
   }
   window.blabSaveState(s);
+  // v4.9.164: mark the calendar entry done — AFTER blabSaveState, never before.
+  // blabCalMarkCompleted writes through blabCalSave, which re-reads state and saves
+  // it back with .calendar attached. Running it first meant the stale `s` captured
+  // at the top of this function was written afterwards and silently dropped the
+  // calendar from blab_state on EVERY completion. Invisible on the device that did
+  // the work; fatal on the next reinstall, where blabCalHydrateFromState rebuilds
+  // the local calendar from blab_state.calendar and found nothing there.
+  if(typeof window.blabCalMarkCompleted === 'function'){
+    try { window.blabCalMarkCompleted(week, day); } catch(_ce){ console.warn('[PHX] blabCalMarkCompleted failed:', _ce); }
+  }
   if(typeof renderTodayScreen === 'function') renderTodayScreen();
   if(typeof navTo === 'function') navTo('today');
 };
@@ -26310,7 +26322,11 @@ window._blabCalSuggestFor = function(dateISO){
   } catch(_e){ list = []; }
   if(!list.length) return null;
 
-  // Least recently performed wins; anything never done sorts first.
+  // v4.9.165: rank by least-recently-performed, then ROTATE within the least-recent
+  // pool by date. The previous version took the first candidate whose score was lower
+  // than the running best — with no history every candidate scored equal, the
+  // comparison never fired again, and it returned list[0] forever. Every suggestion
+  // on every day came back "R1 — Rotational Power".
   var scores = [];
   try { scores = (typeof _phxScoresAll === 'function') ? _phxScoresAll() : []; } catch(_e2){ scores = []; }
   var lastBy = {};
@@ -26320,12 +26336,38 @@ window._blabCalSuggestFor = function(dateISO){
     if(isNaN(t)) return;
     if(!lastBy[s.wod_id] || t > lastBy[s.wod_id]) lastBy[s.wod_id] = t;
   });
-  var best = null, bestT = Infinity;
-  list.forEach(function(x){
-    var t = lastBy[x.id];
-    var v = (t === undefined) ? -1 : t;
-    if(v < bestT){ bestT = v; best = x; }
+
+  // Never suggest something already on the calendar, and never re-suggest something
+  // finished in the last week — now that completions actually persist (v4.9.164).
+  var cal = window.blabCalGet();
+  var taken = {};
+  cal.customs.forEach(function(c){
+    if(!c || !c.libId) return;
+    if(c.status === 'skipped') return;
+    if(c.status === 'completed'){
+      var ct = _blabCalParse(c.completedDate || c.scheduledDate);
+      if(ct && _blabCalDayDiff(_blabCalToday(), ct) > 7) return;   // old enough to come round again
+    }
+    taken[c.libId] = true;
   });
+
+  var pool = list.filter(function(x){ return !taken[x.id]; });
+  if(!pool.length) pool = list;                     // everything is scheduled — rather repeat than say nothing
+
+  pool = pool.slice().sort(function(a, b){
+    var ta = lastBy[a.id], tb = lastBy[b.id];
+    var va = (ta === undefined) ? -1 : ta;
+    var vb = (tb === undefined) ? -1 : tb;
+    if(va !== vb) return va - vb;                   // least recently done first
+    return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); // stable, so the pool never reshuffles
+  });
+
+  // Rotate deterministically within the least-recent group so different days get
+  // different sessions while a re-render of the SAME day never flickers.
+  var head = pool.slice(0, Math.min(5, pool.length));
+  var seed = 0;
+  for(var ci = 0; ci < dateISO.length; ci++) seed = ((seed * 31) + dateISO.charCodeAt(ci)) % 100000;
+  var best = head[seed % head.length];
   if(!best) return null;
   return {
     kind: 'session',

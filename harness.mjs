@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.163'", 'version is 4.9.163');
+has("var APP_VERSION='4.9.164'", 'version is 4.9.164');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1205,6 +1205,32 @@ has("opts.actionLabel || 'Start Session →'", 'PREVIEW: default action preserve
   else bad(`PREVIEW: ${withOpts} callers pass opts to _phxOpenSessionDetail, expected 1 (the calendar). ` +
            `Every other caller must fall through to the default Start Session action.`);
 })();
+
+// ── Jon's device test of .162/.163 — three fixes (v4.9.164) ─────────────────
+console.log('\nDevice-test fixes:');
+
+// 1. blabCompleteSession must save state BEFORE marking the calendar. The nested
+//    save re-reads state and writes it back with .calendar attached; doing it first
+//    meant the stale capture overwrote it and dropped the calendar from blab_state
+//    on every completion. Behaviour is covered in tests/training.mjs; this pins the
+//    ORDER, which is the whole bug.
+(() => {
+  const fn = html.slice(html.indexOf('window.blabCompleteSession = function'));
+  const body = fn.slice(0, fn.indexOf('\n};'));
+  const save = body.indexOf('window.blabSaveState(s)');
+  const mark = body.indexOf('window.blabCalMarkCompleted(week, day)');
+  if (save > -1 && mark > -1 && save < mark) ok('COMPLETE: state is saved before the calendar is marked');
+  else bad(`COMPLETE: blabCalMarkCompleted runs at ${mark}, blabSaveState at ${save} — the calendar mark must come AFTER the state save or the stale capture drops blab_state.calendar.`);
+})();
+
+// 2. Suggestion rotation — the .163 picker returned list[0] forever.
+has('var best = head[seed % head.length];', 'SUGGEST: rotates within the least-recent pool by date');
+has('if(!pool.length) pool = list;',        'SUGGEST: falls back rather than suggesting nothing');
+hasNot('if(v < bestT){ bestT = v; best = x; }', 'SUGGEST: first-match-forever picker removed');
+
+// 3. Hold-to-drag must not start an iOS text selection.
+has('#screen-blab-calendar,#screen-blab-calendar *', 'DRAG: selection suppressed on the calendar screen');
+has('-webkit-touch-callout:none',                     'DRAG: long-press callout suppressed');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

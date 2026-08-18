@@ -94,6 +94,13 @@ Push (from inside your worktree). Order matters — `git rebase` refuses to run 
 
 Worktree-session quirk (Training, 2026-08-18): the harness refuses compound shell commands that chain git with pipes or redirects (`git fetch && git rebase ... | tail`) because it cannot verify they stay inside the worktree. Issue git commands one per call, plain. Not a blocker, just don't waste a cycle on it.
 
+## TESTING STANDARD (three gates, see CLAUDE.md)
+
+- Every push: `node runtime_check.mjs` (parse + top-level, all 6 blocks) → `node harness.mjs` (static assertions) → `node functional_check.mjs` (calls the real functions). All unpiped, all exit 0.
+- **Prove a new guard bites before trusting it**: revert or invert the fix, watch the assertion go red, restore, watch it go green. Say so in the PUSH-NOTICE. A guard that has never failed has not been tested.
+- **A sandbox that supplies the value under test cannot test it** (Nutrition, 2026-08-18): a stub that pre-sets the storage key let a fresh-install restore write to the `guest` key and pass every gate. In functional tests, `signIn(uid)`, seed the inputs, and let the code under test derive its own keys/paths.
+- Functional tests: `tests/<domain>.mjs`, one per domain, own sandbox each. Stage it with your push.
+
 The commit message tag `[TRAINING]` / `[NUTRITION]` / `[PEPTIDES]` / `[PM]` is mandatory. It is the only reliable "who shipped what" record.
 
 Because your worktree contains ONLY your edits, `git add index.html` can no longer sweep anyone else. This is what makes CLAUDE.md rule 3 (one logical change per commit) honourable again.

@@ -25614,7 +25614,18 @@ window.blabCalMarkCompleted = function(week, day){
 };
 
 // ── Today integration ─────────────────────────────────────────────────────
-// The pending BLAB session scheduled for today, if any. Today card reads this.
+// BLAB-ONLY, FIRST-MATCH. Returns the first pending BLAB session scheduled for
+// today, ignoring cal.customs entirely and ignoring any second session on the day.
+//
+// That narrowness is deliberate, not an oversight: this is used ONLY by the 48h
+// gate on the SEQUENTIAL Today path — the one that runs when the athlete has not
+// scheduled anything — where the question really is "which single BLAB day is
+// today". Widening it would change behaviour for users who never opened the
+// calendar.
+//
+// For the full agenda — customs included, all sessions on the day — use
+// blabCalTodaySessions(). A harness assertion pins this to exactly one call site;
+// if you are adding a second caller, you almost certainly want that one instead.
 window.blabCalTodayEntry = function(){
   var cal = window.blabCalGet();
   var todayISO = _blabCalTodayISO();

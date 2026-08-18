@@ -1151,5 +1151,17 @@ has('window.blabCalHasSchedule()', 'TODAY: branch is gated on the calendar being
 // The sequential fallback must survive for anyone who has not scheduled anything.
 has('_renderTodayRemainingRow(_bs, _nextDay, _weekDone)', 'TODAY: sequential path retained when calendar empty');
 
+// blabCalTodayEntry is BLAB-only and first-match. It is correct for the sequential
+// 48h gate and wrong for anything else, so pin it to exactly one call site: a new
+// caller expecting the full agenda would silently get a subset (no customs, one
+// session). Counts INVOCATIONS specifically — the definition, the typeof guard and
+// prose mentions all name it without calling it, so a bare name match would be noise.
+(() => {
+  const n = (html.match(/blabCalTodayEntry\(\)/g) || []).length;
+  if (n === 1) ok('TODAY: blabCalTodayEntry still has exactly one call site (the sequential 48h gate)');
+  else bad(`TODAY: blabCalTodayEntry is invoked ${n}×, expected 1 (the sequential 48h gate). ` +
+           `A new caller gets a BLAB-only, first-match subset — use blabCalTodaySessions() for the full agenda.`);
+})();
+
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

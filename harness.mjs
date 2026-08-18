@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.148'", 'version is 4.9.148');
+has("var APP_VERSION='4.9.150'", 'version is 4.9.150');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -784,6 +784,75 @@ try {
 } catch (e) {
   bad('CAL: calendar rule execution failed — ' + e.message);
 }
+
+// ── PEPTIDE PORTAL — recon engine / Today tile / ADJUST / BLOODS ────────────
+// v4.9.141-146. Guards the peptide domain against accidental removal by other
+// chats editing the shared file.
+console.log('\nFeature check — Peptide Portal (v4.9.141-146):');
+
+// v4.9.141 reconstitution engine
+has('var _PEP_RECON = {',                      'PEP: _PEP_RECON default table present');
+has('function _pepRecon(stack, c)',            'PEP: _pepRecon resolver present');
+has('function _pepDraw(dose, doseUnit, recon)','PEP: _pepDraw units calculator present');
+has('function _pepFmtDose(dose, unit)',        'PEP: _pepFmtDose mg/mcg formatter present');
+has('function _pepGetDoses(ps, dateStr)',      'PEP: _pepGetDoses is date-parameterised');
+
+// v4.9.142 Today screen tile
+has('id="today-peptide-tile"',                 'PEP: Today tile container in screen-today');
+has('function pepRenderTodayTile()',           'PEP: pepRenderTodayTile defined');
+has("if(typeof pepRenderTodayTile==='function') pepRenderTodayTile();",
+                                               'PEP: Today tile called from renderTodayScreen');
+
+// v4.9.143 ADJUST tab
+has('var PEP_ADVISOR_SYSTEM =',                'PEP: advisor system prompt present');
+has('function _pepBuildContext(ps)',           'PEP: advisor context builder present');
+has('function _pepAdherence(ps, days)',        'PEP: 14-day adherence calculator present');
+has('async function pepGenerateAdvice()',      'PEP: pepGenerateAdvice present');
+has('function _pepTabAdjust(ps)',              'PEP: ADJUST tab renderer present');
+
+// v4.9.146 BLOODS tab
+has('function _pepTabBloods(ps)',              'PEP: BLOODS tab renderer present');
+has('async function pepBloodsLoad(force)',     'PEP: blood panel loader present');
+has('async function pepExtractMarkers()',      'PEP: AI marker extraction present');
+has('async function pepSaveBloodPanel()',      'PEP: blood panel save present');
+has('function _pepMarkerFlag(m)',              'PEP: marker range flagging present');
+has('function _pepDownscale(dataURL, maxDim, quality)',
+                                               'PEP: image downscale before upload/vision');
+has('sb.storage.from("blood-panels")',         'PEP: uses the blood-panels bucket');
+has('createSignedUrl',                         'PEP: private bucket read via signed URL');
+
+// Blood images must NOT go to the public checkin-photos bucket.
+(() => {
+  const i = html.indexOf('// ── BLOODS tab');
+  const j = html.indexOf('// ── ORDER tab', i + 1);
+  if (i < 0 || j < 0) { bad('PEP: could not isolate BLOODS block for privacy check'); return; }
+  const blk = html.slice(i, j);
+  blk.includes('checkin-photos')
+    ? bad('PEP: BLOODS block references the PUBLIC checkin-photos bucket')
+    : ok('PEP: BLOODS block never touches the public checkin-photos bucket');
+  blk.includes('getPublicUrl')
+    ? bad('PEP: BLOODS block uses getPublicUrl on medical images')
+    : ok('PEP: BLOODS block never calls getPublicUrl');
+})();
+
+// All five portal tabs wired
+['today','protocol','bloods','adjust','order'].forEach(t => {
+  html.includes('{key:"' + t + '",label:"' + t.toUpperCase() + '"}')
+    ? ok('PEP: ' + t.toUpperCase() + ' tab registered')
+    : bad('PEP: ' + t.toUpperCase() + ' tab missing from tab bar');
+});
+
+// Recon maths — the numbers Jon draws up. 100 units = 1 mL.
+(() => {
+  const conc = (vialMg, waterMl) => vialMg / waterMl;
+  const units = (doseMg, vialMg, waterMl) => (doseMg / conc(vialMg, waterMl)) * 100;
+  const near = (a, b) => Math.abs(a - b) < 0.001;
+  near(units(0.25, 5, 2), 10)   ? ok('PEP: 250mcg from 5mg/2mL = 10u')    : bad('PEP: 250mcg recon maths wrong');
+  near(units(0.5,  5, 2), 20)   ? ok('PEP: 500mcg from 5mg/2mL = 20u')    : bad('PEP: 500mcg recon maths wrong');
+  near(units(6,   10, 0.5), 30) ? ok('PEP: Reta 6mg from RT10/0.5mL = 30u'): bad('PEP: RT10 recon maths wrong');
+  near(units(6,   30, 5),  100) ? ok('PEP: Reta 6mg from RT30/5mL = 100u') : bad('PEP: RT30 recon maths wrong');
+  near(units(100,500, 5),  100) ? ok('PEP: NAD+ 100mg from 500mg/5mL = 100u') : bad('PEP: NAD+ recon maths wrong');
+})();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

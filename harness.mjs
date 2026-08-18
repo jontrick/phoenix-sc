@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.161'", 'version is 4.9.161');
+has("var APP_VERSION='4.9.162'", 'version is 4.9.162');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1162,6 +1162,24 @@ has('_renderTodayRemainingRow(_bs, _nextDay, _weekDone)', 'TODAY: sequential pat
   else bad(`TODAY: blabCalTodayEntry is invoked ${n}×, expected 1 (the sequential 48h gate). ` +
            `A new caller gets a BLAB-only, first-match subset — use blabCalTodaySessions() for the full agenda.`);
 })();
+
+// ── Perpetual calendar (v4.9.162) ───────────────────────────────────────────
+// The calendar used to page one ISO week at a time, so scheduling a 12-week block
+// meant repeated tapping. It now runs on continuously and extends as you scroll.
+console.log('\nCalendar — perpetual scroll:');
+has('var _blabCalDaysShown',      'PERPETUAL: rolling window size');
+has('function _blabCalVisibleDays','PERPETUAL: window builder');
+has('window._blabCalExtend',      'PERPETUAL: forward extend');
+has('window._blabCalShowEarlier', 'PERPETUAL: backward extend');
+has('window._blabCalGoToday',     'PERPETUAL: jump to today');
+has('function _blabCalWireScroll','PERPETUAL: scroll watcher');
+has('function _blabCalWeekOf',    'PERPETUAL: single-week context for smart recs');
+has('_blabCalSmartRec(iso, _blabCalWeekOf(d))', 'PERPETUAL: smart rec gets one week, not the whole window');
+// Week paging is gone entirely — no stale callers left behind in the HTML.
+hasNot('_blabCalVisibleWeek', 'PERPETUAL: week-window builder removed');
+hasNot('_blabCalWeekOffset',  'PERPETUAL: week offset state removed');
+hasNot('_blabCalShiftWeek',   'PERPETUAL: week paging control removed');
+hasNot('_blabCalThisWeek',    'PERPETUAL: this-week reset removed');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -1849,13 +1849,9 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 </div>
 <div style="padding:14px 16px 200px;">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
-    <div onclick="_blabCalShiftWeek(-1)" style="width:38px;height:38px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-    </div>
-    <div id="blab-cal-range" onclick="_blabCalThisWeek()" style="flex:1;text-align:center;font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);cursor:pointer;">This Week</div>
-    <div onclick="_blabCalShiftWeek(1)" style="width:38px;height:38px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>
+    <div onclick="_blabCalShowEarlier()" style="height:38px;padding:0 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);">Earlier</div>
+    <div id="blab-cal-range" onclick="_blabCalGoToday()" style="flex:1;text-align:center;font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);cursor:pointer;">This Week</div>
+    <div onclick="_blabCalGoToday()" style="height:38px;padding:0 12px;background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);">Today</div>
   </div>
   <div id="blab-cal-grid"></div>
   <div style="font-size:11px;color:var(--text3);line-height:1.6;padding:4px 2px;">Hold a session to drag it to another day, or tap it for options.</div>
@@ -3508,7 +3504,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.161';
+var APP_VERSION='4.9.162';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -25282,7 +25278,12 @@ function _phxRecoveryNoteForAdd(dayName, sessionType, byDay){
 
 var _BLAB_CAL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 var _BLAB_DAY_LABELS = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
-var _blabCalWeekOffset = 0;   // 0 = current ISO week, -1 = last, +1 = next
+// v4.9.162: the calendar runs on perpetually rather than paging a week at a time.
+// The window starts _blabCalBackDays before the Monday of the current week and runs
+// _blabCalDaysShown forward, extending as the athlete scrolls.
+var _blabCalDaysShown = 28;
+var _blabCalBackDays = 0;
+var _BLAB_CAL_PAGE = 28;
 var _blabCalQueueOpen = true;
 
 // ── Date helpers (LOCAL dates — never toISOString, Brisbane is UTC+10) ──────
@@ -25740,16 +25741,46 @@ window.blabCalUpcoming = function(limit){
 
 // ── Screen open / week navigation ─────────────────────────────────────────
 window.blabCalOpen = function(){
-  _blabCalWeekOffset = 0;
+  _blabCalDaysShown = _BLAB_CAL_PAGE;
+  _blabCalBackDays = 0;
   showScreen('screen-blab-calendar');
   _blabCalRender();
 };
-window._blabCalShiftWeek = function(n){ _blabCalWeekOffset += n; _blabCalRender(); };
-window._blabCalThisWeek = function(){ _blabCalWeekOffset = 0; _blabCalRender(); };
+// Show two more weeks of history above the current window.
+window._blabCalShowEarlier = function(){
+  _blabCalBackDays += 14;
+  _blabCalDaysShown += 14;
+  _blabCalRender();
+  // Keep the athlete looking at the same day rather than jumping to the new top.
+  var t = document.querySelector('[data-cal-date="' + _blabCalTodayISO() + '"]');
+  if(t && t.scrollIntoView) t.scrollIntoView({block:'start'});
+};
+// Jump back to today without collapsing the window.
+window._blabCalGoToday = function(){
+  var t = document.querySelector('[data-cal-date="' + _blabCalTodayISO() + '"]');
+  if(t && t.scrollIntoView) t.scrollIntoView({block:'start'});
+  else { _blabCalBackDays = 0; _blabCalDaysShown = _BLAB_CAL_PAGE; _blabCalRender(); }
+};
+// Extend the window forward. Called by the scroll watcher.
+window._blabCalExtend = function(){
+  _blabCalDaysShown += _BLAB_CAL_PAGE;
+  _blabCalRender();
+};
 
-function _blabCalVisibleWeek(){
-  var mon = _blabCalMonday(_blabCalToday());
-  mon = _blabCalAddDays(mon, _blabCalWeekOffset * 7);
+function _blabCalWindowStart(){
+  return _blabCalAddDays(_blabCalMonday(_blabCalToday()), -_blabCalBackDays);
+}
+function _blabCalVisibleDays(){
+  var start = _blabCalWindowStart();
+  var out = [];
+  for(var i=0;i<_blabCalDaysShown;i++) out.push(_blabCalAddDays(start, i));
+  return out;
+}
+// The Mon–Sun week containing a date. Smart recommendations reason about a single
+// week, so they must NOT be handed the whole rolling window — byDay is keyed by day
+// name and four Mondays would collapse into one bucket.
+function _blabCalWeekOf(d){
+  var mon = _blabCalMonday(d);
   var out = [];
   for(var i=0;i<7;i++) out.push(_blabCalAddDays(mon, i));
   return out;
@@ -25768,19 +25799,13 @@ window._blabCalRender = function(){
     if(qw) qw.style.display = 'none';
     return;
   }
-  var week = _blabCalVisibleWeek();
+  var week = _blabCalVisibleDays();
   var warn = window._blabCalWarnings(week);
   var cal  = window.blabCalGet();
   var todayISO = _blabCalTodayISO();
 
   var rangeEl = document.getElementById('blab-cal-range');
-  if(rangeEl){
-    var lbl = _blabCalFmtShort(week[0])+' – '+_blabCalFmtShort(week[6]);
-    if(_blabCalWeekOffset === 0) lbl = 'This Week · '+lbl;
-    else if(_blabCalWeekOffset === 1) lbl = 'Next Week · '+lbl;
-    else if(_blabCalWeekOffset === -1) lbl = 'Last Week · '+lbl;
-    rangeEl.textContent = lbl;
-  }
+  if(rangeEl) rangeEl.textContent = _blabCalFmtShort(week[0]) + ' – ' + _blabCalFmtShort(week[week.length-1]);
 
   grid.innerHTML = week.map(function(d){
     var iso = _blabCalISO(d);
@@ -25794,7 +25819,16 @@ window._blabCalRender = function(){
     var borderW = isToday ? '2px' : '1px';
     if(w.consecutive || w.sameDay) borderCol = 'var(--orange)';
 
-    var h = '<div data-cal-date="'+iso+'" style="background:var(--bg2);border:'+borderW+' solid '+borderCol+';'+
+    // Week marker keeps the athlete oriented once the list runs past a screenful.
+    var h = '';
+    if(d.getDay() === 1){
+      var wkEnd = _blabCalAddDays(d, 6);
+      h += '<div style="display:flex;align-items:center;gap:10px;margin:14px 0 8px;">'+
+             '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);white-space:nowrap;">Week of '+_blabCalFmtShort(d)+' – '+_blabCalFmtShort(wkEnd)+'</div>'+
+             '<div style="flex:1;height:1px;background:var(--border);"></div>'+
+           '</div>';
+    }
+    h += '<div data-cal-date="'+iso+'" style="background:var(--bg2);border:'+borderW+' solid '+borderCol+';'+
       'border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;'+(isPast?'opacity:0.55;':'')+'transition:border-color 0.12s,background 0.12s;">';
 
     // Header row — day name, date, badges
@@ -25835,7 +25869,7 @@ window._blabCalRender = function(){
 
     // Empty day — smart recommendation chip + add button
     if(!entries.length){
-      var rec = window._blabCalSmartRec(iso, week);
+      var rec = window._blabCalSmartRec(iso, _blabCalWeekOf(d));
       h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
       h += '<div data-cal-add="'+iso+'" style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1.5px;'+
            'color:var(--text3);border:1px dashed var(--border2);border-radius:var(--radius);padding:6px 12px;cursor:pointer;">+ ADD</div>';
@@ -25857,9 +25891,36 @@ window._blabCalRender = function(){
     return h;
   }).join('');
 
+  // Tail control: the list runs on, so give it an explicit extend as well as the
+  // scroll watcher — scroll-driven loading alone is unreliable inside an iOS PWA.
+  grid.insertAdjacentHTML('beforeend',
+    '<div onclick="_blabCalExtend()" style="text-align:center;padding:14px;margin-top:4px;border:1px dashed var(--border2);border-radius:var(--radius);cursor:pointer;font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Show more days</div>');
+  grid.insertAdjacentHTML('afterbegin',
+    '<div onclick="_blabCalShowEarlier()" style="text-align:center;padding:10px;margin-bottom:8px;border:1px dashed var(--border2);border-radius:var(--radius);cursor:pointer;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">↑ Earlier</div>');
+
   _blabCalRenderQueue();
   _blabCalWireGrid(grid);
+  _blabCalWireScroll();
 };
+
+// Extends the window when the athlete nears the bottom. Bound once; a no-op unless
+// the calendar screen is the active one.
+function _blabCalWireScroll(){
+  if(window._blabCalScrollBound) return;
+  window._blabCalScrollBound = true;
+  window.addEventListener('scroll', function(){
+    var scr = document.getElementById('screen-blab-calendar');
+    if(!scr || !scr.classList || !scr.classList.contains('active')) return;
+    if(window._blabCalExtending) return;
+    var doc = document.documentElement;
+    var nearBottom = (window.innerHeight + window.pageYOffset) >= (doc.scrollHeight - 400);
+    if(!nearBottom) return;
+    window._blabCalExtending = true;
+    _blabCalDaysShown += _BLAB_CAL_PAGE;
+    _blabCalRender();
+    setTimeout(function(){ window._blabCalExtending = false; }, 150);
+  }, {passive:true});
+}
 
 // ── Queue panel ───────────────────────────────────────────────────────────
 window._blabCalRenderQueue = function(){
@@ -26116,7 +26177,9 @@ window._blabCalOpenMoveSheet = function(entryId){
   var item = entry.custom
     ? {custom:true, id:entry.id, cat:entry.cat, libId:entry.libId, label:entry.label}
     : {blabWeek:entry.blabWeek, blabDay:entry.blabDay};
-  var week = _blabCalVisibleWeek();
+  // Offer the fortnight from today — the rolling calendar has no single "visible week".
+  var week = [];
+  for(var _i=0;_i<14;_i++) week.push(_blabCalAddDays(_blabCalToday(), _i));
   var opts = week.map(function(d){
     var iso = _blabCalISO(d);
     var gate = window._blabCalCanDrop(item, iso);

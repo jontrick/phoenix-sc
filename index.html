@@ -1739,6 +1739,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div id="today-remaining-row" style="margin-bottom:12px;"></div>
     <!-- Nutrition placeholder (Phase 2) -->
     <div id="today-nutrition-tile" style="margin-bottom:12px;"></div>
+    <!-- v4.9.145: today's planned meals with tick-off -->
+    <div id="today-meals-tile" style="margin-bottom:12px;"></div>
+    <!-- v4.9.145: water counter -->
+    <div id="today-water-tile" style="margin-bottom:12px;"></div>
     <!-- v4.9.142: today's peptide doses (mg + units to draw). Hidden when no protocol. -->
     <div id="today-peptide-tile" style="margin-bottom:12px;"></div>
     <!-- + Add Session -->
@@ -3504,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.144';
+var APP_VERSION='4.9.145';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17670,6 +17674,9 @@ function renderTodayScreen(){
   // v4.9.132: live nutrition tile (falls back to placeholder if not set up)
   if(typeof nutRenderTile==='function') nutRenderTile();
   else if(typeof _renderTodayNutritionPlaceholder==='function') _renderTodayNutritionPlaceholder();
+  // v4.9.145: today's planned meals (tick-off) + water counter
+  if(typeof nutRenderMealsTile==='function') nutRenderMealsTile();
+  if(typeof nutRenderWaterTile==='function') nutRenderWaterTile();
   // v4.9.142: today's peptide doses in mg + units. No-op when no protocol is set up.
   if(typeof pepRenderTodayTile==='function') pepRenderTodayTile();
 }
@@ -17816,7 +17823,8 @@ function nutRenderTile(){
   var today = _nutToday();
   var targets = nutAdjustForToday(ns.targets);
   var dayData = (ns.daily && ns.daily[today]) || { meals: [] };
-  var logged = _nutDayTotals(dayData);
+  var logged = _nutEatenTotals(dayData);      // v4.9.145: ticked-off meals only
+  var plannedTot = _nutDayTotals(dayData);
   var remKcal = Math.max(0, targets.kcal - logged.kcal);
   var pPct = Math.min(100, targets.protein_g ? Math.round(logged.protein_g / targets.protein_g * 100) : 0);
   var cPct = Math.min(100, targets.carbs_g   ? Math.round(logged.carbs_g   / targets.carbs_g   * 100) : 0);
@@ -17828,7 +17836,8 @@ function nutRenderTile(){
     '<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:10px;">' +
     '<div><div style="font-family:var(--font-d);font-size:40px;font-weight:900;line-height:1;color:'+kcalColor+';">'+remKcal+'</div>' +
     '<div style="font-size:11px;color:var(--text3);margin-top:2px;">kcal remaining · '+targets.kcal+' target</div></div>' +
-    '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">'+(logged.kcal||0)+' logged</div>' +
+    '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);text-align:right;">'+(logged.kcal||0)+' eaten' +
+      ((plannedTot.kcal > logged.kcal) ? ('<br><span style="opacity:0.7;">'+plannedTot.kcal+' planned</span>') : '') + '</div>' +
     '</div>' +
     '<div style="display:flex;gap:10px;">' +
     _nutMacroBar('P', logged.protein_g, targets.protein_g, pPct, '#4CAF50') +
@@ -17885,6 +17894,10 @@ function nutRenderScreen(){
     var parts = btn.getAttribute('data-nut-rm').split('|');
     btn.addEventListener('click', function(){ nutRemoveComponent(parts[0], parts[1], parseInt(parts[2])); });
   });
+  body.querySelectorAll('[data-nut-tick-day]').forEach(function(btn){
+    var parts = btn.getAttribute('data-nut-tick-day').split('|');
+    btn.addEventListener('click', function(ev){ ev.stopPropagation(); nutToggleMealEaten(parts[0], parts[1]); });
+  });
   body.querySelectorAll('[data-nut-supp]').forEach(function(btn){
     var dk = btn.getAttribute('data-nut-supp');
     btn.addEventListener('click', function(){ nutOpenSuppModal(dk); });
@@ -17938,7 +17951,8 @@ function _nutTabToday(ns){
   var today = _nutToday();
   var targets = nutAdjustForToday(ns.targets);
   var dayData = (ns.daily && ns.daily[today]) || {};
-  var logged = _nutDayTotals(dayData);
+  var logged = _nutEatenTotals(dayData);      // v4.9.145: ticked-off meals only
+  var plannedTot = _nutDayTotals(dayData);
   var remKcal = targets.kcal - logged.kcal;
   var remColor = remKcal < 0 ? 'var(--gold)' : 'var(--text)';
   var pPct = Math.min(100, targets.protein_g ? Math.round(logged.protein_g / targets.protein_g * 100) : 0);
@@ -17947,6 +17961,7 @@ function _nutTabToday(ns){
   var h = '<div style="text-align:center;margin-bottom:16px;">' +
     '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;line-height:1;color:'+remColor+';">' + (remKcal < 0 ? '+'+Math.abs(remKcal) : remKcal) + '</div>' +
     '<div style="font-size:12px;color:var(--text3);margin-top:4px;">kcal ' + (remKcal < 0 ? 'over target' : 'remaining') + ' &middot; ' + targets.kcal + ' daily target</div>' +
+    ((plannedTot.kcal > logged.kcal) ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+logged.kcal+' eaten &middot; '+plannedTot.kcal+' planned</div>' : '') +
     (targets.note ? '<div style="font-size:11px;color:var(--gold);margin-top:6px;font-style:italic;">'+targets.note+'</div>' : '') +
     '</div>';
   h += '<div style="display:flex;gap:12px;margin-bottom:16px;">' +
@@ -17964,9 +17979,14 @@ function _nutTabToday(ns){
     comps.forEach(function(c){ var f=(c.qty_g||0)/100; mKcal+=Math.round((c.k||0)*f); mProt+=Math.round((c.p||0)*f*10)/10; });
     var hasFood = comps.length > 0;
     h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
-    h += '<div style="display:flex;align-items:center;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
-    h += '<div style="flex:1;"><div style="font-weight:700;color:var(--text);font-size:14px;">' + _SLOT_LBLS[slot] + '</div>';
-    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
+    var slotEaten = hasFood && nutIsSlotEaten(dayData, slot);
+    h += '<div style="display:flex;align-items:center;gap:11px;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
+    if(hasFood){
+      h += '<button data-nut-tick-day="' + slot + '|' + today + '" style="width:26px;height:26px;flex-shrink:0;padding:0;border-radius:7px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;background:' + (slotEaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (slotEaten ? 'var(--gold)' : 'var(--border2)') + ';">' +
+           (slotEaten ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</button>';
+    }
+    h += '<div style="flex:1;min-width:0;' + (slotEaten ? 'opacity:0.45;' : '') + '"><div style="font-weight:700;color:var(--text);font-size:14px;' + (slotEaten ? 'text-decoration:line-through;' : '') + '">' + _SLOT_LBLS[slot] + '</div>';
+    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein' + (slotEaten ? ' &middot; eaten' : '') + '</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
     h += '</div>';
     h += '<button data-nut-pick="' + slot + '|' + today + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
     h += '</div>';
@@ -18097,9 +18117,14 @@ function _nutTabMeals(ns){
     comps.forEach(function(c){ var f=(c.qty_g||0)/100; mKcal+=Math.round((c.k||0)*f); mProt+=Math.round((c.p||0)*f*10)/10; });
     var hasFood = comps.length > 0;
     h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
-    h += '<div style="display:flex;align-items:center;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
-    h += '<div style="flex:1;"><div style="font-weight:700;color:var(--text);font-size:14px;">' + _SLOT_LBLS[slot] + '</div>';
-    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
+    var slotEaten = hasFood && nutIsSlotEaten(dayData, slot);
+    h += '<div style="display:flex;align-items:center;gap:11px;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
+    if(hasFood){
+      h += '<button data-nut-tick-day="' + slot + '|' + dk + '" style="width:26px;height:26px;flex-shrink:0;padding:0;border-radius:7px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;background:' + (slotEaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (slotEaten ? 'var(--gold)' : 'var(--border2)') + ';">' +
+           (slotEaten ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</button>';
+    }
+    h += '<div style="flex:1;min-width:0;' + (slotEaten ? 'opacity:0.45;' : '') + '"><div style="font-weight:700;color:var(--text);font-size:14px;' + (slotEaten ? 'text-decoration:line-through;' : '') + '">' + _SLOT_LBLS[slot] + '</div>';
+    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein' + (slotEaten ? ' &middot; eaten' : '') + '</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
     h += '</div>';
     h += '<button data-nut-pick="' + slot + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
     h += '</div>';
@@ -18908,7 +18933,7 @@ function _nutApplyWeekTemplate(template){
   }
   if(template === 'clear'){
     days.forEach(function(dk){
-      if(ns.daily && ns.daily[dk]){ ns.daily[dk].meals = {}; ns.daily[dk].supps = []; }
+      if(ns.daily && ns.daily[dk]){ ns.daily[dk].meals = {}; ns.daily[dk].supps = []; ns.daily[dk].eaten = {}; }
     });
     nutSaveState(ns); nutRenderScreen(); return;
   }
@@ -18935,6 +18960,7 @@ function _nutApplyWeekTemplate(template){
   days.forEach(function(dk){
     if(!ns.daily[dk]) ns.daily[dk] = {};
     ns.daily[dk].meals = JSON.parse(JSON.stringify(plan));
+    ns.daily[dk].eaten = {};   // a template is a plan — nothing eaten yet
   });
   nutSaveState(ns);
   nutRenderScreen();
@@ -19354,8 +19380,6 @@ function _nutGoToWeekAndCreate(){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════════════════
 // WEEKLY PREP — single-serve recipes + week assignment + prep aggregator
 // v4.9.141
 // Recipes: localStorage 'phx_recipes_v1_{uid}', mirrored to profiles.nut_recipes.
@@ -19533,6 +19557,9 @@ function nutAssignRecipe(recipeId, slot, dateKey, serves){
   if(!day.meals || Array.isArray(day.meals)) day.meals = {};
   if(!day.meals[slot]) day.meals[slot] = {components:[]};
   if(!day.meals[slot].components) day.meals[slot].components = [];
+  // Planning ahead is not eating — leave the slot unticked unless it already is.
+  var _e = _nutEnsureEaten(day);
+  if(_e[slot] === undefined) _e[slot] = false;
   var per100 = function(v){ return Math.round((v / serveG) * 100 * 10) / 10; };
   day.meals[slot].components.push({
     n: rec.name,
@@ -19913,6 +19940,293 @@ function _nutPrepText(plan, range){
   return t;
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TODAY SCREEN — meal tick-off + water counter (v4.9.145)
+// Tick state lives at ns.daily['YYYY-MM-DD'].eaten = {slot:bool} and water at
+// ns.daily['YYYY-MM-DD'].water_ml — both date-keyed, so both reset at midnight
+// and ride the existing nutrition state (localStorage + its Supabase mirror).
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _NUT_WATER_GLASS_ML  = 250;
+var _NUT_WATER_TARGET_ML = 2500;   // default 2.5L = 10 glasses
+
+// Tick state is created lazily. Days that predate tick-off counted everything
+// logged as eaten, so seed those slots true rather than silently zeroing the day.
+function _nutEnsureEaten(day){
+  if(day && day.eaten && typeof day.eaten === 'object' && !Array.isArray(day.eaten)) return day.eaten;
+  var e = {};
+  var meals = (day && day.meals && !Array.isArray(day.meals)) ? day.meals : {};
+  _NUT_PLAN_SLOTS.forEach(function(s){
+    var comps = (meals[s.k] && meals[s.k].components) || [];
+    if(comps.length) e[s.k] = true;
+  });
+  day.eaten = e;
+  return e;
+}
+
+function nutIsSlotEaten(day, slot){
+  if(!day) return false;
+  var e = _nutEnsureEaten(day);
+  return !!e[slot];
+}
+
+function nutToggleMealEaten(slot, dateKey){
+  var ns = nutGetState();
+  if(!ns) return;
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[dateKey]) ns.daily[dateKey] = {};
+  var day = ns.daily[dateKey];
+  var e = _nutEnsureEaten(day);
+  e[slot] = !e[slot];
+  nutSaveState(ns);
+  if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile();
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+  if(typeof nutRenderScreen === 'function' && document.getElementById('nut-screen-body')) nutRenderScreen();
+}
+
+// Macros for a single slot.
+function _nutSlotTotals(day, slot){
+  var t = {kcal:0, protein_g:0, carbs_g:0, fat_g:0};
+  var meals = (day && day.meals && !Array.isArray(day.meals)) ? day.meals : {};
+  var comps = (meals[slot] && meals[slot].components) || [];
+  comps.forEach(function(c){
+    var f = (c.qty_g||0)/100;
+    t.kcal += Math.round((c.k||0)*f); t.protein_g += (c.p||0)*f; t.carbs_g += (c.c||0)*f; t.fat_g += (c.f||0)*f;
+  });
+  t.protein_g = Math.round(t.protein_g*10)/10;
+  t.carbs_g   = Math.round(t.carbs_g*10)/10;
+  t.fat_g     = Math.round(t.fat_g*10)/10;
+  return t;
+}
+
+// Running totals — only slots ticked off as eaten. Supplements always count.
+function _nutEatenTotals(dayData){
+  var t = {kcal:0, protein_g:0, carbs_g:0, fat_g:0};
+  if(!dayData) return t;
+  if(dayData.meals && !Array.isArray(dayData.meals)){
+    var e = _nutEnsureEaten(dayData);
+    _NUT_PLAN_SLOTS.forEach(function(s){
+      if(!e[s.k]) return;
+      var st = _nutSlotTotals(dayData, s.k);
+      t.kcal += st.kcal; t.protein_g += st.protein_g; t.carbs_g += st.carbs_g; t.fat_g += st.fat_g;
+    });
+  } else if(Array.isArray(dayData.meals)){
+    // Legacy flat array — no per-slot ticking existed, so it all counts.
+    dayData.meals.forEach(function(m){ t.kcal+=m.kcal||0; t.protein_g+=m.protein_g||0; t.carbs_g+=m.carbs_g||0; t.fat_g+=m.fat_g||0; });
+  }
+  (dayData.supplements||[]).forEach(function(s){ t.kcal+=s.kcal||0; t.protein_g+=s.p||0; t.carbs_g+=s.c||0; t.fat_g+=s.f||0; });
+  t.protein_g = Math.round(t.protein_g*10)/10;
+  t.carbs_g   = Math.round(t.carbs_g*10)/10;
+  t.fat_g     = Math.round(t.fat_g*10)/10;
+  return t;
+}
+
+// Tap vs long-press on one element, without the touchend/click double fire.
+function _nutBindLongPress(el, onTap, onLong){
+  if(!el) return;
+  var timer = null, fired = false;
+  function start(){
+    fired = false;
+    clearTimeout(timer);
+    timer = setTimeout(function(){ fired = true; if(onLong) onLong(); }, 550);
+  }
+  function end(e){
+    clearTimeout(timer);
+    if(!fired){ if(e && e.type === 'touchend' && e.cancelable) e.preventDefault(); if(onTap) onTap(); }
+  }
+  function cancel(){ clearTimeout(timer); fired = true; }
+  el.addEventListener('touchstart', start, {passive:true});
+  el.addEventListener('touchmove',  cancel, {passive:true});
+  el.addEventListener('touchend',   end);
+  el.addEventListener('mousedown',  start);
+  el.addEventListener('mouseup',    end);
+  el.addEventListener('mouseleave', cancel);
+}
+
+// ── Today screen: planned meals with tick-off ─────────────────────────────
+function nutRenderMealsTile(){
+  var tile = document.getElementById('today-meals-tile');
+  if(!tile) return;
+  var ns = nutGetState();
+  if(!ns || !ns.setup_done){ tile.innerHTML = ''; return; }
+  var today = _nutToday();
+  var day   = (ns.daily && ns.daily[today]) || {};
+  var meals = (day.meals && !Array.isArray(day.meals)) ? day.meals : {};
+  var planned = _NUT_PLAN_SLOTS.filter(function(s){
+    return ((meals[s.k] && meals[s.k].components) || []).length > 0;
+  });
+  if(!planned.length){
+    tile.innerHTML =
+      '<div id="nut-meals-empty" style="background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);padding:14px 16px;cursor:pointer;touch-action:manipulation;">' +
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Today&#39;s Meals</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+      '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Nothing planned for today.</div>' +
+      '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">PLAN &#8250;</div>' +
+      '</div></div>';
+    var emptyEl = tile.querySelector('#nut-meals-empty');
+    if(emptyEl) emptyEl.addEventListener('click', function(){ _nutTab = 'week'; _nutWeekMode = 'plan'; navTo('nutrition'); });
+    return;
+  }
+  var eatenMap  = _nutEnsureEaten(day);
+  var doneCount = planned.filter(function(s){ return !!eatenMap[s.k]; }).length;
+  var targets   = nutAdjustForToday(ns.targets);
+  var eaten     = _nutEatenTotals(day);
+  var plannedT  = _nutDayTotals(day);
+  var remKcal   = (targets.kcal || 0) - eaten.kcal;
+
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);">Today&#39;s Meals</div>';
+  h += '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:' + (doneCount === planned.length ? 'var(--gold)' : 'var(--text3)') + ';">' + doneCount + ' / ' + planned.length + ' eaten</div>';
+  h += '</div>';
+
+  planned.forEach(function(s){
+    var eatenSlot = !!eatenMap[s.k];
+    var st = _nutSlotTotals(day, s.k);
+    var comps = (meals[s.k] && meals[s.k].components) || [];
+    var names = comps.map(function(c){ return c.n; }).join(', ');
+    h += '<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--border);">';
+    // Tick button
+    h += '<button data-nut-tick="' + s.k + '" aria-pressed="' + (eatenSlot ? 'true' : 'false') + '" style="width:26px;height:26px;flex-shrink:0;padding:0;border-radius:7px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;transition:all 0.15s;background:' + (eatenSlot ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (eatenSlot ? 'var(--gold)' : 'var(--border2)') + ';">' +
+         (eatenSlot ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
+         '</button>';
+    // Body
+    h += '<div data-nut-meal-open="' + s.k + '" style="flex:1;min-width:0;cursor:pointer;touch-action:manipulation;' + (eatenSlot ? 'opacity:0.45;' : '') + '">';
+    h += '<div style="font-size:13px;font-weight:700;color:var(--text);' + (eatenSlot ? 'text-decoration:line-through;' : '') + '">' + s.l + '</div>';
+    h += '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' + (eatenSlot ? 'text-decoration:line-through;' : '') + '">' + names + '</div>';
+    h += '</div>';
+    h += '<div style="flex-shrink:0;text-align:right;' + (eatenSlot ? 'opacity:0.45;' : '') + '">';
+    h += '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:' + (eatenSlot ? 'var(--gold)' : 'var(--text)') + ';">' + st.kcal + '</div>';
+    h += '<div style="font-size:10px;color:var(--text3);">P' + st.protein_g + 'g</div>';
+    h += '</div>';
+    h += '</div>';
+  });
+
+  // Running total — updates as slots are ticked
+  h += '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:11px;">';
+  h += '<div><span style="font-family:var(--font-d);font-size:22px;font-weight:900;color:' + (remKcal < 0 ? 'var(--gold)' : 'var(--text)') + ';">' + (remKcal < 0 ? '+' + Math.abs(remKcal) : remKcal) + '</span>';
+  h += '<span style="font-size:11px;color:var(--text3);margin-left:6px;">kcal ' + (remKcal < 0 ? 'over' : 'remaining') + ' of ' + (targets.kcal || 0) + '</span></div>';
+  h += '<div style="font-size:10px;color:var(--text3);text-align:right;">' + eaten.kcal + ' eaten &middot; ' + plannedT.kcal + ' planned</div>';
+  h += '</div>';
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:3px;">P' + eaten.protein_g + ' / ' + (targets.protein_g||0) + 'g &middot; C' + eaten.carbs_g + ' / ' + (targets.carbs_g||0) + 'g &middot; F' + eaten.fat_g + ' / ' + (targets.fat_g||0) + 'g</div>';
+  h += '</div>';
+  tile.innerHTML = h;
+
+  tile.querySelectorAll('[data-nut-tick]').forEach(function(btn){
+    btn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      nutToggleMealEaten(btn.getAttribute('data-nut-tick'), _nutToday());
+    });
+  });
+  tile.querySelectorAll('[data-nut-meal-open]').forEach(function(el){
+    el.addEventListener('click', function(){ _nutTab = 'today'; navTo('nutrition'); });
+  });
+}
+
+// ── Today screen: water counter ───────────────────────────────────────────
+function nutWaterTargetMl(ns){
+  var t = ns && parseFloat(ns.water_target_ml);
+  return (t > 0) ? t : _NUT_WATER_TARGET_ML;
+}
+
+function nutGetWaterMl(dateKey){
+  var ns = nutGetState();
+  var day = (ns && ns.daily && ns.daily[dateKey]) || {};
+  return parseFloat(day.water_ml) || 0;
+}
+
+function nutAddWater(deltaMl){
+  var ns = nutGetState();
+  if(!ns) return;
+  var today = _nutToday();
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[today]) ns.daily[today] = {};
+  var cur = parseFloat(ns.daily[today].water_ml) || 0;
+  var next = cur + deltaMl;
+  if(next < 0) next = 0;
+  if(next > 20000) next = 20000;
+  ns.daily[today].water_ml = next;
+  nutSaveState(ns);
+  nutRenderWaterTile();
+}
+
+function nutSetWaterTarget(ml){
+  var ns = nutGetState();
+  if(!ns) return;
+  ns.water_target_ml = parseFloat(ml) || _NUT_WATER_TARGET_ML;
+  nutSaveState(ns);
+  nutRenderWaterTile();
+}
+
+function nutOpenWaterTargetSheet(){
+  if(typeof _phxOpenBottomSheet !== 'function') return;
+  var ns = nutGetState() || {};
+  _phxOpenBottomSheet({
+    title: 'Daily Water Target',
+    subtitle: 'How much are you aiming for each day?',
+    current: String(nutWaterTargetMl(ns)),
+    options: [
+      {value:'2000', label:'2.0 L', sub:'8 glasses'},
+      {value:'2500', label:'2.5 L', sub:'10 glasses — default'},
+      {value:'3000', label:'3.0 L', sub:'12 glasses'},
+      {value:'3500', label:'3.5 L', sub:'14 glasses'},
+      {value:'4000', label:'4.0 L', sub:'16 glasses'}
+    ],
+    onSelect: function(val){ nutSetWaterTarget(val); }
+  });
+}
+
+function nutRenderWaterTile(){
+  var tile = document.getElementById('today-water-tile');
+  if(!tile) return;
+  var ns = nutGetState();
+  if(!ns || !ns.setup_done){ tile.innerHTML = ''; return; }
+  var today  = _nutToday();
+  var target = nutWaterTargetMl(ns);
+  var ml     = nutGetWaterMl(today);
+  var glass  = _NUT_WATER_GLASS_ML;
+  var drops  = Math.max(1, Math.round(target / glass));
+  var filled = Math.floor(ml / glass);
+  var pct    = target ? Math.min(100, Math.round(ml / target * 100)) : 0;
+  var hit    = ml >= target;
+
+  var icons = '';
+  for(var i = 0; i < drops; i++){
+    var on = (i < filled);
+    icons += '<svg viewBox="0 0 24 24" width="17" height="17" style="flex-shrink:0;" ' +
+      'fill="' + (on ? 'var(--gold)' : 'none') + '" stroke="' + (on ? 'var(--gold)' : 'var(--border2)') + '" stroke-width="1.8">' +
+      '<path d="M12 2.7s6 6.4 6 10.4a6 6 0 0 1-12 0c0-4 6-10.4 6-10.4z"/></svg>';
+  }
+
+  var h = '<div style="background:var(--bg2);border:1px solid ' + (hit ? 'var(--gold)' : 'var(--border)') + ';border-radius:var(--radius);padding:14px 16px;">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:' + (hit ? 'var(--gold)' : 'var(--text3)') + ';">Water</div>';
+  h += '<button id="nut-water-target" style="background:none;border:none;padding:2px 0 2px 8px;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text3);cursor:pointer;touch-action:manipulation;">TARGET ' + (target/1000).toFixed(1) + 'L &#8250;</button>';
+  h += '</div>';
+  h += '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:9px;">';
+  h += '<div><span style="font-family:var(--font-d);font-size:30px;font-weight:900;line-height:1;color:' + (hit ? 'var(--gold)' : 'var(--text)') + ';">' + (ml/1000).toFixed(2) + '</span>';
+  h += '<span style="font-size:12px;color:var(--text3);margin-left:5px;">L of ' + (target/1000).toFixed(1) + 'L</span></div>';
+  h += '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">' + filled + ' glass' + (filled === 1 ? '' : 'es') + '</div>';
+  h += '</div>';
+  h += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' + icons + '</div>';
+  h += '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:11px;">';
+  h += '<div style="height:100%;width:' + pct + '%;background:var(--gold);border-radius:2px;transition:width 0.35s;"></div></div>';
+  h += '<button id="nut-water-add" style="width:100%;padding:12px;background:' + (hit ? 'var(--bg3)' : 'var(--gold)') + ';border:1px solid ' + (hit ? 'var(--border2)' : 'var(--gold)') + ';border-radius:var(--radius);color:' + (hit ? 'var(--gold)' : '#000') + ';font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;">+ ' + glass + ' ML</button>';
+  h += '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Tap to add a glass &middot; hold to undo</div>';
+  h += '</div>';
+  tile.innerHTML = h;
+
+  _nutBindLongPress(
+    tile.querySelector('#nut-water-add'),
+    function(){ nutAddWater(glass); },
+    function(){ nutAddWater(-glass); }
+  );
+  var tgtBtn = tile.querySelector('#nut-water-target');
+  if(tgtBtn) tgtBtn.addEventListener('click', nutOpenWaterTargetSheet);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PEPTIDE PORTAL — v4.9.138
 // State: localStorage("peptide_v1_{uid}") + profiles.peptide_state (Supabase)
 // Tabs: TODAY | PROTOCOL | ORDER
@@ -21039,8 +21353,11 @@ function nutAddComponent(slot, dateKey, food, qty){
     c: food.c || 0,
     f: food.f || 0
   });
+  // Adding food by hand means it has been eaten — tick the slot.
+  _nutEnsureEaten(day)[slot] = true;
   nutSaveState(ns);
   if(typeof nutRenderTile === 'function') nutRenderTile();
+  if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile();
 }
 
 function nutRemoveComponent(slot, dateKey, idx){

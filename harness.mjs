@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.144'", 'version is 4.9.144');
+has("var APP_VERSION='4.9.145'", 'version is 4.9.145');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -234,6 +234,114 @@ try {
     : bad('text export missing content');
 } catch (e) {
   bad(`prep aggregator execution failed: ${e.message}`);
+}
+
+// ── Today screen: meal tick-off + water counter (v4.9.145) ──────────────────
+has('id="today-meals-tile"', 'TODAY: meals tile div on Today screen');
+has('id="today-water-tile"', 'TODAY: water tile div on Today screen');
+has('nutRenderMealsTile()', 'TODAY: meals tile rendered from the Today render hook');
+has('nutRenderWaterTile()', 'TODAY: water tile rendered from the Today render hook');
+has('function _nutEnsureEaten(', 'TICK: eaten-map seeding defined');
+has('function nutIsSlotEaten(', 'TICK: nutIsSlotEaten defined');
+has('function nutToggleMealEaten(', 'TICK: nutToggleMealEaten defined');
+has('function _nutEatenTotals(', 'TICK: eaten-only running totals defined');
+has('function _nutSlotTotals(', 'TICK: per-slot totals defined');
+has('data-nut-tick=', 'TICK: Today-screen tick buttons rendered');
+has('data-nut-tick-day=', 'TICK: nutrition-screen tick buttons rendered');
+has('nutToggleMealEaten(parts[0], parts[1])', 'TICK: in-screen tick buttons wired');
+has('var logged = _nutEatenTotals(dayData);', 'TICK: running totals follow the ticks');
+has("if(_e[slot] === undefined) _e[slot] = false;", 'TICK: planned recipes start unticked');
+has('_nutEnsureEaten(day)[slot] = true;', 'TICK: ad-hoc logging ticks the slot');
+has("ns.daily[dk].eaten = {};", 'TICK: week templates plan without marking eaten');
+has('function nutRenderWaterTile()', 'WATER: tile renderer defined');
+has('function nutAddWater(', 'WATER: add/undo defined');
+has('function nutWaterTargetMl(', 'WATER: target accessor defined');
+has('function nutSetWaterTarget(', 'WATER: target setter defined');
+has('function nutOpenWaterTargetSheet(', 'WATER: target picker defined');
+has('var _NUT_WATER_GLASS_ML  = 250', 'WATER: 250ml glass');
+has('var _NUT_WATER_TARGET_ML = 2500', 'WATER: 2.5L default target');
+has('function _nutBindLongPress(', 'WATER: tap/long-press binding defined');
+has('Tap to add a glass &middot; hold to undo', 'WATER: tap/hold hint shown');
+has('water_ml', 'WATER: per-day water stored on the daily record');
+
+// ── Execute the tick-off + water logic ──────────────────────────────────────
+console.log('\nExecution check — meal tick-off + water counter:');
+try {
+  const srcPrep2 = extract('var _NUT_REC_CATS = [', '\n// ── Week planner view');
+  const srcToday = extract('var _NUT_WATER_GLASS_ML', '\n// ── Today screen: planned meals')
+                 + extract('// ── Today screen: water counter', '\nfunction nutRenderWaterTile()');
+  const sb2 = { console, athlete: { id: 'harness2' } };
+  sb2.localStorage = {
+    _d: {},
+    getItem(k){ return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
+    setItem(k, v){ this._d[k] = String(v); },
+    removeItem(k){ delete this._d[k]; }
+  };
+  sb2.setTimeout = () => 0;
+  sb2.clearTimeout = () => {};
+  sb2.document = { getElementById: () => null };
+  let st = { setup_done: true, targets: { kcal: 2000, protein_g: 150 }, daily: {} };
+  sb2.nutGetState = () => st;
+  sb2.nutSaveState = (s) => { st = s; };
+  sb2.nutRenderTile = () => {};
+  sb2.nutRenderScreen = () => {};
+  sb2.nutRenderWaterTile = () => {};
+  sb2.nutRenderMealsTile = () => {};
+  sb2.nutAdjustForToday = (t) => t;
+  sb2._nutDayTotals = (day) => {
+    const t = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+    const meals = (day && day.meals && !Array.isArray(day.meals)) ? day.meals : {};
+    Object.keys(meals).forEach(sl => (meals[sl].components || []).forEach(c => {
+      const f = (c.qty_g || 0) / 100;
+      t.kcal += Math.round((c.k || 0) * f); t.protein_g += (c.p || 0) * f;
+    }));
+    return t;
+  };
+  sb2._nutToday = () => '2026-08-19';
+  sb2._nutWeekStart = () => '2026-08-17';
+  vm.createContext(sb2);
+  new vm.Script(srcPrep2 + '\n' + srcToday).runInContext(sb2);
+
+  const rec = { id:'r1', name:'Oats', cat:'carb', yield_serves:1, yield_note:'', prep_method:'',
+    components:[{n:'Oats',cat:'carb',k:400,p:14,c:60,f:8,qty_g:100,cooked_g:0,state:'raw'}], macros_manual:null };
+  sb2.nutSaveRecipes([rec]);
+  const TODAY = '2026-08-19';
+  sb2.nutAssignRecipe('r1', 'breakfast', TODAY, 1);
+  const day = () => sb2.nutGetState().daily[TODAY];
+
+  sb2.nutIsSlotEaten(day(), 'breakfast') === false
+    ? ok('a planned meal starts unticked') : bad('planned meal was already ticked');
+  sb2._nutEatenTotals(day()).kcal === 0
+    ? ok('running total ignores unticked meals') : bad(`unticked meal counted: ${sb2._nutEatenTotals(day()).kcal}`);
+  sb2.nutToggleMealEaten('breakfast', TODAY);
+  sb2.nutIsSlotEaten(day(), 'breakfast') === true && sb2._nutEatenTotals(day()).kcal === 400
+    ? ok('ticking a meal adds it to the running total (400 kcal)')
+    : bad(`tick did not update totals: ${sb2._nutEatenTotals(day()).kcal}`);
+  sb2.nutToggleMealEaten('breakfast', TODAY);
+  sb2._nutEatenTotals(day()).kcal === 0
+    ? ok('unticking removes it again') : bad('untick did not reverse');
+
+  // A day with no eaten map at all predates tick-off — it must still count.
+  st.daily['2026-01-05'] = { meals: { lunch: { components: [{n:'X',cat:'carb',k:300,p:10,c:50,f:5,qty_g:100}] } } };
+  sb2._nutEatenTotals(st.daily['2026-01-05']).kcal === 300
+    ? ok('pre-tick-off days still count as eaten (no silent zeroing)')
+    : bad('legacy day zeroed out');
+
+  // Water
+  sb2.nutWaterTargetMl(sb2.nutGetState()) === 2500 ? ok('water target defaults to 2.5L') : bad('bad default water target');
+  sb2.nutAddWater(250); sb2.nutAddWater(250);
+  sb2.nutGetWaterMl(TODAY) === 500 ? ok('two taps = 500ml') : bad(`water = ${sb2.nutGetWaterMl(TODAY)}`);
+  sb2.nutAddWater(-250);
+  sb2.nutGetWaterMl(TODAY) === 250 ? ok('long-press undo removes a glass') : bad('undo failed');
+  sb2.nutAddWater(-250); sb2.nutAddWater(-250);
+  sb2.nutGetWaterMl(TODAY) === 0 ? ok('water never goes negative') : bad('water went negative');
+  sb2.nutSetWaterTarget(3000);
+  sb2.nutWaterTargetMl(sb2.nutGetState()) === 3000 ? ok('water target is configurable') : bad('target not saved');
+  st.daily['2099-01-01'] = { water_ml: 1000 };
+  sb2.nutGetWaterMl('2099-01-01') === 1000 && sb2.nutGetWaterMl(TODAY) === 0
+    ? ok('water is per date, so it resets at midnight') : bad('water not date-scoped');
+} catch (e) {
+  bad(`tick-off / water execution failed: ${e.message}`);
 }
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────

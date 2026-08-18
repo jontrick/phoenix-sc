@@ -1739,6 +1739,8 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div id="today-remaining-row" style="margin-bottom:12px;"></div>
     <!-- Nutrition placeholder (Phase 2) -->
     <div id="today-nutrition-tile" style="margin-bottom:12px;"></div>
+    <!-- v4.9.142: today's peptide doses (mg + units to draw). Hidden when no protocol. -->
+    <div id="today-peptide-tile" style="margin-bottom:12px;"></div>
     <!-- + Add Session -->
     <div id="card-add-session" class="game-card" onclick="_phxOpenSessionLibrary()" style="margin-bottom:10px;border:1px dashed var(--border2);opacity:0.8;">
       <div class="game-card-inner" style="padding:14px 18px;">
@@ -3489,7 +3491,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.141';
+var APP_VERSION='4.9.142';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6307,6 +6309,11 @@ window.blabCompleteSession = function(week, day){
   s.last_completed_date = new Date().toISOString();
   if(!s.log) s.log = [];
   s.log.push({week:week, day:day, date:s.last_completed_date});
+  // v4.9.141: mark the calendar entry done so it leaves the scheduler queue and
+  // keeps its real completion date for the 48h gate.
+  if(typeof window.blabCalMarkCompleted === 'function'){
+    try { window.blabCalMarkCompleted(week, day); } catch(_ce){ console.warn('[PHX] blabCalMarkCompleted failed:', _ce); }
+  }
   if(day === 4){
     s.week = week + 1;
     s.last_completed_day = 0;
@@ -17512,11 +17519,29 @@ function renderTodayScreen(){
         var _weekDone = _lastDay === 4;
         var _week = _bs.week || 1;
         var _dayLabels = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
-        // 48hr rule Day2→Day4
+        // v4.9.141: when the athlete has scheduled a BLAB session for today on the
+        // training calendar, that session is today's session — it overrides the
+        // purely sequential next-day guess.
+        var _calToday = (typeof window.blabCalTodayEntry === 'function') ? window.blabCalTodayEntry() : null;
+        if(_calToday){
+          _week = _calToday.blabWeek;
+          _nextDay = _calToday.blabDay;
+          _weekDone = false;
+        }
+        // 48hr rule Day2→Day4. Prefer the calendar's Day 2 date (completed date if it
+        // has been done, otherwise its scheduled date); fall back to the legacy
+        // last_completed_date path when no calendar entry exists.
         var _canTrain = true;
-        if(_nextDay === 4 && _lastDay === 2 && _bs.last_completed_date){
-          var _hrs = (new Date() - new Date(_bs.last_completed_date)) / 3600000;
-          if(_hrs < 47) _canTrain = false;
+        if(_nextDay === 4){
+          var _d2ref = (typeof window._blabCalDay2RefDate === 'function') ? window._blabCalDay2RefDate(_week) : null;
+          if(_d2ref){
+            var _tmid = new Date(); _tmid.setHours(0,0,0,0);
+            var _dayGap = Math.round((_tmid.getTime() - _d2ref.getTime()) / 86400000);
+            if(_dayGap < 2) _canTrain = false;
+          } else if(_lastDay === 2 && _bs.last_completed_date){
+            var _hrs = (new Date() - new Date(_bs.last_completed_date)) / 3600000;
+            if(_hrs < 47) _canTrain = false;
+          }
         }
         // PAUSED STATE — takes priority over all other card states
         if(_bs.paused){
@@ -17627,6 +17652,8 @@ function renderTodayScreen(){
   // v4.9.132: live nutrition tile (falls back to placeholder if not set up)
   if(typeof nutRenderTile==='function') nutRenderTile();
   else if(typeof _renderTodayNutritionPlaceholder==='function') _renderTodayNutritionPlaceholder();
+  // v4.9.142: today's peptide doses in mg + units. No-op when no protocol is set up.
+  if(typeof pepRenderTodayTile==='function') pepRenderTodayTile();
 }
 
 // ── Today screen helpers (Priority 2) ────────────────────────────
@@ -19672,6 +19699,100 @@ function pepToggleDose(compoundId){
   else ps.checked[today].push(compoundId);
   pepSaveState(ps);
   pepRenderScreen();
+}
+
+// ── Today-screen dose tile (v4.9.142) ─────────────────────────────────────
+// Lives on screen-today under the nutrition tile. Shows every dose due today
+// with the mg/mcg amount AND the units/mL to draw from the current recon.
+function pepRenderTodayTile(){
+  var tile = document.getElementById("today-peptide-tile");
+  if(!tile) return;
+  var ps = pepGetState();
+  var stacks = (ps && ps.stacks) || [];
+  // No protocol at all - stay out of the way entirely.
+  if(!stacks.length){ tile.innerHTML = ""; return; }
+
+  var today = _pepToday();
+  var checked = (ps.checked && ps.checked[today]) || [];
+  var doses = _pepGetDoses(ps);
+  var all = doses.morning.concat(doses.anytime).concat(doses.evening);
+
+  if(!all.length){
+    tile.innerHTML =
+      "<div data-pep-tile-open=\"1\" style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;\">" +
+      "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Peptides</div>" +
+      "<div style=\"display:flex;align-items:center;justify-content:space-between;\">" +
+      "<div style=\"font-size:13px;color:var(--text2);\">No doses scheduled today.</div>" +
+      "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:700;color:#7B68EE;letter-spacing:1px;white-space:nowrap;margin-left:12px;\">PORTAL &rsaquo;</div>" +
+      "</div></div>";
+    _pepBindTile(tile);
+    return;
+  }
+
+  var done = 0;
+  all.forEach(function(it){ if(checked.indexOf(it.id) >= 0) done++; });
+  var remaining = all.length - done;
+
+  var h = "<div data-pep-tile-open=\"1\" style=\"background:var(--bg2);border:1px solid " + (remaining ? "#7B68EE" : "var(--border)") + ";border-radius:var(--radius);padding:14px 16px;cursor:pointer;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#7B68EE;margin-bottom:8px;\">Peptides &middot; Today</div>";
+  h += "<div style=\"display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px;\">";
+  h += "<div><div style=\"font-family:var(--font-d);font-size:40px;font-weight:900;line-height:1;color:" + (remaining ? "var(--text)" : "#7B68EE") + ";\">" + remaining + "</div>";
+  h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + (remaining === 1 ? "dose remaining" : "doses remaining") + " &middot; " + all.length + " scheduled</div></div>";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;color:var(--text3);\">" + done + "/" + all.length + " done</div>";
+  h += "</div>";
+
+  function row(item){
+    var isDone = checked.indexOf(item.id) >= 0;
+    var r = "<div style=\"display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);" + (isDone ? "opacity:0.5;" : "") + "\">";
+    r += "<button data-pep-tile-check=\"" + item.id + "\" style=\"flex-shrink:0;width:22px;height:22px;border-radius:50%;border:2px solid " + (isDone ? "#7B68EE" : "var(--border2)") + ";background:" + (isDone ? "#7B68EE" : "transparent") + ";cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;padding:0;\">";
+    if(isDone) r += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='12' height='12'><polyline points='20 6 9 17 4 12'/></svg>";
+    r += "</button>";
+    r += "<div style=\"flex:1;min-width:0;\">";
+    r += "<div style=\"font-size:13px;font-weight:700;color:var(--text);\">" + _esc(item.name) + "</div>";
+    r += "<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">" + _esc(item.timing || "") + "</div>";
+    r += "</div>";
+    r += "<div style=\"text-align:right;flex-shrink:0;\">";
+    r += "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;line-height:1.1;\">" + (item.draw ? _pepDrawText(item.draw) : "—") + "</div>";
+    r += "<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">" + _pepFmtDose(item.dose, item.doseUnit) + (item.recon ? " &middot; " + _pepNum(item.recon.conc) + "mg/mL" : " &middot; set recon") + "</div>";
+    r += "</div></div>";
+    return r;
+  }
+
+  function block(label, items){
+    if(!items.length) return "";
+    var b = "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-top:8px;\">" + label + "</div>";
+    items.forEach(function(it){ b += row(it); });
+    return b;
+  }
+
+  h += block("Morning", doses.morning);
+  h += block("Any Time", doses.anytime);
+  h += block("Evening", doses.evening);
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:700;color:#7B68EE;letter-spacing:1px;padding-top:10px;\">OPEN PORTAL &rsaquo;</div>";
+  h += "</div>";
+  tile.innerHTML = h;
+  _pepBindTile(tile);
+}
+
+function _pepBindTile(tile){
+  tile.querySelectorAll("[data-pep-tile-open]").forEach(function(el){
+    el.addEventListener("click", function(){ navTo("peptide"); });
+  });
+  tile.querySelectorAll("[data-pep-tile-check]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      var ps = pepGetState();
+      var today = _pepToday();
+      if(!ps.checked) ps.checked = {};
+      if(!ps.checked[today]) ps.checked[today] = [];
+      var id = btn.getAttribute("data-pep-tile-check");
+      var i = ps.checked[today].indexOf(id);
+      if(i >= 0) ps.checked[today].splice(i, 1);
+      else ps.checked[today].push(id);
+      pepSaveState(ps);
+      pepRenderTodayTile();
+    });
+  });
 }
 
 // ── PROTOCOL tab ──────────────────────────────────────────────────────────
@@ -22542,6 +22663,23 @@ window.openWeekPlan = function(){
 window._phxRenderWeekScheduleTile = function(){
   var bodyEl = document.getElementById('card-this-week-body');
   if(!bodyEl) return;
+  // v4.9.141: when BLAB is active its training calendar owns the week — render the
+  // scheduled BLAB sessions ahead of (and instead of) the AI programme week.
+  var _calUp = (typeof window.blabCalUpcoming === 'function' && typeof blabIsActive === 'function' && blabIsActive())
+    ? window.blabCalUpcoming(2) : [];
+  if(_calUp.length){
+    bodyEl.innerHTML = _calUp.map(function(e, i){
+      var _d = _blabCalParse(e.scheduledDate);
+      var _dayShort = _d ? _BLAB_CAL_DAYS[(_d.getDay()+6)%7].substring(0,3).toUpperCase() : '';
+      var _rule = (i === _calUp.length-1) ? '' : 'border-bottom:1px solid rgba(255,255,255,0.08);';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;'+_rule+'">'+
+        '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:1.5px;color:rgba(255,255,255,0.95);text-transform:uppercase;">'+
+          _dayShort+' · '+(_BLAB_DAY_LABELS[e.blabDay]||('Day '+e.blabDay))+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);">W'+e.blabWeek+' D'+e.blabDay+'</div>'+
+      '</div>';
+    }).join('');
+    return;
+  }
   // v4.8.3: show a clear CTA when no programme exists instead of leaving "Loading..."
   var prog = athlete && athlete.aiProgramme;
   if(!prog){

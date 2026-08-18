@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.168';
+var APP_VERSION='4.9.169';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18095,8 +18095,14 @@ function nutSaveState(s){
   try { localStorage.setItem(_nutKey(), JSON.stringify(s)); } catch(e){}
 }
 
+// v4.9.169: day keys are LOCAL dates, via the shared _phxLocalISO (v4.9.168).
+// This used to be new Date().toISOString().slice(0,10) — a UTC date — so in
+// Brisbane (UTC+10) everything Jon logged before 10:00 local, including his
+// 4:30am weigh-in, breakfast and post-workout meal, was filed under YESTERDAY.
+// Peptides and Training were already local; nutrition disagreed with both for
+// six hours every morning.
 function _nutToday(){
-  return new Date().toISOString().slice(0, 10);
+  return _phxLocalISO();
 }
 
 // Mifflin-St Jeor TDEE → goal-adjusted macro targets
@@ -18896,7 +18902,7 @@ function _nutMealNav(dir){
   if(!_nutMealDate) _nutMealDate = _nutToday();
   var d = new Date(_nutMealDate + 'T12:00:00');
   d.setDate(d.getDate() + dir);
-  var nxt = d.toISOString().slice(0,10);
+  var nxt = _phxLocalISO(d);
   if(nxt > _nutToday()) return;
   _nutMealDate = nxt;
   nutRenderScreen();
@@ -19135,7 +19141,7 @@ function _nutWeekStart(dateKey){
   var dow = d.getDay(); // 0=Sun
   var diff = dow === 0 ? 6 : dow - 1;
   var mon = new Date(d.getTime() - diff * 86400000);
-  return mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
+  return _phxLocalISO(mon);
 }
 
 // ── WEEK tab ─────────────────────────────────────────────────────────────────
@@ -20027,7 +20033,7 @@ function _nutWeekDays(fromDateKey){
   for(var i=0;i<7;i++){
     var d = new Date(monStr + 'T12:00:00');
     d.setDate(d.getDate() + i);
-    out.push(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
+    out.push(_phxLocalISO(d));
   }
   return out;
 }
@@ -20038,7 +20044,7 @@ function _nutWeekDays(fromDateKey){
 function _nutSelectedWeekStart(){
   var mon = new Date(_nutWeekStart(_nutToday()) + 'T12:00:00');
   mon.setDate(mon.getDate() + (_nutWeekOffset * 7));
-  return mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
+  return _phxLocalISO(mon);
 }
 
 function _nutSelectedWeekDays(){
@@ -23023,7 +23029,7 @@ function _nutWeeklyAssessment(ns){
   for(var i = 0; i < 14; i++){
     var d = new Date();
     d.setDate(d.getDate() - i);
-    var dk = d.toISOString().slice(0,10);
+    var dk = _phxLocalISO(d);
     var dd  = ns.daily[dk] || {};
     var tot = _nutDayTotals(dd);
     days.push({date:dk, weight:dd.weight_kg||null, kcal:tot.kcal, p:tot.protein_g, hasLog:tot.kcal>0});

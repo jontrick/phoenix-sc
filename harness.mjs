@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.168'", 'version is 4.9.168');
+has("var APP_VERSION='4.9.169'", 'version is 4.9.169');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -170,7 +170,9 @@ try {
   sandbox.nutGetState = () => _ns;
   sandbox.nutSaveState = (s) => { _ns = s; };
   sandbox.nutRenderTile = () => {};
-  sandbox._nutToday = () => '2026-08-19';                       // a Wednesday
+  sandbox._nutToday = () => '2026-08-19';
+  // Shared PM helper, defined outside the extracted nutrition block.
+  sandbox._phxLocalISO = (d) => { const x = d || new Date(); return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };                       // a Wednesday
   sandbox._nutWeekStart = () => '2026-08-17';                   // that week's Monday
   vm.createContext(sandbox);
   const srcText = extract('// Plain-text export of the prep plan', '\n// PEPTIDE PORTAL');
@@ -426,6 +428,8 @@ try {
     return t;
   };
   sb2._nutToday = () => '2026-08-19';
+  // Shared PM helper, defined outside the extracted nutrition block.
+  sb2._phxLocalISO = (d) => { const x = d || new Date(); return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
   sb2._nutWeekStart = () => '2026-08-17';
   vm.createContext(sb2);
   new vm.Script(srcPrep2 + '\n' + srcToday).runInContext(sb2);
@@ -492,6 +496,15 @@ has('function nutCopyDay(', 'REPEAT: day copy defined');
 has('function nutOpenRepeatDay(', 'REPEAT: day picker defined');
 has('data-nut-repeat-day', 'REPEAT: control rendered on planned days');
 has('ns.daily[dk].eaten = {};', 'REPEAT: copied days start unticked');
+
+// ── Local day keys (v4.9.169) ───────────────────────────────────────────────
+// Brisbane is UTC+10 and Jon logs at 4:30am; a UTC day key filed his morning
+// under yesterday. Nutrition uses the shared PM helper, not a private copy.
+has('function _nutToday(){\n  return _phxLocalISO();', 'TZ: _nutToday delegates to the shared local-date helper');
+hasNot("return new Date().toISOString().slice(0, 10);", 'TZ: UTC day key gone from _nutToday');
+hasNot("var nxt = d.toISOString().slice(0,10);", 'TZ: day-step navigation no longer UTC');
+hasNot("var dk = d.toISOString().slice(0,10);", 'TZ: 14-day history no longer UTC');
+hasNot('function _nutDateKey(', 'TZ: no private nutrition copy of the date helper');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

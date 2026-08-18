@@ -625,7 +625,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // Nutrition's own date convention — nutRecordWeight defaults to _nutToday(), which
   // is toISOString().slice(0,10), i.e. UTC. Asserted against the same expression on
   // purpose: this test must track what the app actually does, not what I assume.
-  const nutTodayKey = () => new Date().toISOString().slice(0, 10);
+  const nutTodayKey = () => app._phxLocalISO();
 
   test('a weekly weigh-in reaches the nutrition daily log', () => {
     driveCheckin(84.5);

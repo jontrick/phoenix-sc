@@ -259,6 +259,60 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(app._nutErrorSummary(null), { count: 0 }, 'null');
   });
 
+  // ── Day keys are LOCAL, not UTC ───────────────────────────────────────────
+  // Jon is in Brisbane (UTC+10) and trains at 4:30am. With a UTC day key,
+  // everything he logged before 10:00 local landed under YESTERDAY.
+  //
+  // Asserting against the runner's own clock would be useless — on a UTC
+  // machine the broken and fixed implementations agree. So pin the instant:
+  // 2026-08-19 04:30 +10:00 is 2026-08-18 18:30 UTC. Local says the 19th, UTC
+  // says the 18th, and the test is the same in every timezone.
+  const at0430Brisbane = (fn) => {
+    const Real = app.Date;
+    function Fixed(...a) {
+      if (a.length) return new Real(...a);
+      return {
+        getFullYear: () => 2026, getMonth: () => 7, getDate: () => 19, getDay: () => 3,
+        getHours: () => 4, getMinutes: () => 30,
+        toISOString: () => '2026-08-18T18:30:00.000Z',
+        getTime: () => Real.parse('2026-08-18T18:30:00.000Z'),
+      };
+    }
+    Fixed.parse = Real.parse; Fixed.now = Real.now; Fixed.UTC = Real.UTC;
+    app.Date = Fixed;
+    try { return fn(); } finally { app.Date = Real; }
+  };
+
+  test('a day key is built from local date parts, not a UTC string', () => {
+    assert.equal(
+      app._phxLocalISO({ getFullYear: () => 2026, getMonth: () => 7, getDate: () => 9 }),
+      '2026-08-09', 'zero-padded local components');
+  });
+
+  test('at 4:30am Brisbane, today is the local date — not yesterday in UTC', () => {
+    at0430Brisbane(() => {
+      assert.equal(app._nutToday(), '2026-08-19', 'the 19th, not the UTC 18th');
+    });
+  });
+
+  test('a 4:30am weigh-in lands on the local day, not the one before', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    at0430Brisbane(() => { app.nutRecordWeight(91.2); });
+    const daily = read(`phx_nut_v1_${UID}`).daily;
+    assert.ok(daily['2026-08-19'], 'filed under the local date');
+    assert.equal(daily['2026-08-19'].weight_kg, 91.2, 'with the right weight');
+    assert.equal(daily['2026-08-18'], undefined, 'and nothing under yesterday');
+  });
+
+  test('the week containing a 4:30am moment is the local week', () => {
+    at0430Brisbane(() => {
+      const days = app._nutWeekDays(app._nutToday());
+      assert.equal(days.length, 7, 'seven days');
+      assert.ok(days.indexOf('2026-08-19') >= 0, 'the local day is in its own week');
+    });
+  });
+
   // ── Renderers ─────────────────────────────────────────────────────────────
   // The sandbox hands out a fresh element per getElementById call, so nothing
   // written by a renderer can be read back. Memoise by id and capture created

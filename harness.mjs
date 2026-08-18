@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.150'", 'version is 4.9.150');
+has("var APP_VERSION='4.9.151'", 'version is 4.9.151');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -232,6 +232,49 @@ try {
   txt.includes('CHILLI SAUCE') && txt.includes('Chilli — 120g') && txt.includes('Blend')
     ? ok('plain-text export carries name, weights and method')
     : bad('text export missing content');
+
+  // ── Cloud restore vs the migration write (regression guard, v4.9.149) ─────
+  // nutRestoreRecipesFromCloud is local-wins. If nutGetRecipes() persisted an
+  // empty array on a read that happens before the profile row lands (fast-path
+  // boot), the key would exist and restore would be blocked forever.
+  const CLOUD = { nut_recipes: [{ id:'r_cloud', name:'Cloud Sauce', cat:'sauce', yield_serves:4,
+    components:[{n:'Chilli',cat:'veg',k:40,p:2,c:9,f:0.4,qty_g:30,cooked_g:0,state:'raw'}],
+    yield_note:'', prep_method:'', macros_manual:null }] };
+  const RKEY = 'phx_recipes_v1_harness';
+
+  sandbox.localStorage.removeItem(RKEY);
+  delete _ns.recipes;
+  sandbox.nutRestoreRecipesFromCloud(CLOUD);
+  sandbox.nutGetRecipes().length === 1
+    ? ok('cloud restore hydrates recipes on a fresh install')
+    : bad('cloud restore did not hydrate');
+
+  sandbox.localStorage.removeItem(RKEY);
+  sandbox.nutSaveRecipes([{ id:'r_local', name:'Local Only', cat:'other', yield_serves:1,
+    components:[], yield_note:'', prep_method:'', macros_manual:null }]);
+  sandbox.nutRestoreRecipesFromCloud(CLOUD);
+  sandbox.nutGetRecipes()[0].name === 'Local Only'
+    ? ok('cloud restore never overwrites existing local recipes')
+    : bad('cloud clobbered local recipes');
+
+  sandbox.localStorage.removeItem(RKEY);
+  delete _ns.recipes;
+  const early = sandbox.nutGetRecipes();                        // Nutrition screen opened first
+  early.length === 0 && sandbox.localStorage.getItem(RKEY) === null
+    ? ok('an empty read does NOT persist the key (restore stays possible)')
+    : bad(`empty read persisted the key: ${sandbox.localStorage.getItem(RKEY)}`);
+  sandbox.nutRestoreRecipesFromCloud(CLOUD);
+  sandbox.nutGetRecipes().length === 1
+    ? ok('cloud restore still works after an early read (race guard)')
+    : bad('early read blocked cloud restore — the v4.9.149 regression is back');
+
+  sandbox.localStorage.removeItem(RKEY);
+  _ns.recipes = [{ id:'r_old', name:'Legacy', components:[{n:'C',cat:'protein',k:100,p:20,c:0,f:2,qty_g:100,state:'raw'}] }];
+  sandbox.nutGetRecipes();
+  sandbox.localStorage.getItem(RKEY) !== null
+    ? ok('a read WITH legacy data still persists the migration')
+    : bad('migration no longer persists real legacy recipes');
+  delete _ns.recipes;
 } catch (e) {
   bad(`prep aggregator execution failed: ${e.message}`);
 }

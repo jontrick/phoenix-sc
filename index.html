@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.150';
+var APP_VERSION='4.9.151';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19421,7 +19421,12 @@ function nutGetRecipes(){
   try { var ns = nutGetState(); legacy = (ns && ns.recipes) ? ns.recipes : []; } catch(e2){}
   var migrated = [];
   legacy.forEach(function(r){ var n = _nutNormalizeRecipe(r); if(n) migrated.push(n); });
-  try { localStorage.setItem(_nutRecipeKey(), JSON.stringify(migrated)); } catch(e3){}
+  // Only persist when there was actually something to migrate. Writing an empty
+  // array here makes the key exist, and nutRestoreRecipesFromCloud is local-wins —
+  // so a read before the profile row lands would block cloud restore forever.
+  if(migrated.length){
+    try { localStorage.setItem(_nutRecipeKey(), JSON.stringify(migrated)); } catch(e3){}
+  }
   return migrated;
 }
 

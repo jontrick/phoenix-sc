@@ -40,30 +40,17 @@ If Desktop access is blocked, clone to `/tmp/phoenix-work` as a fallback, make c
 
 ### 1. Runtime check before EVERY push
 
-**Never use `node --check` alone.** It misses runtime errors. Always do the full execution check:
+**Never use `node --check` alone.** It misses runtime errors. Run the checked-in tool:
 
 ```bash
-python3 -c "
-import re
-with open('index.html','r') as f: html = f.read()
-scripts = re.findall(r'<script>(.*?)</script>', html, re.DOTALL)
-main = sorted(scripts, key=len, reverse=True)[0]
-with open('/tmp/blab_check.js','w') as f: f.write(main)
-print('Extracted', len(main), 'chars')
-"
+node runtime_check.mjs
 ```
 
-Then add browser stubs and run:
+Must print `RUNTIME CHECK CLEAN — 6/6 script blocks executed` and exit 0. **Anything else = do not push.**
 
-```bash
-cat > /tmp/stubs.js << 'EOF'
-var window=global,document={getElementById:()=>({style:{},classList:{add:()=>{},remove:()=>{},contains:()=>false},appendChild:()=>{},setAttribute:()=>{},getAttribute:()=>null,addEventListener:()=>{},insertAdjacentHTML:()=>{},remove:()=>{},querySelector:()=>null,querySelectorAll:()=>[],innerHTML:'',textContent:''}),querySelector:()=>null,querySelectorAll:()=>[],createElement:()=>({style:{},classList:{add:()=>{},remove:()=>{},contains:()=>false},appendChild:()=>{},setAttribute:()=>{},getAttribute:()=>null,addEventListener:()=>{},insertAdjacentHTML:()=>{},remove:()=>{},querySelector:()=>null,querySelectorAll:()=>[],innerHTML:'',textContent:''}),body:{appendChild:()=>{},removeChild:()=>{},style:{},innerHTML:''},addEventListener:()=>{},head:{appendChild:()=>{}}};var navigator={onLine:true,serviceWorker:{register:()=>Promise.resolve({addEventListener:()=>{}}),addEventListener:()=>{},controller:{postMessage:()=>{}}}};var localStorage={_d:{},getItem(k){return this._d[k]||null},setItem(k,v){this._d[k]=v},removeItem(k){delete this._d[k]},clear(){this._d={}}};var location={reload:()=>{},href:'',search:''};var supabase={createClient:()=>({auth:{getSession:()=>Promise.resolve({data:{session:null}}),onAuthStateChange:()=>{}},from:()=>({select:function(){return this},eq:function(){return this},single:()=>Promise.resolve({data:null,error:null}),update:function(){return this},upsert:function(){return this},insert:function(){return this}})})};var fetch=()=>Promise.resolve({ok:true,json:()=>Promise.resolve({}),text:()=>Promise.resolve('')});var alert=()=>{},confirm=()=>false,setTimeout=()=>0,setInterval=()=>0,clearInterval=()=>{},clearTimeout=()=>{};
-EOF
-cat /tmp/stubs.js /tmp/blab_check.js > /tmp/full_check.js
-node /tmp/full_check.js 2>&1
-```
+It executes EVERY inline `<script>` block of index.html in document order under browser stubs (`vm` context), reports the block + line of any top-level throw, and fails on unhandled ReferenceError/TypeError rejections. Pass a path to check a different file (`node runtime_check.mjs /path/to/index.html`).
 
-**Zero output = clean. Any error = do not push. Fix it first.**
+History: until v4.9.156 the mandated snippet ran only the LARGEST script block — 50.3% of the JS. The 703KB auth / profile-load / `_phxRecordWriteError` / shared-restore-hook block was never executed by any pre-push gate (found by Peptides, 2026-08-18). If you add stubs to `runtime_check.mjs`, keep them minimal and commit them — the tool is shared PM tooling.
 
 ### 2. Commit and push after every confirmed-clean build
 
@@ -298,7 +285,7 @@ Harness must cover at minimum:
 ## METRICS FOR A GOOD BUILD
 
 A build is complete when:
-1. `node /tmp/full_check.js` — zero output
+1. `node runtime_check.mjs` — RUNTIME CHECK CLEAN, exit 0
 2. `node harness.mjs` — all tests pass
 3. `git push origin main` — succeeds
 4. Version number visible on Jon's phone after PWA refresh

@@ -82,10 +82,10 @@ EnterWorktree {name: "training"}      # or "nutrition" / "peptides"
 ```
 Creates `.claude/worktrees/<domain>` on its own branch, checked out from origin/main, and moves your session into it. If it already exists from a previous session: `EnterWorktree {path: ".claude/worktrees/<domain>"}`, then inside it `git fetch origin && git rebase origin/main` so you start from the latest main. `.claude/worktrees/` is gitignored. If EnterWorktree fails with a permission error (macOS TCC), tell the PM immediately — do not fall back to editing the shared tree.
 
-Runtime check and harness run unchanged from inside the worktree (`node harness.mjs` resolves `index.html` relative to itself).
+Runtime check and harness run unchanged from inside the worktree: `node runtime_check.mjs` and `node harness.mjs` both resolve `index.html` relative to themselves. Since v4.9.156 the runtime check is the checked-in tool (all 6 script blocks) — not the old largest-block snippet.
 
 Push (from inside your worktree). Order matters — `git rebase` refuses to run over unstaged edits, so commit first, then rebase:
-1. Runtime check → zero output; `node harness.mjs` → all pass (on your edits as they stand)
+1. `node runtime_check.mjs` → RUNTIME CHECK CLEAN, exit 0; `node harness.mjs` → all pass (on your edits as they stand)
 2. `git add index.html harness.mjs` (name files explicitly — never `git add .` / `-A`), `git commit -m "v4.9.XXX — [DOMAIN] description"` with your best-guess version
 3. `git fetch origin` then `git rebase origin/main`
 4. Check `APP_VERSION` is still highest-in-file + 1. If someone shipped in between, fix APP_VERSION + harness assertion, re-run both gates, `git commit --amend --no-edit`

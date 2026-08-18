@@ -21,8 +21,20 @@ Two channels. Both may be deferred in a fresh session — load them first with T
 `select:SendMessage,mcp__ccd_session_mgmt__list_sessions,mcp__ccd_session_mgmt__send_message` (ListAgents is usually already loaded).
 
 **Channel 1 — live sessions (preferred when the target is running):**
-1. `ListAgents` — lists reachable sessions by name
-2. `SendMessage {to: "<name from listing>", message: "..."}` — delivers into that session's conversation
+1. `ListAgents` — lists reachable sessions as `phoenix-sc-XX [ref]`
+2. `SendMessage {to: "phoenix-sc-XX [ref]", message: "..."}` — **include the `[ref]` suffix exactly as listed**; bare names and raw session IDs are rejected on this channel
+
+Gotchas learned 2026-08-18:
+- `ListAgents` hides the calling session — you cannot see your own name. Work it out by elimination against the address book below, or just ask the PM.
+- Peer names (`phoenix-sc-XX`) are per-session-launch and will change when a chat is restarted. Session IDs (`local_...`) for Channel 2 are stable. Re-run `ListAgents` at session start and update the address book if names moved.
+
+**Address book (as of 2026-08-18 — refresh at session start):**
+| Chat | Live name | Channel-2 session id |
+|---|---|---|
+| CENTRAL PM | phoenix-sc-ec [5590de] | (this session) |
+| Training | phoenix-sc-4a [ae1882] | local_01da4116-638b-4b3c-8c02-3d29a9452338 |
+| Nutrition | phoenix-sc-f1 [b03aa0] | local_aa71801d-4876-4b18-8c82-bad4b269e5b2 |
+| Peptides | phoenix-sc-2d [ef34e8] | local_1e141fd5-6424-4a07-8329-889d024ed0ba |
 
 **Channel 2 — any session, running or not:**
 1. `mcp__ccd_session_mgmt__list_sessions` — find the target by title, note its `sessionId`

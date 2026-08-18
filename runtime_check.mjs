@@ -8,16 +8,22 @@
 // Exit 0 + "RUNTIME CHECK CLEAN" = clean.  Anything else = do not push.
 
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 
-const file = process.argv[2] || new URL('./index.html', import.meta.url).pathname;
-const html = readFileSync(file, 'utf8');
-const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
-if (!blocks.length) { console.error('RUNTIME CHECK: no inline <script> blocks found'); process.exit(2); }
-
-const total = blocks.reduce((n, b) => n + b.length, 0);
+// v4.9.156: sandbox + block loading are exported so functional_check.mjs can reuse
+// them instead of maintaining a second, drifting copy of the browser stubs.
+export function loadBlocks(file) {
+  const target = file || new URL('./index.html', import.meta.url).pathname;
+  const html = readFileSync(target, 'utf8');
+  const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  if (!blocks.length) throw new Error('no inline <script> blocks found in ' + target);
+  return blocks;
+}
 
 // ── Browser stubs — enough for top-level execution, not a DOM emulation ────────────────
+// Returns a FRESH context each call so separate runs cannot leak state into each other.
+export function createSandbox() {
 function el() {
   const e = {
     style: {}, dataset: {}, classList: { add(){}, remove(){}, contains(){ return false; }, toggle(){} },
@@ -91,11 +97,17 @@ sandbox.crypto = { randomUUID: () => '00000000-0000-4000-8000-000000000000', get
 sandbox.structuredClone = v => JSON.parse(JSON.stringify(v));
 
 vm.createContext(sandbox);
+return sandbox;
+}
 
 // ── Run every block, in order, in ONE context ─────────────────────────────────────────
+// Returns { failed, hardRejections }. Callers decide how to report.
+export async function runBlocks(sandbox, blocks, opts = {}) {
+const quiet = !!opts.quiet;
 let failed = false;
 const unhandled = [];
-process.on('unhandledRejection', (r) => { unhandled.push(r); });
+const onRejection = (r) => { unhandled.push(r); };
+process.on('unhandledRejection', onRejection);
 
 for (let i = 0; i < blocks.length; i++) {
   const src = blocks[i];
@@ -103,30 +115,49 @@ for (let i = 0; i < blocks.length; i++) {
     vm.runInContext(src, sandbox, { filename: `index.html#script${i + 1}`, timeout: 60_000 });
   } catch (e) {
     failed = true;
-    console.error(`\n✗ script block ${i + 1}/${blocks.length} (${src.length} chars) THREW at top level:`);
-    console.error('  ' + String(e && e.stack ? e.stack.split('\n').slice(0, 6).join('\n  ') : e));
+    if (!quiet) {
+      console.error(`\n✗ script block ${i + 1}/${blocks.length} (${src.length} chars) THREW at top level:`);
+      console.error('  ' + String(e && e.stack ? e.stack.split('\n').slice(0, 6).join('\n  ') : e));
+    }
   }
 }
 
 // Let queued microtasks (auth flows etc.) settle so async top-level throws surface.
 await new Promise(r => setImmediate(r));
 await new Promise(r => setImmediate(r));
+process.removeListener('unhandledRejection', onRejection);
 
+let hard = [];
 if (unhandled.length) {
   // Report but do not fail: stubbed promises legitimately reject in places the real app guards
   // with UI. Fail only if a rejection is a ReferenceError/TypeError from our own code.
-  const hard = unhandled.filter(r => r instanceof ReferenceError || r instanceof TypeError || r instanceof SyntaxError);
+  hard = unhandled.filter(r => r instanceof ReferenceError || r instanceof TypeError || r instanceof SyntaxError);
   if (hard.length) {
     failed = true;
-    console.error(`\n✗ ${hard.length} unhandled ${hard.length === 1 ? 'rejection' : 'rejections'} that look like code errors:`);
-    hard.slice(0, 5).forEach(r => console.error('  ' + String(r && r.stack ? r.stack.split('\n').slice(0, 4).join('\n  ') : r)));
+    if (!quiet) {
+      console.error(`\n✗ ${hard.length} unhandled ${hard.length === 1 ? 'rejection' : 'rejections'} that look like code errors:`);
+      hard.slice(0, 5).forEach(r => console.error('  ' + String(r && r.stack ? r.stack.split('\n').slice(0, 4).join('\n  ') : r)));
+    }
   }
 }
 
-const covered = blocks.reduce((n, b) => n + b.length, 0);
-if (failed) {
-  console.error(`\nRUNTIME CHECK FAILED — ${blocks.length} blocks, ${covered}/${total} chars attempted. DO NOT PUSH.`);
-  process.exit(1);
+return { failed, hardRejections: hard };
 }
-console.log(`RUNTIME CHECK CLEAN — ${blocks.length}/${blocks.length} script blocks executed in document order (${total} chars, 100% coverage)`);
-process.exit(0);
+
+// ── CLI ───────────────────────────────────────────────────────────────────────────────
+// Guarded so `import`ing this file (functional_check.mjs does) does not run the check
+// or call process.exit().
+const isEntry = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntry) {
+  let blocks;
+  try { blocks = loadBlocks(process.argv[2]); }
+  catch (e) { console.error('RUNTIME CHECK: ' + e.message); process.exit(2); }
+  const total = blocks.reduce((n, b) => n + b.length, 0);
+  const { failed } = await runBlocks(createSandbox(), blocks);
+  if (failed) {
+    console.error(`\nRUNTIME CHECK FAILED — ${blocks.length} blocks, ${total}/${total} chars attempted. DO NOT PUSH.`);
+    process.exit(1);
+  }
+  console.log(`RUNTIME CHECK CLEAN — ${blocks.length}/${blocks.length} script blocks executed in document order (${total} chars, 100% coverage)`);
+  process.exit(0);
+}

@@ -76,6 +76,24 @@ You may READ but must NOT restructure (PM coordinates schema changes):
 - `profiles` row: goals, bodyweight, fq_* fields
 - BLAB state (to know training days for `nutAdjustForToday`)
 
+### API other domains may call
+
+**`nutRecordWeight(kg, dateKey) -> bool`** (v4.9.166)
+
+PM ruling 2026-08-18: the dated nutrition daily weigh-in (`ns.daily[date].weight_kg`)
+is the **authoritative current-weight record**. `athlete.bw` is a profile snapshot,
+not a log. Training's `submitWeightCheckin` calls this alongside its own `athlete.bw`
+write, so a weekly check-in lands in the authoritative log too.
+
+- Idempotent and date-keyed — calling twice for the same date overwrites, never appends.
+- `dateKey` defaults to today. Returns `false` for a non-positive weight or no state.
+- No UI, no re-render. Safe to call from any domain.
+
+Nutrition reads the newest of both stores via `_nutCurrentWeight()` as an **interim**
+measure until Training wires the above; after that, `ns.daily[].weight_kg` alone is
+authoritative and the `athlete.bw` branch is a legacy fallback. Nutrition never writes
+`athlete.bw` — that is `submitWeightCheckin`'s, and the banner is Training's.
+
 ---
 
 ## NON-NEGOTIABLE WORKFLOW RULES

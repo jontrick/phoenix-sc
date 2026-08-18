@@ -258,4 +258,208 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(app._nutErrorSummary({}), { count: 0 }, 'empty object');
     assert.deepEqual(app._nutErrorSummary(null), { count: 0 }, 'null');
   });
+
+  // ── Renderers ─────────────────────────────────────────────────────────────
+  // The sandbox hands out a fresh element per getElementById call, so nothing
+  // written by a renderer can be read back. Memoise by id and capture created
+  // elements, then drive the real entry points and assert on what they DREW.
+  // (Training v4.9.165: 43 tests passed while the renderer threw on every call,
+  // because they only ever exercised the helpers underneath it.)
+  const dom = () => {
+    const nodes = {}, created = [];
+    const make = () => app.document.createDocumentFragment();
+    app.document.getElementById = (id) => (nodes[id] || (nodes[id] = make()));
+    const origCreate = app.document.createElement;
+    // The bare stub returns null from querySelector, so any renderer that wires
+    // its own controls throws before finishing. Hand back a memoised stub per
+    // selector instead, so the entry point runs to completion the way it does on
+    // device — otherwise "the renderer was driven" would be a half-truth.
+    app.document.createElement = (t) => {
+      const e = origCreate(t);
+      const found = {};
+      e.querySelector = (sel) => (found[sel] || (found[sel] = origCreate('div')));
+      created.push(e);
+      return e;
+    };
+    return {
+      node: (id) => nodes[id] || (nodes[id] = make()),
+      html: (id) => String((nodes[id] || {}).innerHTML || ''),
+      lastCreatedHtml: () => String((created[created.length - 1] || {}).innerHTML || ''),
+    };
+  };
+
+  const setUp = (weightKg) => {
+    start();
+    app.nutSaveState({
+      setup_done: true,
+      goal: 'hypertrophy',
+      profile: { height_cm: 180, age: 40, sex: 'm', weight_kg: weightKg },
+      targets: app.nutCalcTargets(weightKg, 180, 40, 'm', 'hypertrophy'),
+      daily: {},
+    });
+  };
+
+  test('the setup screen asks for bodyweight, prefilled from the latest weigh-in', () => {
+    setUp(90);
+    app.nutRecordWeight(94.2, '2026-08-18');
+    const d = dom();
+    app.nutOpenSetup();
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('nut-su-bw') >= 0, 'bodyweight input rendered');
+    assert.ok(html.indexOf('BODYWEIGHT') >= 0, 'bodyweight labelled');
+    assert.ok(html.indexOf('94.2') >= 0, 'prefilled with the latest weigh-in');
+  });
+
+  test('the drift banner renders once the latest weigh-in has moved 1kg+', () => {
+    setUp(90);
+    app.nutRecordWeight(86.4, '2026-08-18');
+    app._nutTab = 'today';
+    const d = dom();
+    app.nutRenderScreen();
+    const html = d.html('nut-screen-body');
+    assert.ok(html.indexOf('Targets out of date') >= 0, 'banner drawn');
+    assert.ok(html.indexOf('data-nut-recalc') >= 0, 'recalculate control drawn');
+    assert.ok(html.indexOf('86.4') >= 0, 'shows the current weight');
+  });
+
+  test('no drift banner for a sub-1kg wobble', () => {
+    setUp(90);
+    app.nutRecordWeight(90.4, '2026-08-18');
+    app._nutTab = 'today';
+    const d = dom();
+    app.nutRenderScreen();
+    assert.equal(d.html('nut-screen-body').indexOf('Targets out of date'), -1, 'no banner');
+  });
+
+  test('the week view renders navigation and follows the selected week', () => {
+    setUp(90);
+    app._nutTab = 'week';
+    app._nutWeekOffset = 1;
+    const d = dom();
+    app.nutRenderScreen();
+    const html = d.html('nut-screen-body');
+    assert.ok(html.indexOf('data-nut-week-nav') >= 0, 'week arrows drawn');
+    assert.ok(html.indexOf('NEXT WEEK') >= 0, 'label reflects the offset');
+    assert.ok(html.indexOf('data-nut-week-today') >= 0, 'jump-back control drawn when off-week');
+    app._nutWeekOffset = 0;
+  });
+
+  // ── Bodyweight → targets ──────────────────────────────────────────────────
+
+  test('the latest weigh-in wins over an undated profile weight', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    app.athlete = { id: UID, bw: 80 };
+    app.nutRecordWeight(93.5, '2026-08-18');
+    const cur = app._nutCurrentWeight();
+    assert.equal(cur.kg, 93.5, 'check-in weight chosen');
+    assert.equal(cur.source, 'check-in', 'and it knows where it came from');
+  });
+
+  test('the profile weight is used only when no weigh-in exists', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    app.athlete = { id: UID, bw: 88 };
+    assert.equal(app._nutCurrentWeight().kg, 88, 'falls back to profile');
+  });
+
+  test('nutRecordWeight is date-keyed and idempotent', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    assert.equal(app.nutRecordWeight(91, '2026-08-18'), true, 'reports written');
+    app.nutRecordWeight(91, '2026-08-18');
+    assert.equal(read(`phx_nut_v1_${UID}`).daily['2026-08-18'].weight_kg, 91, 'single value, not appended');
+    assert.equal(app.nutRecordWeight(0, '2026-08-18'), false, 'rejects a non-weight');
+  });
+
+  // The bug Jon spotted: targets were silently built for an 80kg stranger.
+  test('80kg never reaches targets when a weigh-in exists', () => {
+    setUp(90);
+    app.nutRecordWeight(95, '2026-08-18');
+    assert.equal(app.nutRecalcTargets(), true, 'recalculated');
+    const t = read(`phx_nut_v1_${UID}`).targets;
+    assert.deepEqual(t, app.nutCalcTargets(95, 180, 40, 'm', 'hypertrophy'), 'targets match the real weight');
+    const eighty = app.nutCalcTargets(80, 180, 40, 'm', 'hypertrophy');
+    assert.ok(t.kcal !== eighty.kcal, 'and are not the 80kg fallback');
+  });
+
+  test('recalculating keeps goal, height, age and sex — only weight moves', () => {
+    setUp(90);
+    app.nutRecordWeight(84, '2026-08-18');
+    app.nutRecalcTargets();
+    const ns = read(`phx_nut_v1_${UID}`);
+    assert.equal(ns.goal, 'hypertrophy', 'goal kept');
+    assert.deepEqual(
+      { h: ns.profile.height_cm, a: ns.profile.age, s: ns.profile.sex },
+      { h: 180, a: 40, s: 'm' }, 'profile kept');
+    assert.equal(ns.profile.weight_kg, 84, 'weight targets were built from is updated');
+  });
+
+  test('recalculating is refused when there is no weight to use', () => {
+    start();
+    app.athlete = { id: UID };
+    app.nutSaveState({ setup_done: true, goal: 'strength', profile: { height_cm: 180, age: 40, sex: 'm' }, daily: {} });
+    assert.equal(app.nutRecalcTargets(), false, 'no guess made');
+  });
+
+  // ── Perpetual week ────────────────────────────────────────────────────────
+
+  test('the selected week shifts by whole weeks and returns 7 days', () => {
+    app._nutWeekOffset = 0;
+    const thisWeek = app._nutSelectedWeekDays();
+    app._nutWeekOffset = 1;
+    const nextWeek = app._nutSelectedWeekDays();
+    app._nutWeekOffset = 0;
+    assert.equal(nextWeek.length, 7, 'seven days');
+    const gap = (Date.parse(nextWeek[0]) - Date.parse(thisWeek[0])) / 86400000;
+    assert.equal(gap, 7, 'exactly one week later');
+  });
+
+  test('prep for a future week ignores this week, and vice versa', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Sauce')]);
+    app._nutWeekOffset = 1;
+    const nextWeek = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Sauce', 'lunch', nextWeek[0], 2);
+    assert.equal(app.nutBuildPrepPlan(app._nutSelectedWeekDays()).length, 1, 'next week has prep');
+    app._nutWeekOffset = 0;
+    assert.equal(app.nutBuildPrepPlan(app._nutSelectedWeekDays()).length, 0, 'this week has none');
+    app._nutWeekOffset = 1;
+    assert.equal(app.nutBuildPrepPlan(app._nutSelectedWeekDays())[0].serves, 2, 'serves counted in the right week');
+    app._nutWeekOffset = 0;
+  });
+
+  // ── Repeat day ────────────────────────────────────────────────────────────
+
+  test('repeating a day copies its meals onto the chosen days', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Bowl')]);
+    const days = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Bowl', 'lunch', days[0], 1);
+    assert.equal(app.nutCopyDay(days[0], [days[2], days[4]]), 2, 'two days written');
+    const ns = read(`phx_nut_v1_${UID}`);
+    assert.equal(ns.daily[days[2]].meals.lunch.components[0].n, 'Bowl', 'Wed got it');
+    assert.equal(ns.daily[days[4]].meals.lunch.components[0].n, 'Bowl', 'Fri got it');
+  });
+
+  test('a repeated day is not marked as already eaten', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Bowl')]);
+    const days = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Bowl', 'lunch', days[0], 1);
+    app.nutToggleMealEaten('lunch', days[0]);
+    app.nutCopyDay(days[0], [days[2]]);
+    const ns = read(`phx_nut_v1_${UID}`);
+    assert.equal(ns.daily[days[0]].eaten.lunch, true, 'source stays eaten');
+    assert.deepEqual(ns.daily[days[2]].eaten, {}, 'copy starts unticked');
+  });
+
+  test('repeating onto itself, or from an empty day, does nothing', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Bowl')]);
+    const days = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Bowl', 'lunch', days[0], 1);
+    assert.equal(app.nutCopyDay(days[0], [days[0]]), 0, 'self-copy is a no-op');
+    assert.equal(app.nutCopyDay(days[5], [days[6]]), 0, 'empty source is a no-op');
+  });
 }

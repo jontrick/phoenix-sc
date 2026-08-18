@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.165'", 'version is 4.9.165');
+has("var APP_VERSION='4.9.166'", 'version is 4.9.166');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -471,6 +471,27 @@ try {
 } catch (e) {
   bad(`tick-off / water execution failed: ${e.message}`);
 }
+
+// ── Bodyweight, perpetual week, repeat day (v4.9.166) ───────────────────────
+has('function _nutCurrentWeight(', 'BW: newest-weight helper defined');
+has('function nutRecordWeight(', 'BW: cross-domain weight API defined');
+has('function nutRecalcTargets(', 'BW: target recalculation defined');
+has('function _nutDriftBanner(', 'BW: drift banner defined');
+has('data-nut-recalc', 'BW: recalculate control rendered');
+has("_nutSetupInput('nut-su-bw', 'BODYWEIGHT', 'kg'", 'BW: setup asks for bodyweight');
+has('weight_kg: bw', 'BW: setup stores the weight targets were built from');
+hasNot("var bw = (typeof athlete !== 'undefined' && athlete && athlete.bw) ? parseFloat(athlete.bw) : 80;",
+       'BW: silent athlete.bw-or-80 fallback removed from setup');
+has('function _nutSelectedWeekStart(', 'WEEK: selected-week helper defined');
+has('function _nutSelectedWeekDays(', 'WEEK: selected-week days defined');
+has('var _nutWeekOffset = 0', 'WEEK: offset state declared');
+has('data-nut-week-nav', 'WEEK: prev/next navigation rendered');
+has('data-nut-week-today', 'WEEK: jump-to-this-week rendered');
+has('var days = _nutSelectedWeekDays();', 'WEEK: views read the selected week');
+has('function nutCopyDay(', 'REPEAT: day copy defined');
+has('function nutOpenRepeatDay(', 'REPEAT: day picker defined');
+has('data-nut-repeat-day', 'REPEAT: control rendered on planned days');
+has('ns.daily[dk].eaten = {};', 'REPEAT: copied days start unticked');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

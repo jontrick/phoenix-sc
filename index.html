@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.165';
+var APP_VERSION='4.9.166';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18059,6 +18059,7 @@ function _renderTodayNutritionPlaceholder(){
 
 var _nutTab = 'today';
 var _nutWeekMode = 'overview';   // WEEK tab: 'overview' | 'plan'
+var _nutWeekOffset = 0;          // WEEK tab: 0 = this week, +1 next, -1 last
 
 // v4.9.157: same identity rule as _nutRecipeKey — session first, athlete as
 // fallback. No live bug here today because nutrition state is not cloud-restored,
@@ -18274,12 +18275,41 @@ function nutRenderScreen(){
   });
   var prepBtn = body.querySelector('[data-nut-prep]');
   if(prepBtn) prepBtn.addEventListener('click', nutOpenPrepCard);
+  body.querySelectorAll('[data-nut-week-nav]').forEach(function(btn){
+    var d = parseInt(btn.getAttribute('data-nut-week-nav'));
+    btn.addEventListener('click', function(){ _nutWeekOffset += d; nutRenderScreen(); });
+  });
+  var wkToday = body.querySelector('[data-nut-week-today]');
+  if(wkToday) wkToday.addEventListener('click', function(){ _nutWeekOffset = 0; nutRenderScreen(); });
+  body.querySelectorAll('[data-nut-repeat-day]').forEach(function(btn){
+    var dk = btn.getAttribute('data-nut-repeat-day');
+    btn.addEventListener('click', function(){ nutOpenRepeatDay(dk); });
+  });
+  var recalcBtn = body.querySelector('[data-nut-recalc]');
+  if(recalcBtn) recalcBtn.addEventListener('click', function(){ nutRecalcTargets(); });
   var saveCI = body.querySelector('#nut-save-checkin');
   if(saveCI) saveCI.addEventListener('click', nutSaveCheckin);
   _nutWireFeelingBtns();
   // Reset feeling selection to what was already saved today
   var _todayData = (nutGetState() && nutGetState().daily && nutGetState().daily[_nutToday()]) || {};
   _nutFeelingVal = _todayData.feeling || 0;
+}
+
+// v4.9.166: targets are frozen at the weight they were built from. When the
+// latest weigh-in has moved away from it, say so and offer one tap to redo the
+// maths — rather than silently rewriting his macros from a possible typo.
+function _nutDriftBanner(){
+  var cur = _nutCurrentWeight();
+  var was = _nutTargetWeight();
+  if(!cur || !(cur.kg > 0) || !was) return '';
+  var diff = Math.round((cur.kg - was) * 10) / 10;
+  if(Math.abs(diff) < 1) return '';
+  var dir = diff > 0 ? 'up' : 'down';
+  return '<div style="background:rgba(200,150,62,0.1);border:1px solid rgba(200,150,62,0.4);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Targets out of date</div>' +
+    '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:9px;">Set at ' + was + 'kg &middot; you are now ' + cur.kg + 'kg (' + dir + ' ' + Math.abs(diff) + 'kg). Your macros still use the old weight.</div>' +
+    '<button data-nut-recalc style="width:100%;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Recalculate from ' + cur.kg + 'kg</button>' +
+    '</div>';
 }
 
 function _nutTabToday(ns){
@@ -18293,7 +18323,8 @@ function _nutTabToday(ns){
   var pPct = Math.min(100, targets.protein_g ? Math.round(logged.protein_g / targets.protein_g * 100) : 0);
   var cPct = Math.min(100, targets.carbs_g   ? Math.round(logged.carbs_g   / targets.carbs_g   * 100) : 0);
   var fPct = Math.min(100, targets.fat_g     ? Math.round(logged.fat_g     / targets.fat_g     * 100) : 0);
-  var h = '<div style="text-align:center;margin-bottom:16px;">' +
+  var h = _nutDriftBanner();
+  h += '<div style="text-align:center;margin-bottom:16px;">' +
     '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;line-height:1;color:'+remColor+';">' + (remKcal < 0 ? '+'+Math.abs(remKcal) : remKcal) + '</div>' +
     '<div style="font-size:12px;color:var(--text3);margin-top:4px;">kcal ' + (remKcal < 0 ? 'over target' : 'remaining') + ' &middot; ' + targets.kcal + ' daily target</div>' +
     ((plannedTot.kcal > logged.kcal) ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+logged.kcal+' eaten &middot; '+plannedTot.kcal+' planned</div>' : '') +
@@ -18612,6 +18643,14 @@ function nutOpenSetup(){
     { key:'maintenance',  label:'Maintenance',  sub:'TDEE · 1.6g/kg protein' }
   ];
   var currentGoal = ns.goal || 'hypertrophy';
+  // v4.9.165: bodyweight is asked for explicitly. It used to be read silently
+  // from athlete.bw with an 80kg fallback, so an unset profile weight produced
+  // macros for an 80kg stranger with nothing on screen to say so.
+  var _suCur = _nutCurrentWeight();
+  var _suPrefillBw = (ns.profile && ns.profile.weight_kg) || (_suCur ? _suCur.kg : '');
+  var _suBwHint = _suCur
+    ? ('Latest ' + (_suCur.source === 'check-in' ? 'check-in' : 'profile') + ' weight: ' + _suCur.kg + 'kg' + (_suCur.date ? ' (' + _suCur.date + ')' : '') + ' — edit if this is out of date.')
+    : 'No weigh-in logged yet. Enter your current bodyweight — macros are calculated from it.';
   var goalCards = goals.map(function(g){
     var act = currentGoal === g.key;
     return '<button data-goal="'+g.key+'" style="display:block;width:100%;text-align:left;padding:12px 14px;background:'+(act?'rgba(200,150,62,0.15)':'var(--bg3)')+';border:1px solid '+(act?'var(--gold)':'var(--border)')+';border-radius:var(--radius);margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
@@ -18625,7 +18664,11 @@ function nutOpenSetup(){
     '<div style="font-size:12px;color:var(--text3);margin-bottom:20px;">Your goal + stats → daily macro targets</div>' +
     '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Goal</div>' +
     '<div id="nut-goal-cards">' + goalCards + '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:16px;margin-bottom:16px;">' +
+    '<div style="margin-top:16px;">' +
+    _nutSetupInput('nut-su-bw', 'BODYWEIGHT', 'kg', _suPrefillBw) +
+    '<div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;">' + _suBwHint + '</div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px;margin-bottom:16px;">' +
     _nutSetupInput('nut-su-height', 'HEIGHT', 'cm', (ns.profile && ns.profile.height_cm) || '') +
     _nutSetupInput('nut-su-age',    'AGE',    'yrs', (ns.profile && ns.profile.age) || '') +
     '<div><label style="font-size:10px;color:var(--text3);letter-spacing:1px;font-family:var(--font-d);display:block;margin-bottom:4px;">SEX</label>' +
@@ -18647,9 +18690,9 @@ function nutOpenSetup(){
     var h   = parseFloat(ov.querySelector('#nut-su-height').value) || (ns.profile && ns.profile.height_cm) || 0;
     var a   = parseFloat(ov.querySelector('#nut-su-age').value)    || (ns.profile && ns.profile.age) || 0;
     var sex = ov.querySelector('#nut-su-sex').value;
-    var bw  = (typeof athlete !== 'undefined' && athlete && athlete.bw) ? parseFloat(athlete.bw) : 80;
+    var bw  = parseFloat(ov.querySelector('#nut-su-bw').value) || 0;
     var prev = ov.querySelector('#nut-su-preview');
-    if(!h || !a){ prev.innerHTML = '<div style="font-size:12px;color:var(--text3);">Enter height and age to preview targets.</div>'; return; }
+    if(!h || !a || !bw){ prev.innerHTML = '<div style="font-size:12px;color:var(--text3);">Enter bodyweight, height and age to preview targets.</div>'; return; }
     var t = nutCalcTargets(bw, h, a, sex, _suGoal);
     prev.innerHTML = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Preview Targets · ' + bw + 'kg bodyweight</div>' +
       '<div style="display:flex;justify-content:space-around;text-align:center;">' +
@@ -18668,7 +18711,7 @@ function nutOpenSetup(){
       _suUpdatePreview();
     });
   });
-  ['#nut-su-height','#nut-su-age','#nut-su-sex'].forEach(function(sel){
+  ['#nut-su-bw','#nut-su-height','#nut-su-age','#nut-su-sex'].forEach(function(sel){
     var el = ov.querySelector(sel); if(el) el.addEventListener('input', _suUpdatePreview);
   });
   ov.querySelector('#nut-su-cancel').addEventListener('click', function(){ ov.remove(); });
@@ -18676,13 +18719,13 @@ function nutOpenSetup(){
     var h   = parseFloat(ov.querySelector('#nut-su-height').value) || 0;
     var a   = parseFloat(ov.querySelector('#nut-su-age').value)    || 0;
     var sex = ov.querySelector('#nut-su-sex').value;
-    if(!h || !a){ ov.querySelector('#nut-su-preview').innerHTML = '<div style="font-size:12px;color:#ff4444;">Please enter height and age.</div>'; return; }
-    var bw = (typeof athlete !== 'undefined' && athlete && athlete.bw) ? parseFloat(athlete.bw) : 80;
+    var bw = parseFloat(ov.querySelector('#nut-su-bw').value) || 0;
+    if(!h || !a || !bw){ ov.querySelector('#nut-su-preview').innerHTML = '<div style="font-size:12px;color:#ff4444;">Please enter bodyweight, height and age.</div>'; return; }
     var targets = nutCalcTargets(bw, h, a, sex, _suGoal);
     var newState = nutGetState() || {};
     newState.setup_done = true;
     newState.goal = _suGoal;
-    newState.profile = { height_cm: h, age: a, sex: sex };
+    newState.profile = { height_cm: h, age: a, sex: sex, weight_kg: bw };
     newState.targets = targets;
     if(!newState.daily) newState.daily = {};
     nutSaveState(newState);
@@ -19088,19 +19131,28 @@ function _nutWeekStart(dateKey){
 function _nutTabWeek(ns){
   var today   = _nutToday();
   var targets = ns.targets || {};
-  var days    = _nutWeekDays(today);
+  var days    = _nutSelectedWeekDays();
   var monD = new Date(days[0] + 'T12:00:00');
   var sunD = new Date(days[6] + 'T12:00:00');
   var weekTotals = {kcal:0, p:0, c:0, f:0, days:0};
   var DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var h = '';
   // Header
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">';
-  h += '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--text3);">' + monD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + sunD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</div>';
+  // Perpetual calendar — plan any week, not just this one.
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">';
+  h += '<button data-nut-week-nav="-1" style="width:34px;height:34px;flex-shrink:0;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:17px;line-height:1;cursor:pointer;touch-action:manipulation;">&#8249;</button>';
+  h += '<div style="flex:1;text-align:center;min-width:0;">';
+  h += '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;color:' + (_nutWeekOffset === 0 ? 'var(--gold)' : 'var(--text)') + ';">' + _nutWeekLabel().toUpperCase() + '</div>';
+  h += '<div style="font-size:11px;color:var(--text3);">' + monD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + sunD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</div>';
+  h += '</div>';
+  h += '<button data-nut-week-nav="1" style="width:34px;height:34px;flex-shrink:0;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:17px;line-height:1;cursor:pointer;touch-action:manipulation;">&#8250;</button>';
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;">';
+  if(_nutWeekOffset !== 0) h += '<button data-nut-week-today style="background:none;border:none;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;color:var(--gold);cursor:pointer;touch-action:manipulation;padding:4px 6px;">&#8617; JUMP TO THIS WEEK</button>';
   h += '<button data-nut-create-week style="background:var(--bg3);color:var(--gold);border:1px solid var(--border2);border-radius:20px;font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1px;padding:7px 14px;cursor:pointer;touch-action:manipulation;">CREATE WEEK</button>';
   h += '</div>';
   // Prep aggregator entry point
-  var prepPlan = nutBuildPrepPlan(days);
+  var prepPlan = nutBuildPrepPlan(days);   // selected week, not today's
   var prepServes = 0;
   prepPlan.forEach(function(p){ prepServes += p.serves; });
   h += '<button data-nut-prep style="width:100%;padding:15px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:3px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;margin-bottom:4px;">WEEKLY PREP</button>';
@@ -19258,14 +19310,7 @@ function _nutCreateWeekPlan(){
 
 function _nutApplyWeekTemplate(template){
   var ns = nutGetState();
-  var today  = _nutToday();
-  var monStr = _nutWeekStart(today);
-  var days = [], i;
-  for(i=0;i<7;i++){
-    var _d = new Date(monStr + 'T12:00:00');
-    _d.setDate(_d.getDate() + i);
-    days.push(_d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0'));
-  }
+  var days = _nutSelectedWeekDays();
   if(template === 'clear'){
     days.forEach(function(dk){
       if(ns.daily && ns.daily[dk]){ ns.daily[dk].meals = {}; ns.daily[dk].supps = []; ns.daily[dk].eaten = {}; }
@@ -19592,14 +19637,8 @@ function _nutRecipeApplyPrompt(id){
 // ── Shopping List ─────────────────────────────────────────────────────────────
 function nutOpenShopList(){
   var ns = nutGetState();
-  var today = _nutToday();
-  var monStr = _nutWeekStart(today);
-  var days = [], i;
-  for(i=0;i<7;i++){
-    var _d = new Date(monStr + 'T12:00:00');
-    _d.setDate(_d.getDate() + i);
-    days.push(_d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0') + '-' + String(_d.getDate()).padStart(2,'0'));
-  }
+  // v4.9.166: shops for the SELECTED week — Jon shops on the 20th for the 24th–30th.
+  var days = _nutSelectedWeekDays();
   // Aggregate ingredients across the week
   var items = {};
   days.forEach(function(dk){
@@ -19654,7 +19693,7 @@ function nutOpenShopList(){
     '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Shopping List</div>' +
     '<button id="nut-sl-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
     '</div>' +
-    '<div style="font-size:11px;color:var(--text3);margin-top:3px;">This week &middot; tap to tick off</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:3px;">' + _nutWeekLabel() + ' &middot; tap to tick off</div>' +
     '</div>' +
     '<div id="nut-sl-body" style="flex:1;overflow-y:auto;padding:0 20px 8px;">' + listHtml + '</div>' +
     (hasItems ?
@@ -19982,6 +20021,98 @@ function _nutWeekDays(fromDateKey){
   return out;
 }
 
+// v4.9.158 — perpetual calendar. Every week-scoped view (grid, planner, WEEKLY
+// PREP, shopping list) reads the SELECTED week, not today's, so Jon can shop on
+// the 20th for the week of the 24th–30th.
+function _nutSelectedWeekStart(){
+  var mon = new Date(_nutWeekStart(_nutToday()) + 'T12:00:00');
+  mon.setDate(mon.getDate() + (_nutWeekOffset * 7));
+  return mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
+}
+
+function _nutSelectedWeekDays(){
+  return _nutWeekDays(_nutSelectedWeekStart());
+}
+
+function _nutWeekLabel(){
+  if(_nutWeekOffset === 0) return 'This week';
+  if(_nutWeekOffset === 1) return 'Next week';
+  if(_nutWeekOffset === -1) return 'Last week';
+  return (_nutWeekOffset > 0 ? 'In ' + _nutWeekOffset + ' weeks' : Math.abs(_nutWeekOffset) + ' weeks ago');
+}
+
+// INTERIM (until Training wires submitWeightCheckin -> nutRecordWeight): read
+// contract spans both stores. Once that lands, ns.daily[].weight_kg alone is
+// authoritative and the athlete.bw branch below becomes a legacy fallback.
+// The weight targets should be based on — newest of the nutrition daily weigh-in
+// and the athlete profile. Jon logs weight in two unrelated places; this reads
+// both and prefers whichever is more recent. Never writes athlete.bw (that is
+// submitWeightCheckin's, and it is Training's banner).
+function _nutCurrentWeight(){
+  var best = null;   // {kg, date, source}
+  try {
+    var ns = nutGetState();
+    var daily = (ns && ns.daily) ? ns.daily : {};
+    Object.keys(daily).forEach(function(dk){
+      var w = parseFloat(daily[dk] && daily[dk].weight_kg);
+      if(w > 0 && (!best || dk > best.date)) best = { kg: w, date: dk, source: 'check-in' };
+    });
+  } catch(_e){}
+  try {
+    var abw = (typeof athlete !== 'undefined' && athlete) ? parseFloat(athlete.bw) : 0;
+    if(abw > 0){
+      var aDate = '';
+      try {
+        var log = (athlete.weightLog || []);
+        if(log.length) aDate = String(log[log.length-1].date || '').slice(0, 10);
+      } catch(_e2){}
+      if(!aDate) aDate = athlete.lastWeightCheckin ? String(athlete.lastWeightCheckin).slice(0, 10) : '';
+      // No date on the profile weight means we cannot prove it is newer, so it
+      // only wins when there is no nutrition weigh-in at all.
+      if(!best || (aDate && aDate > best.date)) best = { kg: abw, date: aDate || '', source: 'profile' };
+    }
+  } catch(_e3){}
+  return best;
+}
+
+// API other domains may call (PM ruling, 2026-08-18): the dated nutrition daily
+// weigh-in is the authoritative current-weight record. Training's
+// submitWeightCheckin calls this alongside its own athlete.bw write.
+// Idempotent, date-keyed, no UI.
+function nutRecordWeight(kg, dateKey){
+  var w = parseFloat(kg);
+  if(!(w > 0)) return false;
+  var ns = nutGetState();
+  if(!ns) return false;
+  var dk = dateKey || _nutToday();
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[dk]) ns.daily[dk] = {};
+  ns.daily[dk].weight_kg = w;
+  nutSaveState(ns);
+  return true;
+}
+
+// Weight the current targets were actually calculated from.
+function _nutTargetWeight(){
+  var ns = nutGetState();
+  var w = ns && ns.profile ? parseFloat(ns.profile.weight_kg) : 0;
+  return w > 0 ? w : 0;
+}
+
+// Recalculate targets from the newest weight, keeping goal/height/age/sex.
+function nutRecalcTargets(){
+  var ns = nutGetState();
+  if(!ns || !ns.profile) return false;
+  var cur = _nutCurrentWeight();
+  if(!cur || !(cur.kg > 0)) return false;
+  ns.targets = nutCalcTargets(cur.kg, ns.profile.height_cm, ns.profile.age, ns.profile.sex, ns.goal);
+  ns.profile.weight_kg = cur.kg;
+  nutSaveState(ns);
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+  if(typeof nutRenderScreen === 'function') nutRenderScreen();
+  return true;
+}
+
 var _NUT_PLAN_SLOTS = [
   {k:'breakfast',    l:'Breakfast'},
   {k:'lunch',        l:'Lunch'},
@@ -20143,6 +20274,10 @@ function _nutWeekPlanView(ns, days){
     h += '<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:8px;">';
     h += '<span style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;color:' + (isToday ? 'var(--gold)' : 'var(--text2)') + ';">' + DOW[idx].toUpperCase() + '</span>';
     h += '<span style="font-size:11px;color:var(--text3);">' + dp.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</span>';
+    var _hasMeals = _NUT_PLAN_SLOTS.some(function(s){ return ((meals[s.k] && meals[s.k].components) || []).length > 0; });
+    if(_hasMeals){
+      h += '<button data-nut-repeat-day="' + dk + '" style="margin-left:auto;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;padding:4px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">REPEAT</button>';
+    }
     h += '</div>';
     h += '<div style="padding:4px 14px 10px;">';
     _NUT_PLAN_SLOTS.forEach(function(sl){
@@ -20179,6 +20314,97 @@ function _nutWeekPlanView(ns, days){
     h += '</div></div>';
   });
   return h;
+}
+
+// v4.9.166 — repeat a planned day onto other days. Replaces the target days'
+// meals outright (that is what "repeat this day" means) and clears their tick
+// state, because copying a plan forward must not mark it already eaten.
+function nutCopyDay(fromDk, toDks){
+  var ns = nutGetState();
+  if(!ns || !ns.daily || !ns.daily[fromDk]) return 0;
+  var src = ns.daily[fromDk];
+  var meals = (src.meals && !Array.isArray(src.meals)) ? src.meals : null;
+  if(!meals) return 0;
+  var n = 0;
+  (toDks || []).forEach(function(dk){
+    if(!dk || dk === fromDk) return;
+    if(!ns.daily[dk]) ns.daily[dk] = {};
+    ns.daily[dk].meals = JSON.parse(JSON.stringify(meals));
+    ns.daily[dk].eaten = {};
+    n++;
+  });
+  if(n){
+    nutSaveState(ns);
+    if(typeof nutRenderTile === 'function') nutRenderTile();
+    if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile();
+  }
+  return n;
+}
+
+// Day picker for the repeat action. Multi-select, so it covers "every weekday",
+// "just Thursday" and "the whole week" without three separate presets.
+function nutOpenRepeatDay(fromDk){
+  var old = document.getElementById('nut-repeat-day');
+  if(old) old.remove();
+  var days = _nutSelectedWeekDays();
+  var DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var srcD = new Date(fromDk + 'T12:00:00');
+  var picked = {};
+  var ov = document.createElement('div');
+  ov.id = 'nut-repeat-day';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9700;display:flex;align-items:flex-end;';
+  var rows = days.map(function(dk, i){
+    if(dk === fromDk) return '';
+    var d = new Date(dk + 'T12:00:00');
+    return '<button data-rp-day="' + dk + '" style="width:100%;display:flex;align-items:center;gap:11px;padding:11px 2px;background:none;border:none;border-bottom:1px solid var(--border);text-align:left;cursor:pointer;touch-action:manipulation;">' +
+      '<span data-rp-box="' + dk + '" style="width:22px;height:22px;flex-shrink:0;border:2px solid var(--border2);border-radius:5px;display:flex;align-items:center;justify-content:center;"></span>' +
+      '<span style="flex:1;font-size:14px;color:var(--text);">' + DOW[i] + ' ' + d.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</span>' +
+      '</button>';
+  }).join('');
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:85vh;">' +
+    '<div style="padding:18px 20px 10px;flex-shrink:0;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Repeat Day</div>' +
+    '<button id="nut-rpd-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:3px;">Copy ' + srcD.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'short'}) + ' onto — replaces those days</div>' +
+    '</div>' +
+    '<div style="flex:1;overflow-y:auto;padding:0 20px;">' + rows + '</div>' +
+    '<div style="padding:12px 20px 20px;flex-shrink:0;display:flex;gap:8px;">' +
+    '<button id="nut-rpd-all" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Select All</button>' +
+    '<button id="nut-rpd-go" style="flex:2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Repeat</button>' +
+    '</div></div>';
+  document.body.appendChild(ov);
+  function paint(){
+    ov.querySelectorAll('[data-rp-box]').forEach(function(box){
+      var dk = box.getAttribute('data-rp-box');
+      var on = !!picked[dk];
+      box.style.background = on ? 'var(--gold)' : 'transparent';
+      box.style.borderColor = on ? 'var(--gold)' : 'var(--border2)';
+      box.innerHTML = on ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+    });
+  }
+  ov.querySelectorAll('[data-rp-day]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var dk = btn.getAttribute('data-rp-day');
+      picked[dk] = !picked[dk];
+      paint();
+    });
+  });
+  ov.querySelector('#nut-rpd-all').addEventListener('click', function(){
+    days.forEach(function(dk){ if(dk !== fromDk) picked[dk] = true; });
+    paint();
+  });
+  ov.querySelector('#nut-rpd-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  ov.querySelector('#nut-rpd-go').addEventListener('click', function(){
+    var to = Object.keys(picked).filter(function(dk){ return picked[dk]; });
+    if(!to.length) return;
+    nutCopyDay(fromDk, to);
+    ov.remove();
+    nutRenderScreen();
+  });
 }
 
 // ── Recipe picker — assign N serves of a recipe to one day/slot ───────────
@@ -20269,11 +20495,11 @@ function nutOpenRecipePicker(slot, dateKey){
 
 // ── WEEKLY PREP card ──────────────────────────────────────────────────────
 function nutOpenPrepCard(){
-  var days = _nutWeekDays();
+  var days = _nutSelectedWeekDays();
   var plan = nutBuildPrepPlan(days);
   var monD = new Date(days[0] + 'T12:00:00');
   var sunD = new Date(days[6] + 'T12:00:00');
-  var range = monD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + sunD.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+  var range = _nutWeekLabel() + ' &middot; ' + monD.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + ' – ' + sunD.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
   var totalServes = 0;
   plan.forEach(function(p){ totalServes += p.serves; });
   var body = '';

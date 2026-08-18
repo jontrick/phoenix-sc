@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.151';
+var APP_VERSION='4.9.152';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20453,6 +20453,9 @@ function pepSaveState(ps){
   try {
     var uid = currentSession && currentSession.user && currentSession.user.id;
     if(!uid) return;
+    // v4.9.152: stamp every write. pepRestoreFromCloud compares these to decide
+    // whether the cloud copy or the on-device copy is the newer one.
+    ps._ts = new Date().toISOString();
     localStorage.setItem("peptide_v1_" + uid, JSON.stringify(ps));
     _pepMirrorToCloud(ps);
   } catch(_e){}
@@ -20470,14 +20473,76 @@ function _pepMirrorToCloud(ps){
   }, 2000);
 }
 
+// v4.9.152 — RESTORE RULE: newest timestamp wins (Jon's ruling, 18 Aug 2026).
+// The old rule was "local always wins", which meant a replacement device that
+// had written ANY peptide state could never pull the protocol back down from
+// Supabase — defeating the reason the tracker moved off the standalone PWA.
+//
+// Resolution order:
+//   no local                      -> cloud wins (restore)
+//   both stamped                  -> newer _ts wins
+//   local stamped, cloud not      -> local wins (cloud predates stamping)
+//   cloud stamped, local not      -> cloud wins (local predates stamping, and a
+//                                    stamped cloud copy is by definition newer)
+//   neither stamped               -> local wins (no basis to overwrite)
+//
+// Nothing is ever discarded silently: the outgoing copy is kept at
+// peptide_v1_{uid}_bak so a wrong call is recoverable.
 function pepRestoreFromCloud(profileRow){
   try {
     var uid = currentSession && currentSession.user && currentSession.user.id;
-    if(!uid || !profileRow || !profileRow.peptide_state) return;
+    if(!uid || !profileRow || !profileRow.peptide_state) return false;
     var cloud = profileRow.peptide_state;
-    var local = localStorage.getItem("peptide_v1_" + uid);
-    if(local) return; // local takes priority
-    localStorage.setItem("peptide_v1_" + uid, JSON.stringify(cloud));
+    var key = "peptide_v1_" + uid;
+    var rawLocal = localStorage.getItem(key);
+
+    if(!rawLocal){
+      localStorage.setItem(key, JSON.stringify(cloud));
+      console.log("[PHX] peptide state restored from cloud (no local copy)");
+      return true;
+    }
+
+    var local = null;
+    try { local = JSON.parse(rawLocal); } catch(_e){ local = null; }
+    // Unparseable local state is worse than the cloud copy by definition.
+    if(!local){
+      _pepBackupLocal(key, rawLocal);
+      localStorage.setItem(key, JSON.stringify(cloud));
+      console.log("[PHX] peptide state restored from cloud (local copy unreadable)");
+      return true;
+    }
+
+    var lt = Date.parse(local._ts || "");
+    var ct = Date.parse(cloud._ts || "");
+    var localStamped = !isNaN(lt), cloudStamped = !isNaN(ct);
+
+    var cloudWins;
+    if(localStamped && cloudStamped)      cloudWins = ct > lt;
+    else if(cloudStamped && !localStamped) cloudWins = true;
+    else                                   cloudWins = false;
+
+    if(!cloudWins) return false;
+    _pepBackupLocal(key, rawLocal);
+    localStorage.setItem(key, JSON.stringify(cloud));
+    console.log("[PHX] peptide state restored from cloud (cloud " + (cloud._ts||"unstamped") + " newer than local " + (local._ts||"unstamped") + ")");
+    return true;
+  } catch(_e){}
+  return false;
+}
+
+// Keep the copy we are about to replace. Never more than one generation back.
+function _pepBackupLocal(key, rawLocal){
+  try { localStorage.setItem(key + "_bak", rawLocal); } catch(_e){}
+}
+
+// v4.9.152: repaint after a real restore. The background profile path calls
+// renderTodayScreen() BEFORE the restore hook runs, so a fresh-install restore
+// would otherwise sit invisible until the user navigated away and back.
+function _pepAfterRestore(){
+  try { if(typeof pepRenderTodayTile === "function") pepRenderTodayTile(); } catch(_e){}
+  try {
+    var scr = document.getElementById("screen-peptide");
+    if(scr && scr.classList && scr.classList.contains("active") && typeof pepRenderScreen === "function") pepRenderScreen();
   } catch(_e){}
 }
 
@@ -21908,7 +21973,7 @@ function pepCopyOrder(){
   var _origBg = window._phxOnProfileFetched;
   window._phxOnProfileFetched = function(row){
     if(typeof _origBg === "function") _origBg(row);
-    if(typeof pepRestoreFromCloud === "function") pepRestoreFromCloud(row);
+    if(typeof pepRestoreFromCloud === "function" && pepRestoreFromCloud(row)) _pepAfterRestore();
     if(typeof nutRestoreRecipesFromCloud === "function") nutRestoreRecipesFromCloud(row);
   };
 })();

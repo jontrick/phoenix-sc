@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.151'", 'version is 4.9.151');
+has("var APP_VERSION='4.9.152'", 'version is 4.9.152');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -884,6 +884,49 @@ has('createSignedUrl',                         'PEP: private bucket read via sig
     ? ok('PEP: ' + t.toUpperCase() + ' tab registered')
     : bad('PEP: ' + t.toUpperCase() + ' tab missing from tab bar');
 });
+
+// v4.9.152 restore rule — newest timestamp wins
+has('ps._ts = new Date().toISOString();',      'PEP: pepSaveState stamps _ts');
+has('function _pepBackupLocal(key, rawLocal)', 'PEP: local backup before overwrite');
+hasNot('if(local) return; // local takes priority',
+                                               'PEP: old local-always-wins rule removed');
+(() => {
+  const i = html.indexOf('function pepRestoreFromCloud(profileRow)');
+  const j = html.indexOf('function _pepBackupLocal', i + 1);
+  if (i < 0 || j < 0) { bad('PEP: could not isolate pepRestoreFromCloud'); return; }
+  const blk = html.slice(i, j);
+  blk.includes('cloudWins = ct > lt')
+    ? ok('PEP: restore compares cloud _ts against local _ts')
+    : bad('PEP: restore does not compare timestamps');
+  blk.includes('_pepBackupLocal(key, rawLocal)')
+    ? ok('PEP: restore backs up local before overwriting')
+    : bad('PEP: restore overwrites local without a backup');
+})();
+
+// Restore resolution table — mirrors the live branch logic.
+(() => {
+  const resolve = (localTs, cloudTs, hasLocal) => {
+    if (!hasLocal) return 'cloud';
+    const lt = Date.parse(localTs || ''), ct = Date.parse(cloudTs || '');
+    const ls = !isNaN(lt), cs = !isNaN(ct);
+    if (ls && cs) return ct > lt ? 'cloud' : 'local';
+    if (cs && !ls) return 'cloud';
+    return 'local';
+  };
+  const A = '2026-08-01T00:00:00Z', B = '2026-08-17T00:00:00Z';
+  const cases = [
+    ['no local -> cloud',                resolve(null, A, false), 'cloud'],
+    ['cloud newer -> cloud',             resolve(A, B, true),     'cloud'],
+    ['local newer -> local',             resolve(B, A, true),     'local'],
+    ['equal timestamps -> local',        resolve(B, B, true),     'local'],
+    ['cloud stamped, local not -> cloud',resolve(null, B, true),  'cloud'],
+    ['local stamped, cloud not -> local',resolve(A, null, true),  'local'],
+    ['neither stamped -> local',         resolve(null, null, true),'local'],
+  ];
+  cases.forEach(([label, got, want]) => got === want
+    ? ok('PEP: restore ' + label)
+    : bad('PEP: restore ' + label + ' — got ' + got));
+})();
 
 // Recon maths — the numbers Jon draws up. 100 units = 1 mL.
 (() => {

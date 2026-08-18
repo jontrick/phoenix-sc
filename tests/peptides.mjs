@@ -104,6 +104,50 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(!isNaN(Date.parse(saved._ts)), '_ts is a parseable ISO date');
   });
 
+  // ── Storage key derivation ─────────────────────────────────────────────────
+  // Nutrition shipped a fresh-install bug where the restore wrote to a "_guest"
+  // key because it derived from athlete.id, which is null when the hook fires —
+  // and its tests missed it because the sandbox supplied the key itself. A
+  // sandbox that supplies the value under test cannot test it. These assert the
+  // key the APP derives, never one the test hands it.
+
+  test('the storage key is derived from the signed-in session, not a default', () => {
+    reset();
+    signIn('user-alpha');
+    app.pepSaveState({ stacks: [{ compoundId: 'bpc157' }], checked: {}, cart: [] });
+    assert.ok(read('peptide_v1_user-alpha'), 'wrote to the session-derived key');
+    assert.equal(read('peptide_v1_guest'), null, 'no guest-keyed fallback');
+    assert.equal(read('peptide_v1_undefined'), null, 'no undefined-keyed fallback');
+    assert.equal(read('peptide_v1_null'), null, 'no null-keyed fallback');
+  });
+
+  test('two users never share a protocol', () => {
+    reset();
+    signIn('user-alpha');
+    app.pepSaveState({ stacks: [{ compoundId: 'bpc157' }], checked: {}, cart: [] });
+    signIn('user-beta');
+    app.pepSaveState({ stacks: [{ compoundId: 'ta1' }, { compoundId: 'nad' }], checked: {}, cart: [] });
+    assert.equal(read('peptide_v1_user-alpha').stacks.length, 1, 'alpha untouched');
+    assert.equal(read('peptide_v1_user-beta').stacks.length, 2, 'beta separate');
+  });
+
+  test('reading while signed out returns an empty protocol, not another user’s', () => {
+    reset();
+    signIn('user-alpha');
+    app.pepSaveState({ stacks: [{ compoundId: 'bpc157' }], checked: {}, cart: [] });
+    signIn(null);
+    const state = app.pepGetState();
+    assert.equal(state.stacks.length, 0, 'empty while signed out');
+  });
+
+  test('a restore lands on the signed-in user’s key, not a fallback', () => {
+    reset();
+    signIn('user-gamma');
+    app.pepRestoreFromCloud({ peptide_state: cloud });
+    assert.ok(read('peptide_v1_user-gamma'), 'restored to the derived key');
+    assert.equal(read('peptide_v1_guest'), null, 'nothing at a guest key');
+  });
+
   // ── Mirror scrubbing — no medical data leaves the device ───────────────────
   // ps.bloods caches the blood_panels table. Mirroring it would copy pathology
   // values into profiles.peptide_state, a second store for medical data.

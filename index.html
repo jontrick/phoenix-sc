@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.153';
+var APP_VERSION='4.9.154';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20465,16 +20465,102 @@ function pepSaveState(ps){
 }
 
 var _pepMirrorTimer = null;
+var _pepMirrorPending = null;
+
+// v4.9.154: what actually goes to the cloud. ps.bloods is a LOCAL CACHE of the
+// blood_panels table — the table is the source of truth, so mirroring it into
+// profiles.peptide_state would duplicate pathology values into a second store,
+// bloat every write, and leave stale copies behind after a panel is deleted.
+// Stripped here rather than at the call sites so no future caller can forget.
+function _pepCloudPayload(ps){
+  var out = {};
+  for(var k in ps){ if(Object.prototype.hasOwnProperty.call(ps, k) && k !== "bloods") out[k] = ps[k]; }
+  return out;
+}
+
+// Diagnostics only — never medical values. _phxRecordWriteError serialises this
+// into localStorage.phx_last_write_error, which is shown in Settings → Diagnostic
+// and readable via phxLastError() from the URL bar. Shape and size only.
+function _pepErrorSummary(ps){
+  return {
+    stacks: (ps && ps.stacks || []).length,
+    notes:  (ps && ps.notes  || []).length,
+    panels: (ps && ps.bloods || []).length,
+    cart:   (ps && ps.cart   || []).length,
+    ts:     (ps && ps._ts) || null
+  };
+}
+
 function _pepMirrorToCloud(ps){
   clearTimeout(_pepMirrorTimer);
+  _pepMirrorPending = _pepCloudPayload(ps);
   _pepMirrorTimer = setTimeout(function(){
-    try {
-      var uid = currentSession && currentSession.user && currentSession.user.id;
-      if(!uid || !sb) return;
-      sb.from("profiles").update({peptide_state: ps}).eq("id", uid).then(function(){});
-    } catch(_e){}
+    var payload = _pepMirrorPending;
+    _pepMirrorPending = null;
+    _pepSendCloud(payload, false);
   }, 2000);
 }
+
+// v4.9.154: errors are surfaced, not swallowed. The empty .then(function(){})
+// this replaces is why a missing peptide_state column went unnoticed for 12
+// versions — every write failed silently from v4.9.138 onward.
+function _pepSendCloud(payload, useKeepalive){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid || payload == null) return;
+    if(useKeepalive){
+      // The SDK's promise chain can be dropped as the page goes away; a keepalive
+      // PATCH lets the browser finish the request anyway. Same approach as BLAB.
+      var token = (currentSession && currentSession.access_token) || SUPABASE_KEY;
+      fetch(SUPABASE_URL + "/rest/v1/profiles?id=eq." + encodeURIComponent(uid), {
+        method: "PATCH",
+        keepalive: true,
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({peptide_state: payload})
+      }).catch(function(){});
+      return;
+    }
+    if(!sb) return;
+    sb.from("profiles").update({peptide_state: payload}).eq("id", uid)
+      .then(function(res){
+        if(res && res.error){
+          console.warn("[PHX] peptide cloud sync failed:", res.error);
+          if(typeof _phxRecordWriteError === "function") _phxRecordWriteError("pep mirror", res.error, _pepErrorSummary(payload));
+        }
+      })
+      .catch(function(e){
+        console.warn("[PHX] peptide cloud sync error:", e);
+        if(typeof _phxRecordWriteError === "function") _phxRecordWriteError("pep mirror.exception", e, _pepErrorSummary(payload));
+      });
+  } catch(e){ console.warn("[PHX] peptide cloud sync threw:", e); }
+}
+
+// v4.9.154: force the pending debounced write out immediately when the app is
+// backgrounded or killed. Without this, a dose ticked off and then followed by
+// pocketing the phone inside the 2s debounce never reached the cloud.
+window._pepFlushCloud = function(){
+  try {
+    if(_pepMirrorTimer){ clearTimeout(_pepMirrorTimer); _pepMirrorTimer = null; }
+    var payload = _pepMirrorPending;
+    if(payload == null) return;
+    _pepMirrorPending = null;
+    _pepSendCloud(payload, true);
+  } catch(_e){}
+};
+
+// pagehide covers PWA/tab close + iOS home-button app switch; visibilitychange
+// → hidden covers platforms where pagehide is unreliable. Same pair as BLAB.
+try {
+  window.addEventListener("pagehide", function(){ window._pepFlushCloud(); });
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "hidden") window._pepFlushCloud();
+  });
+} catch(_e){}
 
 // v4.9.152 — RESTORE RULE: newest timestamp wins (Jon's ruling, 18 Aug 2026).
 // The old rule was "local always wins", which meant a replacement device that

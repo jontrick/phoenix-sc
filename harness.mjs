@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.153'", 'version is 4.9.153');
+has("var APP_VERSION='4.9.154'", 'version is 4.9.154');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -926,6 +926,46 @@ hasNot('if(local) return; // local takes priority',
   cases.forEach(([label, got, want]) => got === want
     ? ok('PEP: restore ' + label)
     : bad('PEP: restore ' + label + ' — got ' + got));
+})();
+
+// v4.9.154 mirror hygiene — no medical data to the cloud, no swallowed errors
+has('function _pepCloudPayload(ps)',   'PEP: cloud payload builder present');
+has('function _pepErrorSummary(ps)',   'PEP: scrubbed diagnostic summary present');
+has('window._pepFlushCloud = function()', 'PEP: pagehide flush present');
+has("window.addEventListener(\"pagehide\", function(){ window._pepFlushCloud(); });",
+                                       'PEP: pagehide listener wired');
+hasNot('.then(function(){});',         'PEP: empty swallow-everything then() gone');
+
+(() => {
+  const i = html.indexOf('function _pepSendCloud(payload, useKeepalive)');
+  const j = html.indexOf('window._pepFlushCloud', i + 1);
+  if (i < 0 || j < 0) { bad('PEP: could not isolate _pepSendCloud'); return; }
+  const blk = html.slice(i, j);
+  blk.includes('.then(function(res){')  ? ok('PEP: mirror inspects res')          : bad('PEP: mirror ignores res');
+  blk.includes('.catch(function(e){')   ? ok('PEP: mirror handles rejection')     : bad('PEP: mirror has no .catch — unhandled rejection');
+  blk.includes('_phxRecordWriteError("pep mirror"') ? ok('PEP: mirror records write errors') : bad('PEP: mirror does not record write errors');
+  blk.includes('keepalive: true')       ? ok('PEP: flush uses a keepalive PATCH') : bad('PEP: flush has no keepalive path');
+  blk.includes('_pepErrorSummary(payload)') ? ok('PEP: diagnostics get the scrubbed summary') : bad('PEP: diagnostics get a raw payload');
+})();
+
+// The mirrored payload must never carry blood markers.
+(() => {
+  const i = html.indexOf('function _pepCloudPayload(ps)');
+  const j = html.indexOf('function _pepErrorSummary', i + 1);
+  const blk = html.slice(i, j);
+  blk.includes('k !== "bloods"')
+    ? ok('PEP: bloods stripped from the mirrored payload')
+    : bad('PEP: bloods NOT stripped — medical data would reach profiles.peptide_state');
+})();
+
+// Diagnostic summary must be counts only — no field that could hold a value.
+(() => {
+  const i = html.indexOf('function _pepErrorSummary(ps)');
+  const j = html.indexOf('function _pepMirrorToCloud', i + 1);
+  const blk = html.slice(i, j);
+  /markers|value|name:/.test(blk)
+    ? bad('PEP: error summary references marker values')
+    : ok('PEP: error summary is counts and timestamp only');
 })();
 
 // Recon maths — the numbers Jon draws up. 100 units = 1 mL.

@@ -1,6 +1,7 @@
 # PHOENIX APP — PEPTIDES CHAT HANDOFF
 # Paste this as the first message in the "Phoenix App - Peptides" chat.
 # Read CLAUDE.md in the repo root FIRST — all its rules apply here without exception.
+# Then read COMMS_PROTOCOL.md — cross-chat messaging is REQUIRED, not optional.
 
 ---
 
@@ -80,6 +81,16 @@ You may READ but must NOT restructure (PM coordinates schema changes):
 6. **Update the harness** when you add new functionality. `node harness.mjs` must stay green.
 7. **Information accuracy:** Compound doses/frequencies in `_PEP_COMPOUNDS` came from Jon's protocol documents. Never change dose data on your own initiative — flag discrepancies to Jon and let him decide.
 
+## CROSS-CHAT COMMS
+
+Full protocol in `COMMS_PROTOCOL.md` — read it. Summary for you:
+- Load comms tools at session start via ToolSearch: `select:SendMessage,mcp__ccd_session_mgmt__list_sessions,mcp__ccd_session_mgmt__send_message`
+- Your address is `Phoenix App - Peptides`; the PM is `PHOENIX APP CENTRAL PM`
+- Send the PM a PUSH-NOTICE when you start a build task and after every push
+- Pull-late before the version bump; APP_VERSION = highest in file + 1
+- Need weigh-in trend or training schedule? Send a QUERY to Nutrition / Training for data shape; any code change on their side goes through the PM
+- Escalate anything outside your domain to the PM; never resolve another domain's merge conflicts
+
 ## SESSION START RITUAL
 
 ```bash
@@ -89,6 +100,8 @@ grep "APP_VERSION" index.html | head -1
 git status                            # must be clean
 git log --oneline -5                  # see what other chats shipped
 ```
+
+Also read `COMMS_PROTOCOL.md` and load the comms tools (ToolSearch select above).
 
 Then report: current version, recent commits from other domains, ready for task.
 

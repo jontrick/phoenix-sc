@@ -48,7 +48,9 @@ node runtime_check.mjs
 
 Must print `RUNTIME CHECK CLEAN — 6/6 script blocks executed` and exit 0. **Anything else = do not push.** Run it unpiped — `node runtime_check.mjs | tail` reports `tail`'s exit status, not the checker's.
 
-It executes EVERY inline `<script>` block of index.html in document order under browser stubs (`vm` context), reports the block + line of any top-level throw, and fails on unhandled ReferenceError/TypeError rejections. Pass a path to check a different file (`node runtime_check.mjs /path/to/index.html`).
+It executes EVERY inline `<script>` block of index.html in document order under browser stubs (`vm` context), reports the block + line of any top-level throw, and fails on unhandled ReferenceError/TypeError rejections.
+
+**What it proves — and does not.** `runtime_check.mjs` proves every block parses and its top level executes. It does NOT execute function bodies: an undefined reference inside `pepRestoreFromCloud` or inside a `.then` callback passes CLEAN (verified by injection, 2026-08-18). The peptide mirror bug that hid for 12 versions was exactly that shape. Logic inside functions must be covered by `harness.mjs` assertions or a functional test that actually calls the function — see the functional-test layer below. "RUNTIME CHECK CLEAN" is a parse/top-level gate, not a correctness claim. Pass a path to check a different file (`node runtime_check.mjs /path/to/index.html`).
 
 History: until v4.9.156 the mandated snippet ran only the LARGEST script block — 50.3% of the JS. The 703KB auth / profile-load / `_phxRecordWriteError` / shared-restore-hook block was never executed by any pre-push gate (found by Peptides, 2026-08-18). If you add stubs to `runtime_check.mjs`, keep them minimal and commit them — the tool is shared PM tooling.
 

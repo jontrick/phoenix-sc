@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.152'", 'version is 4.9.152');
+has("var APP_VERSION='4.9.153'", 'version is 4.9.153');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -939,6 +939,33 @@ hasNot('if(local) return; // local takes priority',
   near(units(6,   30, 5),  100) ? ok('PEP: Reta 6mg from RT30/5mL = 100u') : bad('PEP: RT30 recon maths wrong');
   near(units(100,500, 5),  100) ? ok('PEP: NAD+ 100mg from 500mg/5mL = 100u') : bad('PEP: NAD+ recon maths wrong');
 })();
+
+// ── Deload cadence — code and coaching prompt must agree (v4.9.152) ─────────
+// Jon ruled 2026-08-18: deload runs as the base programme, weeks 5 and 10.
+// Before this, PHOENIX_COACHING_PROMPT contained TWO contradictory schedules
+// (block periodisation 4/8/12, and an age-banded "every 3rd week (45+)") which
+// disagreed with each other and with BLAB. These pin all three surfaces.
+console.log('\nDeload cadence — code vs coaching prompt:');
+has('function isDeload(w){return w===5||w===10||w===15;}', 'DELOAD: isDeload() pins weeks 5/10/15');
+has('var isDeload = (week === 5 || week === 10);',          'DELOAD: BLAB session builder pins weeks 5/10');
+has('var isDeload = blabWeek===5 || blabWeek===10;',        'DELOAD: smart-recommend pins weeks 5/10');
+// The age-banded rule is dead — it must not come back in any form.
+hasNot('Every 3rd week (45+)',      'DELOAD: age-banded scheduled rule removed');
+hasNot('every 3rd-4th week (35-44)','DELOAD: age band 35-44 removed');
+hasNot('every 4th week (under 35)', 'DELOAD: age band under-35 removed');
+// Prompt block periodisation must name 5 and 10, never 4/8/12.
+has('- Scheduled: every 5th week', 'DELOAD: prompt states the every-5th-week cadence');
+has('weeks 5 and 10',              'DELOAD: prompt names weeks 5 and 10');
+has('BLOCK 1 — ACCUMULATION (Weeks 1-4, deload week 5):',   'DELOAD: prompt Block 1 deloads week 5');
+has('BLOCK 2 — INTENSIFICATION (Weeks 6-9, deload week 10):','DELOAD: prompt Block 2 deloads week 10');
+has('BLOCK 3 — REALISATION (Weeks 11-12):',                  'DELOAD: prompt Block 3 is weeks 11-12');
+hasNot('Deload week 8.',  'DELOAD: stale "Deload week 8" gone from prompt');
+hasNot('Deload week 12.', 'DELOAD: stale "Deload week 12" gone from prompt');
+hasNot('Deload week 4."', 'DELOAD: stale "Deload week 4" gone from coach-note example');
+// The unscheduled triggers are independent of cadence and must survive untouched.
+has('RPE average > 9.5 two consecutive weeks',   'DELOAD: unscheduled RPE trigger intact');
+has('completion rate < 60% two consecutive weeks','DELOAD: unscheduled completion trigger intact');
+has('overreaching triad',                         'DELOAD: overreaching triad trigger intact');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

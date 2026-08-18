@@ -163,6 +163,21 @@ SESSION 6 — Aerobic Session (Sunday preferred, 25-45 mins)
 
 **48-hour rule:** Day 4 (posterior chain) must not follow Day 2 (lower) back-to-back. App flags this.
 
+**Deload cadence (ruled by Jon 2026-08-18):** every 5th week — four loading weeks, then a deload.
+In the 12-week BLAB block that is **weeks 5 and 10**. The same cadence extends to longer blocks
+(week 15 in the legacy 15-week builder). It is **not age-banded**; the earlier prompt rule of
+"every 3rd week (45+), every 3rd-4th (35-44), every 4th (under 35)" is dead and was removed in
+v4.9.152.
+
+Single source of truth is the code, and there are two deliberate copies:
+- `isDeload(w)` — weeks 5 / 10 / 15, used by the legacy 15-week week-builder (`buildWeek`, `getPhase`)
+- `var isDeload = (week === 5 || week === 10)` in `blabGetSessionData` — the 12-week BLAB block
+
+`PHOENIX_COACHING_PROMPT` must agree with these. Before v4.9.152 it did not: the block-periodisation
+section said deload weeks 4/8/12 while the WHEN TO DELOAD section said every 3rd-4th week by age,
+so the coach was handed two contradictory schedules in one document. Harness now pins all of it —
+see the "Deload cadence" assertions in `harness.mjs`.
+
 ---
 
 ## BUILD PRIORITIES — ORDERED

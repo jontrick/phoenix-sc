@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.169';
+var APP_VERSION='4.9.170';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -10531,7 +10531,11 @@ function autoLogSet(row){
   var heroEl=document.querySelector('#screen-session .sh-name');
   var sessionId=heroEl?heroEl.textContent.trim().toLowerCase().replace(/\s+/g,'-'):'unknown';
   var entry={
-    date:new Date().toISOString().split('T')[0],
+    // v4.9.170: a bare day key, so it is stored as a LOCAL Y-M-D. It was
+    // toISOString().split('T')[0] — a UTC date — which at Brisbane UTC+10 filed
+    // every set logged before 10am under the previous day. Jon trains at 4:30am,
+    // so that was effectively his entire set history.
+    date:_phxLocalISO(),
     sessionId:sessionId,
     exerciseName:exerciseName,
     setIndex:setIdx,
@@ -15571,8 +15575,18 @@ function getWalkStreak(){
   var today=new Date();today.setHours(0,0,0,0);
   var streak=0,checkDate=new Date(today);
   for(var i=0;i<365;i++){
-    var dateStr=checkDate.toISOString().split('T')[0];
-    if(logs.some(function(l){return l.date.split('T')[0]===dateStr;})){
+    // v4.9.170: both sides local. `checkDate` is a local midnight, so serialising it
+    // with toISOString() produced the PREVIOUS UTC day; `l.date` is a genuine UTC
+    // instant, so slicing its string gave the UTC day. The two happened to agree for
+    // a morning walk and disagree for an evening one, which is why evening walks
+    // silently reset the streak.
+    //
+    // Fixed at READ time by converting the stored instant, not by changing what the
+    // three writers store: the instant is the correct thing to persist, and deriving
+    // the day key here means every walk already logged — including the evening ones
+    // that were being missed — is counted correctly with no migration.
+    var dateStr=_phxLocalISO(checkDate);
+    if(logs.some(function(l){return l.date && _phxLocalISO(new Date(l.date))===dateStr;})){
       streak++;checkDate.setDate(checkDate.getDate()-1);
     } else break;
   }

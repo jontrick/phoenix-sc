@@ -654,4 +654,108 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const ns = read(`phx_nut_v1_${UID}`);
     assert.equal(Object.keys(ns.daily).length, 0, 'and nothing reached the nutrition log');
   });
+
+  // ── Local day keys (v4.9.170) ─────────────────────────────────────────────
+  // Jon trains at 4:30am Brisbane, which is 18:30 UTC the previous day. Anything
+  // that derived a day key from toISOString() filed his morning activity under
+  // yesterday. PM date rule: persist instants as UTC ISO, derive day keys at read
+  // time via _phxLocalISO(new Date(instant)); only bare day keys are stored local.
+
+  const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // A real instant for today at a given local hour — what the walk writers store.
+  const todayAt = (h, m = 0) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  const daysAgoAt = (n, h) => { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+
+  test('a walk at ANY hour of today counts toward the streak', () => {
+    // Deliberately swept across all 24 local hours rather than testing "an evening
+    // walk". A single fixed hour only exercises the bug when the run happens to
+    // straddle the UTC boundary — at 4pm local the old code passes and the test
+    // proves nothing. Sweeping guarantees some hour straddles in any timezone that
+    // has an offset at all, so this bites wherever it runs.
+    for (let hour = 0; hour < 24; hour++) {
+      reset();
+      signIn(UID);
+      const d = new Date(); d.setHours(hour, 30, 0, 0);
+      seed('phoenix_walk_logs', [{ date: d.toISOString(), mode: 'walk', distance: 3 }]);
+      assert.equal(app.getWalkStreak(), 1, `a walk logged at ${hour}:30 local counts toward today`);
+    }
+  });
+
+  test('a 4:30am walk counts — it passed by accident before, so pin it', () => {
+    // This one WORKED under the old UTC-vs-UTC comparison, purely because both sides
+    // shifted together. A local-only fix on the reader alone would have broken it,
+    // and 4:30am is the hour Jon actually trains.
+    reset();
+    signIn(UID);
+    const d = new Date(); d.setHours(4, 30, 0, 0);
+    seed('phoenix_walk_logs', [{ date: d.toISOString(), mode: 'walk', distance: 3 }]);
+    assert.equal(app.getWalkStreak(), 1, 'a pre-dawn walk today is counted');
+  });
+
+  test('morning and evening walks across days build one continuous streak', () => {
+    reset();
+    signIn(UID);
+    const at = (back, hour) => { const d = new Date(); d.setDate(d.getDate() - back); d.setHours(hour, 0, 0, 0); return d.toISOString(); };
+    seed('phoenix_walk_logs', [
+      { date: at(0, 20), mode: 'walk' },
+      { date: at(1, 4), mode: 'walk' },
+      { date: at(2, 21), mode: 'walk' }
+    ]);
+    assert.equal(app.getWalkStreak(), 3, 'mixed times across three days still chain');
+  });
+
+  test('a gap still breaks the streak', () => {
+    reset();
+    signIn(UID);
+    const at = (back, hour) => { const d = new Date(); d.setDate(d.getDate() - back); d.setHours(hour, 0, 0, 0); return d.toISOString(); };
+    seed('phoenix_walk_logs', [{ date: at(0, 20), mode: 'walk' }, { date: at(2, 20), mode: 'walk' }]);
+    assert.equal(app.getWalkStreak(), 1, 'yesterday missing ends it at one');
+  });
+
+  // A fixed clock, so the set-log cases below assert the divergence itself rather
+  // than depending on the wall clock at run time. 18:30 UTC is 04:30 next-day in
+  // Brisbane — local and UTC dates differ, which is precisely Jon's training hour.
+  const withClock = (isoInstant, fn) => {
+    const RealDate = app.Date;
+    const FIXED = RealDate.parse(isoInstant);
+    class FakeDate extends RealDate {
+      constructor(...a) { if (a.length === 0) super(FIXED); else super(...a); }
+      static now() { return FIXED; }
+    }
+    app.Date = FakeDate;
+    try { return fn(); } finally { app.Date = RealDate; }
+  };
+
+  const stubRow = () => ({
+    getAttribute: (k) => (k === 'data-exid' ? 'bench' : k === 'data-setidx' ? '2' : ''),
+    closest: () => ({ querySelector: () => ({ textContent: 'Bench Press' }) }),
+    parentElement: null,
+    querySelector: (sel) => ({ value: sel.includes('kg-') ? '100' : '5' })
+  });
+
+  test('a set logged at 4:30am is dated today, not yesterday', () => {
+    // Drives autoLogSet itself — per the standard, calling the helper it uses would
+    // not cover the function. The row is a stub because the sandbox has no DOM.
+    reset();
+    signIn(UID);
+    withClock('2026-08-19T18:30:00.000Z', () => app.autoLogSet(stubRow()));
+    const logs = read('phoenix_session_logs_sets');
+    assert.equal(logs.length, 1, 'the set was logged');
+    assert.equal(logs[0].date, '2026-08-20', 'dated by the local day, not the UTC one (which was the 19th)');
+    assert.equal(logs[0].exerciseName, 'Bench Press', 'and it captured the exercise');
+    assert.equal(logs[0].kg, '100', 'and the load');
+  });
+
+  test('the set-log date agrees with the calendar day key at the same instant', () => {
+    // The calendar already keyed days locally, so a UTC set-log date meant the two
+    // systems disagreed about "today" for the whole of Jon's training window.
+    reset();
+    signIn(UID);
+    const both = withClock('2026-08-19T18:30:00.000Z', () => {
+      app.autoLogSet(stubRow());
+      return { cal: app._blabCalTodayISO(), set: read('phoenix_session_logs_sets')[0].date };
+    });
+    assert.equal(both.set, both.cal, 'set log and calendar agree on which day it is');
+    assert.equal(both.cal, '2026-08-20', 'and both say the local day');
+  });
 }

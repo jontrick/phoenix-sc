@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.169'", 'version is 4.9.169');
+has("var APP_VERSION='4.9.170'", 'version is 4.9.170');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1324,5 +1324,29 @@ has('athlete.bw=w;',                        'WEIGHT: athlete.bw snapshot still w
 has("function _phxLocalISO(d){", 'DATE: shared local-date helper exists');
 { const n=(html.match(/today_date: _phxLocalISO\(\)/g)||[]).length; n===4 ? ok('DATE: all 4 coach payloads send LOCAL today_date') : bad(`DATE: expected 4 local today_date sites, found ${n}`); }
 hasNot("today_date: new Date().toISOString().split('T')[0]", 'DATE: coach today_date no longer UTC');
+// ── Local day keys in Training (v4.9.170) ───────────────────────────────────
+// PM date rule: persist instants as UTC ISO; derive day keys at read time via
+// _phxLocalISO(new Date(instant)); store only BARE day keys as local Y-M-D.
+console.log('\nTraining day keys:');
+has('date:_phxLocalISO(),',                     'DAYKEY: set log stores a local day key');
+has('_phxLocalISO(new Date(l.date))===dateStr', 'DAYKEY: walk streak converts the stored instant');
+has('var dateStr=_phxLocalISO(checkDate);',     'DAYKEY: walk streak compares against a local day');
+// The old forms must not come back in either place.
+hasNot("date:new Date().toISOString().split('T')[0],\n    sessionId:sessionId,", 'DAYKEY: set log no longer stores a UTC date');
+hasNot("if(logs.some(function(l){return l.date.split('T')[0]===dateStr;}))",     'DAYKEY: walk streak no longer string-slices the instant');
+// The three walk WRITERS are correct as they stand — an instant is the right thing
+// to persist. If a sweep "fixes" them the streak breaks and history is corrupted,
+// so pin that they still store a full ISO instant.
+(() => {
+  // Matched on the walk-entry SHAPE (date immediately followed by mode), not on a
+  // bare toISOString — a loose match counted 15 unrelated sites across the file and
+  // would have stayed green with all three walk writers changed.
+  const n = (html.match(/date:\s*new Date\(\)\.toISOString\(\),\s*mode:/g) || []).length;
+  if (n === 3) ok('DAYKEY: all 3 walk writers still persist a full UTC instant');
+  else bad(`DAYKEY: ${n} walk writers persist a full instant, expected exactly 3. ` +
+           `Converting one to a day key loses the time the read-time conversion depends on, ` +
+           `and silently corrupts the streak for that entry point.`);
+})();
+
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

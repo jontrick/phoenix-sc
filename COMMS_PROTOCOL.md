@@ -76,14 +76,15 @@ Creates `.claude/worktrees/<domain>` on its own branch, checked out from origin/
 
 Runtime check and harness run unchanged from inside the worktree (`node harness.mjs` resolves `index.html` relative to itself).
 
-Push (from inside your worktree):
-1. `git fetch origin && git rebase origin/main`
-2. Set `APP_VERSION` = highest now in the file + 1; update the harness version assertion to match
-3. Runtime check → zero output; `node harness.mjs` → all pass
-4. `git add index.html harness.mjs` (name files explicitly — never `git add .` / `-A`)
-5. `git commit -m "v4.9.XXX — [DOMAIN] description"`
-6. `git push origin HEAD:main`
-7. If rejected (someone pushed in between): back to step 1. If the rebase conflicts on anything other than the APP_VERSION / harness-version lines, STOP — abort the rebase, message the PM with the conflicting hunks.
+Push (from inside your worktree). Order matters — `git rebase` refuses to run over unstaged edits, so commit first, then rebase:
+1. Runtime check → zero output; `node harness.mjs` → all pass (on your edits as they stand)
+2. `git add index.html harness.mjs` (name files explicitly — never `git add .` / `-A`), `git commit -m "v4.9.XXX — [DOMAIN] description"` with your best-guess version
+3. `git fetch origin` then `git rebase origin/main`
+4. Check `APP_VERSION` is still highest-in-file + 1. If someone shipped in between, fix APP_VERSION + harness assertion, re-run both gates, `git commit --amend --no-edit`
+5. `git push origin HEAD:main`
+6. If rejected: back to step 3. If the rebase conflicts on anything other than the APP_VERSION / harness-version lines, `git rebase --abort` and message the PM with the conflicting hunks.
+
+Worktree-session quirk (Training, 2026-08-18): the harness refuses compound shell commands that chain git with pipes or redirects (`git fetch && git rebase ... | tail`) because it cannot verify they stay inside the worktree. Issue git commands one per call, plain. Not a blocker, just don't waste a cycle on it.
 
 The commit message tag `[TRAINING]` / `[NUTRITION]` / `[PEPTIDES]` / `[PM]` is mandatory. It is the only reliable "who shipped what" record.
 

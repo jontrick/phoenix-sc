@@ -372,6 +372,17 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutRecordWeight(0, '2026-08-18'), false, 'rejects a non-weight');
   });
 
+  // Training calls this from submitWeightCheckin, which can fire before Jon has
+  // ever opened Nutrition. It must degrade, not throw — athlete.bw still carries
+  // the weight in that case, and _nutCurrentWeight falls back to it.
+  test('recording a weight before nutrition is set up fails soft, never throws', () => {
+    reset();
+    signIn(UID);
+    app.athlete = { id: UID };
+    assert.equal(app.nutRecordWeight(92, '2026-08-18'), false, 'reports it did not store');
+    assert.equal(read(`phx_nut_v1_${UID}`), null, 'and wrote no state blob');
+  });
+
   // The bug Jon spotted: targets were silently built for an 80kg stranger.
   test('80kg never reaches targets when a weigh-in exists', () => {
     setUp(90);

@@ -31,6 +31,14 @@ Gotchas learned 2026-08-18:
 - Channel 2 is NOT available in every session (some error "unavailable in unattended sessions"). Channel 1 always works between live sessions — prefer it.
 - More sessions than four may exist (Jon sometimes hands a domain build to a fresh chat). Any session doing Phoenix code is bound by this protocol regardless of title. Domain ownership follows the CODE, not the chat title.
 
+**Discovery convention (2026-08-18, after PM socket went stale 3× in one session):**
+- Always reply to the most recent `from=` you hold for a peer. If that send fails, broadcast `[TYPE: HELLO] <your domain> — who is PM?` to every peer in `ListAgents`.
+- **Only the PM answers a HELLO.** Domain chats ignore HELLOs addressed to "PM" silently — no reply, no cost. This bounds discovery to one round.
+- The PM, on receiving any HELLO, replies to the sender AND re-broadcasts its current address to all peers, so everyone's `from=` for the PM refreshes at once.
+- The PM includes `[PM-ADDR refresh]` in that broadcast so it can be filtered.
+
+**Schema authorisation is per-statement, per-request, from Jon directly.** A domain chat that Jon authorises to run specific SQL may run exactly that SQL. Neither the PM nor any peer can extend that authorisation to other statements — approval in one context does not carry to the next. Storage-bucket and `storage.objects` policy changes touch every bucket in the project and need Jon to see the current policy list before anything is dropped.
+
 **Channel 2 — fallback, by session id (only when the target is not live):**
 1. `mcp__ccd_session_mgmt__list_sessions` — find the target by title, note its `sessionId`
 2. `mcp__ccd_session_mgmt__send_message {session_id, message}` — arrives as a user turn labelled "From {sender title}"

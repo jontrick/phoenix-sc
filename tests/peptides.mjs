@@ -338,6 +338,43 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._pepFmtDose(1.6, 'mg'), '1.6mg', 'mg formatting');
   });
 
+  // ── Library values Jon confirmed against the literature (v4.9.160) ─────────
+  // These exist because two of them LOOK like errors and would invite a
+  // "correction" that is dangerous in one direction and useless in the other.
+
+  const compound = id => app._pepCompound(id);
+
+  test('Epitalon default is 5mg — the Khavinson course, not the old 500mcg', () => {
+    assert.equal(compound('epitalon').dose, 5, 'dose in mg');
+  });
+
+  test('a 20-night Epitalon course totals 100mg, i.e. two 50mg vials', () => {
+    assert.equal(compound('epitalon').dose * 20, 100, 'course total');
+  });
+
+  test('Epitalon reconstitution keeps a 5mg dose at half a syringe', () => {
+    const c = compound('epitalon');
+    const d = app._pepDraw(c.dose, c.doseUnit, app._pepRecon({}, c));
+    assert.equal(Math.round(d.units), 50, 'units — 100u would be a full syringe');
+  });
+
+  // 150-500mcg SubQ vs 50-150mg oral is a 100x gap that is entirely route, not
+  // an error. Anyone reading the injectable figure against an oral source will
+  // think it is under-dosed by 100x; "fixing" it would be a 100x overdose.
+  test('5-Amino-1MQ records the route, so the mcg figure is not mistaken for an error', () => {
+    const n = compound('5amq').notes;
+    assert.ok(n.includes('SubQ'), 'names the injectable route');
+    assert.ok(n.includes('oral'), 'names the oral figure it is confused with');
+  });
+
+  // The 15-minute gap is mechanism, not scheduling: the GHRP drops somatostatin
+  // tone so the GHRH that follows lands with the brake off. Merging them into one
+  // shot discards that.
+  test('the Ipamorelin → CJC sequencing rationale is recorded, not just the timing', () => {
+    assert.ok(compound('ipamorelin').notes.includes('somatostatin'), 'ipa carries the why');
+    assert.ok(compound('cjc1295').notes.includes('Do not merge'), 'cjc warns against merging');
+  });
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

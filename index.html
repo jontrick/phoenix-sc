@@ -3508,7 +3508,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.160';
+var APP_VERSION='4.9.161';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17712,6 +17712,13 @@ function renderTodayScreen(){
           _renderTodayRemainingRow(_bs, _nextDay, _weekDone);
           return;
         }
+        // v4.9.161: once the athlete is using the calendar, the Today card reflects what
+        // is SCHEDULED for today — every session, customs included — rather than guessing
+        // the next sequential BLAB day. With an empty calendar this is skipped entirely and
+        // the original behaviour below runs unchanged.
+        if(typeof window.blabCalHasSchedule === 'function' && window.blabCalHasSchedule()){
+          if(_blabRenderTodayFromCalendar(_card, _inner, _week)) return;
+        }
         var _startBtn = '<div style="margin-top:16px;"><button onclick="event.stopPropagation();window.blabOpenSession(' + _week + ',' + _nextDay + ');" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
         if(_weekDone){
           _inner.innerHTML =
@@ -17811,6 +17818,98 @@ function renderTodayScreen(){
 }
 
 // ── Today screen helpers (Priority 2) ────────────────────────────
+// v4.9.161 — Today card, driven by the training calendar.
+// Renders every session scheduled for today (one, two, or none) and fills the row
+// beneath with the next few days. Returns true when it has taken over the card.
+function _blabRenderTodayFromCalendar(card, inner, weekNum){
+  if(typeof window.blabCalTodaySessions !== 'function') return false;
+  var today = window.blabCalTodaySessions();
+
+  // Nothing scheduled today. Say so plainly rather than offering a session the
+  // athlete did not plan — the calendar is the source of truth once it is in use.
+  if(!today.length){
+    var next = window.blabCalNextDays(1);
+    var when = next.length
+      ? ('Next: ' + next[0].label + ' — ' + _blabCalEntryView(next[0].entries[0]).title)
+      : 'Nothing scheduled. Open the calendar to plan your week.';
+    inner.innerHTML =
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">BLAB · Week ' + weekNum + '</div>' +
+      '<div class="game-card-title" style="font-size:30px;">Rest Day</div>' +
+      '<div style="font-size:13px;color:var(--text2);margin-top:6px;">' + when + '</div>' +
+      '<div style="margin-top:16px;"><button onclick="event.stopPropagation();blabCalOpen()" style="width:100%;padding:13px;background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Open Calendar</button></div>';
+    card.style.border = '1px solid var(--border)';
+    card.style.cursor = 'default';
+    card.removeAttribute('onclick');
+    _renderTodayNextDays();
+    return true;
+  }
+
+  var multi = today.length > 1;
+  var h = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Today · ' +
+          (multi ? (today.length + ' Sessions') : 'Scheduled') + '</div>';
+
+  today.forEach(function(e, i){
+    var v = _blabCalEntryView(e);
+    if(!v) return;
+    var rule = (i === today.length - 1) ? '' : 'border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:14px;';
+    h += '<div style="' + rule + '">';
+    if(multi){
+      h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">' + v.eyebrow + '</div>';
+      h += '<div class="game-card-title" style="font-size:22px;">' + v.title + '</div>';
+    } else {
+      h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">' + v.eyebrow + '</div>';
+      h += '<div class="game-card-title" style="font-size:30px;">' + v.title + '</div>';
+      h += '<div style="font-size:13px;color:var(--text2);margin-top:6px;">' + v.sub + '</div>';
+    }
+    if(v.blocked){
+      h += '<div style="font-size:12px;color:var(--orange);margin-top:8px;line-height:1.5;">' + v.blockNote + '</div>';
+    } else if(v.onStart){
+      h += '<div style="margin-top:' + (multi ? '10' : '16') + 'px;"><button onclick="event.stopPropagation();' + v.onStart + ';" style="width:100%;padding:' + (multi ? '12' : '15') + 'px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:' + (multi ? '13' : '15') + 'px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
+    }
+    h += '</div>';
+  });
+
+  inner.innerHTML = h;
+  card.style.border = '2px solid var(--gold)';
+  // With two sessions there is no single thing a whole-card tap should open.
+  if(multi){
+    card.style.cursor = 'default';
+    card.removeAttribute('onclick');
+  } else {
+    var only = _blabCalEntryView(today[0]);
+    card.style.cursor = only && !only.blocked ? 'pointer' : 'default';
+    if(only && !only.blocked && only.onStart) card.setAttribute('onclick', only.onStart);
+    else card.removeAttribute('onclick');
+  }
+  _renderTodayNextDays();
+  return true;
+}
+
+// The row under the Today card: the next few days that actually have sessions, dated.
+// Replaces the sequential "remaining days of the programme week" list while the
+// calendar is in use.
+function _renderTodayNextDays(){
+  var row = document.getElementById('today-remaining-row');
+  if(!row) return;
+  if(typeof window.blabCalNextDays !== 'function'){ row.innerHTML = ''; return; }
+  var days = window.blabCalNextDays(3);
+  if(!days.length){ row.innerHTML = ''; return; }
+  var h = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Coming Up</div>';
+  h += '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;">';
+  days.forEach(function(d){
+    var titles = d.entries.map(function(e){ var v = _blabCalEntryView(e); return v ? v.title : ''; }).filter(Boolean);
+    h += '<div onclick="blabCalOpen()" style="flex:0 0 auto;min-width:calc(50% - 4px);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">' + d.label + ' · ' + _blabCalFmtShort(d.date) + '</div>';
+    titles.forEach(function(t, i){
+      h += '<div style="font-family:var(--font-d);font-size:' + (titles.length > 1 ? '13' : '15') + 'px;font-weight:700;color:var(--text);line-height:1.25;' + (i ? 'margin-top:3px;' : '') + '">' + t + '</div>';
+    });
+    if(titles.length > 1) h += '<div style="font-size:10px;color:var(--text3);margin-top:4px;letter-spacing:1px;">' + titles.length + ' sessions</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  row.innerHTML = h;
+}
+
 function _renderTodayRemainingRow(bs, nextDay, weekDone){
   var row = document.getElementById('today-remaining-row');
   if(!row) return;
@@ -25525,6 +25624,99 @@ window.blabCalTodayEntry = function(){
   }
   return null;
 };
+// v4.9.161 — Today-card readers. blabCalTodayEntry (above) answers "which BLAB day
+// is today" for the existing single-session path; these answer the fuller question
+// Jon asked for: everything scheduled on a given date, customs included.
+
+// True once the athlete is actually using the calendar. When this is false the Today
+// card keeps its original sequential behaviour — scheduling nothing must not change
+// what an existing user sees.
+window.blabCalHasSchedule = function(){
+  var cal = window.blabCalGet();
+  var live = function(e){ return e && e.status !== 'completed' && e.status !== 'skipped'; };
+  return cal.sessions.some(live) || cal.customs.some(live);
+};
+
+// Every pending session on one date — BLAB first, then customs, in the order added.
+// Completed and skipped entries are excluded: they are history, not an agenda.
+window.blabCalSessionsOn = function(dateISO){
+  var cal = window.blabCalGet();
+  var out = [];
+  cal.sessions.forEach(function(s){
+    if(s.scheduledDate === dateISO && s.status !== 'completed' && s.status !== 'skipped') out.push(s);
+  });
+  cal.customs.forEach(function(c){
+    if(c.scheduledDate === dateISO && c.status !== 'completed' && c.status !== 'skipped'){
+      out.push({custom:true, id:c.id, cat:c.cat, libId:c.libId, label:c.label,
+                scheduledDate:c.scheduledDate, status:c.status});
+    }
+  });
+  return out;
+};
+
+window.blabCalTodaySessions = function(){
+  return window.blabCalSessionsOn(_blabCalTodayISO());
+};
+
+// The next `days` calendar days AFTER today that have something scheduled, each as
+// {dateISO, date, label, entries}. Scans a bounded window so an empty calendar cannot
+// spin. `label` is Tomorrow / weekday name.
+window.blabCalNextDays = function(days, scanLimit){
+  var want = days || 3;
+  var limit = scanLimit || 21;
+  var today = _blabCalToday();
+  var out = [];
+  for(var i = 1; i <= limit && out.length < want; i++){
+    var d = _blabCalAddDays(today, i);
+    var iso = _blabCalISO(d);
+    var entries = window.blabCalSessionsOn(iso);
+    if(!entries.length) continue;
+    out.push({
+      dateISO: iso,
+      date: d,
+      label: (i === 1) ? 'Tomorrow' : _BLAB_CAL_DAYS[(d.getDay()+6)%7],
+      entries: entries
+    });
+  }
+  return out;
+};
+
+// Display fields for one scheduled entry, BLAB or custom.
+window.blabCalEntryView = function(e){
+  if(!e) return null;
+  if(e.custom){
+    return {
+      eyebrow: String(e.cat || 'Session').toUpperCase(),
+      title:   e.label || String(e.cat || 'Session'),
+      sub:     'Added session',
+      onStart: e.libId ? ("openPhxSession('" + String(e.libId).replace(/'/g, "") + "')") : '',
+      blocked: false,
+      blockNote: ''
+    };
+  }
+  var labels = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
+  var blocked = false, note = '';
+  // 48h gate — Day 4 must not land within 48h of that week's Day 2.
+  if(e.blabDay === 4 && typeof window._blabCalDay2RefDate === 'function'){
+    var ref = window._blabCalDay2RefDate(e.blabWeek);
+    if(ref){
+      var t = _blabCalParse(e.scheduledDate) || _blabCalToday();
+      if(_blabCalDayDiff(t, ref) < 2){
+        blocked = true;
+        note = 'Day 4 requires 48hrs after lower body.';
+      }
+    }
+  }
+  return {
+    eyebrow: 'BLAB · Week ' + e.blabWeek + ' · Day ' + e.blabDay,
+    title:   labels[e.blabDay] || ('Day ' + e.blabDay),
+    sub:     'Built Like A Badass · DeFranco Protocol',
+    onStart: 'window.blabOpenSession(' + e.blabWeek + ',' + e.blabDay + ')',
+    blocked: blocked,
+    blockNote: note
+  };
+};
+
 // Upcoming scheduled BLAB sessions from today onward (for the Today tiles).
 window.blabCalUpcoming = function(limit){
   var cal = window.blabCalGet();

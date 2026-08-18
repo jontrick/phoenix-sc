@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.160'", 'version is 4.9.160');
+has("var APP_VERSION='4.9.161'", 'version is 4.9.161');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1134,6 +1134,22 @@ has('if(local.active !== true && cloud.active === true)', 'RESTORE: inactive loc
 // The pre-v4.9.158 rule: local won whenever it was active, regardless of stamps.
 hasNot("if(cloudDay > localDay){",           'RESTORE: old local-wins tiebreak removed');
 hasNot('blabRestoreFromCloud abort: local active and >= cloud', 'RESTORE: old local-wins log line removed');
+
+// ── Today card reads the calendar (v4.9.161) ────────────────────────────────
+// Jon device-tested the calendar: Today still showed the next sequential BLAB
+// session. Behaviour is covered by tests/training.mjs; these pin the wiring.
+console.log('\nToday card — calendar integration:');
+has('window.blabCalHasSchedule',   'TODAY: calendar-in-use check present');
+has('window.blabCalSessionsOn',    'TODAY: per-date session reader present');
+has('window.blabCalTodaySessions', 'TODAY: today reader present');
+has('window.blabCalNextDays',      'TODAY: next-days reader present');
+has('window.blabCalEntryView',     'TODAY: entry view helper present');
+has('function _blabRenderTodayFromCalendar', 'TODAY: calendar-driven card renderer');
+has('function _renderTodayNextDays',         'TODAY: dated coming-up row');
+has('if(_blabRenderTodayFromCalendar(_card, _inner, _week)) return;', 'TODAY: card branches to the calendar');
+has('window.blabCalHasSchedule()', 'TODAY: branch is gated on the calendar being in use');
+// The sequential fallback must survive for anyone who has not scheduled anything.
+has('_renderTodayRemainingRow(_bs, _nextDay, _weekDone)', 'TODAY: sequential path retained when calendar empty');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

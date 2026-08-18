@@ -189,4 +189,119 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(app.blabProgressScore({ week: 6, last_completed_day: 0 }) >
               app.blabProgressScore({ week: 5, last_completed_day: 4 }) - 1, 'week rollover does not go backwards');
   });
+
+  // ── Today card reads the calendar (v4.9.161) ──────────────────────────────
+  // Jon device-tested the calendar and found Today still showed the next
+  // sequential BLAB session. Three defects behind that: customs were ignored,
+  // only the first match was returned, and an unscheduled day fell through to a
+  // guess. These pin the readers the Today card is built on.
+
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const dayFromToday = (n) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return iso(d); };
+
+  const schedule = (cal) => {
+    reset();
+    signIn(UID);
+    seed(KEY, { ...AHEAD, _ts: NEWER });
+    seed(`blab_calendar_v1_${UID}`, cal);
+  };
+  const S = (w, d, date) => ({ blabWeek: w, blabDay: d, scheduledDate: date, status: 'pending' });
+  const C = (label, date) => ({ id: 'c1', cat: 'WOD', libId: 'titan-kronos', label, scheduledDate: date, status: 'pending' });
+
+  test("tomorrow's session does not surface as today's — the thing Jon asked to confirm", () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(1))], customs: [] });
+    assert.equal(app.blabCalTodaySessions().length, 0, 'nothing scheduled for today');
+    const next = app.blabCalNextDays(3);
+    assert.equal(next.length, 1, 'it shows up in the coming-up row instead');
+    assert.equal(next[0].label, 'Tomorrow', 'labelled Tomorrow');
+    assert.equal(next[0].entries[0].blabDay, 3, 'and it is the right session');
+  });
+
+  test("a session dated today does surface, so tomorrow it will be tomorrow's", () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [] });
+    const t = app.blabCalTodaySessions();
+    assert.equal(t.length, 1, 'today resolves by calendar date');
+    assert.equal(t[0].blabDay, 3, 'the scheduled day, not the sequential guess');
+  });
+
+  test('two sessions on one day both come back, in order', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] });
+    const t = app.blabCalTodaySessions();
+    assert.equal(t.length, 2, 'both sessions returned');
+    assert.equal(t[0].blabDay, 3, 'BLAB first');
+    assert.equal(t[1].custom, true, 'custom second');
+  });
+
+  test('a custom WOD scheduled today reaches the card — it used to be invisible', () => {
+    schedule({ sessions: [], customs: [C('Kronos', dayFromToday(0))] });
+    const t = app.blabCalTodaySessions();
+    assert.equal(t.length, 1, 'custom session surfaced');
+    const v = app.blabCalEntryView(t[0]);
+    assert.equal(v.title, 'Kronos', 'titled by the library session');
+    assert.ok(v.onStart.includes('openPhxSession'), 'and it can be started');
+  });
+
+  test('each session gets its own start action', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] });
+    const [a, b] = app.blabCalTodaySessions().map(app.blabCalEntryView);
+    assert.ok(a.onStart.includes('blabOpenSession(5,3)'), 'BLAB start targets W5 D3');
+    assert.ok(b.onStart.includes('openPhxSession'), 'custom start opens the library session');
+    assert.ok(a.onStart !== b.onStart, 'the two starts are distinct');
+  });
+
+  test('completed and skipped sessions drop off the agenda', () => {
+    schedule({
+      sessions: [{ ...S(5, 3, dayFromToday(0)), status: 'completed' },
+                 { ...S(5, 4, dayFromToday(0)), status: 'skipped' }],
+      customs: []
+    });
+    assert.equal(app.blabCalTodaySessions().length, 0, 'history is not an agenda');
+  });
+
+  test('coming-up skips empty days and stops at the number asked for', () => {
+    schedule({
+      sessions: [S(5, 1, dayFromToday(2)), S(5, 2, dayFromToday(5)), S(5, 3, dayFromToday(9)), S(5, 4, dayFromToday(12))],
+      customs: []
+    });
+    const next = app.blabCalNextDays(3);
+    assert.equal(next.length, 3, 'three days returned');
+    assert.equal(next[0].dateISO, dayFromToday(2), 'blank days between are skipped');
+    assert.equal(next[2].dateISO, dayFromToday(9), 'and it stops at three');
+  });
+
+  test('coming-up never includes today', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0)), S(5, 4, dayFromToday(3))], customs: [] });
+    const next = app.blabCalNextDays(3);
+    assert.equal(next.length, 1, "today's session is not repeated below the card");
+    assert.equal(next[0].dateISO, dayFromToday(3), 'only the future day listed');
+  });
+
+  test('the 48h gate still blocks a Day 4 scheduled too close to Day 2', () => {
+    schedule({ sessions: [S(5, 2, dayFromToday(0)), S(5, 4, dayFromToday(1))], customs: [] });
+    const v = app.blabCalEntryView(app.blabCalNextDays(3)[0].entries[0]);
+    assert.equal(v.blocked, true, 'Day 4 one day after Day 2 is blocked');
+    assert.ok(v.blockNote.includes('48hrs'), 'and says why');
+  });
+
+  test('a Day 4 clear of the 48h window is startable', () => {
+    schedule({ sessions: [S(5, 2, dayFromToday(0)), S(5, 4, dayFromToday(2))], customs: [] });
+    const v = app.blabCalEntryView(app.blabCalNextDays(3)[0].entries[0]);
+    assert.equal(v.blocked, false, 'two days later is fine');
+    assert.ok(v.onStart, 'and it has a start action');
+  });
+
+  test('an empty calendar leaves the old sequential Today card alone', () => {
+    schedule({ sessions: [], customs: [] });
+    assert.equal(app.blabCalHasSchedule(), false, 'no schedule in use');
+  });
+
+  test('a calendar holding only finished work also counts as not in use', () => {
+    schedule({ sessions: [{ ...S(5, 1, dayFromToday(-2)), status: 'completed' }], customs: [] });
+    assert.equal(app.blabCalHasSchedule(), false, 'finished history does not hijack the card');
+  });
+
+  test('one pending entry anywhere puts the calendar in charge', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(4))], customs: [] });
+    assert.equal(app.blabCalHasSchedule(), true, 'calendar takes over the Today card');
+  });
 }

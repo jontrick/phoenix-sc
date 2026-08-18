@@ -100,6 +100,8 @@ Worktree-session quirk (Training, 2026-08-18): the harness refuses compound shel
 - **Prove a new guard bites before trusting it**: revert or invert the fix, watch the assertion go red, restore, watch it go green. Say so in the PUSH-NOTICE. A guard that has never failed has not been tested.
 - **A sandbox that supplies the value under test cannot test it** (Nutrition, 2026-08-18): a stub that pre-sets the storage key let a fresh-install restore write to the `guest` key and pass every gate. In functional tests, `signIn(uid)`, seed the inputs, and let the code under test derive its own keys/paths.
 - Functional tests: `tests/<domain>.mjs`, one per domain, own sandbox each. Stage it with your push.
+- **Pinning "no new callers" of a deliberately-narrow function**: count INVOCATIONS with a regex (`/fnName\(\)/g`, expected exactly N), not bare-name occurrences — bare counts break on comments and `typeof` checks. Make the failure message name the wider replacement (Training, 2026-08-18: `blabCalTodayEntry`).
+- **Parked work**: if a small change must wait for a domain's next push, commit it to your `worktree-<domain>` branch and push the BRANCH (CLAUDE.md rule 2 — in-progress work is never local-only), with no APP_VERSION bump and a commit-message note that the next push must bump.
 
 ## RESTORE / MERGE RULES (Jon's rulings, 2026-08-18 — do not reopen without him)
 

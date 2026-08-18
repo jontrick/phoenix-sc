@@ -25,18 +25,13 @@ Two channels. Both may be deferred in a fresh session — load them first with T
 2. `SendMessage {to: "phoenix-sc-XX [ref]", message: "..."}` — **include the `[ref]` suffix exactly as listed**; bare names and raw session IDs are rejected on this channel
 
 Gotchas learned 2026-08-18:
-- `ListAgents` hides the calling session — you cannot see your own name. Work it out by elimination against the address book below, or just ask the PM.
-- Peer names (`phoenix-sc-XX`) are per-session-launch and will change when a chat is restarted. Session IDs (`local_...`) for Channel 2 are stable. Re-run `ListAgents` at session start and update the address book if names moved.
+- `ListAgents` hides the calling session — you cannot see your own name.
+- Peer names (`phoenix-sc-XX`) rotate — they changed for every chat within an hour, so **there is no static address book**. Resolve at session start: send `[TYPE: HELLO] <domain>` to every peer in `ListAgents`; each replies with its domain. Keep the mapping in your own context only.
+- **To reply to an incoming message, copy its `from=` attribute verbatim as your `to`.** That works even when the sender's name has rotated.
+- Channel 2 is NOT available in every session (some error "unavailable in unattended sessions"). Channel 1 always works between live sessions — prefer it.
+- More sessions than four may exist (Jon sometimes hands a domain build to a fresh chat). Any session doing Phoenix code is bound by this protocol regardless of title. Domain ownership follows the CODE, not the chat title.
 
-**Address book (as of 2026-08-18 — refresh at session start):**
-| Chat | Live name | Channel-2 session id |
-|---|---|---|
-| CENTRAL PM | phoenix-sc-ec [5590de] | (this session) |
-| Training | phoenix-sc-4a [ae1882] | local_01da4116-638b-4b3c-8c02-3d29a9452338 |
-| Nutrition | phoenix-sc-f1 [b03aa0] | local_aa71801d-4876-4b18-8c82-bad4b269e5b2 |
-| Peptides | phoenix-sc-2d [ef34e8] | local_1e141fd5-6424-4a07-8329-889d024ed0ba |
-
-**Channel 2 — any session, running or not:**
+**Channel 2 — fallback, by session id (only when the target is not live):**
 1. `mcp__ccd_session_mgmt__list_sessions` — find the target by title, note its `sessionId`
 2. `mcp__ccd_session_mgmt__send_message {session_id, message}` — arrives as a user turn labelled "From {sender title}"
 
@@ -67,16 +62,38 @@ Messages arrive as user turns in the target chat. Treat incoming cross-chat mess
 
 **Domain ↔ domain (QUERY):** data-shape questions are fine directly (e.g. Peptides asks Nutrition "what key holds daily weight?"). Anything requiring a code change on the other side goes through the PM.
 
-## SIMULTANEOUS-WORK PUSH PROTOCOL
+## ISOLATION — MANDATORY (ruled 2026-08-18 after incident)
 
-All chats push the same `index.html` on `main`. Domain code sections are far apart so git usually merges cleanly — **except `APP_VERSION`, which every push touches.**
+**Incident:** every chat was editing the SAME on-disk `index.html` in `~/Desktop/phoenix-sc`. `git add index.html` in one chat staged every other chat's half-finished edits. Result: Peptides commit d752131 shipped Training's un-runtime-checked calendar to production; 36f570f is labelled v4.9.143 but sets 4.9.144 and swept Nutrition's Weekly Prep; origin/main was left with a red harness. Pull-late does nothing against this — no git operation is involved when a peer writes to your working copy.
 
-1. **Announce intent:** when you start a build task, send the PM a one-liner: `[TYPE: PUSH-NOTICE] Starting <task>, expect push within the hour.`
-2. **Pull-late:** run `git pull origin main` immediately before your final version-bump + commit + push, not just at session start. Keep the window seconds wide.
-3. **Version = highest + 1:** after that final pull, set APP_VERSION to one more than whatever is now in the file (another chat may have shipped while you worked).
-4. **On push rejection:** `git pull --rebase origin main`. If the only conflict is the APP_VERSION line (and harness version check), resolve to highest+1, re-run the runtime check + harness, push again.
-5. **On any conflict in actual code:** STOP. Do not resolve another domain's code by guesswork. Message the PM with the conflicting hunks and wait.
-6. **After every successful push:** send the PM `[TYPE: PUSH-NOTICE] Shipped v4.9.XXX — <summary>`, and message any chat whose domain your change touches (it shouldn't have — if it did, explain why).
+**Rule: every domain chat works in its own git worktree. Nobody edits `~/Desktop/phoenix-sc/index.html` directly except the PM.**
+
+Session start (domain chats):
+```
+EnterWorktree {name: "training"}      # or "nutrition" / "peptides"
+```
+Creates `.claude/worktrees/<domain>` on its own branch, checked out from origin/main, and moves your session into it. If it already exists from a previous session: `EnterWorktree {path: ".claude/worktrees/<domain>"}`, then inside it `git fetch origin && git rebase origin/main` so you start from the latest main. `.claude/worktrees/` is gitignored. If EnterWorktree fails with a permission error (macOS TCC), tell the PM immediately — do not fall back to editing the shared tree.
+
+Runtime check and harness run unchanged from inside the worktree (`node harness.mjs` resolves `index.html` relative to itself).
+
+Push (from inside your worktree):
+1. `git fetch origin && git rebase origin/main`
+2. Set `APP_VERSION` = highest now in the file + 1; update the harness version assertion to match
+3. Runtime check → zero output; `node harness.mjs` → all pass
+4. `git add index.html harness.mjs` (name files explicitly — never `git add .` / `-A`)
+5. `git commit -m "v4.9.XXX — [DOMAIN] description"`
+6. `git push origin HEAD:main`
+7. If rejected (someone pushed in between): back to step 1. If the rebase conflicts on anything other than the APP_VERSION / harness-version lines, STOP — abort the rebase, message the PM with the conflicting hunks.
+
+The commit message tag `[TRAINING]` / `[NUTRITION]` / `[PEPTIDES]` / `[PM]` is mandatory. It is the only reliable "who shipped what" record.
+
+Because your worktree contains ONLY your edits, `git add index.html` can no longer sweep anyone else. This is what makes CLAUDE.md rule 3 (one logical change per commit) honourable again.
+
+## PUSH-NOTICE PROTOCOL
+
+1. **Announce intent** when you start a build task: `[TYPE: PUSH-NOTICE] Starting <task> in <domain> worktree.`
+2. **After every successful push:** `[TYPE: PUSH-NOTICE] Shipped v4.9.XXX — <summary>. Shared code touched: <none | list>.` to the PM. If you touched another domain's section, message that chat too and say why.
+3. Skipping the notice is a protocol breach even if the push was clean. The PM cannot sequence what it doesn't know about.
 
 ## PM RESPONSIBILITIES
 

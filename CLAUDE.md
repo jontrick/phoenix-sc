@@ -205,6 +205,12 @@ The overlay renderer system (`blabBuildExCard`, `blabLaunchExercise`, `blabRende
 
 ---
 
+## MULTI-CHAT WORK — READ COMMS_PROTOCOL.md
+
+Phoenix is built by several Claude chats at once (CENTRAL PM + Training + Nutrition + Peptides). `COMMS_PROTOCOL.md` in the repo root is binding for every session that touches Phoenix code, whatever the chat is called. Two rules from it that override anything else here:
+- **Domain chats work in their own git worktree** (`EnterWorktree {name:"<domain>"}` at session start). Never edit `~/Desktop/phoenix-sc/index.html` directly unless you are the PM — a shared working tree caused one chat's `git add` to ship another chat's unchecked code (2026-08-18).
+- **PUSH-NOTICE to the PM** before you start a build and after every push.
+
 ## HANDOFF DOCUMENT
 
 The full build spec lives at: `~/Desktop/phoenix-sc/HANDOFF_5.md`

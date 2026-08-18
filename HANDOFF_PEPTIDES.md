@@ -84,18 +84,20 @@ You may READ but must NOT restructure (PM coordinates schema changes):
 ## CROSS-CHAT COMMS
 
 Full protocol in `COMMS_PROTOCOL.md` — read it. Summary for you:
+- **FIRST: `EnterWorktree {name:"peptides"}`** (or `{path:".claude/worktrees/peptides"}` if it exists, then `git fetch origin && git rebase origin/main`). Never edit the shared Desktop tree — see COMMS_PROTOCOL.md § ISOLATION.
 - Load comms tools at session start via ToolSearch: `select:SendMessage,mcp__ccd_session_mgmt__list_sessions,mcp__ccd_session_mgmt__send_message`
 - Your address is `Phoenix App - Peptides`; the PM is `PHOENIX APP CENTRAL PM`
 - Send the PM a PUSH-NOTICE when you start a build task and after every push
-- Pull-late before the version bump; APP_VERSION = highest in file + 1
+- Push from the worktree: `git fetch origin && git rebase origin/main` → APP_VERSION = highest+1 → runtime check + harness → `git add index.html harness.mjs` → `git push origin HEAD:main`
 - Need weigh-in trend or training schedule? Send a QUERY to Nutrition / Training for data shape; any code change on their side goes through the PM
 - Escalate anything outside your domain to the PM; never resolve another domain's merge conflicts
 
 ## SESSION START RITUAL
 
 ```bash
-pwd                                   # must be ~/Desktop/phoenix-sc
-git pull origin main
+# (after EnterWorktree — pwd should be .../.claude/worktrees/peptides)
+pwd
+git fetch origin && git rebase origin/main
 grep "APP_VERSION" index.html | head -1
 git status                            # must be clean
 git log --oneline -5                  # see what other chats shipped

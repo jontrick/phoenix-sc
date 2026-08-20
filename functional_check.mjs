@@ -85,8 +85,11 @@ const assert = {
     if (s.includes(needle)) throw new Error(`${msg || 'should not contain'} — found ${fmt(needle)}`);
   },
   throws(fn, msg) {
-    let threw = false;
-    try { fn(); } catch { threw = true; }
+    let threw = false, r;
+    try { r = fn(); } catch { threw = true; }
+    // An async fn rejects rather than throwing; a silent pass here would be the same
+    // class of fake green the runner had (v4.9.177). Reject the usage instead.
+    if (r && typeof r.then === 'function') throw new Error('assert.throws does not support async functions — await the call inside a try/catch and assert on the caught error');
     if (!threw) throw new Error(msg || 'expected a throw, got none');
   },
 };
@@ -140,9 +143,16 @@ for (const file of files) {
   };
   const reset = () => app.localStorage.clear();
 
-  const test = (name, fn) => {
+  // v4.9.177: AWAIT the body. Previously `fn()` was called and never awaited, so an async
+  // test body was recorded as passing before a single assertion ran — an async test could
+  // not fail. Found by Training, 2026-08-18; it had silently faked a pass in tests/pm.mjs.
+  // Suites must therefore be awaited too (mod.default is already awaited below), and a
+  // test that returns a promise now blocks the next one, which is what we want for order.
+  const pending = [];
+  const test = (name, fn) => { const p = runOne(name, fn); pending.push(p); return p; };
+  const runOne = async (name, fn) => {
     try {
-      fn();
+      await fn();
       totalPass++;
       console.log(`  ${GREEN}✓${OFF} ${name}`);
     } catch (e) {
@@ -155,6 +165,9 @@ for (const file of files) {
 
   try {
     await mod.default({ test, assert, app, signIn, seed, read, reset });
+    // Domain files call test() without awaiting. Draining here makes the accounting
+    // guaranteed rather than dependent on the microtask queue happening to be empty.
+    await Promise.all(pending);
   } catch (e) {
     totalFail++;
     failures.push(`${domain}: suite threw outside a test — ${e.message}`);

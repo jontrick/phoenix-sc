@@ -47,6 +47,7 @@
 import { readdirSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { createSandbox, loadBlocks, runBlocks } from './runtime_check.mjs';
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
@@ -160,6 +161,52 @@ for (const file of files) {
     console.log(`  ${RED}✗${OFF} suite threw outside a test — ${e.message}`);
   }
 }
+
+// ── v4.9.174 [PM] dead-reference sweep — runs for every domain, no test file needed ──
+// The class that shipped .165 (_blabCalEntryView), .172 (openPhxSession) and the dead
+// custom-session-builder call: handler code emitted into a STRING, naming a function that
+// does not exist. runtime_check passes (never executes it), harness passes (the NAME is
+// present), and functional tests pass when they call the helper instead of the renderer.
+// So: find string literals that look like a call to an app-convention function, and check
+// the loaded app actually has it.
+{
+  process.stdout.write('\ndead-reference sweep\n');
+  const srcHtml = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const probe = createSandbox();
+  const mute = () => {};
+  probe.console = { log:mute, warn:mute, error:mute, info:mute, debug:mute, trace:mute, table:mute, group:mute, groupEnd:mute, time:mute, timeEnd:mute, assert:mute, dir:mute };
+  const loaded = await runBlocks(probe, loadBlocks(), { quiet: true });
+  if (loaded.failed) {
+    totalFail++; failures.push('dead-reference sweep: app did not load — run runtime_check.mjs');
+    console.log(`  ${RED}\u2717${OFF} app did not load — run runtime_check.mjs first`);
+  } else {
+    const CONV = /^(_?(blab|pep|nut|phx|fq)|_phx|open|close|render|show|start|submit|save|toggle|pick|adjust|add)/i;
+    const strRe = /(["'])((?:\\.|(?!\1)[^\\\n])*)\1/g;
+    const dead = new Map();
+    let m;
+    while ((m = strRe.exec(srcHtml))) {
+      const lit = m[2];
+      const callRe = /(?:^|[^.\w$])([A-Za-z_$][\w$]*)\(/g;
+      let c;
+      while ((c = callRe.exec(lit))) {
+        const n = c[1];
+        if (!CONV.test(n) || typeof probe[n] === 'function') continue;
+        if (!dead.has(n)) dead.set(n, html_line(srcHtml, m.index));
+      }
+    }
+    if (dead.size) {
+      totalFail += dead.size;
+      for (const [n, line] of dead) {
+        failures.push(`dead reference: ${n}() at index.html:${line} — named in a string, never defined`);
+        console.log(`  ${RED}\u2717${OFF} ${n}() index.html:${line} — named in a string, no such function`);
+      }
+    } else {
+      totalPass++;
+      console.log(`  ${GREEN}\u2713${OFF} every app-function named inside a string literal exists`);
+    }
+  }
+}
+function html_line(src, idx) { return src.slice(0, idx).split('\n').length; }
 
 console.log('');
 if (totalFail) {

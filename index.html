@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.174';
+var APP_VERSION='4.9.175';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7597,6 +7597,54 @@ function _phxRecordWriteError(context, err, payload){
     localStorage.setItem('phx_write_errors', JSON.stringify(ring));
   } catch(_e){}
 }
+// ====== v4.9.175 SHARED DOM CONFIRM (PM-owned) ======
+// CLAUDE.md rule 4: native confirm() is SUPPRESSED in the iOS PWA — and a suppressed
+// confirm returns FALSE, so `if(!confirm(x)) return;` always returns and the feature is
+// DEAD, not merely silent. That is why Reset My Programme has never worked on Jon's phone
+// (found by Training, 2026-08-18, while converting its own dialogs).
+// Promise-returning so an async caller keeps its guard shape exactly:
+//   if(!(await _phxConfirm('Title','Message'))) return;
+// Resolves true only on an explicit Yes. Backdrop click / Cancel resolve false.
+window._phxConfirm = function(title, message, yesLabel, danger){
+  return new Promise(function(resolve){
+    try {
+      var old = document.getElementById('phx-confirm'); if(old) old.remove();
+      var done = false;
+      var finish = function(v){ if(done) return; done = true; try { ov.remove(); } catch(_e){} resolve(!!v); };
+      var ov = document.createElement('div');
+      ov.id = 'phx-confirm';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9900;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:380px;width:100%;box-sizing:border-box;';
+      var h = document.createElement('div');
+      h.style.cssText = 'font-family:var(--font-d);font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:' + (danger ? '#FF6B6B' : 'var(--gold)') + ';margin-bottom:12px;';
+      h.textContent = title || 'Confirm';
+      box.appendChild(h);
+      if(message){
+        var p = document.createElement('div');
+        p.style.cssText = 'font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;';
+        p.textContent = String(message);
+        box.appendChild(p);
+      }
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:10px;';
+      var cancel = document.createElement('button');
+      cancel.textContent = 'Cancel';
+      cancel.style.cssText = 'flex:1;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;';
+      cancel.addEventListener('click', function(){ finish(false); });
+      var yes = document.createElement('button');
+      yes.textContent = yesLabel || 'Continue';
+      yes.style.cssText = 'flex:1;padding:14px;background:' + (danger ? '#FF6B6B' : 'var(--gold)') + ';border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;';
+      yes.addEventListener('click', function(){ finish(true); });
+      row.appendChild(cancel); row.appendChild(yes);
+      box.appendChild(row);
+      ov.appendChild(box);
+      ov.addEventListener('click', function(e){ if(e.target === ov) finish(false); });
+      document.body.appendChild(ov);
+    } catch(_e){ resolve(false); }
+  });
+};
+
 // ====== v4.9.168 SHARED LOCAL DATE KEY (PM-owned) ======
 // Canonical YYYY-MM-DD for the athlete's LOCAL calendar day. Never use
 // `toISOString().slice(0,10)` / `.split('T')[0]` as a day key — that is UTC, and Jon
@@ -8423,7 +8471,7 @@ function _phxCloseResetModal(e){
 // profile row in sync so a future reload doesn't re-hydrate the completed flag from there.
 async function _phxResetUpdateGoals(){
   if(!athlete){ alert('No profile loaded yet — try again in a moment.'); return; }
-  if(!confirm('Update your goals or schedule? Your coach will rebuild your plan using your latest answers. Training history is kept.')) return;
+  if(!(await _phxConfirm('Update Goals', 'Update your goals or schedule? Your coach will rebuild your plan using your latest answers. Training history is kept.', 'Update'))) return;
   console.log('[PHX] reset: update_goals_schedule');
   _phxCloseResetModal();
   // Clear the completion flags BEFORE anything else. False (not null) on fqCompleted so
@@ -8572,7 +8620,7 @@ function _phxPrefillFqAnswersFromAthlete(a){
 // Clear fqCompleted / aiProgramme / every fq* answer from the live athlete + Supabase
 // profiles row, then route into a blank questionnaire. Training history is untouched.
 async function _phxResetFreshStart(){
-  if(!confirm('Wipe your current plan and start fresh? Your training history (sessions, set logs, weigh-ins, streaks) is kept.')) return;
+  if(!(await _phxConfirm('Fresh Start', 'Wipe your current plan and start fresh? Your training history (sessions, set logs, weigh-ins, streaks) is kept.', 'Fresh Start', true))) return;
   console.log('[PHX] reset: fresh_start');
   _phxCloseResetModal();
   // Build a stripped athlete object — keep account-linked identity (theme/font/tier/bands)
@@ -8617,8 +8665,8 @@ async function _phxResetFreshStart(){
 // errors or throws, alert the user and bail out — do NOT reload (that would leave the user
 // in a half-reset state where local storage is wiped but the Supabase row is intact).
 async function _phxResetFullReset(){
-  if(!confirm('Full Reset — start completely from scratch?')) return;
-  if(!confirm('Are you sure? This will clear your current programme and all your settings. Your training history is kept so your coach still has your foundation.')) return;
+  if(!(await _phxConfirm('Full Reset', 'Start completely from scratch?', 'Full Reset', true))) return;
+  if(!(await _phxConfirm('Confirm Full Reset', 'This clears your current programme and all your settings. Training history is kept so your coach can rebuild.', 'Yes, Reset', true))) return;
   console.log('[PHX] reset: full_reset');
   _phxCloseResetModal();
   var uid = currentSession && currentSession.user && currentSession.user.id;
@@ -31242,8 +31290,8 @@ window._phxAddSuperset = function(originalName){
   });
 };
 
-window._phxResetCustomisations = function(){
-  if(!confirm('Reset this session to the coach plan? Your swaps and supersets will be removed.')) return;
+window._phxResetCustomisations = async function(){
+  if(!(await _phxConfirm('Reset Session', 'Reset this session to the coach plan? Your swaps and supersets will be removed.', 'Reset'))) return;
   var sess = window._todaySession;
   if(!sess) return;
   var weekN = (athlete && athlete.currentWeek) || (typeof progWeek==='function' ? progWeek() : 1);

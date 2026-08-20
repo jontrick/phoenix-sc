@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.171'", 'version is 4.9.171');
+has("var APP_VERSION='4.9.172'", 'version is 4.9.172');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1353,6 +1353,33 @@ hasNot("if(logs.some(function(l){return l.date.split('T')[0]===dateStr;}))",    
   else bad(`DAYKEY: ${n} walk writers persist a full instant, expected exactly 3. ` +
            `Converting one to a day key loses the time the read-time conversion depends on, ` +
            `and silently corrupts the streak for that entry point.`);
+})();
+
+// ── Start actions and visible failures (v4.9.171) ───────────────────────────
+console.log('\nSession start:');
+has("_phxStartSession('", 'START: custom sessions start via the real _phxStartSession');
+has('function _phxStartSession', 'START: and that function exists');
+has('function _blabSessionOpenFailed', 'START: a failed open has a visible surface');
+has("_phxRecordWriteError('blabOpenSession'", 'START: failures reach Diagnostic');
+// Both checks below run on CODE, not prose. A plain match counted the explanatory
+// comments that describe what was removed and reported the bug as still present —
+// the same guard-population mistake as the underscore-stripping sweep and the
+// 15-site writer count. A guard that measures the wrong text is worse than none.
+const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+const codeOnly = stripComments(html);
+(() => {
+  const n = (codeOnly.match(/openPhxSession\s*\(/g) || []).length;
+  if (n === 0) ok('START: the non-existent openPhxSession is never called');
+  else bad(`START: openPhxSession is still called ${n}× in code. It has never been defined; the call becomes a dead onclick.`);
+})();
+// alert() is banned (CLAUDE.md rule 4) — iOS PWA suppresses it, so a failure that
+// ends in alert() is indistinguishable from a dead button. blabOpenSession had two.
+(() => {
+  const fn = codeOnly.slice(codeOnly.indexOf('window.blabOpenSession = function'));
+  const body = fn.slice(0, fn.indexOf('\n};'));
+  const n = (body.match(/\balert\s*\(/g) || []).length;
+  if (n === 0) ok('START: blabOpenSession has no suppressed native dialogs');
+  else bad(`START: blabOpenSession still calls alert() ${n}× in code. iOS PWA suppresses it, so the tap looks dead. Use _blabSessionOpenFailed.`);
 })();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);

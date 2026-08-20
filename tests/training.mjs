@@ -238,14 +238,17 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(t.length, 1, 'custom session surfaced');
     const v = app.blabCalEntryView(t[0]);
     assert.equal(v.title, 'Kronos', 'titled by the library session');
-    assert.ok(v.onStart.includes('openPhxSession'), 'and it can be started');
+    // Was: includes('openPhxSession') — a name that has never existed. This test was
+    // green for six versions while the button was dead. Presence of a name proves
+    // nothing; the handler-resolution cases below assert the name RESOLVES.
+    assert.ok(v.onStart.includes('_phxStartSession'), 'and it can be started');
   });
 
   test('each session gets its own start action', () => {
     schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] });
     const [a, b] = app.blabCalTodaySessions().map(app.blabCalEntryView);
     assert.ok(a.onStart.includes('blabOpenSession(5,3)'), 'BLAB start targets W5 D3');
-    assert.ok(b.onStart.includes('openPhxSession'), 'custom start opens the library session');
+    assert.ok(b.onStart.includes('_phxStartSession'), 'custom start opens the library session');
     assert.ok(a.onStart !== b.onStart, 'the two starts are distinct');
   });
 
@@ -544,7 +547,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._blabRenderTodayFromCalendar(card, inner, 5);
     assert.ok(inner.innerHTML.includes('2 Sessions'), 'card says there are two');
     assert.ok(inner.innerHTML.includes('blabOpenSession(5,3)'), 'BLAB start present');
-    assert.ok(inner.innerHTML.includes('openPhxSession'), 'custom start present');
+    assert.ok(inner.innerHTML.includes('_phxStartSession'), 'custom start present');
     assert.equal(card._attrs.onclick, undefined, 'no whole-card tap when it is ambiguous');
   });
 
@@ -757,5 +760,77 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
     assert.equal(both.set, both.cal, 'set log and calendar agree on which day it is');
     assert.equal(both.cal, '2026-08-20', 'and both say the local day');
+  });
+
+  // ── Emitted click handlers must name real functions (v4.9.171) ────────────
+  // Jon: "the chosen session came up on the today screen but didnt load when
+  // tried to enter it". blabCalEntryView emitted `openPhxSession('id')` into the
+  // Start onclick. openPhxSession has never existed anywhere in the app, so every
+  // scheduled WOD/Core had a Start button that threw inside the inline handler and
+  // did nothing. The real function is _phxStartSession(id).
+  //
+  // This is the third instance of the same class (_blabCalEntryView in .165,
+  // _phxShowCustomSessionBuilder in .165). A name inside a function body — or worse,
+  // inside a STRING that later becomes an onclick — is invisible to runtime_check.
+  // So rather than pin this one name, resolve whatever the code emits.
+
+  const fnNameOf = (onStart) => {
+    const m = /^([A-Za-z_$][\w$.]*)\s*\(/.exec(String(onStart || '').trim());
+    return m ? m[1] : null;
+  };
+  const resolve = (name) => name.split('.').reduce((o, k) => (o == null ? o : o[k]), app);
+
+  test('a scheduled WOD emits a Start handler that actually exists', () => {
+    schedule({ sessions: [], customs: [C('Kronos', dayFromToday(0))] });
+    const view = app.blabCalEntryView(app.blabCalTodaySessions()[0]);
+    const name = fnNameOf(view.onStart);
+    assert.ok(name, `a start handler was emitted, got: ${view.onStart}`);
+    assert.equal(typeof resolve(name), 'function', `${name}() must exist — it becomes an onclick`);
+  });
+
+  test('a scheduled BLAB day emits a Start handler that actually exists', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [] });
+    const view = app.blabCalEntryView(app.blabCalTodaySessions()[0]);
+    const name = fnNameOf(view.onStart);
+    assert.ok(name, `a start handler was emitted, got: ${view.onStart}`);
+    assert.equal(typeof resolve(name), 'function', `${name}() must exist — it becomes an onclick`);
+  });
+
+  test('every handler the Today card renders resolves to a real function', () => {
+    // Sweeps the rendered HTML rather than the view objects, so anything wired into
+    // an onclick anywhere on the card is covered — not just the Start actions.
+    const stubEl = () => ({ style: {}, innerHTML: '', _attrs: {}, setAttribute(k, v) { this._attrs[k] = v; }, removeAttribute(k) { delete this._attrs[k]; }, querySelector: () => null });
+    const cases = [
+      { sessions: [S(5, 3, dayFromToday(0))], customs: [] },
+      { sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] },
+      { sessions: [], customs: [REST(dayFromToday(0))] },
+      { sessions: [S(5, 4, dayFromToday(6))], customs: [] }
+    ];
+    cases.forEach((c, idx) => {
+      schedule(c);
+      const card = stubEl(), inner = stubEl();
+      app._blabRenderTodayFromCalendar(card, inner, 5);
+      const html = inner.innerHTML + ' ' + (card._attrs.onclick || '');
+      const names = [...html.matchAll(/onclick="[^"]*?(?:event\.stopPropagation\(\);)?\s*([A-Za-z_$][\w$.]*)\s*\(/g)]
+        .map((m) => m[1])
+        .filter((n) => n !== 'event');
+      // No minimum: a planned rest day legitimately wires nothing, because there is
+      // nothing to start. The assertion is that whatever IS wired resolves.
+      names.forEach((n) => {
+        assert.equal(typeof resolve(n), 'function', `branch ${idx}: ${n}() is wired to a click but does not exist`);
+      });
+    });
+  });
+
+  test('a session that cannot open reports it instead of doing nothing', () => {
+    // The failure paths used to end in alert(), which iOS PWA suppresses — a real
+    // error looked exactly like a dead button. Now recorded for Diagnostic.
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 5, last_completed_day: 2 });   // no maxes -> no session data
+    app.blabOpenSession(5, 3);
+    const rec = read('phx_last_write_error');
+    assert.ok(rec, 'the failure was recorded');
+    assert.equal(rec.context, 'blabOpenSession', 'under the session-open context');
   });
 }

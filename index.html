@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.171';
+var APP_VERSION='4.9.172';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4010,9 +4010,40 @@ window._phxDevForceSaveToSupabase = async function(){
 // BLAB SESSION SCREEN + RENDERERS
 // ============================================================
 
+// v4.9.171 — a session that will not open must SAY so. Every path here used to end
+// in alert(), which iOS suppresses, so Jon saw a Start button that did nothing and
+// had no way to report what went wrong. Toast for the moment, Diagnostic for later.
+function _blabSessionOpenFailed(what, err, week, day){
+  try { console.error('[PHX] session open failed:', what, err); } catch(_c){}
+  try {
+    if(typeof _phxRecordWriteError === 'function'){
+      _phxRecordWriteError('blabOpenSession', err || new Error(what), {week: week, day: day});
+    }
+  } catch(_r){}
+  try {
+    if(typeof window._blabCalToast === 'function'){
+      window._blabCalToast(what + ' — see Settings, Diagnostic', 'error');
+      return;
+    }
+  } catch(_t){}
+  // Last resort only if the toast itself is unavailable: paint it onto the card.
+  try {
+    var c = document.getElementById('card-today-session');
+    var i = c && c.querySelector('.game-card-inner');
+    if(i) i.insertAdjacentHTML('beforeend',
+      '<div style="margin-top:10px;font-size:12px;color:var(--orange);line-height:1.5;">' + what + '</div>');
+  } catch(_p){}
+}
+
 window.blabOpenSession = function(week, day){
   var sess = window.blabGetSessionData(week, day);
-  if(!sess){ alert('Session data not available yet.'); return; }
+  if(!sess){
+    // v4.9.171: was alert(), which iOS PWA suppresses silently — the tap simply did
+    // nothing and there was no way to tell a real failure from a dead button.
+    _blabSessionOpenFailed('No session data for Week ' + week + ' Day ' + day,
+      new Error('blabGetSessionData returned null'), week, day);
+    return;
+  }
   window._blabCurrentSession = {week:week, day:day, data:sess};
   // Translate BLAB session into Phoenix session format and use the existing renderer
   var phoenixSess = window.blabToPhoenixSession(sess, week, day);
@@ -4027,7 +4058,7 @@ window.blabOpenSession = function(week, day){
       openTodaySession();
     } catch(e){
       console.error('[PHX] blabOpenSession → openTodaySession threw for W'+week+'D'+day+':', e);
-      alert('Could not open the session: '+(e && e.message ? e.message : e));
+      _blabSessionOpenFailed('Could not open Week ' + week + ' Day ' + day, e, week, day);
     }
     return;
   }
@@ -26150,7 +26181,9 @@ window.blabCalEntryView = function(e){
       eyebrow: String(e.cat || 'Session').toUpperCase(),
       title:   e.label || String(e.cat || 'Session'),
       sub:     'Added session',
-      onStart: e.libId ? ("openPhxSession('" + String(e.libId).replace(/'/g, "") + "')") : '',
+      // v4.9.171: was openPhxSession(...), which is not defined anywhere in the app.
+    // This string becomes an onclick, so every scheduled WOD/Core had a dead Start.
+    onStart: e.libId ? ("_phxStartSession('" + String(e.libId).replace(/'/g, "") + "')") : '',
       blocked: false,
       blockNote: ''
     };
@@ -26614,7 +26647,7 @@ window._blabCalEntryTap = function(entryId){
     onSelect: function(v){
       if(v === 'start'){
         if(isBlab && typeof window.blabOpenSession === 'function') window.blabOpenSession(entry.blabWeek, entry.blabDay);
-        else if(entry.libId && typeof openPhxSession === 'function') openPhxSession(entry.libId);
+        else if(entry.libId && typeof _phxStartSession === 'function') _phxStartSession(entry.libId);
       }
       else if(v === 'preview'){ if(typeof window.blabOpenAuditDay === 'function') window.blabOpenAuditDay(entry.blabWeek, entry.blabDay, false); }
       else if(v === 'move'){ window._blabCalOpenMoveSheet(entryId); }

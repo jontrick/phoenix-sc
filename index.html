@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.172';
+var APP_VERSION='4.9.173';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18286,7 +18286,7 @@ function nutRenderScreen(){
   // Meal builder data-attribute wiring
   body.querySelectorAll('[data-nut-pick]').forEach(function(btn){
     var parts = btn.getAttribute('data-nut-pick').split('|');
-    btn.addEventListener('click', function(){ nutOpenFoodPicker(parts[0], parts[1]); });
+    btn.addEventListener('click', function(){ nutOpenFoodPicker(parts[0], parts[1], 'log'); });
   });
   body.querySelectorAll('[data-nut-rm]').forEach(function(btn){
     var parts = btn.getAttribute('data-nut-rm').split('|');
@@ -18812,7 +18812,7 @@ function _nutSetupInput(id, label, unit, val){
 // ═══════════════════════════════════════════════════════════════════════
 
 var _nutMealDate     = null;
-var _nutPickerMode   = 'log';   // 'log' = eating it now | 'plan' = filling a future slot
+var _nutPickerMode   = 'plan';  // 'log' = eating it now | 'plan' = filling a slot (safe default)
 var _nutPickerSlot   = null;
 var _nutPickerDate   = null;
 var _nutPickerCat    = 'all';
@@ -18991,7 +18991,9 @@ function _nutSuppSection(dayData, dateKey){
 }
 
 function nutOpenFoodPicker(slot, dateKey, mode){
-  _nutPickerMode = (mode === 'plan') ? 'plan' : 'log';
+  // v4.9.172: 'log' must be asked for. Omitting the mode plans, which is the
+  // harmless outcome; the ticking path is never what you get by forgetting.
+  _nutPickerMode = (mode === 'log') ? 'log' : 'plan';
   _nutPickerSlot   = slot;
   _nutPickerDate   = dateKey;
   _nutPickerCat    = 'all';

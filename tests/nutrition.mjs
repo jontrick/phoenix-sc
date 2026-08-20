@@ -537,6 +537,22 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(day.eaten || {}, {}, 'nutAddComponent is a pure write');
   });
 
+  // The same principle as the writer split, one level up: a caller who opens the
+  // picker without saying which mode it is in must not get the ticking path.
+  test('opening the picker without a mode plans rather than logs', () => {
+    setUp(90);
+    const d = dom();
+    app.nutOpenFoodPicker('lunch', app._nutToday());     // no mode given
+    assert.equal(app._nutPickerMode, 'plan', 'omission is the safe path');
+  });
+
+  test('the daily builder still logs — it asks for it explicitly', () => {
+    setUp(90);
+    const d = dom();
+    app.nutOpenFoodPicker('lunch', app._nutToday(), 'log');
+    assert.equal(app._nutPickerMode, 'log', 'logging is available when stated');
+  });
+
   test('the week planner offers both a food and a recipe control per slot', () => {
     setUp(90);
     app.nutSaveRecipes([rec('Sauce')]);

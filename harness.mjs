@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.172'", 'version is 4.9.172');
+has("var APP_VERSION='4.9.173'", 'version is 4.9.173');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -385,6 +385,8 @@ has('function nutLogComponent(', 'TICK: logging (add + tick) is its own named wr
 hasNot('  _nutEnsureEaten(day)[slot] = true;', 'TICK: the tick no longer hides inside nutAddComponent');
 has("if(dateKey !== _nutToday()) return;", 'TICK: a future day is never marked eaten');
 has("var _nutPickerMode", 'PLAN: picker carries log-vs-plan mode');
+has("_nutPickerMode = (mode === 'log') ? 'log' : 'plan';", 'PLAN: omitting the mode plans — logging must be asked for');
+has("nutOpenFoodPicker(parts[0], parts[1], 'log')", 'PLAN: the daily builder states its logging intent');
 has('data-nut-plan-food', 'PLAN: + Food control rendered on planner slots');
 has("nutOpenFoodPicker(parts[0], parts[1], 'plan')", 'PLAN: planner adds open the picker in plan mode');
 has('data-fp-new-recipe', 'PLAN: build-new-recipe offered in the food picker');

@@ -1384,5 +1384,18 @@ const codeOnly = stripComments(html);
   else bad(`START: blabOpenSession still calls alert() ${n}× in code. iOS PWA suppresses it, so the tap looks dead. Use _blabSessionOpenFailed.`);
 })();
 
+// ── v4.9.174 [PM] native-dialog ratchet (CLAUDE.md rule 4) ──────────────────────
+// alert()/confirm()/prompt() are silently suppressed in the iOS PWA: a failure shows
+// the user NOTHING. That is how .172's dead Start button reached Jon with no clue —
+// blabOpenSession reported via alert(). 101 calls remain as of v4.9.173; each domain
+// converts its own to DOM modals over time. This ratchet only has to never go UP.
+{
+  const NATIVE_DIALOG_CAP = 101;
+  const n = (html.match(/(?:^|[^.\w])(?:alert|confirm|prompt)\(/g) || []).length;
+  if (n > NATIVE_DIALOG_CAP) bad(`RULE 4: native dialogs grew to ${n} (cap ${NATIVE_DIALOG_CAP}) — use a DOM modal, iOS suppresses these silently`);
+  else if (n < NATIVE_DIALOG_CAP) ok(`RULE 4: native dialogs down to ${n} (cap ${NATIVE_DIALOG_CAP}) — lower the cap in harness.mjs`);
+  else ok(`RULE 4: native dialogs held at ${n}, not growing`);
+}
+
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

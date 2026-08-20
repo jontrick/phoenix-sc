@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.173';
+var APP_VERSION='4.9.174';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4011,7 +4011,7 @@ window._phxDevForceSaveToSupabase = async function(){
 // ============================================================
 
 // v4.9.171 — a session that will not open must SAY so. Every path here used to end
-// in alert(), which iOS suppresses, so Jon saw a Start button that did nothing and
+// in a native alert, which iOS suppresses, so Jon saw a Start button that did nothing and
 // had no way to report what went wrong. Toast for the moment, Diagnostic for later.
 function _blabSessionOpenFailed(what, err, week, day){
   try { console.error('[PHX] session open failed:', what, err); } catch(_c){}
@@ -4035,10 +4035,76 @@ function _blabSessionOpenFailed(what, err, week, day){
   } catch(_p){}
 }
 
+// v4.9.174 — DOM replacements for the native dialogs in the BLAB session paths.
+// Native alert and confirm are suppressed outright in the iOS PWA (CLAUDE.md rule 4), so
+// every one of these was showing Jon nothing mid-session at 4:30am. Modelled on the
+// #phx-complete-confirm pattern.
+
+// Informational result — "Rounds: 12, new best". Dismissible, no decision to make.
+window._blabNotice = function(title, lines){
+  try {
+    var old = document.getElementById('blab-notice'); if(old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'blab-notice';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9850;display:flex;align-items:center;justify-content:center;padding:24px;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:360px;width:100%;text-align:center;';
+    var h = document.createElement('div');
+    h.style.cssText = 'font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--gold);margin-bottom:12px;';
+    h.textContent = title || 'Logged';
+    box.appendChild(h);
+    (Array.isArray(lines) ? lines : [lines]).forEach(function(t){
+      if(t === undefined || t === null || t === '') return;
+      var p = document.createElement('div');
+      p.style.cssText = 'font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:4px;';
+      p.textContent = String(t);
+      box.appendChild(p);
+    });
+    var btn = document.createElement('button');
+    btn.textContent = 'OK';
+    btn.style.cssText = 'width:100%;margin-top:18px;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;';
+    btn.addEventListener('click', function(){ ov.remove(); });
+    box.appendChild(btn);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  } catch(_e){ console.warn('[PHX] _blabNotice failed:', _e); }
+};
+
+// A real decision. onYes runs only on confirm; dismissing does nothing, which is the
+// safe default — note a suppressed native confirm returns FALSE, so every
+// confirm-gated action was already unreachable on Jon's phone.
+window._blabConfirm = function(title, message, onYes, yesLabel){
+  try {
+    var old = document.getElementById('blab-confirm'); if(old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'blab-confirm';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9850;display:flex;align-items:center;justify-content:center;padding:24px;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:360px;width:100%;text-align:center;';
+    var h = document.createElement('div');
+    h.style.cssText = 'font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;';
+    h.textContent = title || 'Confirm';
+    var s = document.createElement('div');
+    s.style.cssText = 'font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.5;';
+    s.textContent = message || '';
+    var yes = document.createElement('button');
+    yes.textContent = yesLabel || 'Continue';
+    yes.style.cssText = 'width:100%;padding:16px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-bottom:10px;';
+    yes.addEventListener('click', function(){ ov.remove(); try { if(typeof onYes === 'function') onYes(); } catch(_y){ console.warn('[PHX] confirm action failed:', _y); } });
+    var no = document.createElement('button');
+    no.textContent = 'Cancel';
+    no.style.cssText = 'width:100%;padding:14px;background:transparent;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--text2);cursor:pointer;';
+    no.addEventListener('click', function(){ ov.remove(); });
+    box.appendChild(h); box.appendChild(s); box.appendChild(yes); box.appendChild(no);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  } catch(_e){ console.warn('[PHX] _blabConfirm failed:', _e); }
+};
+
 window.blabOpenSession = function(week, day){
   var sess = window.blabGetSessionData(week, day);
   if(!sess){
-    // v4.9.171: was alert(), which iOS PWA suppresses silently — the tap simply did
+    // v4.9.171: was a native alert, which iOS PWA suppresses silently — the tap simply did
     // nothing and there was no way to tell a real failure from a dead button.
     _blabSessionOpenFailed('No session data for Week ' + week + ' Day ' + day,
       new Error('blabGetSessionData returned null'), week, day);
@@ -5053,7 +5119,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
     var st = window['_blabSSState_'+i];
     var ka = parseFloat(document.getElementById('bss-ka-'+i)&&document.getElementById('bss-ka-'+i).value)||0;
     var ra = parseInt(document.getElementById('bss-ra-'+i)&&document.getElementById('bss-ra-'+i).value)||0;
-    if(ra<=0){ alert('Enter reps for A.'); return; }
+    if(ra<=0){ window._blabCalToast('Enter reps for A', 'error'); return; }
     st.loadA=ka; st.aReps=ra; st.aOk=true;
     window['_blabSSrender_'+i]();
   };
@@ -5063,7 +5129,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
     var ex2 = (window._blabPhxExercises||[])[i] || {};
     var kb = parseFloat(document.getElementById('bss-kb-'+i)&&document.getElementById('bss-kb-'+i).value)||0;
     var rb = parseInt(document.getElementById('bss-rb-'+i)&&document.getElementById('bss-rb-'+i).value)||0;
-    if(rb<=0){ alert('Enter reps for B.'); return; }
+    if(rb<=0){ window._blabCalToast('Enter reps for B', 'error'); return; }
     st.loadB=kb; st.bReps=rb; st.bOk=true;
     st.log.push({a:st.aReps,ka:st.loadA,b:rb,kb:kb});
     st.set++;
@@ -5677,7 +5743,7 @@ window._blabWoDone=function(){
       } else {
         lines.push('First time logged — this is your benchmark.');
       }
-      alert(st.ex.name+'\n\n'+lines.join('\n'));
+      window._blabNotice(st.ex.name, lines);
     }
   }
   var overlay=document.getElementById('blab-workout-overlay');
@@ -5737,7 +5803,7 @@ window._blabTrLog=function(){
   if(!st.trSets) st.trSets=[];
   st.trSets.push(r); st.trTotal=(st.trTotal||0)+r;
   if(inp) inp.value='';
-  if(st.ex.chin_test&&st.trSets.length===1){var bs=window.blabGetState();if(bs){bs.chin_max=r;bs.chin_established=true;window.blabSaveState(bs);alert('Chin-up max: '+r+' reps. All future targets calculated.');}}
+  if(st.ex.chin_test&&st.trSets.length===1){var bs=window.blabGetState();if(bs){bs.chin_max=r;bs.chin_established=true;window.blabSaveState(bs);window._blabNotice('Chin-Up Max Set', [r+' reps', 'All future targets now calculated from this']);}}
   window._blabWoRender();
 };
 
@@ -5870,7 +5936,7 @@ window._blabRunDone=function(){
     window.blabSaveState(bs);
     var msg='1.6km time: '+blabFmt(t);
     if(prev) msg+=prev>t?'\nNew PB! Previous: '+blabFmt(prev):'\nPrevious best: '+blabFmt(prev);
-    alert(msg);
+    window._blabNotice('1.6km Run', msg.split('\n'));
   }
   window._blabWoDone();
 };
@@ -5895,7 +5961,7 @@ window._blabSteadyDone=function(){
     if(!bs.records) bs.records={};
     bs.records['steady_state']=t;
     window.blabSaveState(bs);
-    alert('Steady-state cardio: '+blabFmt(t)+' logged.');
+    window._blabNotice('Cardio Logged', ['Steady-state: '+blabFmt(t)]);
   }
   window._blabWoDone();
 };
@@ -5929,7 +5995,7 @@ window._blabTabataDone=function(){
     var prev=bs.records['tabata_rounds']||0;
     if(r>prev) bs.records['tabata_rounds']=r;
     window.blabSaveState(bs);
-    alert('Rounds: '+r+(prev?(r>prev?' — new best! (was '+prev+')':' (best '+prev+')'):' logged.'));
+    window._blabNotice('Tabata Complete', ['Rounds: '+r, (prev?(r>prev?'New best — was '+prev:'Best so far: '+prev):'')]);
   }
   window._blabWoDone();
 };
@@ -6489,10 +6555,12 @@ window.blabCompleteSession = function(week, day){
 window.blabOpenCheckin = function(){
   var s = window.blabGetState();
   if(!s) return;
-  // Simple confirm for now — AI assessment coming
-  if(confirm('Start Week ' + s.week + '?')){
+  // v4.9.174: was a native confirm, which iOS PWA suppresses — and a suppressed one
+  // returns FALSE, so this branch never ran and the week check-in was not merely
+  // invisible, it was unreachable. DOM modal per CLAUDE.md rule 4.
+  window._blabConfirm('Start Week ' + s.week, 'Begin the next week of the programme?', function(){
     if(typeof renderTodayScreen === 'function') renderTodayScreen();
-  }
+  }, 'Start Week ' + s.week);
 };
 
 window._phxDevForceReload = async function(){
@@ -10634,14 +10702,14 @@ function autoLogSet(row){
 window._blabLogResult=function(name, idx){
   var el=document.getElementById('blab-result-'+idx);
   var v=parseInt(el&&el.value)||0;
-  if(v<=0){ alert('Enter a result to log.'); return; }
+  if(v<=0){ window._blabCalToast('Enter a result to log', 'error'); return; }
   var bs=window.blabGetState();
   if(bs){
     if(!bs.records) bs.records={};
     var prev=bs.records[name+'_result']||0;
     bs.records[name+'_result']=v;
     window.blabSaveState(bs);
-    alert(name+': '+v+' logged.'+(prev?' (was '+prev+')':''));
+    window._blabNotice(name, [v+' logged', (prev?'Previous: '+prev:'')]);
   }
   if(el){ el.style.borderColor='#3a7d44'; }
 };

@@ -833,4 +833,109 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(rec, 'the failure was recorded');
     assert.equal(rec.context, 'blabOpenSession', 'under the session-open context');
   });
+
+  // ── Native dialogs replaced with DOM modals (v4.9.174) ────────────────────
+  // alert()/confirm() are suppressed in the iOS PWA (CLAUDE.md rule 4). Ten sat in
+  // the BLAB session paths, so a mid-session result or validation error showed Jon
+  // nothing at 4:30am. The confirm() in blabOpenCheckin was worse than invisible:
+  // a suppressed confirm returns FALSE, so starting the next week never ran at all.
+  //
+  // Driven through a recording DOM so the modal's own wiring is exercised — the
+  // point of the change is that a BUTTON works, which a string assertion cannot show.
+
+  const recordingDom = () => {
+    const made = [];
+    const realCreate = app.document.createElement;
+    const el = () => {
+      const e = {
+        style: {}, textContent: '', innerHTML: '', children: [], handlers: {},
+        appendChild(c) { this.children.push(c); return c; },
+        addEventListener(ev, fn) { this.handlers[ev] = fn; },
+        removeAttribute() {}, setAttribute() {}, querySelector: () => null,
+        remove() { this.removed = true; }
+      };
+      made.push(e);
+      return e;
+    };
+    app.document.createElement = el;
+    return {
+      made,
+      restore: () => { app.document.createElement = realCreate; },
+      byText: (t) => made.find((m) => m.textContent === t),
+      // A button is text AND a click handler. Matching on text alone found the
+      // modal's title, which has the same string — that made one case fail and
+      // another pass for the wrong reason.
+      byButton: (t) => made.find((m) => m.textContent === t && typeof m.handlers.click === 'function')
+    };
+  };
+
+  test('the week check-in confirm actually runs its action when confirmed', () => {
+    // The old confirm() returned false under iOS suppression, so this branch was
+    // unreachable — Jon could never start the next week from that button.
+    reset();
+    signIn(UID);
+    let ran = false;
+    const dom = recordingDom();
+    try {
+      app._blabConfirm('Start Week 6', 'Begin?', () => { ran = true; }, 'Start Week 6');
+      const yes = dom.byButton('Start Week 6');
+      assert.ok(yes, 'a confirm BUTTON was rendered — not just the matching title');
+      yes.handlers.click();
+      assert.equal(ran, true, 'confirming runs the action');
+    } finally { dom.restore(); }
+  });
+
+  test('dismissing the confirm does not run the action', () => {
+    reset();
+    signIn(UID);
+    let ran = false;
+    const dom = recordingDom();
+    try {
+      app._blabConfirm('Start Week 6', 'Begin?', () => { ran = true; }, 'Start Week 6');
+      const no = dom.byButton('Cancel');
+      assert.ok(no, 'a cancel button was rendered');
+      no.handlers.click();
+      assert.equal(ran, false, 'cancelling is safe — nothing runs');
+    } finally { dom.restore(); }
+  });
+
+  test('a result notice renders its lines and can be dismissed', () => {
+    reset();
+    signIn(UID);
+    const dom = recordingDom();
+    try {
+      app._blabNotice('Tabata Complete', ['Rounds: 12', 'New best — was 10']);
+      assert.ok(dom.byText('Tabata Complete'), 'title rendered');
+      assert.ok(dom.byText('Rounds: 12'), 'first line rendered');
+      assert.ok(dom.byText('New best — was 10'), 'second line rendered');
+      const ok = dom.byButton('OK');
+      assert.ok(ok, 'dismissable');
+    } finally { dom.restore(); }
+  });
+
+  test('a notice skips empty lines rather than rendering blanks', () => {
+    // The tabata and log-result callers pass '' when there is no previous best.
+    reset();
+    signIn(UID);
+    const dom = recordingDom();
+    try {
+      app._blabNotice('Cardio Logged', ['Steady-state: 20:00', '']);
+      const blanks = dom.made.filter((m) => m.textContent === '');
+      assert.equal(blanks.filter((b) => b.style && b.style.cssText && String(b.style.cssText).includes('line-height:1.6')).length, 0,
+        'no empty result line was rendered');
+    } finally { dom.restore(); }
+  });
+
+  test('the week check-in goes through the DOM confirm, not a native one', () => {
+    // Drives blabOpenCheckin itself. Under the old code this called confirm(), which
+    // the sandbox stubs to false — indistinguishable from the button doing nothing.
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 4, maxes: { bench: 130, squat: 150, deadlift: 170 } });
+    const dom = recordingDom();
+    try {
+      app.blabOpenCheckin();
+      assert.ok(dom.byButton('Start Week 6'), 'a working confirm button was raised for the next week');
+    } finally { dom.restore(); }
+  });
 }

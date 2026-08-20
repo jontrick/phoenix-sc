@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.173'", 'version is 4.9.173');
+has("var APP_VERSION='4.9.174'", 'version is 4.9.174');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1387,10 +1387,16 @@ const codeOnly = stripComments(html);
 // ── v4.9.174 [PM] native-dialog ratchet (CLAUDE.md rule 4) ──────────────────────
 // alert()/confirm()/prompt() are silently suppressed in the iOS PWA: a failure shows
 // the user NOTHING. That is how .172's dead Start button reached Jon with no clue —
-// blabOpenSession reported via alert(). 101 calls remain as of v4.9.173; each domain
-// converts its own to DOM modals over time. This ratchet only has to never go UP.
+// blabOpenSession reported via a native alert. Each domain converts its own over
+// time; this ratchet only has to never go UP.
+//
+// 101 -> 89 at v4.9.174: Training converted its 10 session-path dialogs. The extra 2
+// are NOT conversions — this regex runs over raw source, so it counts the word in
+// COMMENTS too, and two comment lines describing removed dialogs were inflating the
+// baseline. Anyone lowering this cap should reword their own comments rather than
+// assume the delta equals the number of call sites they fixed.
 {
-  const NATIVE_DIALOG_CAP = 101;
+  const NATIVE_DIALOG_CAP = 89;
   const n = (html.match(/(?:^|[^.\w])(?:alert|confirm|prompt)\(/g) || []).length;
   if (n > NATIVE_DIALOG_CAP) bad(`RULE 4: native dialogs grew to ${n} (cap ${NATIVE_DIALOG_CAP}) — use a DOM modal, iOS suppresses these silently`);
   else if (n < NATIVE_DIALOG_CAP) ok(`RULE 4: native dialogs down to ${n} (cap ${NATIVE_DIALOG_CAP}) — lower the cap in harness.mjs`);

@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.170'", 'version is 4.9.170');
+has("var APP_VERSION='4.9.171'", 'version is 4.9.171');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -143,7 +143,7 @@ has('function nutOpenPrepCard()', 'PREP: prep card overlay defined');
 has('function nutOpenRecipePicker(', 'PREP: recipe picker defined');
 has('function _nutWeekPlanView(', 'PREP: week PLAN view defined');
 has('function _nutPrepText(', 'PREP: plain-text export defined');
-has('function nutOpenRecipeBuilder(editId)', 'PREP: builder takes an edit id');
+has('function nutOpenRecipeBuilder(editId, onSaved)', 'PREP: builder takes an edit id + save continuation');
 has('data-nut-prep', 'PREP: WEEKLY PREP button rendered');
 has('WEEKLY PREP', 'PREP: WEEKLY PREP label present');
 has('data-nut-week-mode', 'PREP: week Overview/Plan toggle rendered');
@@ -381,7 +381,14 @@ has('data-nut-tick-day=', 'TICK: nutrition-screen tick buttons rendered');
 has('nutToggleMealEaten(parts[0], parts[1])', 'TICK: in-screen tick buttons wired');
 has('var logged = _nutEatenTotals(dayData);', 'TICK: running totals follow the ticks');
 has("if(_e[slot] === undefined) _e[slot] = false;", 'TICK: planned recipes start unticked');
-has('_nutEnsureEaten(day)[slot] = true;', 'TICK: ad-hoc logging ticks the slot');
+has('function nutLogComponent(', 'TICK: logging (add + tick) is its own named writer');
+hasNot('  _nutEnsureEaten(day)[slot] = true;', 'TICK: the tick no longer hides inside nutAddComponent');
+has("if(dateKey !== _nutToday()) return;", 'TICK: a future day is never marked eaten');
+has("var _nutPickerMode", 'PLAN: picker carries log-vs-plan mode');
+has('data-nut-plan-food', 'PLAN: + Food control rendered on planner slots');
+has("nutOpenFoodPicker(parts[0], parts[1], 'plan')", 'PLAN: planner adds open the picker in plan mode');
+has('data-fp-new-recipe', 'PLAN: build-new-recipe offered in the food picker');
+has('data-rp-new-recipe', 'PLAN: build-new-recipe offered in the recipe picker');
 has("ns.daily[dk].eaten = {};", 'TICK: week templates plan without marking eaten');
 has('function nutRenderWaterTile()', 'WATER: tile renderer defined');
 has('function nutAddWater(', 'WATER: add/undo defined');

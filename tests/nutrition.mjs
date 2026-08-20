@@ -494,6 +494,64 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nutWeekOffset = 0;
   });
 
+  // ── Planning is not eating ────────────────────────────────────────────────
+  // The tick used to live inside nutAddComponent. That was right while today's
+  // builder was the only caller, and silently wrong the moment the week planner
+  // reused the same picker: filling next Thursday's lunch would have marked it
+  // eaten on a day that has not happened.
+
+  const FOOD = { n: 'Chicken', cat: 'protein', k: 110, p: 23, c: 0, f: 2, state: 'raw' };
+
+  test('adding a food to a FUTURE day does not mark it eaten', () => {
+    setUp(90);
+    const future = app._nutWeekDays(app._nutToday())[6];
+    app.nutAddComponent('lunch', future, FOOD, 200);
+    const day = read(`phx_nut_v1_${UID}`).daily[future];
+    assert.equal(day.meals.lunch.components.length, 1, 'the food was planned');
+    assert.deepEqual(day.eaten || {}, {}, 'and nothing was marked eaten');
+  });
+
+  test('logging a food today still ticks the slot — the .145 behaviour survives', () => {
+    setUp(90);
+    const today = app._nutToday();
+    app.nutLogComponent('lunch', today, FOOD, 200);
+    const day = read(`phx_nut_v1_${UID}`).daily[today];
+    assert.equal(day.meals.lunch.components.length, 1, 'food logged');
+    assert.equal(day.eaten.lunch, true, 'and counted as eaten');
+  });
+
+  test('even the logging writer refuses to mark a future day eaten', () => {
+    setUp(90);
+    const future = app._nutWeekDays(app._nutToday())[6];
+    app.nutLogComponent('dinner', future, FOOD, 200);
+    const day = read(`phx_nut_v1_${UID}`).daily[future];
+    assert.equal(day.meals.dinner.components.length, 1, 'still planned');
+    assert.deepEqual(day.eaten || {}, {}, 'eating on a future day is incoherent');
+  });
+
+  test('the plain writer never ticks, whatever the day', () => {
+    setUp(90);
+    const today = app._nutToday();
+    app.nutAddComponent('breakfast', today, FOOD, 100);
+    const day = read(`phx_nut_v1_${UID}`).daily[today];
+    assert.deepEqual(day.eaten || {}, {}, 'nutAddComponent is a pure write');
+  });
+
+  test('the week planner offers both a food and a recipe control per slot', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Sauce')]);
+    const days = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Sauce', 'lunch', days[0], 1);
+    app._nutTab = 'week';
+    app._nutWeekMode = 'plan';
+    const d = dom();
+    app.nutRenderScreen();
+    const html = d.html('nut-screen-body');
+    assert.ok(html.indexOf('data-nut-plan-food') >= 0, '+ Food control drawn');
+    assert.ok(html.indexOf('data-nut-add-recipe') >= 0, '+ Recipe control drawn');
+    app._nutWeekMode = 'overview';
+  });
+
   // ── Repeat day ────────────────────────────────────────────────────────────
 
   test('repeating a day copies its meals onto the chosen days', () => {

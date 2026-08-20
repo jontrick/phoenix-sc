@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.170';
+var APP_VERSION='4.9.171';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18300,6 +18300,10 @@ function nutRenderScreen(){
     var mo = btn.getAttribute('data-nut-week-mode');
     btn.addEventListener('click', function(){ _nutWeekMode = mo; nutRenderScreen(); });
   });
+  body.querySelectorAll('[data-nut-plan-food]').forEach(function(btn){
+    var parts = btn.getAttribute('data-nut-plan-food').split('|');
+    btn.addEventListener('click', function(){ nutOpenFoodPicker(parts[0], parts[1], 'plan'); });
+  });
   body.querySelectorAll('[data-nut-add-recipe]').forEach(function(btn){
     var parts = btn.getAttribute('data-nut-add-recipe').split('|');
     btn.addEventListener('click', function(){ nutOpenRecipePicker(parts[0], parts[1]); });
@@ -18777,6 +18781,7 @@ function _nutSetupInput(id, label, unit, val){
 // ═══════════════════════════════════════════════════════════════════════
 
 var _nutMealDate     = null;
+var _nutPickerMode   = 'log';   // 'log' = eating it now | 'plan' = filling a future slot
 var _nutPickerSlot   = null;
 var _nutPickerDate   = null;
 var _nutPickerCat    = 'all';
@@ -18954,7 +18959,8 @@ function _nutSuppSection(dayData, dateKey){
   return h;
 }
 
-function nutOpenFoodPicker(slot, dateKey){
+function nutOpenFoodPicker(slot, dateKey, mode){
+  _nutPickerMode = (mode === 'plan') ? 'plan' : 'log';
   _nutPickerSlot   = slot;
   _nutPickerDate   = dateKey;
   _nutPickerCat    = 'all';
@@ -19007,7 +19013,7 @@ function nutOpenFoodPicker(slot, dateKey){
     var food = _nutGetFoods().filter(function(f){ return f.id === _nutPickerSelId; })[0];
     if(!food) return;
     var qty = parseFloat(ov.querySelector('#nut-fp-qty').value) || 100;
-    nutAddComponent(_nutPickerSlot, _nutPickerDate, food, qty);
+    (_nutPickerMode === 'plan' ? nutAddComponent : nutLogComponent)(_nutPickerSlot, _nutPickerDate, food, qty);
     ov.remove();
     nutRenderScreen();
   });
@@ -19070,8 +19076,24 @@ function _nutRenderFoodPickerList(ov){
     var _recipes = nutGetRecipes();
     var list = ov.querySelector('#nut-fp-list');
     ov.querySelector('#nut-fp-add-bar').style.display = 'none';
+    var _fpNewRec = '<div style="padding:14px 0 4px;border-top:1px solid var(--border);margin-top:6px;">' + '<button data-fp-new-recipe style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Build New Recipe</button></div>';
+    // Wires the build-from-here button; the new recipe lands in the slot that
+    // was being filled rather than sending Jon back to look for it.
+    var _fpWireNew = function(){
+      var b = list.querySelector('[data-fp-new-recipe]');
+      if(!b) return;
+      b.addEventListener('click', function(){
+        var _s = _nutPickerSlot, _d = _nutPickerDate;
+        ov.remove();
+        nutOpenRecipeBuilder(null, function(newId){
+          nutAssignRecipe(newId, _s, _d, 1);
+          nutRenderScreen();
+        });
+      });
+    };
     if(!_recipes.length){
-      list.innerHTML = '<div style="text-align:center;padding:30px 0;font-size:13px;color:var(--text3);">No saved recipes yet.</div>';
+      list.innerHTML = '<div style="text-align:center;padding:26px 0 4px;font-size:13px;color:var(--text3);">No saved recipes yet.</div>' + _fpNewRec;
+      _fpWireNew();
       return;
     }
     list.innerHTML = _recipes.map(function(rec){
@@ -19083,7 +19105,8 @@ function _nutRenderFoodPickerList(ov){
         '<div style="font-size:11px;color:var(--text3);margin-top:2px;">'+_nutRecCatLabel(rec.cat||'other')+' &middot; '+m.k+' kcal &middot; P'+m.p+'g per serve'+(y>1?(' &middot; batch of '+y):'')+'</div></div>' +
         '<div style="font-family:var(--font-d);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">ADD ›</div>' +
         '</div></div>';
-    }).join('');
+    }).join('') + _fpNewRec;
+    _fpWireNew();
     list.querySelectorAll('[data-fp-recipe]').forEach(function(row){
       row.addEventListener('click', function(){
         nutAssignRecipe(row.getAttribute('data-fp-recipe'), _nutPickerSlot, _nutPickerDate, 1);
@@ -19319,7 +19342,7 @@ function nutOpenCustomFoodModal(slot, dateKey){
     ns.custom_foods.push(food);
     nutSaveState(ns);
     ov.remove();
-    if(slot && dateKey){ nutAddComponent(slot, dateKey, food, qty); nutRenderScreen(); }
+    if(slot && dateKey){ (_nutPickerMode === 'plan' ? nutAddComponent : nutLogComponent)(slot, dateKey, food, qty); nutRenderScreen(); }
     else { nutRenderScreen(); }
   });
 }
@@ -19381,7 +19404,10 @@ function _nutApplyWeekTemplate(template){
 // Ingredients are entered PER SERVE. Yield says how many serves one batch makes,
 // which is what the Weekly Prep aggregator uses to work out batch counts.
 // Pass a recipe id to edit an existing recipe.
-function nutOpenRecipeBuilder(editId){
+// onSaved(recipeId) is optional — used when the builder is opened mid-assignment
+// so the recipe you just built goes straight into the slot you were filling,
+// instead of dropping you back at the screen to find it yourself.
+function nutOpenRecipeBuilder(editId, onSaved){
   var old = document.getElementById('nut-recipe-builder');
   if(old) old.remove();
   var existing = (editId && typeof editId === 'string') ? nutRecipeById(editId) : null;
@@ -19560,6 +19586,7 @@ function nutOpenRecipeBuilder(editId){
     if(found >= 0) list[found] = rec; else list.push(rec);
     nutSaveRecipes(list);
     ov.remove();
+    if(typeof onSaved === 'function'){ try { onSaved(rec.id); return; } catch(_e){} }
     if(typeof nutRenderScreen === 'function') nutRenderScreen();
   });
 }
@@ -20316,7 +20343,10 @@ function _nutWeekPlanView(ns, days){
       h += '<div style="padding:8px 0;border-bottom:1px solid var(--border);">';
       h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">';
       h += '<span style="font-family:var(--font-d);font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);">' + sl.l + '</span>';
+      h += '<span style="display:flex;gap:5px;flex-shrink:0;">';
+      h += '<button data-nut-plan-food="' + sl.k + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:700;padding:4px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Food</button>';
       h += '<button data-nut-add-recipe="' + sl.k + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:700;padding:4px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Recipe</button>';
+      h += '</span>';
       h += '</div>';
       if(!comps.length){
         h += '<div style="font-size:11px;color:var(--text3);opacity:0.6;margin-top:3px;">Empty</div>';
@@ -20487,8 +20517,21 @@ function nutOpenRecipePicker(slot, dateKey){
   function renderList(){
     var list = ov.querySelector('#nut-rp-list');
     var shown = recipes.filter(function(r){ return _pCat === 'all' || (r.cat||'other') === _pCat; });
+    var _rpNew = '<div style="padding:14px 0 4px;border-top:1px solid var(--border);margin-top:6px;">' + '<button data-rp-new-recipe style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Build New Recipe</button></div>';
+    var _rpWireNew = function(){
+      var b = list.querySelector('[data-rp-new-recipe]');
+      if(!b) return;
+      b.addEventListener('click', function(){
+        ov.remove();
+        nutOpenRecipeBuilder(null, function(newId){
+          nutAssignRecipe(newId, slot, dateKey, 1);
+          nutRenderScreen();
+        });
+      });
+    };
     if(!shown.length){
-      list.innerHTML = '<div style="text-align:center;padding:30px 0;font-size:12px;color:var(--text3);">No recipes in this category.</div>';
+      list.innerHTML = '<div style="text-align:center;padding:26px 0 4px;font-size:12px;color:var(--text3);">No recipes in this category.</div>' + _rpNew;
+      _rpWireNew();
       return;
     }
     list.innerHTML = shown.map(function(r){
@@ -20503,7 +20546,8 @@ function nutOpenRecipePicker(slot, dateKey){
         '</div>' +
         '<span style="flex-shrink:0;font-family:var(--font-d);font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text3);border:1px solid var(--border2);border-radius:10px;padding:2px 7px;">' + _nutRecCatLabel(r.cat||'other') + (y > 1 ? ' &middot; x' + y : '') + '</span>' +
         '</div></div>';
-    }).join('');
+    }).join('') + _rpNew;
+    _rpWireNew();
     list.querySelectorAll('[data-rp-rec]').forEach(function(row){
       row.addEventListener('click', function(){
         _pSelId = row.getAttribute('data-rp-rec');
@@ -22838,8 +22882,29 @@ function nutAddComponent(slot, dateKey, food, qty){
     c: food.c || 0,
     f: food.f || 0
   });
-  // Adding food by hand means it has been eaten — tick the slot.
-  _nutEnsureEaten(day)[slot] = true;
+  nutSaveState(ns);
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+  if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile();
+}
+
+// v4.9.171: "I am eating this now" — add, then tick the slot.
+//
+// The tick used to live inside nutAddComponent, which was right while the only
+// caller was today's builder and silently wrong the moment the week planner
+// reused the same picker: planning next Thursday's lunch would have marked it
+// eaten on a day that has not happened. Splitting it means the safe write keeps
+// the obvious name and the side effect has to be asked for by name — a boolean
+// flag would put the dangerous behaviour on the default path for whoever
+// forgets to pass it.
+//
+// Guarded by date as well: eating something on a future day is incoherent
+// however the function is called.
+function nutLogComponent(slot, dateKey, food, qty){
+  nutAddComponent(slot, dateKey, food, qty);
+  if(dateKey !== _nutToday()) return;
+  var ns = nutGetState();
+  if(!ns || !ns.daily || !ns.daily[dateKey]) return;
+  _nutEnsureEaten(ns.daily[dateKey])[slot] = true;
   nutSaveState(ns);
   if(typeof nutRenderTile === 'function') nutRenderTile();
   if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile();

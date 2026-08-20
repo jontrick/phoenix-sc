@@ -1013,4 +1013,120 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(ran, false, 'cancelling runs nothing');
     } finally { dom.restore(); }
   });
+
+  // ── Three session bugs from Jon's 4:30am session (v4.9.179) ───────────────
+
+  // 1. "navigate off training today session it then wipes the session info already
+  //    done". openTodaySession called supabaseStartSession unconditionally and that
+  //    always INSERTS, so re-entering minted a fresh id — and the completed-sets
+  //    shadow store is keyed by it, so the restore looked under a key never written.
+
+  test('re-entering the same session keeps its id, so logged sets are still found', () => {
+    reset();
+    signIn(UID);
+    app.currentSupabaseSessionId = 'sess-1';
+    app._phxActiveSessionKey = 'blab:5:3:' + dayFromToday(0);
+    // The shadow store the restore reads is keyed by session id.
+    seed('phoenix_completed_sets_sess-1', [{ exId: 'bench', setIdx: 0, kg: '100', reps: '5' }]);
+    const before = read('phoenix_completed_sets_sess-1');
+    assert.equal(before.length, 1, 'a set was logged under the live session id');
+    // Same identity: the key must not move, or that set becomes unreachable.
+    assert.equal(app._phxActiveSessionKey, 'blab:5:3:' + dayFromToday(0), 'identity is week/day plus local date');
+  });
+
+  test('completing a session releases the re-entry key', () => {
+    // Otherwise a repeat of the same week/day would reuse a COMPLETED row.
+    reset();
+    signIn(UID);
+    app.currentSupabaseSessionId = 'sess-1';
+    app._phxActiveSessionKey = 'blab:5:3:' + dayFromToday(0);
+    app.supabaseCompleteSession({});
+    assert.equal(app._phxActiveSessionKey, null, 'key released with the row');
+    assert.equal(app.currentSupabaseSessionId, null, 'and the id is cleared as before');
+  });
+
+  // 2. "the lunges on legs 45secs have no way of timing in the session".
+  //    hold_secs already drives a Start-Hold button, but only Nordic Planks carried
+  //    it; everything else put the duration in the reps TEXT.
+
+  test('a timed exercise gets a hold timer even when the duration is only in the text', () => {
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 1, last_completed_day: 0, maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {} });
+    const sess = app.blabGetSessionData(1, 2);          // Lower Body — the lunges live here
+    const phx = app.blabToPhoenixSession(sess, 1, 2);
+    const lunge = phx.exercises.find((e) => /Lunge/i.test(e.name));
+    assert.ok(lunge, 'the lunges are in the session');
+    assert.equal(lunge._holdSecs, 45, 'a 45s continuous set is timeable');
+  });
+
+  test('rep-based exercises are left alone — a timer would be wrong', () => {
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 1, last_completed_day: 0, maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {} });
+    const phx = app.blabToPhoenixSession(app.blabGetSessionData(1, 1), 1, 1);
+    const repBased = phx.exercises.filter((e) => e._holdSecs && !/^\s*\d+\s*(s|sec)/i.test(String(e.reps)));
+    assert.equal(repBased.length, 0, `no rep-based exercise was given a hold timer: ${repBased.map((e) => e.name).join(', ')}`);
+  });
+
+  test('a duration that is not the whole prescription does not become a hold', () => {
+    // '10 reps in 30s' is a rep target. Anchoring at the start is what prevents it.
+    assert.equal(app.blabToPhoenixSession({ name: 'x', exercises: [
+      { name: 'A', format: 'standard_sets', sets: 1, reps: '10 reps in 30s' }
+    ] }, 1, 1).exercises[0]._holdSecs, undefined, 'not treated as a hold');
+    assert.equal(app.blabToPhoenixSession({ name: 'x', exercises: [
+      { name: 'B', format: 'standard_sets', sets: 1, reps: '20 sec/side' }
+    ] }, 1, 1).exercises[0]._holdSecs, 20, 'a leading duration is');
+  });
+
+  // 3. "for the session where there are 2 max sets ... need the last session to show
+  //    both sets from week before only shows 1 currently".
+
+  test('both sets from last week come back, not just the better one', () => {
+    reset();
+    signIn(UID);
+    seed(KEY, {
+      active: true, week: 2, last_completed_day: 0,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10,
+      records: {
+        'Flat DB Press_max': 24, 'Flat DB Press_maxwt': 30,
+        'Flat DB Press_lastsets': { date: dayFromToday(-7), sets: [{ reps: 24, wt: 30 }, { reps: 18, wt: 30 }] }
+      }
+    });
+    const phx = app.blabToPhoenixSession(app.blabGetSessionData(2, 1), 2, 1);
+    const press = phx.exercises.find((e) => e.name === 'Flat DB Press');
+    assert.ok(press, 'the press slot is in the session');
+    assert.equal(press.prev_sets.length, 2, 'both sets carried through');
+    assert.ok(press.coaching_note.includes('Set 1: 24 reps'), 'set 1 named');
+    assert.ok(press.coaching_note.includes('Set 2: 18 reps'), 'set 2 named — this is what was missing');
+  });
+
+  test("today's partial record does not replace the numbers being chased", () => {
+    // Logging set 1 today must not overwrite last week's pair on screen — that is the
+    // reference he is trying to beat.
+    reset();
+    signIn(UID);
+    seed(KEY, {
+      active: true, week: 2, last_completed_day: 0,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10,
+      records: {
+        'Flat DB Press_lastsets': { date: dayFromToday(0), sets: [{ reps: 12, wt: 30 }] },
+        'Flat DB Press_prevsets': { date: dayFromToday(-7), sets: [{ reps: 24, wt: 30 }, { reps: 18, wt: 30 }] }
+      }
+    });
+    const phx = app.blabToPhoenixSession(app.blabGetSessionData(2, 1), 2, 1);
+    const press = phx.exercises.find((e) => e.name === 'Flat DB Press');
+    assert.equal(press.prev_sets.length, 2, "last week's pair is still what is shown");
+    assert.equal(press.prev_sets[0].reps, 24, 'not the 12 just logged today');
+  });
+
+  test('with no history at all the exercise still builds', () => {
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 2, last_completed_day: 0, maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {} });
+    const phx = app.blabToPhoenixSession(app.blabGetSessionData(2, 1), 2, 1);
+    const press = phx.exercises.find((e) => e.name === 'Flat DB Press');
+    assert.ok(press, 'still present');
+    assert.equal(press.prev_sets, null, 'no invented history');
+  });
 }

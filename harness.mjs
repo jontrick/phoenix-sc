@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.178'", 'version is 4.9.178');
+has("var APP_VERSION='4.9.179'", 'version is 4.9.179');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -696,7 +696,18 @@ has('window._blabAuditWeekStatus = function', 'week status helper (COMPLETED/IN 
 // test-mode short-circuits — no logging / no state change
 has('if(window._blabDryRun) return;', 'dry-run guard neutralises saves/complete');
 has('if(!window.blabIsActive() && !window._blabDryRun)', 'openTodaySession bypasses programme guard in dry run');
-has('if(!window._blabDryRun){\n    supabaseStartSession', 'dry-run skips server session start');
+// v4.9.179: was pinned to the exact two-line shape `if(!window._blabDryRun){\n    supabaseStartSession`.
+// Re-entry handling put a branch between them. Assert the PROPERTY — the session-row
+// call is inside the dry-run guard — rather than its formatting.
+{
+  const i = html.indexOf('var aiSessionType=mapSessionType');
+  const seg = html.slice(i, i + 2600);   // must reach showScreen('screen-session'); 1400 fell short
+  const g = seg.indexOf('if(!window._blabDryRun){');
+  const s = seg.indexOf('supabaseStartSession(aiSessionType');
+  const closes = seg.indexOf('showScreen(\'screen-session\')');
+  if (g > -1 && s > g && closes > s) ok('dry-run skips server session start');
+  else bad(`dry-run guard no longer wraps supabaseStartSession (guard@${g}, call@${s}) — an audit dry run would write a real session row`);
+}
 has('if(window._blabAuditStateOverride) return window._blabAuditStateOverride;', 'audit placeholder state override');
 
 // Dead overlay duplicates removed
@@ -1401,6 +1412,28 @@ const codeOnly = stripComments(html);
   else if (n < NATIVE_DIALOG_CAP) ok(`RULE 4: native dialogs down to ${n} (cap ${NATIVE_DIALOG_CAP}) — lower the cap in harness.mjs`);
   else ok(`RULE 4: native dialogs held at ${n}, not growing`);
 }
+
+// ── Session re-entry keeps its row (v4.9.179) ───────────────────────────────
+// Jon: "navigate off training today session it then wipes the session info already
+// done". supabaseStartSession always INSERTS, so re-entering minted a fresh id and
+// the completed-sets shadow store — keyed by that id — became unreachable.
+//
+// Structural, not behavioural: driving openTodaySession needs the full session DOM.
+// The release side IS covered functionally in tests/training.mjs; this pins the
+// branch that stops a second row being opened.
+console.log('\nSession re-entry:');
+has('window._phxActiveSessionKey === _sessKey', 'REENTRY: same-identity check present');
+has('window._phxActiveSessionKey = _sessKey',   'REENTRY: identity recorded when a row opens');
+has("return 'blab:' + b.week + ':' + b.day",    'REENTRY: BLAB identity is week/day');
+has('window._phxActiveSessionKey = null',       'REENTRY: key released on completion');
+(() => {
+  // The guard must actually gate the call, not sit beside it.
+  const i = html.indexOf('var _sameSession =');
+  const seg = html.slice(i, i + 700);
+  const guarded = /_sameSession[\s\S]{0,160}if\(!_sameSession\)\{[\s\S]{0,200}supabaseStartSession/.test(seg);
+  if (guarded) ok('REENTRY: a second row is only opened when the identity differs');
+  else bad('REENTRY: supabaseStartSession is no longer behind the same-session check — re-entry will mint a new row and orphan the logged sets');
+})();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

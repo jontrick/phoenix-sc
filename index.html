@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.178';
+var APP_VERSION='4.9.179';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5325,6 +5325,22 @@ window._blabBuildRunBlock = function(ex, idx){
 
 // Translate BLAB session data into Phoenix session format
 window.blabToPhoenixSession = function(sess, week, day){
+  // v4.9.179 — pull a duration out of a reps string so timed work gets a timer.
+  // Anchored at the START on purpose: '45s continuous' and '20 sec/side' are
+  // durations, but '10 reps in 30s' is a rep target and must NOT become a hold.
+  // Defined INSIDE the mapper deliberately: harness.mjs extracts this function by
+  // its opening line, so a helper declared just above it does not travel with it and
+  // threw across 80 of 96 combos.
+  function _blabHoldSecsFromReps(reps){
+    if(reps == null) return 0;
+    var m = /^\s*(\d+)\s*(s|sec|secs|second|seconds)\b/i.exec(String(reps));
+    if(!m) return 0;
+    var n = parseInt(m[1], 10);
+    // A 0s hold is meaningless, and past 10 minutes it is a cardio block with its
+    // own renderer, not a hold.
+    if(!(n > 0) || n > 600) return 0;
+    return n;
+  }
   var bs = window.blabGetState();
   if(!sess || !bs) return null;
   var exercises = (sess.exercises||[]).map(function(ex, i){
@@ -5437,10 +5453,20 @@ window.blabToPhoenixSession = function(sess, week, day){
       // reads these off the mapped exercise object; the mapper previously dropped them.
       phxEx.prev_best = ex.prev_best || 0;
       phxEx.prev_best_wt = ex.prev_best_wt || 0;
+      phxEx.prev_sets = ex.prev_sets || null;
       // v4.9.111: once a prior result exists, turn the coaching note into a progression cue —
       // "Beat last week: X reps @ Ykg. Same weight." First time out (no prev) keeps the setup note.
       // The W12 bench test is excluded (its own load-choice flow, not a same-weight rep-beat).
-      if(!ex.bench_test && phxEx.prev_best){
+      if(!ex.bench_test && phxEx.prev_sets && phxEx.prev_sets.length){
+        // v4.9.179: name every set from last week. A two-set max-reps exercise drops
+        // off on the second set by design, so one number told him nothing about
+        // whether he was ahead or behind on the set he was actually doing.
+        var _ps = phxEx.prev_sets.map(function(s2, i){
+          if(!s2) return null;
+          return 'Set '+(i+1)+': '+s2.reps+' reps'+(s2.wt?' @ '+s2.wt+'kg':'');
+        }).filter(Boolean);
+        phxEx.coaching_note = 'Last week — '+_ps.join(' · ')+'. Same weight, beat each set.';
+      } else if(!ex.bench_test && phxEx.prev_best){
         phxEx.coaching_note = 'Beat last week: '+phxEx.prev_best+' reps'+(phxEx.prev_best_wt?' @ '+phxEx.prev_best_wt+'kg':'')+'. Same weight.';
       }
       // v4.9.108: W12 bench test — load choice + dedicated record keys.
@@ -5482,6 +5508,13 @@ window.blabToPhoenixSession = function(sess, week, day){
       // v4.9.131: timed-hold exercises carry hold_secs through so the session renderer
       // can inject a countdown timer button (e.g. Nordic Planks).
       if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs; phxEx.reps = ex.hold_secs+'s'; }
+      // v4.9.179: an explicit hold_secs wins, but otherwise read the duration out of
+      // the reps text. '45s continuous', '30s', '20 sec/side' all describe a timed
+      // effort with no way to time it. Jon hit this on the 45s lunges.
+      else {
+        var _hs = _blabHoldSecsFromReps(ex.reps);
+        if(_hs) phxEx._holdSecs = _hs;
+      }
       // v4.9.108: result capture for "record …" cues (sled/prowler/tests). autoLogSet writes
       // records[name+'_result']; the generic block surfaces the prior result.
       if(ex.note && /record/i.test(ex.note)){
@@ -5992,6 +6025,18 @@ window.blabGetSessionData = function(week, day){
   var C = s.chin_max || 0;
   var p = window.blabPct;
   function rec(k){ return (s.records && s.records[k]) || 0; }
+  // v4.9.179: the per-set history for a max-reps exercise, as [{reps,wt},...] for the
+  // most recently COMPLETED session. While today's session is being logged, _lastsets
+  // is today's partial record, so fall back a generation — otherwise the numbers he is
+  // trying to beat would be replaced by the ones he just did.
+  function recSets(name){
+    if(!s.records) return null;
+    var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    var last = s.records[name+'_lastsets'];
+    var prev = s.records[name+'_prevsets'];
+    var pick = (last && typeof last === 'object' && last.date === today) ? prev : last;
+    return (pick && Array.isArray(pick.sets) && pick.sets.length) ? pick.sets : null;
+  }
 
   // ── Main-lift % schemes — faithful to the "Built Like A Badass" PDF ──────────
   var benchSchemes = {
@@ -6108,12 +6153,12 @@ window.blabGetSessionData = function(week, day){
     }
 
     // DB / horizontal-press slot
-    if(w <= 2) exs.push({name:'Flat DB Press', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Flat DB Press_max'), prev_best_wt:rec('Flat DB Press_maxwt'), note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
-    else if(w <= 4) exs.push({name:'Incline DB Press', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Incline DB Press_max'), prev_best_wt:rec('Incline DB Press_maxwt'), note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
-    else if(w === 6 || w === 7) exs.push({name:'Offset Med Ball Push-ups', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Offset Med Ball Push-ups_max'), prev_best_wt:rec('Offset Med Ball Push-ups_maxwt'), note:'One hand on a med ball, alternate each rep.'});
+    if(w <= 2) exs.push({name:'Flat DB Press', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Flat DB Press_max'), prev_best_wt:rec('Flat DB Press_maxwt'), prev_sets:recSets('Flat DB Press'), note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
+    else if(w <= 4) exs.push({name:'Incline DB Press', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Incline DB Press_max'), prev_best_wt:rec('Incline DB Press_maxwt'), prev_sets:recSets('Incline DB Press'), note:'Choose a weight you can get 20-25 reps on set 1. Same weight both sets.'});
+    else if(w === 6 || w === 7) exs.push({name:'Offset Med Ball Push-ups', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('Offset Med Ball Push-ups_max'), prev_best_wt:rec('Offset Med Ball Push-ups_maxwt'), prev_sets:recSets('Offset Med Ball Push-ups'), note:'One hand on a med ball, alternate each rep.'});
     else if(w === 8) exs.push({name:'Alternate DB Bench (flat)', format:'standard_sets', sets:2, reps:'10 each arm', note:'Flat bench — one DB stays locked out while the other presses.'});
     else if(w === 9) exs.push({name:'Alternate DB Bench (flat)', format:'standard_sets', sets:2, reps:'12 each arm', note:'Same weight as Week 8.'});
-    else if(w === 11) exs.push({name:'DB Floor Press (palms in)', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('DB Floor Press (palms in)_max'), prev_best_wt:rec('DB Floor Press (palms in)_maxwt'), note:'Palms facing in. Choose a weight for ~20-25 reps on set 1.'});
+    else if(w === 11) exs.push({name:'DB Floor Press (palms in)', format:'max_reps_sets', sets:2, reps:'Max reps', prev_best:rec('DB Floor Press (palms in)_max'), prev_best_wt:rec('DB Floor Press (palms in)_maxwt'), prev_sets:recSets('DB Floor Press (palms in)'), note:'Palms facing in. Choose a weight for ~20-25 reps on set 1.'});
 
     // Accessories
     if(w <= 2){
@@ -7789,6 +7834,9 @@ async function supabaseCompleteSession(updates){
   }
   var sessionId=currentSupabaseSessionId;
   currentSupabaseSessionId=null;
+  // v4.9.179: release the re-entry key with the row it belongs to, so a later session
+  // with the same identity opens a fresh row rather than reusing a completed one.
+  try { window._phxActiveSessionKey = null; } catch(_ak){}
   // v4.7.29 FIX 3: session done — clear the per-session completed-sets shadow.
   try { localStorage.removeItem('phoenix_completed_sets_' + sessionId); } catch(_e){}
   try{
@@ -10625,6 +10673,20 @@ function autoLogSet(row){
           } else {
             var _mk=exerciseName+'_max';
             if(!_bs.records[_mk]||_rp>_bs.records[_mk]){ _bs.records[_mk]=_rp; if(_wt) _bs.records[exerciseName+'_maxwt']=_wt; _dirty=true; }
+            // v4.9.179: per-set history so BOTH sets of a two-set max-reps exercise
+            // come back next week, not just the better one.
+            var _lk=exerciseName+'_lastsets', _pk=exerciseName+'_prevsets';
+            var _today=(typeof _phxLocalISO==='function')?_phxLocalISO():'';
+            var _cur=_bs.records[_lk];
+            if(!_cur || typeof _cur!=='object' || _cur.date!==_today){
+              // First set of a new session: the old session becomes the reference
+              // Jon is chasing today, and today starts collecting fresh.
+              if(_cur && typeof _cur==='object') _bs.records[_pk]=_cur;
+              _cur={date:_today, sets:[]};
+            }
+            if(!Array.isArray(_cur.sets)) _cur.sets=[];
+            _cur.sets[setIdx]={reps:_rp, wt:_wt||0};
+            _bs.records[_lk]=_cur; _dirty=true;
           }
         }
         // v4.9.108: percentage_sets AMRAP top set — persist the work-set reps@weight per week
@@ -31452,9 +31514,28 @@ function openTodaySession(){
   body.appendChild(finBtn);
   document.getElementById('session-back-btn').onclick=function(){navTo('today');};
   var aiSessionType=mapSessionType('ai-'+(sess.session_type||'strength').toLowerCase());
+  // v4.9.179: only open a NEW server session row when this is genuinely a different
+  // session. Re-entering the same one keeps the existing id, and with it the
+  // completed-sets shadow store that _phxRestoreSessionVisualState reads on mount.
+  // Identity is the BLAB week/day where we have one, else the session type, plus the
+  // local date so tomorrow's session of the same name is correctly a new row.
+  var _sessKey = (function(){
+    try {
+      var b = window._blabCurrentSession;
+      var day = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+      if(b && b.week != null && b.day != null) return 'blab:' + b.week + ':' + b.day + ':' + day;
+      return 'ai:' + (sess.session_type || 'training') + ':' + day;
+    } catch(_e){ return null; }
+  })();
   // v4.9.110: dry-run audit must not open a server session row.
   if(!window._blabDryRun){
-    supabaseStartSession(aiSessionType,sess.session_type||'Training','ai-'+(sess.session_type||'training').toLowerCase());
+    var _sameSession = _sessKey && window._phxActiveSessionKey === _sessKey && currentSupabaseSessionId;
+    if(!_sameSession){
+      window._phxActiveSessionKey = _sessKey;
+      supabaseStartSession(aiSessionType,sess.session_type||'Training','ai-'+(sess.session_type||'training').toLowerCase());
+    } else {
+      console.log('[PHX] re-entering session', _sessKey, '— keeping row', currentSupabaseSessionId);
+    }
   }
   showScreen('screen-session');
   // v4.9.110: decorate the just-rendered session for audit (read-only shield + banner).

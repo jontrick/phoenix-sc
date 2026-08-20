@@ -12,6 +12,8 @@
 // blabRestoreFromCloud derive blab_v1_<uid> itself. Nutrition shipped a
 // fresh-install bug precisely because its stub handed the key over.
 
+import { recordingDom as sharedRecordingDom } from './helpers/dom.mjs';
+
 const UID = 'test-user';
 const KEY = `blab_v1_${UID}`;
 const OLDER = '2026-08-01T00:00:00.000Z';
@@ -843,31 +845,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // Driven through a recording DOM so the modal's own wiring is exercised — the
   // point of the change is that a BUTTON works, which a string assertion cannot show.
 
-  const recordingDom = () => {
-    const made = [];
-    const realCreate = app.document.createElement;
-    const el = () => {
-      const e = {
-        style: {}, textContent: '', innerHTML: '', children: [], handlers: {},
-        appendChild(c) { this.children.push(c); return c; },
-        addEventListener(ev, fn) { this.handlers[ev] = fn; },
-        removeAttribute() {}, setAttribute() {}, querySelector: () => null,
-        remove() { this.removed = true; }
-      };
-      made.push(e);
-      return e;
-    };
-    app.document.createElement = el;
-    return {
-      made,
-      restore: () => { app.document.createElement = realCreate; },
-      byText: (t) => made.find((m) => m.textContent === t),
-      // A button is text AND a click handler. Matching on text alone found the
-      // modal's title, which has the same string — that made one case fail and
-      // another pass for the wrong reason.
-      byButton: (t) => made.find((m) => m.textContent === t && typeof m.handlers.click === 'function')
-    };
-  };
+  const recordingDom = () => sharedRecordingDom(app);
 
   test('_blabConfirm delegates to the one shared modal, with the right wording', () => {
     // Deliberately not asserting that onYes RAN: _phxConfirm is promise-based, so the
@@ -942,6 +920,97 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     try {
       app.blabOpenCheckin();
       assert.ok(dom.byButton('Start Week 6'), 'a working confirm button was raised for the next week');
+    } finally { dom.restore(); }
+  });
+
+  // ── _phxConfirm resolution, end to end (v4.9.177) ─────────────────────────
+  // Restored now the runner awaits test bodies. Before ff2762b an async body was
+  // recorded as passing before its assertions ran, so these could not have failed —
+  // which is how .175 shipped five destructive reset flows on an untestable promise.
+  //
+  // Covered heavily because those flows are destructive: an explicit Yes must
+  // proceed, and NOTHING else may.
+
+  const driveConfirm = async (pick) => {
+    const dom = recordingDom();
+    try {
+      const p = app._phxConfirm('Reset Programme', 'This cannot be undone.', 'Reset Everything', true);
+      pick(dom);
+      return await p;
+    } finally { dom.restore(); }
+  };
+
+  test('confirming resolves true — the destructive action proceeds', async () => {
+    const got = await driveConfirm((dom) => dom.byButton('Reset Everything').handlers.click());
+    assert.equal(got, true, 'an explicit Yes resolves true');
+  });
+
+  test('cancelling resolves false — the destructive action does not run', async () => {
+    const got = await driveConfirm((dom) => dom.byButton('Cancel').handlers.click());
+    assert.equal(got, false, 'Cancel resolves false');
+  });
+
+  test('a backdrop tap resolves false, it does not count as consent', async () => {
+    // Dismissing by tapping outside must never be read as agreement to a reset.
+    const got = await driveConfirm((dom) => {
+      const ov = dom.byId('phx-confirm');
+      ov.handlers.click({ target: ov });
+    });
+    assert.equal(got, false, 'a backdrop tap is a cancel');
+  });
+
+  test('a tap INSIDE the modal is not a dismissal', async () => {
+    // The backdrop handler fires for clicks anywhere in the overlay subtree, so it
+    // must check the target. Otherwise reading the message dismisses the dialog.
+    const dom = recordingDom();
+    try {
+      const p = app._phxConfirm('Reset Programme', 'This cannot be undone.', 'Reset Everything', true);
+      const ov = dom.byId('phx-confirm');
+      ov.handlers.click({ target: { not: 'the overlay' } });
+      let settled = false;
+      p.then(() => { settled = true; });
+      await Promise.resolve();
+      assert.equal(settled, false, 'clicking the box itself leaves the decision open');
+      dom.byButton('Cancel').handlers.click();
+      assert.equal(await p, false, 'and it still resolves when a button is used');
+    } finally { dom.restore(); }
+  });
+
+  test('resolving twice cannot change the answer', async () => {
+    // finish() guards with `done`; if it did not, a stray second event could flip a
+    // false into a true after the caller had already acted on the cancel.
+    const dom = recordingDom();
+    try {
+      const p = app._phxConfirm('Reset Programme', 'This cannot be undone.', 'Reset Everything', true);
+      dom.byButton('Cancel').handlers.click();
+      dom.byButton('Reset Everything').handlers.click();
+      assert.equal(await p, false, 'the first answer stands');
+    } finally { dom.restore(); }
+  });
+
+  test('_blabConfirm runs its callback only when confirmed', async () => {
+    // The BLAB session paths use the callback form. Restored end to end now that a
+    // microtask can actually be awaited.
+    let ran = false;
+    const dom = recordingDom();
+    try {
+      app._blabConfirm('Start Week 6', 'Begin the next week?', () => { ran = true; }, 'Start Week 6');
+      dom.byButton('Start Week 6').handlers.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      assert.equal(ran, true, 'confirming runs the action');
+    } finally { dom.restore(); }
+  });
+
+  test('_blabConfirm does not run its callback when cancelled', async () => {
+    let ran = false;
+    const dom = recordingDom();
+    try {
+      app._blabConfirm('Start Week 6', 'Begin the next week?', () => { ran = true; }, 'Start Week 6');
+      dom.byButton('Cancel').handlers.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      assert.equal(ran, false, 'cancelling runs nothing');
     } finally { dom.restore(); }
   });
 }

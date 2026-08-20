@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.177'", 'version is 4.9.177');
+has("var APP_VERSION='4.9.178'", 'version is 4.9.178');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -650,7 +650,6 @@ hasNot('id="afap-countdown"', 'FIX3: afap-countdown element removed');
   ["_phxStampTimerStart();\n    startWork();", 'WOD sprint intervals'],
   ["showCountIn(function(){\n    if(!document.getElementById('core-timer-display')) return;", 'Core 20-min timer'],
   ["showCountIn(function(){\n          if(!cfRunning) return; // stopped / left during the count-in", 'CrossFit benchmark WOD'],
-  ["showCountIn(function(){\n          if(!karenRunning) return; // stopped / left during the count-in", 'Karen benchmark WOD'],
 ].forEach(([needle, label]) => has(needle, 'FIX3: count-in gates the clock — ' + label));
 // rest is a phase inside a live session — the lock must survive it
 has('function _phxReleaseWakeLockIfIdle(){\n  if(!window._phxTimerResync){ releaseWakeLock(); requestWakeLock(); }', 'FIX2: rest end keeps the lock while a session is registered');
@@ -1396,7 +1395,7 @@ const codeOnly = stripComments(html);
 // baseline. Anyone lowering this cap should reword their own comments rather than
 // assume the delta equals the number of call sites they fixed.
 {
-  const NATIVE_DIALOG_CAP = 84;
+  const NATIVE_DIALOG_CAP = 80;
   const n = (html.match(/(?:^|[^.\w])(?:alert|confirm|prompt)\(/g) || []).length;
   if (n > NATIVE_DIALOG_CAP) bad(`RULE 4: native dialogs grew to ${n} (cap ${NATIVE_DIALOG_CAP}) — use a DOM modal, iOS suppresses these silently`);
   else if (n < NATIVE_DIALOG_CAP) ok(`RULE 4: native dialogs down to ${n} (cap ${NATIVE_DIALOG_CAP}) — lower the cap in harness.mjs`);

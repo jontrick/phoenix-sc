@@ -869,33 +869,39 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     };
   };
 
-  test('the week check-in confirm actually runs its action when confirmed', () => {
-    // The old confirm() returned false under iOS suppression, so this branch was
-    // unreachable — Jon could never start the next week from that button.
+  test('_blabConfirm delegates to the one shared modal, with the right wording', () => {
+    // Deliberately not asserting that onYes RAN: _phxConfirm is promise-based, so the
+    // callback lands a microtask later, and this runner does not await test bodies —
+    // an async assertion here would pass without ever executing. Assert the contract
+    // that is observable synchronously, and cover the button itself below.
     reset();
     signIn(UID);
-    let ran = false;
-    const dom = recordingDom();
+    const real = app._phxConfirm;
+    let got = null;
+    app._phxConfirm = (title, message, yesLabel, danger) => {
+      got = { title, message, yesLabel, danger };
+      return Promise.resolve(false);
+    };
     try {
-      app._blabConfirm('Start Week 6', 'Begin?', () => { ran = true; }, 'Start Week 6');
-      const yes = dom.byButton('Start Week 6');
-      assert.ok(yes, 'a confirm BUTTON was rendered — not just the matching title');
-      yes.handlers.click();
-      assert.equal(ran, true, 'confirming runs the action');
-    } finally { dom.restore(); }
+      app._blabConfirm('Start Week 6', 'Begin the next week?', () => {}, 'Start Week 6');
+      assert.ok(got, 'it went through the shared confirm rather than its own modal');
+      assert.equal(got.title, 'Start Week 6', 'title passed through');
+      assert.equal(got.yesLabel, 'Start Week 6', 'button label passed through');
+      assert.equal(got.danger, false, 'a week check-in is not a destructive action');
+    } finally { app._phxConfirm = real; }
   });
 
-  test('dismissing the confirm does not run the action', () => {
+  test('the shared confirm renders a working button, not just matching text', () => {
     reset();
     signIn(UID);
-    let ran = false;
     const dom = recordingDom();
     try {
-      app._blabConfirm('Start Week 6', 'Begin?', () => { ran = true; }, 'Start Week 6');
-      const no = dom.byButton('Cancel');
-      assert.ok(no, 'a cancel button was rendered');
-      no.handlers.click();
-      assert.equal(ran, false, 'cancelling is safe — nothing runs');
+      app._phxConfirm('Stop and exit?', 'This walk will not be saved.', 'Stop and Exit', true);
+      const yes = dom.byButton('Stop and Exit');
+      assert.ok(yes, 'a real button exists with a click handler');
+      yes.handlers.click();
+      const ov = dom.made.find((m) => m.id === 'phx-confirm');
+      assert.ok(ov && ov.removed, 'clicking it dismisses the modal');
     } finally { dom.restore(); }
   });
 

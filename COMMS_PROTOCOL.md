@@ -94,6 +94,22 @@ Push (from inside your worktree). Order matters — `git rebase` refuses to run 
 
 Worktree-session quirk (Training, 2026-08-18): the harness refuses compound shell commands that chain git with pipes or redirects (`git fetch && git rebase ... | tail`) because it cannot verify they stay inside the worktree. Issue git commands one per call, plain. Not a blocker, just don't waste a cycle on it.
 
+## REVIEW EACH OTHER'S CLAIMS, INCLUDING THE PM'S
+
+Observed repeatedly on 2026-08-18, in both directions: the PM classified `nutGetState` from its
+name without reading it; Nutrition pointed at a variable initialiser the PM had reasoned about
+correctly but located wrongly; the PM's first dead-reference tool would have certified the very
+bug it was built to catch. **In every case the author missed their own error and a peer caught
+it.** So:
+
+- Read the code before agreeing with a plausible claim about it — including a plausible claim
+  from whoever has been right all day, and including one from the PM.
+- A TASK from the PM is a starting position, not a specification. If it is wrong, say so and
+  say why; implementing a known-wrong instruction politely is the failure mode.
+- Verify claims made ABOUT your domain rather than accepting them ("your module is clean" is
+  cheap to check and expensive to be wrong about).
+- The PM records corrections to its own rulings in the protocol, marked as corrections.
+
 ## TESTING STANDARD (three gates, see CLAUDE.md)
 
 - Every push: `node runtime_check.mjs` (parse + top-level, all 6 blocks) → `node harness.mjs` (static assertions) → `node functional_check.mjs` (calls the real functions). All unpiped, all exit 0.

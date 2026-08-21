@@ -1515,8 +1515,13 @@ has("return 'blab:' + b.week + ':' + b.day",    'REENTRY: BLAB identity is week/
 has('window._phxActiveSessionKey = null',       'REENTRY: key released on completion');
 (() => {
   // The guard must actually gate the call, not sit beside it.
-  const i = html.indexOf('var _sameSession =');
-  const seg = html.slice(i, i + 700);
+  // Located in COMMENT-STRIPPED source. indexOf on raw text finds the first textual
+  // match, so a comment naming `var _sameSession =` — like the one in the block above
+  // this guard's subject — hijacks the scan window and the guard fails on prose.
+  // Found by testing the ignoring direction; it had only ever been proven catching.
+  const code = phxStripComments(html);
+  const i = code.indexOf('var _sameSession =');
+  const seg = code.slice(i, i + 700);
   const guarded = /_sameSession[\s\S]{0,160}if\(!_sameSession\)\{[\s\S]{0,200}supabaseStartSession/.test(seg);
   if (guarded) ok('REENTRY: a second row is only opened when the identity differs');
   else bad('REENTRY: supabaseStartSession is no longer behind the same-session check — re-entry will mint a new row and orphan the logged sets');

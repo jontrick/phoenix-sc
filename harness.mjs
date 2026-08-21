@@ -141,6 +141,19 @@ function phxStripComments(s){
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
+// v4.9.191 [PM]: code-only variants. has/hasNot read RAW text, correct for the
+// version-label guards (a label legitimately lives in a comment) and wrong for
+// anything asserting the presence or absence of CODE.
+//
+// v4.9.192 [TRAINING]: moved up from ~1263 to sit beside has/hasNot. They were
+// declared below most Training guards, and `const` is not hoisted, so routing those
+// guards through them threw "Cannot access 'hasNotCode' before initialization".
+// Memoised too — 50+ call sites each re-stripping 1.9MB is a slow harness for nothing.
+let _codeSrcCache = null;
+const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
+const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
+const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
+
 has("var APP_VERSION='4.9.190'", 'version is 4.9.190');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
@@ -402,7 +415,7 @@ try {
 }
 
 // The old rule is gone — a local copy must no longer win by merely existing.
-hasNot("if(localStorage.getItem(_nutRecipeKey()) !== null) return;", 'RESTORE: old local-wins early-return removed');
+hasNotCode("if(localStorage.getItem(_nutRecipeKey()) !== null) return;", 'RESTORE: old local-wins early-return removed');
 has('function _nutBackupLocal(', 'RESTORE: _bak helper defined');
 has('function _nutAfterRestore(', 'RESTORE: repaint helper defined');
 has('function _nutRecipesFrom(', 'RESTORE: envelope reader defined (bare array still loads)');
@@ -567,18 +580,18 @@ hasNot('function _nutDateKey(', 'TZ: no private nutrition copy of the date helpe
 has('function nutTrainingForDay(', 'CAL: training day read per date');
 has('function nutAdjustForDay(', 'CAL: targets adjusted per date');
 has('window.blabTrainingStateOn(dateKey)', 'CAL: asks Training for the STATE, not raw entries');
-hasNot('function _nutCalEntriesOn(', 'CAL: no longer interprets calendar entries itself');
+hasNotCode('function _nutCalEntriesOn(', 'CAL: no longer interprets calendar entries itself');
 has("out.rest = (dateKey < _nutToday())", 'CAL: an unresolved PAST due day does not earn training targets');
 has("' \\u2014 not logged'", 'CAL: and says why on screen');
 has("out.sessions > 1", 'CAL: a second session on a day is disclosed');
-hasNot("var nextDay = (bs.last_completed_day || 0) + 1;", 'CAL: queue-position heuristic gone');
+hasNotCode("var nextDay = (bs.last_completed_day || 0) + 1;", 'CAL: queue-position heuristic gone');
 has('function _nutSlotCard(', 'DAY: one shared slot renderer');
 has('function _nutDaySummary(', 'DAY: one shared day summary');
 has('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
 hasNot('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
 
 // ── Training API migration (v4.9.185) ──────────────────────────────────────
-hasNot("_BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]", 'CAL: no longer reads Training internals');
+hasNotCode("_BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]", 'CAL: no longer reads Training internals');
 has("out.state    = s.state || 'none';", 'CAL: takes the state Training reports');
 has("if(out.state === 'trained')   out.rest = false;", 'CAL: a completed session is a training day');
 has("else                          out.rest = true;", 'CAL: rest / skipped / none all take rest targets');
@@ -596,8 +609,8 @@ has("phxEx.prev_sets_b=_ssPB", 'P11-B1: prev_sets_b passed to renderer');
 // Bug 2: iOS tap counter — button elements with touch-action
 has("class=\"phx-tt-minus\"", 'P11-B2: phx-tt-minus exists');
 has("touch-action:manipulation", 'P11-B2: touch-action:manipulation on tap counter buttons');
-hasNot('<div class="phx-tt-minus"', 'P11-B2: phx-tt-minus is now a button (not a div)');
-hasNot('<div class="phx-tt-plus"', 'P11-B2: phx-tt-plus is now a button (not a div)');
+hasNotCode('<div class="phx-tt-minus"', 'P11-B2: phx-tt-minus is now a button (not a div)');
+hasNotCode('<div class="phx-tt-plus"', 'P11-B2: phx-tt-plus is now a button (not a div)');
 // Bug 3: Persistent wake lock
 has("requestWakeLock(); // persistent", 'P11-B3: persistent wake lock requested on load');
 has("function _phxReleaseWakeLockIfIdle", 'P11-B3: _phxReleaseWakeLockIfIdle still present');
@@ -695,22 +708,22 @@ has('_phxRegisterTimer(paintEmom);', 'FIX1: EMOM registers a resync');
 has('_phxRegisterTimer(paintInt);', 'FIX1: intervals register a resync');
 has('_phxRegisterTimer(updateCoreTimer);', 'FIX1: 20-min core registers a resync');
 // the old tick-counter clocks must be gone
-hasNot('st.elapsed++;', 'FIX1: BLAB tick-counter elapsed++ removed');
-hasNot('setInterval(function(){ elapsed++;', 'FIX1: WOD tick-counter elapsed++ removed');
-hasNot('setInterval(function(){ remain--;', 'FIX1: AMRAP tick-counter remain-- removed');
-hasNot('setInterval(function(){ secLeft--;', 'FIX1: EMOM tick-counter secLeft-- removed');
-hasNot('coreSecsLeft--;', 'FIX1: Core circuit tick-counter decrement removed');
+hasNotCode('st.elapsed++;', 'FIX1: BLAB tick-counter elapsed++ removed');
+hasNotCode('setInterval(function(){ elapsed++;', 'FIX1: WOD tick-counter elapsed++ removed');
+hasNotCode('setInterval(function(){ remain--;', 'FIX1: AMRAP tick-counter remain-- removed');
+hasNotCode('setInterval(function(){ secLeft--;', 'FIX1: EMOM tick-counter secLeft-- removed');
+hasNotCode('coreSecsLeft--;', 'FIX1: Core circuit tick-counter decrement removed');
 // FIX 2 — wake lock held for every timed session, re-requested after a screen lock.
 has('if(wakeLock && !wakeLock.released) return;', 'FIX2: released sentinel replaced, live one never duplicated');
 has('requestWakeLock(); // persistent', 'FIX2: wake lock re-requested when the page becomes visible (persistent)');
 has('function showCountIn(callback){\n  // Kill any prior count-in still running before we start a new one\n  _phxCancelCountIn();\n  requestWakeLock();', 'FIX2: wake lock held through the count-in');
-hasNot("navigator.wakeLock.request('screen').then(function(lock){", 'FIX2: BLAB inline wakeLock request replaced by shared helper');
+hasNotCode("navigator.wakeLock.request('screen').then(function(lock){", 'FIX2: BLAB inline wakeLock request replaced by shared helper');
 // FIX 3 — one 5-4-3-2-1-GO! count-in before every timed session, never scored.
 has("numEl.textContent='5';", 'FIX3: count-in opens on 5 (not 6)');
 has("var label = (el>=5) ? 'GO!' : String(5-el);", 'FIX3: 5,4,3,2,1 then GO!');
 has('if(el>=6){\n      clearInterval(iv);', 'FIX3: hands over one second after GO!');
-hasNot('st.afapCountdown', 'FIX3: BLAB afap inline 5→0 countdown removed');
-hasNot('id="afap-countdown"', 'FIX3: afap-countdown element removed');
+hasNotCode('st.afapCountdown', 'FIX3: BLAB afap inline 5→0 countdown removed');
+hasNotCode('id="afap-countdown"', 'FIX3: afap-countdown element removed');
 [
   ["showCountIn(function(){\n      // The user may have backed out of the runner during the count-in", 'BLAB runner (complex/run/interval/tabata)'],
   ["showCountIn(function(){\n    if(!document.body.contains(o)) return; // left the runner during the count-in\n    requestWakeLock();\n    _phxStampTimerStart();\n    paintTime();", 'WOD count-up'],
@@ -769,8 +782,10 @@ has('if(!window.blabIsActive() && !window._blabDryRun)', 'openTodaySession bypas
 // Re-entry handling put a branch between them. Assert the PROPERTY — the session-row
 // call is inside the dry-run guard — rather than its formatting.
 {
-  const i = html.indexOf('var aiSessionType=mapSessionType');
-  const seg = html.slice(i, i + 2600);   // must reach showScreen('screen-session'); 1400 fell short
+  // Comment-stripped: prose naming the sentinel would otherwise hijack the window.
+  const src = codeSrc();
+  const i = src.indexOf('var aiSessionType=mapSessionType');
+  const seg = src.slice(i, i + 2600);   // must reach showScreen('screen-session'); 1400 fell short
   const g = seg.indexOf('if(!window._blabDryRun){');
   const s = seg.indexOf('supabaseStartSession(aiSessionType');
   const closes = seg.indexOf('showScreen(\'screen-session\')');
@@ -780,13 +795,13 @@ has('if(!window.blabIsActive() && !window._blabDryRun)', 'openTodaySession bypas
 has('if(window._blabAuditStateOverride) return window._blabAuditStateOverride;', 'audit placeholder state override');
 
 // Dead overlay duplicates removed
-hasNot('window.blabBuildExCard', 'blabBuildExCard removed');
-hasNot('window.blabLaunchExercise', 'blabLaunchExercise removed');
-hasNot('function blabRenderPct', 'blabRenderPct removed');
-hasNot('function blabRenderSuper(', 'blabRenderSuper removed');
-hasNot('function blabRenderMaxReps', 'blabRenderMaxReps removed');
-hasNot('function blabRenderStd', 'blabRenderStd removed');
-hasNot("document.getElementById('blab-session-overlay')", 'blabOpenSession overlay fallback removed');
+hasNotCode('window.blabBuildExCard', 'blabBuildExCard removed');
+hasNotCode('window.blabLaunchExercise', 'blabLaunchExercise removed');
+hasNotCode('function blabRenderPct', 'blabRenderPct removed');
+hasNotCode('function blabRenderSuper(', 'blabRenderSuper removed');
+hasNotCode('function blabRenderMaxReps', 'blabRenderMaxReps removed');
+hasNotCode('function blabRenderStd', 'blabRenderStd removed');
+hasNotCode("document.getElementById('blab-session-overlay')", 'blabOpenSession overlay fallback removed');
 // Live runner kept
 has('window.blabRunWorkout = function', 'live runner blabRunWorkout kept');
 has('function blabRenderAfap', 'blabRenderAfap kept');
@@ -905,10 +920,10 @@ has("startRestTimer(180, 'Next set'", 'FIX2: FOR-LOAD WOD set rest fires full-sc
 has("class=\"phx-load-tick\"", 'FIX2: FOR-LOAD per-set tick to confirm');
 has("sets:(extra&&extra.sets)||null", 'FIX2: per-set data saved to record');
 // v4.9.113 FIX 3 — Circuit + Endurance Grind categories dropped
-hasNot("coreType:'Circuit'",         'FIX3: Circuit category removed');
-hasNot("coreType:'Endurance Grind'", 'FIX3: Endurance Grind category removed');
-hasNot("id:'core-ci-phoenix'",       'FIX3: Phoenix Circuit removed');
-hasNot("id:'core-en-rowcore'",       'FIX3: Row + Core removed');
+hasNotCode("coreType:'Circuit'",         'FIX3: Circuit category removed');
+hasNotCode("coreType:'Endurance Grind'", 'FIX3: Endurance Grind category removed');
+hasNotCode("id:'core-ci-phoenix'",       'FIX3: Phoenix Circuit removed');
+hasNotCode("id:'core-en-rowcore'",       'FIX3: Row + Core removed');
 has('function _phxOpenScoreEntry',  'score entry screen');
 has('function renderRecords',       'RECORDS scoreboard renderer');
 has("sb.from('wod_scores')",        'scores persist to Supabase wod_scores');
@@ -916,16 +931,16 @@ has('id="screen-records"',          'RECORDS screen present');
 has('navTo(\'records\')',           'RECORDS nav route wired');
 has('>Records<',                    'RECORDS nav/sidebar label present');
 // Legacy WOD system removed
-hasNot('function openPhoenixWOD',        'legacy openPhoenixWOD removed');
-hasNot('function renderDailyWOD',        'legacy renderDailyWOD removed');
-hasNot('function _phxGenerateDailyWOD',  'legacy _phxGenerateDailyWOD removed');
-hasNot('function _detectWODFormat',      'legacy _detectWODFormat removed');
-hasNot('function openWODLibrary',        'legacy openWODLibrary removed');
-hasNot('function generateCustomWOD',     'legacy generateCustomWOD removed');
-hasNot('function openBenchmarkLibrary',  'legacy openBenchmarkLibrary removed');
-hasNot('function phxWodTierColour',      'legacy phxWodTierColour removed');
-hasNot('window._wlibSetFilter',          'legacy _wlib browser removed');
-hasNot('id="screen-wod-library"',        'legacy WOD Library screen removed');
+hasNotCode('function openPhoenixWOD',        'legacy openPhoenixWOD removed');
+hasNotCode('function renderDailyWOD',        'legacy renderDailyWOD removed');
+hasNotCode('function _phxGenerateDailyWOD',  'legacy _phxGenerateDailyWOD removed');
+hasNotCode('function _detectWODFormat',      'legacy _detectWODFormat removed');
+hasNotCode('function openWODLibrary',        'legacy openWODLibrary removed');
+hasNotCode('function generateCustomWOD',     'legacy generateCustomWOD removed');
+hasNotCode('function openBenchmarkLibrary',  'legacy openBenchmarkLibrary removed');
+hasNotCode('function phxWodTierColour',      'legacy phxWodTierColour removed');
+hasNotCode('window._wlibSetFilter',          'legacy _wlib browser removed');
+hasNotCode('id="screen-wod-library"',        'legacy WOD Library screen removed');
 
 // ── BLAB TRAINING CALENDAR (v4.9.144) ───────────────────────────────────────
 console.log('\nBLAB Training Calendar — static wiring:');
@@ -1234,18 +1249,18 @@ has('function isDeload(w){return w===5||w===10||w===15;}', 'DELOAD: isDeload() p
 has('var isDeload = (week === 5 || week === 10);',          'DELOAD: BLAB session builder pins weeks 5/10');
 has('var isDeload = blabWeek===5 || blabWeek===10;',        'DELOAD: smart-recommend pins weeks 5/10');
 // The age-banded rule is dead — it must not come back in any form.
-hasNot('Every 3rd week (45+)',      'DELOAD: age-banded scheduled rule removed');
-hasNot('every 3rd-4th week (35-44)','DELOAD: age band 35-44 removed');
-hasNot('every 4th week (under 35)', 'DELOAD: age band under-35 removed');
+hasNotCode('Every 3rd week (45+)',      'DELOAD: age-banded scheduled rule removed');
+hasNotCode('every 3rd-4th week (35-44)','DELOAD: age band 35-44 removed');
+hasNotCode('every 4th week (under 35)', 'DELOAD: age band under-35 removed');
 // Prompt block periodisation must name 5 and 10, never 4/8/12.
 has('- Scheduled: every 5th week', 'DELOAD: prompt states the every-5th-week cadence');
 has('weeks 5 and 10',              'DELOAD: prompt names weeks 5 and 10');
 has('BLOCK 1 — ACCUMULATION (Weeks 1-4, deload week 5):',   'DELOAD: prompt Block 1 deloads week 5');
 has('BLOCK 2 — INTENSIFICATION (Weeks 6-9, deload week 10):','DELOAD: prompt Block 2 deloads week 10');
 has('BLOCK 3 — REALISATION (Weeks 11-12):',                  'DELOAD: prompt Block 3 is weeks 11-12');
-hasNot('Deload week 8.',  'DELOAD: stale "Deload week 8" gone from prompt');
-hasNot('Deload week 12.', 'DELOAD: stale "Deload week 12" gone from prompt');
-hasNot('Deload week 4."', 'DELOAD: stale "Deload week 4" gone from coach-note example');
+hasNotCode('Deload week 8.',  'DELOAD: stale "Deload week 8" gone from prompt');
+hasNotCode('Deload week 12.', 'DELOAD: stale "Deload week 12" gone from prompt');
+hasNotCode('Deload week 4."', 'DELOAD: stale "Deload week 4" gone from coach-note example');
 // The unscheduled triggers are independent of cadence and must survive untouched.
 has('RPE average > 9.5 two consecutive weeks',   'DELOAD: unscheduled RPE trigger intact');
 has('completion rate < 60% two consecutive weeks','DELOAD: unscheduled completion trigger intact');
@@ -1259,9 +1274,6 @@ has('payload_shape: _phxShapeOf(payload)',          'DIAG: snapshot stores paylo
 // asserting the presence or absence of CODE. Proven by prose probe (Training's method,
 // 2026-08-21): six PM guards fired on a comment describing the very thing they guard, so
 // documenting the privacy rule would have broken the build.
-const codeSrc = () => phxStripComments(html);
-const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
-const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
 hasNotCode('payload_preview:',                          'DIAG: raw payload_preview removed');
 hasNotCode("details: (err && err.details) || null",     'DIAG: details (value-echoing) not recorded');
@@ -1300,8 +1312,8 @@ has("_phxRecordWriteError('blabRestore.progressGuard'", 'RESTORE: blocked restor
 has('cloudWins = ct > lt;',                  'RESTORE: strict newer-wins, ties keep local');
 has('if(local.active !== true && cloud.active === true)', 'RESTORE: inactive local stub cannot shadow active cloud');
 // The pre-v4.9.158 rule: local won whenever it was active, regardless of stamps.
-hasNot("if(cloudDay > localDay){",           'RESTORE: old local-wins tiebreak removed');
-hasNot('blabRestoreFromCloud abort: local active and >= cloud', 'RESTORE: old local-wins log line removed');
+hasNotCode("if(cloudDay > localDay){",           'RESTORE: old local-wins tiebreak removed');
+hasNotCode('blabRestoreFromCloud abort: local active and >= cloud', 'RESTORE: old local-wins log line removed');
 
 // ── Today card reads the calendar (v4.9.161) ────────────────────────────────
 // Jon device-tested the calendar: Today still showed the next sequential BLAB
@@ -1344,10 +1356,10 @@ has('function _blabCalWireScroll','PERPETUAL: scroll watcher');
 has('function _blabCalWeekOf',    'PERPETUAL: single-week context for smart recs');
 has('_blabCalSmartRec(dateISO, _blabCalWeekOf(', 'PERPETUAL: smart rec gets one week, not the whole window');
 // Week paging is gone entirely — no stale callers left behind in the HTML.
-hasNot('_blabCalVisibleWeek', 'PERPETUAL: week-window builder removed');
-hasNot('_blabCalWeekOffset',  'PERPETUAL: week offset state removed');
-hasNot('_blabCalShiftWeek',   'PERPETUAL: week paging control removed');
-hasNot('_blabCalThisWeek',    'PERPETUAL: this-week reset removed');
+hasNotCode('_blabCalVisibleWeek', 'PERPETUAL: week-window builder removed');
+hasNotCode('_blabCalWeekOffset',  'PERPETUAL: week offset state removed');
+hasNotCode('_blabCalShiftWeek',   'PERPETUAL: week paging control removed');
+hasNotCode('_blabCalThisWeek',    'PERPETUAL: this-week reset removed');
 
 // ── Preview before adding + live suggestions (v4.9.163) ─────────────────────
 console.log('\nCalendar — preview and suggestions:');
@@ -1359,8 +1371,8 @@ has('function _blabCalIsRest',         'REST: rest classifier');
 has('data-cal-suggest=',               'SUGGEST: renders as a provisional entry on the day');
 has('SUGGESTED',                       'SUGGEST: provisional entries are badged');
 // The old category-only chip is gone.
-hasNot('data-cal-rec=',                'SUGGEST: category-only chip replaced');
-hasNot('data-cal-rec-type',            'SUGGEST: category-only chip type attribute removed');
+hasNotCode('data-cal-rec=',                'SUGGEST: category-only chip replaced');
+hasNotCode('data-cal-rec-type',            'SUGGEST: category-only chip type attribute removed');
 // _phxOpenSessionDetail gained an additive third arg; the two existing call sites
 // must keep working unchanged, so pin their count.
 has('window._phxOpenSessionDetail = function(id, backCtx, opts)', 'PREVIEW: detail view takes an opts arg');
@@ -1394,7 +1406,7 @@ console.log('\nDevice-test fixes:');
 // 2. Suggestion rotation — the .163 picker returned list[0] forever.
 has('var best = head[seed % head.length];', 'SUGGEST: rotates within the least-recent pool by date');
 has('if(!pool.length) pool = list;',        'SUGGEST: falls back rather than suggesting nothing');
-hasNot('if(v < bestT){ bestT = v; best = x; }', 'SUGGEST: first-match-forever picker removed');
+hasNotCode('if(v < bestT){ bestT = v; best = x; }', 'SUGGEST: first-match-forever picker removed');
 
 // 3. Hold-to-drag must not start an iOS text selection.
 has('#screen-blab-calendar,#screen-blab-calendar *', 'DRAG: selection suppressed on the calendar screen');
@@ -1405,7 +1417,7 @@ console.log('\nToday card wiring:');
 // The bug: the renderer called _blabCalEntryView; the function is
 // window.blabCalEntryView. Every call threw, the inject swallowed it, and the
 // static placeholder was left with a dead Start button for four versions.
-hasNot('_blabCalEntryView(', 'TODAY: no call to the non-existent _blabCalEntryView');
+hasNotCode('_blabCalEntryView(', 'TODAY: no call to the non-existent _blabCalEntryView');
 has('window.blabCalEntryView(', 'TODAY: renderer uses the real exported name');
 has('No Session Today',            'TODAY: empty day says so plainly');
 has('_blabCalConfirmRestToday',    'TODAY: confirm-rest action');
@@ -1422,11 +1434,15 @@ has('id="nav-programme4"',         'NAV: calendar screen carries the bottom nav'
 // class for the calendar surface: every _blabCal* / blabCal* name that is CALLED
 // must also be DEFINED somewhere.
 (() => {
-  const called  = new Set([...html.matchAll(/\b(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]));
+  // Comment-stripped: _blabCalEntryView is the dead-reference case study in the
+  // archive and the standard, so it is a name people WILL write about. On raw text a
+  // prose mention counts as a call and the sweep reports it undefined.
+  const cs = codeSrc();
+  const called  = new Set([...cs.matchAll(/\b(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]));
   const defined = new Set([
-    ...[...html.matchAll(/function\s+(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]),
-    ...[...html.matchAll(/window\.(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1]),
-    ...[...html.matchAll(/(?:var|let|const)\s+(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1])
+    ...[...cs.matchAll(/function\s+(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]),
+    ...[...cs.matchAll(/window\.(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1]),
+    ...[...cs.matchAll(/(?:var|let|const)\s+(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1])
   ]);
   // Compared EXACTLY. An earlier draft of this guard also accepted a name with its
   // leading underscore stripped, which made _blabCalEntryView look defined because
@@ -1466,8 +1482,8 @@ has('date:_phxLocalISO(),',                     'DAYKEY: set log stores a local 
 has('_phxLocalISO(new Date(l.date))===dateStr', 'DAYKEY: walk streak converts the stored instant');
 has('var dateStr=_phxLocalISO(checkDate);',     'DAYKEY: walk streak compares against a local day');
 // The old forms must not come back in either place.
-hasNot("date:new Date().toISOString().split('T')[0],\n    sessionId:sessionId,", 'DAYKEY: set log no longer stores a UTC date');
-hasNot("if(logs.some(function(l){return l.date.split('T')[0]===dateStr;}))",     'DAYKEY: walk streak no longer string-slices the instant');
+hasNotCode("date:new Date().toISOString().split('T')[0],\n    sessionId:sessionId,", 'DAYKEY: set log no longer stores a UTC date');
+hasNotCode("if(logs.some(function(l){return l.date.split('T')[0]===dateStr;}))",     'DAYKEY: walk streak no longer string-slices the instant');
 // The three walk WRITERS are correct as they stand — an instant is the right thing
 // to persist. If a sweep "fixes" them the streak breaks and history is corrupted,
 // so pin that they still store a full ISO instant.
@@ -1667,14 +1683,18 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
   // ever shrinks, that window spills into whatever domain follows and picks up THEIR
   // status literals ('active', 'abandoned', 'locked' all exist elsewhere), failing my
   // closed-set assertion on someone else's perfectly good code.
-  const start = html.indexOf('// BLAB TRAINING CALENDAR');
-  const end = html.indexOf('window.blabTrainingStateOn = function', start + 1);
+  // Both sentinels are CODE I own, in comment-stripped source. The previous start
+  // sentinel was the '// BLAB TRAINING CALENDAR' banner — a comment, so it vanishes
+  // under stripping, and on raw text prose quoting it hijacked the window.
+  const src = codeSrc();
+  const start = src.indexOf('window.blabCalGet = function');
+  const end = src.indexOf('window.blabTrainingStateOn = function', start + 1);
   if (start < 0 || end < 0 || end < start) {
-    bad('CONTRACT: cannot locate the calendar block by its own sentinels — the status-set ' +
-        'check did NOT run. Fix the sentinels rather than leaving this silently green.');
+    bad('CONTRACT: cannot locate the calendar block by its own code sentinels — the ' +
+        'status-set check did NOT run. Fix the sentinels rather than leaving this silently green.');
     return;
   }
-  const seg = html.slice(start, end);
+  const seg = src.slice(start, end);
   const found = new Set([...seg.matchAll(/status\s*[:=]+\s*'([a-z]+)'/g)].map(m => m[1]));
   const expected = ['completed', 'pending', 'skipped'];
   const actual = [...found].sort();
@@ -1695,8 +1715,9 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
   // internal pin, not a cross-domain contract. Kept because the Today card breaks
   // just as badly, but labelled honestly so the real dependency above is not assumed
   // covered by it.
-  const i = html.indexOf('window.blabCalSessionsOn = function');
-  const seg = html.slice(i, i + 900);
+  const src = codeSrc();
+  const i = src.indexOf('window.blabCalSessionsOn = function');
+  const seg = src.slice(i, i + 900);
   if (/cal\.sessions\.forEach[\s\S]{0,200}out\.push\(s\)/.test(seg)) ok('CONTRACT: BLAB entries pass through whole, so blabDay survives');
   else bad('CONTRACT: blabCalSessionsOn no longer passes BLAB entries through intact — blabDay may be gone, and Nutrition names the training day from it');
 })();

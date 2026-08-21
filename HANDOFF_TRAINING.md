@@ -62,6 +62,19 @@ answers *"what is still outstanding"*. A finished training day is `state:'traine
 from the first and `[]` from the second — both correct answers to their own question.
 **If you are filtering the second one's result by status, you wanted the first.**
 
+**`due` IS TIME-RELATIVE — the same word means two things.** For today it means
+*"this is the session to do"*. For a PAST date it means *"this was scheduled and was
+never resolved"* — not that he is about to do it, and not that he skipped it. Nothing
+ages an unresolved past session automatically, deliberately: only Jon knows whether a
+missed session was abandoned or is being made up, and auto-ageing it to `skipped`
+would have the calendar assert something he never said.
+
+So if you branch on `due`, ask whether `dateISO` is in the past first. Sending a
+three-week-old `due` day to training targets is defensible but is a decision, not a
+default — make it knowingly. If Jon ever asks why an old day still says "due", the
+honest answer is that nothing has resolved it, and the fix is a prompt asking him,
+not a silent state change.
+
 **Do not derive a day's state from raw entries.** The state call exists precisely so
 you do not have to: both cross-domain bugs on this data came from a consumer inferring
 meaning from a shape — v4.9.182 read a planned rest day as training, v4.9.187 read a

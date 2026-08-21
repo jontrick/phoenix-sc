@@ -752,6 +752,93 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.document.getElementById = _realGetById;
   }
 
+  // ── NET — the backup is reachable (v4.9.192) ──────────────────────────────
+  // _pepBackupLocal has written peptide_v1_{uid}_bak since .152 and NOTHING has
+  // ever read it. Three comments called it "recoverable" and I told Jon the same
+  // three times — but no path in code or UI could get it back. A safety net
+  // nobody can pull is not a safety net. These pull it.
+  {
+    const nOLD = '2026-08-01T00:00:00.000Z';
+    const nNEW = '2026-08-17T00:00:00.000Z';
+
+    const UID = 'jon';
+    const KEY = `peptide_v1_${UID}`;
+    
+    
+
+    const REAL = { stacks:[{compoundId:'retatrutide'},{compoundId:'bpc157'},{compoundId:'ta1'}],
+                   checked:{}, cart:[], notes:[{text:'months of notes'}], _ts: nOLD };
+
+    test('NET a real restore leaves a recoverable backup, and it is offered', () => {
+      reset(); signIn(UID);
+      seed(KEY, REAL);
+      // Cloud wins on timestamp — the live path that discards the local copy.
+      app.pepRestoreFromCloud({ peptide_state: { stacks:[{compoundId:'nad'}], checked:{}, cart:[], _ts: nNEW } });
+      assert.equal(read(KEY).stacks.length, 1, 'cloud copy is live');
+      const info = app.pepBackupInfo();
+      assert.ok(info, 'a backup is offered');
+      assert.equal(info.stacks, 3, 'it describes the replaced protocol');
+      assert.equal(info.curStacks, 1, 'and what is live now');
+    });
+
+    test('NET swapping it back actually returns the protocol', () => {
+      assert.equal(app.pepRestoreBackup(), true, 'restore reports success');
+      assert.equal(read(KEY).stacks.length, 3, 'the 3-compound protocol is live again');
+      assert.equal(read(KEY).notes.length, 1, 'notes came back too');
+    });
+
+    test('NET the swap is itself reversible', () => {
+      const info = app.pepBackupInfo();
+      assert.ok(info, 'the displaced copy is now the backup');
+      assert.equal(info.stacks, 1, 'it is the cloud copy we just displaced');
+      app.pepRestoreBackup();
+      assert.equal(read(KEY).stacks.length, 1, 'swapped back again');
+    });
+
+    test('NET nothing is offered when the backup matches what is live', () => {
+      reset(); signIn(UID);
+      seed(KEY, REAL);
+      seed(`${KEY}_bak`, REAL);
+      assert.equal(app.pepBackupInfo(), null, 'silent in normal use');
+    });
+
+    test('NET nothing is offered when there is no backup at all', () => {
+      reset(); signIn(UID);
+      seed(KEY, REAL);
+      assert.equal(app.pepBackupInfo(), null, 'no backup, no offer');
+    });
+
+    test('NET restore is a safe no-op with no backup and while signed out', () => {
+      reset(); signIn(UID);
+      assert.equal(app.pepRestoreBackup(), false, 'no backup');
+      signIn(null);
+      assert.equal(app.pepRestoreBackup(), false, 'signed out');
+    });
+
+    test('NET the offer is actually PAINTED, not just computed', () => {
+      const nodes = {};
+      const mk = id => ({ id, innerHTML:'', style:{}, classList:{add(){},remove(){},contains(){return false;}},
+        appendChild(){}, setAttribute(){}, getAttribute(){return null;}, addEventListener(){},
+        querySelector(){return null;}, querySelectorAll(){return [];} });
+      const real = app.document.getElementById;
+      app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
+
+      reset(); signIn(UID);
+      seed(KEY, REAL);
+      app.pepRestoreFromCloud({ peptide_state: { stacks:[{compoundId:'nad'}], checked:{}, cart:[], _ts: nNEW } });
+      app._pepTab = 'protocol';
+      nodes['pep-screen-body'] = mk('pep-screen-body');
+      app.pepRenderScreen();
+      const h = nodes['pep-screen-body'].innerHTML;
+      app.document.getElementById = real;
+
+      assert.ok(h.includes('Previous protocol kept'), 'the notice is on screen');
+      assert.ok(h.includes('Swap it back'), 'with a button the user can press');
+      assert.ok(h.includes('3 compounds'), 'naming what would come back');
+    });
+
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

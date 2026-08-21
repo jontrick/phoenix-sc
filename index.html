@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.191';
+var APP_VERSION='4.9.192';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21392,6 +21392,52 @@ function _pepBackupLocal(key, rawLocal){
   try { localStorage.setItem(key + "_bak", rawLocal); } catch(_e){}
 }
 
+// v4.9.192: the backup above has been written since .152 and read by NOTHING.
+// Three comments in this file called it "recoverable" and I told Jon the same
+// three times — but there was no path, in code or UI, that could get it back.
+// A safety net nobody can pull is not a safety net.
+function pepBackupInfo(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid) return null;
+    var raw = localStorage.getItem("peptide_v1_" + uid + "_bak");
+    if(!raw) return null;
+    var bak = JSON.parse(raw);
+    var cur = null;
+    try { cur = JSON.parse(localStorage.getItem("peptide_v1_" + uid) || "null"); } catch(_e){}
+    // Nothing to offer if the backup matches what is already live.
+    if(cur && JSON.stringify(cur) === JSON.stringify(bak)) return null;
+    return {
+      stacks:  (bak.stacks || []).length,
+      notes:   (bak.notes  || []).length,
+      ts:      bak._ts || null,
+      curStacks: cur ? (cur.stacks || []).length : 0
+    };
+  } catch(_e){ return null; }
+}
+
+// Swap live and backup. Deliberately a SWAP rather than a one-way restore, so
+// restoring the wrong one is itself undoable — the same reasoning that put the
+// backup there in the first place.
+function pepRestoreBackup(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid) return false;
+    var key = "peptide_v1_" + uid;
+    var bak = localStorage.getItem(key + "_bak");
+    if(!bak) return false;
+    var cur = localStorage.getItem(key);
+    localStorage.setItem(key, bak);
+    if(cur != null) localStorage.setItem(key + "_bak", cur);
+    // Re-save through the normal path so it stamps _ts and mirrors to cloud.
+    var restored = pepGetState();
+    pepSaveState(restored);
+    if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+    pepRenderScreen();
+    return true;
+  } catch(_e){ return false; }
+}
+
 // v4.9.152: repaint after a real restore. The background profile path calls
 // renderTodayScreen() BEFORE the restore hook runs, so a fresh-install restore
 // would otherwise sit invisible until the user navigated away and back.
@@ -21836,6 +21882,8 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-note-rm]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepDeleteNote(parseInt(btn.getAttribute("data-pep-note-rm"))); });
   });
+  var restoreBak = body.querySelector("#pep-restore-bak");
+  if(restoreBak) restoreBak.addEventListener("click", pepRestoreBackup);
   var bloodAdd = body.querySelector("#pep-blood-add");
   if(bloodAdd) bloodAdd.addEventListener("click", function(){ pepOpenBloodPanel(null); });
   body.querySelectorAll("[data-pep-blood-open]").forEach(function(el){
@@ -22017,7 +22065,24 @@ function _pepBindTile(tile){
 // ── PROTOCOL tab ──────────────────────────────────────────────────────────
 function _pepTabProtocol(ps){
   var stacks = ps.stacks || [];
-  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
+  var h = "";
+
+  // v4.9.192: offer the replaced copy back. Only appears when a backup exists
+  // AND differs from what is live, so it is silent in normal use.
+  var _bak = pepBackupInfo();
+  if(_bak){
+    h += "<div style=\"background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;\">Previous protocol kept</div>";
+    h += "<div style=\"font-size:12px;color:var(--text2);line-height:1.6;\">A copy with <strong>" + _bak.stacks + " compound" + (_bak.stacks===1?"":"s") + "</strong>" +
+         (_bak.notes ? " and " + _bak.notes + " note" + (_bak.notes===1?"":"s") : "") +
+         " was replaced when your protocol last synced" + (_bak.ts ? " (saved " + _esc(String(_bak.ts).slice(0,10)) + ")" : "") +
+         ". You currently have " + _bak.curStacks + ".</div>";
+    h += "<button id=\"pep-restore-bak\" style=\"margin-top:10px;padding:9px 14px;background:none;border:1px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">Swap it back</button>";
+    h += "<div style=\"font-size:10px;color:var(--text3);margin-top:6px;\">This swaps the two, so it is reversible.</div>";
+    h += "</div>";
+  }
+
+  h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + stacks.length + " compound" + (stacks.length !== 1 ? "s" : "") + "</div>";
   h += "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add</button>";
   h += "</div>";

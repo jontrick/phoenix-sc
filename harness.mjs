@@ -1487,8 +1487,14 @@ const codeOnly = stripComments(html);
 // baseline. Anyone lowering this cap should reword their own comments rather than
 // assume the delta equals the number of call sites they fixed.
 {
-  const NATIVE_DIALOG_CAP = 80;
-  const n = (html.match(/(?:^|[^.\w])(?:alert|confirm|prompt)\(/g) || []).length;
+  // v4.9.191: counted on CODE ONLY. This previously counted raw text, so 9 of the 80 were
+  // comment MENTIONS — a domain could have added 9 real dialogs while deleting comments and
+  // stayed green. Peptides' rule (2026-08-21): a tolerance added to work around a measurement
+  // problem outlives the measurement fix and silently becomes a hole; when you correct what a
+  // guard can see, re-examine every fudge that existed because it could not see properly.
+  // Training had flagged the raw count as "not a site count" — with phxStripComments it now is.
+  const NATIVE_DIALOG_CAP = 71;
+  const n = (phxStripComments(html).match(/(?:^|[^.\w])(?:alert|confirm|prompt)\(/g) || []).length;
   if (n > NATIVE_DIALOG_CAP) bad(`RULE 4: native dialogs grew to ${n} (cap ${NATIVE_DIALOG_CAP}) — use a DOM modal, iOS suppresses these silently`);
   else if (n < NATIVE_DIALOG_CAP) ok(`RULE 4: native dialogs down to ${n} (cap ${NATIVE_DIALOG_CAP}) — lower the cap in harness.mjs`);
   else ok(`RULE 4: native dialogs held at ${n}, not growing`);

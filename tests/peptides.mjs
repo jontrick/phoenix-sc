@@ -524,6 +524,66 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   
   }
 
+  // ── Cross-domain contract — PROVIDER-SIDE PINS ────────────────────────────
+  // Per COMMS_PROTOCOL (Training .186): the provider pins the contract in their
+  // OWN suite. A consumer's pin only goes red after the break has already
+  // shipped past the domain that owns the shape.
+  //
+  // Peptide surfaces called from OUTSIDE the peptide block:
+  //   pepRestoreFromCloud(row) -> boolean   PM's _phxOnProfileFetched wrapper
+  //   _pepAfterRestore()                    same wrapper, only when true
+  //   pepRenderTodayTile()                  renderTodayScreen
+  //   pepRenderScreen()                     navTo('peptide')
+  //   pepOpenAddStack() / pepOpenOrderPicker()   the + button set in navTo
+  //
+  // The boolean is the sharp one. The shared wrapper repaints ONLY on true. If
+  // this returned undefined, a fresh install would restore the protocol and then
+  // show an empty Today tile until the user navigated away and back — silent,
+  // and exactly the bug fixed in v4.9.152.
+  {
+    const cCloud = {
+      stacks: [{ compoundId: 'retatrutide' }, { compoundId: 'bpc157' }],
+      checked: {}, cart: [], _ts: NEWER,
+    };
+
+    test('CONTRACT pepRestoreFromCloud returns true when it replaced local', () => {
+      reset(); signIn(UID);
+      assert.equal(app.pepRestoreFromCloud({ peptide_state: cCloud }), true,
+        'must be exactly true — the shared wrapper repaints on it');
+    });
+
+    test('CONTRACT pepRestoreFromCloud returns false when it changed nothing', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId: 'ta1' }], checked: {}, cart: [], _ts: NEWER });
+      assert.equal(app.pepRestoreFromCloud({ peptide_state: { ...cCloud, _ts: OLDER } }), false,
+        'must be falsy — otherwise every profile fetch triggers a needless repaint');
+    });
+
+    test('CONTRACT pepRestoreFromCloud always returns a boolean, whatever it is passed', () => {
+      reset(); signIn(UID);
+      [null, undefined, {}, { peptide_state: null }, { peptide_state: {} }].forEach(row => {
+        assert.equal(typeof app.pepRestoreFromCloud(row), 'boolean', 'boolean for every input');
+      });
+    });
+
+    test('CONTRACT _pepAfterRestore exists and is safe without a DOM node', () => {
+      assert.equal(typeof app._pepAfterRestore, 'function', 'the wrapper calls it directly');
+      app._pepAfterRestore();
+    });
+
+    test('CONTRACT pepRenderTodayTile is safe with no protocol', () => {
+      reset(); signIn(UID);
+      assert.equal(typeof app.pepRenderTodayTile, 'function', 'renderTodayScreen calls it');
+      app.pepRenderTodayTile();
+    });
+
+    test('CONTRACT the nav entry points exist', () => {
+      ['pepRenderScreen', 'pepOpenAddStack', 'pepOpenOrderPicker'].forEach(fn => {
+        assert.equal(typeof app[fn], 'function', fn + ' is called from navTo');
+      });
+    });
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

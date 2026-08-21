@@ -58,6 +58,63 @@ You are the **Peptides Engineer** for Project Phoenix — Jon's personal fitness
 
 Status values: `instock` (active — scheduled), `pipeline`, `onorder`, `complete` (all three = NOT scheduled).
 
+Stock fields per stack (v4.9.180): `vialMg`, `waterMl`, `sealedVials`, `openDosesUsed`, `openedDate`.
+Settings (v4.9.180–182): `settings: {leadTimeDays, bufferWeeks, shelfLifeDays, coverageMonths}`.
+Also present: `notes[]` (response log), `advice` (last AI review), `bloods[]` (LOCAL CACHE of the
+`blood_panels` table — stripped from the cloud mirror, see below).
+
+### MEANINGS — not just shapes
+
+Shapes above are not enough to use this data safely. Three meanings you cannot infer from the schema:
+
+**`stacks: []` is AMBIGUOUS.** It means either "Jon deliberately cleared his protocol" or "the app
+synthesised an empty default because localStorage had no key yet". `pepGetState()` returns a literal
+`{stacks:[], checked:{}, cart:[]}` on a cache miss, and all 12 save paths will persist that with a
+fresh `_ts`. The two are byte-identical. **Never treat an empty `stacks` as authoritative** — that
+assumption wiped a live protocol in v4.9.158 and is guarded in `pepRestoreFromCloud` and
+`_pepStubWouldClobber` (v4.9.159). If you write code that reads `peptide_state`, an empty `stacks`
+means "no information", not "no protocol".
+
+**`_ts` is written on SAVE, never on read.** Stamping on read would make merely opening the app look
+like an edit and let a stale device win a restore. Restore rule is newest-timestamp-wins with ties to
+local; full table in COMMS_PROTOCOL § RESTORE / MERGE RULES.
+
+**`bloods[]` never goes to the cloud.** `blood_panels` is the source of truth; `ps.bloods` is a local
+cache. `_pepCloudPayload()` strips it, because mirroring it would duplicate pathology values into a
+second store. Anything that builds a peptide cloud payload must go through `_pepCloudPayload()`.
+
+## API OTHER DOMAINS MAY CALL (provider-pinned)
+
+Pinned in `tests/peptides.mjs` under CONTRACT, and in `harness.mjs` under STRUCTURAL. Per
+COMMS_PROTOCOL, the provider owns these pins — a consumer's pin only goes red after the break has
+already shipped.
+
+| Surface | Contract | Called by |
+|---|---|---|
+| `pepRestoreFromCloud(row)` | Returns **boolean**. `true` ONLY when local was actually replaced. Never throws — returns a boolean for `null`/`{}`/missing `peptide_state`. | PM's `_phxOnProfileFetched` wrapper |
+| `_pepAfterRestore()` | Repaints the Today tile and the portal. Safe with no DOM. Call ONLY when the above returned true. | same wrapper |
+| `pepRenderTodayTile()` | Renders `#today-peptide-tile`. No-ops when there is no protocol or no element. | `renderTodayScreen()` |
+| `pepRenderScreen()` | Renders the portal. | `navTo('peptide')` |
+| `pepOpenAddStack()` / `pepOpenOrderPicker()` | Sheet openers. | the `+` button handler in `navTo` |
+
+**Why the boolean matters:** the shared wrapper repaints only on `true`. If it ever returned
+`undefined`, a fresh install would restore the protocol and then show an empty Today tile until the
+user navigated away and back — silent. That was the v4.9.152 bug; breaking the return value now fails
+two named tests.
+
+## WHAT PEPTIDES CONSUMES FROM OTHER DOMAINS
+
+Exactly one surface: **`_phxRecordWriteError(context, err, payload)`** (PM-owned). Every call site is
+`typeof`-guarded, so a rename degrades to "no diagnostics" rather than throwing inside a cloud write.
+Asserted structurally in `harness.mjs`.
+
+Peptides reads **nothing** from Training or Nutrition state — no `blab*`, no `nut*`. Also asserted
+structurally, so if that ever changes the owning domain must be told, per COMMS_PROTOCOL.
+
+Payloads passed to `_phxRecordWriteError` are **counts and timestamps only**, never medical values —
+it serialises into `localStorage.phx_last_write_error`, which is visible in Settings and readable from
+the URL bar via `phxLastError()`.
+
 ## JON'S ACTUAL REGIME (context — confirm current state with Jon before assuming)
 
 Key compounds from his stack: Retatrutide (weekly Fri AM fasted), Ipamorelin + CJC-1295 No DAC (nightly, 15-min gap, Mon off), BPC-157, Thymosin Alpha-1 (Wed+Sat), MOTS-c (every 5 days ×4 then 4 months off), Klow blend (EOD), NAD+ (Mon/Wed/Fri AM — never PM), Epitalon (20 consecutive nights, 6-month break).

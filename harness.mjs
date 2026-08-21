@@ -985,6 +985,28 @@ try {
   bad('CAL: calendar rule execution failed — ' + e.message);
 }
 
+// ── PEPTIDES — cross-domain contract (STRUCTURAL) ───────────────────────────
+// _phxRecordWriteError is the ONLY foreign surface the peptide block consumes.
+// Every call site is typeof-guarded, so a PM rename degrades to "no diagnostics"
+// rather than throwing inside a cloud write.
+(() => {
+  const i = html.indexOf('var _pepTab = "today";');
+  const j = html.indexOf('function nutAddComponent(slot, dateKey, food, qty)');
+  if (i < 0 || j < 0) { bad('PEP: could not isolate the peptide block'); return; }
+  const blk = html.slice(i, j);
+  const calls  = (blk.match(/_phxRecordWriteError\s*\(/g) || []).length;
+  const guards = (blk.match(/typeof _phxRecordWriteError === "function"/g) || []).length;
+  calls > 0 && guards >= calls - 1
+    ? ok(`PEP: STRUCTURAL every _phxRecordWriteError call is typeof-guarded (${calls} calls, ${guards} guards)`)
+    : bad(`PEP: STRUCTURAL unguarded _phxRecordWriteError call — ${calls} calls, ${guards} guards`);
+  /\bblab[A-Z]/.test(blk)
+    ? bad('PEP: STRUCTURAL peptide block reaches into Training state')
+    : ok('PEP: STRUCTURAL peptide block consumes nothing from Training');
+  /\bnut[A-Z]/.test(blk)
+    ? bad('PEP: STRUCTURAL peptide block reaches into Nutrition state')
+    : ok('PEP: STRUCTURAL peptide block consumes nothing from Nutrition');
+})();
+
 // ── PEPTIDE PORTAL — recon engine / Today tile / ADJUST / BLOODS ────────────
 // v4.9.141-146. Guards the peptide domain against accidental removal by other
 // chats editing the shared file.

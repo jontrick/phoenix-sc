@@ -148,8 +148,22 @@ for (const file of files) {
   // not fail. Found by Training, 2026-08-18; it had silently faked a pass in tests/pm.mjs.
   // Suites must therefore be awaited too (mod.default is already awaited below), and a
   // test that returns a promise now blocks the next one, which is what we want for order.
+  // v4.9.197: SERIALISED. Previously every case was started immediately and all were awaited
+  // together, so async cases INTERLEAVED inside one shared sandbox — a case could read another
+  // case's localStorage mid-flight, and it presents as a bug in the code under test rather than
+  // in the runner (Nutrition hit it: three cases carrying a different case's diagnostic).
+  // My own doing: this is the shadow of the fix that made async cases able to fail at all.
+  // Each case now waits for the previous, so the sandbox has a single writer.
+  //
+  // CONSEQUENCE FOR SUITE AUTHORS: cases no longer execute at REGISTRATION time. The suite body
+  // runs to completion first, so any state or stubbing established at suite-body level is laid
+  // down before every case and torn down before any of them run. Establish state PER CASE.
+  // Verified before shipping: all four suites pass under deferred semantics (Peptides fixed
+  // three order-dependencies in 872cea9 — suite-level state, a getElementById override restored
+  // at body level, and three cases chained off the previous case's leftovers).
+  let chain = Promise.resolve();
   const pending = [];
-  const test = (name, fn) => { const p = runOne(name, fn); pending.push(p); return p; };
+  const test = (name, fn) => { chain = chain.then(() => runOne(name, fn)); pending.push(chain); return chain; };
   const runOne = async (name, fn) => {
     try {
       await fn();

@@ -21651,9 +21651,10 @@ function _pepTongForStack(stack){
 // pulls the WHOLE order forward, and everything gets topped up to the coverage
 // window in the same shipment. Shipping is a flat ~$167 AUD, so splitting into
 // separate orders pays it repeatedly for no benefit.
-function _pepOrderPlan(ps){
+function _pepOrderPlan(ps, overrideMonths){
   var set = _pepSettings(ps);
-  var coverDays = (set.coverageMonths != null ? set.coverageMonths : 6) * 30;
+  var months = overrideMonths != null ? overrideMonths : (set.coverageMonths != null ? set.coverageMonths : 6);
+  var coverDays = months * 30;
   var todayISO = _pepToday();
   var rows = [], trigger = null, anyOverdue = false;
 
@@ -21695,7 +21696,7 @@ function _pepOrderPlan(ps){
     rows: rows,
     triggerDate: trigger,
     anyOverdue: anyOverdue,
-    coverageMonths: (set.coverageMonths != null ? set.coverageMonths : 6),
+    coverageMonths: months,
     itemsAud: total,
     unpriced: rows.filter(function(r){ return !r.tong; }).length,
     dueNow: !!(anyOverdue || (trigger && trigger <= todayISO))
@@ -21770,6 +21771,24 @@ function pepRenderScreen(){
   if(copyBtn) copyBtn.addEventListener("click", pepCopyOrder);
   var buildBtn = body.querySelector("#pep-build-order");
   if(buildBtn) buildBtn.addEventListener("click", pepBuildOrderFromPlan);
+  body.querySelectorAll("[data-pep-cover]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var st = pepGetState();
+      if(!st.settings) st.settings = {};
+      st.settings.coverageMonths = parseInt(btn.getAttribute("data-pep-cover"), 10);
+      pepSaveState(st);
+      pepRenderScreen();
+    });
+  });
+  var lead = body.querySelector("#pep-leadtime");
+  if(lead) lead.addEventListener("change", function(){
+    var st = pepGetState();
+    if(!st.settings) st.settings = {};
+    var v = parseInt(lead.value, 10);
+    st.settings.leadTimeDays = (isNaN(v) || v < 0) ? 21 : v;
+    pepSaveState(st);
+    pepRenderScreen();
+  });
   var advBtn = body.querySelector("#pep-advice-go");
   if(advBtn) advBtn.addEventListener("click", pepGenerateAdvice);
   var noteBtn = body.querySelector("#pep-note-save");
@@ -23012,7 +23031,33 @@ function _pepTabOrder(ps){
 // turns the whole thing into a cart.
 function _pepOrderForecastBlock(ps){
   var plan = _pepOrderPlan(ps);
+  var set = _pepSettings(ps);
   var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Reorder Forecast</div>";
+
+  // v4.9.182: how far ahead to buy is a spending decision, not a default. Each
+  // option carries its own price so the choice is made with the number visible —
+  // a 6-month top-up priced at roughly $8,400 AUD should not arrive silently.
+  if((ps.stacks || []).length){
+    h += "<div style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;\">Buy ahead</div>";
+    h += "<div style=\"display:flex;gap:8px;margin-bottom:12px;\">";
+    [3,6,12].forEach(function(m){
+      var alt = _pepOrderPlan(ps, m);
+      var act = plan.coverageMonths === m;
+      h += "<button data-pep-cover=\"" + m + "\" style=\"flex:1;padding:8px 4px;border-radius:8px;border:1px solid " + (act?"#7B68EE":"var(--border2)") + ";background:" + (act?"#7B68EE22":"none") + ";cursor:pointer;touch-action:manipulation;\">" +
+           "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;color:" + (act?"#7B68EE":"var(--text2)") + ";\">" + m + " mo</div>" +
+           "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">$" + Math.round(alt.itemsAud) + "</div>" +
+           "</button>";
+    });
+    h += "</div>";
+    h += "<div style=\"display:flex;align-items:center;gap:10px;\">";
+    h += "<label style=\"font-size:11px;color:var(--text3);flex:1;\">Delivery lead time</label>";
+    h += "<input id=\"pep-leadtime\" type=\"number\" min=\"0\" step=\"1\" value=\"" + set.leadTimeDays + "\" style=\"width:70px;padding:8px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;text-align:center;box-sizing:border-box;\">";
+    h += "<span style=\"font-size:11px;color:var(--text3);\">days</span>";
+    h += "</div>";
+    h += "<div style=\"font-size:10px;color:var(--text3);margin-top:6px;\">Order-by dates are lead time plus a " + set.bufferWeeks + "-week buffer.</div>";
+    h += "</div>";
+  }
 
   if(!plan.rows.length){
     var msg = (ps.stacks || []).length

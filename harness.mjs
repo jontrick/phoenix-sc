@@ -91,6 +91,28 @@ try {
 
 // ── 3. Feature assertions — v4.9.108 BLAB rebuild ───────────────────────────
 console.log('\nFeature check — v4.9.108 architecture + content:');
+// ── SAFE COMMENT STRIPPING (PM, 2026-08-21 — after Training measured the damage) ──
+// DO NOT use /\/\*[\s\S]*?\*\//g on this file. `/*` and `*/` occur inside strings and CSS,
+// so the lazy match jumps between unrelated pairs and swallows real code: measured at
+// 472,792 chars — 23.7% of index.html — and 231 `function ` declarations. Guards built on
+// it scanned a file with a quarter missing: 8 of 25 _phxRecordWriteError calls and 33 of 38
+// nutGetState calls were INVISIBLE, so a regression hiding in a swallowed region reported
+// clean. Training found it when exactly that ate an injected test consumer.
+// This strips LINE-WISE instead: a line is dropped only if it BEGINS a block comment or a
+// //-comment at line start, so a `/*` or `//` appearing mid-line inside a string or a URL is
+// never touched. Removes 11.4% (real comments) and loses zero real call sites.
+function phxStripComments(s){
+  const out = []; let inBlock = false;
+  for (const line of s.split('\n')) {
+    const t = line.trim();
+    if (inBlock) { if (line.includes('*/')) inBlock = false; out.push(''); continue; }
+    if (t.startsWith('/*')) { if (!t.slice(2).includes('*/')) inBlock = true; out.push(''); continue; }
+    if (t.startsWith('//')) { out.push(''); continue; }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
@@ -1003,9 +1025,7 @@ try {
   // same "a grep match is not a call" trap as renderTodayScreen. Strip
   // full-line and block comments before scanning. Full-line only, deliberately:
   // stripping from any // would eat https:// inside string literals.
-  const decomment = src => src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+  const decomment = phxStripComments; // v4.9.191: the regex form ate 23.7% of the file
   if (i < 0 || j < 0) { bad('PEP: could not isolate the peptide block'); return; }
   const blk = decomment(html.slice(i, j));
   const calls  = (blk.match(/_phxRecordWriteError\s*\(/g) || []).length;
@@ -1432,7 +1452,7 @@ has("_phxRecordWriteError('blabOpenSession'", 'START: failures reach Diagnostic'
 // comments that describe what was removed and reported the bug as still present —
 // the same guard-population mistake as the underscore-stripping sweep and the
 // 15-site writer count. A guard that measures the wrong text is worse than none.
-const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+const stripComments = phxStripComments; // v4.9.191: the regex form ate 23.7% of the file
 const codeOnly = stripComments(html);
 (() => {
   const n = (codeOnly.match(/openPhxSession\s*\(/g) || []).length;

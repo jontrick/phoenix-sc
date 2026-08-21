@@ -1030,7 +1030,13 @@ try {
   const blk = decomment(html.slice(i, j));
   const calls  = (blk.match(/_phxRecordWriteError\s*\(/g) || []).length;
   const guards = (blk.match(/typeof _phxRecordWriteError === "function"/g) || []).length;
-  calls > 0 && guards >= calls - 1
+  // v4.9.191: was `guards >= calls - 1`. That slack existed because the COMMENT
+  // naming _phxRecordWriteError inflated the call count — but comments are
+  // stripped now, so the tolerance did nothing except let exactly one unguarded
+  // call through undetected. Which is the only regression this guard exists to
+  // catch. Found by injecting an unguarded call and watching it report PASS at
+  // 4 calls / 3 guards. Strict from here.
+  calls > 0 && guards >= calls
     ? ok(`PEP: STRUCTURAL every _phxRecordWriteError call is typeof-guarded (${calls} calls, ${guards} guards)`)
     : bad(`PEP: STRUCTURAL unguarded _phxRecordWriteError call — ${calls} calls, ${guards} guards`);
   /\bblab[A-Z]/.test(blk)

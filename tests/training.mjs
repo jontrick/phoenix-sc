@@ -11,6 +11,28 @@
 // Note the sandbox never supplies the key under test: we signIn(UID) and let
 // blabRestoreFromCloud derive blab_v1_<uid> itself. Nutrition shipped a
 // fresh-install bug precisely because its stub handed the key over.
+//
+// ── DATE LITERALS: audited 2026-08-21, none decay ────────────────────────────
+// A test pinned to a literal date turns into a DIFFERENT test as that date recedes.
+// Nutrition's calendar cases were written against 2026-08-19; once it became the past
+// they silently exercised the unresolved-`due` path while still claiming to test
+// scheduled sessions — green throughout, describing something they no longer did.
+// This file owns the calendar semantics where past/present/future changes meaning, so
+// it is the most exposed suite in the repo. All seven literals checked:
+//
+//   OLDER / NEWER (L19-20)   — compared only against EACH OTHER by the restore
+//                              resolution table, never against now. Position-independent.
+//   '2026-08-20' (calendar    — arbitrary; that case asserts the blob survives restore,
+//    carry test)                nothing interprets the date. Commented at the site.
+//   withClock('2026-08-19     — a PINNED now. The '2026-08-20' assertions are that
+//    T18:30Z') pairs            instant's LOCAL date, so the pair is the point of the
+//                               test and cannot drift.
+//
+// RULE FOR ANYTHING ADDED HERE: if the assertion depends on the date's position
+// relative to today, derive it with dayFromToday(n) or pin `now` with withClock() and
+// say which status you mean. A bare literal is only acceptable where the assertion
+// genuinely does not care — and say so at the site, or the next reader cannot tell
+// the difference between "inert" and "not yet decayed".
 
 import { recordingDom as sharedRecordingDom } from './helpers/dom.mjs';
 
@@ -147,6 +169,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   });
 
   test('the training calendar rides along inside blab_state', () => {
+    // The date here is ARBITRARY and nothing interprets it — this asserts the blob
+    // survives restore and hydrates, not what the day means. Saying so because
+    // Nutrition found several of its own cases written against a hardcoded date that
+    // had since become the past, silently exercising the unresolved-`due` path while
+    // claiming to test scheduled sessions. A bare literal that looks meaningful is
+    // how that starts. If this case ever grows a day-semantics assertion, switch it
+    // to dayFromToday().
     const cal = { sessions: [{ blabWeek: 5, blabDay: 3, scheduledDate: '2026-08-20', status: 'pending' }], customs: [] };
     const r = restore(null, { ...AHEAD, calendar: cal, _ts: NEWER });
     assert.equal(r.state.calendar.sessions.length, 1, 'calendar restored with the state');

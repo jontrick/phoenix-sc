@@ -1533,10 +1533,27 @@ has("if(!(d >= 1 && d <= 4)) return '';",           'CONTRACT: blabDayLabel refu
 has("out.push({custom:true, id:c.id, cat:c.cat",    'CONTRACT: calendar entries carry cat for the REST distinction');
 // blabCalGet is INTERNAL (PM ruling): being on window is packaging, not a contract,
 // and freezing {sessions, customs} would lock this domain's raw storage shape. The
-// supported surface is the question-shaped call below. Nutrition's dependency on
-// blabCalGet is a documented temporary exception until it migrates — do not rename it
-// in the meantime.
+// supported surface is the question-shaped call below.
+//
+// The temporary exception that let Nutrition read blabCalGet is DISCHARGED — they
+// migrated to blabTrainingStateOn in their v4.9.189 and interpret nothing. Verified
+// here rather than taken on trust: the guard below fails if any consumption returns.
 has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped state surface exists');
+(() => {
+  // Nutrition dropped its own hasNot on blabCalGet because a file-wide match fired on
+  // MY legitimate use of my own function — correct call, a guard that cannot tell
+  // whose code it is reading is worse than none. Scoped to the nutrition block, the
+  // check is possible without that false positive, and it belongs on this side anyway:
+  // I am the one who would be surprised by a consumer returning.
+  const start = html.indexOf('// NUTRITION ENGINE');
+  const end = html.indexOf('// ═══════════════════════════════════════════════════════════════════════════\n// PEPTIDE');
+  if (start < 0 || end < 0 || end < start) { ok('CONTRACT: nutrition block not isolatable, skipping consumption check'); return; }
+  const seg = html.slice(start, end);
+  const reaches = /(?<![.\w$])blabCalGet\s*\(/.test(seg);
+  if (!reaches) ok('CONTRACT: nutrition consumes the state surface, not the store');
+  else bad('CONTRACT: nutrition is reading blabCalGet again — that is my internal storage shape, ' +
+           'and freezing it blocks restructuring this domain. Route it through blabTrainingStateOn.');
+})();
 has("out.state = done.length ? 'trained' : 'due';", 'CONTRACT: a completed session reads as trained, not as an empty day');
 has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRACT: blabDay is a number, never null');
 

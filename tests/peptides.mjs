@@ -9,8 +9,26 @@
 
 const UID = 'test-user';
 const KEY = `peptide_v1_${UID}`;
+
+// DATE LITERALS — audited against COMMS_PROTOCOL's decay rule (Nutrition .189):
+// a test pinned to a literal date becomes a DIFFERENT test as the date recedes.
+// A literal is only safe where the assertion is position-independent — i.e. the
+// value is compared against another value, never against "now".
+//
+// OLDER/NEWER are compared ONLY against each other, by pepRestoreFromCloud's
+// timestamp table. Nothing derives a phase or an elapsed time from them, so they
+// mean the same thing forever. SAFE as literals.
 const OLDER = '2026-08-01T00:00:00.000Z';
 const NEWER = '2026-08-17T00:00:00.000Z';
+
+// Anything whose MEANING depends on where it sits relative to today must be
+// derived, and must say which phase it represents. My schedule engine and
+// depletion forecast are entirely position-sensitive: a startDate that meant
+// "just started" when written silently becomes "deep into a cycle", and a
+// fixed-length course anchored to a past date tests the FINISHED path while the
+// test name still claims otherwise.
+const ISO = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const daysAgo = n => ISO(new Date(Date.now() - n*86400000));
 
 export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
@@ -112,6 +130,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // the profile row lands stamped an empty protocol "now", which then beat the
   // real cloud copy on timestamp. Every case below FAILS on .158.
 
+  // startDate here is INERT — these cases assert how many stacks survive a
+  // restore, and restore never schedules. Position-independent, so literals are
+  // safe. If anyone adds a scheduling assertion to these, derive them first.
   const REAL_CLOUD = {
     stacks: [
       { compoundId: 'retatrutide', dose: 6, startDate: '2026-07-01' },
@@ -581,6 +602,48 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       ['pepRenderScreen', 'pepOpenAddStack', 'pepOpenOrderPicker'].forEach(fn => {
         assert.equal(typeof app[fn], 'function', fn + ' is called from navTo');
       });
+    });
+  }
+
+  // ── Course phase — the date-decay trap, occupied ──────────────────────────
+  // Epitalon is 20 consecutive nights. A stack anchored to a literal past date
+  // would silently exercise the FINISHED course while its name claimed it was
+  // running, and it would go on passing. Both phases are derived from today and
+  // named, so neither can drift into the other.
+  {
+    const c = app._pepCompound('epitalon');
+
+    test('PHASE Epitalon on night 5 of 20 is still dosing', () => {
+      const due = app._pepStackDueOn({ compoundId:'epitalon', startDate: daysAgo(4) }, c, new Date());
+      assert.equal(due, 4, 'day 4 into the course, dose due');
+    });
+
+    test('PHASE Epitalon on night 20 is the last dose', () => {
+      const due = app._pepStackDueOn({ compoundId:'epitalon', startDate: daysAgo(19) }, c, new Date());
+      assert.equal(due, 19, 'day 19 is the twentieth night, still due');
+    });
+
+    test('PHASE Epitalon on night 21 has finished — no dose', () => {
+      const due = app._pepStackDueOn({ compoundId:'epitalon', startDate: daysAgo(20) }, c, new Date());
+      assert.equal(due, null, 'course complete, nothing due');
+    });
+
+    test('PHASE a cycled compound is dosing inside its on-weeks', () => {
+      const g = app._pepCompound('ghkcu');
+      const due = app._pepStackDueOn({ compoundId:'ghkcu', startDate: daysAgo(7), cycleWeeks:4, offWeeks:4 }, g, new Date());
+      assert.equal(due, 7, 'week 2 of 4 on, dose due');
+    });
+
+    test('PHASE the same compound is silent inside its off-weeks', () => {
+      const g = app._pepCompound('ghkcu');
+      const due = app._pepStackDueOn({ compoundId:'ghkcu', startDate: daysAgo(35), cycleWeeks:4, offWeeks:4 }, g, new Date());
+      assert.equal(due, null, 'day 35 is in the 4-week off block');
+    });
+
+    test('PHASE a not-yet-started stack is silent', () => {
+      const due = app._pepStackDueOn({ compoundId:'bpc157', startDate: ISO(new Date(Date.now() + 3*86400000)) },
+                                     app._pepCompound('bpc157'), new Date());
+      assert.equal(due, null, 'future start, nothing due');
     });
   }
 

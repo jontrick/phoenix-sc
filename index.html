@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.189';
+var APP_VERSION='4.9.190';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20930,6 +20930,13 @@ function nutRenderWaterTile(){
 // Tabs: TODAY | PROTOCOL | ORDER
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════ PEPTIDE BLOCK START — do not move (harness boundary) ═══════
+// v4.9.190: peptide-owned sentinels replace a boundary that ended at another
+// domain's function.
+// harness.mjs slices between this line and PEPTIDE BLOCK END to assert what the
+// peptide domain consumes. Both markers are peptide-owned on purpose: the end
+// marker used to be another domain's function, so anything they added before it
+// fell inside my slice and would have tripped my guard on their code.
 var _pepTab = "today";
 
 // ── Compound library ──────────────────────────────────────────────────────
@@ -23237,6 +23244,7 @@ function pepCopyOrder(){
 }
 
 // v4.9.155: the shared _phxOnProfileFetched wrapper moved to PM plumbing next to _phxRecordWriteError.
+// ═══════════════ PEPTIDE BLOCK END — do not move (harness boundary) ═════════
 
 function nutAddComponent(slot, dateKey, food, qty){
   var ns = nutGetState();

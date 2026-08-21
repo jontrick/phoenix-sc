@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.189'", 'version is 4.9.189');
+has("var APP_VERSION='4.9.190'", 'version is 4.9.190');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -993,10 +993,21 @@ try {
 // Every call site is typeof-guarded, so a PM rename degrades to "no diagnostics"
 // rather than throwing inside a cloud write.
 (() => {
-  const i = html.indexOf('var _pepTab = "today";');
-  const j = html.indexOf('function nutAddComponent(slot, dateKey, food, qty)');
+  const START = 'PEPTIDE BLOCK START — do not move';
+  const END   = 'PEPTIDE BLOCK END — do not move';
+  const i = html.indexOf(START);
+  const j = html.indexOf(END);
+  if (i < 0 || j < 0) { bad('PEP: STRUCTURAL peptide block sentinels missing — the guard cannot bound my code'); return; }
+  // A mention in a comment is not a consumption. Naming nutAddComponent in a
+  // comment explaining the boundary tripped this guard on its first run — the
+  // same "a grep match is not a call" trap as renderTodayScreen. Strip
+  // full-line and block comments before scanning. Full-line only, deliberately:
+  // stripping from any // would eat https:// inside string literals.
+  const decomment = src => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
   if (i < 0 || j < 0) { bad('PEP: could not isolate the peptide block'); return; }
-  const blk = html.slice(i, j);
+  const blk = decomment(html.slice(i, j));
   const calls  = (blk.match(/_phxRecordWriteError\s*\(/g) || []).length;
   const guards = (blk.match(/typeof _phxRecordWriteError === "function"/g) || []).length;
   calls > 0 && guards >= calls - 1

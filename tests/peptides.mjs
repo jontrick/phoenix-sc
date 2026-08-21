@@ -654,7 +654,6 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // pepRenderTodayTile() and asserts on the HTML they actually produce.
   // getElementById is restored at the end so later cases see the real sandbox.
   {
-    const _realGetById = app.document.getElementById;
 
     const ISO = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const daysAgo = n => ISO(new Date(Date.now() - n*86400000));
@@ -671,24 +670,40 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       };
       return e;
     };
-    app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
+    // Setup is PER-CASE, not suite-body. Suite-body setup only works if cases
+    // execute the moment they are registered; the instant the runner defers them
+    // — which a shared sandbox requires, since it must have one writer at a time
+    // — the whole body runs first and a later block's reset() wipes what these
+    // cases rely on. They would have been passing because of the execution
+    // model rather than because of what they assert.
+    const seedProtocol = () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [
+        { compoundId:'bpc157',       dose:0.5, startDate: daysAgo(40), vialMg:5,  waterMl:2,   sealedVials:1, openDosesUsed:3, openedDate: daysAgo(5), status:'instock' },
+        { compoundId:'retatrutide',  dose:6,   startDate: daysAgo(40), vialMg:10, waterMl:0.5, sealedVials:0, status:'instock' },
+        { compoundId:'bpc_ghkcu_tb', dose:14,  startDate: daysAgo(40), vialMg:70, waterMl:2,   sealedVials:2, status:'instock' },
+      ];
+      app.pepSaveState(st);
+    };
 
-    reset(); signIn('jon');
-    const st = app.pepGetState();
-    st.settings = {};
-    st.stacks = [
-      { compoundId:'bpc157',       dose:0.5, startDate: daysAgo(40), vialMg:5,  waterMl:2,   sealedVials:1, openDosesUsed:3, openedDate: daysAgo(5), status:'instock' },
-      { compoundId:'retatrutide',  dose:6,   startDate: daysAgo(40), vialMg:10, waterMl:0.5, sealedVials:0, status:'instock' },
-      { compoundId:'bpc_ghkcu_tb', dose:14,  startDate: daysAgo(40), vialMg:70, waterMl:2,   sealedVials:2, status:'instock' },
-    ];
-    app.pepSaveState(st);
+    // The getElementById override is scoped to the call too. Restoring it at
+    // suite-body level had the same defect in reverse: under a deferred runner
+    // the restore would run BEFORE any case, so nothing would be captured.
+    const withStubbedDom = fn => {
+      const real = app.document.getElementById;
+      app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
+      try { return fn(); } finally { app.document.getElementById = real; }
+    };
 
-    const render = tab => {
+    const render = tab => withStubbedDom(() => {
+      seedProtocol();
       app._pepTab = tab;
       nodes['pep-screen-body'] = mk('pep-screen-body');
       app.pepRenderScreen();
       return nodes['pep-screen-body'].innerHTML;
-    };
+    });
 
     test('RENDER the portal paints all five tabs', () => {
       const h = render('today');
@@ -734,22 +749,26 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
 
     test('RENDER the Today-screen tile paints doses with units', () => {
-      nodes['today-peptide-tile'] = mk('today-peptide-tile');
-      app.pepRenderTodayTile();
-      const h = nodes['today-peptide-tile'].innerHTML;
+      const h = withStubbedDom(() => {
+        seedProtocol();
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
       assert.ok(h.length > 0, 'tile is not empty for a real protocol');
       assert.ok(h.includes('Peptides'), 'labelled');
       assert.ok(h.includes('u / ') || h.includes('No doses scheduled'), 'units or rest-day line');
     });
 
     test('RENDER the tile stays empty when there is no protocol', () => {
-      reset(); signIn('jon');
-      nodes['today-peptide-tile'] = mk('today-peptide-tile');
-      app.pepRenderTodayTile();
-      assert.equal(nodes['today-peptide-tile'].innerHTML, '', 'hidden with no protocol');
+      const h = withStubbedDom(() => {
+        reset(); signIn('jon');
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.equal(h, '', 'hidden with no protocol');
     });
-
-    app.document.getElementById = _realGetById;
   }
 
   // ── NET — the backup is reachable (v4.9.192) ──────────────────────────────
@@ -781,17 +800,30 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(info.curStacks, 1, 'and what is live now');
     });
 
+    // Each case lays down its own precondition rather than inheriting the
+    // previous case's leftovers. Chained cases pass only while the runner
+    // happens to execute in registration order and nothing between them touches
+    // the same sandbox — neither of which a test should depend on.
+    const afterLosingRestore = () => {
+      reset(); signIn(UID);
+      seed(KEY, REAL);
+      app.pepRestoreFromCloud({ peptide_state: { stacks:[{compoundId:'nad'}], checked:{}, cart:[], _ts: nNEW } });
+    };
+
     test('NET swapping it back actually returns the protocol', () => {
+      afterLosingRestore();
       assert.equal(app.pepRestoreBackup(), true, 'restore reports success');
       assert.equal(read(KEY).stacks.length, 3, 'the 3-compound protocol is live again');
       assert.equal(read(KEY).notes.length, 1, 'notes came back too');
     });
 
     test('NET the swap is itself reversible', () => {
+      afterLosingRestore();
+      app.pepRestoreBackup();                       // protocol back
       const info = app.pepBackupInfo();
       assert.ok(info, 'the displaced copy is now the backup');
-      assert.equal(info.stacks, 1, 'it is the cloud copy we just displaced');
-      app.pepRestoreBackup();
+      assert.equal(info.stacks, 1, 'it is the cloud copy just displaced');
+      app.pepRestoreBackup();                       // and back again
       assert.equal(read(KEY).stacks.length, 1, 'swapped back again');
     });
 

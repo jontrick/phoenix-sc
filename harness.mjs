@@ -429,8 +429,8 @@ hasNot(".then(function(){}, function(){});", 'MIRROR: empty swallowing callbacks
 // ── Today screen: meal tick-off + water counter (v4.9.145) ──────────────────
 has('id="today-meals-tile"', 'TODAY: meals tile div on Today screen');
 has('id="today-water-tile"', 'TODAY: water tile div on Today screen');
-has('nutRenderMealsTile()', 'TODAY: meals tile rendered from the Today render hook');
-has('nutRenderWaterTile()', 'TODAY: water tile rendered from the Today render hook');
+has('nutRenderMealsTile()', 'TODAY: meals tile is CALLED from the render hook (structural — that it DRAWS is tests/nutrition.mjs)');
+has('nutRenderWaterTile()', 'TODAY: water tile is CALLED from the render hook (structural — that it DRAWS is tests/nutrition.mjs)');
 has('function _nutEnsureEaten(', 'TICK: eaten-map seeding defined');
 has('function nutIsSlotEaten(', 'TICK: nutIsSlotEaten defined');
 has('function nutToggleMealEaten(', 'TICK: nutToggleMealEaten defined');

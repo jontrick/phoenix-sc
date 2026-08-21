@@ -398,6 +398,70 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nutWeekOffset = 0;
   });
 
+  // ══ ENTRY POINTS — the layer a test observes ═══════════════════════════════
+  // Audit after the PM's .165 note: every water, tick and prep case below was
+  // BUILDER-level — nutAddWater, nutToggleMealEaten, nutBuildPrepPlan. Those
+  // prove the maths and say nothing about whether the screen calls them. All
+  // five of these renderers had ZERO entry-point coverage, so the water counter
+  // could have been absent from Today and this suite would have stayed green.
+
+  test('ENTRY the Today nutrition tile draws the day\'s numbers', () => {
+    setUp(90);
+    const d = dom();
+    app.nutRenderTile();
+    const html = d.html('today-nutrition-tile');
+    assert.ok(html.length > 0, 'the tile drew something');
+    assert.ok(html.indexOf('Nutrition') >= 0, 'and is the nutrition tile');
+    assert.ok(html.indexOf('kcal') >= 0, 'showing calories');
+  });
+
+  test('ENTRY the Today meals tile draws the planned slots with their ticks', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Bowl')]);
+    app.nutAssignRecipe('r_Bowl', 'lunch', app._nutToday(), 1);
+    const d = dom();
+    app.nutRenderMealsTile();
+    const html = d.html('today-meals-tile');
+    assert.ok(html.indexOf('Lunch') >= 0, 'the planned slot is on screen');
+    assert.ok(html.indexOf('data-nut-tick') >= 0, 'with a tick control');
+    assert.ok(html.indexOf('Bowl') >= 0, 'naming what is in it');
+  });
+
+  test('ENTRY the water counter draws its target and its add control', () => {
+    setUp(90);
+    app.nutAddWater(500);
+    const d = dom();
+    app.nutRenderWaterTile();
+    const html = d.html('today-water-tile');
+    assert.ok(html.indexOf('Water') >= 0, 'the tile drew');
+    assert.ok(html.indexOf('nut-water-add') >= 0, 'with the add control');
+    assert.ok(html.indexOf('0.50') >= 0, 'and the litres actually consumed');
+  });
+
+  test('ENTRY the prep card draws a recipe that is assigned this week', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Chilli Sauce')]);
+    const days = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Chilli Sauce', 'lunch', days[0], 2);
+    const d = dom();
+    app.nutOpenPrepCard();
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('Weekly Prep') >= 0, 'the prep card drew');
+    assert.ok(html.indexOf('Chilli Sauce') >= 0, 'naming the recipe to prep');
+    assert.ok(html.indexOf('2 serves') >= 0, 'and how many serves are needed');
+  });
+
+  test('ENTRY the shopping list draws the week\'s ingredients', () => {
+    setUp(90);
+    const days = app._nutSelectedWeekDays();
+    app.nutLogComponent('lunch', days[0], { n: 'Chicken breast', cat: 'protein', k: 110, p: 23, c: 0, f: 2 }, 200);
+    const d = dom();
+    app.nutOpenShopList();
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('Shopping List') >= 0, 'the list drew');
+    assert.ok(html.indexOf('Chicken breast') >= 0, 'naming the ingredient');
+  });
+
   // ── Bodyweight → targets ──────────────────────────────────────────────────
 
   test('the latest weigh-in wins over an undated profile weight', () => {

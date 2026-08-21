@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.188'", 'version is 4.9.188');
+has("var APP_VERSION='4.9.189'", 'version is 4.9.189');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -519,9 +519,11 @@ hasNot('function _nutDateKey(', 'TZ: no private nutrition copy of the date helpe
 // ── Day-surface consolidation + calendar-aware targets (v4.9.174) ───────────
 has('function nutTrainingForDay(', 'CAL: training day read per date');
 has('function nutAdjustForDay(', 'CAL: targets adjusted per date');
-has('function _nutCalEntriesOn(', 'CAL: reads Training calendar, not the BLAB queue');
-has("s.status !== 'skipped'", 'CAL: a completed session still counts as a training day');
-hasNot('window.blabCalSessionsOn(dateKey)', 'CAL: no longer uses the agenda call, which hides completed sessions');
+has('window.blabTrainingStateOn(dateKey)', 'CAL: asks Training for the STATE, not raw entries');
+hasNot('function _nutCalEntriesOn(', 'CAL: no longer interprets calendar entries itself');
+has("out.rest = (dateKey < _nutToday())", 'CAL: an unresolved PAST due day does not earn training targets');
+has("' \\u2014 not logged'", 'CAL: and says why on screen');
+has("out.sessions > 1", 'CAL: a second session on a day is disclosed');
 hasNot("var nextDay = (bs.last_completed_day || 0) + 1;", 'CAL: queue-position heuristic gone');
 has('function _nutSlotCard(', 'DAY: one shared slot renderer');
 has('function _nutDaySummary(', 'DAY: one shared day summary');
@@ -529,10 +531,11 @@ has('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
 hasNot('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
 
 // ── Training API migration (v4.9.185) ──────────────────────────────────────
-has('window.blabDayLabel(n)', 'CAL: day label via Training public API');
 hasNot("_BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]", 'CAL: no longer reads Training internals');
-has("String(entries[j].cat || '').toUpperCase() === 'REST'", 'CAL: a planned rest day is detected');
-has("label: 'Rest day', rest: true, scheduled: true", 'CAL: planned rest takes rest targets but stays distinct from an empty day');
+has("out.state    = s.state || 'none';", 'CAL: takes the state Training reports');
+has("if(out.state === 'trained')   out.rest = false;", 'CAL: a completed session is a training day');
+has("else                          out.rest = true;", 'CAL: rest / skipped / none all take rest targets');
+has("out.scheduled = (out.state !== 'none');", 'CAL: a scheduled rest day stays distinct from an empty one');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

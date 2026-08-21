@@ -607,15 +607,20 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // This reported "Upper Body" on a day with nothing scheduled, because it read
   // blabGetState().last_completed_day + 1 — the next UNDONE session — instead of
   // what Training's calendar actually has on that date.
-  const schedule = (dateISO, blabDay) => seed(`blab_calendar_v1_${UID}`, {
-    sessions: [{ blabWeek: 1, blabDay, scheduledDate: dateISO, status: 'pending' }], customs: [],
+  // status matters: a PENDING session on a past date is unresolved, not proof he
+  // trained. Tests state the date and the status they mean rather than relying on
+  // whichever day the suite happens to run.
+  const schedule = (dateISO, blabDay, status) => seed(`blab_calendar_v1_${UID}`, {
+    sessions: [{ blabWeek: 1, blabDay, scheduledDate: dateISO, status: status || 'pending' }], customs: [],
   });
+  const TODAY = () => app._nutToday();
+  const PAST = '2026-08-19';
 
   test('an empty day is rest even when a session sits unfinished in the queue', () => {
     start();
     seed(`blab_calendar_v1_${UID}`, { sessions: [], customs: [] });
     app.blabGetState = () => ({ active: true, last_completed_day: 0 });   // Day 1 still undone
-    const t = app.nutTrainingForDay('2026-08-19');
+    const t = app.nutTrainingForDay(PAST);
     assert.equal(t.label, 'Rest day', 'reads the calendar, not the queue');
     assert.equal(t.rest, true, 'rest');
     assert.equal(t.scheduled, false, 'nothing scheduled');
@@ -623,8 +628,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('the label comes from what is scheduled on that date', () => {
     start();
-    schedule('2026-08-19', 2);
-    const t = app.nutTrainingForDay('2026-08-19');
+    schedule(TODAY(), 2);
+    const t = app.nutTrainingForDay(TODAY());
     assert.equal(t.dayNum, 2, 'BLAB day 2');
     assert.equal(t.label, 'Lower Body', 'named from the calendar');
     assert.equal(t.rest, false, 'not a rest day');
@@ -632,7 +637,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('a session scheduled on Monday does not label Wednesday', () => {
     start();
-    schedule('2026-08-17', 1);                       // Monday
+    schedule('2026-08-17', 1, 'completed');          // Monday, done
     assert.equal(app.nutTrainingForDay('2026-08-17').label, 'Upper Body', 'Monday is Upper Body');
     assert.equal(app.nutTrainingForDay('2026-08-19').rest, true, 'Wednesday is untouched by it');
   });
@@ -640,10 +645,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('targets follow the scheduled day — lower body gets the carb bump', () => {
     start();
     const base = { kcal: 2600, protein_g: 180, carbs_g: 300, fat_g: 70 };
-    schedule('2026-08-19', 2);
-    const lower = app.nutAdjustForDay(base, '2026-08-19');
+    schedule(TODAY(), 2);
+    const lower = app.nutAdjustForDay(base, TODAY());
     seed(`blab_calendar_v1_${UID}`, { sessions: [], customs: [] });
-    const restDay = app.nutAdjustForDay(base, '2026-08-19');
+    const restDay = app.nutAdjustForDay(base, TODAY());
     assert.equal(lower.carbs_g, 340, 'lower body +40g carbs');
     assert.equal(restDay.carbs_g, 270, 'rest day −30g carbs');
     assert.ok(lower.kcal > restDay.kcal, 'and a training day is not the same as a rest day');
@@ -657,20 +662,20 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     start();
     seed(`blab_calendar_v1_${UID}`, {
       sessions: [],
-      customs: [{ id: 'r1', cat: 'REST', label: 'Rest', scheduledDate: '2026-08-19', status: 'pending' }],
+      customs: [{ id: 'r1', cat: 'REST', label: 'Rest', scheduledDate: PAST, status: 'pending' }],
     });
-    const t = app.nutTrainingForDay('2026-08-19');
+    const t = app.nutTrainingForDay(PAST);
     assert.equal(t.rest, true, 'rest');
     assert.equal(t.scheduled, true, 'but it IS on the calendar — not the same as an empty day');
     const base = { kcal: 2600, protein_g: 180, carbs_g: 300, fat_g: 70 };
-    assert.equal(app.nutAdjustForDay(base, '2026-08-19').carbs_g, 270, 'carbs come down like any rest day');
+    assert.equal(app.nutAdjustForDay(base, PAST).carbs_g, 270, 'carbs come down like any rest day');
   });
 
   test('the day label comes from Training public API, not its internals', () => {
     start();
-    schedule('2026-08-19', 3);
+    schedule(TODAY(), 3);
     assert.equal(app.blabDayLabel(3), 'Upper Body — Chins', 'the public accessor answers');
-    assert.equal(app.nutTrainingForDay('2026-08-19').label, 'Upper Body — Chins', 'and that is what nutrition shows');
+    assert.equal(app.nutTrainingForDay(TODAY()).label, 'Upper Body — Chins', 'and that is what nutrition shows');
     assert.equal(app.blabDayLabel(9), '', 'out-of-range returns empty rather than throwing');
   });
 
@@ -681,31 +686,73 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('finishing the session does not turn a training day into a rest day', () => {
     start();
     seed(`blab_calendar_v1_${UID}`, {
-      sessions: [{ blabWeek: 1, blabDay: 2, scheduledDate: '2026-08-19', status: 'completed', completedDate: '2026-08-19' }],
+      sessions: [{ blabWeek: 1, blabDay: 2, scheduledDate: PAST, status: 'completed', completedDate: PAST }],
       customs: [],
     });
-    const t = app.nutTrainingForDay('2026-08-19');
+    const t = app.nutTrainingForDay(PAST);
     assert.equal(t.rest, false, 'still a training day after it is done');
     assert.equal(t.label, 'Lower Body', 'and still named');
     const base = { kcal: 2600, protein_g: 180, carbs_g: 300, fat_g: 70 };
-    assert.equal(app.nutAdjustForDay(base, '2026-08-19').carbs_g, 340, 'keeps the training-day carbs');
+    assert.equal(app.nutAdjustForDay(base, PAST).carbs_g, 340, 'keeps the training-day carbs');
+  });
+
+  // Training, v4.9.188: nothing ages an unattended session into 'skipped', so a PAST
+  // day can read 'due' forever. That is "was scheduled, never resolved" — not
+  // evidence he trained. Crediting it would inflate a historical day's targets on
+  // the strength of a session there is no record of.
+  test('an unresolved past session does not earn training targets', () => {
+    start();
+    schedule(PAST, 2, 'pending');
+    const t = app.nutTrainingForDay(PAST);
+    assert.equal(t.state, 'due', 'the calendar still says due');
+    assert.equal(t.rest, true, 'but nutrition will not credit it');
+    assert.ok(t.label.indexOf('not logged') >= 0, 'and says why on screen');
+    const base = { kcal: 2600, protein_g: 180, carbs_g: 300, fat_g: 70 };
+    assert.equal(app.nutAdjustForDay(base, PAST).carbs_g, 270, 'rest-day carbs');
+  });
+
+  test('the same session TODAY is still due and still earns training targets', () => {
+    start();
+    schedule(TODAY(), 2, 'pending');
+    const t = app.nutTrainingForDay(TODAY());
+    assert.equal(t.rest, false, 'today has not happened yet');
+    assert.equal(t.label, 'Lower Body', 'named plainly, no caveat');
+  });
+
+  test('a second session on a day is disclosed rather than hidden by one label', () => {
+    start();
+    seed(`blab_calendar_v1_${UID}`, {
+      sessions: [{ blabWeek: 1, blabDay: 2, scheduledDate: TODAY(), status: 'pending' }],
+      customs: [{ id: 'c1', cat: 'WOD', label: 'Murph', scheduledDate: TODAY(), status: 'pending' }],
+    });
+    const t = app.nutTrainingForDay(TODAY());
+    assert.equal(t.sessions, 2, 'both counted');
+    assert.ok(t.label.indexOf('+1 more') >= 0, 'the label admits it is not the whole day');
+  });
+
+  test('a corrupt calendar degrades to rest rather than throwing', () => {
+    start();
+    seed(`blab_calendar_v1_${UID}`, { sessions: null, customs: null });
+    const t = app.nutTrainingForDay(TODAY());
+    assert.equal(t.rest, true, 'rest');
+    assert.equal(t.state, 'none', 'and honestly reports nothing known');
   });
 
   test('a skipped session does not count as training', () => {
     start();
     seed(`blab_calendar_v1_${UID}`, {
-      sessions: [{ blabWeek: 1, blabDay: 2, scheduledDate: '2026-08-19', status: 'skipped' }],
+      sessions: [{ blabWeek: 1, blabDay: 2, scheduledDate: PAST, status: 'skipped' }],
       customs: [],
     });
-    assert.equal(app.nutTrainingForDay('2026-08-19').rest, true, 'skipped is not trained');
+    assert.equal(app.nutTrainingForDay(PAST).rest, true, 'skipped is not trained');
   });
 
   test('a custom session counts as training rather than rest', () => {
     start();
     seed(`blab_calendar_v1_${UID}`, {
-      sessions: [], customs: [{ id: 'c1', cat: 'WOD', label: 'Murph', scheduledDate: '2026-08-19', status: 'pending' }],
+      sessions: [], customs: [{ id: 'c1', cat: 'WOD', label: 'Murph', scheduledDate: TODAY(), status: 'pending' }],
     });
-    const t = app.nutTrainingForDay('2026-08-19');
+    const t = app.nutTrainingForDay(TODAY());
     assert.equal(t.rest, false, 'not a rest day');
     assert.equal(t.label, 'Murph', 'named from the custom entry');
   });
@@ -770,7 +817,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('the add sheet names the day it is writing to', () => {
     setUp(90);
     const days = app._nutSelectedWeekDays();
-    schedule(days[2], 2);
+    schedule(days[2], 2, 'completed');
     const stamp = app._nutDayStamp(days[2]);
     assert.ok(stamp.indexOf('Wednesday') >= 0, 'names the weekday');
     assert.ok(stamp.indexOf('Lower Body') >= 0, 'and what is trained that day');

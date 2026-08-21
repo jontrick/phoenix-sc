@@ -124,27 +124,27 @@ Declared so the owners know they have a consumer and can pin the shape their sid
 
 | Surface | Owner | Status | What nutrition relies on |
 |---|---|---|---|
-| `blabCalGet()` | Training | **INTERNAL — temporary, PM-sanctioned exception** | `{sessions, customs}`; per entry `scheduledDate`, `status`, `blabDay` (BLAB) or `cat` (customs) |
-| `blabDayLabel(n)` | Training | public | Day number → name; `''` outside 1–4 |
+| `blabTrainingStateOn(dateISO)` | Training | public | `{state, blabDay, label, sessions}`; states `trained` / `due` / `rest` / `skipped` / `none` |
+| `blabDayLabel(n)` | Training | public | Day number → name; `''` outside 1–4 (fallback only) |
 
-> **`blabCalGet` is Training-INTERNAL** (HANDOFF_TRAINING:80, "renameable without notice").
-> Nutrition reaching for it in v4.9.187 was a mistake: being on `window` is packaging, not
-> contract — in a single-script-scope app nearly everything is reachable. A consumer cannot
-> promote another domain's function by depending on it; the provider's doc is the authority.
-> The PM has sanctioned it as a documented temporary exception and asked Training not to
-> rename it until nutrition has migrated onto a supported surface returning the training
-> STATE for a date rather than raw entries. **Update this table on migration.**
+Migrated onto `blabTrainingStateOn` in v4.9.189. **Nutrition no longer reads
+`blabCalGet` or interprets calendar entries at all** — the two bugs that preceded this
+(`.182` misreading a REST custom as training, `.187` misreading a completed session as an
+empty day) were both nutrition inferring meaning from a shape. Asking Training for the
+STATE removes the inference rather than making the next misreading less likely.
 
-**Why `blabCalGet` and not `blabCalSessionsOn`:** `blabCalSessionsOn` is an AGENDA — it
-excludes `completed` and `skipped`. Macro targets need *"did he train or is he due to"*,
-not *"is he still due to"*. Using the agenda meant that the moment Jon finished his 4:30am
-session the day looked empty and his targets dropped to rest-day levels **on the day he
-trained** (fixed v4.9.187). Nutrition therefore reads the full calendar and excludes only
-`skipped` — a session he did not do is not a training day.
+**`due` is time-relative — the same word means two things** (Training, `da1e405`). On
+TODAY it means "the session to do". On a PAST date it means "was scheduled, never
+resolved" — nothing ages an unattended session into `skipped`, deliberately, because only
+Jon knows whether a missed session was abandoned or is being made up.
 
-Entry meanings that matter, per Training's handoff: a `cat === 'REST'` custom entry means
-the OPPOSITE of the other customs, and an empty array (nothing scheduled) is a different
-state from a scheduled rest day.
+So nutrition maps it by date: `due` earns training targets **only when the day has not
+already passed**. An unresolved past day takes rest targets and is labelled
+"… — not logged", because crediting a training day needs either evidence he trained
+(`trained`) or a day that has not happened yet. Pinned in `tests/nutrition.mjs`.
+
+`sessions > 1` means one label does not speak for the whole day; nutrition appends
+"+N more" rather than implying the day was only the session Training named.
 
 ---
 

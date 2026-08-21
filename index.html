@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.188';
+var APP_VERSION='4.9.189';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18032,60 +18032,33 @@ function nutCalcTargets(bw_kg, height_cm, age_yr, sex, goal){
 //
 // Returns {dayNum, label, rest, scheduled}. scheduled=false means the calendar
 // has nothing for that date — a rest day, not a guess.
-// v4.9.187: what was on the calendar for a date, INCLUDING sessions already
-// completed. blabCalSessionsOn is an agenda — it excludes completed and skipped —
-// so using it meant the moment Jon finished his 4:30am session the day looked
-// empty and his targets dropped to rest-day levels ON THE DAY HE TRAINED.
-// Macro targets need "did he train or is he due to", not "is he still due to".
-// Skipped stays excluded: a session he did not do is not a training day.
-// Reads Training's public blabCalGet(); the entry shape is their pinned contract.
-function _nutCalEntriesOn(dateKey){
-  var out = [];
-  try {
-    if(typeof window === 'undefined' || typeof window.blabCalGet !== 'function') return out;
-    var cal = window.blabCalGet() || {};
-    (cal.sessions || []).forEach(function(s){
-      if(s.scheduledDate === dateKey && s.status !== 'skipped') out.push(s);
-    });
-    (cal.customs || []).forEach(function(c){
-      if(c.scheduledDate === dateKey && c.status !== 'skipped'){
-        out.push({custom:true, id:c.id, cat:c.cat, libId:c.libId, label:c.label,
-                  scheduledDate:c.scheduledDate, status:c.status});
-      }
-    });
-  } catch(e){}
-  return out;
-}
-
 function nutTrainingForDay(dateKey){
-  var out = { dayNum: 0, label: 'Rest day', rest: true, scheduled: false };
+  var out = { dayNum: 0, label: 'Rest day', rest: true, scheduled: false, state: 'none', sessions: 0 };
   try {
-    var entries = _nutCalEntriesOn(dateKey);
-    if(!entries.length) return out;
-    // A BLAB session drives the macro adjustment; a custom session (WOD/Core/
-    // aerobic) counts as training but has no BLAB day number.
-    var blab = null;
-    for(var i=0;i<entries.length;i++){ if(!entries[i].custom && entries[i].blabDay){ blab = entries[i]; break; } }
-    if(blab){
-      var n = parseInt(blab.blabDay, 10) || 0;
-      // v4.9.185: Training's public accessor, not the _BLAB_DAY_LABELS internal.
-      var lbl = (typeof window.blabDayLabel === 'function') ? (window.blabDayLabel(n) || '') : '';
-      return { dayNum: n, label: lbl || ('Day ' + n), rest: false, scheduled: true };
-    }
-    // v4.9.185: a planned REST day is scheduled, but it is still rest — it must take the
-    // rest-day targets, not the standard ones. Distinct from an empty day only
-    // in `scheduled`, so the two remain tellable apart.
-    var rest = null;
-    for(var j=0;j<entries.length;j++){
-      if(String(entries[j].cat || '').toUpperCase() === 'REST'){ rest = entries[j]; break; }
-    }
-    if(rest && entries.length === 1) return { dayNum: 0, label: 'Rest day', rest: true, scheduled: true };
-    var c = null;
-    for(var k=0;k<entries.length;k++){
-      if(String(entries[k].cat || '').toUpperCase() !== 'REST'){ c = entries[k]; break; }
-    }
-    if(!c) return { dayNum: 0, label: 'Rest day', rest: true, scheduled: true };
-    return { dayNum: 0, label: c.label || String(c.cat || 'Session'), rest: false, scheduled: true };
+    if(typeof window === 'undefined' || typeof window.blabTrainingStateOn !== 'function') return out;
+    var s = window.blabTrainingStateOn(dateKey) || {};
+    out.state    = s.state || 'none';
+    out.sessions = s.sessions || 0;
+    out.dayNum   = parseInt(s.blabDay, 10) || 0;
+    out.scheduled = (out.state !== 'none');
+
+    // v4.9.189: a PAST day still reading 'due' was never resolved — nothing marks
+    // an unattended session skipped (Training, .188). Training targets need either
+    // evidence he trained ('trained') or a day that has not happened yet. An
+    // unresolved past day has neither, so it takes rest targets and says why
+    // rather than crediting him with a session there is no record of.
+    if(out.state === 'trained')   out.rest = false;
+    else if(out.state === 'due')  out.rest = (dateKey < _nutToday());
+    else                          out.rest = true;
+
+    var lbl = s.label || (out.dayNum ? ('Day ' + out.dayNum) : 'Session');
+    if(out.state === 'due' && out.rest)   out.label = lbl + ' \u2014 not logged';
+    else if(out.state === 'skipped')      out.label = 'Session skipped';
+    else if(out.rest)                     out.label = 'Rest day';
+    else                                  out.label = lbl;
+    // One label cannot speak for two sessions — say so rather than imply the day
+    // was only the one Training named.
+    if(!out.rest && out.sessions > 1) out.label += ' +' + (out.sessions - 1) + ' more';
   } catch(e){}
   return out;
 }

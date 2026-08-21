@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.182';
+var APP_VERSION='4.9.183';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7626,6 +7626,14 @@ function _phxRecordWriteError(context, err, payload){
     localStorage.setItem('phx_write_errors', JSON.stringify(ring));
   } catch(_e){}
 }
+// v4.9.183 [PM]: version-collision remedy. v4.9.182 was shipped TWICE — 452c34f
+// [NUTRITION] day-surface consolidation and 8ea40d2 [PEPTIDES] coverage-window pricing
+// both set APP_VERSION to 4.9.182. Jon reads that number to confirm the PWA has actually
+// updated (CLAUDE.md rule 7), so two builds sharing it defeats the only check he has.
+// This bump gives the combined state a distinct number. Cause: after rebasing onto a
+// commit that had already taken .182, the second push resolved the APP_VERSION conflict
+// to .182 instead of highest+1. Not detectable from file state — see version_check.mjs.
+
 // ====== v4.9.175 SHARED DOM CONFIRM (PM-owned) ======
 // CLAUDE.md rule 4: native confirm() is SUPPRESSED in the iOS PWA — and a suppressed
 // confirm returns FALSE, so `if(!confirm(x)) return;` always returns and the feature is

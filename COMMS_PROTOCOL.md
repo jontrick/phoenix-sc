@@ -87,10 +87,10 @@ Creates `.claude/worktrees/<domain>` on its own branch, checked out from origin/
 Runtime check and harness run unchanged from inside the worktree: `node runtime_check.mjs` and `node harness.mjs` both resolve `index.html` relative to themselves. Since v4.9.156 the runtime check is the checked-in tool (all 6 script blocks) — not the old largest-block snippet.
 
 Push (from inside your worktree). Order matters — `git rebase` refuses to run over unstaged edits, so commit first, then rebase:
-1. All three gates on your edits as they stand: `node runtime_check.mjs` → CLEAN 6/6; `node harness.mjs` → PASS; `node functional_check.mjs` → CLEAN. Unpiped.
+1. All three gates on your edits as they stand: `node runtime_check.mjs` → CLEAN 6/6; `node harness.mjs` → PASS; `node functional_check.mjs` → CLEAN. Unpiped. (`version_check.mjs` runs at step 4, after the rebase — that is the only point at which it can be meaningful.)
 2. `git add index.html harness.mjs` (name files explicitly — never `git add .` / `-A`), `git commit -m "v4.9.XXX — [DOMAIN] description"` with your best-guess version
 3. `git fetch origin` then `git rebase origin/main`
-4. Check `APP_VERSION` is still highest-in-file + 1. If someone shipped in between, fix APP_VERSION + harness assertion, re-run both gates, `git commit --amend --no-edit`
+4. `node version_check.mjs` — MANDATORY after the rebase. It compares your APP_VERSION against origin/main and exits 1 on a collision, 2 if it cannot check. Reading the file alone is NOT enough: v4.9.182 shipped twice (452c34f NUTRITION + 8ea40d2 PEPTIDES) because the second push resolved the rebase conflict to the version it started under instead of highest+1, and no file-state gate can see that. If it fails: fix APP_VERSION + harness assertion, re-run all gates, `git commit --amend --no-edit`
 5. `git push origin HEAD:main`
 6. If rejected: back to step 3. If the rebase conflicts on anything other than the APP_VERSION / harness-version lines, `git rebase --abort` and message the PM with the conflicting hunks.
 

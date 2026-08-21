@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.199';
+var APP_VERSION='4.9.200';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7382,12 +7382,24 @@ async function _loadProfileAndRouteInner(){
       if(athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
     } catch(_e){}
     if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
+    // v4.9.200: READ THE RESTORE TAB BEFORE navTo('today'), not after.
+    // The navTo intercept deletes phx_lastTab_v1 whenever the target is 'today'.
+    // This block used to navTo('today') and THEN read the key — which the
+    // navigation had just removed — so _restoreTab was always null and the
+    // restore could never fire, for peptide or any other tab in the safe list.
+    // Symptom Jon reported: iOS kills the PWA context on screen lock, the app
+    // reloads on wake, and he is dropped back on Today instead of the screen he
+    // left. Reproduced in tests/peptides.mjs under NAV.
+    var _restoreTab = null;
+    try { _restoreTab = localStorage.getItem('phx_lastTab_v1'); } catch(_re0){}
     navTo('today');
     // Restore last non-today tab after PWA reload (iOS kills PWA context on sleep/low-memory).
     try {
-      var _restoreTab = localStorage.getItem('phx_lastTab_v1');
       var _safeRestoreTabs = ['nutrition','records','workout','settings','peptide'];
       if(_restoreTab && _safeRestoreTabs.indexOf(_restoreTab) >= 0){
+        // navTo('today') above wiped the key; put it back so a SECOND reload
+        // still restores. Without this the fix works exactly once.
+        try { localStorage.setItem('phx_lastTab_v1', _restoreTab); } catch(_re1){}
         setTimeout(function(){ if(typeof navTo==='function') navTo(_restoreTab); }, 400);
       }
     } catch(_re){}

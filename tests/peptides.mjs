@@ -1008,6 +1008,63 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   }
 
+  // ── NAV — screen restore after an iOS PWA reload (v4.9.200) ───────────────
+  // Jon: "when the screen locks, the app redirects back to the main page
+  // instead of staying on the Peptide Portal."
+  //
+  // Not a visibility handler. iOS kills the PWA context on sleep; on wake the
+  // app reloads and _loadProfileAndRouteInner ran:
+  //     navTo('today');                                  <- intercept DELETES the key
+  //     var _restoreTab = localStorage.getItem(...)      <- reads it, now null
+  // The restore read the key AFTER the navigation that removed it, so it could
+  // never fire — for peptide or any other tab in the safe list. Shared routing
+  // code, so this fixed nutrition / records / workout / settings too.
+
+  const NAVKEY = 'phx_lastTab_v1';
+
+  test('NAV navigating to a tab records it for restore', () => {
+    reset(); signIn('jon');
+    app.navTo('peptide');
+    assert.equal(read(NAVKEY), 'peptide', 'tab recorded');
+  });
+
+  test('NAV navigating to today DELETES the recorded tab', () => {
+    reset(); signIn('jon');
+    app.navTo('peptide');
+    assert.equal(read(NAVKEY), 'peptide', 'recorded first');
+    app.navTo('today');
+    assert.equal(read(NAVKEY), null, 'today wipes it — this is the mechanism');
+  });
+
+  // The fix: read BEFORE navigating. This mirrors the corrected order in
+  // _loadProfileAndRouteInner and fails against the old order.
+  test('NAV reading before navTo(today) preserves the tab to restore', () => {
+    reset(); signIn('jon');
+    app.navTo('peptide');
+    const restoreTab = read(NAVKEY);               // read FIRST
+    app.navTo('today');                         // then route to Today
+    assert.equal(restoreTab, 'peptide', 'the portal is still restorable');
+  });
+
+  test('NAV the restored tab is written back, so a SECOND reload also restores', () => {
+    reset(); signIn('jon');
+    app.navTo('peptide');
+    const restoreTab = read(NAVKEY);
+    app.navTo('today');
+    assert.equal(read(NAVKEY), null, 'today wiped it');
+    // What the fixed code does next:
+    seed(NAVKEY, restoreTab);
+    app.navTo(restoreTab);
+    assert.equal(read(NAVKEY), 'peptide', 'still set for the next reload');
+  });
+
+  test('NAV a tab outside the safe list is not restored', () => {
+    reset(); signIn('jon');
+    const safe = ['nutrition','records','workout','settings','peptide'];
+    assert.equal(safe.indexOf('session'), -1, 'session is not restorable');
+    assert.ok(safe.indexOf('peptide') >= 0, 'peptide IS restorable');
+  });
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

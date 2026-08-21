@@ -936,6 +936,78 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── EPITALON — Jon's confirmed protocol (18 Aug 2026) ─────────────────────
+  // Verbatim: "10 vial - 5 dose", then "20 consecutive nights x 5mg".
+  // Dose, frequency and vial were ALREADY these values, so this pins them
+  // rather than changing them. Worth pinning precisely because a two-word relay
+  // ("10mg epithalon") nearly doubled an injected dose earlier the same day.
+  {
+
+  const eIso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const eAgo = n => eIso(new Date(Date.now() - n*86400000));
+  reset(); signIn('jon');
+
+  const c = app._pepCompound('epitalon');
+  const recon = app._pepRecon({}, c);
+
+  test('confirmed values are live: 5mg, 20 nights, 10mg vial', () => {
+    assert.equal(c.dose, 5, 'mg per dose');
+    assert.equal(c.freq, '20 consecutive nights', 'frequency');
+    assert.equal(recon.vialMg, 10, 'vial mg');
+  });
+
+  test('draw is 50u / 0.50mL from 10mg in 1mL', () => {
+    const d = app._pepDraw(c.dose, c.doseUnit, recon);
+    assert.equal(Math.round(d.units), 50, 'units');
+    assert.equal(app._pepDosesPerVial({}, c), 2, 'doses per vial');
+  });
+
+  test('the course runs exactly 20 nights and then stops', () => {
+    const stack = { compoundId:'epitalon', startDate: eAgo(0) };
+    let due = 0;
+    for (let i = 0; i < 40; i++) {
+      const d = new Date(Date.now() + i*86400000);
+      if (app._pepStackDueOn(stack, c, d) !== null) due++;
+    }
+    assert.equal(due, 20, 'twenty nights, no more');
+  });
+
+  test('starting today with no stock, the forecast wants 10 vials', () => {
+    const ps = { settings:{}, stacks:[{ compoundId:'epitalon', dose:5, startDate: eAgo(0), vialMg:10, waterMl:1, sealedVials:0, status:'instock' }] };
+    const need = app._pepVialsNeeded(ps, ps.stacks[0], 180);
+    assert.equal(need, 10, '20 doses / 2 per vial');
+  });
+
+  test('the order builder prices the course against ET10', () => {
+    const ps = { settings:{}, stacks:[{ compoundId:'epitalon', dose:5, startDate: eAgo(0), vialMg:10, waterMl:1, sealedVials:0, status:'instock' }] };
+    const plan = app._pepOrderPlan(ps);
+    const row = plan.rows.find(r => r.compoundId === 'epitalon');
+    assert.equal(row.tong.cat, 'ET10', 'matches his vial');
+    assert.equal(row.vials, 10, 'ten vials');
+  });
+
+  test('mid-course, night 10, ten doses still to come', () => {
+    const ps = { settings:{}, stacks:[{ compoundId:'epitalon', dose:5, startDate: eAgo(10), vialMg:10, waterMl:1, sealedVials:0, status:'instock' }] };
+    const need = app._pepVialsNeeded(ps, ps.stacks[0], 180);
+    assert.equal(need, 5, 'ten doses left / 2 per vial');
+  });
+
+  test('after the course, nothing is ordered', () => {
+    const ps = { settings:{}, stacks:[{ compoundId:'epitalon', dose:5, startDate: eAgo(25), vialMg:10, waterMl:1, sealedVials:0, status:'instock' }] };
+    const plan = app._pepOrderPlan(ps);
+    assert.equal(plan.rows.some(r => r.compoundId === 'epitalon'), false, 'course complete, nothing to buy');
+  });
+
+  test('30-day shelf life does not waste doses on this course', () => {
+    // 2 doses per vial and a dose every night = a vial lasts 2 days, far inside 30.
+    const ps = { settings:{}, stacks:[{ compoundId:'epitalon', dose:5, startDate: eAgo(0), vialMg:10, waterMl:1, sealedVials:10, openDosesUsed:0, openedDate:null, status:'instock' }] };
+    const f = app._pepStockForecast(ps, ps.stacks[0]);
+    assert.equal(f.wastedDoses, 0, 'no expiry loss');
+    assert.equal(f.dosesRemaining, 20, 'exactly the course');
+  });
+
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

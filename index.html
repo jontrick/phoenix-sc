@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.184';
+var APP_VERSION='4.9.185';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18044,10 +18044,23 @@ function nutTrainingForDay(dateKey){
     for(var i=0;i<entries.length;i++){ if(!entries[i].custom && entries[i].blabDay){ blab = entries[i]; break; } }
     if(blab){
       var n = parseInt(blab.blabDay, 10) || 0;
-      var lbl = (typeof _BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]) ? _BLAB_DAY_LABELS[n] : ('Day ' + n);
-      return { dayNum: n, label: lbl, rest: false, scheduled: true };
+      // v4.9.185: Training's public accessor, not the _BLAB_DAY_LABELS internal.
+      var lbl = (typeof window.blabDayLabel === 'function') ? (window.blabDayLabel(n) || '') : '';
+      return { dayNum: n, label: lbl || ('Day ' + n), rest: false, scheduled: true };
     }
-    var c = entries[0];
+    // v4.9.185: a planned REST day is scheduled, but it is still rest — it must take the
+    // rest-day targets, not the standard ones. Distinct from an empty day only
+    // in `scheduled`, so the two remain tellable apart.
+    var rest = null;
+    for(var j=0;j<entries.length;j++){
+      if(String(entries[j].cat || '').toUpperCase() === 'REST'){ rest = entries[j]; break; }
+    }
+    if(rest && entries.length === 1) return { dayNum: 0, label: 'Rest day', rest: true, scheduled: true };
+    var c = null;
+    for(var k=0;k<entries.length;k++){
+      if(String(entries[k].cat || '').toUpperCase() !== 'REST'){ c = entries[k]; break; }
+    }
+    if(!c) return { dayNum: 0, label: 'Rest day', rest: true, scheduled: true };
     return { dayNum: 0, label: c.label || String(c.cat || 'Session'), rest: false, scheduled: true };
   } catch(e){}
   return out;

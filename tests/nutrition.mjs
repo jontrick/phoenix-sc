@@ -599,6 +599,31 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(lower.kcal > restDay.kcal, 'and a training day is not the same as a rest day');
   });
 
+  // v4.9.185, from Training: a calendar entry may be a PLANNED rest day, which is
+  // scheduled but is still rest. .182 only checked for a BLAB session, so a
+  // planned rest day fell through to the custom branch and took STANDARD targets
+  // — the opposite of what a rest day should get.
+  test('a planned rest day takes rest-day targets, not training ones', () => {
+    start();
+    seed(`blab_calendar_v1_${UID}`, {
+      sessions: [],
+      customs: [{ id: 'r1', cat: 'REST', label: 'Rest', scheduledDate: '2026-08-19', status: 'pending' }],
+    });
+    const t = app.nutTrainingForDay('2026-08-19');
+    assert.equal(t.rest, true, 'rest');
+    assert.equal(t.scheduled, true, 'but it IS on the calendar — not the same as an empty day');
+    const base = { kcal: 2600, protein_g: 180, carbs_g: 300, fat_g: 70 };
+    assert.equal(app.nutAdjustForDay(base, '2026-08-19').carbs_g, 270, 'carbs come down like any rest day');
+  });
+
+  test('the day label comes from Training public API, not its internals', () => {
+    start();
+    schedule('2026-08-19', 3);
+    assert.equal(app.blabDayLabel(3), 'Upper Body — Chins', 'the public accessor answers');
+    assert.equal(app.nutTrainingForDay('2026-08-19').label, 'Upper Body — Chins', 'and that is what nutrition shows');
+    assert.equal(app.blabDayLabel(9), '', 'out-of-range returns empty rather than throwing');
+  });
+
   test('a custom session counts as training rather than rest', () => {
     start();
     seed(`blab_calendar_v1_${UID}`, {

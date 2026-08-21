@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.184'", 'version is 4.9.184');
+has("var APP_VERSION='4.9.185'", 'version is 4.9.185');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -525,6 +525,12 @@ has('function _nutSlotCard(', 'DAY: one shared slot renderer');
 has('function _nutDaySummary(', 'DAY: one shared day summary');
 has('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
 hasNot('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
+
+// ── Training API migration (v4.9.185) ──────────────────────────────────────
+has('window.blabDayLabel(n)', 'CAL: day label via Training public API');
+hasNot("_BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]", 'CAL: no longer reads Training internals');
+has("String(entries[j].cat || '').toUpperCase() === 'REST'", 'CAL: a planned rest day is detected');
+has("label: 'Rest day', rest: true, scheduled: true", 'CAL: planned rest takes rest targets but stays distinct from an empty day');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

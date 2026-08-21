@@ -122,10 +122,18 @@ the break already shipped, so these live here.
 
 Declared so the owners know they have a consumer and can pin the shape their side.
 
-| Surface | Owner | What nutrition relies on |
-|---|---|---|
-| `blabCalGet()` | Training | `{sessions, customs}`; each entry's `scheduledDate`, `status`, `blabDay` (BLAB) or `cat` (customs) |
-| `blabDayLabel(n)` | Training | Day number → name; `''` outside 1–4 |
+| Surface | Owner | Status | What nutrition relies on |
+|---|---|---|---|
+| `blabCalGet()` | Training | **INTERNAL — temporary, PM-sanctioned exception** | `{sessions, customs}`; per entry `scheduledDate`, `status`, `blabDay` (BLAB) or `cat` (customs) |
+| `blabDayLabel(n)` | Training | public | Day number → name; `''` outside 1–4 |
+
+> **`blabCalGet` is Training-INTERNAL** (HANDOFF_TRAINING:80, "renameable without notice").
+> Nutrition reaching for it in v4.9.187 was a mistake: being on `window` is packaging, not
+> contract — in a single-script-scope app nearly everything is reachable. A consumer cannot
+> promote another domain's function by depending on it; the provider's doc is the authority.
+> The PM has sanctioned it as a documented temporary exception and asked Training not to
+> rename it until nutrition has migrated onto a supported surface returning the training
+> STATE for a date rather than raw entries. **Update this table on migration.**
 
 **Why `blabCalGet` and not `blabCalSessionsOn`:** `blabCalSessionsOn` is an AGENDA — it
 excludes `completed` and `skipped`. Macro targets need *"did he train or is he due to"*,

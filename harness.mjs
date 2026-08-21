@@ -1291,7 +1291,7 @@ has('_renderTodayRemainingRow(_bs, _nextDay, _weekDone)', 'TODAY: sequential pat
 // session). Counts INVOCATIONS specifically — the definition, the typeof guard and
 // prose mentions all name it without calling it, so a bare name match would be noise.
 (() => {
-  const n = (html.match(/blabCalTodayEntry\(\)/g) || []).length;
+  const n = (phxStripComments(html).match(/blabCalTodayEntry\(\)/g) || []).length;
   if (n === 1) ok('TODAY: blabCalTodayEntry still has exactly one call site (the sequential 48h gate)');
   else bad(`TODAY: blabCalTodayEntry is invoked ${n}×, expected 1 (the sequential 48h gate). ` +
            `A new caller gets a BLAB-only, first-match subset — use blabCalTodaySessions() for the full agenda.`);
@@ -1334,7 +1334,7 @@ has("opts.actionLabel || 'Start Session →'", 'PREVIEW: default action preserve
 (() => {
   // Exactly one caller may pass opts — the calendar's preview-then-add. Every other
   // caller (nine library back-buttons and tiles) must keep the default Start action.
-  const withOpts = (html.match(/_phxOpenSessionDetail\([^)]*,\s*\{/g) || []).length;
+  const withOpts = (phxStripComments(html).match(/_phxOpenSessionDetail\([^)]*,\s*\{/g) || []).length;
   if (withOpts === 1) ok('PREVIEW: exactly one caller overrides the detail-view action');
   else bad(`PREVIEW: ${withOpts} callers pass opts to _phxOpenSessionDetail, expected 1 (the calendar). ` +
            `Every other caller must fall through to the default Start Session action.`);
@@ -1441,7 +1441,7 @@ hasNot("if(logs.some(function(l){return l.date.split('T')[0]===dateStr;}))",    
   // Matched on the walk-entry SHAPE (date immediately followed by mode), not on a
   // bare toISOString — a loose match counted 15 unrelated sites across the file and
   // would have stayed green with all three walk writers changed.
-  const n = (html.match(/date:\s*new Date\(\)\.toISOString\(\),\s*mode:/g) || []).length;
+  const n = (phxStripComments(html).match(/date:\s*new Date\(\)\.toISOString\(\),\s*mode:/g) || []).length;
   if (n === 3) ok('DAYKEY: all 3 walk writers still persist a full UTC instant');
   else bad(`DAYKEY: ${n} walk writers persist a full instant, expected exactly 3. ` +
            `Converting one to a day key loses the time the read-time conversion depends on, ` +
@@ -1584,21 +1584,22 @@ has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped s
   // header moved my window, and the not-isolatable branch called ok(), turning a peer's
   // rename into a permanent silent pass.
   //
-  // Counting invocations needs no sentinel I do not own. Only FULL-LINE // comments
-  // are stripped — deliberately NOT block comments, and not from any '//' (which
-  // would eat https:// inside string literals).
+  // Counting invocations needs no sentinel I do not own. Uses the shared
+  // phxStripComments (PM, 4c98ed8) rather than a private stripper: it drops a line
+  // only when the line BEGINS a comment, so a /* or // mid-line inside a string or a
+  // URL is never touched.
   //
-  // Block-stripping is unsafe in THIS file specifically: /* ... */ pairs occur inside
-  // strings and CSS, so the lazy match swallows real code. Measured: it removes
-  // 428,488 characters, a quarter of index.html, and it silently ate an injected test
-  // consumer. Any guard here that strips block comments is scanning a file with a
-  // quarter missing and cannot see a regression hiding in it.
+  // The naive /\/\*[\s\S]*?\*\//g form is catastrophic on this file — it removed
+  // ~24% of index.html and 231 function declarations, because /* and */ occur inside
+  // strings and CSS and the lazy match spans unrelated pairs. It silently ate an
+  // injected test consumer here, and left 8 of 25 _phxRecordWriteError and 33 of 38
+  // nutGetState call sites invisible to other domains' guards.
   //
   // Matches BOTH forms: an earlier version used (?<![.\w$])blabCalGet\( , which does
   // not match window.blabCalGet( — the form all 19 real call sites use. It could not
   // have caught the regression it claimed to, and my inversion proof passed only
   // because I injected a bare call. A guard has to bite for the RIGHT reason.
-  const code = html.replace(/^[ \t]*\/\/.*$/gm, '');
+  const code = phxStripComments(html);
   const n = (code.match(/(?:window\.)?blabCalGet\s*\(/g) || []).length;
   const MINE = 19;
   if (n === MINE) ok('CONTRACT: blabCalGet has only its ' + MINE + ' Training call sites');

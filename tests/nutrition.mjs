@@ -407,18 +407,18 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // _phxRecordWriteError is a function DECLARATION, so it cannot be stubbed by
   // assignment — which is for the best: these assert the diagnostic Jon would
   // actually read in Settings, not that a stub was called.
-  const settled = { then: () => settled, catch: () => settled };
   const failingWrite = (error) => {
     app.sb = { from: () => ({ update: () => ({ eq: () => ({
-      then: (ok, bad) => { if (error instanceof Error) bad(error); else ok({ error }); return settled; },
+      then: (ok, bad) => (error instanceof Error ? Promise.reject(error).then(ok, bad)
+                                                 : Promise.resolve({ error }).then(ok, bad)),
     }) }) }) };
   };
   const lastWriteError = () => read('phx_last_write_error');
 
-  test('a failed cloud write is RECORDED, not swallowed', () => {
+  test('a failed cloud write is RECORDED, not swallowed', async () => {
     start();
     failingWrite({ message: 'column missing', code: '42703' });
-    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
+    await app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
     const snap = lastWriteError();
     assert.ok(snap, 'a diagnostic was written');
     assert.equal(snap.context, '_nutRecipesMirrorToCloud', 'named by its source');
@@ -426,18 +426,18 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(snap.message.indexOf('column missing') >= 0, 'and the message');
   });
 
-  test('a rejected cloud write is recorded under its own context', () => {
+  test('a rejected cloud write is recorded under its own context', async () => {
     start();
     failingWrite(new Error('offline'));
-    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
+    await app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
     assert.equal(lastWriteError().context, '_nutRecipesMirrorToCloud.rejected',
       'distinguishable from a returned error');
   });
 
-  test('what reaches diagnostics is SHAPE — no recipe name or gram weight', () => {
+  test('what reaches diagnostics is SHAPE — no recipe name or gram weight', async () => {
     start();
     failingWrite({ message: 'nope', code: 'X' });
-    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [
+    await app._nutRecipesWriteNow({ _ts: NEWER, recipes: [
       { ...rec('Chilli Sauce'), components: [{ n: 'Chilli', qty_g: 30 }] },
     ] });
     const snap = lastWriteError();
@@ -446,12 +446,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.notIncludes(snap, '30', 'no gram weight');
   });
 
-  test('a successful write records nothing', () => {
+  test('a successful write records nothing', async () => {
     start();
     app.sb = { from: () => ({ update: () => ({ eq: () => ({
-      then: (ok) => { ok({ error: null }); return settled; },
+      then: (ok) => Promise.resolve({ error: null }).then(ok),
     }) }) }) };
-    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
+    await app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
     assert.equal(lastWriteError(), null, 'no diagnostic on success');
   });
 

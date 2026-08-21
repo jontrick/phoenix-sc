@@ -13,6 +13,8 @@ const KEY = `phx_recipes_v1_${UID}`;
 const OLDER = '2026-08-01T00:00:00.000Z';
 const NEWER = '2026-08-17T00:00:00.000Z';
 
+const _NUT_SIZES = [250, 330, 500, 1000, 1500];
+
 const rec = (name) => ({
   id: `r_${name}`, name, cat: 'other', yield_serves: 1,
   components: [], yield_note: '', prep_method: '', macros_manual: null,
@@ -460,6 +462,96 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     failingWrite({ message: 'should not reach here', code: 'X' });
     assert.equal(app._nutRecipesWriteNow({ _ts: NEWER, recipes: [] }), null, 'no write attempted');
     assert.equal(lastWriteError(), null, 'and nothing recorded');
+  });
+
+  // ══ WATER — variable drink sizes ═══════════════════════════════════════════
+  // Undo used to subtract a hard-coded 250ml, correct only while every entry WAS
+  // 250ml. The cases that matter are the ones that fail under THAT behaviour, not
+  // the ones that pass under this one — a test written against the new code
+  // passes either way (Training's warning, and it was the right one).
+
+  test('WATER a big drink is undone in full, not by a fixed 250ml', () => {
+    setUp(90);
+    app.nutAddWater(1500);
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 1500, 'logged');
+    app.nutUndoLastWater();
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 0,
+      'the whole 1.5L came off — subtracting 250 would leave 1250 and look fine');
+  });
+
+  test('WATER undo removes the LAST drink, not the largest or the first', () => {
+    setUp(90);
+    app.nutAddWater(1000);
+    app.nutAddWater(330);
+    app.nutUndoLastWater();
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 1000, 'the 330 went, the 1000 stayed');
+  });
+
+  test('WATER repeated undo unwinds the day in reverse order', () => {
+    setUp(90);
+    [250, 500, 1500].forEach(app.nutAddWater);
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 2250, 'three drinks');
+    app.nutUndoLastWater();
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 750, 'minus the 1500');
+    app.nutUndoLastWater();
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 250, 'minus the 500');
+    app.nutUndoLastWater();
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 0, 'empty');
+    assert.equal(app.nutUndoLastWater(), false, 'and nothing left to undo');
+  });
+
+  test('WATER every offered size logs the amount it says', () => {
+    _NUT_SIZES.forEach((ml) => {
+      setUp(90);
+      app.nutAddWater(ml);
+      assert.equal(app.nutGetWaterMl(app._nutToday()), ml, `${ml}ml logged as ${ml}ml`);
+    });
+  });
+
+  test('WATER add refuses a non-positive amount rather than subtracting', () => {
+    setUp(90);
+    app.nutAddWater(500);
+    assert.equal(app.nutAddWater(-250), false, 'a negative is not an add');
+    assert.equal(app.nutAddWater(0), false, 'nor is zero');
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 500, 'the total is untouched');
+  });
+
+  // A day logged before v4.9.197 has a total and no entries. Undo cannot be exact
+  // there; it must degrade rather than corrupt or refuse.
+  test('WATER a pre-existing day without entries still undoes by the default size', () => {
+    setUp(90);
+    const ns = app.nutGetState();
+    ns.daily[app._nutToday()] = { water_ml: 750 };          // legacy shape
+    app.nutSaveState(ns);
+    assert.equal(app.nutUndoLastWater(), true, 'still does something');
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 500, 'falls back to 250ml');
+  });
+
+  test('WATER the tile offers a size picker, not a fixed glass', () => {
+    setUp(90);
+    app.nutAddWater(330);
+    const d = dom();
+    app.nutRenderWaterTile();
+    const html = d.html('today-water-tile');
+    assert.ok(html.indexOf('LOG A DRINK') >= 0, 'the control invites a choice');
+    assert.equal(html.indexOf('+ 250 ML'), -1, 'and no longer hard-codes one size');
+    assert.ok(html.indexOf('1 drink') >= 0, 'counts drinks, not glasses');
+  });
+
+  test('WATER the size sheet offers exactly the sizes Jon asked for', () => {
+    setUp(90);
+    let opts = null;
+    app._phxOpenBottomSheet = (cfg) => { opts = cfg.options; };
+    app.nutOpenDrinkSizeSheet();
+    assert.deepEqual(opts.map(o => Number(o.value)), _NUT_SIZES, 'all five, in order');
+    opts.forEach((o) => assert.ok(o.label.length > 0, 'each is labelled'));
+  });
+
+  test('WATER picking a size from the sheet logs that size', () => {
+    setUp(90);
+    app._phxOpenBottomSheet = (cfg) => cfg.onSelect('500');
+    app.nutOpenDrinkSizeSheet();
+    assert.equal(app.nutGetWaterMl(app._nutToday()), 500, 'the chosen size landed');
   });
 
   // ══ THE BACKUP IS REACHABLE ════════════════════════════════════════════════

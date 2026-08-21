@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.198'", 'version is 4.9.198');
+has("var APP_VERSION='4.9.199'", 'version is 4.9.199');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -485,7 +485,7 @@ hasCode('function nutOpenWaterTargetSheet(', 'WATER: target picker defined');
 hasCode('var _NUT_WATER_GLASS_ML  = 250', 'WATER: 250ml glass');
 hasCode('var _NUT_WATER_TARGET_ML = 2500', 'WATER: 2.5L default target');
 hasCode('function _nutBindLongPress(', 'WATER: tap/long-press binding defined');
-hasCode('Tap to add a glass &middot; hold to undo', 'WATER: tap/hold hint shown');
+hasCode('Tap to pick a size &middot; hold to undo the last one', 'WATER: tap/hold hint shown');
 hasCode('water_ml', 'WATER: per-day water stored on the daily record');
 
 // ── Execute the tick-off + water logic ──────────────────────────────────────
@@ -557,9 +557,9 @@ try {
   sb2.nutWaterTargetMl(sb2.nutGetState()) === 2500 ? ok('water target defaults to 2.5L') : bad('bad default water target');
   sb2.nutAddWater(250); sb2.nutAddWater(250);
   sb2.nutGetWaterMl(TODAY) === 500 ? ok('two taps = 500ml') : bad(`water = ${sb2.nutGetWaterMl(TODAY)}`);
-  sb2.nutAddWater(-250);
-  sb2.nutGetWaterMl(TODAY) === 250 ? ok('long-press undo removes a glass') : bad('undo failed');
-  sb2.nutAddWater(-250); sb2.nutAddWater(-250);
+  sb2.nutUndoLastWater();
+  sb2.nutGetWaterMl(TODAY) === 250 ? ok('long-press undo removes the last drink') : bad('undo failed');
+  sb2.nutUndoLastWater(); sb2.nutUndoLastWater();
   sb2.nutGetWaterMl(TODAY) === 0 ? ok('water never goes negative') : bad('water went negative');
   sb2.nutSetWaterTarget(3000);
   sb2.nutWaterTargetMl(sb2.nutGetState()) === 3000 ? ok('water target is configurable') : bad('target not saved');
@@ -613,6 +613,15 @@ hasCode('function _nutSlotCard(', 'DAY: one shared slot renderer');
 hasCode('function _nutDaySummary(', 'DAY: one shared day summary');
 hasCode('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
 hasNotCode('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
+
+// ── Water drink sizes (v4.9.199) ───────────────────────────────────────────
+hasCode('var _NUT_DRINK_SIZES = [250, 330, 500, 1000, 1500];', 'WATER: the five sizes Jon asked for');
+hasCode('function nutOpenDrinkSizeSheet(', 'WATER: size picker defined');
+hasCode('function nutUndoLastWater(', 'WATER: undo is its own named function');
+hasCode('day.water_log.push(amt)', 'WATER: each drink is logged as its own entry');
+hasCode('amt = parseFloat(day.water_log.pop())', 'WATER: undo removes the ACTUAL last drink, not a fixed glass');
+hasCode('if(!(amt > 0)) return false;', 'WATER: add refuses a non-positive amount rather than subtracting');
+hasNotCode("function(){ nutAddWater(-glass); }", 'WATER: the fixed-glass undo is gone');
 
 // ── Backup recovery path (v4.9.194) ────────────────────────────────────────
 // The _bak copy was written from .152 and read by NOTHING while a comment called

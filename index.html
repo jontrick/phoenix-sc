@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.198';
+var APP_VERSION='4.9.199';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21024,19 +21024,57 @@ function nutGetWaterMl(dateKey){
   return parseFloat(day.water_ml) || 0;
 }
 
-function nutAddWater(deltaMl){
+// v4.9.199: drink sizes Jon actually drinks, rather than one fixed glass.
+var _NUT_DRINK_SIZES = [250, 330, 500, 1000, 1500];
+
+function _nutDrinkLabel(ml){
+  return (ml >= 1000) ? ((ml / 1000).toFixed(ml % 1000 === 0 ? 0 : 1) + 'L') : (ml + 'ml');
+}
+
+// Each drink is logged as its own entry. Undo used to subtract a hard-coded
+// 250ml, which was only ever correct because every entry WAS 250ml — after a
+// 1.5L drink that would quietly take the day's total 1250ml too high and look
+// like it had worked. water_ml stays the authoritative total so days logged
+// before this change keep their history; the log is what makes undo exact.
+function nutAddWater(ml){
+  var amt = parseFloat(ml);
+  if(!(amt > 0)) return false;              // "add" never subtracts — undo is its own function
   var ns = nutGetState();
-  if(!ns) return;
+  if(!ns) return false;
   var today = _nutToday();
   if(!ns.daily) ns.daily = {};
   if(!ns.daily[today]) ns.daily[today] = {};
-  var cur = parseFloat(ns.daily[today].water_ml) || 0;
-  var next = cur + deltaMl;
-  if(next < 0) next = 0;
+  var day = ns.daily[today];
+  var next = (parseFloat(day.water_ml) || 0) + amt;
   if(next > 20000) next = 20000;
-  ns.daily[today].water_ml = next;
+  day.water_ml = next;
+  if(!Array.isArray(day.water_log)) day.water_log = [];
+  day.water_log.push(amt);
   nutSaveState(ns);
   nutRenderWaterTile();
+  return true;
+}
+
+// Removes the LAST DRINK, whatever size it was. On a day logged before v4.9.199
+// there is a total but no entries to pop, so it falls back to the smallest size
+// — the best available answer, and stated here rather than left looking exact.
+function nutUndoLastWater(){
+  var ns = nutGetState();
+  if(!ns) return false;
+  var today = _nutToday();
+  var day = (ns.daily && ns.daily[today]) || null;
+  if(!day || !(parseFloat(day.water_ml) > 0)) return false;
+  var amt;
+  if(Array.isArray(day.water_log) && day.water_log.length){
+    amt = parseFloat(day.water_log.pop()) || 0;
+  } else {
+    amt = _NUT_WATER_GLASS_ML;              // legacy day: no entries to pop
+  }
+  var next = (parseFloat(day.water_ml) || 0) - amt;
+  day.water_ml = next > 0 ? next : 0;
+  nutSaveState(ns);
+  nutRenderWaterTile();
+  return true;
 }
 
 function nutSetWaterTarget(ml){
@@ -21045,6 +21083,19 @@ function nutSetWaterTarget(ml){
   ns.water_target_ml = parseFloat(ml) || _NUT_WATER_TARGET_ML;
   nutSaveState(ns);
   nutRenderWaterTile();
+}
+
+// v4.9.199: pick the size instead of assuming a glass.
+function nutOpenDrinkSizeSheet(){
+  if(typeof _phxOpenBottomSheet !== 'function') return;
+  _phxOpenBottomSheet({
+    title: 'Log a drink',
+    subtitle: 'How much did you have?',
+    options: _NUT_DRINK_SIZES.map(function(ml){
+      return { value: String(ml), label: _nutDrinkLabel(ml), sub: ml + ' ml' };
+    }),
+    onSelect: function(val){ nutAddWater(parseFloat(val)); }
+  });
 }
 
 function nutOpenWaterTargetSheet(){
@@ -21078,6 +21129,11 @@ function nutRenderWaterTile(){
   var filled = Math.floor(ml / glass);
   var pct    = target ? Math.min(100, Math.round(ml / target * 100)) : 0;
   var hit    = ml >= target;
+  // Sizes vary now, so "glasses" would be a guess. Count what was actually
+  // logged; a day from before v4.9.199 has a total but no entries, so fall back
+  // to the 250ml-unit reading rather than showing zero drinks against a real total.
+  var _day    = (ns.daily && ns.daily[today]) || {};
+  var _drinks = Array.isArray(_day.water_log) ? _day.water_log.length : filled;
 
   var icons = '';
   for(var i = 0; i < drops; i++){
@@ -21095,20 +21151,20 @@ function nutRenderWaterTile(){
   h += '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:9px;">';
   h += '<div><span style="font-family:var(--font-d);font-size:30px;font-weight:900;line-height:1;color:' + (hit ? 'var(--gold)' : 'var(--text)') + ';">' + (ml/1000).toFixed(2) + '</span>';
   h += '<span style="font-size:12px;color:var(--text3);margin-left:5px;">L of ' + (target/1000).toFixed(1) + 'L</span></div>';
-  h += '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">' + filled + ' glass' + (filled === 1 ? '' : 'es') + '</div>';
+  h += '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">' + _drinks + ' drink' + (_drinks === 1 ? '' : 's') + '</div>';
   h += '</div>';
   h += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">' + icons + '</div>';
   h += '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:11px;">';
   h += '<div style="height:100%;width:' + pct + '%;background:var(--gold);border-radius:2px;transition:width 0.35s;"></div></div>';
-  h += '<button id="nut-water-add" style="width:100%;padding:12px;background:' + (hit ? 'var(--bg3)' : 'var(--gold)') + ';border:1px solid ' + (hit ? 'var(--border2)' : 'var(--gold)') + ';border-radius:var(--radius);color:' + (hit ? 'var(--gold)' : '#000') + ';font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;">+ ' + glass + ' ML</button>';
-  h += '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Tap to add a glass &middot; hold to undo</div>';
+  h += '<button id="nut-water-add" style="width:100%;padding:12px;background:' + (hit ? 'var(--bg3)' : 'var(--gold)') + ';border:1px solid ' + (hit ? 'var(--border2)' : 'var(--gold)') + ';border-radius:var(--radius);color:' + (hit ? 'var(--gold)' : '#000') + ';font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;">+ LOG A DRINK</button>';
+  h += '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:6px;">Tap to pick a size &middot; hold to undo the last one</div>';
   h += '</div>';
   tile.innerHTML = h;
 
   _nutBindLongPress(
     tile.querySelector('#nut-water-add'),
-    function(){ nutAddWater(glass); },
-    function(){ nutAddWater(-glass); }
+    function(){ nutOpenDrinkSizeSheet(); },
+    function(){ nutUndoLastWater(); }
   );
   var tgtBtn = tile.querySelector('#nut-water-target');
   if(tgtBtn) tgtBtn.addEventListener('click', nutOpenWaterTargetSheet);
@@ -21144,7 +21200,7 @@ var _PEP_COMPOUNDS = [
   {id:"nad",           name:"NAD+",                cat:"Longevity",dose:100,  doseUnit:"mg",  freq:"3x/week Mon/Wed/Fri",           timing:"Morning — NOT before bed",      notes:"SubQ NAD+. Week 1: 50mg. Week 2+: 100mg. Never PM."},
   {id:"5amq",          name:"5-Amino-1MQ",         cat:"Metabolic",dose:0.5,  doseUnit:"mg",  freq:"daily",                         timing:"Fasted AM",                     notes:"SubQ 150-500mcg/day. NOT the oral figure: oral is 50-150mg (first-pass). Wks 1-2: 500mcg. Wk 3+: 1mg is above the usual SubQ ceiling."},
   {id:"tesamorelin",   name:"Tesamorelin",         cat:"GH/IGF",   dose:1,    doseUnit:"mg",  freq:"6 days on / 1 day off",         timing:"Before bed",                    notes:"Wks 1-2: 1mg. Wk 3+: 2mg. Replaces CJC in advanced protocols."},
-  {id:"epitalon",      name:"Epitalon",            cat:"Longevity",dose:5,    doseUnit:"mg",  freq:"20 consecutive nights",         timing:"Before bed",                    notes:"v4.9.198 Jon confirmed 18 Aug 2026: 5mg x 20 consecutive nights, ET10 vials. 10mg in 1mL = 50u per dose, 2 doses per vial, 10 vials per 100mg course. 4-6 month washout. Khavinson range is 5-10mg x 10-20 nights."},
+  {id:"epitalon",      name:"Epitalon",            cat:"Longevity",dose:5,    doseUnit:"mg",  freq:"20 consecutive nights",         timing:"Before bed",                    notes:"v4.9.199 Jon confirmed 18 Aug 2026: 5mg x 20 consecutive nights, ET10 vials. 10mg in 1mL = 50u per dose, 2 doses per vial, 10 vials per 100mg course. 4-6 month washout. Khavinson range is 5-10mg x 10-20 nights."},
   {id:"dsip",          name:"DSIP",                cat:"Sleep",    dose:0.25, doseUnit:"mg",  freq:"as needed",                     timing:"30 min before bed",             notes:"200-300mcg pre-sleep. Modulates cortisol and stress response."},
   {id:"semax",         name:"Semax",               cat:"Cognitive",dose:0.2,  doseUnit:"mg",  freq:"daily",                         timing:"Morning",                       notes:"200-600mcg/day. BDNF upregulator. Nasal or SubQ."},
   {id:"selank",        name:"Selank",              cat:"Cognitive",dose:0.25, doseUnit:"mg",  freq:"daily",                         timing:"Any time",                      notes:"250mcg/day. Anxiolytic without sedation."},

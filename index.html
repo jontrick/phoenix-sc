@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.179';
+var APP_VERSION='4.9.180';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21329,60 +21329,71 @@ function _pepToday(){
 }
 
 // ── Scheduling engine ─────────────────────────────────────────────────────
+// v4.9.180: the schedule rule for ONE stack on ONE day, lifted out of
+// _pepGetDoses unchanged so the stock forecast can walk the same calendar the
+// Today screen renders. Two copies of these rules would drift, and a forecast
+// built on drifted rules would order the wrong quantities.
+// Returns the day-number into the protocol when a dose is due, else null.
+// Deliberately does NOT check stack.status — callers decide that.
+function _pepStackDueOn(stack, c, d){
+  if(!stack || !c || !stack.startDate) return null;
+  var dow = d.getDay(); // 0=Sun,1=Mon,...,6=Sat
+  var startD = new Date(stack.startDate + "T12:00:00");
+  var dayNum = Math.round((d - startD) / 86400000);
+  if(dayNum < 0) return null;
+
+  // Off-cycle check
+  if(stack.cycleWeeks && !stack.continuous){
+    var cycleLen = stack.cycleWeeks * 7;
+    var offLen = (stack.offWeeks || 0) * 7;
+    var fullLen = cycleLen + offLen;
+    if(fullLen > 0 && dayNum % fullLen >= cycleLen) return null;
+  }
+
+  var freq = (stack.freq || c.freq || "daily").toLowerCase();
+  var shouldDose = false;
+
+  if(freq.indexOf("daily") >= 0 || freq.indexOf("every day") >= 0){
+    shouldDose = true;
+  } else if(freq.indexOf("eod") >= 0 || freq.indexOf("every other day") >= 0){
+    shouldDose = dayNum % 2 === 0;
+  } else if(freq.indexOf("wed") >= 0 && freq.indexOf("sat") >= 0){
+    shouldDose = dow === 3 || dow === 6;
+  } else if(freq.indexOf("every 5 day") >= 0){
+    shouldDose = dayNum % 5 === 0 && dayNum < 20;
+  } else if(freq.indexOf("20 consecutive") >= 0 || freq.indexOf("20 night") >= 0){
+    shouldDose = dayNum < 20;
+  } else if(freq.indexOf("10 day") >= 0){
+    shouldDose = dayNum < 10;
+  } else if(freq.indexOf("3x/week") >= 0 || freq.indexOf("mon/wed/fri") >= 0){
+    shouldDose = dow === 1 || dow === 3 || dow === 5;
+  } else if(freq.indexOf("2x/week") >= 0){
+    shouldDose = dow === startD.getDay() || dow === (startD.getDay() + 3) % 7;
+  } else if(freq.indexOf("6 day") >= 0){
+    shouldDose = dow !== 1;
+  } else if(freq.indexOf("weekly") >= 0){
+    shouldDose = dow === startD.getDay();
+  } else if(freq.indexOf("needed") >= 0){
+    shouldDose = false;
+  } else {
+    shouldDose = true;
+  }
+
+  return shouldDose ? dayNum : null;
+}
+
 function _pepGetDoses(ps, dateStr){
   var today = dateStr || _pepToday();
   var d = new Date(today + "T12:00:00");
-  var dow = d.getDay(); // 0=Sun,1=Mon,...,6=Sat
   var morning = [], anytime = [], evening = [];
 
   (ps.stacks || []).forEach(function(stack){
     if(stack.status && stack.status !== "instock") return;
-    if(!stack.startDate) return;
     var c = _pepCompound(stack.compoundId);
     if(!c) return;
 
-    var startD = new Date(stack.startDate + "T12:00:00");
-    var dayNum = Math.round((d - startD) / 86400000);
-    if(dayNum < 0) return;
-
-    // Off-cycle check
-    if(stack.cycleWeeks && !stack.continuous){
-      var cycleLen = stack.cycleWeeks * 7;
-      var offLen = (stack.offWeeks || 0) * 7;
-      var fullLen = cycleLen + offLen;
-      if(fullLen > 0 && dayNum % fullLen >= cycleLen) return;
-    }
-
-    var freq = (stack.freq || c.freq || "daily").toLowerCase();
-    var shouldDose = false;
-
-    if(freq.indexOf("daily") >= 0 || freq.indexOf("every day") >= 0){
-      shouldDose = true;
-    } else if(freq.indexOf("eod") >= 0 || freq.indexOf("every other day") >= 0){
-      shouldDose = dayNum % 2 === 0;
-    } else if(freq.indexOf("wed") >= 0 && freq.indexOf("sat") >= 0){
-      shouldDose = dow === 3 || dow === 6;
-    } else if(freq.indexOf("every 5 day") >= 0){
-      shouldDose = dayNum % 5 === 0 && dayNum < 20;
-    } else if(freq.indexOf("20 consecutive") >= 0 || freq.indexOf("20 night") >= 0){
-      shouldDose = dayNum < 20;
-    } else if(freq.indexOf("10 day") >= 0){
-      shouldDose = dayNum < 10;
-    } else if(freq.indexOf("3x/week") >= 0 || freq.indexOf("mon/wed/fri") >= 0){
-      shouldDose = dow === 1 || dow === 3 || dow === 5;
-    } else if(freq.indexOf("2x/week") >= 0){
-      shouldDose = dow === startD.getDay() || dow === (startD.getDay() + 3) % 7;
-    } else if(freq.indexOf("6 day") >= 0){
-      shouldDose = dow !== 1;
-    } else if(freq.indexOf("weekly") >= 0){
-      shouldDose = dow === startD.getDay();
-    } else if(freq.indexOf("needed") >= 0){
-      shouldDose = false;
-    } else {
-      shouldDose = true;
-    }
-
-    if(!shouldDose) return;
+    var dayNum = _pepStackDueOn(stack, c, d);
+    if(dayNum === null) return;
 
     var timing = (c.timing || "").toLowerCase();
     var dose = stack.dose != null ? stack.dose : c.dose;
@@ -21397,6 +21408,109 @@ function _pepGetDoses(ps, dateStr){
   });
 
   return {morning:morning, anytime:anytime, evening:evening};
+}
+
+// ── Stock + reorder forecast (v4.9.180) ───────────────────────────────────
+// Jon's rules, 18 Aug 2026: reorder trigger = supplier lead time + 4 weeks
+// buffer; one consolidated order when anything trips; a reconstituted vial is
+// treated as good for 30 days refrigerated.
+function _pepSettings(ps){
+  var s = (ps && ps.settings) || {};
+  return {
+    leadTimeDays:  s.leadTimeDays  != null ? s.leadTimeDays  : 21,  // order -> in hand
+    bufferWeeks:   s.bufferWeeks   != null ? s.bufferWeeks   : 4,
+    shelfLifeDays: s.shelfLifeDays != null ? s.shelfLifeDays : 30   // after reconstitution
+  };
+}
+
+function _pepISO(d){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+function _pepAddDays(iso, n){
+  var d = new Date(iso + "T12:00:00");
+  return _pepISO(new Date(d.getTime() + n * 86400000));
+}
+
+// How many doses one vial yields at this stack's dose and reconstitution.
+// Unit-dosed blends are measured against syringe volume, not mg.
+function _pepDosesPerVial(stack, c){
+  var dose = stack.dose != null ? stack.dose : (c && c.dose);
+  var recon = _pepRecon(stack, c);
+  if(!dose || dose <= 0 || !recon) return 0;
+  if(c && c.doseUnit === "units") return Math.floor((recon.waterMl * 100) / dose);
+  return Math.floor(recon.vialMg / dose);
+}
+
+// Day-by-day simulation rather than an average burn rate. Averages get cycles,
+// off-weeks and 20-night courses wrong, and they cannot model a part-used vial
+// being discarded at its shelf-life date — which is real consumption and the
+// main way a naive forecast under-orders.
+function _pepStockForecast(ps, stack){
+  var c = _pepCompound(stack && stack.compoundId);
+  if(!c) return null;
+  var perVial = _pepDosesPerVial(stack, c);
+  if(!perVial) return {unknown:true, reason:"Set vial size and BAC water to forecast"};
+
+  var set = _pepSettings(ps);
+  var sealed = parseInt(stack.sealedVials, 10) || 0;
+  var used   = parseInt(stack.openDosesUsed, 10) || 0;
+  var hasOpen = !!stack.openedDate;
+  var openLeft = hasOpen ? Math.max(0, perVial - used) : 0;
+  var openExpiryMs = hasOpen ? new Date(stack.openedDate + "T12:00:00").getTime() + set.shelfLifeDays * 86400000 : null;
+
+  var todayISO = _pepToday();
+  var baseMs = new Date(todayISO + "T12:00:00").getTime();
+  var dosesLeft = 0, wasted = 0, depletion = null, firstDue = null;
+  var HORIZON = 730;
+
+  for(var i = 0; i < HORIZON; i++){
+    var dayMs = baseMs + i * 86400000;
+    var day = new Date(dayMs);
+    if(_pepStackDueOn(stack, c, day) === null) continue;
+    if(!firstDue) firstDue = _pepISO(day);
+
+    // A part-used vial past its shelf life is discarded, not carried forward.
+    if(hasOpen && openExpiryMs !== null && dayMs > openExpiryMs){
+      wasted += openLeft; hasOpen = false; openLeft = 0;
+    }
+    if(hasOpen && openLeft <= 0) hasOpen = false;
+
+    if(!hasOpen){
+      if(sealed <= 0){ depletion = _pepISO(day); break; }
+      sealed--; hasOpen = true; openLeft = perVial;
+      openExpiryMs = dayMs + set.shelfLifeDays * 86400000;
+    }
+    openLeft--; dosesLeft++;
+  }
+
+  var orderBy = depletion ? _pepAddDays(depletion, -(set.leadTimeDays + set.bufferWeeks * 7)) : null;
+  var daysOfSupply = depletion ? Math.round((new Date(depletion + "T12:00:00") - baseMs) / 86400000) : null;
+  return {
+    dosesPerVial: perVial,
+    dosesRemaining: dosesLeft,
+    wastedDoses: wasted,
+    depletionDate: depletion,
+    daysOfSupply: daysOfSupply,
+    orderByDate: orderBy,
+    overdue: !!(orderBy && orderBy <= todayISO),
+    firstDue: firstDue,
+    vialsHeld: (parseInt(stack.sealedVials, 10) || 0) + (stack.openedDate ? 1 : 0)
+  };
+}
+
+// Short status line for a protocol card. Null when there is nothing to say.
+function _pepStockLine(ps, stack){
+  var f = _pepStockForecast(ps, stack);
+  if(!f) return null;
+  if(f.unknown) return {text: f.reason, colour: "var(--text3)"};
+  if(!f.vialsHeld) return {text: "No stock recorded", colour: "var(--gold)"};
+  if(!f.depletionDate) return {text: f.vialsHeld + " vial" + (f.vialsHeld===1?"":"s") + " — over 2 years of supply", colour: "#4CAF50"};
+  var colour = f.overdue ? "#FF6B6B" : (f.daysOfSupply <= 60 ? "var(--gold)" : "#4CAF50");
+  return {
+    text: f.dosesRemaining + " doses left &middot; runs out " + f.depletionDate + (f.overdue ? " &middot; ORDER NOW" : " &middot; order by " + f.orderByDate),
+    colour: colour
+  };
 }
 
 // ── Main renderer ─────────────────────────────────────────────────────────
@@ -21666,6 +21780,8 @@ function _pepTabProtocol(ps){
     h += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;\">" + (_pDose != null ? _pepFmtDose(_pDose, _pUnit) : "?") +
          (_pDraw ? "<span style=\"color:var(--text2);\"> &middot; " + _pepDrawText(_pDraw) + "</span>" : "") + "</div>";
     if(_pRecon) h += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + _pepReconText(_pRecon) + "</div>";
+    var _pStock = _pepStockLine(ps, stack);
+    if(_pStock) h += "<div style=\"font-size:10px;color:" + _pStock.colour + ";margin-top:3px;font-weight:700;\">" + _pStock.text + "</div>";
     h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">";
     h += "Start: " + (stack.startDate || "—");
     if(stack.cycleWeeks) h += " &middot; " + stack.cycleWeeks + "wk on";
@@ -21767,6 +21883,17 @@ function pepOpenEditStack(idx, newId){
     "<input id=\"pep-e-water\" type=\"number\" step=\"0.1\" value=\"" + (stack.waterMl != null && stack.waterMl !== "" ? stack.waterMl : (_rDef.waterMl != null ? _rDef.waterMl : "")) + "\" placeholder=\"mL added\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;margin-top:4px;\"></div>" +
     "</div>" +
     "<div id=\"pep-e-draw\" style=\"background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px;\"></div>" +
+    "<div style=\"font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:8px;\">Stock</div>" +
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;\">" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Sealed Vials</label><br>" +
+    "<input id=\"pep-e-sealed\" type=\"number\" step=\"1\" min=\"0\" value=\"" + (stack.sealedVials != null ? stack.sealedVials : "") + "\" placeholder=\"0\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Doses Used From Open Vial</label><br>" +
+    "<input id=\"pep-e-used\" type=\"number\" step=\"1\" min=\"0\" value=\"" + (stack.openDosesUsed != null ? stack.openDosesUsed : "") + "\" placeholder=\"0\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "</div>" +
+    "<div style=\"margin-bottom:8px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Open Vial Reconstituted On</label><br>" +
+    "<input id=\"pep-e-opened\" type=\"date\" value=\"" + (stack.openedDate || "") + "\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\">" +
+    "<div style=\"font-size:10px;color:var(--text3);margin-top:4px;\">Leave blank if no vial is open. Mixed vials are treated as good for 30 days.</div></div>" +
+    "<div id=\"pep-e-stock\" style=\"background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px;\"></div>" +
     "<div style=\"margin-bottom:12px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Status</label><br>" +
     "<select id=\"pep-e-status\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\">" +
     ["instock","pipeline","onorder","complete"].map(function(s){ return "<option value=\"" + s + "\"" + (stack.status===s?" selected":"") + ">" + {instock:"In Stock",pipeline:"Pipeline",onorder:"On Order",complete:"Complete"}[s] + "</option>"; }).join("") +
@@ -21799,11 +21926,50 @@ function pepOpenEditStack(idx, newId){
       (draw.units > 100 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Over 100 units - more than one full U-100 syringe. Use less water.</div>" : "") +
       (draw.units > 0 && draw.units < 3 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Under 3 units - hard to measure accurately. Use more water.</div>" : "");
   }
+  // Live supply forecast from whatever is currently typed in the sheet.
+  function _pepEditStockPreview(){
+    var box = document.getElementById("pep-e-stock");
+    if(!box || !c) return;
+    var probe = {
+      compoundId: stack.compoundId,
+      dose:       parseFloat(document.getElementById("pep-e-dose").value),
+      startDate:  document.getElementById("pep-e-start").value || stack.startDate || _pepToday(),
+      cycleWeeks: parseInt(document.getElementById("pep-e-cycle").value, 10) || null,
+      offWeeks:   parseInt(document.getElementById("pep-e-off").value, 10) || 0,
+      vialMg:     document.getElementById("pep-e-vial").value,
+      waterMl:    document.getElementById("pep-e-water").value,
+      sealedVials:   document.getElementById("pep-e-sealed").value,
+      openDosesUsed: document.getElementById("pep-e-used").value,
+      openedDate:    document.getElementById("pep-e-opened").value || null,
+      freq: stack.freq, continuous: stack.continuous
+    };
+    var f = _pepStockForecast(pepGetState(), probe);
+    if(!f || f.unknown){
+      box.innerHTML = "<div style=\"font-size:12px;color:var(--text3);\">" + ((f && f.reason) || "Enter dose, vial size and water to forecast supply.") + "</div>";
+      return;
+    }
+    var head = f.depletionDate
+      ? "<div style=\"font-family:var(--font-d);font-size:22px;font-weight:900;color:" + (f.overdue ? "#FF6B6B" : "#7B68EE") + ";line-height:1;\">" + f.dosesRemaining + " doses</div>" +
+        "<div style=\"font-size:11px;color:var(--text3);margin-top:6px;\">Runs out " + f.depletionDate + " &middot; " + f.daysOfSupply + " days of supply</div>" +
+        "<div style=\"font-size:11px;color:" + (f.overdue ? "#FF6B6B" : "var(--text2)") + ";margin-top:4px;font-weight:700;\">" + (f.overdue ? "Order now — already inside the lead time" : "Order by " + f.orderByDate) + "</div>"
+      : "<div style=\"font-family:var(--font-d);font-size:22px;font-weight:900;color:#4CAF50;line-height:1;\">" + f.dosesRemaining + " doses</div>" +
+        "<div style=\"font-size:11px;color:var(--text3);margin-top:6px;\">Over 2 years of supply at this schedule</div>";
+    box.innerHTML =
+      "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;\">Supply</div>" + head +
+      "<div style=\"font-size:10px;color:var(--text3);margin-top:6px;\">" + f.dosesPerVial + " doses per vial" +
+      (f.wastedDoses ? " &middot; " + f.wastedDoses + " doses lost to 30-day expiry" : "") + "</div>";
+  }
+
   ["pep-e-dose","pep-e-vial","pep-e-water"].forEach(function(id){
     var el = document.getElementById(id);
-    if(el) el.addEventListener("input", _pepEditPreview);
+    if(el) el.addEventListener("input", function(){ _pepEditPreview(); _pepEditStockPreview(); });
+  });
+  ["pep-e-sealed","pep-e-used","pep-e-opened","pep-e-cycle","pep-e-off","pep-e-start"].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener("input", _pepEditStockPreview);
   });
   _pepEditPreview();
+  _pepEditStockPreview();
 
   document.getElementById("pep-e-save").addEventListener("click", function(){
     var saved = {
@@ -21814,6 +21980,9 @@ function pepOpenEditStack(idx, newId){
       offWeeks:   parseInt(document.getElementById("pep-e-off").value)||0,
       vialMg:     parseFloat(document.getElementById("pep-e-vial").value)||null,
       waterMl:    parseFloat(document.getElementById("pep-e-water").value)||null,
+      sealedVials:   parseInt(document.getElementById("pep-e-sealed").value, 10) || 0,
+      openDosesUsed: parseInt(document.getElementById("pep-e-used").value, 10) || 0,
+      openedDate:    document.getElementById("pep-e-opened").value || null,
       status:     document.getElementById("pep-e-status").value,
       notes:      document.getElementById("pep-e-notes").value.trim()
     };

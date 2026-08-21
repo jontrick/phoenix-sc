@@ -375,6 +375,73 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(compound('cjc1295').notes.includes('Do not merge'), 'cjc warns against merging');
   });
 
+  // ── Stock forecast (v4.9.180) ──────────────────────────────────────────────
+  // Jon's rules, 18 Aug 2026: reorder at supplier lead time + 4 weeks buffer;
+  // one consolidated order; a reconstituted vial is good for 30 days.
+  // The forecast simulates the calendar day by day rather than averaging a burn
+  // rate — averages get cycles, off-weeks and 20-night courses wrong, and they
+  // cannot model a part-used vial being binned at its expiry, which is real
+  // consumption and the main way a naive forecast under-orders.
+  {
+    const sIso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const sToday = sIso(new Date());
+    const sAgo = n => sIso(new Date(Date.now() - n*86400000));
+    const sPs = { stacks: [], settings: {} };
+    const f = stack => app._pepStockForecast(sPs, stack);
+
+    test('BPC-157 500mcg from a 5mg/2mL vial yields 10 doses', () => {
+      assert.equal(f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), vialMg:5, waterMl:2, sealedVials:3 }).dosesPerVial, 10, 'doses per vial');
+    });
+
+    test('Retatrutide 6mg from an RT10 in 0.5mL yields a single dose', () => {
+      assert.equal(f({ compoundId:'retatrutide', dose:6, startDate: sAgo(30), vialMg:10, waterMl:0.5, sealedVials:4 }).dosesPerVial, 1, 'one dose per vial');
+    });
+
+    test('a unit-dosed blend is measured against syringe volume, not mg', () => {
+      // BBG70: 70mg in 2mL = 200 units; 14u per dose = 14 doses.
+      assert.equal(f({ compoundId:'bpc_ghkcu_tb', dose:14, startDate: sAgo(30), vialMg:70, waterMl:2, sealedVials:2 }).dosesPerVial, 14, 'doses per vial');
+    });
+
+    test('a part-used vial past 30 days is written off, not carried forward', () => {
+      const fresh = f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), vialMg:5, waterMl:2, sealedVials:0, openDosesUsed:2, openedDate: sToday });
+      const stale = f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), vialMg:5, waterMl:2, sealedVials:0, openDosesUsed:2, openedDate: sAgo(31) });
+      assert.equal(fresh.dosesRemaining, 8, 'fresh vial yields its remainder');
+      assert.equal(stale.dosesRemaining, 0, 'expired vial yields nothing');
+      assert.equal(stale.wastedDoses, 8, 'the remainder counts as waste, not supply');
+    });
+
+    test('no stock depletes on the next scheduled dose and flags overdue', () => {
+      const r = f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), vialMg:5, waterMl:2, sealedVials:0 });
+      assert.equal(r.dosesRemaining, 0, 'nothing to give');
+      assert.equal(r.overdue, true, 'flagged overdue');
+    });
+
+    test('order-by is depletion minus lead time plus buffer (21 + 28 days)', () => {
+      const r = f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), vialMg:5, waterMl:2, sealedVials:12 });
+      const gap = Math.round((new Date(r.depletionDate) - new Date(r.orderByDate)) / 86400000);
+      assert.equal(gap, 49, 'lead time + buffer');
+    });
+
+    test('a cycled compound still burns shelf life while it is paused', () => {
+      const r = f({ compoundId:'ghkcu', dose:1, startDate: sAgo(10), cycleWeeks:4, offWeeks:4, vialMg:50, waterMl:5, sealedVials:1, openDosesUsed:0, openedDate: sToday });
+      assert.ok(r.wastedDoses > 0, 'doses expire across the off-weeks');
+    });
+
+    test('a library default reconstitution is enough to forecast', () => {
+      assert.equal(f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), sealedVials:3 }).dosesPerVial, 10, 'falls back to _PEP_RECON');
+    });
+
+    test('an unusable reconstitution reports rather than guessing', () => {
+      assert.equal(f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), vialMg:0, waterMl:0, sealedVials:3 }).unknown, true, 'flagged unknown');
+    });
+
+    test('the settings carry Jon\'s chosen rules as defaults', () => {
+      const set = app._pepSettings({});
+      assert.equal(set.bufferWeeks, 4, '4-week buffer');
+      assert.equal(set.shelfLifeDays, 30, '30-day reconstituted shelf life');
+    });
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

@@ -157,4 +157,26 @@ export default function ({ test, assert, app, signIn, seed, read }) {
     const ath = read('phoenix_athlete');
     assert.equal(ath && ath.fqCompleted, true, 'cancel left the profile untouched');
   });
+
+  test('ENTRY _blabSendCloud: a failing keepalive write reaches the diagnostic', async () => {
+    // Declared gap, now closed. Four harness guards asserted "recorded" while only checking
+    // that a line of source existed — Nutrition's 06da7fa point. This is the write that fires
+    // when Jon backgrounds the PWA mid-session, so a silent failure here loses the set he just
+    // logged with nothing on screen and nothing in Settings.
+    signIn('u-blab');
+    app.localStorage.removeItem('phx_last_write_error');
+    const realFetch = app.fetch;
+    app.fetch = () => Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}), text: () => Promise.resolve('') });
+    try {
+      app._blabSendCloud('u-blab', { blabWeek: 5, blabDay: 1 }, true); // keepalive branch
+      await new Promise(r => setImmediate(r));
+      await new Promise(r => setImmediate(r));
+    } finally { app.fetch = realFetch; }
+    const raw = app.localStorage.getItem('phx_last_write_error');
+    assert.ok(raw, 'a failed keepalive write must land in phx_last_write_error');
+    const snap = JSON.parse(raw);
+    assert.ok(String(snap.context).includes('_blabSendCloud.keepalive'), 'context names the branch, got ' + snap.context);
+    assert.equal(snap.code, '503', 'HTTP status carried as the code, got ' + snap.code);
+    assert.ok(snap.payload_shape, 'shape recorded, not the payload');
+  });
 }

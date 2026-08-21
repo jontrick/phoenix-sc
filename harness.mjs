@@ -1268,7 +1268,14 @@ has('overreaching triad',                         'DELOAD: overreaching triad tr
 
 // ── v4.9.155 [PM] Write-error diagnostics + BLAB mirror instrumentation ────────
 // _phxRecordWriteError must redact: shape only, no details/hint, message truncated, ring of 8.
-has('payload_shape: _phxShapeOf(payload)',          'DIAG: snapshot stores payload SHAPE not values');
+// v4.9.191 [PM]: names corrected after Nutrition's 06da7fa — a structural guard whose NAME
+// reads as a behavioural claim is worse than one that reads honestly, because an auditor
+// reads the name and moves on. "recorded" / "written" / "chains" all claimed behaviour these
+// assertions cannot support; they check that a line of source exists. Where the behaviour IS
+// proven the name now points at where. The four BLAB MIRROR guards say NOT behaviourally
+// covered — and the gap that declaration exposed is now closed: tests/pm.mjs drives
+// _blabSendCloud with a failing fetch and asserts the diagnostic actually lands.
+has('payload_shape: _phxShapeOf(payload)',          'DIAG: shape helper is wired in (structural — that it REDACTS is tests/pm.mjs)');
 // v4.9.191 [PM]: code-only variants. `has`/`hasNot` read raw text, which is correct for the
 // version-label guards (a label legitimately lives in a comment) and WRONG for anything
 // asserting the presence or absence of CODE. Proven by prose probe (Training's method,
@@ -1278,14 +1285,14 @@ has('payload_shape: _phxShapeOf(payload)',          'DIAG: snapshot stores paylo
 hasNotCode('payload_preview:',                          'DIAG: raw payload_preview removed');
 hasNotCode("details: (err && err.details) || null",     'DIAG: details (value-echoing) not recorded');
 hasNotCode("hint: (err && err.hint) || null",           'DIAG: hint (value-echoing) not recorded');
-has("if(msg.length > 200) msg = msg.slice(0, 200)", 'DIAG: message truncated to 200');
-has("localStorage.setItem('phx_write_errors', JSON.stringify(ring))", 'DIAG: ring buffer written');
-has('while(ring.length > 8) ring.shift();',         'DIAG: ring capped at 8');
+has("if(msg.length > 200) msg = msg.slice(0, 200)", 'DIAG: truncation present (structural — that it TRUNCATES is tests/pm.mjs)');
+has("localStorage.setItem('phx_write_errors', JSON.stringify(ring))", 'DIAG: ring write present (structural — that it RETAINS 8 is tests/pm.mjs)');
+has('while(ring.length > 8) ring.shift();',         'DIAG: ring cap present (structural — that it EVICTS is tests/pm.mjs)');
 // _blabSendCloud: BOTH branches record. Keepalive is the pagehide write — must not swallow.
-has("_phxRecordWriteError('_blabSendCloud.keepalive'",        'BLAB MIRROR: keepalive HTTP failure recorded');
-has("_phxRecordWriteError('_blabSendCloud.keepalive.reject'", 'BLAB MIRROR: keepalive rejection recorded');
-has("_phxRecordWriteError('_blabSendCloud.update'",           'BLAB MIRROR: update res.error recorded');
-has("_phxRecordWriteError('_blabSendCloud.update.reject'",    'BLAB MIRROR: update rejection recorded');
+has("_phxRecordWriteError('_blabSendCloud.keepalive'",        'BLAB MIRROR: keepalive HTTP branch calls the recorder (structural — that it RECORDS is tests/pm.mjs)');
+has("_phxRecordWriteError('_blabSendCloud.keepalive.reject'", 'BLAB MIRROR: keepalive reject branch calls the recorder (structural — that it RECORDS is tests/pm.mjs)');
+has("_phxRecordWriteError('_blabSendCloud.update'",           'BLAB MIRROR: update error branch calls the recorder (structural — that it RECORDS is tests/pm.mjs)');
+has("_phxRecordWriteError('_blabSendCloud.update.reject'",    'BLAB MIRROR: update reject branch calls the recorder (structural — that it RECORDS is tests/pm.mjs)');
 hasNot("}).catch(function(){});\n    } catch(_){}",           'BLAB MIRROR: keepalive no longer swallows');
 // Shared restore hook lives in PM plumbing, exactly once, and still chains both domains.
 {
@@ -1295,8 +1302,8 @@ hasNot("}).catch(function(){});\n    } catch(_){}",           'BLAB MIRROR: keep
   const idxPep  = html.indexOf('function pepGetState(');
   (idxHook > 0 && idxHook < idxPep) ? ok('HOOK: wrapper relocated to PM plumbing (before peptide block)') : bad('HOOK: wrapper still inside peptide block');
 }
-has('pepRestoreFromCloud(row)) _pepAfterRestore();', 'HOOK: chains peptide restore + repaint');
-has('nutRestoreRecipesFromCloud(row)) _nutAfterRestore();', 'HOOK: chains nutrition restore + repaint');
+has('pepRestoreFromCloud(row)) _pepAfterRestore();', 'HOOK: peptide chain line present (structural — that it CHAINS is tests/peptides.mjs)');
+has('nutRestoreRecipesFromCloud(row)) _nutAfterRestore();', 'HOOK: nutrition chain line present (structural — that it CHAINS is tests/nutrition.mjs)');
 
 // ── BLAB restore resolution (v4.9.158) ──────────────────────────────────────
 // Jon ruled 2026-08-18: newest _ts wins, EXCEPT it may never roll training

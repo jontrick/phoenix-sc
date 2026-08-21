@@ -1469,6 +1469,9 @@ has('window._phxActiveSessionKey = null',       'REENTRY: key released on comple
   // a shipping version is referenced only by the domain shipping it, so if ALL your labels
   // are stale, nothing mentions the new number and this fails. Caught Peptides' .161
   // collision and Nutrition's .174 labels, both verified by reverting them on a real tree.
+  // Third failure mode, found in anger by Nutrition on .185 and NOT one either of us listed:
+  // no label at all, because the version comments lived in the BUILD SCRIPT used to make the
+  // edits and never reached the shipped file. Caught it cold.
   // KNOWN RESIDUE, accepted: defeated if you write ONE correct label alongside stale ones.
   // Narrower than the mechanical failure (getting them all wrong after a rebase) and not
   // worth a git-aware gate to close — revisit only if it actually bites someone.

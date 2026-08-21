@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.185'", 'version is 4.9.185');
+has("var APP_VERSION='4.9.186'", 'version is 4.9.186');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1497,7 +1497,23 @@ has("id:'wb-150', name:'150 Wall Balls'", 'WB150: library entry present, named f
   else ok('WB150: benchmark name kept out of the label');
 })();
 has("window.blabDayLabel = function", 'API: public day-label accessor exists');
-has("var _BLAB_DAY_LABELS = [", 'API: the internal array still works until Nutrition migrates');
+has("var _BLAB_DAY_LABELS = [", 'API: the day-label array still backs the accessor');
+
+// CONTRACT PINS — the shape other domains depend on. Nutrition pins these too, but
+// its suite failing means I have ALREADY broken it. These fail on MY side first,
+// which is where a provider's contract guard belongs.
+has("if(!(d >= 1 && d <= 4)) return '';",           'CONTRACT: blabDayLabel refuses days outside 1-4');
+has("out.push({custom:true, id:c.id, cat:c.cat",    'CONTRACT: calendar entries carry cat for the REST distinction');
+has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
+(() => {
+  // blabCalSessionsOn must keep putting blabDay on BLAB entries — Nutrition reads it
+  // to name the training day, and a rename would show wrong macro targets rather
+  // than an error.
+  const i = html.indexOf('window.blabCalSessionsOn = function');
+  const seg = html.slice(i, i + 900);
+  if (/cal\.sessions\.forEach[\s\S]{0,200}out\.push\(s\)/.test(seg)) ok('CONTRACT: BLAB entries pass through whole, so blabDay survives');
+  else bad('CONTRACT: blabCalSessionsOn no longer passes BLAB entries through intact — blabDay may be gone, and Nutrition names the training day from it');
+})();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

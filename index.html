@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.185';
+var APP_VERSION='4.9.186';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -26098,6 +26098,12 @@ var _BLAB_DAY_LABELS = ['','Upper Body','Lower Body','Upper Body — Chins','Low
 // Added v4.9.184 because Nutrition was reading the _BLAB_DAY_LABELS array directly.
 // That is an internal: not on window, and renameable without notice. This is not —
 // it will not change shape without both other domains being told first.
+//
+// v4.9.186: Nutrition has migrated (their v4.9.185) and no longer reads the internal,
+// so _BLAB_DAY_LABELS is Training-only again. The contract for this accessor and for
+// blabCalSessionsOn is documented in HANDOFF_TRAINING under "API other domains may
+// call", and pinned in harness.mjs under CONTRACT so a shape change fails HERE rather
+// than in a consumer's suite — by which point the break has already shipped.
 window.blabDayLabel = function(dayNumber){
   var d = parseInt(dayNumber, 10);
   if(!(d >= 1 && d <= 4)) return '';

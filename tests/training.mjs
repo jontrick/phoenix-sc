@@ -1221,4 +1221,61 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.blabDayLabel(entry.blabDay), app.blabCalEntryView(entry).title,
       'accessor and calendar agree on the day name');
   });
+
+  // ── Cross-domain contract (v4.9.186) ──────────────────────────────────────
+  // Nutrition consumes blabCalSessionsOn + blabDayLabel to set macro targets. It
+  // pins these too, but its suite going red means the break has ALREADY shipped
+  // past the domain that owns the shape. These fail on the Training side first.
+  //
+  // The REST case is here because it caused a real bug: Nutrition's v4.9.182 read
+  // every entry as work, so a day Jon had deliberately marked as rest took training
+  // macros — and since an EMPTY day was already correct, the only broken case was
+  // the one where the calendar looks right and nothing on screen looks wrong.
+
+  test('CONTRACT: a BLAB entry carries blabDay, which names the training day', () => {
+    schedule({ sessions: [S(5, 2, dayFromToday(0))], customs: [] });
+    const [e] = app.blabCalSessionsOn(dayFromToday(0));
+    assert.equal(e.blabDay, 2, 'blabDay present and correct');
+    assert.equal(e.blabWeek, 5, 'blabWeek too');
+    assert.ok(!e.custom, 'a BLAB session is not flagged custom');
+    assert.equal(app.blabDayLabel(e.blabDay), 'Lower Body', 'and it names the day');
+  });
+
+  test('CONTRACT: a planned rest day is distinguishable from a session', () => {
+    schedule({ sessions: [], customs: [REST(dayFromToday(0))] });
+    const [e] = app.blabCalSessionsOn(dayFromToday(0));
+    assert.equal(e.custom, true, 'flagged custom');
+    assert.equal(e.cat, 'REST', 'cat REST is the marker a consumer keys on');
+    assert.equal(e.blabDay, undefined, 'no blabDay — it is not a training day');
+    assert.equal(app.blabDayLabel(e.blabDay), '', 'and the accessor returns empty rather than throwing');
+  });
+
+  test('CONTRACT: a custom WOD is distinguishable from both', () => {
+    schedule({ sessions: [], customs: [C('Kronos', dayFromToday(0))] });
+    const [e] = app.blabCalSessionsOn(dayFromToday(0));
+    assert.equal(e.custom, true, 'flagged custom');
+    assert.equal(e.cat, 'WOD', 'categorised');
+    assert.ok(e.libId, 'and carries a library id');
+    assert.equal(e.blabDay, undefined, 'no blabDay');
+  });
+
+  test('CONTRACT: nothing scheduled is an empty array, not a rest entry', () => {
+    // "deliberately resting" and "nothing planned yet" are different states and a
+    // consumer is expected to treat them differently.
+    schedule({ sessions: [S(5, 2, dayFromToday(3))], customs: [] });
+    assert.deepEqual(app.blabCalSessionsOn(dayFromToday(0)), [], 'empty day is []');
+  });
+
+  test('CONTRACT: the agenda excludes history, so a finished day reads as free', () => {
+    schedule({ sessions: [{ ...S(5, 2, dayFromToday(0)), status: 'completed' }], customs: [] });
+    assert.deepEqual(app.blabCalSessionsOn(dayFromToday(0)), [], 'completed work is not on the agenda');
+  });
+
+  test('CONTRACT: a rest marker alongside a real session still means training', () => {
+    // The rest entry must not mask the session sharing the day.
+    schedule({ sessions: [S(5, 2, dayFromToday(0))], customs: [REST(dayFromToday(0))] });
+    const es = app.blabCalSessionsOn(dayFromToday(0));
+    assert.equal(es.length, 2, 'both entries returned');
+    assert.ok(es.some((e) => e.blabDay === 2), 'the training session is still discoverable');
+  });
 }

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.200';
+var APP_VERSION='4.9.201';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21836,6 +21836,15 @@ function _pepSimulate(ps, stack, opts){
 
   var set = _pepSettings(ps);
   var sealed = unlimited ? Infinity : (parseInt(stack.sealedVials, 10) || 0);
+  // v4.9.201: stock already ordered counts, but only FROM its arrival date.
+  // Counting it as present today would hide a gap Jon has to live through; not
+  // counting it at all would tell him to re-order something already in transit.
+  var incomingVials = 0, incomingMs = null;
+  if(!unlimited && stack.onOrder && stack.arrivalDate){
+    incomingVials = parseInt(stack.onOrderVials, 10) || 0;
+    var _am = Date.parse(stack.arrivalDate + "T12:00:00");
+    if(!isNaN(_am)) incomingMs = _am; else incomingVials = 0;
+  }
   var used   = parseInt(stack.openDosesUsed, 10) || 0;
   var hasOpen = !!stack.openedDate;
   var openLeft = hasOpen ? Math.max(0, perVial - used) : 0;
@@ -21844,12 +21853,18 @@ function _pepSimulate(ps, stack, opts){
   var todayISO = _pepToday();
   var baseMs = new Date(todayISO + "T12:00:00").getTime();
   var dosesServed = 0, wasted = 0, vialsOpened = 0, depletion = null, firstDue = null;
+  var gapStart = null, gapEnd = null;
 
   for(var i = 0; i < horizon; i++){
     var dayMs = baseMs + i * 86400000;
     var day = new Date(dayMs);
     if(_pepStackDueOn(stack, c, day) === null) continue;
     if(!firstDue) firstDue = _pepISO(day);
+
+    // Delivery lands: fold it into stock on its arrival date, once.
+    if(incomingMs !== null && dayMs >= incomingMs){
+      sealed += incomingVials; incomingVials = 0; incomingMs = null;
+    }
 
     // A part-used vial past its shelf life is discarded, not carried forward.
     if(hasOpen && openExpiryMs !== null && dayMs > openExpiryMs){
@@ -21858,7 +21873,17 @@ function _pepSimulate(ps, stack, opts){
     if(hasOpen && openLeft <= 0) hasOpen = false;
 
     if(!hasOpen){
-      if(sealed <= 0){ depletion = _pepISO(day); break; }
+      if(sealed <= 0){
+        if(incomingMs !== null){
+          // Out of stock but a delivery is dated. This is a GAP Jon will feel,
+          // not the end of the protocol — record it and carry on so the
+          // forecast can say "resumes <date>" rather than "runs out".
+          if(!gapStart) gapStart = _pepISO(day);
+          gapEnd = _pepISO(day);
+          continue;
+        }
+        depletion = _pepISO(day); break;
+      }
       sealed--; vialsOpened++; hasOpen = true; openLeft = perVial;
       openExpiryMs = dayMs + set.shelfLifeDays * 86400000;
     }
@@ -21871,7 +21896,10 @@ function _pepSimulate(ps, stack, opts){
     wastedDoses: wasted,
     vialsOpened: vialsOpened,
     depletionDate: depletion,
-    firstDue: firstDue
+    firstDue: firstDue,
+    gapStart: gapStart,
+    gapEnd: gapEnd,
+    resumesOn: gapEnd ? (stack.arrivalDate || null) : null
   };
 }
 
@@ -21888,6 +21916,10 @@ function _pepStockForecast(ps, stack){
     dosesPerVial: sim.dosesPerVial,
     dosesRemaining: sim.dosesServed,
     wastedDoses: sim.wastedDoses,
+    gapStart: sim.gapStart,
+    resumesOn: sim.resumesOn,
+    onOrder: !!(stack.onOrder && stack.arrivalDate),
+    arrivalDate: stack.arrivalDate || null,
     depletionDate: depletion,
     daysOfSupply: daysOfSupply,
     orderByDate: orderBy,
@@ -22054,18 +22086,24 @@ function pepRenderScreen(){
   var body = document.getElementById("pep-screen-body");
   if(!body) return;
   var ps = pepGetState();
-  var tabs = [{key:"today",label:"TODAY"},{key:"protocol",label:"PROTOCOL"},{key:"bloods",label:"BLOODS"},{key:"adjust",label:"ADJUST"},{key:"order",label:"ORDER"}];
+  // v4.9.201 — Jon's structure: TODAY | PROTOCOL OVERVIEW | STOCK | ADJUST | ORDER.
+  // BLOODS is NOT dropped; it moved inside ADJUST, which is the only screen that
+  // consumes blood markers. Six tabs do not fit a phone and Jon's bloods arrive
+  // next week, so losing the screen was not an option either.
+  var tabs = [{key:"today",label:"TODAY"},{key:"overview",label:"PROTOCOL"},{key:"stock",label:"STOCK"},{key:"adjust",label:"ADJUST"},{key:"order",label:"ORDER"}];
   var tabBar = "<div style=\"display:flex;border-bottom:1px solid var(--border);background:var(--bg);\">" +
     tabs.map(function(t){
       var act = _pepTab === t.key;
       return "<button data-pep-tab=\"" + t.key + "\" style=\"flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid " + (act?"#7B68EE":"transparent") + ";font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:" + (act?"#7B68EE":"var(--text3)") + ";cursor:pointer;touch-action:manipulation;\">" + t.label + "</button>";
     }).join("") + "</div>";
   var content = "";
-  if(_pepTab === "today")    content = _pepTabToday(ps);
-  else if(_pepTab === "protocol") content = _pepTabProtocol(ps);
+  if(_pepTab === "today")         content = _pepTabToday(ps);
+  else if(_pepTab === "overview") content = _pepTabOverview(ps);
+  else if(_pepTab === "stock")    content = _pepTabStock(ps);
+  else if(_pepTab === "protocol") content = _pepTabProtocol(ps);   // edit sheet host
   else if(_pepTab === "bloods")   content = _pepTabBloods(ps);
   else if(_pepTab === "adjust")   content = _pepTabAdjust(ps);
-  else                       content = _pepTabOrder(ps);
+  else                            content = _pepTabOrder(ps);
   body.innerHTML = tabBar + "<div style=\"padding:16px;\">" + content + "</div>";
   body.querySelectorAll("[data-pep-tab]").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -22127,6 +22165,29 @@ function pepRenderScreen(){
   });
   var restoreBak = body.querySelector("#pep-restore-bak");
   if(restoreBak) restoreBak.addEventListener("click", pepRestoreBackup);
+  body.querySelectorAll("[data-pep-stock]").forEach(function(btn){
+    var pr = btn.getAttribute("data-pep-stock").split("|");
+    btn.addEventListener("click", function(){ pepStockAdjust(parseInt(pr[0],10), parseInt(pr[1],10)); });
+  });
+  body.querySelectorAll("[data-pep-incoming]").forEach(function(btn){
+    var pi = btn.getAttribute("data-pep-incoming").split("|");
+    btn.addEventListener("click", function(){ pepIncomingAdjust(parseInt(pi[0],10), parseInt(pi[1],10)); });
+  });
+  body.querySelectorAll("[data-pep-onorder]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepToggleOnOrder(parseInt(btn.getAttribute("data-pep-onorder"),10)); });
+  });
+  body.querySelectorAll("[data-pep-arrival]").forEach(function(inp){
+    inp.addEventListener("change", function(){ pepSetArrival(parseInt(inp.getAttribute("data-pep-arrival"),10), inp.value); });
+  });
+  body.querySelectorAll("[data-pep-counted]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepConfirmCount(parseInt(btn.getAttribute("data-pep-counted"),10)); });
+  });
+  var histBtn = body.querySelector("#pep-hist-confirm");
+  if(histBtn) histBtn.addEventListener("click", pepConfirmHistory);
+  var bloodsOpen = body.querySelector("#pep-open-bloods");
+  if(bloodsOpen) bloodsOpen.addEventListener("click", function(){ _pepTab = "bloods"; pepRenderScreen(); });
+  var bloodsBack = body.querySelector("#pep-bloods-back");
+  if(bloodsBack) bloodsBack.addEventListener("click", function(){ _pepTab = "adjust"; pepRenderScreen(); });
   var bloodAdd = body.querySelector("#pep-blood-add");
   if(bloodAdd) bloodAdd.addEventListener("click", function(){ pepOpenBloodPanel(null); });
   body.querySelectorAll("[data-pep-blood-open]").forEach(function(el){
@@ -22199,16 +22260,58 @@ function _pepTabToday(ps){
   return h;
 }
 
+// v4.9.201: marking a dose done DECREMENTS STOCK. Jon's rule — the STOCK screen
+// is the live truth of what is available, so it has to move when a dose is
+// taken rather than when he remembers to edit it. Un-ticking gives it back, so
+// a mis-tap is not a silent loss of a vial.
+function _pepConsumeDose(ps, compoundId, direction){
+  var stack = null, si = -1;
+  (ps.stacks || []).forEach(function(st, i){ if(st.compoundId === compoundId && si < 0){ stack = st; si = i; } });
+  if(!stack) return;
+  var c = _pepCompound(compoundId);
+  var perVial = _pepDosesPerVial(stack, c);
+  if(!perVial) return;   // no reconstitution set — nothing to count against
+
+  var used = parseInt(stack.openDosesUsed, 10) || 0;
+  var sealed = parseInt(stack.sealedVials, 10) || 0;
+
+  if(direction > 0){
+    if(!stack.openedDate){
+      // No vial open. Open one if there is a sealed vial to open.
+      if(sealed <= 0) return;             // nothing to consume; leave stock alone
+      sealed--; stack.openedDate = _pepToday(); used = 0;
+    }
+    used++;
+    if(used >= perVial){ used = 0; stack.openedDate = null; }   // vial finished
+  } else {
+    // Undo. Step back into the previous vial if this un-ticks the first dose of one.
+    if(used > 0){
+      used--;
+      // Zero doses drawn means the vial is effectively unopened — hand it back
+      // to the sealed count. Without this, ticking then un-ticking silently
+      // consumed a whole vial, which is exactly the mis-tap this branch exists
+      // to protect against.
+      if(used === 0 && stack.openedDate){ stack.openedDate = null; sealed++; }
+    }
+    else if(stack.openedDate){ stack.openedDate = null; sealed++; }
+    else { used = Math.max(0, perVial - 1); stack.openedDate = _pepToday(); }
+  }
+  stack.openDosesUsed = used;
+  stack.sealedVials = sealed;
+  ps.stacks[si] = stack;
+}
+
 function pepToggleDose(compoundId){
   var ps = pepGetState();
   var today = _pepToday();
   if(!ps.checked) ps.checked = {};
   if(!ps.checked[today]) ps.checked[today] = [];
   var idx = ps.checked[today].indexOf(compoundId);
-  if(idx >= 0) ps.checked[today].splice(idx, 1);
-  else ps.checked[today].push(compoundId);
+  if(idx >= 0){ ps.checked[today].splice(idx, 1); _pepConsumeDose(ps, compoundId, -1); }
+  else { ps.checked[today].push(compoundId); _pepConsumeDose(ps, compoundId, 1); }
   pepSaveState(ps);
   pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
 }
 
 // ── Today-screen dose tile (v4.9.142) ─────────────────────────────────────
@@ -22797,6 +22900,7 @@ function _pepTabAdjust(ps){
 
   var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Smart Protocol Review</div>";
   h += "<div style=\"font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:14px;\">Reads your live protocol, the last 14 days of adherence, your latest blood panel and every response note below, then returns specific dose, timing and cycle changes. Research tracking only — not medical advice.</div>";
+  h += "<button id=\"pep-open-bloods\" style=\"width:100%;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;margin-bottom:12px;\">Blood Panels &rsaquo;</button>";
   var _bl = _pepLatestBloods(ps);
   if(_bl){
     var _oor = (_bl.out_of_range || []).length;
@@ -23017,7 +23121,11 @@ async function _pepSignedUrl(path, seconds){
 // ── BLOODS tab ────────────────────────────────────────────────────────────
 function _pepTabBloods(ps){
   var panels = (ps && ps.bloods) || [];
-  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;\">";
+  // v4.9.201: BLOODS is no longer a top-level tab — Jon's five-tab structure has
+  // no room and six do not fit a phone. Reached from ADJUST, which is the only
+  // screen that consumes markers, with an explicit way back.
+  var h = "<button id=\"pep-bloods-back\" style=\"background:none;border:none;color:#7B68EE;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;padding:0 0 12px;cursor:pointer;touch-action:manipulation;\">&lsaquo; Adjust</button>";
+  h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;\">";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + panels.length + " panel" + (panels.length!==1?"s":"") + "</div>";
   h += "<button id=\"pep-blood-add\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add Panel</button>";
   h += "</div>";
@@ -23397,6 +23505,248 @@ async function pepDeleteBloodPanel(){
   pepRenderScreen();
 }
 
+// ── Readiness gate (v4.9.201) ─────────────────────────────────────────────
+// Jon's rule: do NOT build or display the forward protocol until (a) stock on
+// hand is entered and (b) what has already been completed has been reviewed.
+// A forward plan built on unknown stock and unknown history is a guess wearing
+// the costume of a schedule — it would tell him to inject things he does not
+// have and re-run months he has already done.
+function _pepReadiness(ps){
+  var stacks = (ps.stacks || []).filter(function(st){ return st.status !== "complete"; });
+  var withRecon = stacks.filter(function(st){ return !!_pepRecon(st, _pepCompound(st.compoundId)); });
+  var counted = withRecon.filter(function(st){
+    return st.stockCounted === true;   // explicit, not inferred from a zero
+  });
+  return {
+    compounds: stacks.length,
+    countable: withRecon.length,
+    counted: counted.length,
+    stockDone: withRecon.length > 0 && counted.length === withRecon.length,
+    historyDone: ps.historyConfirmed === true,
+    historyNote: ps.historyNote || "",
+    ready: withRecon.length > 0 && counted.length === withRecon.length && ps.historyConfirmed === true
+  };
+}
+
+// ── PROTOCOL OVERVIEW tab ─────────────────────────────────────────────────
+// Read-only reference: every compound, every week, dose and timing. Gated.
+function _pepTabOverview(ps){
+  var r = _pepReadiness(ps);
+  var h = "";
+
+  if(!r.ready){
+    h += "<div style=\"background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:14px;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;\">Two things first</div>";
+    h += "<div style=\"font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;\">The forward protocol stays hidden until the app knows what you actually have and what you have already done. Built on guesses it would schedule compounds you are out of and repeat months you have finished.</div>";
+
+    h += "<div style=\"display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;\">";
+    h += "<div style=\"flex-shrink:0;width:20px;height:20px;border-radius:50%;border:2px solid " + (r.stockDone?"#4CAF50":"var(--border2)") + ";background:" + (r.stockDone?"#4CAF50":"transparent") + ";display:flex;align-items:center;justify-content:center;\">";
+    if(r.stockDone) h += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='11' height='11'><polyline points='20 6 9 17 4 12'/></svg>";
+    h += "</div><div style=\"flex:1;\"><div style=\"font-size:13px;font-weight:700;color:var(--text);\">Count your stock</div>";
+    h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + r.counted + " of " + r.countable + " compounds confirmed. Do it on the STOCK tab.</div></div></div>";
+
+    h += "<div style=\"display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;\">";
+    h += "<div style=\"flex-shrink:0;width:20px;height:20px;border-radius:50%;border:2px solid " + (r.historyDone?"#4CAF50":"var(--border2)") + ";background:" + (r.historyDone?"#4CAF50":"transparent") + ";display:flex;align-items:center;justify-content:center;\">";
+    if(r.historyDone) h += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='11' height='11'><polyline points='20 6 9 17 4 12'/></svg>";
+    h += "</div><div style=\"flex:1;\"><div style=\"font-size:13px;font-weight:700;color:var(--text);\">Confirm what you have already run</div>";
+    h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">Which courses are done, part-done, or not started.</div></div></div>";
+
+    if(!r.historyDone){
+      h += "<textarea id=\"pep-hist-note\" rows=\"3\" placeholder=\"e.g. MOTS-c course 1 finished June. Epitalon never started. Reta running since July.\" style=\"width:100%;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:none;margin-bottom:8px;\">" + _esc(r.historyNote) + "</textarea>";
+      h += "<button id=\"pep-hist-confirm\" style=\"width:100%;padding:12px;background:none;border:1px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Confirm history</button>";
+    }
+    h += "</div>";
+
+    var logged = 0;
+    Object.keys(ps.checked || {}).forEach(function(k){ logged += (ps.checked[k] || []).length; });
+    h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.6;\">" +
+         (logged ? "The app has " + logged + " logged dose" + (logged===1?"":"s") + " on record, which will be used alongside your note." :
+                   "No dose history is logged yet, so your note is the only record of what has been run.") + "</div>";
+    return h;
+  }
+
+  // ── Ready: the read-only forward reference ──
+  var stacks = (ps.stacks || []).filter(function(st){ return st.status !== "complete"; });
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;\">Full Protocol</div>";
+  h += "<div style=\"font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:14px;\">Read-only. Edit a compound on the STOCK tab.</div>";
+
+  var byCat = {};
+  stacks.forEach(function(st){
+    var c = _pepCompound(st.compoundId); if(!c) return;
+    (byCat[c.cat] = byCat[c.cat] || []).push({st:st, c:c});
+  });
+
+  Object.keys(byCat).sort().forEach(function(cat){
+    h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin:14px 0 8px;\">" + _esc(cat) + "</div>";
+    byCat[cat].forEach(function(row){
+      var st = row.st, c = row.c;
+      var dose = st.dose != null ? st.dose : c.dose;
+      var recon = _pepRecon(st, c);
+      var draw = _pepDraw(dose, c.doseUnit, recon);
+      var f = _pepStockForecast(ps, st);
+      h += "<div style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;\">";
+      h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;\">";
+      h += "<div style=\"font-weight:700;font-size:14px;color:var(--text);\">" + _esc(c.name) + "</div>";
+      h += "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;color:#7B68EE;\">" + (draw ? _pepDrawText(draw) : _pepFmtDose(dose, c.doseUnit)) + "</div>";
+      h += "</div>";
+      h += "<div style=\"font-size:11px;color:var(--text3);margin-top:3px;\">" + _pepFmtDose(dose, c.doseUnit) + " &middot; " + _esc(st.freq || c.freq) + " &middot; " + _esc(c.timing) + "</div>";
+      if(st.startDate){
+        var wk = Math.floor((new Date(_pepToday()+"T12:00:00") - new Date(st.startDate+"T12:00:00")) / 86400000 / 7) + 1;
+        h += "<div style=\"font-size:10px;color:var(--text3);margin-top:3px;\">Started " + _esc(st.startDate) + (wk > 0 ? " &middot; week " + wk : " &middot; not started") +
+             (st.cycleWeeks ? " of " + st.cycleWeeks + (st.offWeeks ? " on / " + st.offWeeks + " off" : "") : "") + "</div>";
+      }
+      if(f && !f.unknown && f.depletionDate) h += "<div style=\"font-size:10px;color:var(--gold);margin-top:3px;\">Stock runs out " + f.depletionDate + "</div>";
+      h += "</div>";
+    });
+  });
+  return h;
+}
+
+// ── STOCK tab ─────────────────────────────────────────────────────────────
+// The live truth of what is available. Decrements as doses are ticked off.
+function _pepTabStock(ps){
+  var stacks = (ps.stacks || []).filter(function(st){ return st.status !== "complete"; });
+  var r = _pepReadiness(ps);
+  var h = "";
+
+  h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">Stock On Hand</div>";
+  h += "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add</button>";
+  h += "</div>";
+  h += "<div style=\"font-size:11px;color:" + (r.stockDone ? "#4CAF50" : "var(--gold)") + ";margin-bottom:14px;\">" +
+       (r.stockDone ? "All " + r.countable + " counted — the protocol overview is unlocked."
+                    : r.counted + " of " + r.countable + " counted. Confirm each one to unlock the protocol overview.") + "</div>";
+
+  if(!stacks.length){
+    h += "<div style=\"text-align:center;padding:32px 0;color:var(--text3);font-size:13px;\">No compounds yet.<br>Tap + Add to start.</div>";
+    return h;
+  }
+
+  stacks.forEach(function(st){
+    var idx = ps.stacks.indexOf(st);
+    var c = _pepCompound(st.compoundId); if(!c) return;
+    var f = _pepStockForecast(ps, st);
+    var perVial = _pepDosesPerVial(st, c);
+    var sealed = parseInt(st.sealedVials, 10) || 0;
+    var used = parseInt(st.openDosesUsed, 10) || 0;
+    var openLeft = st.openedDate ? Math.max(0, perVial - used) : 0;
+    var counted = st.stockCounted === true;
+
+    h += "<div style=\"background:var(--bg2);border:1px solid " + (counted ? "var(--border)" : "var(--gold)") + ";border-radius:var(--radius);padding:14px;margin-bottom:10px;\">";
+    h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px;\">";
+    h += "<div style=\"font-weight:700;font-size:15px;color:var(--text);\">" + _esc(c.name) + "</div>";
+    h += "<button data-pep-edit=\"" + idx + "\" style=\"background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-size:10px;padding:4px 10px;cursor:pointer;touch-action:manipulation;\">Edit</button>";
+    h += "</div>";
+
+    if(!perVial){
+      h += "<div style=\"font-size:12px;color:var(--gold);\">Set vial size and BAC water before this can be counted.</div></div>";
+      return;
+    }
+
+    // Sealed vial stepper
+    h += "<div style=\"display:flex;align-items:center;gap:10px;margin-bottom:8px;\">";
+    h += "<div style=\"flex:1;font-size:12px;color:var(--text2);\">Sealed vials</div>";
+    h += "<button data-pep-stock=\"" + idx + "|-1\" style=\"width:30px;height:30px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:17px;line-height:1;cursor:pointer;touch-action:manipulation;\">-</button>";
+    h += "<span style=\"font-family:var(--font-d);font-size:17px;font-weight:900;width:30px;text-align:center;color:var(--text);\">" + sealed + "</span>";
+    h += "<button data-pep-stock=\"" + idx + "|1\" style=\"width:30px;height:30px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:17px;line-height:1;cursor:pointer;touch-action:manipulation;\">+</button>";
+    h += "</div>";
+
+    h += "<div style=\"font-size:11px;color:var(--text3);margin-bottom:8px;\">" +
+         (st.openedDate ? "Open vial: " + openLeft + " of " + perVial + " doses left, mixed " + _esc(st.openedDate) : "No vial open") +
+         " &middot; " + perVial + " doses per vial</div>";
+
+    if(f && !f.unknown){
+      var supply = f.depletionDate
+        ? (f.overdue ? "Out of stock" : f.dosesRemaining + " doses &middot; runs out " + f.depletionDate)
+        : f.dosesRemaining + " doses &middot; covered beyond 2 years";
+      var col = f.overdue ? "#FF6B6B" : (f.daysOfSupply != null && f.daysOfSupply <= 60 ? "var(--gold)" : "#4CAF50");
+      h += "<div style=\"font-size:11px;color:" + col + ";font-weight:700;margin-bottom:10px;\">" + supply + "</div>";
+      if(f.gapStart && f.resumesOn){
+        h += "<div style=\"font-size:11px;color:var(--gold);margin-bottom:10px;\">Gap from " + f.gapStart + " &middot; resumes " + f.resumesOn + " when the order lands</div>";
+      }
+    }
+
+    // On Order
+    h += "<div style=\"display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--border);\">";
+    h += "<button data-pep-onorder=\"" + idx + "\" style=\"flex-shrink:0;width:22px;height:22px;border-radius:6px;border:2px solid " + (st.onOrder?"#7B68EE":"var(--border2)") + ";background:" + (st.onOrder?"#7B68EE":"transparent") + ";cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;padding:0;\">";
+    if(st.onOrder) h += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='12' height='12'><polyline points='20 6 9 17 4 12'/></svg>";
+    h += "</button>";
+    h += "<div style=\"flex:1;font-size:12px;color:var(--text2);\">On order</div>";
+    if(st.onOrder){
+      h += "<input data-pep-arrival=\"" + idx + "\" type=\"date\" value=\"" + _esc(st.arrivalDate || "") + "\" style=\"padding:6px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:12px;\">";
+    }
+    h += "</div>";
+    if(st.onOrder){
+      h += "<div style=\"display:flex;align-items:center;gap:10px;margin-top:8px;\">";
+      h += "<div style=\"flex:1;font-size:11px;color:var(--text3);\">Vials incoming</div>";
+      h += "<button data-pep-incoming=\"" + idx + "|-1\" style=\"width:26px;height:26px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;\">-</button>";
+      h += "<span style=\"font-family:var(--font-d);font-size:14px;font-weight:900;width:26px;text-align:center;\">" + (parseInt(st.onOrderVials,10) || 0) + "</span>";
+      h += "<button data-pep-incoming=\"" + idx + "|1\" style=\"width:26px;height:26px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;\">+</button>";
+      h += "</div>";
+      if(!st.arrivalDate) h += "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Set an arrival date — the forecast cannot use incoming stock without one.</div>";
+    }
+
+    if(!counted){
+      h += "<button data-pep-counted=\"" + idx + "\" style=\"width:100%;margin-top:10px;padding:10px;background:none;border:1px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">Confirm this count</button>";
+    }
+    h += "</div>";
+  });
+  return h;
+}
+
+function pepStockAdjust(idx, delta){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  st.sealedVials = Math.max(0, (parseInt(st.sealedVials, 10) || 0) + delta);
+  pepSaveState(ps); pepRenderScreen();
+}
+
+function pepIncomingAdjust(idx, delta){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  st.onOrderVials = Math.max(0, (parseInt(st.onOrderVials, 10) || 0) + delta);
+  pepSaveState(ps); pepRenderScreen();
+}
+
+function pepToggleOnOrder(idx){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  st.onOrder = !st.onOrder;
+  if(st.onOrder){
+    // Default the quantity to what the forecast says he needs, so the common
+    // case is one tap and a date rather than a stepper safari.
+    if(!st.onOrderVials){
+      var set = _pepSettings(ps);
+      st.onOrderVials = _pepVialsNeeded(ps, st, (set.coverageMonths != null ? set.coverageMonths : 6) * 30) || 1;
+    }
+  } else {
+    st.arrivalDate = null; st.onOrderVials = 0;
+  }
+  pepSaveState(ps); pepRenderScreen();
+}
+
+function pepSetArrival(idx, iso){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  st.arrivalDate = iso || null;
+  pepSaveState(ps); pepRenderScreen();
+}
+
+function pepConfirmCount(idx){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  st.stockCounted = true;
+  pepSaveState(ps); pepRenderScreen();
+}
+
+function pepConfirmHistory(){
+  var ps = pepGetState();
+  var el = document.getElementById("pep-hist-note");
+  ps.historyNote = el ? String(el.value || "").trim() : "";
+  ps.historyConfirmed = true;
+  pepSaveState(ps); pepRenderScreen();
+}
+
 // ── ORDER tab ─────────────────────────────────────────────────────────────
 function _pepTabOrder(ps){
   var h = _pepOrderForecastBlock(ps);
@@ -23456,13 +23806,32 @@ function _pepOrderForecastBlock(ps){
        " &middot; topped up to " + plan.coverageMonths + " months &middot; ~$" + Math.round(plan.itemsAud) + " AUD before shipping</div>";
   h += "</div>";
 
+  // v4.9.201: Jon's rule — surface what is NOT yet on order and will run out.
+  // Something already in transit is not an action; something that is not is.
+  var notOrdered = plan.rows.filter(function(r){
+    var st = (ps.stacks || [])[r.idx];
+    return !(st && st.onOrder && st.arrivalDate);
+  });
+  if(notOrdered.length){
+    h += "<div style=\"background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;\">Not yet on order</div>";
+    h += "<div style=\"font-size:12px;color:var(--text2);line-height:1.6;\">" +
+         notOrdered.map(function(r){ return _esc(r.name) + (r.depletionDate ? " (out " + r.depletionDate + ")" : ""); }).join("<br>") +
+         "</div>";
+    h += "<div style=\"font-size:10px;color:var(--text3);margin-top:6px;\">Tick On Order on the STOCK tab once these are placed, and the forecast will account for them.</div>";
+    h += "</div>";
+  }
+
   plan.rows.forEach(function(r){
-    var col = r.overdue ? "#FF6B6B" : (r.daysOfSupply != null && r.daysOfSupply <= 60 ? "var(--gold)" : "var(--text2)");
+    var st0 = (ps.stacks || [])[r.idx];
+    var inTransit = !!(st0 && st0.onOrder && st0.arrivalDate);
+    var col = inTransit ? "#7B68EE" : (r.overdue ? "#FF6B6B" : (r.daysOfSupply != null && r.daysOfSupply <= 60 ? "var(--gold)" : "var(--text2)"));
     h += "<div style=\"display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-left:3px solid " + col + ";border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;\">";
     h += "<div style=\"flex:1;min-width:0;\">";
     h += "<div style=\"font-weight:700;font-size:13px;color:var(--text);\">" + _esc(r.name) + "</div>";
     h += "<div style=\"font-size:11px;color:" + col + ";margin-top:2px;\">" +
-         (r.depletionDate ? "Runs out " + r.depletionDate + (r.overdue ? " &middot; overdue" : " &middot; order by " + r.orderByDate) : "In supply") + "</div>";
+         (inTransit ? "On order &middot; arrives " + _esc(st0.arrivalDate)
+                    : (r.depletionDate ? "Runs out " + r.depletionDate + (r.overdue ? " &middot; overdue" : " &middot; order by " + r.orderByDate) : "In supply")) + "</div>";
     h += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" +
          (r.tong ? r.tong.cat + " &middot; " + r.tong.name : "No catalogue match — add manually") + "</div>";
     h += "</div>";

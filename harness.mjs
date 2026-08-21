@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.200'", 'version is 4.9.200');
+has("var APP_VERSION='4.9.201'", 'version is 4.9.201');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1180,8 +1180,13 @@ has('createSignedUrl',                         'PEP: private bucket read via sig
 })();
 
 // All five portal tabs wired
-['today','protocol','bloods','adjust','order'].forEach(t => {
-  html.includes('{key:"' + t + '",label:"' + t.toUpperCase() + '"}')
+// v4.9.201 — Jon's structure: TODAY | PROTOCOL | STOCK | ADJUST | ORDER.
+// BLOODS moved inside ADJUST (six tabs do not fit a phone). A functional case
+// proves it is still reachable, so this pins only the bar itself. The 'overview'
+// key carries the PROTOCOL label, hence the pair rather than a derived string.
+[['today','TODAY'],['overview','PROTOCOL'],['stock','STOCK'],['adjust','ADJUST'],['order','ORDER']].forEach(([k,lab]) => {
+  const t = lab;
+  html.includes('{key:"' + k + '",label:"' + lab + '"}')
     ? ok('PEP: ' + t.toUpperCase() + ' tab registered')
     : bad('PEP: ' + t.toUpperCase() + ' tab missing from tab bar');
 });

@@ -708,10 +708,32 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       return nodes['pep-screen-body'].innerHTML;
     });
 
-    test('RENDER the portal paints all five tabs', () => {
+    // v4.9.201 — Jon's structure. BLOODS is deliberately NOT here; it moved
+    // inside ADJUST, and a case below proves it is still reachable.
+    test('RENDER the portal paints Jon\'s five tabs', () => {
       const h = render('today');
-      ['TODAY','PROTOCOL','BLOODS','ADJUST','ORDER'].forEach(t =>
+      ['TODAY','PROTOCOL','STOCK','ADJUST','ORDER'].forEach(t =>
         assert.ok(h.includes('>' + t + '<'), t + ' tab painted'));
+    });
+
+    test('RENDER BLOODS is not a top-level tab but IS reachable from ADJUST', () => {
+      assert.notIncludes(render('today'), '>BLOODS<', 'not in the tab bar');
+      assert.ok(render('adjust').includes('Blood Panels'), 'entry point on ADJUST');
+      assert.ok(render('bloods').includes('Adjust'), 'and a way back');
+    });
+
+    test('RENDER the STOCK tab paints per-compound stock controls', () => {
+      const h = render('stock');
+      assert.ok(h.includes('Stock On Hand'), 'heading');
+      assert.ok(h.includes('Sealed vials'), 'stepper');
+      assert.ok(h.includes('On order'), 'on-order toggle');
+    });
+
+    test('RENDER the PROTOCOL tab is GATED until stock and history are confirmed', () => {
+      const h = render('overview');
+      assert.ok(h.includes('Two things first'), 'gate shown');
+      assert.ok(h.includes('Count your stock'), 'names the stock step');
+      assert.ok(h.includes('already run'), 'names the history step');
     });
 
     test('RENDER the TODAY tab shows units to draw, not just mg', () => {
@@ -1064,6 +1086,124 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(safe.indexOf('session'), -1, 'session is not restorable');
     assert.ok(safe.indexOf('peptide') >= 0, 'peptide IS restorable');
   });
+
+  // ── STOCK — live truth, gating, and incoming orders (v4.9.201) ────────────
+  // Jon's rules: stock decrements when a dose is ticked; the forward protocol
+  // stays hidden until stock is counted AND history confirmed; an order in
+  // transit counts from its arrival date, not before.
+  {
+    const sIso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const sIn = n => sIso(new Date(Date.now() + n*86400000));
+    const sAgo = n => sIso(new Date(Date.now() - n*86400000));
+    const SKEY = 'peptide_v1_stockuser';
+
+    const seedStock = over => {
+      reset(); signIn('stockuser');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [Object.assign({
+        compoundId:'bpc157', dose:0.5, startDate: sAgo(30),
+        vialMg:5, waterMl:2, sealedVials:2, openDosesUsed:0, openedDate:null, status:'instock'
+      }, over || {})];
+      app.pepSaveState(st);
+      return app.pepGetState();
+    };
+
+    test('STOCK ticking a dose consumes from stock', () => {
+      seedStock();
+      const before = app.pepGetState().stacks[0];
+      assert.equal(before.sealedVials, 2, 'two sealed to start');
+      app.pepToggleDose('bpc157');
+      const after = app.pepGetState().stacks[0];
+      assert.equal(after.sealedVials, 1, 'a vial was opened');
+      assert.equal(after.openDosesUsed, 1, 'one dose drawn from it');
+      assert.ok(after.openedDate, 'and it is marked as mixed today');
+    });
+
+    test('STOCK un-ticking gives the dose back — a mis-tap is not a lost vial', () => {
+      seedStock();
+      app.pepToggleDose('bpc157');
+      app.pepToggleDose('bpc157');
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.openDosesUsed, 0, 'dose returned');
+      assert.equal(st.sealedVials, 2, 'vial returned');
+    });
+
+    test('STOCK finishing a vial rolls to the next one', () => {
+      // 5mg/2mL at 500mcg = 10 doses per vial. Tick 10 and the vial is done.
+      seedStock({ sealedVials: 2 });
+      for (let i = 0; i < 10; i++) {
+        const s = app.pepGetState();
+        s.checked = {};                       // re-tick the same compound each time
+        app.pepSaveState(s);
+        app.pepToggleDose('bpc157');
+      }
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.openedDate, null, 'vial finished and closed');
+      assert.equal(st.openDosesUsed, 0, 'counter reset for the next vial');
+      assert.equal(st.sealedVials, 1, 'one sealed vial left');
+    });
+
+    test('STOCK ticking with nothing in stock does not invent a vial', () => {
+      seedStock({ sealedVials: 0, openedDate: null });
+      app.pepToggleDose('bpc157');
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.sealedVials, 0, 'still zero');
+      assert.equal(st.openedDate, null, 'no phantom vial opened');
+    });
+
+    test('GATE the protocol is locked until BOTH stock and history are confirmed', () => {
+      const ps = seedStock();
+      assert.equal(app._pepReadiness(ps).ready, false, 'locked at the start');
+
+      ps.stacks[0].stockCounted = true; app.pepSaveState(ps);
+      assert.equal(app._pepReadiness(app.pepGetState()).stockDone, true, 'stock done');
+      assert.equal(app._pepReadiness(app.pepGetState()).ready, false, 'still locked — history outstanding');
+
+      const p2 = app.pepGetState(); p2.historyConfirmed = true; app.pepSaveState(p2);
+      assert.equal(app._pepReadiness(app.pepGetState()).ready, true, 'unlocked');
+    });
+
+    test('GATE an uncounted compound is counted as uncounted, not inferred from zero', () => {
+      const ps = seedStock({ sealedVials: 0 });
+      const r = app._pepReadiness(ps);
+      assert.equal(r.counted, 0, 'zero stock is not the same as a confirmed count');
+      assert.equal(r.stockDone, false, 'still needs confirming');
+    });
+
+    test('ORDER incoming stock counts from its ARRIVAL date, not today', () => {
+      const ps = seedStock({ sealedVials: 0, onOrder: true, arrivalDate: sIn(10), onOrderVials: 3 });
+      const f = app._pepStockForecast(ps, ps.stacks[0]);
+      assert.equal(f.onOrder, true, 'flagged as on order');
+      assert.ok(f.gapStart, 'a gap is reported before it lands');
+      assert.equal(f.resumesOn, ps.stacks[0].arrivalDate, 'and when it resumes');
+    });
+
+    test('ORDER a delivery already dated is not re-ordered as urgent', () => {
+      const ps = seedStock({ sealedVials: 0, onOrder: true, arrivalDate: sIn(3), onOrderVials: 5 });
+      const f = app._pepStockForecast(ps, ps.stacks[0]);
+      assert.ok(f.dosesRemaining > 0, 'the incoming vials are counted once they land');
+    });
+
+    test('ORDER toggling On Order defaults the quantity to what is needed', () => {
+      seedStock({ sealedVials: 0 });
+      app.pepToggleOnOrder(0);
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.onOrder, true, 'toggled on');
+      assert.ok((st.onOrderVials || 0) > 0, 'quantity pre-filled from the forecast');
+    });
+
+    test('ORDER untoggling clears the arrival date and quantity', () => {
+      seedStock({ sealedVials: 0 });
+      app.pepToggleOnOrder(0);
+      app.pepSetArrival(0, sIn(7));
+      assert.equal(app.pepGetState().stacks[0].arrivalDate, sIn(7), 'date set');
+      app.pepToggleOnOrder(0);
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.onOrder, false, 'off');
+      assert.equal(st.arrivalDate, null, 'date cleared');
+    });
+  }
 
   // ── Marker flagging — against the lab's own printed range ──────────────────
 

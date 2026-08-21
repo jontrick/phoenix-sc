@@ -647,6 +647,111 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── RENDER — drive the entry points, read the DOM ─────────────────────────
+  // This codebase shipped a Today card that passed every gate and never rendered
+  // for four versions, because its tests called the BUILDER rather than the
+  // entry point. Everything below goes through pepRenderScreen() and
+  // pepRenderTodayTile() and asserts on the HTML they actually produce.
+  // getElementById is restored at the end so later cases see the real sandbox.
+  {
+    const _realGetById = app.document.getElementById;
+
+    const ISO = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const daysAgo = n => ISO(new Date(Date.now() - n*86400000));
+
+    // A persistent stub per id, so innerHTML written by the renderer can be read back.
+    const nodes = {};
+    const mk = id => {
+      const e = {
+        id, innerHTML: '', textContent: '', value: '', style: {}, dataset: {},
+        classList: { add(){}, remove(){}, contains(){ return false; } },
+        appendChild(){}, removeChild(){}, remove(){}, setAttribute(){}, getAttribute(){ return null; },
+        addEventListener(){}, removeEventListener(){}, focus(){}, click(){},
+        querySelector(){ return null; }, querySelectorAll(){ return []; },
+      };
+      return e;
+    };
+    app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
+
+    reset(); signIn('jon');
+    const st = app.pepGetState();
+    st.settings = {};
+    st.stacks = [
+      { compoundId:'bpc157',       dose:0.5, startDate: daysAgo(40), vialMg:5,  waterMl:2,   sealedVials:1, openDosesUsed:3, openedDate: daysAgo(5), status:'instock' },
+      { compoundId:'retatrutide',  dose:6,   startDate: daysAgo(40), vialMg:10, waterMl:0.5, sealedVials:0, status:'instock' },
+      { compoundId:'bpc_ghkcu_tb', dose:14,  startDate: daysAgo(40), vialMg:70, waterMl:2,   sealedVials:2, status:'instock' },
+    ];
+    app.pepSaveState(st);
+
+    const render = tab => {
+      app._pepTab = tab;
+      nodes['pep-screen-body'] = mk('pep-screen-body');
+      app.pepRenderScreen();
+      return nodes['pep-screen-body'].innerHTML;
+    };
+
+    test('RENDER the portal paints all five tabs', () => {
+      const h = render('today');
+      ['TODAY','PROTOCOL','BLOODS','ADJUST','ORDER'].forEach(t =>
+        assert.ok(h.includes('>' + t + '<'), t + ' tab painted'));
+    });
+
+    test('RENDER the TODAY tab shows units to draw, not just mg', () => {
+      const h = render('today');
+      assert.ok(h.includes('u / '), 'units/mL figure present');
+      assert.ok(h.includes('mg/mL'), 'concentration shown');
+    });
+
+    test('RENDER the PROTOCOL tab shows the stock line for each compound', () => {
+      const h = render('protocol');
+      assert.ok(h.includes('doses left') || h.includes('No stock recorded'), 'supply line rendered');
+      assert.ok(h.includes('runs out') || h.includes('ORDER NOW'), 'depletion surfaced');
+    });
+
+    test('RENDER the ORDER tab paints the reorder forecast, not just the cart', () => {
+      const h = render('order');
+      assert.ok(h.includes('Reorder Forecast'), 'forecast heading');
+      assert.ok(h.includes('Build This Order'), 'build button');
+      assert.ok(h.includes('Cart'), 'cart section still present');
+    });
+
+    test('RENDER the coverage chips are priced in the rendered HTML', () => {
+      const h = render('order');
+      ['3 mo','6 mo','12 mo'].forEach(c => assert.ok(h.includes(c), c + ' chip'));
+      assert.ok(/\$\d/.test(h), 'a price is rendered against the chips');
+      assert.ok(h.includes('Delivery lead time'), 'lead time field');
+    });
+
+    test('RENDER the BLOODS tab paints without a panel loaded', () => {
+      const h = render('bloods');
+      assert.ok(h.includes('No panels yet') || h.includes('Add Panel'), 'bloods empty state');
+    });
+
+    test('RENDER the ADJUST tab paints and states which bloods it would use', () => {
+      const h = render('adjust');
+      assert.ok(h.includes('Smart Protocol Review'), 'review heading');
+      assert.ok(h.includes('No blood panel logged'), 'names the missing input');
+    });
+
+    test('RENDER the Today-screen tile paints doses with units', () => {
+      nodes['today-peptide-tile'] = mk('today-peptide-tile');
+      app.pepRenderTodayTile();
+      const h = nodes['today-peptide-tile'].innerHTML;
+      assert.ok(h.length > 0, 'tile is not empty for a real protocol');
+      assert.ok(h.includes('Peptides'), 'labelled');
+      assert.ok(h.includes('u / ') || h.includes('No doses scheduled'), 'units or rest-day line');
+    });
+
+    test('RENDER the tile stays empty when there is no protocol', () => {
+      reset(); signIn('jon');
+      nodes['today-peptide-tile'] = mk('today-peptide-tile');
+      app.pepRenderTodayTile();
+      assert.equal(nodes['today-peptide-tile'].innerHTML, '', 'hidden with no protocol');
+    });
+
+    app.document.getElementById = _realGetById;
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

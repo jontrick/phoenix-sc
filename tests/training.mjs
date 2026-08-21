@@ -1567,4 +1567,65 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app.document.getElementById = realGet;
     }
   });
+
+  // ── The safety net nobody had pulled (v4.9.191) ───────────────────────────
+  // Two harness guards claimed "a render failure is recorded" and "is visible on the
+  // card". Both true as source strings; NEITHER proved anything happens. An auditor
+  // reads the name and moves on — which is the mechanism, one level up from a test
+  // that does not discriminate: the assertion is fine, the NAME overclaims it.
+  //
+  // This net exists because silent failure hid a broken Today card for four versions.
+  // It had never been driven, so nothing said whether it still worked.
+
+  test('a render failure paints a visible card instead of leaving the placeholder', () => {
+    reset();
+    signIn(UID);
+    const card = { style: {}, _attrs: {}, innerHTML: '', setAttribute(k, v) { this._attrs[k] = v; },
+                   removeAttribute(k) { delete this._attrs[k]; }, querySelector: null };
+    const inner = { innerHTML: '' };
+    card.querySelector = (sel) => (sel === '.game-card-inner' ? inner : null);
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'card-today-session' ? card : realGet.call(app.document, id));
+    try {
+      app._blabRenderTodayError(new Error('_blabCalEntryView is not defined'));
+      assert.ok(inner.innerHTML.includes('Could not build today'), 'the failure is on screen, not in a console Jon cannot see');
+      assert.ok(inner.innerHTML.includes('_blabCalEntryView is not defined'), 'and it says what went wrong');
+      assert.equal(card._attrs.onclick, undefined, 'the dead placeholder tap is removed');
+    } finally { app.document.getElementById = realGet; }
+  });
+
+  test('a render failure is recorded to Diagnostic', () => {
+    reset();
+    signIn(UID);
+    app._blabRenderTodayError(new Error('boom'));
+    const last = read('phx_last_write_error');
+    assert.ok(last, 'a diagnostic record exists');
+    assert.equal(last.context, 'todayCard.render', 'under the right context');
+  });
+
+  test('it records BEFORE painting, so a fault in painting still leaves evidence', () => {
+    // Ordering matters: this runs when something has already gone wrong. If the paint
+    // threw first, the only trace of the original failure would be lost.
+    reset();
+    signIn(UID);
+    const realGet = app.document.getElementById;
+    app.document.getElementById = () => { throw new Error('DOM is gone too'); };
+    try {
+      app._blabRenderTodayError(new Error('original failure'));
+      const last = read('phx_last_write_error');
+      assert.ok(last, 'the original failure was still recorded');
+      assert.ok(String(last.message).includes('original failure'), 'and it is the ORIGINAL error, not the paint error');
+    } finally { app.document.getElementById = realGet; }
+  });
+
+  test('it never throws on top of the failure it is reporting', () => {
+    reset();
+    signIn(UID);
+    const realGet = app.document.getElementById;
+    app.document.getElementById = () => { throw new Error('DOM is gone too'); };
+    try {
+      app._blabRenderTodayError(null);   // even with no error object at all
+      assert.ok(true, 'survived a null error and a hostile DOM');
+    } finally { app.document.getElementById = realGet; }
+  });
 }

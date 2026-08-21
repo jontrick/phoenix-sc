@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.190';
+var APP_VERSION='4.9.191';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -17731,20 +17731,7 @@ function renderTodayScreen(){
       // tap it. A ReferenceError inside this block hid a broken Today card for four
       // versions. Surface it instead: visible on the card, and recorded for Diagnostic.
       console.error('[PHX] direct inject failed:', _e);
-      try { if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('todayCard.render', _e, null); } catch(_r){}
-      try {
-        var _ec = document.getElementById('card-today-session');
-        var _ei = _ec && _ec.querySelector('.game-card-inner');
-        if(_ei){
-          _ei.innerHTML =
-            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--orange);margin-bottom:6px;">Today</div>'+
-            '<div class="game-card-title" style="font-size:26px;">Could not build today</div>'+
-            '<div style="font-size:13px;color:var(--text2);margin-top:6px;line-height:1.5;">'+((_e && _e.message) ? String(_e.message).slice(0,120) : 'Unknown error')+'</div>'+
-            '<div style="margin-top:14px;"><button onclick="event.stopPropagation();blabCalOpen()" style="width:100%;padding:13px;background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Open Calendar</button></div>';
-          _ec.style.border = '1px solid var(--orange)';
-          _ec.removeAttribute('onclick');
-        }
-      } catch(_r2){}
+      window._blabRenderTodayError(_e);
     }
   })();
 
@@ -17782,6 +17769,34 @@ function renderTodayScreen(){
 }
 
 // ── Today screen helpers (Priority 2) ────────────────────────────
+// v4.9.191 — what the Today card shows when its renderer throws.
+//
+// Extracted from renderTodayScreen's catch so it can be DRIVEN. It existed since
+// v4.9.165 — added precisely so a render failure stops being invisible — and had
+// never been tested, because inline in a catch it could only be reached by driving
+// the whole Today screen. A safety net nobody has pulled is a safety net nobody knows
+// is attached: the failure it guards against is the one that hid a broken Today card
+// for four versions.
+//
+// Records to Diagnostic first, THEN paints, so a fault in the painting still leaves
+// the evidence. Both halves are wrapped: this runs when something has already gone
+// wrong, so it must not throw on top of it.
+window._blabRenderTodayError = function(err){
+  try { if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('todayCard.render', err, null); } catch(_r){}
+  try {
+    var ec = document.getElementById('card-today-session');
+    var ei = ec && ec.querySelector('.game-card-inner');
+    if(!ei) return;
+    ei.innerHTML =
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--orange);margin-bottom:6px;">Today</div>'+
+      '<div class="game-card-title" style="font-size:26px;">Could not build today</div>'+
+      '<div style="font-size:13px;color:var(--text2);margin-top:6px;line-height:1.5;">'+((err && err.message) ? String(err.message).slice(0,120) : 'Unknown error')+'</div>'+
+      '<div style="margin-top:14px;"><button onclick="event.stopPropagation();blabCalOpen()" style="width:100%;padding:13px;background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Open Calendar</button></div>';
+    ec.style.border = '1px solid var(--orange)';
+    ec.removeAttribute('onclick');
+  } catch(_r2){}
+};
+
 // v4.9.161 — Today card, driven by the training calendar.
 // Renders every session scheduled for today (one, two, or none) and fills the row
 // beneath with the next few days. Returns true when it has taken over the card.

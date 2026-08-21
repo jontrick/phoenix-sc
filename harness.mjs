@@ -154,7 +154,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.190'", 'version is 4.9.190');
+has("var APP_VERSION='4.9.191'", 'version is 4.9.191');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -948,12 +948,12 @@ has('id="screen-blab-calendar"',      'CAL: calendar screen present');
 has("'blab-calendar':'screen-blab-calendar'", 'CAL: navTo route wired');
 has('id="prog-blab-cal-tile"',        'CAL: Programme tab entry point');
 has('window.blabCalOpen',             'CAL: blabCalOpen exported');
-has('window.blabCalTodayEntry',       'CAL: Today card reads scheduled session');
-has('window.blabCalMarkCompleted',    'CAL: completion stamps the calendar entry');
-has('window._blabCalDay2RefDate',     'CAL: 48h gate reads scheduled Day 2');
+has('window.blabCalTodayEntry',       'CAL: today-entry reader present (structural — behaviour in tests/training.mjs)');
+has('window.blabCalMarkCompleted',    'CAL: completion hook present (structural — behaviour in tests/training.mjs)');
+has('window._blabCalDay2RefDate',     'CAL: Day-2 reference helper present (structural — behaviour in tests/training.mjs)');
 has('blabCalMarkCompleted(week, day)','CAL: hooked into blabCompleteSession');
-has('blabCalHydrateFromState',        'CAL: cloud mirror rehydrated on restore');
-has("localStorage.setItem(_blabCalKey()", 'CAL: writes blab_calendar_v1_{uid}');
+has('blabCalHydrateFromState',        'CAL: rehydrate call present (structural — behaviour in tests/training.mjs)');
+has("localStorage.setItem(_blabCalKey()", 'CAL: local key write present (structural — behaviour in tests/training.mjs)');
 has('s.calendar = c',                 'CAL: mirrors into blab_state.calendar');
 
 console.log('\nBLAB Training Calendar — rule execution:');
@@ -1318,14 +1318,14 @@ has('nutRestoreRecipesFromCloud(row)) _nutAfterRestore();', 'HOOK: nutrition cha
 // progress backwards. Behaviour is covered by tests/training.mjs; these pin the
 // shape so the old local-wins rule cannot creep back in.
 console.log('\nBLAB restore resolution:');
-has('state._ts = new Date().toISOString()',  'RESTORE: blabSaveState stamps _ts on write');
+has('state._ts = new Date().toISOString()',  'RESTORE: _ts stamp present (structural — behaviour in tests/training.mjs)');
 has('window.blabProgressScore',              'RESTORE: progress score helper present');
 has('function _blabBackupLocal',             'RESTORE: one-generation backup helper');
-has("localStorage.setItem(key + '_bak', rawLocal)", 'RESTORE: backup writes to _bak key');
-has('if(cloudScore < localScore){',          'RESTORE: progress guard blocks a behind-but-newer cloud');
-has("_phxRecordWriteError('blabRestore.progressGuard'", 'RESTORE: blocked restore is recorded for Diagnostic');
-has('cloudWins = ct > lt;',                  'RESTORE: strict newer-wins, ties keep local');
-has('if(local.active !== true && cloud.active === true)', 'RESTORE: inactive local stub cannot shadow active cloud');
+has("localStorage.setItem(key + '_bak', rawLocal)", 'RESTORE: _bak write present (structural — behaviour in tests/training.mjs)');
+has('if(cloudScore < localScore){',          'RESTORE: progress guard present (structural — behaviour in tests/training.mjs)');
+has("_phxRecordWriteError('blabRestore.progressGuard'", 'RESTORE: guard telemetry present (structural — behaviour in tests/training.mjs)');
+has('cloudWins = ct > lt;',                  'RESTORE: strict newer-than present (structural — behaviour in tests/training.mjs)');
+has('if(local.active !== true && cloud.active === true)', 'RESTORE: inactive-stub rule present (structural — behaviour in tests/training.mjs)');
 // The pre-v4.9.158 rule: local won whenever it was active, regardless of stamps.
 hasNotCode("if(cloudDay > localDay){",           'RESTORE: old local-wins tiebreak removed');
 hasNotCode('blabRestoreFromCloud abort: local active and >= cloud', 'RESTORE: old local-wins log line removed');
@@ -1383,7 +1383,7 @@ has('window._blabCalSuggestFor',       'SUGGEST: concrete session proposal');
 has('window._blabCalAcceptSuggestion', 'SUGGEST: accept action');
 has('window._blabCalPlaceRest',        'REST: planned rest entry');
 has('function _blabCalIsRest',         'REST: rest classifier');
-has('data-cal-suggest=',               'SUGGEST: renders as a provisional entry on the day');
+has('data-cal-suggest=',               'SUGGEST: provisional-entry markup present (structural — behaviour in tests/training.mjs)');
 has('SUGGESTED',                       'SUGGEST: provisional entries are badged');
 // The old category-only chip is gone.
 hasNotCode('data-cal-rec=',                'SUGGEST: category-only chip replaced');
@@ -1437,9 +1437,13 @@ has('window.blabCalEntryView(', 'TODAY: renderer uses the real exported name');
 has('No Session Today',            'TODAY: empty day says so plainly');
 has('_blabCalConfirmRestToday',    'TODAY: confirm-rest action');
 has('_blabCalAddSessionToday',     'TODAY: add-session action');
-has('function _blabCalAfterChange','TODAY: shared repaint keeps Today and calendar in step');
-has("_phxRecordWriteError('todayCard.render'", 'TODAY: a render failure is recorded, not swallowed');
-has('Could not build today',       'TODAY: a render failure is visible on the card');
+has('function _blabCalAfterChange','TODAY: shared repaint helper present (structural — NOT behaviourally covered)');
+has("_phxRecordWriteError('todayCard.render'", 'TODAY: error telemetry present (structural — behaviour in tests/training.mjs)');
+has('Could not build today',       'TODAY: error card copy present (structural — behaviour in tests/training.mjs)');
+// The extraction is only safe if the catch still CALLS it. Without this, the error
+// card could be perfectly tested and never reached — the builder-vs-entry gap, in the
+// safety net whose whole purpose is catching that class.
+hasCode('window._blabRenderTodayError(_e);', 'TODAY: the render catch actually calls the error renderer');
 // Programme tab must reach the calendar while BLAB is running.
 has("if(tab === 'programme' && typeof blabIsActive === 'function' && blabIsActive())", 'NAV: Programme routes to the calendar under BLAB');
 has('id="nav-programme4"',         'NAV: calendar screen carries the bottom nav');
@@ -1471,9 +1475,9 @@ has('id="nav-programme4"',         'NAV: calendar screen carries the bottom nav'
 
 // ── Weekly check-in feeds the nutrition weight log (v4.9.168) ───────────────
 console.log('\nWeight check-in → nutrition:');
-has('nutRecordWeight(w);',                  'WEIGHT: check-in records to the nutrition daily log');
+has('nutRecordWeight(w);',                  'WEIGHT: nutRecordWeight call present (structural — behaviour in tests/training.mjs)');
 has("typeof nutRecordWeight === 'function'",'WEIGHT: call is typeof-guarded across domains');
-has('athlete.bw=w;',                        'WEIGHT: athlete.bw snapshot still written');
+has('athlete.bw=w;',                        'WEIGHT: athlete.bw write present (structural — behaviour in tests/training.mjs)');
 // The call must come AFTER the athlete write, so a throw in Nutrition's code can
 // never cost the weigh-in Jon just entered.
 (() => {
@@ -1575,7 +1579,7 @@ const codeOnly = stripComments(html);
 // branch that stops a second row being opened.
 console.log('\nSession re-entry:');
 has('window._phxActiveSessionKey === _sessKey', 'REENTRY: same-identity check present');
-has('window._phxActiveSessionKey = _sessKey',   'REENTRY: identity recorded when a row opens');
+has('window._phxActiveSessionKey = _sessKey',   'REENTRY: identity assignment present (structural — NOT behaviourally covered)');
 has("return 'blab:' + b.week + ':' + b.day",    'REENTRY: BLAB identity is week/day');
 has('window._phxActiveSessionKey = null',       'REENTRY: key released on completion');
 (() => {
@@ -1642,7 +1646,7 @@ has("var _BLAB_DAY_LABELS = [", 'API: the day-label array still backs the access
 // CONTRACT PINS — the shape other domains depend on. Nutrition pins these too, but
 // its suite failing means I have ALREADY broken it. These fail on MY side first,
 // which is where a provider's contract guard belongs.
-has("if(!(d >= 1 && d <= 4)) return '';",           'CONTRACT: blabDayLabel refuses days outside 1-4');
+has("if(!(d >= 1 && d <= 4)) return '';",           'CONTRACT: day-range check present (structural — behaviour in tests/training.mjs)');
 has("out.push({custom:true, id:c.id, cat:c.cat",    'CONTRACT: calendar entries carry cat for the REST distinction');
 // blabCalGet is INTERNAL (PM ruling): being on window is packaging, not a contract,
 // and freezing {sessions, customs} would lock this domain's raw storage shape. The
@@ -1684,8 +1688,8 @@ has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped s
            `shape — freezing {sessions, customs} blocks restructuring this domain. Route it ` +
            `through blabTrainingStateOn instead.`);
 })();
-has("out.state = done.length ? 'trained' : 'due';", 'CONTRACT: a completed session reads as trained, not as an empty day');
-has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRACT: blabDay is a number, never null');
+has("out.state = done.length ? 'trained' : 'due';", 'CONTRACT: trained/due branch present (structural — behaviour in tests/training.mjs)');
+has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRACT: blabDay zero-default present (structural — behaviour in tests/training.mjs)');
 
 // THE CLOSED STATUS SET. Nutrition filters on `status`, treating anything that is not
 // 'skipped' as a day that counts. So the set of values is itself the contract: adding

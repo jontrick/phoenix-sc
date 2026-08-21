@@ -101,6 +101,31 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 // This strips LINE-WISE instead: a line is dropped only if it BEGINS a block comment or a
 // //-comment at line start, so a `/*` or `//` appearing mid-line inside a string or a URL is
 // never touched. Removes 11.4% (real comments) and loses zero real call sites.
+// v4.9.191 (Peptides): also strip TRAILING //-comments, quote-aware.
+// Line-start-only stripping left a hole every counting guard shared: a trailing
+// `foo(); // alert("x")` survived intact and inflated the count. Proved on the
+// peptide consumption guard — three comment-only mentions of _phxRecordWriteError
+// turned it red, a false positive on prose. Any guard that COUNTS has this in the
+// ignore-direction, including the native-dialog ratchet.
+// Quote-aware because the whole reason for line-wise stripping was not to eat
+// `https://` inside a string literal — so the cut only happens when the `//` is
+// outside ' " and ` quotes. A regex literal containing an escaped slash (/\//)
+// never presents two CONSECUTIVE slashes, so it is unaffected.
+function phxStripTrailingComment(line){
+  let q = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) {
+      if (c === '\\') { i++; continue; }
+      if (c === q) q = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { q = c; continue; }
+    if (c === '/' && line[i + 1] === '/') return line.slice(0, i);
+  }
+  return line;
+}
+
 function phxStripComments(s){
   const out = []; let inBlock = false;
   for (const line of s.split('\n')) {
@@ -108,7 +133,7 @@ function phxStripComments(s){
     if (inBlock) { if (line.includes('*/')) inBlock = false; out.push(''); continue; }
     if (t.startsWith('/*')) { if (!t.slice(2).includes('*/')) inBlock = true; out.push(''); continue; }
     if (t.startsWith('//')) { out.push(''); continue; }
-    out.push(line);
+    out.push(phxStripTrailingComment(line));
   }
   return out.join('\n');
 }

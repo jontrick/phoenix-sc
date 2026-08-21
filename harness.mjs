@@ -1147,8 +1147,16 @@ has('createSignedUrl',                         'PEP: private bucket read via sig
 // v4.9.152 restore rule — newest timestamp wins
 has('ps._ts = new Date().toISOString();',      'PEP: pepSaveState stamps _ts');
 has('function _pepBackupLocal(key, rawLocal)', 'PEP: local backup before overwrite');
-hasNot('if(local) return; // local takes priority',
-                                               'PEP: old local-always-wins rule removed');
+// v4.9.191: hasNotCode, not hasNot. These two guard the regressions with the
+// most instructive history in my domain — the .158 protocol wipe and the mirror
+// that swallowed errors for 12 versions. Reading raw text meant that WRITING
+// DOWN either incident broke the build, so the guard punished exactly the
+// documentation a successor needs most.
+// The needle must be CODE-ONLY. It used to carry the trailing comment
+// `// local takes priority`, which hasNotCode strips before matching — so the
+// guard could never match the very line it exists to catch. Proving the CATCH
+// direction is what exposed that; the ignore direction had gone green happily.
+hasNotCode('if(local) return;',                'PEP: old local-always-wins rule removed');
 (() => {
   const i = html.indexOf('function pepRestoreFromCloud(profileRow)');
   const j = html.indexOf('function _pepBackupLocal', i + 1);
@@ -1193,7 +1201,7 @@ has('function _pepErrorSummary(ps)',   'PEP: scrubbed diagnostic summary present
 has('window._pepFlushCloud = function()', 'PEP: pagehide flush present');
 has("window.addEventListener(\"pagehide\", function(){ window._pepFlushCloud(); });",
                                        'PEP: pagehide listener wired');
-hasNot('.then(function(){});',         'PEP: empty swallow-everything then() gone');
+hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gone');
 
 (() => {
   const i = html.indexOf('function _pepSendCloud(payload, useKeepalive)');

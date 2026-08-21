@@ -102,6 +102,24 @@ already shipped.
 user navigated away and back — silent. That was the v4.9.152 bug; breaking the return value now fails
 two named tests.
 
+### Shared image helpers (v4.9.197) — any domain may call
+
+Promoted from `_pepDownscale` / `_pepDataURLToBlob` at the PM's ruling so Nutrition's
+nutrition-panel capture reuses them rather than growing a second copy. `_pep*` names remain
+as thin wrappers. Pinned in `tests/peptides.mjs` under `IMG`.
+
+| Surface | Contract |
+|---|---|
+| `_phxDownscaleImage(dataURL, maxDim, quality)` | Resolves a JPEG data URL with the **long edge capped at `maxDim`, default 1600px**. **NEVER THROWS and never rejects** — anything it cannot decode resolves to the **input unchanged**. |
+| `_phxDataURLToBlob(dataURL)` | Returns a `Blob`, or **`null`** on anything it cannot parse. Never throws. **Strict since v4.9.197**: a header that does not declare `;base64` returns null rather than decoding anyway. |
+
+**MEANINGS — the constraints a second consumer would otherwise rediscover by hitting them:**
+
+- **1600px is not arbitrary.** A raw phone photo is 3–5MB. The Anthropic API **refuses images over 5MB**, and 1600px on the long edge reads printed text fine at roughly a tenth the size. Raising it risks the ceiling; lowering it costs legibility on small print.
+- **Never-throwing is the contract, not an implementation detail.** These are used on the upload path. Failing to shrink is recoverable; throwing loses the user's photo. A rewrite that "cleans up" the silent fallback into a throw breaks the contract — the pin exists for that.
+- **`null` from the Blob converter is a real outcome, not an error case to ignore.** Callers must handle it. Before v4.9.197 a malformed header produced a **0-byte Blob**, so a caller could upload an empty file believing it had a photo.
+- **These carry NO claim about what the coach worker does with the result.** They are image-handling primitives. Whether the worker passes image blocks through to the API is **UNVERIFIED** as of v4.9.197 — see COMMS_PROTOCOL. Build the manual-entry fallback regardless.
+
 ## WHAT PEPTIDES CONSUMES FROM OTHER DOMAINS
 
 Exactly one surface: **`_phxRecordWriteError(context, err, payload)`** (PM-owned). Every call site is

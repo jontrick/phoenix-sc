@@ -30,6 +30,9 @@ const NEWER = '2026-08-17T00:00:00.000Z';
 const ISO = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const daysAgo = n => ISO(new Date(Date.now() - n*86400000));
 
+import { readFileSync } from 'node:fs';
+const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
 export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   // ── Restore resolution — newest timestamp wins ─────────────────────────────
@@ -869,6 +872,68 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(h.includes('3 compounds'), 'naming what would come back');
     });
 
+  }
+
+  // ── IMG — shared image helpers, provider-pinned (v4.9.197) ────────────────
+  // Promoted from _pep* so Nutrition's nutrition-panel capture reuses them
+  // rather than growing a second copy. Peptides owns them, so Peptides pins
+  // them. The never-throws property is the one Training asked me to insist on:
+  // it is what a rewrite is most likely to "clean up" into a throw, and callers
+  // use these on the upload path where losing the user's photo is the worst
+  // outcome.
+  {
+    test('IMG both shared helpers exist under the _phx name', () => {
+      assert.equal(typeof app._phxDownscaleImage, 'function', 'downscaler');
+      assert.equal(typeof app._phxDataURLToBlob, 'function', 'blob converter');
+    });
+
+    test('IMG the _pep names still work, so nothing breaks in the gap', () => {
+      assert.equal(typeof app._pepDownscale, 'function', 'wrapper kept');
+      assert.equal(typeof app._pepDataURLToBlob, 'function', 'wrapper kept');
+    });
+
+    // The sandbox's Image never fires onload OR onerror — assigning .src does
+    // nothing — so the promise would hang forever and the case would never
+    // settle rather than fail. That is worse than a red test, so the stub is
+    // supplied here: an Image whose src assignment reports failure, which is
+    // exactly the path a non-image input takes in a browser.
+    const withFailingImage = fn => {
+      const real = app.Image;
+      app.Image = function(){
+        const self = this;
+        Object.defineProperty(this, 'src', {
+          set(){ Promise.resolve().then(() => { if (self.onerror) self.onerror(); }); },
+          configurable: true,
+        });
+      };
+      return Promise.resolve(fn()).finally(() => { app.Image = real; });
+    };
+
+    test('IMG an undecodable image resolves to the INPUT, it does NOT throw', async () => {
+      const junk = 'not-a-data-url';
+      const out = await withFailingImage(() => app._phxDownscaleImage(junk, 1600, 0.85));
+      assert.equal(out, junk, 'input returned unchanged rather than thrown');
+    });
+
+    test('IMG a corrupt data URL also resolves rather than throwing', async () => {
+      const bad = 'data:image/jpeg;base64,@@@not-base64@@@';
+      const out = await withFailingImage(() => app._phxDownscaleImage(bad, 1600, 0.85));
+      assert.equal(out, bad, 'input returned unchanged');
+    });
+
+    test('IMG the blob converter returns NULL on junk rather than throwing', () => {
+      [null, undefined, '', 'nope', 'data:image/jpeg;NOTbase64,xx'].forEach(v => {
+        assert.equal(app._phxDataURLToBlob(v), null, 'null for ' + JSON.stringify(v));
+      });
+    });
+
+    test('IMG the 1600px cap and 5MB ceiling are stated where a caller will read them', () => {
+      const i = html.indexOf('function _phxDownscaleImage');
+      const doc = html.slice(Math.max(0, i - 1400), i);
+      assert.ok(doc.includes('1600'), 'the long-edge cap is documented');
+      assert.ok(doc.includes('5MB'), 'the API image ceiling is documented');
+      assert.ok(doc.includes('NEVER THROWS'), 'the never-throws contract is stated');
+    });
   }
 
   // ── Marker flagging — against the lab's own printed range ──────────────────

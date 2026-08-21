@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.196';
+var APP_VERSION='4.9.197';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22852,10 +22852,24 @@ function _pepRefText(m){
   return "";
 }
 
-// Downscale before upload and before the vision call. A raw phone photo is
-// 3-5MB; the API caps images at 5MB and a 1600px long edge reads a printed
-// pathology report fine at roughly a tenth the size.
-function _pepDownscale(dataURL, maxDim, quality){
+// ═══ SHARED IMAGE HELPERS (v4.9.197) — any domain may call ═══════════════
+// Promoted from _pepDownscale / _pepDataURLToBlob at the PM's ruling, so a
+// second consumer (Nutrition's nutrition-panel capture) reuses these rather
+// than growing a second copy. Two image downscalers drift, and the constants
+// below are exactly the kind that drift silently.
+//
+// CONTRACT — pinned provider-side in tests/peptides.mjs under IMG:
+//   · caps the LONG EDGE at maxDim, default 1600px. A raw phone photo is 3-5MB;
+//     the Anthropic API refuses images over 5MB, and 1600px reads printed text
+//     fine at roughly a tenth the size.
+//   · NEVER THROWS. Anything it cannot decode — a non-image, a corrupt data
+//     URL, a missing canvas — resolves to the INPUT unchanged. This is the
+//     property a rewrite is most likely to "clean up" into a throw, and it must
+//     not be: callers use it on the upload path, where failing to shrink is
+//     recoverable and throwing loses the user's photo.
+//   · resolves a JPEG data URL.
+// Still physically inside the peptide block; PM may relocate, the pin travels.
+function _phxDownscaleImage(dataURL, maxDim, quality){
   return new Promise(function(resolve){
     try {
       var img = new Image();
@@ -22875,18 +22889,32 @@ function _pepDownscale(dataURL, maxDim, quality){
   });
 }
 
-function _pepDataURLToBlob(dataURL){
+// Returns a Blob, or NULL on anything it cannot decode — never throws, for the
+// same reason as above. Callers must handle null rather than assuming a Blob.
+function _phxDataURLToBlob(dataURL){
   try {
     var parts = String(dataURL).split(",");
     if(parts.length !== 2) return null;
     var meta = parts[0].match(/^data:([^;]+);base64$/);
-    var mime = meta ? meta[1] : "image/jpeg";
+    // v4.9.197: STRICT. This used to fall back to "image/jpeg" when the header
+    // did not declare base64, and then atob() the payload regardless — so a URL
+    // like `data:image/jpeg;NOTbase64,xx` produced a 0-byte Blob instead of
+    // null, and a caller would have uploaded an empty file believing it had a
+    // photo. Found by writing the contract pin, not by a failure in the field.
+    // A header we cannot parse means we cannot know the payload is base64.
+    if(!meta) return null;
+    var mime = meta[1];
     var bin = atob(parts[1]);
     var bytes = new Uint8Array(bin.length);
     for(var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
     return new Blob([bytes], {type: mime});
   } catch(_e){ return null; }
 }
+
+// Peptide-named wrappers kept so nothing of mine breaks in the gap, same shape
+// as Training held _BLAB_DAY_LABELS. New callers should use the _phx names.
+function _pepDownscale(dataURL, maxDim, quality){ return _phxDownscaleImage(dataURL, maxDim, quality); }
+function _pepDataURLToBlob(dataURL){ return _phxDataURLToBlob(dataURL); }
 
 // ── data layer ────────────────────────────────────────────────────────────
 var _pepBloodsBusy = false;

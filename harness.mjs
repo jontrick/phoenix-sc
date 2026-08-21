@@ -1254,9 +1254,18 @@ has('overreaching triad',                         'DELOAD: overreaching triad tr
 // ── v4.9.155 [PM] Write-error diagnostics + BLAB mirror instrumentation ────────
 // _phxRecordWriteError must redact: shape only, no details/hint, message truncated, ring of 8.
 has('payload_shape: _phxShapeOf(payload)',          'DIAG: snapshot stores payload SHAPE not values');
-hasNot('payload_preview:',                          'DIAG: raw payload_preview removed');
-hasNot("details: (err && err.details) || null",     'DIAG: details (value-echoing) not recorded');
-hasNot("hint: (err && err.hint) || null",           'DIAG: hint (value-echoing) not recorded');
+// v4.9.191 [PM]: code-only variants. `has`/`hasNot` read raw text, which is correct for the
+// version-label guards (a label legitimately lives in a comment) and WRONG for anything
+// asserting the presence or absence of CODE. Proven by prose probe (Training's method,
+// 2026-08-21): six PM guards fired on a comment describing the very thing they guard, so
+// documenting the privacy rule would have broken the build.
+const codeSrc = () => phxStripComments(html);
+const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
+const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
+
+hasNotCode('payload_preview:',                          'DIAG: raw payload_preview removed');
+hasNotCode("details: (err && err.details) || null",     'DIAG: details (value-echoing) not recorded');
+hasNotCode("hint: (err && err.hint) || null",           'DIAG: hint (value-echoing) not recorded');
 has("if(msg.length > 200) msg = msg.slice(0, 200)", 'DIAG: message truncated to 200');
 has("localStorage.setItem('phx_write_errors', JSON.stringify(ring))", 'DIAG: ring buffer written');
 has('while(ring.length > 8) ring.shift();',         'DIAG: ring capped at 8');
@@ -1268,7 +1277,7 @@ has("_phxRecordWriteError('_blabSendCloud.update.reject'",    'BLAB MIRROR: upda
 hasNot("}).catch(function(){});\n    } catch(_){}",           'BLAB MIRROR: keepalive no longer swallows');
 // Shared restore hook lives in PM plumbing, exactly once, and still chains both domains.
 {
-  const n = (html.match(/window\._phxOnProfileFetched = function\(row\)\{/g) || []).length;
+  const n = (phxStripComments(html).match(/window\._phxOnProfileFetched = function\(row\)\{/g) || []).length;
   n === 1 ? ok('HOOK: _phxOnProfileFetched wrapper defined exactly once') : bad(`HOOK: wrapper defined ${n} times`);
   const idxHook = html.indexOf('SHARED RESTORE HOOK (PM-owned)');
   const idxPep  = html.indexOf('function pepGetState(');

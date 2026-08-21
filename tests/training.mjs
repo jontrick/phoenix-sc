@@ -1452,4 +1452,119 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     schedule({ sessions: [{ ...S(5, 2, dayFromToday(-21)), status: 'completed' }], customs: [] });
     assert.equal(app.blabTrainingStateOn(dayFromToday(-21)).state, 'trained', 'a past completed day is still trained');
   });
+
+  // ── Drive the CALENDAR SCREEN, not just its readers (v4.9.192) ────────────
+  // Third axis, from Peptides via the PM: a builder-level test certifies a function
+  // returns the right data. It cannot tell you whether the entry point calls that
+  // function at all — and both stay green while the feature is absent from the screen.
+  //
+  // That is the .165 Today-card failure exactly, and my calendar was in the same
+  // state: blabCalSessionsOn, blabCalNextDays, _blabCalWarnings and _blabCalSuggestFor
+  // are all covered, and NOTHING drove _blabCalRender. If it threw the way
+  // _blabCalEntryView did, every one of those cases would still pass and Jon would
+  // open a blank calendar.
+  //
+  // The Today card is already driven (that lesson landed at .165). This closes the
+  // matching gap on the screen he actually schedules in.
+
+  // A DOM stub that hands back the SAME element for a given id every time, so the
+  // renderer's writes are observable. The default sandbox returns a fresh object per
+  // call, which is why a renderer cannot otherwise be inspected.
+  const screenDom = () => {
+    const byId = new Map();
+    const realGet = app.document.getElementById;
+    const mk = (id) => ({
+      id, style: {}, innerHTML: '', _attrs: {}, handlers: {},
+      appendChild() {}, addEventListener(ev, fn) { this.handlers[ev] = fn; },
+      setAttribute(k, v) { this._attrs[k] = v; }, removeAttribute(k) { delete this._attrs[k]; },
+      querySelector: () => null, querySelectorAll: () => [],
+      insertAdjacentHTML(pos, html) { this.innerHTML += html; },
+      scrollIntoView() {}, remove() {}
+    });
+    app.document.getElementById = (id) => {
+      if (!byId.has(id)) byId.set(id, mk(id));
+      return byId.get(id);
+    };
+    return {
+      get: (id) => byId.get(id),
+      restore: () => { app.document.getElementById = realGet; }
+    };
+  };
+
+  test('ENTRY: the calendar screen renders the scheduled session, not just returns it', () => {
+    schedule({ sessions: [S(5, 2, dayFromToday(0))], customs: [] });
+    const dom = screenDom();
+    try {
+      app._blabCalRender();
+      const grid = dom.get('blab-cal-grid');
+      assert.ok(grid, 'the renderer reached for its grid');
+      assert.ok(grid.innerHTML.length > 200, 'and wrote a real calendar into it');
+      assert.ok(grid.innerHTML.includes('Lower Body'), 'the scheduled session is ON SCREEN');
+      assert.ok(grid.innerHTML.includes('TODAY'), 'and today is marked');
+    } finally { dom.restore(); }
+  });
+
+  test('ENTRY: a planned rest day reaches the screen', () => {
+    schedule({ sessions: [], customs: [REST(dayFromToday(0))] });
+    const dom = screenDom();
+    try {
+      app._blabCalRender();
+      assert.ok(dom.get('blab-cal-grid').innerHTML.includes('Rest Day'), 'rest is rendered, not just stored');
+    } finally { dom.restore(); }
+  });
+
+  test('ENTRY: the queue panel renders the unscheduled sessions', () => {
+    schedule({ sessions: [], customs: [] });
+    const dom = screenDom();
+    try {
+      app._blabCalRender();
+      const q = dom.get('blab-cal-queue');
+      assert.ok(q && q.innerHTML.includes('Upper Body'), 'the queue shows what is left to schedule');
+    } finally { dom.restore(); }
+  });
+
+  test('ENTRY: with no programme the screen says so rather than rendering blank', () => {
+    reset();
+    signIn(UID);
+    seed(KEY, { active: false, week: 0, last_completed_day: 0 });
+    const dom = screenDom();
+    try {
+      app._blabCalRender();
+      assert.ok(dom.get('blab-cal-grid').innerHTML.includes('No BLAB Programme'), 'explains the empty state');
+    } finally { dom.restore(); }
+  });
+
+  test('ENTRY: the library detail view renders the wall-ball session on screen', () => {
+    // Karen was verified as a library ENTRY — phxSessionById, tier lists. Nothing drove
+    // the view that shows it, which is precisely how the old implementation sat
+    // unreachable while a harness assertion certified it.
+    // Richer stubs than the shared helper: this view wires its buttons through
+    // querySelector and getElementById, so both must hand back real objects or the
+    // renderer throws before it has written anything.
+    const realCreate = app.document.createElement;
+    const realGet = app.document.getElementById;
+    const made = [];
+    const el = () => {
+      const e = {
+        style: {}, innerHTML: '', textContent: '', onclick: null, handlers: {},
+        appendChild() {}, addEventListener(ev, fn) { this.handlers[ev] = fn; },
+        setAttribute() {}, removeAttribute() {}, remove() {},
+        querySelector: () => el(), querySelectorAll: () => []
+      };
+      made.push(e);
+      return e;
+    };
+    app.document.createElement = el;
+    app.document.getElementById = () => el();
+    try {
+      app._phxOpenSessionDetail('wb-150', null, {});
+      const rendered = made.map((m) => m.innerHTML || '').join(' ');
+      assert.ok(rendered.includes('150 Wall Balls'), 'the session name is on screen');
+      assert.ok(rendered.includes('Wall Ball'), 'and the movement');
+      assert.ok(!/karen/i.test(rendered), 'and the benchmark name is not what he reads');
+    } finally {
+      app.document.createElement = realCreate;
+      app.document.getElementById = realGet;
+    }
+  });
 }

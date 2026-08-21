@@ -102,4 +102,30 @@ export default function ({ test, assert, app }) {
     app._phxRecordWriteError('c', null, (() => { const o = {}; o.self = o; return o; })());
     assert.ok(true, 'survived undefined args and a circular payload');
   });
+
+  test('CONTRACT _phxRecordWriteError: holds for a CARELESS caller, not just a careful one', () => {
+    // Peptides' insight (2026-08-21): its own call sites pass scrubbed summaries, so its
+    // tests only ever proved its discipline. The provider guarantee must hold WITHOUT it —
+    // otherwise the redaction is caller etiquette wearing a helper's clothes. This hands the
+    // helper a raw peptide state, the exact thing a future caller might pass by accident.
+    app.localStorage.removeItem('phx_last_write_error');
+    app._phxRecordWriteError('pep.careless', {
+      message: 'duplicate key value violates unique constraint',
+      code: '23505',
+      // The subtle path: the value leaks through the ERROR object, not the payload, so
+      // scrubbing the payload alone would not be enough.
+      details: 'Failing row contains (24.8, Serum copper)',
+      hint: 'value 24.8 is out of range',
+    }, {
+      stacks: [{ compoundId: 'epitalon', dose: 5, notes: 'felt flat all week' }],
+      notes: [{ text: 'sleep much worse since Tuesday' }],
+      bloods: [{ lab: 'QML', markers: [{ name: 'Serum copper', value: 24.8, unit: 'umol/L' }] }],
+    });
+    const blob = app.localStorage.getItem('phx_last_write_error');
+    ['24.8', 'Serum copper', 'QML', 'felt flat all week', 'sleep much worse', 'epitalon', 'umol/L']
+      .forEach(leak => assert.notIncludes(blob, leak, `medical/personal value leaked: ${leak}`));
+    const snap = JSON.parse(blob);
+    assert.equal(snap.code, '23505', 'still diagnosable — code kept');
+    assert.ok(snap.payload_shape.stacks === 'array[1]', 'still diagnosable — shape kept');
+  });
 }

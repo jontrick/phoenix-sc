@@ -1458,8 +1458,15 @@ has('window._phxActiveSessionKey = null',       'REENTRY: key released on comple
   ahead.length
     ? bad(`VERSION: comment references v4.9.${ahead.join(', v4.9.')} but APP_VERSION is 4.9.${cur} — a version that does not exist yet`)
     : ok('VERSION: no comment references a version ahead of APP_VERSION');
-  // The version being shipped must be labelled somewhere, so new code carries the number it
-  // actually went out as rather than the number it was written under.
+  // THIS IS THE LOAD-BEARING CHECK, not a "did you label it" nicety — both the PM and
+  // Nutrition initially misread it as cosmetic (2026-08-21). It catches stale-after-rebase:
+  // a shipping version is referenced only by the domain shipping it, so if ALL your labels
+  // are stale, nothing mentions the new number and this fails. Caught Peptides' .161
+  // collision and Nutrition's .174 labels, both verified by reverting them on a real tree.
+  // KNOWN RESIDUE, accepted: defeated if you write ONE correct label alongside stale ones.
+  // Narrower than the mechanical failure (getting them all wrong after a rebase) and not
+  // worth a git-aware gate to close — revisit only if it actually bites someone.
+  // NOTE: the regex needs a literal 'v', so `APP_VERSION='4.9.N'` does not satisfy itself.
   refs.includes(cur)
     ? ok(`VERSION: v4.9.${cur} is labelled in the source`)
     : bad(`VERSION: APP_VERSION is 4.9.${cur} but no comment mentions v4.9.${cur} — label the change you are shipping (stale label after a rebase?)`);

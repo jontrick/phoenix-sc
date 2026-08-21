@@ -1435,5 +1435,24 @@ has('window._phxActiveSessionKey = null',       'REENTRY: key released on comple
   else bad('REENTRY: supabaseStartSession is no longer behind the same-session check — re-entry will mint a new row and orphan the logged sets');
 })();
 
+// ── [PM] version-comment staleness (requested by Peptides + Nutrition, 2026-08-18) ──
+// A version written into a comment while building goes stale the moment a rebase moves
+// APP_VERSION past it. Peptides shipped .180 with code labelled v4.9.161 (Training already
+// owned .161); Nutrition is mid-build labelled .174 against a .180 main. The harness pinned
+// APP_VERSION but nothing checked the references around it.
+{
+  const cur = parseInt((html.match(/APP_VERSION='4\.9\.(\d+)'/) || [])[1], 10);
+  const refs = [...new Set([...html.matchAll(/v4\.9\.(\d+)/g)].map(m => parseInt(m[1], 10)))];
+  const ahead = refs.filter(r => r > cur);
+  ahead.length
+    ? bad(`VERSION: comment references v4.9.${ahead.join(', v4.9.')} but APP_VERSION is 4.9.${cur} — a version that does not exist yet`)
+    : ok('VERSION: no comment references a version ahead of APP_VERSION');
+  // The version being shipped must be labelled somewhere, so new code carries the number it
+  // actually went out as rather than the number it was written under.
+  refs.includes(cur)
+    ? ok(`VERSION: v4.9.${cur} is labelled in the source`)
+    : bad(`VERSION: APP_VERSION is 4.9.${cur} but no comment mentions v4.9.${cur} — label the change you are shipping (stale label after a rebase?)`);
+}
+
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

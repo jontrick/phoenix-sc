@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.195'", 'version is 4.9.195');
+has("var APP_VERSION='4.9.196'", 'version is 4.9.196');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1774,7 +1774,7 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
   else bad('CONTRACT: blabCalSessionsOn no longer passes BLAB entries through intact — blabDay may be gone, and Nutrition names the training day from it');
 })();
 
-// ── Backup recovery: the net had no path (v4.9.195) ─────────────────────────
+// ── Backup recovery: the net had no path (v4.9.196) ─────────────────────────
 // blab_v1_{uid}_bak was written and read by NOTHING, while a comment called it
 // "kept one generation" — which reads as recoverable. An untested net at least
 // exists; an unreachable one is a claim. Behaviour is in tests/training.mjs,

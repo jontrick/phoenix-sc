@@ -82,6 +82,19 @@ if (mine.major !== theirs.major) {
   process.exit(0);
 }
 if (mine.n > theirs.n) {
+  // Training, .195: a rebase that resolves APP_VERSION leaves the commit SUBJECT saying the
+  // old number — a record Jon reads, claiming something the build does not. Same correction
+  // as APP_VERSION and the in-file labels, and mechanical, so it is checked rather than
+  // remembered. Only warns: a subject may legitimately omit a version (docs/tooling commits).
+  try {
+    const subject = execFileSync('git', ['log', '-1', '--format=%s'], { encoding: 'utf8' }).trim();
+    const claimed = (subject.match(/v(\d+)\.(\d+)\.(\d+)/) || [])[0];
+    if (claimed && claimed !== 'v' + mine.text) {
+      console.error(`VERSION CHECK FAILED — your commit SUBJECT says ${claimed} but APP_VERSION is ${mine.text}.`);
+      console.error(`Amend the subject (git commit --amend) so the log matches the build. DO NOT PUSH.`);
+      process.exit(1);
+    }
+  } catch { /* not a git dir, or no commit yet — the version comparison above still stands */ }
   console.log(`VERSION CHECK CLEAN — ${mine.text} is ahead of ${theirs.text} at ${base}`);
   process.exit(0);
 }

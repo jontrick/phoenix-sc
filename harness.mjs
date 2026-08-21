@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.192'", 'version is 4.9.192');
+has("var APP_VERSION='4.9.193'", 'version is 4.9.193');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -194,48 +194,48 @@ has("lbl.textContent     = 'HOLD'", 'NP: rest overlay label changed to HOLD');
 has("skipBtn.textContent = 'Done'", 'NP: skip button relabelled Done for holds');
 
 // ── Nutrition Engine (v4.9.132) ───────────────────────────────────────────────
-has('function nutGetState()', 'NUT: nutGetState defined');
-has('function nutSaveState(s)', 'NUT: nutSaveState defined');
-has('function nutCalcTargets(', 'NUT: nutCalcTargets defined');
-has('function nutAdjustForToday(', 'NUT: nutAdjustForToday defined');
-has('function nutRenderTile()', 'NUT: nutRenderTile defined');
-has('function openNutritionScreen()', 'NUT: openNutritionScreen defined');
-has('function nutRenderScreen()', 'NUT: nutRenderScreen defined');
-has('function nutOpenSetup()', 'NUT: nutOpenSetup defined');
-has('function nutOpenMealLog(slot)', 'NUT: nutOpenMealLog defined');
-has('function nutSaveCheckin()', 'NUT: nutSaveCheckin defined');
-has("id=\"screen-nutrition\"", 'NUT: #screen-nutrition HTML screen added');
-has("'nutrition':'screen-nutrition'", 'NUT: navigation route wired');
-has("if(tab==='nutrition')", 'NUT: navTo renders nutrition screen');
-has("nutRenderTile()", 'NUT: Today tile replaced with live render');
+hasCode('function nutGetState()', 'NUT: nutGetState defined');
+hasCode('function nutSaveState(s)', 'NUT: nutSaveState defined');
+hasCode('function nutCalcTargets(', 'NUT: nutCalcTargets defined');
+hasCode('function nutAdjustForToday(', 'NUT: nutAdjustForToday defined');
+hasCode('function nutRenderTile()', 'NUT: nutRenderTile defined');
+hasCode('function openNutritionScreen()', 'NUT: openNutritionScreen defined');
+hasCode('function nutRenderScreen()', 'NUT: nutRenderScreen defined');
+hasCode('function nutOpenSetup()', 'NUT: nutOpenSetup defined');
+hasCode('function nutOpenMealLog(slot)', 'NUT: nutOpenMealLog defined');
+hasCode('function nutSaveCheckin()', 'NUT: nutSaveCheckin defined');
+hasCode("id=\"screen-nutrition\"", 'NUT: #screen-nutrition HTML screen added');
+hasCode("'nutrition':'screen-nutrition'", 'NUT: navigation route wired');
+hasCode("if(tab==='nutrition')", 'NUT: navTo renders nutrition screen');
+hasCode("nutRenderTile()", 'NUT: Today tile replaced with live render');
 
 // ── Weekly Prep — single-serve recipes + prep aggregator (v4.9.144) ──────────
-has('function nutGetRecipes()', 'PREP: nutGetRecipes defined');
-has('function nutSaveRecipes(list)', 'PREP: nutSaveRecipes defined');
-has("'phx_recipes_v1_' + (uid || 'guest')", 'PREP: recipes stored under phx_recipes_v1_{uid}');
-has('if(!uid && typeof athlete', 'PREP: key prefers the session, falls back to athlete');
-has('function _nutRecipesMirrorToCloud(', 'PREP: Supabase mirror defined');
-has('function nutRestoreRecipesFromCloud(', 'PREP: cloud restore defined');
-has('nutRestoreRecipesFromCloud(row)', 'PREP: cloud restore wired into profile load');
-has('function _nutNormalizeRecipe(', 'PREP: legacy batch-recipe migration defined');
-has('function nutRecipeMacros(', 'PREP: per-serve macro calc defined');
-has('function nutRecipeServeWeight(', 'PREP: serve weight calc defined');
-has('function nutAssignRecipe(', 'PREP: week slot assignment defined');
-has('function nutBuildPrepPlan(', 'PREP: aggregator defined');
-has('function _nutPrepScale(', 'PREP: batch/yield scaling defined');
-has('function nutOpenPrepCard()', 'PREP: prep card overlay defined');
-has('function nutOpenRecipePicker(', 'PREP: recipe picker defined');
-has('function _nutWeekPlanView(', 'PREP: week PLAN view defined');
-has('function _nutPrepText(', 'PREP: plain-text export defined');
-has('function nutOpenRecipeBuilder(editId, onSaved)', 'PREP: builder takes an edit id + save continuation');
-has('data-nut-prep', 'PREP: WEEKLY PREP button rendered');
-has('WEEKLY PREP', 'PREP: WEEKLY PREP label present');
-has('data-nut-week-mode', 'PREP: week Overview/Plan toggle rendered');
-has('data-nut-add-recipe', 'PREP: per-slot + Recipe button rendered');
-has('data-nut-recipe-edit', 'PREP: recipe Edit button rendered');
-has("var _nutWeekMode = 'overview'", 'PREP: _nutWeekMode state var declared');
-has('recipeId: rec.id', 'PREP: assigned components carry recipeId for aggregation');
-hasNot("var _recipes = (_rns && _rns.recipes) ? _rns.recipes : [];", 'PREP: food picker no longer reads legacy ns.recipes');
+hasCode('function nutGetRecipes()', 'PREP: nutGetRecipes defined');
+hasCode('function nutSaveRecipes(list)', 'PREP: nutSaveRecipes defined');
+hasCode("'phx_recipes_v1_' + (uid || 'guest')", 'PREP: recipes stored under phx_recipes_v1_{uid}');
+hasCode('if(!uid && typeof athlete', 'PREP: key prefers the session, falls back to athlete');
+hasCode('function _nutRecipesMirrorToCloud(', 'PREP: Supabase mirror defined');
+hasCode('function nutRestoreRecipesFromCloud(', 'PREP: cloud restore defined');
+hasCode('nutRestoreRecipesFromCloud(row)', 'PREP: cloud restore wired into profile load');
+hasCode('function _nutNormalizeRecipe(', 'PREP: legacy batch-recipe migration defined');
+hasCode('function nutRecipeMacros(', 'PREP: per-serve macro calc defined');
+hasCode('function nutRecipeServeWeight(', 'PREP: serve weight calc defined');
+hasCode('function nutAssignRecipe(', 'PREP: week slot assignment defined');
+hasCode('function nutBuildPrepPlan(', 'PREP: aggregator defined');
+hasCode('function _nutPrepScale(', 'PREP: batch/yield scaling defined');
+hasCode('function nutOpenPrepCard()', 'PREP: prep card overlay defined');
+hasCode('function nutOpenRecipePicker(', 'PREP: recipe picker defined');
+hasCode('function _nutWeekPlanView(', 'PREP: week PLAN view defined');
+hasCode('function _nutPrepText(', 'PREP: plain-text export defined');
+hasCode('function nutOpenRecipeBuilder(editId, onSaved)', 'PREP: builder takes an edit id + save continuation');
+hasCode('data-nut-prep', 'PREP: WEEKLY PREP button rendered');
+hasCode('WEEKLY PREP', 'PREP: WEEKLY PREP label present');
+hasCode('data-nut-week-mode', 'PREP: week Overview/Plan toggle rendered');
+hasCode('data-nut-add-recipe', 'PREP: per-slot + Recipe button rendered');
+hasCode('data-nut-recipe-edit', 'PREP: recipe Edit button rendered');
+hasCode("var _nutWeekMode = 'overview'", 'PREP: _nutWeekMode state var declared');
+hasCode('recipeId: rec.id', 'PREP: assigned components carry recipeId for aggregation');
+hasNotCode("var _recipes = (_rns && _rns.recipes) ? _rns.recipes : [];", 'PREP: food picker no longer reads legacy ns.recipes');
 
 // ── Execute the prep aggregator against the two spec scenarios ───────────────
 console.log('\nExecution check — Weekly Prep aggregator:');
@@ -445,48 +445,48 @@ has('function _nutAfterRestore(', 'RESTORE: repaint helper defined');
 has('function _nutRecipesFrom(', 'RESTORE: envelope reader defined (bare array still loads)');
 has("_ts: new Date().toISOString()", 'RESTORE: save stamps ISO _ts');
 has("cloudWins = ct > lt", 'RESTORE: strict newer-than, so ties fall to local');
-has("_phxRecordWriteError('_nutRecipesMirrorToCloud'", 'MIRROR: write errors recorded, not swallowed');
-has('function _nutErrorSummary(', 'MIRROR: diagnostic summary helper defined');
-has('_nutErrorSummary(env)', 'MIRROR: payload is a count, never recipe values');
-hasNot(".then(function(){}, function(){});", 'MIRROR: empty swallowing callbacks gone');
+hasCode("_phxRecordWriteError('_nutRecipesMirrorToCloud'", 'MIRROR: write errors recorded, not swallowed');
+hasCode('function _nutErrorSummary(', 'MIRROR: diagnostic summary helper defined');
+hasCode('_nutErrorSummary(env)', 'MIRROR: payload is a count, never recipe values');
+hasNotCode(".then(function(){}, function(){});", 'MIRROR: empty swallowing callbacks gone');
 
 // ── Today screen: meal tick-off + water counter (v4.9.145) ──────────────────
-has('id="today-meals-tile"', 'TODAY: meals tile div on Today screen');
-has('id="today-water-tile"', 'TODAY: water tile div on Today screen');
-has('nutRenderMealsTile()', 'TODAY: meals tile is CALLED from the render hook (structural — that it DRAWS is tests/nutrition.mjs)');
-has('nutRenderWaterTile()', 'TODAY: water tile is CALLED from the render hook (structural — that it DRAWS is tests/nutrition.mjs)');
-has('function _nutEnsureEaten(', 'TICK: eaten-map seeding defined');
-has('function nutIsSlotEaten(', 'TICK: nutIsSlotEaten defined');
-has('function nutToggleMealEaten(', 'TICK: nutToggleMealEaten defined');
-has('function _nutEatenTotals(', 'TICK: eaten-only running totals defined');
-has('function _nutSlotTotals(', 'TICK: per-slot totals defined');
-has('data-nut-tick=', 'TICK: Today-screen tick buttons rendered');
-has('data-nut-tick-day=', 'TICK: nutrition-screen tick buttons rendered');
-has('nutToggleMealEaten(parts[0], parts[1])', 'TICK: in-screen tick buttons wired');
-has('var logged = _nutEatenTotals(dayData);', 'TICK: running totals follow the ticks');
-has("if(_e[slot] === undefined) _e[slot] = false;", 'TICK: planned recipes start unticked');
-has('function nutLogComponent(', 'TICK: logging (add + tick) is its own named writer');
-hasNot('  _nutEnsureEaten(day)[slot] = true;', 'TICK: the tick no longer hides inside nutAddComponent');
-has("if(dateKey !== _nutToday()) return;", 'TICK: a future day is never marked eaten');
-has("var _nutPickerMode", 'PLAN: picker carries log-vs-plan mode');
-has("_nutPickerMode = (mode === 'log') ? 'log' : 'plan';", 'PLAN: omitting the mode plans — logging must be asked for');
-has("parts[2] === 'log' ? 'log' : 'plan'", 'PLAN: wiring honours the mode the slot card declares');
-has("'|' + mode + '\" style=", 'PLAN: the slot card emits its mode');
-has("{mode:'log', dayKcal:_dayK}", 'PLAN: the today screen asks to log');
-has("{mode:'plan', dayKcal:_dayK}", 'PLAN: the planner asks to plan');
-has('data-fp-new-recipe', 'PLAN: build-new-recipe offered in the food picker');
-has('data-rp-new-recipe', 'PLAN: build-new-recipe offered in the recipe picker');
-has("ns.daily[dk].eaten = {};", 'TICK: week templates plan without marking eaten');
-has('function nutRenderWaterTile()', 'WATER: tile renderer defined');
-has('function nutAddWater(', 'WATER: add/undo defined');
-has('function nutWaterTargetMl(', 'WATER: target accessor defined');
-has('function nutSetWaterTarget(', 'WATER: target setter defined');
-has('function nutOpenWaterTargetSheet(', 'WATER: target picker defined');
-has('var _NUT_WATER_GLASS_ML  = 250', 'WATER: 250ml glass');
-has('var _NUT_WATER_TARGET_ML = 2500', 'WATER: 2.5L default target');
-has('function _nutBindLongPress(', 'WATER: tap/long-press binding defined');
-has('Tap to add a glass &middot; hold to undo', 'WATER: tap/hold hint shown');
-has('water_ml', 'WATER: per-day water stored on the daily record');
+hasCode('id="today-meals-tile"', 'TODAY: meals tile div on Today screen');
+hasCode('id="today-water-tile"', 'TODAY: water tile div on Today screen');
+hasCode('nutRenderMealsTile()', 'TODAY: meals tile is CALLED from the render hook (structural — that it DRAWS is tests/nutrition.mjs)');
+hasCode('nutRenderWaterTile()', 'TODAY: water tile is CALLED from the render hook (structural — that it DRAWS is tests/nutrition.mjs)');
+hasCode('function _nutEnsureEaten(', 'TICK: eaten-map seeding defined');
+hasCode('function nutIsSlotEaten(', 'TICK: nutIsSlotEaten defined');
+hasCode('function nutToggleMealEaten(', 'TICK: nutToggleMealEaten defined');
+hasCode('function _nutEatenTotals(', 'TICK: eaten-only running totals defined');
+hasCode('function _nutSlotTotals(', 'TICK: per-slot totals defined');
+hasCode('data-nut-tick=', 'TICK: Today-screen tick buttons rendered');
+hasCode('data-nut-tick-day=', 'TICK: nutrition-screen tick buttons rendered');
+hasCode('nutToggleMealEaten(parts[0], parts[1])', 'TICK: in-screen tick buttons wired');
+hasCode('var logged = _nutEatenTotals(dayData);', 'TICK: running totals follow the ticks');
+hasCode("if(_e[slot] === undefined) _e[slot] = false;", 'TICK: planned recipes start unticked');
+hasCode('function nutLogComponent(', 'TICK: logging (add + tick) is its own named writer');
+hasNotCode('  _nutEnsureEaten(day)[slot] = true;', 'TICK: the tick no longer hides inside nutAddComponent');
+hasCode("if(dateKey !== _nutToday()) return;", 'TICK: a future day is never marked eaten');
+hasCode("var _nutPickerMode", 'PLAN: picker carries log-vs-plan mode');
+hasCode("_nutPickerMode = (mode === 'log') ? 'log' : 'plan';", 'PLAN: omitting the mode plans — logging must be asked for');
+hasCode("parts[2] === 'log' ? 'log' : 'plan'", 'PLAN: wiring honours the mode the slot card declares');
+hasCode("'|' + mode + '\" style=", 'PLAN: the slot card emits its mode');
+hasCode("{mode:'log', dayKcal:_dayK}", 'PLAN: the today screen asks to log');
+hasCode("{mode:'plan', dayKcal:_dayK}", 'PLAN: the planner asks to plan');
+hasCode('data-fp-new-recipe', 'PLAN: build-new-recipe offered in the food picker');
+hasCode('data-rp-new-recipe', 'PLAN: build-new-recipe offered in the recipe picker');
+hasCode("ns.daily[dk].eaten = {};", 'TICK: week templates plan without marking eaten');
+hasCode('function nutRenderWaterTile()', 'WATER: tile renderer defined');
+hasCode('function nutAddWater(', 'WATER: add/undo defined');
+hasCode('function nutWaterTargetMl(', 'WATER: target accessor defined');
+hasCode('function nutSetWaterTarget(', 'WATER: target setter defined');
+hasCode('function nutOpenWaterTargetSheet(', 'WATER: target picker defined');
+hasCode('var _NUT_WATER_GLASS_ML  = 250', 'WATER: 250ml glass');
+hasCode('var _NUT_WATER_TARGET_ML = 2500', 'WATER: 2.5L default target');
+hasCode('function _nutBindLongPress(', 'WATER: tap/long-press binding defined');
+hasCode('Tap to add a glass &middot; hold to undo', 'WATER: tap/hold hint shown');
+hasCode('water_ml', 'WATER: per-day water stored on the daily record');
 
 // ── Execute the tick-off + water logic ──────────────────────────────────────
 console.log('\nExecution check — meal tick-off + water counter:');
@@ -571,55 +571,55 @@ try {
 }
 
 // ── Bodyweight, perpetual week, repeat day (v4.9.166) ───────────────────────
-has('function _nutCurrentWeight(', 'BW: newest-weight helper defined');
-has('function nutRecordWeight(', 'BW: cross-domain weight API defined');
-has('function nutRecalcTargets(', 'BW: target recalculation defined');
-has('function _nutDriftBanner(', 'BW: drift banner defined');
-has('data-nut-recalc', 'BW: recalculate control rendered');
-has("_nutSetupInput('nut-su-bw', 'BODYWEIGHT', 'kg'", 'BW: setup asks for bodyweight');
-has('weight_kg: bw', 'BW: setup stores the weight targets were built from');
-hasNot("var bw = (typeof athlete !== 'undefined' && athlete && athlete.bw) ? parseFloat(athlete.bw) : 80;",
+hasCode('function _nutCurrentWeight(', 'BW: newest-weight helper defined');
+hasCode('function nutRecordWeight(', 'BW: cross-domain weight API defined');
+hasCode('function nutRecalcTargets(', 'BW: target recalculation defined');
+hasCode('function _nutDriftBanner(', 'BW: drift banner defined');
+hasCode('data-nut-recalc', 'BW: recalculate control rendered');
+hasCode("_nutSetupInput('nut-su-bw', 'BODYWEIGHT', 'kg'", 'BW: setup asks for bodyweight');
+hasCode('weight_kg: bw', 'BW: setup stores the weight targets were built from');
+hasNotCode("var bw = (typeof athlete !== 'undefined' && athlete && athlete.bw) ? parseFloat(athlete.bw) : 80;",
        'BW: silent athlete.bw-or-80 fallback removed from setup');
-has('function _nutSelectedWeekStart(', 'WEEK: selected-week helper defined');
-has('function _nutSelectedWeekDays(', 'WEEK: selected-week days defined');
-has('var _nutWeekOffset = 0', 'WEEK: offset state declared');
-has('data-nut-week-nav', 'WEEK: prev/next navigation rendered');
-has('data-nut-week-today', 'WEEK: jump-to-this-week rendered');
-has('var days = _nutSelectedWeekDays();', 'WEEK: views read the selected week');
-has('function nutCopyDay(', 'REPEAT: day copy defined');
-has('function nutOpenRepeatDay(', 'REPEAT: day picker defined');
-has('data-nut-repeat-day', 'REPEAT: control rendered on planned days');
-has('ns.daily[dk].eaten = {};', 'REPEAT: copied days start unticked');
+hasCode('function _nutSelectedWeekStart(', 'WEEK: selected-week helper defined');
+hasCode('function _nutSelectedWeekDays(', 'WEEK: selected-week days defined');
+hasCode('var _nutWeekOffset = 0', 'WEEK: offset state declared');
+hasCode('data-nut-week-nav', 'WEEK: prev/next navigation rendered');
+hasCode('data-nut-week-today', 'WEEK: jump-to-this-week rendered');
+hasCode('var days = _nutSelectedWeekDays();', 'WEEK: views read the selected week');
+hasCode('function nutCopyDay(', 'REPEAT: day copy defined');
+hasCode('function nutOpenRepeatDay(', 'REPEAT: day picker defined');
+hasCode('data-nut-repeat-day', 'REPEAT: control rendered on planned days');
+hasCode('ns.daily[dk].eaten = {};', 'REPEAT: copied days start unticked');
 
 // ── Local day keys (v4.9.169) ───────────────────────────────────────────────
 // Brisbane is UTC+10 and Jon logs at 4:30am; a UTC day key filed his morning
 // under yesterday. Nutrition uses the shared PM helper, not a private copy.
-has('function _nutToday(){\n  return _phxLocalISO();', 'TZ: _nutToday delegates to the shared local-date helper');
-hasNot("return new Date().toISOString().slice(0, 10);", 'TZ: UTC day key gone from _nutToday');
-hasNot("var nxt = d.toISOString().slice(0,10);", 'TZ: day-step navigation no longer UTC');
-hasNot("var dk = d.toISOString().slice(0,10);", 'TZ: 14-day history no longer UTC');
-hasNot('function _nutDateKey(', 'TZ: no private nutrition copy of the date helper');
+hasCode('function _nutToday(){\n  return _phxLocalISO();', 'TZ: _nutToday delegates to the shared local-date helper');
+hasNotCode("return new Date().toISOString().slice(0, 10);", 'TZ: UTC day key gone from _nutToday');
+hasNotCode("var nxt = d.toISOString().slice(0,10);", 'TZ: day-step navigation no longer UTC');
+hasNotCode("var dk = d.toISOString().slice(0,10);", 'TZ: 14-day history no longer UTC');
+hasNotCode('function _nutDateKey(', 'TZ: no private nutrition copy of the date helper');
 
 // ── Day-surface consolidation + calendar-aware targets (v4.9.174) ───────────
-has('function nutTrainingForDay(', 'CAL: training day read per date');
-has('function nutAdjustForDay(', 'CAL: targets adjusted per date');
-has('window.blabTrainingStateOn(dateKey)', 'CAL: asks Training for the STATE, not raw entries');
+hasCode('function nutTrainingForDay(', 'CAL: training day read per date');
+hasCode('function nutAdjustForDay(', 'CAL: targets adjusted per date');
+hasCode('window.blabTrainingStateOn(dateKey)', 'CAL: asks Training for the STATE, not raw entries');
 hasNotCode('function _nutCalEntriesOn(', 'CAL: no longer interprets calendar entries itself');
-has("out.rest = (dateKey < _nutToday())", 'CAL: an unresolved PAST due day does not earn training targets');
-has("' \\u2014 not logged'", 'CAL: and says why on screen');
-has("out.sessions > 1", 'CAL: a second session on a day is disclosed');
+hasCode("out.rest = (dateKey < _nutToday())", 'CAL: an unresolved PAST due day does not earn training targets');
+hasCode("' \\u2014 not logged'", 'CAL: and says why on screen');
+hasCode("out.sessions > 1", 'CAL: a second session on a day is disclosed');
 hasNotCode("var nextDay = (bs.last_completed_day || 0) + 1;", 'CAL: queue-position heuristic gone');
-has('function _nutSlotCard(', 'DAY: one shared slot renderer');
-has('function _nutDaySummary(', 'DAY: one shared day summary');
-has('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
-hasNot('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
+hasCode('function _nutSlotCard(', 'DAY: one shared slot renderer');
+hasCode('function _nutDaySummary(', 'DAY: one shared day summary');
+hasCode('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
+hasNotCode('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
 
 // ── Training API migration (v4.9.185) ──────────────────────────────────────
 hasNotCode("_BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]", 'CAL: no longer reads Training internals');
-has("out.state    = s.state || 'none';", 'CAL: takes the state Training reports');
-has("if(out.state === 'trained')   out.rest = false;", 'CAL: a completed session is a training day');
-has("else                          out.rest = true;", 'CAL: rest / skipped / none all take rest targets');
-has("out.scheduled = (out.state !== 'none');", 'CAL: a scheduled rest day stays distinct from an empty one');
+hasCode("out.state    = s.state || 'none';", 'CAL: takes the state Training reports');
+hasCode("if(out.state === 'trained')   out.rest = false;", 'CAL: a completed session is a training day');
+hasCode("else                          out.rest = true;", 'CAL: rest / skipped / none all take rest targets');
+hasCode("out.scheduled = (out.state !== 'none');", 'CAL: a scheduled rest day stays distinct from an empty one');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

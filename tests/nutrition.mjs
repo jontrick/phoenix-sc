@@ -398,6 +398,70 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nutWeekOffset = 0;
   });
 
+  // ══ THE CLOUD WRITE — behaviour, not a source-string match ═════════════════
+  // The guard "write errors recorded, not swallowed" was a has() on source with
+  // the behaviour proven NOWHERE: the write lived inside a setTimeout callback,
+  // and setTimeout is a no-op in the sandbox, so the body never ran in any test.
+  // Extracted to _nutRecipesWriteNow in v4.9.190 so it can be driven.
+
+  // _phxRecordWriteError is a function DECLARATION, so it cannot be stubbed by
+  // assignment — which is for the best: these assert the diagnostic Jon would
+  // actually read in Settings, not that a stub was called.
+  const settled = { then: () => settled, catch: () => settled };
+  const failingWrite = (error) => {
+    app.sb = { from: () => ({ update: () => ({ eq: () => ({
+      then: (ok, bad) => { if (error instanceof Error) bad(error); else ok({ error }); return settled; },
+    }) }) }) };
+  };
+  const lastWriteError = () => read('phx_last_write_error');
+
+  test('a failed cloud write is RECORDED, not swallowed', () => {
+    start();
+    failingWrite({ message: 'column missing', code: '42703' });
+    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
+    const snap = lastWriteError();
+    assert.ok(snap, 'a diagnostic was written');
+    assert.equal(snap.context, '_nutRecipesMirrorToCloud', 'named by its source');
+    assert.equal(snap.code, '42703', 'carrying the error code');
+    assert.ok(snap.message.indexOf('column missing') >= 0, 'and the message');
+  });
+
+  test('a rejected cloud write is recorded under its own context', () => {
+    start();
+    failingWrite(new Error('offline'));
+    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
+    assert.equal(lastWriteError().context, '_nutRecipesMirrorToCloud.rejected',
+      'distinguishable from a returned error');
+  });
+
+  test('what reaches diagnostics is SHAPE — no recipe name or gram weight', () => {
+    start();
+    failingWrite({ message: 'nope', code: 'X' });
+    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [
+      { ...rec('Chilli Sauce'), components: [{ n: 'Chilli', qty_g: 30 }] },
+    ] });
+    const snap = lastWriteError();
+    assert.notIncludes(snap, 'Chilli Sauce', 'no recipe name in the diagnostic');
+    assert.notIncludes(snap, 'Chilli', 'no ingredient name');
+    assert.notIncludes(snap, '30', 'no gram weight');
+  });
+
+  test('a successful write records nothing', () => {
+    start();
+    app.sb = { from: () => ({ update: () => ({ eq: () => ({
+      then: (ok) => { ok({ error: null }); return settled; },
+    }) }) }) };
+    app._nutRecipesWriteNow({ _ts: NEWER, recipes: [rec('Sauce')] });
+    assert.equal(lastWriteError(), null, 'no diagnostic on success');
+  });
+
+  test('signed out, the write does not happen at all', () => {
+    reset(); signIn(null); app.athlete = null;
+    failingWrite({ message: 'should not reach here', code: 'X' });
+    assert.equal(app._nutRecipesWriteNow({ _ts: NEWER, recipes: [] }), null, 'no write attempted');
+    assert.equal(lastWriteError(), null, 'and nothing recorded');
+  });
+
   // ══ ENTRY POINTS — the layer a test observes ═══════════════════════════════
   // Audit after the PM's .165 note: every water, tick and prep case below was
   // BUILDER-level — nutAddWater, nutToggleMealEaten, nutBuildPrepPlan. Those

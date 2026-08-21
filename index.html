@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.192';
+var APP_VERSION='4.9.193';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19884,32 +19884,42 @@ function nutSaveRecipes(list){
 }
 
 var _nutRecMirrorTimer = null;
+
+// v4.9.193: the write is its own function so it can actually be DRIVEN. It used
+// to live inside the debounce callback, and setTimeout is a no-op in the test
+// sandbox — so nothing ever executed this body. The guard asserting "write errors
+// recorded, not swallowed" was a source-string match with the behaviour proven
+// nowhere. Returns the thenable so a test can await the outcome.
+function _nutRecipesWriteNow(env){
+  var summary = _nutErrorSummary(env);
+  try {
+    var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
+    if(!uid || typeof sb === 'undefined' || !sb) return null;
+    // v4.9.155: never swallow. Counts only — no recipe names or weights leave here.
+    return sb.from('profiles').update({nut_recipes: env}).eq('id', uid).then(
+      function(res){
+        if(res && res.error && typeof _phxRecordWriteError === 'function'){
+          _phxRecordWriteError('_nutRecipesMirrorToCloud', res.error, summary);
+        }
+        return res;
+      },
+      function(e){
+        if(typeof _phxRecordWriteError === 'function'){
+          _phxRecordWriteError('_nutRecipesMirrorToCloud.rejected', e, summary);
+        }
+      }
+    );
+  } catch(e){
+    if(typeof _phxRecordWriteError === 'function'){
+      _phxRecordWriteError('_nutRecipesMirrorToCloud.threw', e, summary);
+    }
+  }
+  return null;
+}
+
 function _nutRecipesMirrorToCloud(env){
   clearTimeout(_nutRecMirrorTimer);
-  _nutRecMirrorTimer = setTimeout(function(){
-    var summary = _nutErrorSummary(env);
-    try {
-      var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
-      if(!uid || typeof sb === 'undefined' || !sb) return;
-      // v4.9.155: never swallow. Counts only — no recipe names or weights leave here.
-      sb.from('profiles').update({nut_recipes: env}).eq('id', uid).then(
-        function(res){
-          if(res && res.error && typeof _phxRecordWriteError === 'function'){
-            _phxRecordWriteError('_nutRecipesMirrorToCloud', res.error, summary);
-          }
-        },
-        function(e){
-          if(typeof _phxRecordWriteError === 'function'){
-            _phxRecordWriteError('_nutRecipesMirrorToCloud.rejected', e, summary);
-          }
-        }
-      );
-    } catch(e){
-      if(typeof _phxRecordWriteError === 'function'){
-        _phxRecordWriteError('_nutRecipesMirrorToCloud.threw', e, summary);
-      }
-    }
-  }, 2000);
+  _nutRecMirrorTimer = setTimeout(function(){ _nutRecipesWriteNow(env); }, 2000);
 }
 
 // v4.9.155 — RESTORE RULE: newest timestamp wins (Jon's ruling, 18 Aug 2026).

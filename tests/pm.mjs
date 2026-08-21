@@ -1,5 +1,5 @@
 // PM-owned shared plumbing — functional tests.
-export default function ({ test, assert, app }) {
+export default function ({ test, assert, app, signIn, seed, read }) {
   test('_phxLocalISO returns the LOCAL calendar day, not UTC', () => {
     // 2026-08-19 04:30 in UTC+10 is 2026-08-18 18:30 UTC. Construct via local components so the
     // assertion holds in any TZ the runner happens to have; the property is "matches local parts".
@@ -127,5 +127,34 @@ export default function ({ test, assert, app }) {
     const snap = JSON.parse(blob);
     assert.equal(snap.code, '23505', 'still diagnosable — code kept');
     assert.ok(snap.payload_shape.stacks === 'array[1]', 'still diagnosable — shape kept');
+  });
+
+  test('ENTRY _phxResetFullReset: cancelling the confirm changes nothing', async () => {
+    // Peptides' third axis (34c75fe): my existing pin asserts the reset flows AWAIT
+    // _phxConfirm — a structural claim about the source. It cannot tell me the entry point
+    // actually reaches the modal, nor that a Cancel really aborts. This drives the entry
+    // point. Cancel is the case worth pinning: these flows wipe Jon's programme, and the
+    // whole reason .175 existed is that the native confirm returned false and the feature
+    // was dead. If a future edit makes cancel fall through, that is silent data loss.
+    signIn('u-reset');
+    seed('phoenix_athlete', { id: 'u-reset', name: 'Jon', fqCompleted: true });
+    const buttons = [];
+    const realCreate = app.document.createElement;
+    app.document.createElement = function (tag) {
+      const el = realCreate.call(app.document, tag);
+      el.addEventListener = (ev, fn) => { if (ev === 'click') el.__click = fn; };
+      if (String(tag).toLowerCase() === 'button') buttons.push(el);
+      return el;
+    };
+    let threw = null;
+    try {
+      const p = app._phxResetFullReset();          // entry point, not a helper
+      assert.ok(buttons.length >= 2, 'the entry point actually reached the DOM confirm, got ' + buttons.length + ' buttons');
+      buttons[0].__click();                         // Cancel
+      await p;
+    } catch (e) { threw = e; } finally { app.document.createElement = realCreate; }
+    assert.equal(threw, null, 'cancelling must not throw: ' + (threw && threw.message));
+    const ath = read('phoenix_athlete');
+    assert.equal(ath && ath.fqCompleted, true, 'cancel left the profile untouched');
   });
 }

@@ -1628,4 +1628,124 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(true, 'survived a null error and a hostile DOM');
     } finally { app.document.getElementById = realGet; }
   });
+
+  // ── The backup was a claim, not a net (v4.9.195) ──────────────────────────
+  // blab_v1_{uid}_bak was written and read by NOTHING. The comment said "kept one
+  // generation", which reads as recoverable, and no path existed to get it back.
+  // Peptides' framing: an untested net at least EXISTS; an unreachable net is a CLAIM.
+  // The tell is that no test could have caught it — there was nothing to call.
+  //
+  // This is Jon's BLAB state and calendar: every session he has logged. So these drive
+  // the real Adjust Programme screen as well as the functions, because "the recovery
+  // works but he cannot reach it" is the exact failure being fixed.
+
+  const seedBackup = (bak, cur) => {
+    reset();
+    signIn(UID);
+    if (cur) seed(KEY, cur);
+    seed(`${KEY}_bak`, bak);
+  };
+  const AT_W5 = { active: true, week: 5, last_completed_day: 2, log: [1, 2, 3, 4, 5, 6], maxes: { bench: 130, squat: 150, deadlift: 170 },
+                  calendar: { sessions: [{ blabWeek: 5, blabDay: 3, scheduledDate: '2026-01-01', status: 'pending' }], customs: [] }, _ts: NEWER };
+  const AT_W1 = { active: true, week: 1, last_completed_day: 0, log: [], maxes: { bench: 130, squat: 150, deadlift: 170 },
+                  calendar: { sessions: [], customs: [] }, _ts: OLDER };
+
+  test('BACKUP: describes what is held, in terms worth judging', () => {
+    seedBackup(AT_W5, AT_W1);
+    const info = app.blabBackupInfo();
+    assert.ok(info, 'there is something to offer');
+    assert.equal(info.week, 5, 'the week the backup holds');
+    assert.equal(info.sessionsLogged, 6, 'and how much work is in it');
+    assert.equal(info.curWeek, 1, 'alongside what is live now, so the choice is informed');
+    assert.equal(info.curSessionsLogged, 0, 'including how much would be swapped out');
+  });
+
+  test('BACKUP: offers nothing when the backup matches what is live', () => {
+    // An offer that is always there is noise.
+    seedBackup(AT_W5, AT_W5);
+    assert.equal(app.blabBackupInfo(), null, 'identical copies are not an offer');
+  });
+
+  test('BACKUP: offers nothing when there is no backup at all', () => {
+    reset(); signIn(UID); seed(KEY, AT_W1);
+    assert.equal(app.blabBackupInfo(), null, 'nothing held, nothing claimed');
+  });
+
+  test('RECOVER: swaps rather than overwrites, so a wrong recovery is undoable', () => {
+    // The property that matters most here: recovering the wrong generation must not
+    // destroy the good one.
+    seedBackup(AT_W5, AT_W1);
+    assert.equal(app.blabRestoreBackup(), true, 'recovery reports success');
+    assert.equal(read(KEY).week, 5, 'the backup is now live');
+    assert.equal(read(`${KEY}_bak`).week, 1, 'and what WAS live is now the backup');
+    // Undo by doing it again.
+    assert.equal(app.blabRestoreBackup(), true, 'second call works');
+    assert.equal(read(KEY).week, 1, 'back to where he started');
+  });
+
+  test('RECOVER: brings the calendar with it, not just the programme position', () => {
+    // The calendar lives in blab_state AND its own key. Swapping only the state would
+    // recover his week while leaving the other generation's schedule on screen.
+    seedBackup(AT_W5, AT_W1);
+    seed(`blab_calendar_v1_${UID}`, { sessions: [], customs: [] });
+    app.blabRestoreBackup();
+    const cal = read(`blab_calendar_v1_${UID}`);
+    assert.equal(cal.sessions.length, 1, 'the recovered schedule is on its own key too');
+    assert.equal(cal.sessions[0].blabDay, 3, 'and it is the right one');
+  });
+
+  test('RECOVER: a pre-calendar backup leaves the current schedule alone', () => {
+    // Recovering an old programme position is not a reason to blank a schedule that
+    // is still good. blabBackupInfo reports hasCalendar so the card can say so.
+    const legacy = { active: true, week: 4, last_completed_day: 1, log: [1], maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: OLDER };
+    seedBackup(legacy, AT_W1);
+    const keep = { sessions: [{ blabWeek: 9, blabDay: 1, scheduledDate: '2026-02-02', status: 'pending' }], customs: [] };
+    seed(`blab_calendar_v1_${UID}`, keep);
+    assert.equal(app.blabBackupInfo().hasCalendar, false, 'the card can warn it carries no schedule');
+    app.blabRestoreBackup();
+    assert.equal(read(`blab_calendar_v1_${UID}`).sessions[0].blabWeek, 9, 'the good schedule survived');
+    assert.equal(read(KEY).week, 4, 'while the programme position was recovered');
+  });
+
+  test('RECOVER: re-stamps so the next cloud restore does not undo it', () => {
+    // Without going through blabSaveState the recovered copy keeps the OLD _ts, and
+    // the newest-wins rule would hand it straight back.
+    seedBackup(AT_W5, AT_W1);
+    app.blabRestoreBackup();
+    const after = read(KEY);
+    assert.ok(after._ts, 'the recovered state is stamped');
+    assert.ok(Date.parse(after._ts) > Date.parse(NEWER), 'with a stamp newer than the copy it came from');
+  });
+
+  test('RECOVER: does nothing, safely, when there is no backup', () => {
+    reset(); signIn(UID); seed(KEY, AT_W1);
+    assert.equal(app.blabRestoreBackup(), false, 'reports it did nothing');
+    assert.equal(read(KEY).week, 1, 'and changed nothing');
+  });
+
+  test('ENTRY: the Recover card is ON the Adjust Programme screen when there is something to recover', () => {
+    // The whole failure was reachability, so this drives the real screen. A recovery
+    // that works but cannot be reached is exactly what was already there.
+    seedBackup(AT_W5, AT_W1);
+    const dom = recordingDom();
+    try {
+      app.openBlabAdjust();
+      const html = dom.made.map((m) => m.innerHTML || '').join(' ');
+      assert.ok(html.includes('Recover Previous Programme'), 'the offer is on screen');
+      assert.ok(html.includes('data-act="recover"'), 'and it is actionable');
+      assert.ok(html.includes('Week 5'), 'saying what it would bring back');
+      assert.ok(html.includes('SWAP'), 'and that it is undoable');
+    } finally { dom.restore(); }
+  });
+
+  test('ENTRY: the Recover card is absent when there is nothing to recover', () => {
+    reset(); signIn(UID); seed(KEY, AT_W1);
+    const dom = recordingDom();
+    try {
+      app.openBlabAdjust();
+      const html = dom.made.map((m) => m.innerHTML || '').join(' ');
+      assert.ok(!html.includes('Recover Previous Programme'), 'no empty promise on screen');
+      assert.ok(html.includes('Pause Programme'), 'while the rest of the sheet is intact');
+    } finally { dom.restore(); }
+  });
 }

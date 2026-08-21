@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.194'", 'version is 4.9.194');
+has("var APP_VERSION='4.9.195'", 'version is 4.9.195');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1772,6 +1772,26 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
   const seg = src.slice(i, i + 900);
   if (/cal\.sessions\.forEach[\s\S]{0,200}out\.push\(s\)/.test(seg)) ok('CONTRACT: BLAB entries pass through whole, so blabDay survives');
   else bad('CONTRACT: blabCalSessionsOn no longer passes BLAB entries through intact — blabDay may be gone, and Nutrition names the training day from it');
+})();
+
+// ── Backup recovery: the net had no path (v4.9.195) ─────────────────────────
+// blab_v1_{uid}_bak was written and read by NOTHING, while a comment called it
+// "kept one generation" — which reads as recoverable. An untested net at least
+// exists; an unreachable one is a claim. Behaviour is in tests/training.mjs,
+// including through the real Adjust Programme screen, because reachability WAS the
+// bug and a function-level test cannot see it.
+console.log('\nBackup recovery:');
+hasCode('window.blabBackupInfo = function',    'BACKUP: describe-what-is-held present (structural — behaviour in tests/training.mjs)');
+hasCode('window.blabRestoreBackup = function', 'BACKUP: recovery present (structural — behaviour in tests/training.mjs)');
+hasCode("localStorage.setItem(key + '_bak', cur)", 'BACKUP: swap keeps the replaced copy (structural — behaviour in tests/training.mjs)');
+hasCode('data-act="recover"',                  'BACKUP: the offer is wired into Adjust Programme');
+// The whole failure was a written-but-unread key. Pin that it is now READ.
+(() => {
+  const code = codeSrc();
+  const reads = (code.match(/getItem\('blab_v1_'\s*\+\s*uid\s*\+\s*'_bak'\)/g) || []).length;
+  if (reads >= 1) ok('BACKUP: the _bak key is actually READ, not just written');
+  else bad('BACKUP: nothing reads blab_v1_{uid}_bak — the backup is a claim again. ' +
+           'Bytes being written is not recoverability; there must be a path Jon can reach.');
 })();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.194';
+var APP_VERSION='4.9.195';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3724,13 +3724,91 @@ try {
 // cloud win a row it would otherwise lose. Strictly-less blocks; equal passes. A stale
 // second device with a recent write cannot wipe a session Jon actually logged.
 //
-// Anything replaced is kept one generation at blab_v1_{uid}_bak, never chained.
+// Anything replaced is kept one generation at blab_v1_{uid}_bak, never chained, and
+// is RECOVERABLE — see blabBackupInfo/blabRestoreBackup and the Recover card in
+// Adjust Programme. Until v4.9.195 those bytes were written and read by nothing: the
+// comment said "kept", which reads as recoverable, and no path existed to get them
+// back. An untested net at least exists; an unreachable one is a claim.
 // Returns true ONLY when local was actually replaced — the caller repaints on true.
 window.blabProgressScore = function(s){
   if(!s || typeof s !== 'object') return -1;
   var w = parseInt(s.week, 10); if(isNaN(w)) w = 0;
   var d = parseInt(s.last_completed_day, 10); if(isNaN(d)) d = 0;
   return (w * 4) + d;
+};
+
+// v4.9.195 — what is in the backup, in terms Jon can judge. Returns null when there
+// is nothing worth offering, so the Recover card only appears when it can actually do
+// something.
+window.blabBackupInfo = function(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid) return null;
+    var raw = localStorage.getItem('blab_v1_' + uid + '_bak');
+    if(!raw) return null;
+    var bak = JSON.parse(raw);
+    if(!bak || typeof bak !== 'object') return null;
+    var cur = null;
+    try { cur = JSON.parse(localStorage.getItem('blab_v1_' + uid) || 'null'); } catch(_e){}
+    // Nothing to offer if the backup is already what is live.
+    if(cur && JSON.stringify(cur) === JSON.stringify(bak)) return null;
+    var bCal = (bak.calendar && Array.isArray(bak.calendar.sessions)) ? bak.calendar.sessions : [];
+    return {
+      week: bak.week || 0,
+      day: bak.last_completed_day || 0,
+      sessionsLogged: Array.isArray(bak.log) ? bak.log.length : 0,
+      scheduled: bCal.length,
+      hasCalendar: !!bak.calendar,
+      ts: bak._ts || null,
+      curWeek: cur ? (cur.week || 0) : 0,
+      curDay: cur ? (cur.last_completed_day || 0) : 0,
+      curSessionsLogged: (cur && Array.isArray(cur.log)) ? cur.log.length : 0
+    };
+  } catch(_e){ return null; }
+};
+
+// SWAP live and backup — deliberately not a one-way restore. Recovering the wrong
+// generation would otherwise destroy the good one, which matters more here than
+// anywhere else in the app: this is every session Jon has logged.
+window.blabRestoreBackup = function(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(!uid) return false;
+    var key = 'blab_v1_' + uid;
+    var bak = localStorage.getItem(key + '_bak');
+    if(!bak) return false;
+    var cur = localStorage.getItem(key);
+    localStorage.setItem(key, bak);
+    if(cur != null) localStorage.setItem(key + '_bak', cur);
+
+    var restored = window.blabGetState();
+    if(!restored) return false;
+
+    // The calendar lives in TWO places — inside blab_state.calendar and in its own
+    // blab_calendar_v1_{uid} key. Swapping only the state would recover his programme
+    // position while leaving the OTHER generation's schedule on screen.
+    //
+    // If the backup predates the calendar it carries none. Deliberately leave the
+    // current schedule alone in that case rather than blanking it: recovering an old
+    // programme position is not a reason to destroy a schedule that is still good.
+    // blabBackupInfo reports hasCalendar so the card can say which.
+    try {
+      if(restored.calendar){
+        var calKey = 'blab_calendar_v1_' + uid;
+        localStorage.setItem(calKey, JSON.stringify(restored.calendar));
+      }
+    } catch(_ce){}
+
+    // Re-save through the normal path so it stamps _ts and mirrors to cloud —
+    // otherwise the next restore would see a stale stamp and undo the recovery.
+    window.blabSaveState(restored);
+    try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_re){}
+    try {
+      var cs = document.getElementById('screen-blab-calendar');
+      if(cs && cs.classList && cs.classList.contains('active') && typeof _blabCalRender === 'function') _blabCalRender();
+    } catch(_r2){}
+    return true;
+  } catch(_e){ console.warn('[PHX] blabRestoreBackup failed:', _e); return false; }
 };
 
 function _blabBackupLocal(key, rawLocal){
@@ -4383,6 +4461,23 @@ function openBlabAdjust(){
         '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);margin-bottom:5px;">Reset to Week 1</div>'+
         '<div style="font-size:13px;color:var(--text3);line-height:1.5;">Back from a long break? Enter new 1-rep maxes and restart from Week 1. Records are kept.</div>'+
       '</div>'+
+      // v4.9.195: only rendered when a backup exists AND differs from what is live —
+      // an offer that is always there is noise, and one that cannot deliver is a lie.
+      (function(){
+        var b = (typeof window.blabBackupInfo === 'function') ? window.blabBackupInfo() : null;
+        if(!b) return '';
+        var when = b.ts ? String(b.ts).slice(0,10) : 'an earlier save';
+        return '<div data-act="recover" style="background:var(--bg2);border:1px solid var(--orange);border-radius:var(--radius);padding:18px 16px;margin-top:12px;cursor:pointer;">'+
+          '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);margin-bottom:5px;">Recover Previous Programme</div>'+
+          '<div style="font-size:13px;color:var(--text3);line-height:1.5;">'+
+            'Programme replaced by a cloud restore and it looks wrong? This swaps back to the copy saved from '+when+' — '+
+            'Week '+b.week+' Day '+b.day+', '+b.sessionsLogged+' sessions logged'+
+            (b.hasCalendar ? ', '+b.scheduled+' scheduled' : ', schedule unchanged (that copy predates the calendar)')+'. '+
+            'Currently live: Week '+b.curWeek+' Day '+b.curDay+', '+b.curSessionsLogged+' logged. '+
+            'This is a SWAP, so you can undo it by tapping again.'+
+          '</div>'+
+        '</div>';
+      })()+
     '</div>';
   ov.addEventListener('click',function(e){
     var el=e.target.closest('[data-act]'); if(!el) return;
@@ -4390,6 +4485,13 @@ function openBlabAdjust(){
     if(a==='close'){ ov.remove(); }
     else if(a==='pause'){ ov.remove(); window._blabPause(); }
     else if(a==='reset'){ ov.remove(); window._blabOpenReset(); }
+    else if(a==='recover'){
+      var okRec = window.blabRestoreBackup();
+      ov.remove();
+      if(typeof window._blabCalToast === 'function'){
+        window._blabCalToast(okRec ? 'Programme recovered — tap Recover again to undo' : 'Nothing to recover', okRec ? '' : 'error');
+      }
+    }
   });
   document.body.appendChild(ov);
 }
@@ -19900,7 +20002,7 @@ function nutSaveRecipes(list){
 
 var _nutRecMirrorTimer = null;
 
-// v4.9.193: the write is its own function so it can actually be DRIVEN. It used
+// v4.9.195: the write is its own function so it can actually be DRIVEN. It used
 // to live inside the debounce callback, and setTimeout is a no-op in the test
 // sandbox — so nothing ever executed this body. The guard asserting "write errors
 // recorded, not swallowed" was a source-string match with the behaviour proven

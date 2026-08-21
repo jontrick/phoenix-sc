@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.193';
+var APP_VERSION='4.9.194';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18257,6 +18257,8 @@ function nutRenderScreen(){
     var parts = btn.getAttribute('data-nut-add-recipe').split('|');
     btn.addEventListener('click', function(){ nutOpenRecipePicker(parts[0], parts[1]); });
   });
+  var bakBtn = body.querySelector('[data-nut-restore-bak]');
+  if(bakBtn) bakBtn.addEventListener('click', function(){ nutRestoreBackup(); });
   var prepBtn = body.querySelector('[data-nut-prep]');
   if(prepBtn) prepBtn.addEventListener('click', nutOpenPrepCard);
   body.querySelectorAll('[data-nut-week-nav]').forEach(function(btn){
@@ -18441,7 +18443,20 @@ function _nutTabToday(ns){
 
 function _nutTabRecipes(ns){
   var recipes = nutGetRecipes();
-  var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">';
+  // v4.9.194: the replaced copy is now reachable. Only shown when there is
+  // something to offer — nutBackupInfo returns null if the backup matches live.
+  var _bak = nutBackupInfo();
+  var bakBanner = '';
+  if(_bak){
+    var when = _bak.ts ? (' from ' + String(_bak.ts).slice(0, 10)) : '';
+    bakBanner = '<div style="background:rgba(200,150,62,0.09);border:1px solid rgba(200,150,62,0.35);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;">' +
+      '<div style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Previous recipe list kept</div>' +
+      '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:9px;">A restore replaced your recipes. The previous list' + when + ' has ' + _bak.count + ' recipe' + (_bak.count === 1 ? '' : 's') + '; you currently have ' + _bak.curCount + '. Swapping keeps both — you can swap back.</div>' +
+      '<button data-nut-restore-bak style="width:100%;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Swap to the previous list</button>' +
+      '</div>';
+  }
+  var h = bakBanner;
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">';
   h += '<div style="font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">' + recipes.length + ' Recipe' + (recipes.length !== 1 ? 's' : '') + '</div>';
   h += '<button id="nut-new-recipe-btn" style="background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;">+ New Recipe</button>';
   h += '</div>';
@@ -19937,7 +19952,9 @@ function _nutRecipesMirrorToCloud(env){
 //   7. neither stamped            -> LOCAL
 //
 // Nothing is discarded silently: the replaced copy is kept at
-// phx_recipes_v1_{uid}_bak, one generation, never chained.
+// phx_recipes_v1_{uid}_bak, one generation, never chained — and REACHABLE since
+// v4.9.194 via nutBackupInfo/nutRestoreBackup, offered in the RECIPES tab. Before
+// that this comment claimed recoverable and no path existed.
 // Returns TRUE only when local was actually replaced — callers repaint on true.
 function nutRestoreRecipesFromCloud(profileRow){
   try {
@@ -19980,6 +19997,51 @@ function nutRestoreRecipesFromCloud(profileRow){
 }
 
 // Keep the copy we are about to replace. Never more than one generation back.
+// v4.9.194: the backup above was written from .152 and read by NOTHING. The
+// comment called it recoverable and there was no path, in code or UI, by which
+// Jon could reach it. An untested net at least exists; an unreachable one is a
+// claim (Peptides, .192). These two build the path.
+//
+// Describes the held copy, or null when there is nothing worth offering —
+// including when the backup already matches what is live, so the banner does
+// not appear for a no-op recovery.
+function nutBackupInfo(){
+  try {
+    var key = _nutRecipeKey();
+    var raw = localStorage.getItem(key + '_bak');
+    if(!raw) return null;
+    var bak = JSON.parse(raw);
+    var cur = null;
+    try { cur = JSON.parse(localStorage.getItem(key) || 'null'); } catch(_e){}
+    if(cur && JSON.stringify(cur) === JSON.stringify(bak)) return null;
+    return {
+      count:    _nutRecipesFrom(bak).length,
+      ts:       (bak && bak._ts) || null,
+      curCount: cur ? _nutRecipesFrom(cur).length : 0
+    };
+  } catch(_e){ return null; }
+}
+
+// SWAP live and backup rather than restoring one-way, so recovering the wrong
+// copy is itself undoable — the same reasoning that put the backup there. A
+// one-way restore would destroy the library Jon just recovered from.
+function nutRestoreBackup(){
+  try {
+    var key = _nutRecipeKey();
+    var bak = localStorage.getItem(key + '_bak');
+    if(!bak) return false;
+    var cur = localStorage.getItem(key);
+    localStorage.setItem(key, bak);
+    if(cur != null) localStorage.setItem(key + '_bak', cur);
+    // Re-save through the normal path so it stamps _ts and mirrors to cloud —
+    // a deliberate recovery should win the next newest-wins comparison.
+    nutSaveRecipes(nutGetRecipes());
+    if(typeof nutRenderTile === 'function') nutRenderTile();
+    if(typeof nutRenderScreen === 'function') nutRenderScreen();
+    return true;
+  } catch(_e){ return false; }
+}
+
 function _nutBackupLocal(key, rawLocal){
   try { localStorage.setItem(key + '_bak', rawLocal); } catch(_e){}
 }

@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.193'", 'version is 4.9.193');
+has("var APP_VERSION='4.9.194'", 'version is 4.9.194');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -613,6 +613,15 @@ hasCode('function _nutSlotCard(', 'DAY: one shared slot renderer');
 hasCode('function _nutDaySummary(', 'DAY: one shared day summary');
 hasCode('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
 hasNotCode('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
+
+// ── Backup recovery path (v4.9.194) ────────────────────────────────────────
+// The _bak copy was written from .152 and read by NOTHING while a comment called
+// it recoverable. These pin the PATH, not the write.
+hasCode('function nutBackupInfo(', 'BAK: the held copy can be described');
+hasCode('function nutRestoreBackup(', 'BAK: and recovered');
+hasCode('data-nut-restore-bak', 'BAK: the offer is rendered where Jon can press it');
+hasCode('var h = bakBanner;', 'BAK: and is actually wired into the recipes tab (unreachable = a claim, not a net)');
+hasCode("localStorage.setItem(key + '_bak', cur)", 'BAK: recovery SWAPS, so a wrong recovery is undoable');
 
 // ── Training API migration (v4.9.185) ──────────────────────────────────────
 hasNotCode("_BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]", 'CAL: no longer reads Training internals');

@@ -462,6 +462,68 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(lastWriteError(), null, 'and nothing recorded');
   });
 
+  // ══ THE BACKUP IS REACHABLE ════════════════════════════════════════════════
+  // phx_recipes_v1_{uid}_bak was written from .152 and read by NOTHING, while the
+  // comment beside it called the copy recoverable. No test could have caught that
+  // — there was nothing to call. Driven through the RECIPES tab, not the builder.
+
+  const losingRestore = () => {
+    setUp(90);
+    seed(KEY, { recipes: [rec('mine-A'), rec('mine-B')] });      // legacy, unstamped
+    const changed = app.nutRestoreRecipesFromCloud({ nut_recipes: env(NEWER, 'cloud-only') });
+    assert.equal(changed, true, 'precondition: the restore actually replaced the library');
+  };
+
+  test('after a restore replaces the library, the previous one is offered', () => {
+    losingRestore();
+    const info = app.nutBackupInfo();
+    assert.ok(info, 'there is something to offer');
+    assert.equal(info.count, 2, 'the replaced list had two recipes');
+    assert.equal(info.curCount, 1, 'the live list has one');
+  });
+
+  test('the offer is REACHABLE — it renders in the recipes tab', () => {
+    losingRestore();
+    app._nutTab = 'recipes';
+    const d = dom();
+    app.nutRenderScreen();
+    const html = d.html('nut-screen-body');
+    assert.ok(html.indexOf('Previous recipe list kept') >= 0, 'the offer is on screen');
+    assert.ok(html.indexOf('data-nut-restore-bak') >= 0, 'with a control Jon can press');
+  });
+
+  test('recovering swaps, so a wrong recovery is itself undoable', () => {
+    losingRestore();
+    assert.equal(app.nutRestoreBackup(), true, 'recovered');
+    assert.deepEqual(app.nutGetRecipes().map(r => r.name), ['mine-A', 'mine-B'], 'the old list is back');
+    assert.equal(app.nutRestoreBackup(), true, 'and can be swapped again');
+    assert.deepEqual(app.nutGetRecipes().map(r => r.name), ['cloud-only'], 'returning to the cloud copy');
+  });
+
+  test('a recovered library is stamped, so it wins the next comparison', () => {
+    losingRestore();
+    app.nutRestoreBackup();
+    const saved = read(KEY);
+    assert.ok(saved && !isNaN(Date.parse(saved._ts)), 'recovery stamps _ts');
+  });
+
+  test('no offer when there is nothing to recover', () => {
+    start();
+    app.nutSaveRecipes([rec('only')]);
+    assert.equal(app.nutBackupInfo(), null, 'no backup, no offer');
+    app._nutTab = 'recipes';
+    const d = dom();
+    app.nutRenderScreen();
+    assert.equal(d.html('nut-screen-body').indexOf('Previous recipe list kept'), -1, 'and nothing on screen');
+  });
+
+  test('no offer when the backup matches what is already live', () => {
+    start();
+    app.nutSaveRecipes([rec('same')]);
+    seed(`${KEY}_bak`, read(KEY));
+    assert.equal(app.nutBackupInfo(), null, 'a no-op recovery is not offered');
+  });
+
   // ══ ENTRY POINTS — the layer a test observes ═══════════════════════════════
   // Audit after the PM's .165 note: every water, tick and prep case below was
   // BUILDER-level — nutAddWater, nutToggleMealEaten, nutBuildPrepPlan. Those

@@ -34,6 +34,8 @@ Gotchas learned 2026-08-18:
 **Discovery convention (2026-08-18, after PM socket went stale 3× in one session):**
 - Always reply to the most recent `from=` you hold for a peer. If that send fails, broadcast `[TYPE: HELLO] <your domain> — who is PM?` to every peer in `ListAgents`.
 - **Only the PM answers a HELLO.** Domain chats ignore HELLOs addressed to "PM" silently — no reply, no cost. This bounds discovery to one round.
+- **Sanctioned exception (Nutrition → Training, 2026-08-21):** a domain chat that holds a *verified* current PM address SHOULD hand it over rather than stay silent — that ends the search in one message instead of sending the asker round another broadcast. Pass the address only; do not relay the content of a notice on someone's behalf, or the sender will believe it was filed when it was not.
+- **Any address book you are carrying in your own context goes stale within the hour.** One was retired from this file for that reason; copies survive in chat contexts and have already misled a chat into messaging the wrong peer by name prefix. Never address a peer from remembered names — re-run `ListAgents`, or reply to a `from=` you received this session.
 - The PM, on receiving any HELLO, replies to the sender AND re-broadcasts its current address to all peers, so everyone's `from=` for the PM refreshes at once.
 - The PM includes `[PM-ADDR refresh]` in that broadcast so it can be filtered.
 

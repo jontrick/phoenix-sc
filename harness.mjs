@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.186'", 'version is 4.9.186');
+has("var APP_VERSION='4.9.187'", 'version is 4.9.187');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -519,7 +519,9 @@ hasNot('function _nutDateKey(', 'TZ: no private nutrition copy of the date helpe
 // ── Day-surface consolidation + calendar-aware targets (v4.9.174) ───────────
 has('function nutTrainingForDay(', 'CAL: training day read per date');
 has('function nutAdjustForDay(', 'CAL: targets adjusted per date');
-has('window.blabCalSessionsOn(dateKey)', 'CAL: reads Training calendar, not the BLAB queue');
+has('function _nutCalEntriesOn(', 'CAL: reads Training calendar, not the BLAB queue');
+has("s.status !== 'skipped'", 'CAL: a completed session still counts as a training day');
+hasNot('window.blabCalSessionsOn(dateKey)', 'CAL: no longer uses the agenda call, which hides completed sessions');
 hasNot("var nextDay = (bs.last_completed_day || 0) + 1;", 'CAL: queue-position heuristic gone');
 has('function _nutSlotCard(', 'DAY: one shared slot renderer');
 has('function _nutDaySummary(', 'DAY: one shared day summary');

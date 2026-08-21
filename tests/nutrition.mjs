@@ -553,6 +553,56 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._nutPickerMode, 'log', 'logging is available when stated');
   });
 
+  // ══ CONTRACT — nutRecordWeight, called by Training's submitWeightCheckin ═══
+  // The PROVIDER pins the contract. A consumer's suite going red means the break
+  // already shipped past the owner, so these live here rather than in Training's.
+  // Meanings, not just shapes — `false` is a NORMAL state, not an error.
+
+  test('CONTRACT nutRecordWeight: returns true and writes the dated weight', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    assert.equal(app.nutRecordWeight(84.5, '2026-08-19'), true, 'reports written');
+    assert.equal(read(`phx_nut_v1_${UID}`).daily['2026-08-19'].weight_kg, 84.5, 'under that exact date');
+  });
+
+  test('CONTRACT nutRecordWeight: the date defaults to the LOCAL today', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    at0430Brisbane(() => { app.nutRecordWeight(84.5); });
+    assert.ok(read(`phx_nut_v1_${UID}`).daily['2026-08-19'], 'local date, not the UTC day before');
+  });
+
+  test('CONTRACT nutRecordWeight: idempotent — same date overwrites, never appends', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    app.nutRecordWeight(84.5, '2026-08-19');
+    app.nutRecordWeight(85.1, '2026-08-19');
+    assert.equal(read(`phx_nut_v1_${UID}`).daily['2026-08-19'].weight_kg, 85.1, 'one value, last wins');
+  });
+
+  test('CONTRACT nutRecordWeight: false means NOT SET UP — a normal state, not an error', () => {
+    reset(); signIn(UID); app.athlete = { id: UID };
+    assert.equal(app.nutRecordWeight(84.5, '2026-08-19'), false, 'no nutrition state yet');
+    assert.equal(read(`phx_nut_v1_${UID}`), null, 'and no state blob manufactured');
+  });
+
+  test('CONTRACT nutRecordWeight: refuses a non-weight rather than storing it', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    [0, -5, NaN, null, undefined, 'heavy'].forEach((bad) => {
+      assert.equal(app.nutRecordWeight(bad, '2026-08-19'), false, `rejects ${String(bad)}`);
+    });
+    assert.equal(read(`phx_nut_v1_${UID}`).daily['2026-08-19'], undefined, 'nothing written');
+  });
+
+  test('CONTRACT nutRecordWeight: never throws, whatever it is handed', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    app.nutRecordWeight({}, {});
+    app.nutRecordWeight(84.5, 12345);
+    assert.ok(true, 'no throw reached the caller');
+  });
+
   // ── Training day comes from the calendar, not the queue ───────────────────
   // This reported "Upper Body" on a day with nothing scheduled, because it read
   // blabGetState().last_completed_day + 1 — the next UNDONE session — instead of
@@ -622,6 +672,32 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.blabDayLabel(3), 'Upper Body — Chins', 'the public accessor answers');
     assert.equal(app.nutTrainingForDay('2026-08-19').label, 'Upper Body — Chins', 'and that is what nutrition shows');
     assert.equal(app.blabDayLabel(9), '', 'out-of-range returns empty rather than throwing');
+  });
+
+  // Training, v4.9.186: blabCalSessionsOn is an AGENDA, not history — it excludes
+  // completed and skipped entries. So the moment Jon finishes his 4:30am session
+  // the day looks empty, and his targets silently drop to rest-day levels ON THE
+  // DAY HE TRAINED. Macro targets want "did he train", not "is he due to".
+  test('finishing the session does not turn a training day into a rest day', () => {
+    start();
+    seed(`blab_calendar_v1_${UID}`, {
+      sessions: [{ blabWeek: 1, blabDay: 2, scheduledDate: '2026-08-19', status: 'completed', completedDate: '2026-08-19' }],
+      customs: [],
+    });
+    const t = app.nutTrainingForDay('2026-08-19');
+    assert.equal(t.rest, false, 'still a training day after it is done');
+    assert.equal(t.label, 'Lower Body', 'and still named');
+    const base = { kcal: 2600, protein_g: 180, carbs_g: 300, fat_g: 70 };
+    assert.equal(app.nutAdjustForDay(base, '2026-08-19').carbs_g, 340, 'keeps the training-day carbs');
+  });
+
+  test('a skipped session does not count as training', () => {
+    start();
+    seed(`blab_calendar_v1_${UID}`, {
+      sessions: [{ blabWeek: 1, blabDay: 2, scheduledDate: '2026-08-19', status: 'skipped' }],
+      customs: [],
+    });
+    assert.equal(app.nutTrainingForDay('2026-08-19').rest, true, 'skipped is not trained');
   });
 
   test('a custom session counts as training rather than rest', () => {

@@ -89,10 +89,54 @@ write, so a weekly check-in lands in the authoritative log too.
 - `dateKey` defaults to today. Returns `false` for a non-positive weight or no state.
 - No UI, no re-render. Safe to call from any domain.
 
-Nutrition reads the newest of both stores via `_nutCurrentWeight()` as an **interim**
-measure until Training wires the above; after that, `ns.daily[].weight_kg` alone is
-authoritative and the `athlete.bw` branch is a legacy fallback. Nutrition never writes
-`athlete.bw` — that is `submitWeightCheckin`'s, and the banner is Training's.
+Nutrition reads the newest of both stores via `_nutCurrentWeight()`. Training wired
+`submitWeightCheckin` in v4.9.167, so `ns.daily[].weight_kg` is now the authoritative
+record and the `athlete.bw` branch is a legacy fallback for weights logged before that.
+Nutrition never writes `athlete.bw` — that is `submitWeightCheckin`'s, and the banner is
+Training's.
+
+#### What the return value MEANS (not just its type)
+
+| Return | Meaning | What the caller should do |
+|---|---|---|
+| `true`  | Written. | Nothing. |
+| `false` | **Nutrition is not set up yet, or the weight was not a positive number.** | **Nothing.** This is a NORMAL state, not an error. |
+
+`false` is not a failure to report. Jon can weigh in before he has ever opened the
+Nutrition screen, in which case there is no state to write into and none is manufactured —
+deliberately, because a half-real nutrition record sitting in front of the setup flow is
+the empty-stub trap in a different hat. `athlete.bw` still carries the weight and
+`_nutCurrentWeight()` falls back to it, so nothing is lost.
+
+**Call it unconditionally, ignore the return, keep writing `athlete.bw`.** Do not branch on
+it and do not surface it to the user.
+
+Contract pinned provider-side in `tests/nutrition.mjs` under `CONTRACT nutRecordWeight`
+(six cases: writes dated, defaults to LOCAL today, idempotent, `false` on no-state without
+manufacturing one, refuses non-weights, never throws). A consumer's suite going red means
+the break already shipped, so these live here.
+
+---
+
+### What Nutrition CONSUMES from other domains
+
+Declared so the owners know they have a consumer and can pin the shape their side.
+
+| Surface | Owner | What nutrition relies on |
+|---|---|---|
+| `blabCalGet()` | Training | `{sessions, customs}`; each entry's `scheduledDate`, `status`, `blabDay` (BLAB) or `cat` (customs) |
+| `blabDayLabel(n)` | Training | Day number → name; `''` outside 1–4 |
+
+**Why `blabCalGet` and not `blabCalSessionsOn`:** `blabCalSessionsOn` is an AGENDA — it
+excludes `completed` and `skipped`. Macro targets need *"did he train or is he due to"*,
+not *"is he still due to"*. Using the agenda meant that the moment Jon finished his 4:30am
+session the day looked empty and his targets dropped to rest-day levels **on the day he
+trained** (fixed v4.9.187). Nutrition therefore reads the full calendar and excludes only
+`skipped` — a session he did not do is not a training day.
+
+Entry meanings that matter, per Training's handoff: a `cat === 'REST'` custom entry means
+the OPPOSITE of the other customs, and an empty array (nothing scheduled) is a different
+state from a scheduled rest day.
 
 ---
 

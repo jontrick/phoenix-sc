@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.186';
+var APP_VERSION='4.9.187';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18032,11 +18032,35 @@ function nutCalcTargets(bw_kg, height_cm, age_yr, sex, goal){
 //
 // Returns {dayNum, label, rest, scheduled}. scheduled=false means the calendar
 // has nothing for that date — a rest day, not a guess.
+// v4.9.187: what was on the calendar for a date, INCLUDING sessions already
+// completed. blabCalSessionsOn is an agenda — it excludes completed and skipped —
+// so using it meant the moment Jon finished his 4:30am session the day looked
+// empty and his targets dropped to rest-day levels ON THE DAY HE TRAINED.
+// Macro targets need "did he train or is he due to", not "is he still due to".
+// Skipped stays excluded: a session he did not do is not a training day.
+// Reads Training's public blabCalGet(); the entry shape is their pinned contract.
+function _nutCalEntriesOn(dateKey){
+  var out = [];
+  try {
+    if(typeof window === 'undefined' || typeof window.blabCalGet !== 'function') return out;
+    var cal = window.blabCalGet() || {};
+    (cal.sessions || []).forEach(function(s){
+      if(s.scheduledDate === dateKey && s.status !== 'skipped') out.push(s);
+    });
+    (cal.customs || []).forEach(function(c){
+      if(c.scheduledDate === dateKey && c.status !== 'skipped'){
+        out.push({custom:true, id:c.id, cat:c.cat, libId:c.libId, label:c.label,
+                  scheduledDate:c.scheduledDate, status:c.status});
+      }
+    });
+  } catch(e){}
+  return out;
+}
+
 function nutTrainingForDay(dateKey){
   var out = { dayNum: 0, label: 'Rest day', rest: true, scheduled: false };
   try {
-    if(typeof window === 'undefined' || typeof window.blabCalSessionsOn !== 'function') return out;
-    var entries = window.blabCalSessionsOn(dateKey) || [];
+    var entries = _nutCalEntriesOn(dateKey);
     if(!entries.length) return out;
     // A BLAB session drives the macro adjustment; a custom session (WOD/Core/
     // aerobic) counts as training but has no BLAB day number.

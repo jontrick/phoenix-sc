@@ -143,6 +143,13 @@ it.** So:
 - Sweep rule (Training): the pattern to hunt is a LOCAL-derived Date serialised with `toISOString`, or a UTC instant string-sliced and compared against a local day key — not `toISOString` alone; instant-writers are correct as they stand.
 - History keyed the old way is left as-is (off by one only for pre-10:00 entries; a blanket shift would corrupt afternoon ones). Reader-side conversion heals comparisons retroactively without migration.
 
+## CROSS-DOMAIN APIs (Training, .186 — applies three ways, all domains now expose one)
+
+- **The PROVIDER pins the contract in their own suite. That pin is the one that must exist.** A consumer may pin it too, but a consumer's suite going red means the break has ALREADY shipped past the domain that owns the shape — the provider is the only party who can fail *before* the change lands. Proved by renaming `cat` → `category` on calendar entries (the change that would silently wrong Nutrition's macro targets): under consumer-only pinning it ships green; with provider pins, two functional cases and a harness pin go red on the provider's side.
+- **An API doc that lists shapes without meanings is a signature, not a contract — and the failure it permits is silent.** `blabCalSessionsOn` returns entries, and nothing in its signature said one kind (`cat === 'REST'`) means the OPPOSITE of the others. Nutrition read every entry as work and gave Jon training macros on days he had marked rest; an empty day was already correct, so the only broken case was the one where the screen looks right. Document what values MEAN and which states are distinct (`[]` vs `cat === 'REST'` are different things), not just their shape.
+- Publish contract-stable surfaces under **"API other domains may call"** in your handoff doc, and say explicitly what is INTERNAL — including anything that merely *looks* reachable because the whole app shares one script scope.
+- **If you consume another domain's API, tell them.** They cannot pin a contract they do not know has a consumer.
+
 ## RESTORE / MERGE RULES (Jon's rulings, 2026-08-18 — do not reopen without him)
 
 - **Common rule, all stores:** newest `_ts` wins; ISO string stamped on WRITE only; 7-row table (see Peptides' spec in `pepRestoreFromCloud`); ties → local; `_bak` one generation before any overwrite; restore returns boolean, true only when local was replaced.

@@ -1478,9 +1478,9 @@ has('athlete.bw=w;',                        'WEIGHT: athlete.bw snapshot still w
 })();
 
 // ── v4.9.168 [PM] shared local date key ─────────────────────────────────────────
-has("function _phxLocalISO(d){", 'DATE: shared local-date helper exists');
-{ const n=(html.match(/today_date: _phxLocalISO\(\)/g)||[]).length; n===4 ? ok('DATE: all 4 coach payloads send LOCAL today_date') : bad(`DATE: expected 4 local today_date sites, found ${n}`); }
-hasNot("today_date: new Date().toISOString().split('T')[0]", 'DATE: coach today_date no longer UTC');
+hasCode("function _phxLocalISO(d){", 'DATE: shared local-date helper defined (structural — that it returns LOCAL is tests/pm.mjs)');
+{ const n=(codeSrc().match(/today_date: _phxLocalISO\(\)/g)||[]).length; n===4 ? ok('DATE: all 4 coach payloads send LOCAL today_date') : bad(`DATE: expected 4 local today_date sites, found ${n}`); }
+hasNotCode("today_date: new Date().toISOString().split('T')[0]", 'DATE: coach today_date no longer UTC');
 // ── Local day keys in Training (v4.9.170) ───────────────────────────────────
 // PM date rule: persist instants as UTC ISO; derive day keys at read time via
 // _phxLocalISO(new Date(instant)); store only BARE day keys as local Y-M-D.

@@ -1552,18 +1552,34 @@ has("out.push({custom:true, id:c.id, cat:c.cat",    'CONTRACT: calendar entries 
 has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped state surface exists');
 (() => {
   // Nutrition dropped its own hasNot on blabCalGet because a file-wide match fired on
-  // MY legitimate use of my own function — correct call, a guard that cannot tell
-  // whose code it is reading is worse than none. Scoped to the nutrition block, the
-  // check is possible without that false positive, and it belongs on this side anyway:
-  // I am the one who would be surprised by a consumer returning.
-  const start = html.indexOf('// NUTRITION ENGINE');
-  const end = html.indexOf('// ═══════════════════════════════════════════════════════════════════════════\n// PEPTIDE');
-  if (start < 0 || end < 0 || end < start) { ok('CONTRACT: nutrition block not isolatable, skipping consumption check'); return; }
-  const seg = html.slice(start, end);
-  const reaches = /(?<![.\w$])blabCalGet\s*\(/.test(seg);
-  if (!reaches) ok('CONTRACT: nutrition consumes the state surface, not the store');
-  else bad('CONTRACT: nutrition is reading blabCalGet again — that is my internal storage shape, ' +
-           'and freezing it blocks restructuring this domain. Route it through blabTrainingStateOn.');
+  // MY legitimate use of my own function. The check still belongs on this side — I am
+  // the one who would be surprised by a consumer returning — but scanning THEIR block
+  // was the wrong way to do it: both sentinels were foreign, so either peer renaming a
+  // header moved my window, and the not-isolatable branch called ok(), turning a peer's
+  // rename into a permanent silent pass.
+  //
+  // Counting invocations needs no sentinel I do not own. Only FULL-LINE // comments
+  // are stripped — deliberately NOT block comments, and not from any '//' (which
+  // would eat https:// inside string literals).
+  //
+  // Block-stripping is unsafe in THIS file specifically: /* ... */ pairs occur inside
+  // strings and CSS, so the lazy match swallows real code. Measured: it removes
+  // 428,488 characters, a quarter of index.html, and it silently ate an injected test
+  // consumer. Any guard here that strips block comments is scanning a file with a
+  // quarter missing and cannot see a regression hiding in it.
+  //
+  // Matches BOTH forms: an earlier version used (?<![.\w$])blabCalGet\( , which does
+  // not match window.blabCalGet( — the form all 19 real call sites use. It could not
+  // have caught the regression it claimed to, and my inversion proof passed only
+  // because I injected a bare call. A guard has to bite for the RIGHT reason.
+  const code = html.replace(/^[ \t]*\/\/.*$/gm, '');
+  const n = (code.match(/(?:window\.)?blabCalGet\s*\(/g) || []).length;
+  const MINE = 19;
+  if (n === MINE) ok('CONTRACT: blabCalGet has only its ' + MINE + ' Training call sites');
+  else bad(`CONTRACT: blabCalGet is invoked ${n}× in code, expected ${MINE} (all Training's). ` +
+           `If you added one, update the count. If a peer added one, that is my internal storage ` +
+           `shape — freezing {sessions, customs} blocks restructuring this domain. Route it ` +
+           `through blabTrainingStateOn instead.`);
 })();
 has("out.state = done.length ? 'trained' : 'due';", 'CONTRACT: a completed session reads as trained, not as an empty day');
 has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRACT: blabDay is a number, never null');
@@ -1574,9 +1590,19 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
 // be read as a training day. This fails HERE when the set changes, which forces the
 // conversation before it ships rather than after.
 (() => {
-  const i = html.indexOf('// ═══════════════════════════════════════════════════════════════════════════\n// BLAB TRAINING CALENDAR');
-  const start = i > -1 ? i : html.indexOf('window.blabCalGet = function');
-  const seg = html.slice(start, start + 34000);
+  // Sentinels I OWN at BOTH ends, and a loud failure if either goes missing. The
+  // previous version sliced a blind 34000 chars from the opening banner: if this block
+  // ever shrinks, that window spills into whatever domain follows and picks up THEIR
+  // status literals ('active', 'abandoned', 'locked' all exist elsewhere), failing my
+  // closed-set assertion on someone else's perfectly good code.
+  const start = html.indexOf('// BLAB TRAINING CALENDAR');
+  const end = html.indexOf('window.blabTrainingStateOn = function', start + 1);
+  if (start < 0 || end < 0 || end < start) {
+    bad('CONTRACT: cannot locate the calendar block by its own sentinels — the status-set ' +
+        'check did NOT run. Fix the sentinels rather than leaving this silently green.');
+    return;
+  }
+  const seg = html.slice(start, end);
   const found = new Set([...seg.matchAll(/status\s*[:=]+\s*'([a-z]+)'/g)].map(m => m[1]));
   const expected = ['completed', 'pending', 'skipped'];
   const actual = [...found].sort();

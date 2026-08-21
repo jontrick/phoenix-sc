@@ -1411,4 +1411,45 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const r = app.blabTrainingStateOn(dayFromToday(0));
     assert.equal(r.state, 'none', 'degrades to none rather than throwing');
   });
+
+  // ── Occupying the empty trap: `due` is position-sensitive (v4.9.191) ──────
+  // The date audit found nothing decaying, but nothing PINNED the today-vs-past
+  // distinction either — an empty space where the next person's mistake lands
+  // silently instead of on a red test. Peptides hit the same shape with running vs
+  // finished courses and filled it; this fills mine.
+  //
+  // PM ruled (2026-08-21) that an unresolved past session must NOT auto-age to
+  // 'skipped': only Jon knows whether a missed session was abandoned or is being
+  // made up, and ageing it would have the calendar assert something he never said.
+  // These cases hold that ruling in place — if someone later "tidies" it into
+  // auto-ageing, this goes red and forces the conversation rather than silently
+  // changing what the app claims about his training history.
+
+  test('DUE: today means "do this" — the ordinary case', () => {
+    schedule({ sessions: [S(5, 2, dayFromToday(0))], customs: [] });
+    assert.equal(app.blabTrainingStateOn(dayFromToday(0)).state, 'due', "today's scheduled session is due");
+  });
+
+  test('DUE: a PAST unresolved session stays due — it does not auto-age to skipped', () => {
+    // Same word, different meaning: for a past date `due` means "was scheduled, never
+    // resolved". Deliberately NOT 'skipped' — that would assert he abandoned it.
+    schedule({ sessions: [S(5, 2, dayFromToday(-21))], customs: [] });
+    const r = app.blabTrainingStateOn(dayFromToday(-21));
+    assert.equal(r.state, 'due', 'three weeks old and still unresolved, not skipped');
+    assert.equal(r.blabDay, 2, 'and it still names the session');
+  });
+
+  test('DUE: a FUTURE session is due too — position does not change the value', () => {
+    schedule({ sessions: [S(5, 2, dayFromToday(7))], customs: [] });
+    assert.equal(app.blabTrainingStateOn(dayFromToday(7)).state, 'due', 'next week is due');
+  });
+
+  test('DUE: only an explicit mark makes it skipped, whatever the date', () => {
+    // The distinction the ruling protects: skipped is something Jon said, not
+    // something the passage of time inferred.
+    schedule({ sessions: [{ ...S(5, 2, dayFromToday(-21)), status: 'skipped' }], customs: [] });
+    assert.equal(app.blabTrainingStateOn(dayFromToday(-21)).state, 'skipped', 'explicitly marked');
+    schedule({ sessions: [{ ...S(5, 2, dayFromToday(-21)), status: 'completed' }], customs: [] });
+    assert.equal(app.blabTrainingStateOn(dayFromToday(-21)).state, 'trained', 'a past completed day is still trained');
+  });
 }

@@ -1278,4 +1278,108 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(es.length, 2, 'both entries returned');
     assert.ok(es.some((e) => e.blabDay === 2), 'the training session is still discoverable');
   });
+
+  // ── blabTrainingStateOn — the question-shaped surface (v4.9.188) ──────────
+  // Returns a STATE, not entries. Both cross-domain bugs came from a consumer
+  // inferring meaning from a shape: .182 read a planned rest day as training, .187
+  // read a FINISHED day as nothing and dropped Jon's macros to rest levels on every
+  // day he trained. These pin the interpretation on the side that owns the data.
+
+  const stateOn = (n) => app.blabTrainingStateOn(dayFromToday(n));
+
+  test('STATE: a completed session reads as trained, not as an empty day', () => {
+    // This is .187 exactly: blabCalSessionsOn returns [] here, which is correct for
+    // ITS question and catastrophic as an answer to this one.
+    schedule({ sessions: [{ ...S(5, 2, dayFromToday(0)), status: 'completed' }], customs: [] });
+    const r = stateOn(0);
+    assert.equal(r.state, 'trained', 'he trained that day');
+    assert.equal(r.blabDay, 2, 'and it names which session');
+    assert.equal(r.label, 'Lower Body', 'with the label');
+    assert.deepEqual(app.blabCalSessionsOn(dayFromToday(0)), [], 'while the agenda call still correctly says nothing outstanding');
+  });
+
+  test('STATE: a scheduled session not yet done reads as due', () => {
+    schedule({ sessions: [S(5, 2, dayFromToday(0))], customs: [] });
+    assert.equal(stateOn(0).state, 'due', 'due, not trained');
+  });
+
+  test('STATE: a planned rest day is rest, and an empty day is none', () => {
+    // .182 was reading the first of these as training.
+    schedule({ sessions: [], customs: [REST(dayFromToday(0))] });
+    assert.equal(stateOn(0).state, 'rest', 'deliberate rest');
+    schedule({ sessions: [], customs: [] });
+    assert.equal(stateOn(0).state, 'none', 'nothing planned is a different thing');
+  });
+
+  test('STATE: a skipped session is skipped, not none', () => {
+    // Nutrition asked for this distinction: he was due and did not, versus nothing
+    // was ever planned. Both take rest targets, but they are not the same fact.
+    schedule({ sessions: [{ ...S(5, 2, dayFromToday(0)), status: 'skipped' }], customs: [] });
+    assert.equal(stateOn(0).state, 'skipped', 'was due, not done');
+    assert.equal(stateOn(0).sessions, 0, 'and it does not count as a live session');
+  });
+
+  // The two cases Nutrition asked me to decide rather than assume.
+
+  test('STATE: a completed session plus a rest marker is trained', () => {
+    // Reachable: a session can be dragged onto a day already marked as rest.
+    schedule({
+      sessions: [{ ...S(5, 2, dayFromToday(0)), status: 'completed' }],
+      customs: [REST(dayFromToday(0))]
+    });
+    assert.equal(stateOn(0).state, 'trained', 'the work he did wins over the marker');
+  });
+
+  test('STATE: with two sessions it names the completed one and reports the count', () => {
+    // blabDay can only carry one, so the rule is documented rather than incidental:
+    // the completed session leads, and `sessions` tells a caller not to trust one
+    // label as the whole day.
+    schedule({
+      sessions: [S(5, 1, dayFromToday(0)), { ...S(5, 2, dayFromToday(0)), status: 'completed' }],
+      customs: []
+    });
+    const r = stateOn(0);
+    assert.equal(r.state, 'trained', 'a completed session makes the day trained');
+    assert.equal(r.blabDay, 2, 'and the label names the one he actually finished');
+    assert.equal(r.sessions, 2, 'count says there is more to the day than the label');
+  });
+
+  test('STATE: two unfinished sessions are due, named by the first', () => {
+    schedule({ sessions: [S(5, 1, dayFromToday(0)), S(5, 2, dayFromToday(0))], customs: [] });
+    const r = stateOn(0);
+    assert.equal(r.state, 'due', 'still due');
+    assert.equal(r.blabDay, 1, 'named by the first');
+    assert.equal(r.sessions, 2, 'with the count');
+  });
+
+  test('STATE: a custom WOD is a training day and carries its own name', () => {
+    schedule({ sessions: [], customs: [C('Kronos', dayFromToday(0))] });
+    const r = stateOn(0);
+    assert.equal(r.state, 'due', 'a WOD counts as training');
+    assert.equal(r.blabDay, 0, 'no BLAB day number — never null, so no null check needed');
+    assert.equal(r.label, 'Kronos', 'named by the session');
+  });
+
+  test('STATE: blabDay is always a number, never null', () => {
+    // Nutrition branches on it; a null would mean a null check at every call site.
+    [
+      { sessions: [], customs: [] },
+      { sessions: [], customs: [REST(dayFromToday(0))] },
+      { sessions: [], customs: [C('Kronos', dayFromToday(0))] },
+      { sessions: [S(5, 3, dayFromToday(0))], customs: [] }
+    ].forEach((cal, i) => {
+      schedule(cal);
+      assert.equal(typeof stateOn(0).blabDay, 'number', `case ${i} returns a number`);
+    });
+  });
+
+  test('STATE: it never throws, whatever the calendar holds', () => {
+    // It is called to set macro targets; a throw there is worse than a wrong answer.
+    reset();
+    signIn(UID);
+    seed(KEY, { active: true, week: 5, last_completed_day: 0, maxes: { bench: 130, squat: 150, deadlift: 170 } });
+    seed(`blab_calendar_v1_${UID}`, { sessions: null, customs: undefined });
+    const r = app.blabTrainingStateOn(dayFromToday(0));
+    assert.equal(r.state, 'none', 'degrades to none rather than throwing');
+  });
 }

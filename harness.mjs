@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.187'", 'version is 4.9.187');
+has("var APP_VERSION='4.9.188'", 'version is 4.9.188');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1528,11 +1528,44 @@ has("var _BLAB_DAY_LABELS = [", 'API: the day-label array still backs the access
 // which is where a provider's contract guard belongs.
 has("if(!(d >= 1 && d <= 4)) return '';",           'CONTRACT: blabDayLabel refuses days outside 1-4');
 has("out.push({custom:true, id:c.id, cat:c.cat",    'CONTRACT: calendar entries carry cat for the REST distinction');
+// blabCalGet is INTERNAL (PM ruling): being on window is packaging, not a contract,
+// and freezing {sessions, customs} would lock this domain's raw storage shape. The
+// supported surface is the question-shaped call below. Nutrition's dependency on
+// blabCalGet is a documented temporary exception until it migrates — do not rename it
+// in the meantime.
+has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped state surface exists');
+has("out.state = done.length ? 'trained' : 'due';", 'CONTRACT: a completed session reads as trained, not as an empty day');
+has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRACT: blabDay is a number, never null');
+
+// THE CLOSED STATUS SET. Nutrition filters on `status`, treating anything that is not
+// 'skipped' as a day that counts. So the set of values is itself the contract: adding
+// a fourth — 'missed', 'deferred', anything meaning "did not happen" — would silently
+// be read as a training day. This fails HERE when the set changes, which forces the
+// conversation before it ships rather than after.
+(() => {
+  const i = html.indexOf('// ═══════════════════════════════════════════════════════════════════════════\n// BLAB TRAINING CALENDAR');
+  const start = i > -1 ? i : html.indexOf('window.blabCalGet = function');
+  const seg = html.slice(start, start + 34000);
+  const found = new Set([...seg.matchAll(/status\s*[:=]+\s*'([a-z]+)'/g)].map(m => m[1]));
+  const expected = ['completed', 'pending', 'skipped'];
+  const actual = [...found].sort();
+  if (actual.length === 3 && expected.every((v, n) => actual[n] === v)) {
+    ok('CONTRACT: calendar status set is exactly pending/completed/skipped');
+  } else {
+    bad(`CONTRACT: calendar status values are now [${actual.join(', ')}], expected [${expected.join(', ')}]. ` +
+        `Nutrition treats anything not 'skipped' as a day that counts, so a new value meaning ` +
+        `"did not happen" would silently read as a training day. Tell Nutrition before adding one.`);
+  }
+})();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
 (() => {
-  // blabCalSessionsOn must keep putting blabDay on BLAB entries — Nutrition reads it
-  // to name the training day, and a rename would show wrong macro targets rather
-  // than an error.
+  // blabCalSessionsOn must keep putting blabDay on BLAB entries. NOTE: as of their
+  // v4.9.187 Nutrition no longer calls this — it reads blabCalGet directly, because
+  // this one excludes completed work and so answered "is he due to train" when they
+  // needed "did he train". The consumer here is now my own Today card, so this is an
+  // internal pin, not a cross-domain contract. Kept because the Today card breaks
+  // just as badly, but labelled honestly so the real dependency above is not assumed
+  // covered by it.
   const i = html.indexOf('window.blabCalSessionsOn = function');
   const seg = html.slice(i, i + 900);
   if (/cal\.sessions\.forEach[\s\S]{0,200}out\.push\(s\)/.test(seg)) ok('CONTRACT: BLAB entries pass through whole, so blabDay survives');

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.187';
+var APP_VERSION='4.9.188';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -26472,6 +26472,66 @@ window.blabCalMarkCompleted = function(week, day){
   if(e){ e.status = 'completed'; e.completedDate = todayISO; }
   else cal.sessions.push({blabWeek:week, blabDay:day, scheduledDate:todayISO, status:'completed', completedDate:todayISO});
   window.blabCalSave(cal);
+};
+
+// API other domains may call (contract-stable) — v4.9.188.
+// "What kind of day is this?" for a local YYYY-MM-DD date.
+//
+//   state 'trained' — a training session that day is COMPLETE
+//         'due'     — scheduled and not yet done
+//         'rest'    — a deliberately planned rest day, no training session on it
+//         'skipped' — was scheduled, explicitly not done. Distinct from 'none':
+//                     he was due and did not, versus nothing was ever planned.
+//         'none'    — nothing on the calendar
+//
+// PRECEDENCE: trained > due > rest > skipped > none. So a rest marker dragged onto a
+// day that also holds a real session never hides the session, and a completed session
+// always wins over anything else on the day.
+//
+// blabDay is 1-4 for a BLAB session, or 0 — never null, so callers need no null check.
+// With TWO sessions on a day it names the COMPLETED one if there is one, else the
+// first; `sessions` carries the count so a caller knows when one label is not the
+// whole story.
+//
+// label is a convenience: the BLAB day name, or the custom session's own name. If you
+// would rather own presentation, ignore it and use blabDay with blabDayLabel().
+//
+// Distinct from blabCalSessionsOn, which answers only "what is still outstanding" and
+// returns [] for a finished day. If you are filtering that call's result by status,
+// you wanted this one.
+window.blabTrainingStateOn = function(dateISO){
+  var out = {state:'none', blabDay:0, label:'', sessions:0};
+  try {
+    var cal = window.blabCalGet();
+    var onDay = function(e){ return e && e.scheduledDate === dateISO; };
+    var isRest = function(c){ return String(c.cat || '').toUpperCase() === 'REST'; };
+
+    var blab = (cal.sessions || []).filter(onDay);
+    var customs = (cal.customs || []).filter(onDay);
+    var work = blab.concat(customs.filter(function(c){ return !isRest(c); }));
+    var rest = customs.filter(isRest).filter(function(c){ return c.status !== 'skipped'; });
+
+    var live = work.filter(function(e){ return e.status !== 'skipped'; });
+    out.sessions = live.length;
+
+    if(!live.length){
+      // Nothing live. A session he was due to do and did not is different from a day
+      // that never had anything on it — say which.
+      if(rest.length) out.state = 'rest';
+      else if(work.length) out.state = 'skipped';
+      else out.state = 'none';
+      return out;
+    }
+
+    var done = live.filter(function(e){ return e.status === 'completed'; });
+    var lead = done.length ? done[0] : live[0];
+    out.state = done.length ? 'trained' : 'due';
+    out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;
+    out.label = out.blabDay
+      ? (window.blabDayLabel(out.blabDay) || '')
+      : String((lead && lead.label) || (lead && lead.cat) || '');
+  } catch(_e){ console.warn('[PHX] blabTrainingStateOn failed:', _e); }
+  return out;
 };
 
 // ── Today integration ─────────────────────────────────────────────────────

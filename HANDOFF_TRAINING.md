@@ -51,9 +51,38 @@ a script scope.
 
 | Surface | Contract |
 |---|---|
-| `window.blabCalSessionsOn(dateISO)` | Every pending entry on that local date. Excludes completed and skipped — it is an agenda, not history. Returns `[]` for a day with nothing scheduled. |
+| `window.blabTrainingStateOn(dateISO)` | **What kind of day is this.** `{state, blabDay, label, sessions}`. `state` is `'trained'` · `'due'` · `'rest'` · `'skipped'` · `'none'`, precedence in that order. `blabDay` is 1–4 or `0`, never null. `sessions` is the count, so you know when one label is not the whole story. Use this for anything history-shaped. |
+| `window.blabCalSessionsOn(dateISO)` | The AGENDA for that local date — pending only. **Excludes completed and skipped.** Returns `[]` both for a day with nothing scheduled and for a day already finished. Use only when you genuinely mean "what is still outstanding". |
 | `window.blabDayLabel(dayNumber)` | BLAB day number → session name. Returns `''` outside 1–4, so a caller handling a custom or rest entry needs no pre-check. |
 | `window.blabCalHasSchedule()` | Whether the athlete is using the calendar at all. False when it holds only completed work. |
+
+**WHICH ONE ANSWERS WHICH QUESTION.** These are not two ways to ask the same thing.
+`blabTrainingStateOn` answers *"did he train, or is he due"*; `blabCalSessionsOn`
+answers *"what is still outstanding"*. A finished training day is `state:'trained'`
+from the first and `[]` from the second — both correct answers to their own question.
+**If you are filtering the second one's result by status, you wanted the first.**
+
+**Do not derive a day's state from raw entries.** The state call exists precisely so
+you do not have to: both cross-domain bugs on this data came from a consumer inferring
+meaning from a shape — v4.9.182 read a planned rest day as training, v4.9.187 read a
+FINISHED day as nothing at all, dropping Jon's macro targets to rest levels on every
+day he trained the moment he ticked it off. The interpretation now lives with the
+domain that owns the data.
+
+**`status` (`pending` · `completed` · `skipped`) is INTERNAL** and so is
+`blabCalGet()` — being on `window` is packaging, not a contract, and freezing
+`{sessions, customs}` would lock the raw storage shape of this domain. Stated here only
+because it is why the state call matters. The status set is pinned under CONTRACT in
+`harness.mjs`, so adding a fourth value fails on the Training side and cannot ship
+without a conversation.
+
+**AGENDA vs HISTORY — the trap that has now cost two live bugs.**
+`blabCalSessionsOn` answers *"is he due to train?"*, not *"did he train?"*. The moment
+a session is marked done it drops out, so a finished training day returns `[]` —
+identical to a day with nothing on it. Nutrition read it as history and Jon's macro
+targets fell to rest-day levels **on every day he trained, the moment he ticked the
+session off** (their v4.9.182, fixed in v4.9.187). If you want history, read
+`blabCalGet()` and filter on `status` yourself.
 
 **SEMANTICS, NOT JUST SIGNATURES.** An entry from `blabCalSessionsOn` is one of three
 things, and the signature does not say so:

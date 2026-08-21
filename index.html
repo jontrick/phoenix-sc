@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.180';
+var APP_VERSION='4.9.181';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21446,14 +21446,22 @@ function _pepDosesPerVial(stack, c){
 // off-weeks and 20-night courses wrong, and they cannot model a part-used vial
 // being discarded at its shelf-life date — which is real consumption and the
 // main way a naive forecast under-orders.
-function _pepStockForecast(ps, stack){
+//
+// opts.unlimited runs the same calendar with an endless supply of sealed vials
+// and counts how many get opened. That is how the order builder sizes a
+// purchase: it asks the identical simulation a different question, so a forecast
+// and an order can never disagree about consumption.
+function _pepSimulate(ps, stack, opts){
+  opts = opts || {};
+  var horizon = opts.horizonDays || 730;
+  var unlimited = !!opts.unlimited;
   var c = _pepCompound(stack && stack.compoundId);
   if(!c) return null;
   var perVial = _pepDosesPerVial(stack, c);
   if(!perVial) return {unknown:true, reason:"Set vial size and BAC water to forecast"};
 
   var set = _pepSettings(ps);
-  var sealed = parseInt(stack.sealedVials, 10) || 0;
+  var sealed = unlimited ? Infinity : (parseInt(stack.sealedVials, 10) || 0);
   var used   = parseInt(stack.openDosesUsed, 10) || 0;
   var hasOpen = !!stack.openedDate;
   var openLeft = hasOpen ? Math.max(0, perVial - used) : 0;
@@ -21461,10 +21469,9 @@ function _pepStockForecast(ps, stack){
 
   var todayISO = _pepToday();
   var baseMs = new Date(todayISO + "T12:00:00").getTime();
-  var dosesLeft = 0, wasted = 0, depletion = null, firstDue = null;
-  var HORIZON = 730;
+  var dosesServed = 0, wasted = 0, vialsOpened = 0, depletion = null, firstDue = null;
 
-  for(var i = 0; i < HORIZON; i++){
+  for(var i = 0; i < horizon; i++){
     var dayMs = baseMs + i * 86400000;
     var day = new Date(dayMs);
     if(_pepStackDueOn(stack, c, day) === null) continue;
@@ -21478,25 +21485,52 @@ function _pepStockForecast(ps, stack){
 
     if(!hasOpen){
       if(sealed <= 0){ depletion = _pepISO(day); break; }
-      sealed--; hasOpen = true; openLeft = perVial;
+      sealed--; vialsOpened++; hasOpen = true; openLeft = perVial;
       openExpiryMs = dayMs + set.shelfLifeDays * 86400000;
     }
-    openLeft--; dosesLeft++;
+    openLeft--; dosesServed++;
   }
 
+  return {
+    dosesPerVial: perVial,
+    dosesServed: dosesServed,
+    wastedDoses: wasted,
+    vialsOpened: vialsOpened,
+    depletionDate: depletion,
+    firstDue: firstDue
+  };
+}
+
+function _pepStockForecast(ps, stack){
+  var sim = _pepSimulate(ps, stack);
+  if(!sim || sim.unknown) return sim;
+  var set = _pepSettings(ps);
+  var todayISO = _pepToday();
+  var baseMs = new Date(todayISO + "T12:00:00").getTime();
+  var depletion = sim.depletionDate;
   var orderBy = depletion ? _pepAddDays(depletion, -(set.leadTimeDays + set.bufferWeeks * 7)) : null;
   var daysOfSupply = depletion ? Math.round((new Date(depletion + "T12:00:00") - baseMs) / 86400000) : null;
   return {
-    dosesPerVial: perVial,
-    dosesRemaining: dosesLeft,
-    wastedDoses: wasted,
+    dosesPerVial: sim.dosesPerVial,
+    dosesRemaining: sim.dosesServed,
+    wastedDoses: sim.wastedDoses,
     depletionDate: depletion,
     daysOfSupply: daysOfSupply,
     orderByDate: orderBy,
     overdue: !!(orderBy && orderBy <= todayISO),
-    firstDue: firstDue,
+    firstDue: sim.firstDue,
     vialsHeld: (parseInt(stack.sealedVials, 10) || 0) + (stack.openedDate ? 1 : 0)
   };
+}
+
+// How many NEW vials to buy so this compound is covered for `days` from today.
+// Runs the same calendar with unlimited stock, counts the vials it would open,
+// and subtracts the sealed ones already on the shelf.
+function _pepVialsNeeded(ps, stack, days){
+  var sim = _pepSimulate(ps, stack, {unlimited:true, horizonDays: days});
+  if(!sim || sim.unknown) return 0;
+  var held = parseInt(stack.sealedVials, 10) || 0;
+  return Math.max(0, sim.vialsOpened - held);
 }
 
 // Short status line for a protocol card. Null when there is nothing to say.
@@ -21511,6 +21545,133 @@ function _pepStockLine(ps, stack){
     text: f.dosesRemaining + " doses left &middot; runs out " + f.depletionDate + (f.overdue ? " &middot; ORDER NOW" : " &middot; order by " + f.orderByDate),
     colour: colour
   };
+}
+
+// ── Order builder (v4.9.181) ──────────────────────────────────────────────
+// Which Tong products can supply each compound. The order builder matches on
+// the stack's configured vialMg, NOT on price — a different vial size changes
+// the concentration, which changes every units-to-draw figure Jon reads at the
+// bench. Cheaper per mg is not worth silently re-basing his syringe maths.
+var _PEP_TONG_FOR = {
+  retatrutide:  ["RT5","RT10","RT20","RT30"],
+  ipamorelin:   ["IP5","IP10"],
+  cjc1295:      ["CND5","CND10"],
+  bpc157:       ["BC5","BC10"],
+  ta1:          ["TA5","TA10"],
+  motsc:        ["MS10","MS40"],
+  klow:         ["KLOW80"],
+  bpc_ghkcu_tb: ["BBG70"],
+  ghkcu:        ["CU50","CU100"],
+  tb500:        ["BT5","BT10"],
+  nad:          ["NJ100","NJ500","NJ1000"],
+  "5amq":       ["5AM","10AM"],
+  tesamorelin:  ["TSM5","TSM10"],
+  epitalon:     ["ET10","ET50"],
+  dsip:         ["DS5"],
+  semax:        ["XA5"],
+  selank:       ["SK5"],
+  semaglutide:  ["SM5","SM10"],
+  tirzepatide:  ["TR10","TR20"],
+  cagrilintide: ["CGL5"],
+  ara290:       ["RA10"],
+  kpv:          ["KPV5"],
+  p21:          ["P210"]
+};
+
+function _pepTongItem(cat){
+  for(var i=0;i<_PEP_TONG.length;i++){ if(_PEP_TONG[i].cat === cat) return _PEP_TONG[i]; }
+  return null;
+}
+
+// The catalogue entry matching this stack's vial size. Falls back to the
+// smallest listed size so an unconfigured compound still produces a line.
+function _pepTongForStack(stack){
+  var cats = _PEP_TONG_FOR[stack && stack.compoundId];
+  if(!cats || !cats.length) return null;
+  var items = cats.map(_pepTongItem).filter(Boolean);
+  if(!items.length) return null;
+  var want = parseFloat(stack.vialMg);
+  if(!want){
+    var c = _pepCompound(stack.compoundId);
+    var def = c && _PEP_RECON[c.id];
+    want = def && def.vialMg;
+  }
+  if(want){
+    for(var i=0;i<items.length;i++){ if(items[i].mg === want) return items[i]; }
+  }
+  return items.slice().sort(function(a,b){ return a.mg - b.mg; })[0];
+}
+
+// One consolidated order — Jon's rule. Any compound tripping its order-by date
+// pulls the WHOLE order forward, and everything gets topped up to the coverage
+// window in the same shipment. Shipping is a flat ~$167 AUD, so splitting into
+// separate orders pays it repeatedly for no benefit.
+function _pepOrderPlan(ps){
+  var set = _pepSettings(ps);
+  var coverDays = (set.coverageMonths != null ? set.coverageMonths : 6) * 30;
+  var todayISO = _pepToday();
+  var rows = [], trigger = null, anyOverdue = false;
+
+  (ps.stacks || []).forEach(function(stack, idx){
+    if(stack.status === "complete") return;
+    var c = _pepCompound(stack.compoundId);
+    if(!c) return;
+    var f = _pepStockForecast(ps, stack);
+    if(!f || f.unknown) return;
+
+    if(f.orderByDate && (!trigger || f.orderByDate < trigger)) trigger = f.orderByDate;
+    if(f.overdue) anyOverdue = true;
+
+    var need = _pepVialsNeeded(ps, stack, coverDays);
+    if(need <= 0) return;
+    var tong = _pepTongForStack(stack);
+    rows.push({
+      idx: idx,
+      compoundId: stack.compoundId,
+      name: c.name,
+      vials: need,
+      tong: tong,
+      aud: tong ? tong.aud * need : null,
+      depletionDate: f.depletionDate,
+      orderByDate: f.orderByDate,
+      overdue: f.overdue,
+      daysOfSupply: f.daysOfSupply
+    });
+  });
+
+  rows.sort(function(a,b){
+    if(a.orderByDate && b.orderByDate) return a.orderByDate < b.orderByDate ? -1 : 1;
+    return a.orderByDate ? -1 : 1;
+  });
+
+  var total = 0;
+  rows.forEach(function(r){ if(r.aud) total += r.aud; });
+  return {
+    rows: rows,
+    triggerDate: trigger,
+    anyOverdue: anyOverdue,
+    coverageMonths: (set.coverageMonths != null ? set.coverageMonths : 6),
+    itemsAud: total,
+    unpriced: rows.filter(function(r){ return !r.tong; }).length,
+    dueNow: !!(anyOverdue || (trigger && trigger <= todayISO))
+  };
+}
+
+// Replace the cart with the plan. Replace rather than append so pressing it
+// twice cannot silently double an order.
+function pepBuildOrderFromPlan(){
+  var ps = pepGetState();
+  var plan = _pepOrderPlan(ps);
+  var cart = [];
+  plan.rows.forEach(function(r){
+    if(!r.tong) return;
+    cart.push({cat: r.tong.cat, name: r.tong.name, aud: r.tong.aud, qty: r.vials});
+  });
+  if(!cart.length) return;
+  ps.cart = cart;
+  pepSaveState(ps);
+  _pepTab = "order";
+  pepRenderScreen();
 }
 
 // ── Main renderer ─────────────────────────────────────────────────────────
@@ -21562,6 +21723,8 @@ function pepRenderScreen(){
   if(orderPick) orderPick.addEventListener("click", pepOpenOrderPicker);
   var copyBtn = body.querySelector("#pep-copy-order");
   if(copyBtn) copyBtn.addEventListener("click", pepCopyOrder);
+  var buildBtn = body.querySelector("#pep-build-order");
+  if(buildBtn) buildBtn.addEventListener("click", pepBuildOrderFromPlan);
   var advBtn = body.querySelector("#pep-advice-go");
   if(advBtn) advBtn.addEventListener("click", pepGenerateAdvice);
   var noteBtn = body.querySelector("#pep-note-save");
@@ -22796,11 +22959,68 @@ async function pepDeleteBloodPanel(){
 
 // ── ORDER tab ─────────────────────────────────────────────────────────────
 function _pepTabOrder(ps){
+  var h = _pepOrderForecastBlock(ps);
+  return h + _pepTabCart(ps);
+}
+
+// The forecast half of the ORDER tab: what runs out when, and one button that
+// turns the whole thing into a cart.
+function _pepOrderForecastBlock(ps){
+  var plan = _pepOrderPlan(ps);
+  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Reorder Forecast</div>";
+
+  if(!plan.rows.length){
+    var msg = (ps.stacks || []).length
+      ? "Nothing needs reordering within " + plan.coverageMonths + " months. Add sealed vial counts in PROTOCOL to keep this accurate."
+      : "Add compounds to your protocol to see a reorder forecast.";
+    h += "<div style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:20px;font-size:13px;color:var(--text3);line-height:1.6;\">" + msg + "</div>";
+    return h;
+  }
+
+  var headColour = plan.dueNow ? "#FF6B6B" : "#7B68EE";
+  h += "<div style=\"background:var(--bg2);border:1px solid " + headColour + ";border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:22px;font-weight:900;color:" + headColour + ";line-height:1.1;\">" +
+       (plan.dueNow ? "Order now" : "Order by " + plan.triggerDate) + "</div>";
+  h += "<div style=\"font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;\">" +
+       (plan.dueNow
+         ? "At least one compound is inside its lead time. One consolidated order covers everything below."
+         : "Earliest trigger across your protocol. Ordering everything together saves paying shipping more than once.") +
+       "</div>";
+  h += "<div style=\"font-size:11px;color:var(--text2);margin-top:8px;\">" + plan.rows.length + " compound" + (plan.rows.length===1?"":"s") +
+       " &middot; topped up to " + plan.coverageMonths + " months &middot; ~$" + Math.round(plan.itemsAud) + " AUD before shipping</div>";
+  h += "</div>";
+
+  plan.rows.forEach(function(r){
+    var col = r.overdue ? "#FF6B6B" : (r.daysOfSupply != null && r.daysOfSupply <= 60 ? "var(--gold)" : "var(--text2)");
+    h += "<div style=\"display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--border);border-left:3px solid " + col + ";border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;\">";
+    h += "<div style=\"flex:1;min-width:0;\">";
+    h += "<div style=\"font-weight:700;font-size:13px;color:var(--text);\">" + _esc(r.name) + "</div>";
+    h += "<div style=\"font-size:11px;color:" + col + ";margin-top:2px;\">" +
+         (r.depletionDate ? "Runs out " + r.depletionDate + (r.overdue ? " &middot; overdue" : " &middot; order by " + r.orderByDate) : "In supply") + "</div>";
+    h += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" +
+         (r.tong ? r.tong.cat + " &middot; " + r.tong.name : "No catalogue match — add manually") + "</div>";
+    h += "</div>";
+    h += "<div style=\"text-align:right;flex-shrink:0;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:16px;font-weight:900;color:#7B68EE;line-height:1.1;\">&times;" + r.vials + "</div>";
+    h += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + (r.aud != null ? "$" + r.aud : "—") + "</div>";
+    h += "</div></div>";
+  });
+
+  if(plan.unpriced){
+    h += "<div style=\"font-size:11px;color:var(--gold);margin-bottom:10px;\">" + plan.unpriced +
+         " compound" + (plan.unpriced===1?" has":"s have") + " no Tong match — add " + (plan.unpriced===1?"it":"them") + " to the cart by hand.</div>";
+  }
+
+  h += "<button id=\"pep-build-order\" style=\"width:100%;padding:14px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;margin-bottom:22px;\">Build This Order</button>";
+  return h;
+}
+
+function _pepTabCart(ps){
   var cart = ps.cart || [];
   var total = 0;
   cart.forEach(function(item){ total += (item.aud || 0) * (item.qty || 1); });
   var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
-  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + cart.length + " item" + (cart.length!==1?"s":"") + "</div>";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">Cart &middot; " + cart.length + " item" + (cart.length!==1?"s":"") + "</div>";
   h += "<button id=\"pep-order-pick\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add Item</button>";
   h += "</div>";
   if(cart.length === 0){

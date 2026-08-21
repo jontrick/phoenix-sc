@@ -442,6 +442,88 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── Consolidated order builder (v4.9.181) ─────────────────────────────────
+  // Jon's rule: one order when anything trips, everything topped up together —
+  // shipping is a flat ~$167 AUD, so splitting orders pays it repeatedly.
+  // The builder asks the SAME simulation a different question (unlimited stock,
+  // count the vials opened) so a forecast and an order can never disagree about
+  // consumption.
+  {
+    const oIso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const ago = n => oIso(new Date(Date.now() - n*86400000));
+  
+  
+    // A slice of Jon's real protocol with deliberately thin stock.
+    const oPs = { settings: {}, stacks: [
+      { compoundId:'bpc157',       dose:0.5,  startDate: ago(60), vialMg:5,  waterMl:2, sealedVials:0, status:'instock' },
+      { compoundId:'retatrutide',  dose:6,    startDate: ago(60), vialMg:10, waterMl:0.5, sealedVials:2, status:'instock' },
+      { compoundId:'ta1',          dose:1.6,  startDate: ago(60), vialMg:5,  waterMl:2, sealedVials:1, status:'instock' },
+      { compoundId:'bpc_ghkcu_tb', dose:14,   startDate: ago(60), vialMg:70, waterMl:2, sealedVials:1, status:'instock' },
+    ]};
+  
+    const plan = app._pepOrderPlan(oPs);
+  
+    test('the plan covers every compound that needs stock', () => {
+      assert.ok(plan.rows.length >= 3, 'several compounds need topping up');
+    });
+  
+    test('the vial ordered matches the configured vial size, not the cheapest', () => {
+      const reta = plan.rows.find(r => r.compoundId === 'retatrutide');
+      assert.equal(reta.tong.mg, 10, 'RT10 to match vialMg 10 — a different size rebases the units maths');
+    });
+  
+    test('a blend maps to its own catalogue product', () => {
+      const blend = plan.rows.find(r => r.compoundId === 'bpc_ghkcu_tb');
+      assert.equal(blend.tong.cat, 'BBG70', 'BBG70');
+    });
+  
+    test('a compound with zero stock is flagged overdue and pulls the order forward', () => {
+      const bpc = plan.rows.find(r => r.compoundId === 'bpc157');
+      assert.equal(bpc.overdue, true, 'overdue');
+      assert.equal(plan.dueNow, true, 'whole order is due now');
+    });
+  
+    test('rows are ordered by urgency', () => {
+      const dates = plan.rows.map(r => r.orderByDate).filter(Boolean);
+      const sorted = dates.slice().sort();
+      assert.deepEqual(dates, sorted, 'soonest order-by first');
+    });
+  
+    test('building the order replaces the cart rather than appending', () => {
+      const st = app.pepGetState();
+      st.stacks = oPs.stacks; st.settings = {};
+      st.cart = [{ cat:'JUNK', name:'stale line', aud:1, qty:9 }];
+      app.pepSaveState(st);
+      app.pepBuildOrderFromPlan();
+      const after = app.pepGetState().cart;
+      assert.equal(after.some(c => c.cat === 'JUNK'), false, 'stale line gone');
+      assert.ok(after.length >= 3, 'plan lines present');
+    });
+  
+    test('pressing build twice does not double the order', () => {
+      app.pepBuildOrderFromPlan();
+      const first = app.pepGetState().cart.map(c => c.cat + ':' + c.qty).join('|');
+      app.pepBuildOrderFromPlan();
+      const second = app.pepGetState().cart.map(c => c.cat + ':' + c.qty).join('|');
+      assert.equal(second, first, 'idempotent');
+    });
+  
+    test('a completed compound is left out of the order', () => {
+      const withDone = { settings:{}, stacks: oPs.stacks.concat([
+        { compoundId:'motsc', dose:10, startDate: ago(60), vialMg:10, waterMl:0.5, sealedVials:0, status:'complete' }
+      ])};
+      const p2 = app._pepOrderPlan(withDone);
+      assert.equal(p2.rows.some(r => r.compoundId === 'motsc'), false, 'complete compounds excluded');
+    });
+  
+    test('an empty protocol produces an empty plan, not a crash', () => {
+      const p3 = app._pepOrderPlan({ stacks: [], settings: {} });
+      assert.equal(p3.rows.length, 0, 'no rows');
+      assert.equal(p3.dueNow, false, 'nothing due');
+    });
+  
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

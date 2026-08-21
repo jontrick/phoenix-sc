@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.181'", 'version is 4.9.181');
+has("var APP_VERSION='4.9.182'", 'version is 4.9.182');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -386,9 +386,10 @@ hasNot('  _nutEnsureEaten(day)[slot] = true;', 'TICK: the tick no longer hides i
 has("if(dateKey !== _nutToday()) return;", 'TICK: a future day is never marked eaten');
 has("var _nutPickerMode", 'PLAN: picker carries log-vs-plan mode');
 has("_nutPickerMode = (mode === 'log') ? 'log' : 'plan';", 'PLAN: omitting the mode plans — logging must be asked for');
-has("nutOpenFoodPicker(parts[0], parts[1], 'log')", 'PLAN: the daily builder states its logging intent');
-has('data-nut-plan-food', 'PLAN: + Food control rendered on planner slots');
-has("nutOpenFoodPicker(parts[0], parts[1], 'plan')", 'PLAN: planner adds open the picker in plan mode');
+has("parts[2] === 'log' ? 'log' : 'plan'", 'PLAN: wiring honours the mode the slot card declares');
+has("'|' + mode + '\" style=", 'PLAN: the slot card emits its mode');
+has("{mode:'log', dayKcal:_dayK}", 'PLAN: the today screen asks to log');
+has("{mode:'plan', dayKcal:_dayK}", 'PLAN: the planner asks to plan');
 has('data-fp-new-recipe', 'PLAN: build-new-recipe offered in the food picker');
 has('data-rp-new-recipe', 'PLAN: build-new-recipe offered in the recipe picker');
 has("ns.daily[dk].eaten = {};", 'TICK: week templates plan without marking eaten');
@@ -514,6 +515,16 @@ hasNot("return new Date().toISOString().slice(0, 10);", 'TZ: UTC day key gone fr
 hasNot("var nxt = d.toISOString().slice(0,10);", 'TZ: day-step navigation no longer UTC');
 hasNot("var dk = d.toISOString().slice(0,10);", 'TZ: 14-day history no longer UTC');
 hasNot('function _nutDateKey(', 'TZ: no private nutrition copy of the date helper');
+
+// ── Day-surface consolidation + calendar-aware targets (v4.9.174) ───────────
+has('function nutTrainingForDay(', 'CAL: training day read per date');
+has('function nutAdjustForDay(', 'CAL: targets adjusted per date');
+has('window.blabCalSessionsOn(dateKey)', 'CAL: reads Training calendar, not the BLAB queue');
+hasNot("var nextDay = (bs.last_completed_day || 0) + 1;", 'CAL: queue-position heuristic gone');
+has('function _nutSlotCard(', 'DAY: one shared slot renderer');
+has('function _nutDaySummary(', 'DAY: one shared day summary');
+has('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
+hasNot('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
 
 // ── Priority 11 — Outstanding Bug Fixes ──────────────────────────────────────
 // Bug 1: Superset per-set data

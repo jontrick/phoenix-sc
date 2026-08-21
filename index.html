@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.181';
+var APP_VERSION='4.9.182';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18015,18 +18015,62 @@ function nutCalcTargets(bw_kg, height_cm, age_yr, sex, goal){
 }
 
 // Adjust macro targets for today based on BLAB session type
-function nutAdjustForToday(base){
+// v4.9.182: what is actually TRAINED on a given date, read from Training's
+// drag-and-drop calendar. This used to come from blabGetState().last_completed_day
+// + 1 — a QUEUE POSITION, not a calendar. It answered "what is the next BLAB
+// session you have not done", so it reported Upper Body on a day with nothing
+// scheduled because Upper Body was Monday's and was still next in the queue.
+// Wrong since the calendar shipped; the assumption predates it.
+//
+// Returns {dayNum, label, rest, scheduled}. scheduled=false means the calendar
+// has nothing for that date — a rest day, not a guess.
+function nutTrainingForDay(dateKey){
+  var out = { dayNum: 0, label: 'Rest day', rest: true, scheduled: false };
+  try {
+    if(typeof window === 'undefined' || typeof window.blabCalSessionsOn !== 'function') return out;
+    var entries = window.blabCalSessionsOn(dateKey) || [];
+    if(!entries.length) return out;
+    // A BLAB session drives the macro adjustment; a custom session (WOD/Core/
+    // aerobic) counts as training but has no BLAB day number.
+    var blab = null;
+    for(var i=0;i<entries.length;i++){ if(!entries[i].custom && entries[i].blabDay){ blab = entries[i]; break; } }
+    if(blab){
+      var n = parseInt(blab.blabDay, 10) || 0;
+      var lbl = (typeof _BLAB_DAY_LABELS !== 'undefined' && _BLAB_DAY_LABELS[n]) ? _BLAB_DAY_LABELS[n] : ('Day ' + n);
+      return { dayNum: n, label: lbl, rest: false, scheduled: true };
+    }
+    var c = entries[0];
+    return { dayNum: 0, label: c.label || String(c.cat || 'Session'), rest: false, scheduled: true };
+  } catch(e){}
+  return out;
+}
+
+// Targets adjusted for what is scheduled on a SPECIFIC date. Lower-body days get
+// the carb bump; rest days come down.
+function nutAdjustForDay(base, dateKey){
   if(!base) return base;
   var adj = { kcal: base.kcal, protein_g: base.protein_g, carbs_g: base.carbs_g, fat_g: base.fat_g, note: '' };
   try {
-    var bs = (typeof blabGetState === 'function') ? blabGetState() : null;
-    if(!bs || !bs.active){ adj.note = 'Rest day — targets reduced'; adj.carbs_g = Math.max(0, adj.carbs_g - 30); adj.kcal = Math.max(1200, adj.kcal - 120); return adj; }
-    var nextDay = (bs.last_completed_day || 0) + 1;
-    if(nextDay > 4){ adj.note = 'Rest day — targets reduced'; adj.carbs_g = Math.max(0, adj.carbs_g - 30); adj.kcal = Math.max(1200, adj.kcal - 120); }
-    else if(nextDay === 2 || nextDay === 4){ adj.carbs_g += 40; adj.kcal += 160; adj.note = (nextDay === 4 ? 'Lower Power' : 'Lower Body') + ' day — +40g carbs added'; }
-    else { adj.note = 'Upper Body day — standard targets'; }
+    var t = nutTrainingForDay(dateKey || _nutToday());
+    if(t.rest){
+      adj.note = 'Rest day — targets reduced';
+      adj.carbs_g = Math.max(0, adj.carbs_g - 30);
+      adj.kcal = Math.max(1200, adj.kcal - 120);
+      return adj;
+    }
+    if(t.dayNum === 2 || t.dayNum === 4){
+      adj.carbs_g += 40; adj.kcal += 160;
+      adj.note = t.label + ' — +40g carbs added';
+    } else {
+      adj.note = t.label + ' — standard targets';
+    }
   } catch(e){}
   return adj;
+}
+
+// Kept so existing callers do not have to care which day they mean.
+function nutAdjustForToday(base){
+  return nutAdjustForDay(base, _nutToday());
 }
 
 // Sum macros — handles both old flat-array format and new slot/component format
@@ -18131,7 +18175,7 @@ function nutRenderScreen(){
   // Meal builder data-attribute wiring
   body.querySelectorAll('[data-nut-pick]').forEach(function(btn){
     var parts = btn.getAttribute('data-nut-pick').split('|');
-    btn.addEventListener('click', function(){ nutOpenFoodPicker(parts[0], parts[1], 'log'); });
+    btn.addEventListener('click', function(){ nutOpenFoodPicker(parts[0], parts[1], parts[2] === 'log' ? 'log' : 'plan'); });
   });
   body.querySelectorAll('[data-nut-rm]').forEach(function(btn){
     var parts = btn.getAttribute('data-nut-rm').split('|');
@@ -18176,10 +18220,6 @@ function nutRenderScreen(){
     var mo = btn.getAttribute('data-nut-week-mode');
     btn.addEventListener('click', function(){ _nutWeekMode = mo; nutRenderScreen(); });
   });
-  body.querySelectorAll('[data-nut-plan-food]').forEach(function(btn){
-    var parts = btn.getAttribute('data-nut-plan-food').split('|');
-    btn.addEventListener('click', function(){ nutOpenFoodPicker(parts[0], parts[1], 'plan'); });
-  });
   body.querySelectorAll('[data-nut-add-recipe]').forEach(function(btn){
     var parts = btn.getAttribute('data-nut-add-recipe').split('|');
     btn.addEventListener('click', function(){ nutOpenRecipePicker(parts[0], parts[1]); });
@@ -18223,6 +18263,116 @@ function _nutDriftBanner(){
     '</div>';
 }
 
+// ── Shared day rendering (v4.9.182) ───────────────────────────────────────────
+// TODAY, MEALS and the week PLANNER all draw "a day's meals". They had grown
+// three separate copies of that markup, so + Recipe existed on one screen,
+// component detail on two, and the tick control differed between them. One
+// renderer, three callers — adding the missing controls to each copy separately
+// would only re-create the divergence a version later.
+//
+// mode: 'log'  — adding food here means you ate it (today's own screens)
+//       'plan' — filling a slot for a day that has not happened
+// v4.9.182: every add-sheet says which day it is writing to. Opened from the
+// week planner they all looked identical to opening them from Today, so there
+// was nothing on screen to tell you which day a food was about to land on.
+function _nutDayStamp(dateKey, slot){
+  if(!dateKey) return '';
+  var out = '';
+  try {
+    var d = new Date(dateKey + 'T12:00:00');
+    out = d.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'});
+    if(dateKey === _nutToday()) out += ' \u00b7 today';
+    var t = nutTrainingForDay(dateKey);
+    if(t && !t.rest) out += ' \u00b7 ' + t.label;
+  } catch(e){ out = dateKey; }
+  return slot ? (_nutSlotLabel(slot) + ' \u00b7 ' + out) : out;
+}
+
+function _nutSlotCard(dayData, slot, dk, opts){
+  opts = opts || {};
+  var mode = opts.mode || 'plan';
+  var dayKcal = opts.dayKcal || 0;
+  var meals = (dayData && dayData.meals && !Array.isArray(dayData.meals)) ? dayData.meals : {};
+  var comps = (meals[slot] && meals[slot].components) || [];
+  var hasFood = comps.length > 0;
+  var eaten = hasFood && nutIsSlotEaten(dayData, slot);
+  var st = _nutSlotTotals(dayData, slot);
+  var share = (dayKcal > 0 && st.kcal > 0) ? Math.round(st.kcal / dayKcal * 100) : 0;
+
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
+  h += '<div style="display:flex;align-items:center;gap:10px;padding:11px 13px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
+  if(hasFood){
+    h += '<button data-nut-tick-day="' + slot + '|' + dk + '" style="width:26px;height:26px;flex-shrink:0;padding:0;border-radius:7px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;background:' + (eaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (eaten ? 'var(--gold)' : 'var(--border2)') + ';">' +
+         (eaten ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</button>';
+  }
+  h += '<div style="flex:1;min-width:0;' + (eaten ? 'opacity:0.45;' : '') + '">';
+  h += '<div style="font-weight:700;color:var(--text);font-size:14px;' + (eaten ? 'text-decoration:line-through;' : '') + '">' + _nutSlotLabel(slot) + '</div>';
+  h += hasFood
+    ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + st.kcal + ' kcal &middot; P' + st.protein_g + 'g' + (share ? (' &middot; ' + share + '% of day') : '') + (eaten ? ' &middot; eaten' : '') + '</div>'
+    : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:6px;flex-shrink:0;">';
+  h += '<button data-nut-pick="' + slot + '|' + dk + '|' + mode + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:700;padding:6px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Food</button>';
+  h += '<button data-nut-add-recipe="' + slot + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:700;padding:6px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Recipe</button>';
+  h += '</div></div>';
+
+  if(hasFood){
+    h += '<div style="padding:5px 13px 9px;">';
+    comps.forEach(function(c, idx){
+      var f = (c.qty_g||0)/100;
+      var cK = Math.round((c.k||0)*f), cP = Math.round((c.p||0)*f*10)/10;
+      var tag = c.isRecipe
+        ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">R</span>'
+        : (c.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '');
+      h += '<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">';
+      h += '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + c.n + tag + '</div>';
+      h += '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cK + ' kcal &middot; P' + cP + 'g</div></div>';
+      h += '<button data-nut-rm="' + slot + '|' + dk + '|' + idx + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+// What this day is meant to add up to, and what it currently does. Shown on every
+// surface that edits a day, so a planned day can be judged against its target
+// rather than guessed at.
+function _nutDaySummary(ns, dk, opts){
+  opts = opts || {};
+  var dayData = (ns.daily && ns.daily[dk]) || {};
+  var targets = nutAdjustForDay(ns.targets, dk);
+  var planned = _nutDayTotals(dayData);
+  var eaten   = _nutEatenTotals(dayData);
+  var isToday = (dk === _nutToday());
+  var shown   = isToday ? eaten : planned;
+  var rem     = (targets.kcal || 0) - shown.kcal;
+  var pPct = Math.min(100, targets.protein_g ? Math.round(planned.protein_g / targets.protein_g * 100) : 0);
+  var cPct = Math.min(100, targets.carbs_g   ? Math.round(planned.carbs_g   / targets.carbs_g   * 100) : 0);
+  var fPct = Math.min(100, targets.fat_g     ? Math.round(planned.fat_g     / targets.fat_g     * 100) : 0);
+  var t = nutTrainingForDay(dk);
+
+  var h = '<div style="background:var(--bg2);border:1px solid ' + (opts.accent ? 'var(--gold)' : 'var(--border)') + ';border-radius:var(--radius);padding:12px 14px;margin-bottom:' + (opts.tight ? '8px' : '14px') + ';">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">';
+  h += '<span style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:' + (t.rest ? 'var(--text3)' : 'var(--gold)') + ';">' + t.label + '</span>';
+  h += '<span style="font-size:10px;color:var(--text3);">' + (targets.kcal || 0) + ' kcal target</span>';
+  h += '</div>';
+  h += '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px;">';
+  h += '<div><span style="font-family:var(--font-d);font-size:24px;font-weight:900;color:' + (rem < 0 ? 'var(--gold)' : 'var(--text)') + ';">' + (rem < 0 ? '+' + Math.abs(rem) : rem) + '</span>';
+  h += '<span style="font-size:11px;color:var(--text3);margin-left:6px;">kcal ' + (rem < 0 ? 'over' : (isToday ? 'remaining' : 'left to plan')) + '</span></div>';
+  h += '<div style="font-size:10px;color:var(--text3);text-align:right;">' + planned.kcal + ' planned' + (isToday ? (' &middot; ' + eaten.kcal + ' eaten') : '') + '</div>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:8px;">';
+  h += _nutMacroBar('P', planned.protein_g, targets.protein_g, pPct, '#4CAF50');
+  h += _nutMacroBar('C', planned.carbs_g,   targets.carbs_g,   cPct, 'var(--gold)');
+  h += _nutMacroBar('F', planned.fat_g,     targets.fat_g,     fPct, '#FF6B6B');
+  h += '</div>';
+  if(targets.note) h += '<div style="font-size:10px;color:var(--text3);margin-top:7px;font-style:italic;">' + targets.note + '</div>';
+  h += '</div>';
+  return h;
+}
+
 function _nutTabToday(ns){
   var today = _nutToday();
   var targets = nutAdjustForToday(ns.targets);
@@ -18246,42 +18396,11 @@ function _nutTabToday(ns){
     _nutBigMacro('Carbs',   logged.carbs_g,   targets.carbs_g,   cPct, 'var(--gold)') +
     _nutBigMacro('Fat',     logged.fat_g,     targets.fat_g,     fPct, '#FF6B6B') +
     '</div>';
-  // Meal slots for today
-  var _SLOTS     = ['breakfast','lunch','dinner','snack','post_workout'];
-  var _SLOT_LBLS = {breakfast:'Breakfast',lunch:'Lunch',dinner:'Dinner',snack:'Snack',post_workout:'Post-Workout'};
-  _SLOTS.forEach(function(slot){
-    var mealData = (dayData.meals && !Array.isArray(dayData.meals)) ? (dayData.meals[slot] || {components:[]}) : {components:[]};
-    var comps = mealData.components || [];
-    var mKcal = 0, mProt = 0;
-    comps.forEach(function(c){ var f=(c.qty_g||0)/100; mKcal+=Math.round((c.k||0)*f); mProt+=Math.round((c.p||0)*f*10)/10; });
-    var hasFood = comps.length > 0;
-    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
-    var slotEaten = hasFood && nutIsSlotEaten(dayData, slot);
-    h += '<div style="display:flex;align-items:center;gap:11px;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
-    if(hasFood){
-      h += '<button data-nut-tick-day="' + slot + '|' + today + '" style="width:26px;height:26px;flex-shrink:0;padding:0;border-radius:7px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;background:' + (slotEaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (slotEaten ? 'var(--gold)' : 'var(--border2)') + ';">' +
-           (slotEaten ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</button>';
-    }
-    h += '<div style="flex:1;min-width:0;' + (slotEaten ? 'opacity:0.45;' : '') + '"><div style="font-weight:700;color:var(--text);font-size:14px;' + (slotEaten ? 'text-decoration:line-through;' : '') + '">' + _SLOT_LBLS[slot] + '</div>';
-    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein' + (slotEaten ? ' &middot; eaten' : '') + '</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
-    h += '</div>';
-    h += '<button data-nut-pick="' + slot + '|' + today + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
-    h += '</div>';
-    if(hasFood){
-      h += '<div style="padding:6px 14px 10px;">';
-      comps.forEach(function(c, idx){
-        var cKcal = Math.round((c.k||0)*(c.qty_g||0)/100);
-        var cProt = Math.round((c.p||0)*(c.qty_g||0)/100*10)/10;
-        var sb = c.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '';
-        h += '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);">';
-        h += '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + c.n + sb + '</div>';
-        h += '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cKcal + ' kcal &middot; P' + cProt + 'g</div></div>';
-        h += '<button data-nut-rm="' + slot + '|' + today + '|' + idx + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
-        h += '</div>';
-      });
-      h += '</div>';
-    }
-    h += '</div>';
+  // Meal slots for today — shared renderer, so this screen and the planner
+  // cannot drift apart again.
+  var _dayK = _nutDayTotals(dayData).kcal;
+  _NUT_PLAN_SLOTS.forEach(function(s){
+    h += _nutSlotCard(dayData, s.k, today, {mode:'log', dayKcal:_dayK});
   });
   h += _nutSuppSection(dayData, today);
   return h;
@@ -18370,58 +18489,11 @@ function _nutTabMeals(ns){
   h += '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:13px;font-weight:900;color:var(--text);">' + dayLabel + '</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">' + dk + '</div></div>';
   h += '<button onclick="_nutMealNav(1)" style="width:36px;height:36px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&#8250;</button>';
   h += '</div>';
-  // Day macro summary
-  var kcalColor = totals.kcal > targets.kcal ? 'var(--gold)' : 'var(--text)';
-  h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;">';
-  h += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">';
-  h += '<div style="font-family:var(--font-d);font-size:22px;font-weight:900;color:' + kcalColor + ';">' + totals.kcal + '</div>';
-  h += '<div style="font-size:11px;color:var(--text3);">of ' + targets.kcal + ' kcal &middot; ' + Math.max(0, targets.kcal - totals.kcal) + ' remaining</div>';
-  h += '</div>';
-  h += '<div style="display:flex;gap:8px;">';
-  h += _nutMacroBar('P', totals.protein_g, targets.protein_g, pPct, '#4CAF50');
-  h += _nutMacroBar('C', totals.carbs_g,   targets.carbs_g,   cPct, 'var(--gold)');
-  h += _nutMacroBar('F', totals.fat_g,     targets.fat_g,     fPct, '#FF6B6B');
-  h += '</div>';
-  if(targets.note) h += '<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">' + targets.note + '</div>';
-  h += '</div>';
-  // Meal slots
-  var _SLOTS     = ['breakfast','lunch','dinner','snack','post_workout'];
-  var _SLOT_LBLS = {breakfast:'Breakfast',lunch:'Lunch',dinner:'Dinner',snack:'Snack',post_workout:'Post-Workout'};
-  _SLOTS.forEach(function(slot){
-    var mealData = (dayData.meals && !Array.isArray(dayData.meals)) ? (dayData.meals[slot] || {components:[]}) : {components:[]};
-    var comps = mealData.components || [];
-    var mKcal = 0, mProt = 0;
-    comps.forEach(function(c){ var f=(c.qty_g||0)/100; mKcal+=Math.round((c.k||0)*f); mProt+=Math.round((c.p||0)*f*10)/10; });
-    var hasFood = comps.length > 0;
-    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;">';
-    var slotEaten = hasFood && nutIsSlotEaten(dayData, slot);
-    h += '<div style="display:flex;align-items:center;gap:11px;padding:12px 14px;' + (hasFood ? 'border-bottom:1px solid var(--border);' : '') + '">';
-    if(hasFood){
-      h += '<button data-nut-tick-day="' + slot + '|' + dk + '" style="width:26px;height:26px;flex-shrink:0;padding:0;border-radius:7px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;background:' + (slotEaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (slotEaten ? 'var(--gold)' : 'var(--border2)') + ';">' +
-           (slotEaten ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</button>';
-    }
-    h += '<div style="flex:1;min-width:0;' + (slotEaten ? 'opacity:0.45;' : '') + '"><div style="font-weight:700;color:var(--text);font-size:14px;' + (slotEaten ? 'text-decoration:line-through;' : '') + '">' + _SLOT_LBLS[slot] + '</div>';
-    h += hasFood ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mKcal + ' kcal &middot; ' + mProt + 'g protein' + (slotEaten ? ' &middot; eaten' : '') + '</div>' : '<div style="font-size:11px;color:var(--text3);">Empty</div>';
-    h += '</div>';
-    h += '<button data-nut-pick="' + slot + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:700;padding:6px 14px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Add</button>';
-    h += '</div>';
-    if(hasFood){
-      h += '<div style="padding:6px 14px 10px;">';
-      comps.forEach(function(c, idx){
-        var cKcal = Math.round((c.k||0)*(c.qty_g||0)/100);
-        var cProt = Math.round((c.p||0)*(c.qty_g||0)/100*10)/10;
-        var sb = c.state === 'cooked' ? '<span style="font-size:8px;font-weight:800;padding:1px 4px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:5px;">C</span>' : '';
-        h += '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);">';
-        h += '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + c.n + sb + '</div>';
-        h += '<div style="font-size:11px;color:var(--text3);">' + c.qty_g + 'g &middot; ' + cKcal + ' kcal &middot; P' + cProt + 'g</div></div>';
-        h += '<button data-nut-rm="' + slot + '|' + dk + '|' + idx + '" style="width:28px;height:28px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:16px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
-        h += '</div>';
-      });
-      h += '</div>';
-    }
-    h += '</div>';
+  h += _nutDaySummary(ns, dk, {accent: isToday});
+  var _dayK = totals.kcal;
+  _NUT_PLAN_SLOTS.forEach(function(s){
+    h += _nutSlotCard(dayData, s.k, dk, {mode: isToday ? 'log' : 'plan', dayKcal:_dayK});
   });
-  // Supplements section
   h += _nutSuppSection(dayData, dk);
   return h;
 }
@@ -18856,7 +18928,8 @@ function nutOpenFoodPicker(slot, dateKey, mode){
     '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88vh;">' +
     '<div style="padding:16px 16px 10px;flex-shrink:0;">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
-    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Add to ' + (slotLabels[slot]||slot) + '</div>' +
+    '<div style="min-width:0;"><div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Add to ' + (slotLabels[slot]||slot) + '</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + _nutDayStamp(dateKey) + '</div></div>' +
     '<button id="nut-fp-close" style="width:28px;height:28px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:16px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
     '</div>' +
     '<input type="text" id="nut-fp-search" placeholder="Search foods…" inputmode="search" autocomplete="off" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;box-sizing:border-box;outline:none;margin-bottom:10px;">' +
@@ -19166,7 +19239,8 @@ function nutOpenCustomFoodModal(slot, dateKey){
   var cats = ['Protein','Carb','Vegetable','Sauce','Extra'];
   ov.innerHTML = '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;padding:20px;max-height:90vh;overflow-y:auto;box-sizing:border-box;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">ADD CUSTOM FOOD</div>' +
+    '<div style="min-width:0;"><div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">ADD CUSTOM FOOD</div>' +
+    (dateKey ? ('<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + _nutDayStamp(dateKey, slot) + '</div>') : '') + '</div>' +
     '<button id="nut-cf-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
     '</div>' +
     '<div id="nut-cf-err" style="display:none;background:rgba(255,80,80,0.15);border:1px solid rgba(255,80,80,0.4);border-radius:8px;padding:10px 12px;color:#FF6B6B;font-size:12px;margin-bottom:12px;"></div>' +
@@ -20215,40 +20289,11 @@ function _nutWeekPlanView(ns, days){
       h += '<button data-nut-repeat-day="' + dk + '" style="margin-left:auto;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:1px;padding:4px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">REPEAT</button>';
     }
     h += '</div>';
-    h += '<div style="padding:4px 14px 10px;">';
+    h += '<div style="padding:8px 12px 10px;">';
+    h += _nutDaySummary(ns, dk, {tight:true, accent:isToday});
+    var _dayK = _nutDayTotals(day).kcal;
     _NUT_PLAN_SLOTS.forEach(function(sl){
-      var comps = (meals[sl.k] && meals[sl.k].components) || [];
-      h += '<div style="padding:8px 0;border-bottom:1px solid var(--border);">';
-      h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">';
-      h += '<span style="font-family:var(--font-d);font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);">' + sl.l + '</span>';
-      h += '<span style="display:flex;gap:5px;flex-shrink:0;">';
-      h += '<button data-nut-plan-food="' + sl.k + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:700;padding:4px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Food</button>';
-      h += '<button data-nut-add-recipe="' + sl.k + '|' + dk + '" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:700;padding:4px 11px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">+ Recipe</button>';
-      h += '</span>';
-      h += '</div>';
-      if(!comps.length){
-        h += '<div style="font-size:11px;color:var(--text3);opacity:0.6;margin-top:3px;">Empty</div>';
-      } else {
-        comps.forEach(function(c, ci){
-          var f = (c.qty_g||0)/100;
-          var cK = Math.round((c.k||0)*f);
-          var cP = Math.round((c.p||0)*f*10)/10;
-          var cC = Math.round((c.c||0)*f*10)/10;
-          var cF = Math.round((c.f||0)*f*10)/10;
-          var sv = c.isRecipe ? (parseFloat(c.serves)||1) : 0;
-          var tag = c.isRecipe
-            ? '<span style="font-size:8px;font-weight:800;padding:1px 5px;border-radius:3px;background:rgba(200,150,62,0.2);color:var(--gold);margin-left:6px;">' + (sv !== 1 ? ('x' + sv + ' SERVES') : 'RECIPE') + '</span>'
-            : '';
-          h += '<div style="display:flex;align-items:center;margin-top:5px;">';
-          h += '<div style="flex:1;min-width:0;">';
-          h += '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + c.n + tag + '</div>';
-          h += '<div style="font-size:10px;color:var(--text3);">' + cK + ' kcal &middot; P' + cP + 'g &middot; C' + cC + 'g &middot; F' + cF + 'g</div>';
-          h += '</div>';
-          h += '<button data-nut-rm="' + sl.k + '|' + dk + '|' + ci + '" style="width:26px;height:26px;flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:50%;color:var(--text3);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;margin-left:8px;">&times;</button>';
-          h += '</div>';
-        });
-      }
-      h += '</div>';
+      h += _nutSlotCard(day, sl.k, dk, {mode:'plan', dayKcal:_dayK});
     });
     h += '</div></div>';
   });
@@ -20356,7 +20401,7 @@ function nutOpenRecipePicker(slot, dateKey){
   ov.id = 'nut-recipe-picker';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9700;display:flex;align-items:flex-end;';
   var dp = new Date(dateKey + 'T12:00:00');
-  var sub = _nutSlotLabel(slot) + ' &middot; ' + dp.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+  var sub = _nutDayStamp(dateKey, slot);
   ov.innerHTML =
     '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:82vh;">' +
     '<div style="padding:14px 16px 10px;flex-shrink:0;">' +

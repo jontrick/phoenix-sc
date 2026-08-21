@@ -553,6 +553,144 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._nutPickerMode, 'log', 'logging is available when stated');
   });
 
+  // ── Training day comes from the calendar, not the queue ───────────────────
+  // This reported "Upper Body" on a day with nothing scheduled, because it read
+  // blabGetState().last_completed_day + 1 — the next UNDONE session — instead of
+  // what Training's calendar actually has on that date.
+  const schedule = (dateISO, blabDay) => seed(`blab_calendar_v1_${UID}`, {
+    sessions: [{ blabWeek: 1, blabDay, scheduledDate: dateISO, status: 'pending' }], customs: [],
+  });
+
+  test('an empty day is rest even when a session sits unfinished in the queue', () => {
+    start();
+    seed(`blab_calendar_v1_${UID}`, { sessions: [], customs: [] });
+    app.blabGetState = () => ({ active: true, last_completed_day: 0 });   // Day 1 still undone
+    const t = app.nutTrainingForDay('2026-08-19');
+    assert.equal(t.label, 'Rest day', 'reads the calendar, not the queue');
+    assert.equal(t.rest, true, 'rest');
+    assert.equal(t.scheduled, false, 'nothing scheduled');
+  });
+
+  test('the label comes from what is scheduled on that date', () => {
+    start();
+    schedule('2026-08-19', 2);
+    const t = app.nutTrainingForDay('2026-08-19');
+    assert.equal(t.dayNum, 2, 'BLAB day 2');
+    assert.equal(t.label, 'Lower Body', 'named from the calendar');
+    assert.equal(t.rest, false, 'not a rest day');
+  });
+
+  test('a session scheduled on Monday does not label Wednesday', () => {
+    start();
+    schedule('2026-08-17', 1);                       // Monday
+    assert.equal(app.nutTrainingForDay('2026-08-17').label, 'Upper Body', 'Monday is Upper Body');
+    assert.equal(app.nutTrainingForDay('2026-08-19').rest, true, 'Wednesday is untouched by it');
+  });
+
+  test('targets follow the scheduled day — lower body gets the carb bump', () => {
+    start();
+    const base = { kcal: 2600, protein_g: 180, carbs_g: 300, fat_g: 70 };
+    schedule('2026-08-19', 2);
+    const lower = app.nutAdjustForDay(base, '2026-08-19');
+    seed(`blab_calendar_v1_${UID}`, { sessions: [], customs: [] });
+    const restDay = app.nutAdjustForDay(base, '2026-08-19');
+    assert.equal(lower.carbs_g, 340, 'lower body +40g carbs');
+    assert.equal(restDay.carbs_g, 270, 'rest day −30g carbs');
+    assert.ok(lower.kcal > restDay.kcal, 'and a training day is not the same as a rest day');
+  });
+
+  test('a custom session counts as training rather than rest', () => {
+    start();
+    seed(`blab_calendar_v1_${UID}`, {
+      sessions: [], customs: [{ id: 'c1', cat: 'WOD', label: 'Murph', scheduledDate: '2026-08-19', status: 'pending' }],
+    });
+    const t = app.nutTrainingForDay('2026-08-19');
+    assert.equal(t.rest, false, 'not a rest day');
+    assert.equal(t.label, 'Murph', 'named from the custom entry');
+  });
+
+  // ── The three day surfaces must not drift apart again ─────────────────────
+
+  const renderTab = (tab, weekMode) => {
+    app._nutTab = tab;
+    if (weekMode) app._nutWeekMode = weekMode;
+    const d = dom();
+    app.nutRenderScreen();
+    return d.html('nut-screen-body');
+  };
+
+  test('every day-editing surface offers the same controls', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Sauce')]);
+    const days = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Sauce', 'lunch', days[0], 1);
+    app.nutAssignRecipe('r_Sauce', 'lunch', app._nutToday(), 1);
+
+    ['today', 'meals'].forEach((tab) => {
+      const html = renderTab(tab);
+      assert.ok(html.indexOf('data-nut-pick') >= 0, `${tab}: + Food present`);
+      assert.ok(html.indexOf('data-nut-add-recipe') >= 0, `${tab}: + Recipe present`);
+      assert.ok(html.indexOf('data-nut-tick-day') >= 0, `${tab}: tick present`);
+      assert.ok(html.indexOf('data-nut-rm') >= 0, `${tab}: remove present`);
+    });
+    const plan = renderTab('week', 'plan');
+    assert.ok(plan.indexOf('data-nut-pick') >= 0, 'planner: + Food present');
+    assert.ok(plan.indexOf('data-nut-add-recipe') >= 0, 'planner: + Recipe present');
+    app._nutWeekMode = 'overview';
+  });
+
+  test('every day-editing surface shows what the day is meant to add up to', () => {
+    setUp(90);
+    const dk = app._nutToday();
+    schedule(dk, 2);
+    const target = String(app.nutAdjustForDay(app.nutGetState().targets, dk).kcal);
+    ['today', 'meals'].forEach((tab) => {
+      assert.ok(renderTab(tab).indexOf(target) >= 0, `${tab}: shows the ${target} kcal target`);
+    });
+    const plan = renderTab('week', 'plan');
+    assert.ok(plan.indexOf(target) >= 0, `planner: shows the ${target} kcal target — it never had one before`);
+    assert.ok(plan.indexOf('Lower Body') >= 0, 'planner: names the scheduled session for that day');
+    app._nutWeekMode = 'overview';
+  });
+
+  test('the planner plans and the today screen logs', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Sauce')]);
+    app.nutAssignRecipe('r_Sauce', 'lunch', app._nutToday(), 1);
+    assert.ok(renderTab('today').indexOf('|log"') >= 0, 'today asks to log');
+    const plan = renderTab('week', 'plan');
+    assert.equal(plan.indexOf('|log"'), -1, 'the planner never logs');
+    app._nutWeekMode = 'overview';
+  });
+
+  // Jon: "need day and date on the card adding to in any of the views" — opened
+  // from the planner, every add-sheet looked identical to opening it from Today,
+  // so nothing on screen said which day the food was about to land on.
+  test('the add sheet names the day it is writing to', () => {
+    setUp(90);
+    const days = app._nutSelectedWeekDays();
+    schedule(days[2], 2);
+    const stamp = app._nutDayStamp(days[2]);
+    assert.ok(stamp.indexOf('Wednesday') >= 0, 'names the weekday');
+    assert.ok(stamp.indexOf('Lower Body') >= 0, 'and what is trained that day');
+    assert.equal(stamp.indexOf('today'), -1, 'a future day is not marked today');
+  });
+
+  test('the add sheet marks today as today', () => {
+    setUp(90);
+    assert.ok(app._nutDayStamp(app._nutToday()).indexOf('today') >= 0, 'today is called out');
+  });
+
+  test('the food picker renders the day it is adding to', () => {
+    setUp(90);
+    const days = app._nutSelectedWeekDays();
+    const d = dom();
+    app.nutOpenFoodPicker('lunch', days[2], 'plan');
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('Add to Lunch') >= 0, 'slot named');
+    assert.ok(html.indexOf('Wednesday') >= 0, 'and the day it lands on');
+  });
+
   test('the week planner offers both a food and a recipe control per slot', () => {
     setUp(90);
     app.nutSaveRecipes([rec('Sauce')]);
@@ -563,8 +701,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const d = dom();
     app.nutRenderScreen();
     const html = d.html('nut-screen-body');
-    assert.ok(html.indexOf('data-nut-plan-food') >= 0, '+ Food control drawn');
+    assert.ok(html.indexOf('data-nut-pick') >= 0, '+ Food control drawn');
     assert.ok(html.indexOf('data-nut-add-recipe') >= 0, '+ Recipe control drawn');
+    assert.ok(html.indexOf("|plan\"") >= 0, 'and the planner asks for plan mode, not log');
+    assert.equal(html.indexOf("|log\""), -1, 'nothing in the planner logs');
     app._nutWeekMode = 'overview';
   });
 

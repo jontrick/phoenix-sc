@@ -138,6 +138,30 @@ function phxStripComments(s){
   return out.join('\n');
 }
 
+// ── SELF-CHECK: needles must survive their own matcher (Peptides, 22fc1e0) ──────────
+// hasCode/hasNotCode strip comments from the HAYSTACK. A needle that CONTAINS a comment is
+// therefore unmatchable by construction — the guard reports green while the regression it
+// names sits in the file as live code. Peptides hit exactly that: the needle
+// `if(local) return; // local takes priority` could never match, so reintroducing the .158
+// protocol-wipe bug passed. Within one commit that guard went from firing on prose to being
+// unable to fail — the shadow the fix for prose-firing casts.
+// This is mechanical, so the harness checks ITSELF rather than anyone remembering.
+{
+  const selfSrc = readFileSync(new URL('./harness.mjs', import.meta.url), 'utf8');
+  const re = /has(?:Not)?Code\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
+  const dead = [];
+  let m, seen = 0;
+  while ((m = re.exec(selfSrc))) {
+    seen++;
+    const needle = m[2].replace(/\\n/g, '\n').replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    if (phxStripComments(needle) !== needle) dead.push(needle.slice(0, 70));
+  }
+  dead.length === 0
+    ? ok(`SELF: all ${seen} comment-stripped needles can actually match`)
+    : bad(`SELF: ${dead.length} needle(s) contain a comment and can NEVER match — the guard cannot fail: ${dead.join(' | ')}`);
+}
+
+
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 

@@ -52,7 +52,25 @@ const sandbox = {
   alert: noop, confirm: () => false, prompt: () => null,
   atob: s => Buffer.from(s, 'base64').toString('binary'), btoa: s => Buffer.from(s, 'binary').toString('base64'),
   URL, URLSearchParams, TextEncoder, TextDecoder, Blob: class { constructor(){ this.size = 0; } }, FileReader: class { readAsDataURL(){} readAsText(){} addEventListener(){} },
-  Image: class { constructor(){ this.style = {}; } addEventListener(){} }, FormData: class { append(){} },
+  // v4.9.198 [PM]: Image MUST settle. The old stub accepted `.src` and did nothing, so any
+  // async case awaiting an image-loading helper (_phxDownscaleImage) HUNG rather than failed —
+  // "unsettled top-level await", no verdict, no red. An unsettled case produces NO signal at
+  // all, which is worse than a failing one: a fake-green generator of a new kind. Raised by
+  // Peptides after it nearly hit this writing the .197 pins. Default is onerror, so a helper
+  // under test takes its cannot-decode path unless a test supplies a richer stub deliberately.
+  Image: class {
+    constructor(){ this.style = {}; this.width = 0; this.height = 0; this.onload = null; this.onerror = null; this._src = ''; }
+    addEventListener(ev, fn){ if (ev === 'load') this.onload = fn; if (ev === 'error') this.onerror = fn; }
+    removeEventListener(){}
+    get src(){ return this._src; }
+    set src(v){
+      this._src = v;
+      // Async, like the real thing — a synchronous callback would let a test pass on ordering
+      // the browser does not give it.
+      Promise.resolve().then(() => { if (typeof this.onerror === 'function') this.onerror(new Error('sandbox Image: no decoder — supply your own stub to test the success path')); });
+    }
+  },
+  FormData: class { append(){} },
   fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}), text: () => Promise.resolve(''), blob: () => Promise.resolve({}) }),
   performance: { now: () => 0, mark: noop, measure: noop },
   matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }),

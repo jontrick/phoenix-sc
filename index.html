@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.183';
+var APP_VERSION='4.9.184';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -26076,6 +26076,20 @@ function _phxRecoveryNoteForAdd(dayName, sessionType, byDay){
 
 var _BLAB_CAL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 var _BLAB_DAY_LABELS = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
+
+// API other domains may call (contract-stable). Turns a BLAB day number — the
+// `blabDay` carried on entries from blabCalSessionsOn() — into its session name.
+// Returns '' for anything outside 1-4 rather than throwing, so a caller handling a
+// custom or rest entry does not need to pre-check.
+//
+// Added v4.9.184 because Nutrition was reading the _BLAB_DAY_LABELS array directly.
+// That is an internal: not on window, and renameable without notice. This is not —
+// it will not change shape without both other domains being told first.
+window.blabDayLabel = function(dayNumber){
+  var d = parseInt(dayNumber, 10);
+  if(!(d >= 1 && d <= 4)) return '';
+  return _BLAB_DAY_LABELS[d] || '';
+};
 // v4.9.162: the calendar runs on perpetually rather than paging a week at a time.
 // The window starts _blabCalBackDays before the Monday of the current week and runs
 // _blabCalDaysShown forward, extending as the athlete scrolls.
@@ -28569,6 +28583,12 @@ WOD: [
     note:'Work top to bottom. Pace the row or pay later.',
     movements:[ _phxMv('Row','2000m'), _phxMv('Wall Ball','50 reps · 9kg'), _phxMv('Sandbag Over Shoulder','30 reps · 25kg'),
       _phxMv('Thruster','20 reps @ 60kg'), _phxMv('Pull-Up','20 reps'), _phxMv('Run','1.6km') ],
+    config:{ chipper:true } },
+
+  { id:'wb-150', name:'150 Wall Balls', cat:'WOD', tier:'CONDITIONING',
+    format:'FOR TIME', renderer:'time', scoreType:'time', scoreLabel:'Total time',
+    note:'150 unbroken-as-possible wall balls, 9kg to a 10ft target. Break them into sets BEFORE you have to — the athletes who go unbroken to 50 lose more time on the floor afterwards than they gained. Squat to depth every rep; the ball must hit the target.',
+    movements:[ _phxMv('Wall Ball','150 reps · 9kg · 10ft target') ],
     config:{ chipper:true } },
 
   { id:'titan-atlas', name:'Atlas', cat:'WOD', tier:'CONDITIONING',

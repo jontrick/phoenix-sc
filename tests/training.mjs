@@ -1129,4 +1129,96 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(press, 'still present');
     assert.equal(press.prev_sets, null, 'no invented history');
   });
+
+  // ── 150 Wall Balls, built through the real library path (v4.9.184) ────────
+  // Jon asked for Karen, named for what the session is rather than the benchmark.
+  // Built through phxSessionById / the plan builder rather than asserting the object
+  // exists — a harness assertion certified THIS EXACT WOD as working while it was
+  // unreachable behind two dead renderers, which is why it had to be rebuilt at all.
+
+  test('the wall-ball session builds through the library, not just exists in it', () => {
+    const s = app.phxSessionById('wb-150');
+    assert.ok(s, 'resolvable by id');
+    assert.equal(s.cat, 'WOD', 'categorised as a WOD');
+    assert.equal(s.tier, 'CONDITIONING', 'and tiered so it appears in the conditioning grid');
+    assert.ok(s.movements.length >= 1, 'has the work');
+    assert.ok(/150/.test(s.movements[0].detail), 'all 150 reps are in the prescription');
+    assert.ok(/9kg/.test(s.movements[0].detail), 'with the load');
+  });
+
+  test('it is scored, so it earns a PB and a place in RECORDS', () => {
+    // The whole reason for rebuilding it in PHX_LIB rather than restoring the old
+    // opener: that one could not be scored at all.
+    const s = app.phxSessionById('wb-150');
+    assert.equal(s.scoreType, 'time', 'scored on time');
+    assert.ok(s.scoreLabel, 'with a label for the score entry screen');
+    assert.equal(s.renderer, 'time', 'and renders through the timed runner');
+  });
+
+  test('it is reachable from the conditioning list Jon actually browses', () => {
+    const found = app.phxAllWods().filter((w) => w.id === 'wb-150');
+    assert.equal(found.length, 1, 'listed exactly once among the WODs');
+    const tiered = app.phxWodsByTier('CONDITIONING').filter((w) => w.id === 'wb-150');
+    assert.equal(tiered.length, 1, 'and in the CONDITIONING tier');
+  });
+
+  test('the label describes the work, not the benchmark', () => {
+    const s = app.phxSessionById('wb-150');
+    assert.ok(!/karen/i.test(s.name), `name must not carry the benchmark: got "${s.name}"`);
+    assert.ok(/wall ball/i.test(s.name), 'it says what the work is');
+    assert.ok(/150/.test(s.name), 'and how much of it');
+  });
+
+  test('every library session still builds — adding one broke nothing', () => {
+    const all = app.phxAllWods().concat(app.phxAllCore());
+    all.forEach((s) => {
+      assert.ok(s.id && s.name, `session has id and name: ${JSON.stringify(s.id)}`);
+      assert.ok(Array.isArray(s.movements) && s.movements.length, `${s.id} has movements`);
+      assert.ok(s.scoreType, `${s.id} is scoreable`);
+    });
+  });
+
+  // ── Public API for other domains ──────────────────────────────────────────
+  // Nutrition reads the BLAB day name to adjust macro targets. It was reaching into
+  // _BLAB_DAY_LABELS, a bare module var I would rename without thinking — so this is
+  // the supported surface, and it is contract-stable.
+
+  test('blabDayLabel maps a BLAB day number to its session name', () => {
+    assert.equal(app.blabDayLabel(1), 'Upper Body', 'day 1');
+    assert.equal(app.blabDayLabel(2), 'Lower Body', 'day 2');
+    assert.equal(app.blabDayLabel(4), 'Lower Power', 'day 4');
+  });
+
+  test('blabDayLabel returns empty for anything outside the programme days', () => {
+    // A caller handling a custom or rest entry must not have to pre-check.
+    [0, 5, null, undefined, 'x', -1].forEach((v) => {
+      assert.equal(app.blabDayLabel(v), '', `no label for ${JSON.stringify(v)}`);
+    });
+  });
+
+  test('the day range is enforced, not merely implied by the array length', () => {
+    // The cases above pass on the `|| ''` fallback alone, so they do NOT prove the
+    // range check — verified by removing it and watching them stay green. This one
+    // discriminates: grow the internal array and the accessor must still refuse a
+    // day outside 1-4, because BLAB has four days and a fifth label would be a bug
+    // in the array, not a new training day to hand Nutrition.
+    const real = app._BLAB_DAY_LABELS.slice();
+    try {
+      app._BLAB_DAY_LABELS.push('Not A Real Day');
+      assert.equal(app.blabDayLabel(5), '', 'a fifth array slot is still not a valid BLAB day');
+      assert.equal(app.blabDayLabel(3), 'Upper Body — Chins', 'and the real days are unaffected');
+    } finally {
+      app._BLAB_DAY_LABELS.length = 0;
+      real.forEach((x) => app._BLAB_DAY_LABELS.push(x));
+    }
+  });
+
+  test('the label accessor agrees with what the calendar renders', () => {
+    // If these ever diverge, Nutrition would show one training day and the calendar
+    // another, and neither would look wrong on its own.
+    schedule({ sessions: [S(5, 2, dayFromToday(0))], customs: [] });
+    const entry = app.blabCalSessionsOn(dayFromToday(0))[0];
+    assert.equal(app.blabDayLabel(entry.blabDay), app.blabCalEntryView(entry).title,
+      'accessor and calendar agree on the day name');
+  });
 }

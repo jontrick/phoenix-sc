@@ -94,7 +94,7 @@ console.log('\nFeature check — v4.9.108 architecture + content:');
 const has = (needle, label) => html.includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNot = (needle, label) => !html.includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.183'", 'version is 4.9.183');
+has("var APP_VERSION='4.9.184'", 'version is 4.9.184');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -796,10 +796,10 @@ try {
   vm.createContext(sb2);
   new vm.Script(libSlice).runInContext(sb2);
   const wods = sb2.phxAllWods(), core = sb2.phxAllCore(), all = sb2.phxAllSessions();
-  wods.length===19 ? ok('exactly 19 WODs (14 Conditioning + 5 Aerobic)') : bad('expected 19 WODs, got '+wods.length);
+  wods.length===20 ? ok('exactly 20 WODs (15 Conditioning + 5 Aerobic)') : bad('expected 20 WODs, got '+wods.length);
   core.length===6  ? ok('exactly 6 Core sessions (v4.9.123: R1/R2/R3 + S1/S2/S3)') : bad('expected 6 Core, got '+core.length);
-  all.length===25  ? ok('25 total sessions') : bad('expected 25 sessions, got '+all.length);
-  sb2.phxWodsByTier('CONDITIONING').length===14 ? ok('14 Conditioning WODs') : bad('Conditioning count '+sb2.phxWodsByTier('CONDITIONING').length);
+  all.length===26  ? ok('26 total sessions') : bad('expected 26 sessions, got '+all.length);
+  sb2.phxWodsByTier('CONDITIONING').length===15 ? ok('15 Conditioning WODs') : bad('Conditioning count '+sb2.phxWodsByTier('CONDITIONING').length);
   sb2.phxWodsByTier('AEROBIC').length===5       ? ok('5 Aerobic sessions') : bad('Aerobic count '+sb2.phxWodsByTier('AEROBIC').length);
   const ctExpect={'Rotational Focus':3,'Core Strength':3};
   const ct={}; core.forEach(c=>ct[c.coreType]=(ct[c.coreType]||0)+1);
@@ -1471,6 +1471,24 @@ has('window._phxActiveSessionKey = null',       'REENTRY: key released on comple
     ? ok(`VERSION: v4.9.${cur} is labelled in the source`)
     : bad(`VERSION: APP_VERSION is 4.9.${cur} but no comment mentions v4.9.${cur} — label the change you are shipping (stale label after a rebase?)`);
 }
+
+// ── 150 Wall Balls + public day-label accessor (v4.9.184) ───────────────────
+console.log('\n150 Wall Balls / public API:');
+has("id:'wb-150', name:'150 Wall Balls'", 'WB150: library entry present, named for the work');
+// Jon: "named different usins description what session is". The benchmark name must
+// not be the label — keeping it in parentheses would satisfy the letter and defeat
+// the point. It is allowed in the coaching note, which is context, not the label.
+(() => {
+  const m = /\{ id:'wb-150',[\s\S]{0,900}?\},\n\n/.exec(html);
+  if (!m) { bad('WB150: could not isolate the entry to check its naming'); return; }
+  const entry = m[0];
+  const nameMatch = /name:'([^']*)'/.exec(entry);
+  const name = nameMatch ? nameMatch[1] : '';
+  if (/karen/i.test(name)) bad(`WB150: entry name is "${name}" — Jon asked for it named by the work, not the benchmark`);
+  else ok('WB150: benchmark name kept out of the label');
+})();
+has("window.blabDayLabel = function", 'API: public day-label accessor exists');
+has("var _BLAB_DAY_LABELS = [", 'API: the internal array still works until Nutrition migrates');
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

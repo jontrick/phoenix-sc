@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.230';
+var APP_VERSION='4.9.231';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7842,6 +7842,12 @@ function _phxRecordWriteError(context, err, payload){
 // file that was not in the commit. Two trees then shipped as 4.9.220 — the exact thing that
 // number exists to rule out. It also now FAILS when the working tree and the commit
 // disagree, because those edits are not shipping.
+
+// v4.9.231 [PM]: rule 8 applied to the paths Jon feels. Peptides' .230 found a blood panel
+// saving without its photo and saying nothing; following it, 24 Supabase WRITE paths still
+// reported only to console.warn — invisible in the iOS PWA — and 22 were PM/shared. The four
+// that touch his own records are now instrumented: daily weigh-in, morning photo, WOD score,
+// check-in photo. Pinned in harness.mjs as a ratchet on the named paths.
 
 // ====== v4.9.175 SHARED DOM CONFIRM (PM-owned) ======
 // CLAUDE.md rule 4: native confirm() is SUPPRESSED in the iOS PWA — and a suppressed
@@ -26007,7 +26013,7 @@ async function _wciUploadPhoto(side, dataURL, userId, weekStartDate){
       contentType: blob.type || 'image/jpeg',
       upsert: true
     });
-    if(up.error){ console.warn('[PHX] photo upload failed ('+side+'):', up.error); return null; }
+    if(up.error){ console.warn('[PHX] photo upload failed ('+side+'):', up.error); _phxRecordWriteError('checkinPhoto.upload', up.error, {side: side, path: path}); return null; }
     var u = sb.storage.from('checkin-photos').getPublicUrl(path);
     return (u && u.data && u.data.publicUrl) ? u.data.publicUrl : null;
   } catch(e){ console.warn('[PHX] photo upload error ('+side+'):', e); return null; }
@@ -26490,7 +26496,7 @@ async function _phxMorningSave(){
       };
       // UPSERT on (user_id, date) so a re-save on the same day overwrites cleanly.
       var ins = await sb.from('daily_weigh_ins').upsert(row, {onConflict: 'user_id,date'}).select().single();
-      if(ins.error){ console.warn('[PHX] daily weigh-in insert failed:', ins.error); }
+      if(ins.error){ console.warn('[PHX] daily weigh-in insert failed:', ins.error); _phxRecordWriteError('morningSave.weighIn', ins.error, row); }
       // Photo upload (best-effort).
       var dataURL = window._phxMorning && window._phxMorning.photoDataURL;
       if(dataURL && typeof _wciDataURLToBlob === 'function'){
@@ -26508,6 +26514,7 @@ async function _phxMorningSave(){
               }
             } else {
               console.warn('[PHX] morning photo upload failed:', up.error);
+              _phxRecordWriteError('morningSave.photoUpload', up.error, {path: path});
             }
           } catch(e){ console.warn('[PHX] morning photo upload error:', e); }
         }
@@ -30902,8 +30909,8 @@ function _phxSaveScore(session, rawScore, notes, extra){
     if(typeof sb!=='undefined' && sb && uid){
       sb.from('wod_scores').insert({ user_id:uid, wod_id:rec.wod_id, score:rec.score,
         score_type:rec.score_type, date:rec.date, notes:rec.notes, is_pb:rec.is_pb })
-        .then(function(res){ if(res && res.error) console.warn('[PHX] wod_scores insert:', res.error.message); })
-        .catch(function(e){ console.warn('[PHX] wod_scores insert threw', e); });
+        .then(function(res){ if(res && res.error){ console.warn('[PHX] wod_scores insert:', res.error.message); _phxRecordWriteError('saveScore.insert', res.error, rec); } })
+        .catch(function(e){ console.warn('[PHX] wod_scores insert threw', e); _phxRecordWriteError('saveScore.insert.reject', e, rec); });
     }
   }catch(e){ console.warn('[PHX] score save', e); }
   return rec;

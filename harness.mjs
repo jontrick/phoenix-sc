@@ -138,6 +138,27 @@ function phxStripComments(s){
   return out.join('\n');
 }
 
+// ── RULE 8 SWEEP (PM, v4.9.231) ────────────────────────────────────────────────
+// CLAUDE.md rule 8: no Supabase WRITE may report only to console — invisible on iPhone.
+// Found by following Peptides' .230 (a blood panel saving without its photo, silently):
+// 24 write paths were still console-only, 22 of them PM/shared, including Jon's daily
+// weigh-in, his WOD scores and his check-in photos. This pins the four highest-value ones
+// as instrumented. It is a RATCHET on the named paths, not a whole-file ban — reads that
+// warn are fine, and the remaining sites are logged for follow-up rather than hidden.
+{
+  const CRITICAL = [
+    ["morningSave.weighIn",    "his daily weigh-in"],
+    ["morningSave.photoUpload","his morning photo"],
+    ["saveScore.insert",       "his WOD scores"],
+    ["checkinPhoto.upload",    "his check-in photos"],
+  ];
+  const src = phxStripComments(html);
+  const missing = CRITICAL.filter(([ctx]) => !src.includes(`_phxRecordWriteError('${ctx}'`));
+  missing.length === 0
+    ? ok(`RULE 8: all ${CRITICAL.length} critical write paths record, not just console.warn`)
+    : bad(`RULE 8: write path reports only to console — invisible on iPhone: ${missing.map(m => m[0] + ' (' + m[1] + ')').join(', ')}`);
+}
+
 // ── SELF-CHECK: needles must survive their own matcher (Peptides, 22fc1e0) ──────────
 // hasCode/hasNotCode strip comments from the HAYSTACK. A needle that CONTAINS a comment is
 // therefore unmatchable by construction — the guard reports green while the regression it
@@ -178,7 +199,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.230'", 'version is 4.9.230');
+has("var APP_VERSION='4.9.231'", 'version is 4.9.231');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

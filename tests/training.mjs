@@ -2018,4 +2018,94 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(r.armed[0], o, 'and it is the overlay that was just built');
     } finally { r.restore(); }
   });
+
+  // ── PAIRED WALL BALLS (v4.9.223) ──────────────────────────────────────────
+  // Jon ruled "paired". Added alongside wb-150 rather than replacing it, so the
+  // standalone stays a clean comparable benchmark.
+  //
+  // The library CANNOT carry two scores: one score and one score_type per row, and
+  // phxScoreToNum reduces composites to a single number for the PB test (load_reps
+  // compares on load and ignores reps entirely). So this is two linked entries, each
+  // scored in its native type. These cases pin that, and pin REACHABILITY — the old
+  // Karen sat in the library, unreachable, under a green assertion.
+
+  test('WB: the standalone was not touched', () => {
+    // Jon chose the pair; that is not a statement that the standalone was wrong.
+    const solo = app.phxSessionById('wb-150');
+    assert.ok(solo, '150 Wall Balls still exists');
+    assert.equal(solo.name, '150 Wall Balls', 'under its own name');
+    assert.equal(solo.scoreType, 'time', 'still scored as a plain time');
+    assert.equal(solo.pairedNext, undefined, 'and it does not chain anywhere');
+  });
+
+  test('WB: the paired entry is named for the work, not the benchmark', () => {
+    const p = app.phxSessionById('wb-150-core');
+    assert.ok(p, 'the paired session exists');
+    assert.ok(/wall ball/i.test(p.name) && /core/i.test(p.name), 'the name says what the session is');
+    assert.ok(!/karen/i.test(p.name), 'and does not reintroduce the benchmark name Jon asked to remove');
+  });
+
+  test('WB: each half keeps its own score type — nothing is fused', () => {
+    const p1 = app.phxSessionById('wb-150-core');
+    const p2 = app.phxSessionById('wb-150-core-p2');
+    assert.equal(p1.scoreType, 'time', 'the wall balls score as a time');
+    assert.equal(p2.scoreType, 'rounds', 'the core scores as rounds + reps');
+    assert.equal(p1.scoreType === p2.scoreType, false, 'two native types, not one composite reduced to half of itself');
+  });
+
+  test('WB: both halves build a valid renderer plan', () => {
+    // phxBuildSessionPlan throws on an unknown renderer, unknown scoreType, or missing
+    // movements — so this is the structural validity of both entries.
+    const p1 = app.phxBuildSessionPlan(app.phxSessionById('wb-150-core'));
+    assert.equal(p1.renderer, 'time', 'part 1 runs the for-time renderer');
+    const p2 = app.phxBuildSessionPlan(app.phxSessionById('wb-150-core-p2'));
+    assert.equal(p2.renderer, 'amrap', 'part 2 runs the amrap renderer');
+    assert.equal(p2.durationSec, 480, 'for eight minutes');
+  });
+
+  test('WB: part 2 is REACHABLE from part 1, not merely present', () => {
+    // The whole point. Two entries that exist but have no path between them is the
+    // _blabCalEntryView shape: every assertion green, nothing usable on the phone.
+    const p1 = app.phxSessionById('wb-150-core');
+    assert.equal(p1.pairedNext, 'wb-150-core-p2', 'part 1 declares its next part');
+    assert.ok(app.phxSessionById(p1.pairedNext), 'and that id actually resolves to a session');
+  });
+
+  test('WB: the continue button is ON the saved-score screen', () => {
+    // Drives the real view rather than asserting the field exists. A dangling id would
+    // paint a button that goes nowhere, so the renderer only draws it when the next
+    // part resolves — both directions checked below.
+    reset(); signIn(UID);
+    const dom = recordingDom();
+    try {
+      const p1 = app.phxSessionById('wb-150-core');
+      app._phxScoreSaved(p1, { score: '452', is_pb: false });
+      const html = dom.made.map((m) => m.innerHTML || '').join(' ');
+      assert.ok(html.includes('phx-saved-next'), 'the continue control is rendered');
+      assert.ok(/Start Part 2/i.test(html), 'and says what it starts');
+      assert.ok(/not affected by how the core goes/i.test(html), 'and states that the time is already banked');
+    } finally { dom.restore(); }
+  });
+
+  test('WB: an unpaired session shows no continue button', () => {
+    // The standalone must not sprout a dead control.
+    reset(); signIn(UID);
+    const dom = recordingDom();
+    try {
+      app._phxScoreSaved(app.phxSessionById('wb-150'), { score: '452', is_pb: false });
+      const html = dom.made.map((m) => m.innerHTML || '').join(' ');
+      assert.ok(!html.includes('phx-saved-next'), 'no continue control on a session with no next part');
+      assert.ok(html.includes('phx-saved-records'), 'while the normal buttons are intact');
+    } finally { dom.restore(); }
+  });
+
+  test('WB: part 2 is hidden from the WOD grid but still startable', () => {
+    // Its score only means anything in sequence, so it must not be offered cold — but
+    // it has to stay resolvable, or the continue button above goes nowhere.
+    const grid = app.phxWodsByTier('CONDITIONING');
+    assert.ok(grid.some((w) => w.id === 'wb-150-core'), 'the pair is offered');
+    assert.ok(grid.some((w) => w.id === 'wb-150'), 'the standalone is still offered');
+    assert.ok(!grid.some((w) => w.id === 'wb-150-core-p2'), 'part 2 is not offered on its own');
+    assert.ok(app.phxSessionById('wb-150-core-p2'), 'but it still resolves by id');
+  });
 }

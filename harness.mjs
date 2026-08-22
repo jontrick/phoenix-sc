@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.222'", 'version is 4.9.222');
+has("var APP_VERSION='4.9.223'", 'version is 4.9.223');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -934,10 +934,25 @@ try {
   vm.createContext(sb2);
   new vm.Script(libSlice).runInContext(sb2);
   const wods = sb2.phxAllWods(), core = sb2.phxAllCore(), all = sb2.phxAllSessions();
-  wods.length===20 ? ok('exactly 20 WODs (15 Conditioning + 5 Aerobic)') : bad('expected 20 WODs, got '+wods.length);
+  // v4.9.223: 20 -> 22. Two entries added for the paired wall-ball session, one of
+  // which is hidden from the grid. Note the two counts below now DIFFER by exactly the
+  // hidden entries, and that gap is asserted rather than left as an unexplained
+  // discrepancy for the next reader to talk themselves out of.
+  wods.length===22 ? ok('exactly 22 WODs in the library (16 Conditioning + 5 Aerobic + 1 hidden paired part)') : bad('expected 22 WODs, got '+wods.length);
   core.length===6  ? ok('exactly 6 Core sessions (v4.9.123: R1/R2/R3 + S1/S2/S3)') : bad('expected 6 Core, got '+core.length);
-  all.length===26  ? ok('26 total sessions') : bad('expected 26 sessions, got '+all.length);
-  sb2.phxWodsByTier('CONDITIONING').length===15 ? ok('15 Conditioning WODs') : bad('Conditioning count '+sb2.phxWodsByTier('CONDITIONING').length);
+  all.length===28  ? ok('28 total sessions') : bad('expected 28 sessions, got '+all.length);
+  // phxWodsByTier is the GRID view and excludes hidden entries, so this is what Jon
+  // can actually see and start. The library total above counts the hidden part too.
+  sb2.phxWodsByTier('CONDITIONING').length===16 ? ok('16 Conditioning WODs offered in the grid') : bad('Conditioning count '+sb2.phxWodsByTier('CONDITIONING').length);
+  (() => {
+    // The gap between the library and the grid must be exactly the entries marked
+    // hidden — nothing else may quietly drop out of the grid unexplained.
+    const shown = sb2.phxWodsByTier('CONDITIONING').length + sb2.phxWodsByTier('AEROBIC').length;
+    const hidden = wods.filter(w => w.hidden).length;
+    if (wods.length - shown === hidden) ok(`grid hides exactly the ${hidden} entry marked hidden, nothing else`);
+    else bad(`library has ${wods.length} WODs and the grid shows ${shown}, a gap of ${wods.length - shown}, ` +
+             `but only ${hidden} are marked hidden. Something is falling out of the grid unaccounted for.`);
+  })();
   sb2.phxWodsByTier('AEROBIC').length===5       ? ok('5 Aerobic sessions') : bad('Aerobic count '+sb2.phxWodsByTier('AEROBIC').length);
   const ctExpect={'Rotational Focus':3,'Core Strength':3};
   const ct={}; core.forEach(c=>ct[c.coreType]=(ct[c.coreType]||0)+1);
@@ -1166,7 +1181,7 @@ try {
 })();
 
 // ── PEPTIDES — cross-domain contract (STRUCTURAL) ───────────────────────────
-// TWO foreign surfaces, as of v4.9.221. Listing them is the point of this block:
+// TWO foreign surfaces, as of v4.9.223. Listing them is the point of this block:
 // an undeclared consumption is how a rename in another domain becomes a black
 // screen here.
 //   _phxRecordWriteError  (PM)         — every call site typeof-guarded, so a

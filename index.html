@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.222';
+var APP_VERSION='4.9.223';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -30271,6 +30271,35 @@ WOD: [
     movements:[ _phxMv('Wall Ball','150 reps · 9kg · 10ft target') ],
     config:{ chipper:true } },
 
+  // v4.9.223 — Jon ruled "paired". Added ALONGSIDE wb-150, which is untouched: the
+  // standalone stays a clean comparable benchmark time, and a fused entry cannot give
+  // him that.
+  //
+  // WHY TWO LINKED ENTRIES RATHER THAN ONE SESSION WITH A COMBINED SCORE. The library
+  // cannot carry two scores. wod_scores holds one score and one score_type per row,
+  // and phxScoreToNum reduces every composite to a SINGLE number for the PB test —
+  // load_reps compares on load and ignores the reps entirely. So a fused entry would
+  // have silently decided PBs on half the session. Chaining keeps each half in its
+  // native type: the wall balls score as a time, the core scores as rounds + reps,
+  // both comparable against their own history, neither polluting the other.
+  //
+  // Named for the work, not the benchmark, per Jon's standing instruction.
+  { id:'wb-150-core', name:'150 Wall Balls + Core AMRAP', cat:'WOD', tier:'CONDITIONING',
+    format:'FOR TIME — THEN AMRAP 8', renderer:'time', scoreType:'time', scoreLabel:'Wall ball time',
+    note:'Part 1 of 2. 150 wall balls for time, 9kg to a 10ft target — then an 8 minute core AMRAP straight after. Break the wall balls into sets BEFORE you have to. Each part is scored and tracked separately: this one on time, the core on rounds. Neither is averaged into the other.',
+    movements:[ _phxMv('Wall Ball','150 reps · 9kg · 10ft target') ],
+    config:{ chipper:true }, pairedNext:'wb-150-core-p2' },
+
+  // Part 2. Hidden from the WOD grid so it cannot be started on its own by accident —
+  // its time only means anything as the second half of the pair. Reached from the
+  // saved-score screen of part 1.
+  { id:'wb-150-core-p2', name:'150 Wall Balls + Core AMRAP — Core', cat:'WOD', tier:'CONDITIONING',
+    format:'AMRAP 8', renderer:'amrap', scoreType:'rounds', scoreLabel:'Rounds + reps',
+    note:'Part 2 of 2, straight off the wall balls. 8 minutes, as many rounds as possible. The trunk is already cooked — hold the positions rather than racing them.',
+    movements:[ _phxMv('Hanging Leg Raise','10 reps'), _phxMv('Landmine Rotation','16 reps · 8 each side'),
+      _phxMv('Ab Wheel','12 reps') ],
+    config:{ durationMin:8 }, hidden:true, pairedFrom:'wb-150-core' },
+
   { id:'titan-atlas', name:'Atlas', cat:'WOD', tier:'CONDITIONING',
     format:'FOR TIME', renderer:'time', scoreType:'time', scoreLabel:'Total time',
     note:'Loaded carries. You cannot put it down — drop = restart that segment.',
@@ -30461,7 +30490,11 @@ function phxAllWods(){ return PHX_LIB.WOD.concat(PHX_LIB.AEROBIC||[]); }
 function phxAllCore(){ return PHX_LIB.CORE; }
 function phxAllSessions(){ return phxAllWods().concat(phxAllCore()); }
 function phxSessionById(id){ var a=phxAllSessions(); for(var i=0;i<a.length;i++){ if(a[i].id===id) return a[i]; } return null; }
-function phxWodsByTier(t){ return phxAllWods().filter(function(w){ return w.tier===t; }); }
+// v4.9.223: `hidden` entries are the second half of a paired session. They are real
+// library sessions — startable, scorable, in phxSessionById — but must not appear in
+// the grid as something to start cold, because their score only means anything in
+// sequence. Only wb-150-core-p2 uses it today.
+function phxWodsByTier(t){ return phxAllWods().filter(function(w){ return w.tier===t && !w.hidden; }); }
 function phxCoreByType(t){ return PHX_LIB.CORE.filter(function(c){ return c.coreType===t; }); }
 function phxCoreTypes(){ var seen=[]; PHX_LIB.CORE.forEach(function(c){ if(seen.indexOf(c.coreType)<0) seen.push(c.coreType); }); return seen; }
 
@@ -31426,10 +31459,22 @@ function _phxScoreSaved(s, rec){
     (rec.is_pb?'<div style="font-family:var(--font-d);font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);">★ New Personal Best ★</div>':'<div style="font-family:var(--font-d);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--green,#4CAF50);">Score Saved</div>')+
     '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);">'+s.name+'</div>'+
     '<div style="font-family:var(--font-d);font-size:32px;font-weight:900;color:var(--gold);">'+phxFormatScore(s.scoreType,rec.score)+'</div>'+
+    // v4.9.223: a paired session continues here. Rendered ONLY when this session
+    // declares a next part AND that part actually resolves — a dangling id would
+    // otherwise paint a button that goes nowhere, which is the failure mode this
+    // whole build is written against.
+    ((function(){
+      var nx = s.pairedNext ? phxSessionById(s.pairedNext) : null;
+      if(!nx) return '';
+      return '<div style="margin-top:8px;"><button id="phx-saved-next" style="width:100%;padding:16px 24px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Start Part 2 — '+nx.format+'</button>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5;">Scored separately. This time is already saved and is not affected by how the core goes.</div></div>';
+    })())+
     '<div style="display:flex;gap:10px;margin-top:8px;">'+
       '<button id="phx-saved-records" style="padding:14px 24px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">View Records</button>'+
       '<button id="phx-saved-done" style="padding:14px 24px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Done</button>'+
     '</div></div>';
+  var _nextBtn = document.getElementById('phx-saved-next');
+  if(_nextBtn) _nextBtn.onclick=function(){ o.remove(); if(typeof _phxStartSession==='function') _phxStartSession(s.pairedNext); };
   document.getElementById('phx-saved-records').onclick=function(){ o.remove(); if(typeof navTo==='function') navTo('records'); };
   document.getElementById('phx-saved-done').onclick=function(){ o.remove(); if(typeof renderRecords==='function') renderRecords(); };
 }

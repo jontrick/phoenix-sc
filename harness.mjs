@@ -2157,6 +2157,10 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
   }
   // The `out` initialiser is the declared shape of everything this aggregator hands out.
   const decl = src.slice(i, i + 600);
+  // END-ANCHORED, not size-anchored (Nutrition's refinement, checked by truncation
+  // rather than argued): the regex below requires the literal's CLOSING brace, so a
+  // window that stops mid-literal cannot satisfy it and reports DID NOT RUN. Verified
+  // by shrinking this to 120 — it failed loudly instead of pinning a partial list.
   const m = decl.match(/var out = \{([^}]*)\}/);
   if (!m) {
     bad('EXITS: found the aggregator but not its `out` initialiser — the field pin DID NOT RUN. ' +

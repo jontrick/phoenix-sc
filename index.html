@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.231';
+var APP_VERSION='4.9.232';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22032,7 +22032,13 @@ function _pepSendCloud(payload, useKeepalive){
         console.warn("[PHX] peptide cloud sync error:", e);
         if(typeof _phxRecordWriteError === "function") _phxRecordWriteError("pep mirror.exception", e, _pepErrorSummary(payload));
       });
-  } catch(e){ console.warn("[PHX] peptide cloud sync threw:", e); }
+  } catch(e){
+    // v4.9.232: was console-only. This wraps payload construction and the
+    // keepalive branch, so a throw here means the mirror never left the device
+    // at all — the loudest possible failure, reported the quietest way.
+    console.warn("[PHX] peptide cloud sync threw:", e);
+    if(typeof _phxRecordWriteError === "function") _phxRecordWriteError("pep mirror.threw", e, _pepErrorSummary(payload));
+  }
 }
 
 // v4.9.154: force the pending debounced write out immediately when the app is
@@ -24126,10 +24132,48 @@ async function pepDeleteBloodPanel(){
   }
   var uid = currentSession && currentSession.user && currentSession.user.id;
   if(typeof sb === "undefined" || !sb || !uid) return;
+  var msg = document.getElementById("pep-blood-save-msg");
+  // v4.9.232: this whole path reported success unconditionally. Three faults,
+  // found by sweeping my own block after fixing the SAVE side in .230 — the
+  // neighbour trap again, same file, hours later.
+  //
+  //  1. supabase-js .delete() and storage .remove() RESOLVE with {data, error}.
+  //     They do not throw on a policy denial, so the catch below never fired
+  //     and neither error was ever read.
+  //  2. the storage removal sat in a bare try/catch(_e){} — his pathology
+  //     PHOTO could survive in the bucket after he deleted the panel, which is
+  //     the privacy half and the one that matters most here.
+  //  3. the sheet closed and the draft cleared whatever happened, so a delete
+  //     that did not delete looked identical to one that did.
+  var photoErr = null, rowErr = null;
   try {
-    if(d.photo_path){ try { await sb.storage.from("blood-panels").remove([d.photo_path]); } catch(_e){} }
-    await sb.from("blood_panels").delete().eq("id", d.id).eq("user_id", uid);
-  } catch(e){ console.warn("[PHX] blood panel delete failed:", e); }
+    if(d.photo_path){
+      var rm = await sb.storage.from("blood-panels").remove([d.photo_path]);
+      if(rm && rm.error) photoErr = rm.error;
+    }
+    var del = await sb.from("blood_panels").delete().eq("id", d.id).eq("user_id", uid);
+    if(del && del.error) rowErr = del.error;
+  } catch(e){
+    console.warn("[PHX] blood panel delete failed:", e);
+    rowErr = e;
+  }
+
+  if(rowErr || photoErr){
+    if(typeof _phxRecordWriteError === "function"){
+      _phxRecordWriteError("blood panel delete", rowErr || photoErr,
+        {panel_id: String(d.id).length, photo: !!d.photo_path, row_failed: !!rowErr});
+    }
+    // Sheet stays open. d.id is intact, so Delete Panel retries both halves —
+    // including removing an image orphaned by a row delete that did succeed.
+    if(msg) msg.innerHTML = rowErr
+      ? "Could not delete this panel (" + _esc((rowErr && rowErr.message) ? String(rowErr.message) : "unknown error") + "). It is still stored. Tap Delete Panel to try again."
+      : "The panel was deleted, but its photo could not be removed from storage (" + _esc((photoErr && photoErr.message) ? String(photoErr.message) : "unknown error") + "). Tap Delete Panel to try removing the image again.";
+    var db = document.getElementById("pep-blood-del");
+    if(db){ db.removeAttribute("data-confirm"); db.textContent = "Delete Panel"; }
+    await pepBloodsLoad(true);
+    return;
+  }
+
   _pepBloodDraft = null;
   var ov = document.getElementById("pep-blood-sheet");
   if(ov) ov.remove();

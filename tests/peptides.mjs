@@ -1980,6 +1980,79 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         'console.warn is invisible on his phone; this is the only surface he has');
     });
 
+    // ── DELETE, swept after fixing SAVE in .230. The neighbour trap again,
+    // same file, hours later: I fixed the save path and did not look at the one
+    // underneath it. Three faults, and the middle one is the privacy fault.
+    const delSetUp = (rowErr, photoErr, removeThrows) => {
+      reset();
+      signIn(UID);
+      const seen = [];
+      const q = {
+        delete() { seen.push('row-delete'); return q; },
+        select() { return q; }, eq() { return q; }, order() { return q; }, update() { return q; },
+        single() { return Promise.resolve({ data: null, error: null }); },
+        then(a, b) { return Promise.resolve({ data: null, error: rowErr || null }).then(a, b); },
+      };
+      app.sb = {
+        from: () => q,
+        storage: { from: () => ({
+          remove: () => {
+            seen.push('photo-remove');
+            if (removeThrows) return Promise.reject(new Error('network down'));
+            return Promise.resolve({ data: null, error: photoErr || null });
+          },
+        }) },
+      };
+      app._pepBloodDraft = { id: 'row-9', photo_path: `${UID}/row-9.jpg`, markers: [], panel_date: '2026-08-20' };
+      // Second tap: the confirm step is a DOM attribute the sandbox cannot hold.
+      // The override is RESTORED by every caller in a finally — the first version
+      // leaked it and broke an unrelated KEYBOARD case two blocks away, which is
+      // a test polluting its neighbours rather than a bug in the code.
+      const realGet = app.document.getElementById;
+      app.document.getElementById = () => ({
+        getAttribute: () => '1', setAttribute() {}, removeAttribute() {},
+        style: {}, textContent: '', innerHTML: '', remove() {}, addEventListener() {},
+        querySelector: () => null, querySelectorAll: () => [],
+      });
+      return { seen, restore: () => { app.document.getElementById = realGet; } };
+    };
+
+    test('DELETE a refused row delete does not report success', async () => {
+      const h = delSetUp({ message: 'permission denied' }, null, false);
+      try { await app.pepDeleteBloodPanel(); } finally { h.restore(); }
+      assert.ok(h.seen.includes('row-delete'), 'it tried');
+      assert.ok(app._pepBloodDraft,
+        'sheet stays open — .delete() RESOLVES with {error} rather than throwing, so ' +
+        'the old catch never fired and a refused delete looked identical to a real one');
+      const rec = read('phx_last_write_error');
+      assert.ok(rec && JSON.stringify(rec).includes('blood panel delete'), 'and it is recorded');
+    });
+
+    // The privacy one. Row gone, image left behind in the bucket: he believes
+    // he has deleted a pathology report and the photo of it is still stored.
+    test('DELETE a photo left in the bucket is surfaced, not swallowed', async () => {
+      const h = delSetUp(null, { message: 'storage policy denied' }, false);
+      try { await app.pepDeleteBloodPanel(); } finally { h.restore(); }
+      const rec = read('phx_last_write_error');
+      assert.ok(rec && JSON.stringify(rec).includes('blood panel delete'),
+        'the orphaned image is recorded — it used to sit in a bare try/catch(_e){}');
+      assert.ok(app._pepBloodDraft,
+        'and the sheet stays open so Delete Panel can retry removing the image');
+    });
+
+    test('DELETE a thrown removal is caught and still reported', async () => {
+      const h = delSetUp(null, null, true);
+      try { await app.pepDeleteBloodPanel(); } finally { h.restore(); }
+      const rec = read('phx_last_write_error');
+      assert.ok(rec && JSON.stringify(rec).includes('blood panel delete'), 'throw path recorded too');
+    });
+
+    test('DELETE a clean delete closes the sheet', async () => {
+      const h = delSetUp(null, null, false);
+      try { await app.pepDeleteBloodPanel(); } finally { h.restore(); }
+      assert.equal(app._pepBloodDraft, null, 'cleared only when both halves actually landed');
+    });
+
     // The stale instruction, pinned so it cannot come back. The migration is
     // applied — verified against production 22 Aug 2026 — and this string sent
     // Jon to run it anyway. Three chats spent a day passing that around.

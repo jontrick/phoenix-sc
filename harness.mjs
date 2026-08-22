@@ -199,7 +199,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.231'", 'version is 4.9.231');
+has("var APP_VERSION='4.9.232'", 'version is 4.9.232');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1641,6 +1641,37 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
     extra.length === 0 && gone.length === 0
       ? ok(`PEP: the advisor sends exactly the ${EXPECTED.length} pinned fields off-device, bloods included and declared`)
       : bad(`PEP: what leaves the device changed — ${extra.length ? `added ${extra.join(', ')}` : ''}${extra.length && gone.length ? '; ' : ''}${gone.length ? `removed ${gone.join(', ')}` : ''}. This is Jon's medical data going to an unowned external service; the change may well be right, but it must be intended.`);
+  }
+})();
+
+// Every Supabase WRITE in the peptide block reports somewhere Jon can see.
+// v4.9.232, after the PM's sweep found 24 console-only writes across the file
+// and I assumed none were mine. Two were: _pepSendCloud's outer catch, and the
+// whole of pepDeleteBloodPanel. console.warn is invisible on an iPhone, so a
+// write that only warns is a write that fails silently.
+//
+// Writes only. Reads that warn are fine — a failed load leaves stale data on
+// screen, which is recoverable and visible; a failed write loses the thing he
+// just entered.
+(() => {
+  const START = 'PEPTIDE BLOCK START — do not move';
+  const END   = 'PEPTIDE BLOCK END — do not move';
+  const a = html.indexOf(START), b = html.indexOf(END);
+  if (a < 0 || b < 0) { bad('PEP: sentinels missing — cannot check write reporting'); return; }
+  const blk = phxStripComments(html.slice(a, b));
+  const WRITERS = ['pepSaveBloodPanel', 'pepDeleteBloodPanel', '_pepSendCloud'];
+  const missing = [], unfound = [];
+  WRITERS.forEach(name => {
+    const span = phxFnSpan(blk, name);
+    if (span === null) { unfound.push(name); return; }
+    if (!/_phxRecordWriteError/.test(span)) missing.push(name);
+  });
+  if (unfound.length) {
+    bad(`PEP: could not bound ${unfound.join(', ')} — cannot verify their failures are reported, and will not assume it`);
+  } else {
+    missing.length === 0
+      ? ok(`PEP: all ${WRITERS.length} Supabase-writing functions report failures beyond console.warn`)
+      : bad(`PEP: ${missing.join(', ')} write to Supabase and report failures only to console.warn — invisible on iPhone, so the write fails silently`);
   }
 })();
 

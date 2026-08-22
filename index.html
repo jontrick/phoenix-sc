@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.228';
+var APP_VERSION='4.9.229';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19329,10 +19329,12 @@ function _nutRenderFoodPickerList(ov){
     return true;
   });
   var list = ov.querySelector('#nut-fp-list');
-  var addCustomBtn = '<div style="padding:16px 0 4px;border-top:1px solid var(--border);margin-top:6px;"><button data-nut-fp-add-custom style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Add Custom Food</button></div>';
+  var addCustomBtn = '<div style="padding:16px 0 4px;border-top:1px solid var(--border);margin-top:6px;"><button data-nut-fp-add-custom style="width:100%;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Add Custom Food</button>' + '<button data-nut-fp-scan style="width:100%;margin-top:8px;padding:11px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SCAN FOOD LABEL</button></div>';
   if(!filtered.length){
     list.innerHTML = '<div style="text-align:center;padding:24px 0 8px;font-size:13px;color:var(--text3);">No foods found</div>' + addCustomBtn;
     list.querySelector('[data-nut-fp-add-custom]').addEventListener('click', function(){ ov.remove(); nutOpenCustomFoodModal(_nutPickerSlot, _nutPickerDate); });
+    var _scanEmpty = list.querySelector('[data-nut-fp-scan]');
+    if(_scanEmpty) _scanEmpty.addEventListener('click', function(){ ov.remove(); nutOpenLabelScanner(_nutPickerSlot, _nutPickerDate); });
     return;
   }
   list.innerHTML = filtered.map(function(f){
@@ -19360,6 +19362,8 @@ function _nutRenderFoodPickerList(ov){
   });
   var customBtn = list.querySelector('[data-nut-fp-add-custom]');
   if(customBtn) customBtn.addEventListener('click', function(){ ov.remove(); nutOpenCustomFoodModal(_nutPickerSlot, _nutPickerDate); });
+  var scanBtn = list.querySelector('[data-nut-fp-scan]');
+  if(scanBtn) scanBtn.addEventListener('click', function(){ ov.remove(); nutOpenLabelScanner(_nutPickerSlot, _nutPickerDate); });
 }
 
 function _nutUpdatePickerPreview(ov){
@@ -19551,6 +19555,239 @@ function nutOpenCustomFoodModal(slot, dateKey){
     if(slot && dateKey){ (_nutPickerMode === 'plan' ? nutAddComponent : nutLogComponent)(slot, dateKey, food, qty); nutRenderScreen(); }
     else { nutRenderScreen(); }
   });
+}
+
+// -- Label scanner: capture and confirm --------------------------------------
+// v4.9.229. MANUAL-FIRST BY DESIGN, not as a fallback bolted on afterwards.
+// Whether the coach worker passes images through to the API is UNVERIFIED, so the
+// spine of this feature is "photograph the label, read it on screen, type or
+// correct the numbers, save". If extraction is confirmed later it lights up as an
+// enhancement and nothing here has to be rewritten.
+//
+// THE PHOTO IS DELIBERATELY NOT PERSISTED. A downscaled 1600px JPEG is 200-400KB
+// and localStorage holds about 5MB TOTAL for everything nutrition owns - recipes,
+// every day log, the week plan. Half a dozen saved label photos would evict all of
+// it, and the failure would present as "my recipes vanished", not as "the scanner
+// used too much space". The photo lives in the sheet while Jon reads it and is
+// dropped on close.
+var _nutLabelPhoto = null;
+
+function nutOpenLabelScanner(slot, dateKey){
+  var old = document.getElementById('nut-label-ov');
+  if(old) old.remove();
+  _nutLabelPhoto = null;
+  var ov = document.createElement('div');
+  ov.id = 'nut-label-ov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9650;display:flex;align-items:flex-end;';
+  var inp = 'width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;';
+  var lbl = 'font-size:10px;color:var(--text3);margin-bottom:4px;';
+  var cats = ['Protein','Carb','Vegetable','Sauce','Extra'];
+  ov.innerHTML = '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;padding:20px;max-height:90%;overflow-y:auto;box-sizing:border-box;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+    '<div style="min-width:0;"><div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">SCAN FOOD LABEL</div>' +
+    (dateKey ? ('<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + _nutDayStamp(dateKey, slot) + '</div>') : '') + '</div>' +
+    '<button id="nut-lb-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+
+    '<div id="nut-lb-err" style="display:none;background:rgba(255,80,80,0.15);border:1px solid rgba(255,80,80,0.4);border-radius:8px;padding:10px 12px;color:#FF6B6B;font-size:12px;margin-bottom:12px;line-height:1.5;"></div>' +
+
+    '<label for="nut-lb-file" style="display:block;width:100%;box-sizing:border-box;padding:13px;background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;text-align:center;cursor:pointer;margin-bottom:10px;">PHOTOGRAPH THE LABEL</label>' +
+    '<input id="nut-lb-file" type="file" accept="image/*" capture="environment" style="display:none;">' +
+    '<div id="nut-lb-shot" style="display:none;margin-bottom:12px;"></div>' +
+
+    '<div style="margin-bottom:12px;"><div style="' + lbl + '">FOOD NAME</div>' +
+    '<input id="nut-lb-name" type="text" placeholder="e.g. Granola" style="' + inp + '"></div>' +
+
+    '<div style="margin-bottom:12px;"><div style="' + lbl + '">CATEGORY</div>' +
+    '<div id="nut-lb-cats" style="display:flex;gap:6px;flex-wrap:wrap;">' +
+    cats.map(function(cat){ return '<button data-nut-lb-cat="' + cat + '" style="padding:6px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:700;cursor:pointer;touch-action:manipulation;">' + cat.toUpperCase() + '</button>'; }).join('') +
+    '</div></div>' +
+
+    '<div style="margin-bottom:12px;"><div style="' + lbl + '">ARE THESE NUMBERS PER 100G, OR PER SERVING?</div>' +
+    '<div id="nut-lb-basis" style="display:flex;gap:8px;">' +
+    '<button data-nut-lb-basis="per100" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation;">PER 100G</button>' +
+    '<button data-nut-lb-basis="serving" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation;">PER SERVING</button>' +
+    '</div></div>' +
+
+    '<div id="nut-lb-serve-wrap" style="display:none;margin-bottom:12px;">' +
+    '<div style="' + lbl + '">SERVING SIZE (G) &mdash; printed next to &ldquo;Serving size&rdquo;</div>' +
+    '<input id="nut-lb-serve" type="number" min="1" inputmode="decimal" placeholder="e.g. 40" style="' + inp + '"></div>' +
+
+    '<div style="margin-bottom:12px;"><div id="nut-lb-macro-head" style="' + lbl + '">MACROS AS PRINTED ON THE LABEL</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+    '<div><div style="' + lbl + '">Calories (kcal)</div><input id="nut-lb-kcal" type="number" min="0" inputmode="decimal" style="' + inp + '"></div>' +
+    '<div><div style="' + lbl + '">Protein (g)</div><input id="nut-lb-prot" type="number" min="0" inputmode="decimal" style="' + inp + '"></div>' +
+    '<div><div style="' + lbl + '">Carbs (g)</div><input id="nut-lb-carb" type="number" min="0" inputmode="decimal" style="' + inp + '"></div>' +
+    '<div><div style="' + lbl + '">Fat (g)</div><input id="nut-lb-fat" type="number" min="0" inputmode="decimal" style="' + inp + '"></div>' +
+    '</div></div>' +
+
+    '<div id="nut-lb-preview" style="display:none;font-size:11px;color:var(--text3);background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.6;"></div>' +
+
+    '<div style="font-size:11px;color:var(--gold);background:rgba(200,150,62,0.1);border:1px solid rgba(200,150,62,0.35);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">Check these against the label before saving. Once saved they are reused every time you log this food.</div>' +
+
+    '<button id="nut-lb-save" style="width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SAVE FOOD</button>' +
+    '</div>';
+  document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
+
+  var _cat = 'Extra';
+  // NO DEFAULT BASIS. Preselecting "per 100g" would make the commonest label type
+  // (per serving) save silently wrong for anyone who does not notice the toggle.
+  // One extra tap is the price of never guessing.
+  var _basis = null;
+
+  function _err(msg){
+    var e = ov.querySelector('#nut-lb-err');
+    if(!msg){ e.style.display = 'none'; return; }
+    e.textContent = msg; e.style.display = '';
+  }
+  function _paintCats(){
+    ov.querySelectorAll('[data-nut-lb-cat]').forEach(function(b){
+      var on = (b.getAttribute('data-nut-lb-cat') === _cat);
+      b.style.borderColor = on ? 'var(--gold)' : 'var(--border2)';
+      b.style.background  = on ? 'rgba(200,150,62,0.15)' : 'var(--bg2)';
+      b.style.color       = on ? 'var(--gold)' : 'var(--text3)';
+    });
+  }
+  function _paintBasis(){
+    ov.querySelectorAll('[data-nut-lb-basis]').forEach(function(b){
+      var on = (b.getAttribute('data-nut-lb-basis') === _basis);
+      b.style.borderColor = on ? 'var(--gold)' : 'var(--border2)';
+      b.style.background  = on ? 'rgba(200,150,62,0.15)' : 'var(--bg2)';
+      b.style.color       = on ? 'var(--gold)' : 'var(--text3)';
+    });
+    ov.querySelector('#nut-lb-serve-wrap').style.display = (_basis === 'serving') ? '' : 'none';
+    var head = ov.querySelector('#nut-lb-macro-head');
+    if(head) head.textContent = (_basis === 'serving') ? 'MACROS PER SERVING, AS PRINTED'
+            : (_basis === 'per100' ? 'MACROS PER 100G, AS PRINTED' : 'MACROS AS PRINTED ON THE LABEL');
+    _preview();
+  }
+  function _vals(){
+    return { k: ov.querySelector('#nut-lb-kcal').value, p: ov.querySelector('#nut-lb-prot').value,
+             c: ov.querySelector('#nut-lb-carb').value, f: ov.querySelector('#nut-lb-fat').value };
+  }
+  // Shows the CONVERTED figures before saving, so the conversion is something Jon
+  // can check rather than something that happens to him.
+  function _preview(){
+    var box = ov.querySelector('#nut-lb-preview');
+    if(_basis !== 'serving'){ box.style.display = 'none'; return; }
+    var r = _nutLabelToPer100(_vals(), 'serving', ov.querySelector('#nut-lb-serve').value);
+    if(!r.ok){ box.style.display = 'none'; return; }
+    box.innerHTML = 'Stored as per 100g: <span style="color:var(--gold);">' + r.per100.k + ' kcal &middot; P' +
+                    r.per100.p + ' &middot; C' + r.per100.c + ' &middot; F' + r.per100.f + '</span>' +
+                    '<br>One serving (' + r.serving_g + 'g) stays ' + _vals().k + ' kcal, as printed.';
+    box.style.display = '';
+  }
+  _paintCats(); _paintBasis();
+
+  ov.querySelectorAll('[data-nut-lb-cat]').forEach(function(b){
+    b.addEventListener('click', function(){ _cat = b.getAttribute('data-nut-lb-cat'); _paintCats(); });
+  });
+  ov.querySelectorAll('[data-nut-lb-basis]').forEach(function(b){
+    b.addEventListener('click', function(){ _basis = b.getAttribute('data-nut-lb-basis'); _err(''); _paintBasis(); });
+  });
+  ['#nut-lb-kcal','#nut-lb-prot','#nut-lb-carb','#nut-lb-fat','#nut-lb-serve'].forEach(function(sel){
+    var el = ov.querySelector(sel);
+    if(el) el.addEventListener('input', _preview);
+  });
+
+  ov.querySelector('#nut-lb-file').addEventListener('change', function(e){
+    var file = e.target && e.target.files && e.target.files[0];
+    if(!file) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+      // _phxDownscaleImage never throws and never rejects - anything it cannot
+      // decode resolves to the input unchanged, so there is no error branch here.
+      Promise.resolve(_phxDownscaleImage(String(rd.result), 1600, 0.8)).then(function(small){
+        _nutLabelPhoto = small || String(rd.result);
+        var shot = ov.querySelector('#nut-lb-shot');
+        shot.innerHTML = '<img src="' + _nutLabelPhoto + '" alt="label" style="width:100%;border-radius:var(--radius);border:1px solid var(--border2);display:block;">' +
+                         '<div style="font-size:10px;color:var(--text3);margin-top:5px;text-align:center;">Read the numbers off this and type them below. The photo is not saved.</div>';
+        shot.style.display = '';
+      });
+    };
+    rd.readAsDataURL(file);
+  });
+
+  ov.querySelector('#nut-lb-close').addEventListener('click', function(){ _nutLabelPhoto = null; ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov){ _nutLabelPhoto = null; ov.remove(); } });
+
+  ov.querySelector('#nut-lb-save').addEventListener('click', function(){
+    var name = (ov.querySelector('#nut-lb-name').value || '').trim();
+    if(!name){ _err('Give the food a name so you can find it again.'); return; }
+    var r = _nutLabelToPer100(_vals(), _basis, ov.querySelector('#nut-lb-serve').value);
+    if(!r.ok){ _err(r.message); return; }
+    _err('');
+    var catMap = {Protein:'protein',Carb:'carb',Vegetable:'veg',Sauce:'sauce',Extra:'extras'};
+    var ns = nutGetState();
+    if(!ns.custom_foods) ns.custom_foods = [];
+    var food = { id:'cf_' + String(Date.now()), n:name, cat:(catMap[_cat] || 'extras'),
+                 k:r.per100.k, p:r.per100.p, c:r.per100.c, f:r.per100.f,
+                 defaultQty: r.serving_g > 0 ? r.serving_g : 100,
+                 serving_g:  r.serving_g,
+                 from_label: true, custom:true };
+    ns.custom_foods.push(food);
+    nutSaveState(ns);
+    _nutLabelPhoto = null;
+    ov.remove();
+    if(slot && dateKey){
+      (_nutPickerMode === 'plan' ? nutAddComponent : nutLogComponent)(slot, dateKey, food, food.defaultQty);
+      nutRenderScreen();
+    } else { nutRenderScreen(); }
+  });
+}
+
+// ── Label scanner — basis conversion ─────────────────────────────────────────
+// v4.9.229. THE SAFETY-CRITICAL PART OF THE SCANNER, kept as a pure function so
+// it can be tested without a camera.
+//
+// Every macro in this app is stored PER 100G and multiplied by qty_g/100 in six
+// places (day totals, slot cards, recipe builder, shopping list, prep card). A
+// label, however, is usually printed PER SERVING. Getting the basis wrong does not
+// look like a bug: the numbers are plausible, they save, and they stay wrong
+// forever in a custom food that Jon will reuse for months. Nothing downstream can
+// detect it, because 250 kcal per serving and 250 kcal per 100g are the same shape.
+//
+// THREE OUTCOMES, and the third is the one that matters:
+//   per 100g                  -> use as printed
+//   per serving WITH grams    -> convert, and remember the serving size
+//   per serving WITHOUT grams -> REFUSE. Never assume 100g.
+//
+// Labels routinely say "per serving (2 biscuits)" with no gram weight. That makes
+// the conversion IMPOSSIBLE, not merely hard — there is no number to divide by.
+// Guessing 100g there would silently inflate or deflate everything Jon logs from
+// that food. Refusing costs him one question; guessing costs him months of wrong
+// totals he has no way to notice.
+function _nutLabelToPer100(vals, basis, servingG){
+  var v = vals || {};
+  var num = function(x){ var n = parseFloat(x); return (isFinite(n) && n >= 0) ? n : 0; };
+  var out = { k: num(v.k), p: num(v.p), c: num(v.c), f: num(v.f) };
+
+  if(basis === 'per100'){
+    return { ok: true, per100: out, serving_g: 0, basis: 'per100' };
+  }
+
+  if(basis === 'serving'){
+    var g = parseFloat(servingG);
+    if(!(isFinite(g) && g > 0)){
+      return { ok: false, reason: 'serving_size_missing',
+               message: 'This label is per serving, so I need the serving size in grams ' +
+                        'before I can save it. It is usually printed next to "Serving size". ' +
+                        'Without it the macros cannot be converted.' };
+    }
+    var factor = 100 / g;
+    return { ok: true, basis: 'serving', serving_g: Math.round(g * 10) / 10,
+             per100: { k: Math.round(out.k * factor * 10) / 10,
+                       p: Math.round(out.p * factor * 10) / 10,
+                       c: Math.round(out.c * factor * 10) / 10,
+                       f: Math.round(out.f * factor * 10) / 10 } };
+  }
+
+  // Unknown or absent basis is REFUSED rather than defaulted. Defaulting to per100
+  // here would be the silent-wrong-basis bug arriving through the back door.
+  return { ok: false, reason: 'basis_unknown',
+           message: 'Tell me whether these numbers are per 100g or per serving. ' +
+                    'I will not guess — the two cannot be told apart afterwards.' };
 }
 
 // ── Create Week — template picker ─────────────────────────────────────────────

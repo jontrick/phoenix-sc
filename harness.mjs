@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.228'", 'version is 4.9.228');
+has("var APP_VERSION='4.9.229'", 'version is 4.9.229');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2331,6 +2331,81 @@ hasCode('data-act="recover"',                  'BACKUP: the offer is wired into 
   if (reads >= 1) ok('BACKUP: the _bak key is actually READ, not just written');
   else bad('BACKUP: nothing reads blab_v1_{uid}_bak — the backup is a claim again. ' +
            'Bytes being written is not recoverability; there must be a path Jon can reach.');
+})();
+
+// ── Label scanner ───────────────────────────────────────────────────────────
+hasCode('function _nutLabelToPer100(', 'LABEL: the basis rule exists as a pure, testable function');
+hasCode('function nutOpenLabelScanner(', 'LABEL: the scanner sheet exists');
+hasCode('data-nut-fp-scan',             'LABEL: and the food picker offers it');
+
+// The refusal is the feature. A label that says "per serving (2 biscuits)" cannot
+// be converted at all, and assuming 100g there is silently wrong forever.
+hasCode("reason: 'serving_size_missing'", 'LABEL: per-serving without grams is REFUSED, not assumed');
+hasCode("reason: 'basis_unknown'",        'LABEL: an unstated basis is REFUSED, not defaulted to per-100g');
+
+// A downscaled label photo is 200-400KB against a ~5MB localStorage budget shared
+// with every recipe and day log. Persisting a few would evict all of it, and Jon
+// would experience that as "my recipes vanished".
+(() => {
+  const code = codeSrc();
+  const m = /function nutOpenLabelScanner\(([\s\S]*?)\n\}/.exec(code);
+  if (!m) { bad('LABEL: could not isolate nutOpenLabelScanner — guard below is vacuous'); return; }
+  const body = m[1];
+  // Floor. A regex that matches a SHORT wrong span (a .map callback, an inner
+  // closure) does not fail — it silently pins a few lines and reports success.
+  // A length floor alone is NOT enough here — proven: truncating the match at the
+  // first closing brace still yields 3000+ chars, clears any sane floor, and
+  // contains no exits, so the guard would report success having read a third of
+  // the function. Anchor on a string that exists only in the LAST block instead.
+  if (body.indexOf('custom_foods.push') < 0) { bad('LABEL: the isolated span does not reach the save handler — the match is wrong, not the code'); return; }
+  if (/_nutLabelPhoto/.test(body)) ok('LABEL: the sheet holds the photo in memory while Jon reads it');
+  else bad('LABEL: the photo variable vanished from the sheet');
+  // Reading it to draw the <img> is the whole point, and clearing it on close is
+  // hygiene. The bug is it ENTERING the saved object, so match an assignment into
+  // ns/food whose value is the photo — not mere proximity to a save.
+  if (/(?:ns\.|food\s*[=:]|[\w_]+\s*:)\s*_nutLabelPhoto\b/.test(body) ||
+      /_nutLabelPhoto\s*[,}]/.test(body))
+    bad('LABEL: a label PHOTO is being written into nutrition state — a few of these ' +
+        'evict every recipe and day log, and it presents as data loss, not as a storage bug');
+  else ok('LABEL: no label photo is written into nutrition state');
+})();
+
+// ── Label scanner: HOW MANY EXITS does the photo have? ──────────────────────
+// Peptides' question, answered while the feature is being designed rather than
+// pinned afterwards. Today the answer is ZERO: the scanner is manual-first, so the
+// photo is read by a FileReader, downscaled in the browser, drawn into an <img>,
+// and dropped. It never touches the network and it never touches disk.
+//
+// That is worth ASSERTING rather than merely being true, because it is exactly the
+// kind of property that stops being true quietly. When extraction is switched on,
+// this guard fails — and whoever switches it on has to come here, state the exit,
+// and list the payload's fields on purpose. The decision already taken, so it is
+// not re-litigated under time pressure: the extraction call sends THE IMAGE AND
+// NOTHING ELSE. No targets, no weight, no meal history, no recipes. Reading a
+// printed label needs the label.
+(() => {
+  const code = codeSrc();
+  const m = /function nutOpenLabelScanner\(([\s\S]*?)\n\}/.exec(code);
+  if (!m) { bad('LABEL/EXIT: could not isolate nutOpenLabelScanner — every check below would be vacuous'); return; }
+  const body = m[1];
+  // A length floor alone is NOT enough here — proven: truncating the match at the
+  // first closing brace still yields 3000+ chars, clears any sane floor, and
+  // contains no exits, so the guard would report success having read a third of
+  // the function. Anchor on a string that exists only in the LAST block instead.
+  if (body.indexOf('custom_foods.push') < 0) { bad('LABEL/EXIT: the isolated span does not reach the save handler — the match is wrong, not the code'); return; }
+
+  const exits = [];
+  if (/\bfetch\s*\(/.test(body))            exits.push('fetch');
+  if (/XMLHttpRequest/.test(body))            exits.push('XMLHttpRequest');
+  if (/sendBeacon/.test(body))                exits.push('sendBeacon');
+  if (/workers\.dev|phoenix-coach/.test(body)) exits.push('coach worker');
+  if (/supabase|\.from\(/.test(body))         exits.push('supabase');
+
+  if (exits.length === 0) ok('LABEL/EXIT: the label photo has ZERO exits — it never leaves the device');
+  else bad('LABEL/EXIT: the scanner now sends data out via ' + exits.join(', ') +
+           '. That may be correct, but it must be DECLARED: list the payload fields ' +
+           'here on purpose, including the sensitive ones, so the list documents ' +
+           'what leaves rather than hiding it.');
 })();
 
 // ── Keyboard safety, as a CONDITIONAL PAIR rather than a list ───────────────

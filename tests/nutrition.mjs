@@ -330,18 +330,64 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // its own controls throws before finishing. Hand back a memoised stub per
     // selector instead, so the entry point runs to completion the way it does on
     // device — otherwise "the renderer was driven" would be a half-truth.
+    // Listeners are RECORDED, not just accepted. Without this a test can only read
+    // the markup a sheet renders, which proves the fields exist and nothing about
+    // what the save button does with them — and "the validator validates" is not
+    // the same claim as "the validator is on the save path".
+    const listeners = new Map();
+    const arm = (el) => {
+      const orig = el.addEventListener ? el.addEventListener.bind(el) : null;
+      el.addEventListener = (ev, fn) => {
+        if (!listeners.has(el)) listeners.set(el, {});
+        const m = listeners.get(el);
+        (m[ev] = m[ev] || []).push(fn);
+        if (orig) { try { orig(ev, fn); } catch (_e) {} }
+      };
+      return el;
+    };
+    // querySelectorAll on a detached element returns EMPTY, so every control a
+    // sheet wires through it was silently inert in these tests — the basis toggle,
+    // every category pill, every delegated button in the domain. A markup
+    // assertion cannot see that, which is exactly the gap this closes: derive the
+    // matching elements from the markup the sheet actually rendered, and arm them.
+    const qsa = (host, sel) => {
+      const attr = /^\[([\w-]+)\]$/.exec(sel);
+      const html = String(host.innerHTML || '');
+      const out = [];
+      if (attr) {
+        const re = new RegExp(attr[1] + '(?:="([^"]*)")?', 'g');
+        let m;
+        while ((m = re.exec(html)) !== null) {
+          const el = arm(origCreate('button'));
+          const val = m[1] === undefined ? '' : m[1];
+          el.getAttribute = (a) => (a === attr[1] ? val : null);
+          out.push(el);
+        }
+      }
+      return out;
+    };
     app.document.createElement = (t) => {
-      const e = origCreate(t);
-      const found = {};
-      e.querySelector = (sel) => (found[sel] || (found[sel] = origCreate('div')));
+      const e = arm(origCreate(t));
+      const found = {}, foundAll = {};
+      e.querySelector = (sel) => (found[sel] || (found[sel] = arm(origCreate('div'))));
+      e.querySelectorAll = (sel) => (foundAll[sel] || (foundAll[sel] = qsa(e, sel)));
       created.push(e);
       return e;
+    };
+    const fire = (el, ev) => {
+      const m = listeners.get(el);
+      if (!m || !m[ev] || !m[ev].length) {
+        throw new Error('nothing is listening for "' + ev + '" on that element — ' +
+                        'the control is inert, which no markup assertion would reveal');
+      }
+      m[ev].forEach((fn) => fn({ target: el }));
     };
     return {
       node: (id) => nodes[id] || (nodes[id] = make()),
       html: (id) => String((nodes[id] || {}).innerHTML || ''),
       lastCreatedHtml: () => String((created[created.length - 1] || {}).innerHTML || ''),
       lastCreated: () => created[created.length - 1] || null,
+      fire,
     };
   };
 
@@ -598,6 +644,162 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     seed('phx_nut_view_v1', null);
     app._nutRestoreView();
     assert.equal(app._nutTab, 'today', 'clean default');
+  });
+
+  // ── Label scanner: the basis rule ────────────────────────────────────────
+  // A wrong basis is SILENT, permanent once saved as a custom food, and invisible
+  // downstream — 250 kcal per serving and 250 kcal per 100g are the same shape.
+  // So the refusal cases matter more than the happy path here.
+
+  test('LABEL per-100g values are used exactly as printed', () => {
+    setUp(90);
+    const r = app._nutLabelToPer100({ k: 380, p: 8.2, c: 62, f: 11.5 }, 'per100');
+    assert.equal(r.ok, true, 'per 100g needs no conversion');
+    assert.equal(r.per100.k, 380, 'kcal unchanged');
+    assert.equal(r.per100.p, 8.2, 'protein unchanged');
+    assert.equal(r.serving_g, 0, 'and there is no serving size to remember');
+  });
+
+  test('LABEL per-serving WITH a gram weight converts, and remembers the serving', () => {
+    setUp(90);
+    // A 40g serving reading 152 kcal is a 380 kcal/100g food.
+    const r = app._nutLabelToPer100({ k: 152, p: 3.28, c: 24.8, f: 4.6 }, 'serving', 40);
+    assert.equal(r.ok, true, 'grams make the conversion possible');
+    assert.equal(r.per100.k, 380, '152 kcal per 40g is 380 per 100g');
+    assert.equal(r.per100.p, 8.2, 'protein scales by the same factor');
+    assert.equal(r.serving_g, 40,
+      'the serving size is KEPT — it is what turns "2 servings" into grams later');
+  });
+
+  test('LABEL per-serving with NO gram weight is REFUSED, never assumed to be 100g', () => {
+    setUp(90);
+    // "Per serving (2 biscuits)" — no gram weight anywhere on the label.
+    [undefined, null, '', 0, -5, 'two biscuits', NaN].forEach((bad) => {
+      const r = app._nutLabelToPer100({ k: 250, p: 4, c: 30, f: 12 }, 'serving', bad);
+      assert.equal(r.ok, false,
+        'refused for serving size ' + JSON.stringify(bad) +
+        ' — guessing 100g here is silently wrong forever, and nothing downstream can detect it');
+      assert.equal(r.reason, 'serving_size_missing', 'and says why, so the sheet can ask');
+    });
+  });
+
+  test('LABEL an unknown basis is REFUSED rather than defaulted to per-100g', () => {
+    setUp(90);
+    [undefined, null, '', 'per_100', '100g', 'serving_size'].forEach((bad) => {
+      const r = app._nutLabelToPer100({ k: 250, p: 4, c: 30, f: 12 }, bad, 40);
+      assert.equal(r.ok, false,
+        'basis ' + JSON.stringify(bad) + ' refused — defaulting to per100 would be the ' +
+        'silent-wrong-basis bug arriving through the back door');
+      assert.equal(r.reason, 'basis_unknown', 'named distinctly from a missing serving size');
+    });
+  });
+
+  test('LABEL junk macro values become 0 rather than NaN reaching the day total', () => {
+    setUp(90);
+    const r = app._nutLabelToPer100({ k: 'abc', p: -3, c: null, f: undefined }, 'per100');
+    assert.equal(r.ok, true, 'a bad macro is not a reason to refuse the whole food');
+    assert.equal(r.per100.k, 0, 'unparseable becomes 0');
+    assert.equal(r.per100.p, 0, 'negative becomes 0 — a negative macro is never real');
+    assert.ok(!isNaN(r.per100.c + r.per100.f), 'nothing NaN escapes into the totals');
+  });
+
+  // ── Label scanner: the rule must be ON THE SAVE PATH ─────────────────────
+  // Peptides' finding, applied to my own feature before it ships. Their guard
+  // proved a sanitiser sanitises; it could not prove the sanitiser was on the
+  // write path, so a new write bypassing it would have kept every gate green.
+  // The tests above prove _nutLabelToPer100 refuses correctly. They prove NOTHING
+  // about whether the save button consults it. These drive the button.
+
+  const scanner = () => {
+    const d = dom();
+    app.nutOpenLabelScanner('lunch', app._nutToday());
+    const ov = d.lastCreated();
+    const set = (sel, v) => { ov.querySelector(sel).value = v; };
+    return {
+      ov, d, set,
+      basis: (which) => {
+        const all = ov.querySelectorAll('[data-nut-lb-basis]');
+        const hit = all.filter((b) => b.getAttribute('data-nut-lb-basis') === which)[0];
+        if (!hit) throw new Error('no basis button rendered for ' + which);
+        return hit;
+      },
+      save:  () => d.fire(ov.querySelector('#nut-lb-save'), 'click'),
+      err:   () => String(ov.querySelector('#nut-lb-err').textContent || ''),
+      foods: () => (app.nutGetState().custom_foods || []),
+    };
+  };
+
+  test('CHOKE POINT the save button REFUSES a per-serving label with no gram weight', () => {
+    setUp(90);
+    const s = scanner();
+    s.set('#nut-lb-name', 'Biscuits');
+    s.set('#nut-lb-kcal', '250'); s.set('#nut-lb-prot', '4');
+    s.set('#nut-lb-carb', '30');  s.set('#nut-lb-fat', '12');
+    // Choose per-serving, leave the serving size empty — "per serving (2 biscuits)".
+    s.d.fire(s.basis('serving'), 'click');
+    s.save();
+    assert.equal(s.foods().length, 0,
+      'NOTHING was saved — the refusal is enforced at the save, not merely available ' +
+      'in a helper the save could have skipped');
+    assert.ok(s.err().indexOf('serving size') >= 0,
+      'and Jon is told what is missing and where to find it: got "' + s.err() + '"');
+  });
+
+  test('CHOKE POINT the save button REFUSES when no basis has been chosen', () => {
+    setUp(90);
+    const s = scanner();
+    s.set('#nut-lb-name', 'Granola');
+    s.set('#nut-lb-kcal', '380');
+    s.save();                                   // never touched the basis toggle
+    assert.equal(s.foods().length, 0,
+      'no basis means no save — defaulting to per-100g here would be the silent ' +
+      'wrong-basis bug arriving through the UI instead of the helper');
+    assert.ok(s.err().length > 0, 'with a message rather than a dead button');
+  });
+
+  test('CHOKE POINT a per-serving label WITH grams saves converted, and keeps the serving', () => {
+    setUp(90);
+    const s = scanner();
+    s.set('#nut-lb-name', 'Granola');
+    s.set('#nut-lb-kcal', '152'); s.set('#nut-lb-prot', '3.28');
+    s.set('#nut-lb-carb', '24.8'); s.set('#nut-lb-fat', '4.6');
+    s.d.fire(s.basis('serving'), 'click');
+    s.set('#nut-lb-serve', '40');
+    s.save();
+    const f = s.foods()[0];
+    assert.ok(f, 'the food saved once the label could actually be interpreted');
+    assert.equal(f.k, 380, 'stored PER 100G, because every consumer multiplies qty_g/100');
+    assert.equal(f.serving_g, 40, 'and the serving size is kept for the servings input');
+    assert.equal(f.defaultQty, 40, 'so adding it defaults to exactly one serving');
+  });
+
+  test('CHOKE POINT a per-100g label saves untouched', () => {
+    setUp(90);
+    const s = scanner();
+    s.set('#nut-lb-name', 'Oats');
+    s.set('#nut-lb-kcal', '389'); s.set('#nut-lb-prot', '17');
+    s.d.fire(s.basis('per100'), 'click');
+    s.save();
+    const f = s.foods()[0];
+    assert.ok(f, 'saved');
+    assert.equal(f.k, 389, 'no conversion applied to a per-100g label');
+    assert.equal(f.serving_g, 0, 'and no serving concept — this one is weighed');
+  });
+
+  test('CHOKE POINT a saved label food lands in the meal with the right macros', () => {
+    setUp(90);
+    const s = scanner();
+    s.set('#nut-lb-name', 'Granola');
+    s.set('#nut-lb-kcal', '152');
+    s.d.fire(s.basis('serving'), 'click');
+    s.set('#nut-lb-serve', '40');
+    s.save();
+    // The whole point of storing per-100g: the six existing consumers keep working.
+    const day = app.nutGetState().daily[app._nutToday()];
+    const comp = day.meals.lunch.components[0];
+    assert.equal(comp.qty_g, 40, 'one serving went in as 40 GRAMS, not as "1"');
+    assert.equal(Math.round(comp.k * comp.qty_g / 100), 152,
+      'and the standard qty_g/100 maths gives back the 152 kcal printed on the label');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

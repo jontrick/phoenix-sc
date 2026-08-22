@@ -207,6 +207,47 @@ it.** So:
 - **"The test passes" and "the test proves what I said" are different claims.** Only report the second. Invert the specific guard you are crediting, not a neighbour.
 - **Parked work**: if a small change must wait for a domain's next push, commit it to your `worktree-<domain>` branch and push the BRANCH (CLAUDE.md rule 2 — in-progress work is never local-only), with no APP_VERSION bump and a commit-message note that the next push must bump.
 
+## NEVER `git stash` IN THIS REPO (PEPTIDES correcting the PM, 2026-08-22)
+
+**The stash stack is SHARED across the main checkout and every worktree**, and three
+sessions run concurrently. A bare `git stash` / `git stash pop` can pop another session's
+entry — the same clobbering hazard that put us in worktrees in the first place.
+
+**The PM recommended `git stash` as the safe alternative to `git checkout <file>`. That
+advice was wrong and would have been worse than the mistake it was meant to prevent.**
+It reads as obviously prudent right up until two sessions do it in the same minute.
+
+**Safe forms for parking work:**
+- **Copy the file aside and restore by copy.** No shared state, nothing to race, identical
+  behaviour in every worktree. This is the default.
+- **A WIP commit.**
+- If you genuinely must stash: `git stash push -u -m "<unique-tag>"`, capture the SHA from
+  `git stash list --format='%H %gs'`, restore with `git stash apply <sha>`, drop by
+  re-finding the tag. Never bare.
+
+## A VERIFIER BUILT ON THE ASSUMPTION IT IS TESTING CANNOT FAIL (PM, 2026-08-22)
+
+The PM's uniqueness guard skipped computed contexts and printed a confident distinct-count
+that omitted them. Before fixing it, the PM wrote a scan to check whether any were live.
+**The scan reported zero. It tested only whether the argument STARTS with a quote**, so
+`'prefix.' + event` passed — a concatenation beginning with a literal. **The verifier
+carried the identical defect as the code under test, returned the clean answer the author
+wanted, and was believed.** The hardened guard found the site on its first run.
+
+  A VERIFIER BUILT FROM THE SAME ASSUMPTION AS THE THING IT VERIFIES
+  CANNOT FAIL IN THE DIRECTION THAT MATTERS.
+
+Sits next to **"not a vacuous pass — a confident wrong answer"**: an inert check is merely
+useless, but a count reads as coverage, so a number that silently omits its blind spot
+argues against looking further. When writing a throwaway scan to confirm a bug report,
+**derive it differently from the thing being checked**, or test it against a case you know
+should trip it.
+
+Also from that exchange (PEPTIDES, .243): **split error contexts by REMEDY, not by which
+branch produced them.** Two contexts can be unique as strings and identical in meaning —
+an upload that failed (nothing stored, retry) versus a path-save that failed (the image IS
+in the bucket, orphaned, needs re-pointing) are different fixes and must not share a slot.
+
 ## AN INVERSION MUST BE CHECKED FOR HAVING CHANGED SOMETHING (PM, 2026-08-22)
 
 We prove a guard bites by re-introducing the bug and watching it fail. Twice today an

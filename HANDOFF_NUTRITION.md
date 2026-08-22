@@ -155,6 +155,18 @@ Pinned provider-side in `tests/nutrition.mjs` under `CONTRACT _phxKeyboardSafe` 
 sizes any overlay, self-detaches, no-ops without `visualViewport`, never throws, and is not
 idempotent. Proven to bite by removing the detach.
 
+> **ARMING IT IS ONLY HALF THE FIX — audit your panel's own `max-height`.** The helper
+> sizes the **overlay**. A panel capped in **viewport units** (`max-height:88vh`) is measured
+> against the *full* viewport and does **not** shrink with it. Because `align-items:flex-end`
+> pins the panel's bottom to the overlay's bottom, the excess overflows **upward, off the top
+> of the screen** — carrying your inputs with it and leaving the save button perfectly visible.
+> The sheet looks fine, the helper is correctly armed, and an "is it called?" test passes.
+>
+> **Use `%`, not `vh`.** Identical at rest, because an `inset:0` overlay is already viewport
+> height; correct when the keyboard is up. Found by Peptides (v4.9.221) by shipping it — which
+> is precisely what this section exists to prevent for the next consumer. Nutrition's eleven
+> sheets converted in v4.9.225 and pinned by driving each opener, not by grepping the file.
+
 **Wire your own sheets.** As of v4.9.217, 13 of the app's 26 `flex-end` sheets are covered —
 all of them nutrition's. The rest are Training's and Peptides', and any of them that takes
 typed input has this bug.

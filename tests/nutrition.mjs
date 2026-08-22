@@ -600,6 +600,53 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._nutTab, 'today', 'clean default');
   });
 
+  // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
+  // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
+  // the visible area, but a panel capped in `vh` is measured against the FULL
+  // viewport and does not shrink with it. With align-items:flex-end pinning the
+  // panel's bottom to the overlay's bottom, the excess overflows UPWARD, off the
+  // top of the screen — taking the inputs with it and leaving the save button
+  // perfectly visible. The sheet looks fine and "is the helper armed?" passes.
+  //
+  // Driving the openers rather than grepping the file, so this only ever speaks
+  // about nutrition's own sheets and cannot fail on another domain's markup.
+  const noVhCap = (html, who) => {
+    const m = /max-height:\s*(\d+)vh/.exec(html || '');
+    assert.equal(m ? m[0] : 'none', 'none',
+      who + ' caps its panel in vh — it will not shrink when the overlay does, ' +
+      'and the overflow goes off the TOP of the screen, not the bottom');
+  };
+
+  test('ENTRY armed nutrition sheets cap their panel in %, never vh', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Chilli Sauce')]);
+    const days = app._nutSelectedWeekDays();
+    app.nutAssignRecipe('r_Chilli Sauce', 'lunch', days[0], 2);
+    const today = app._nutToday();
+    const d = dom();
+    const drive = [
+      ['nutOpenSetup',       () => app.nutOpenSetup()],
+      ['nutOpenPrepCard',    () => app.nutOpenPrepCard()],
+      ['nutOpenShopList',    () => app.nutOpenShopList()],
+      ['nutOpenFoodPicker',  () => app.nutOpenFoodPicker('lunch', today, 'log')],
+      ['nutOpenRecipePicker',() => app.nutOpenRecipePicker('lunch', today)],
+      ['nutOpenMealLog',     () => app.nutOpenMealLog('lunch')],
+      ['nutOpenSuppModal',   () => app.nutOpenSuppModal(today)],
+      ['nutOpenRepeatDay',   () => app.nutOpenRepeatDay(days[0])],
+      ['nutOpenRecipeBuilder',   () => app.nutOpenRecipeBuilder()],
+      ['nutOpenCustomFoodModal', () => app.nutOpenCustomFoodModal('lunch', today)],
+    ];
+    let drawn = 0;
+    drive.forEach(([name, open]) => {
+      open();
+      const html = d.lastCreatedHtml();
+      assert.ok(html && html.length > 0, name + ' produced no markup — it did not open');
+      noVhCap(html, name);
+      drawn++;
+    });
+    assert.equal(drawn, 10, 'every armed sheet was actually opened and inspected');
+  });
+
   // ══ CONTRACT — _phxKeyboardSafe, called by Training and Peptides ═══════════
   // Provider-side, because a consumer's suite going red means the break already
   // shipped past the owner. Meanings, not just shapes.

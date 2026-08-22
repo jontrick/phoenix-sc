@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.224';
+var APP_VERSION='4.9.225';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18803,7 +18803,7 @@ function nutOpenMealLog(slot){
   ov.id = 'nut-meal-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-end;';
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;padding:24px 20px 40px;max-height:85vh;overflow-y:auto;">' +
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;padding:24px 20px 40px;max-height:85%;overflow-y:auto;">' +
     '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text);margin-bottom:4px;">' + slotLabel + '</div>' +
     '<div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Enter what you ate</div>' +
     '<div style="margin-bottom:12px;"><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px;">MEAL NAME (optional)</label><input type="text" id="nut-ml-name" placeholder="e.g. Chicken and rice" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;box-sizing:border-box;outline:none;"></div>' +
@@ -18877,7 +18877,7 @@ function nutOpenSetup(){
       '</button>';
   }).join('');
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;padding:24px 20px 44px;max-height:92vh;overflow-y:auto;">' +
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;padding:24px 20px 44px;max-height:92%;overflow-y:auto;">' +
     '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Nutrition Setup</div>' +
     '<div style="font-size:12px;color:var(--text3);margin-bottom:20px;">Your goal + stats → daily macro targets</div>' +
     '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Goal</div>' +
@@ -19143,6 +19143,10 @@ function _nutSuppSection(dayData, dateKey){
   return h;
 }
 
+// v4.9.225: every nutrition sheet caps its panel in % rather than vh. Arming
+// _phxKeyboardSafe shrinks the OVERLAY; a vh cap is measured against the full
+// viewport and does not shrink with it, so with flex-end the excess overflows
+// off the TOP of the screen — inputs gone, save button still visible.
 function nutOpenFoodPicker(slot, dateKey, mode){
   // v4.9.172: 'log' must be asked for. Omitting the mode plans, which is the
   // harmless outcome; the ticking path is never what you get by forgetting.
@@ -19161,7 +19165,7 @@ function nutOpenFoodPicker(slot, dateKey, mode){
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-end;';
   var slotLabels = {breakfast:'Breakfast',lunch:'Lunch',dinner:'Dinner',snack:'Snack',post_workout:'Post-Workout'};
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88vh;">' +
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88%;">' +
     '<div style="padding:16px 16px 10px;flex-shrink:0;">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
     '<div style="min-width:0;"><div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Add to ' + (slotLabels[slot]||slot) + '</div>' +
@@ -19474,7 +19478,7 @@ function nutOpenCustomFoodModal(slot, dateKey){
   ov.id = 'nut-custom-food-ov';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;';
   var cats = ['Protein','Carb','Vegetable','Sauce','Extra'];
-  ov.innerHTML = '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;padding:20px;max-height:90vh;overflow-y:auto;box-sizing:border-box;">' +
+  ov.innerHTML = '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;padding:20px;max-height:90%;overflow-y:auto;box-sizing:border-box;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
     '<div style="min-width:0;"><div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">ADD CUSTOM FOOD</div>' +
     (dateKey ? ('<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + _nutDayStamp(dateKey, slot) + '</div>') : '') + '</div>' +
@@ -19612,7 +19616,7 @@ function nutOpenRecipeBuilder(editId, onSaved){
   var sect = 'font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;';
   var mm = (existing && existing.macros_manual) || {};
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;max-height:92vh;display:flex;flex-direction:column;">' +
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;max-height:92%;display:flex;flex-direction:column;">' +
     '<div style="padding:20px 20px 10px;flex-shrink:0;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
     '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">' + (existing ? 'Edit Recipe' : 'New Recipe') + '</div>' +
@@ -19792,7 +19796,7 @@ function _nutOpenPickerForRecipe(onAdd){
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9700;display:flex;align-items:flex-end;';
   var _rCats = [{key:'all',label:'All'},{key:'protein',label:'Protein'},{key:'carb',label:'Carbs'},{key:'veg',label:'Veg'},{key:'sauce',label:'Sauce'},{key:'extras',label:'Extras'}];
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:80vh;">' +
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:80%;">' +
     '<div style="padding:14px 16px 10px;flex-shrink:0;">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">' +
     '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;color:var(--gold);">Pick Component</div>' +
@@ -19938,7 +19942,7 @@ function nutOpenShopList(){
   ov.id = 'nut-shop-list';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9500;display:flex;align-items:flex-end;';
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88vh;">' +
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88%;">' +
     '<div style="padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border);">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;">' +
     '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Shopping List</div>' +
@@ -20659,7 +20663,7 @@ function nutOpenRepeatDay(fromDk){
       '</button>';
   }).join('');
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:85vh;">' +
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:85%;">' +
     '<div style="padding:18px 20px 10px;flex-shrink:0;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;">' +
     '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Repeat Day</div>' +
@@ -20717,7 +20721,7 @@ function nutOpenRecipePicker(slot, dateKey){
   var dp = new Date(dateKey + 'T12:00:00');
   var sub = _nutDayStamp(dateKey, slot);
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:82vh;">' +
+    '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:82%;">' +
     '<div style="padding:14px 16px 10px;flex-shrink:0;">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">' +
     '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Assign Recipe</div>' +
@@ -20885,7 +20889,7 @@ function nutOpenPrepCard(){
   ov.id = 'nut-prep-card';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9500;display:flex;align-items:flex-end;';
   ov.innerHTML =
-    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:90vh;">' +
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:90%;">' +
     '<div style="padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border);">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;">' +
     '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Weekly Prep</div>' +
@@ -23495,7 +23499,7 @@ function pepOpenBloodPanel(panelId){
   ov.id = "pep-blood-sheet";
   ov.style.cssText = "position:fixed;inset:0;background:var(--bg);z-index:9700;overflow-y:auto;-webkit-overflow-scrolling:touch;";
   document.body.appendChild(ov);
-  // v4.9.224: armed HERE, not in _pepRenderBloodSheet. The renderer redraws on
+  // v4.9.225: armed HERE, not in _pepRenderBloodSheet. The renderer redraws on
   // every photo load and every marker added; the overlay is created once. The
   // helper is not idempotent, so arming beside the inputs — the obvious place —
   // would leak a viewport listener per redraw. Creation site, always.
@@ -25057,7 +25061,7 @@ function nutOpenSuppModal(dateKey){
         (_tab===t ? 'var(--gold)' : 'var(--text3)') +
         ';cursor:pointer;touch-action:manipulation;';
     };
-    return '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88vh;">' +
+    return '<div style="width:100%;background:var(--bg2);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88%;">' +
       '<div style="padding:16px 16px 0;flex-shrink:0;">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
       '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Add Supplement</div>' +

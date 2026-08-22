@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.216'", 'version is 4.9.216');
+has("var APP_VERSION='4.9.217'", 'version is 4.9.217');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -624,7 +624,8 @@ hasNotCode("if(tab==='nutrition'){ _nutTab='today';", 'BUG2: the unconditional r
 
 hasCode("localStorage.getItem('phoenix_last_weighin')", 'WEIGHT: targets read the LIVE morning weigh-in, not just athlete.bw');
 
-hasCode('function _nutKeyboardSafe(', 'KEYBOARD: sheets size to the visible area when the keyboard is up');
+hasCode('function _phxKeyboardSafe(', 'KEYBOARD: promoted to a shared helper other domains can call');
+hasCode('function _nutKeyboardSafe(ov){ return _phxKeyboardSafe(ov); }', 'KEYBOARD: nutrition keeps a thin wrapper so its twelve sheets do not churn');
 hasCode("vv.addEventListener('resize', fit)", 'KEYBOARD: and follow it as it opens');
 hasCode("t.scrollIntoView({block:'center'})", 'KEYBOARD: the focused field is brought into view');
 

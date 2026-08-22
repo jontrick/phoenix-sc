@@ -600,6 +600,81 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._nutTab, 'today', 'clean default');
   });
 
+  // ══ CONTRACT — _phxKeyboardSafe, called by Training and Peptides ═══════════
+  // Provider-side, because a consumer's suite going red means the break already
+  // shipped past the owner. Meanings, not just shapes.
+
+  const kbViewport = (visibleHeight) => {
+    const listeners = {};
+    app.visualViewport = {
+      height: visibleHeight, offsetTop: 0,
+      addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
+      removeEventListener: (ev, fn) => { listeners[ev] = (listeners[ev] || []).filter(f => f !== fn); },
+      _fire: (ev) => (listeners[ev] || []).forEach(f => f()),
+      _count: () => (listeners.resize || []).length,
+    };
+    return app.visualViewport;
+  };
+
+  test('CONTRACT _phxKeyboardSafe: sizes any overlay, knowing nothing of its contents', () => {
+    setUp(90);
+    kbViewport(400);
+    app.document.body.contains = () => true;
+    const ov = app.document.createElement('div');     // bare element, no structure
+    app._phxKeyboardSafe(ov);
+    assert.equal(ov.style.height, '400px', 'sized to the visible area');
+    assert.equal(ov.style.bottom, 'auto', 'so a flex-end panel clears the keyboard');
+    delete app.visualViewport;
+  });
+
+  test('CONTRACT _phxKeyboardSafe: SELF-DETACHES — the listener outlives the element', () => {
+    setUp(90);
+    const vv = kbViewport(400);
+    let present = true;
+    app.document.body.contains = () => present;
+    app._phxKeyboardSafe(app.document.createElement('div'));
+    assert.equal(vv._count(), 1, 'listening while the sheet is open');
+    present = false;
+    vv._fire('resize');
+    assert.equal(vv._count(), 0,
+      'and gone once it closes — visualViewport is a GLOBAL, so a caller that ' +
+      'opens sheets repeatedly would otherwise leak one listener per open, each ' +
+      'firing against a detached node');
+    delete app.visualViewport;
+  });
+
+  test('CONTRACT _phxKeyboardSafe: no visualViewport is a NO-OP, not an error', () => {
+    setUp(90);
+    delete app.visualViewport;
+    const ov = app.document.createElement('div');
+    ov.style.height = '';
+    app._phxKeyboardSafe(ov);
+    assert.equal(ov.style.height, '', 'older WebViews keep the normal sheet');
+  });
+
+  test('CONTRACT _phxKeyboardSafe: never throws, whatever it is handed', () => {
+    setUp(90);
+    kbViewport(400);
+    app._phxKeyboardSafe(null);
+    app._phxKeyboardSafe(undefined);
+    app._phxKeyboardSafe({});
+    assert.ok(true, 'no throw reached the caller');
+    delete app.visualViewport;
+  });
+
+  test('CONTRACT _phxKeyboardSafe: call it ONCE per overlay', () => {
+    setUp(90);
+    const vv = kbViewport(400);
+    app.document.body.contains = () => true;
+    const ov = app.document.createElement('div');
+    app._phxKeyboardSafe(ov);
+    app._phxKeyboardSafe(ov);
+    assert.equal(vv._count(), 2,
+      'a second call registers a second listener — it does not de-duplicate, so ' +
+      'callers must not re-arm an overlay they have already armed');
+    delete app.visualViewport;
+  });
+
   // ══ KEYBOARD — the field being typed into must not sit under it ════════════
   // Jon: "the keyboard and other heads up things cover what I'm trying to type at
   // the bottom of the screen." Every sheet is position:fixed; inset:0 with

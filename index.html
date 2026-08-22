@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.216';
+var APP_VERSION='4.9.217';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21094,7 +21094,11 @@ function _nutEatenTotals(dayData){
 //
 // Guarded throughout: visualViewport is absent on older WebViews and in the test
 // sandbox, where the sheet keeps its normal full-height behaviour.
-function _nutKeyboardSafe(ov){
+// Promoted from _nutKeyboardSafe (nutrition, v4.9.216; promoted v4.9.217) at the PM's direction so
+// Training and Peptides do not each write a copy. Takes an overlay element and
+// assumes nothing about its contents. Contract and meanings in HANDOFF_NUTRITION
+// under "API other domains may call"; pinned provider-side in tests/nutrition.mjs.
+function _phxKeyboardSafe(ov){
   if(!ov) return;
   var vv = (typeof window !== 'undefined') ? window.visualViewport : null;
 
@@ -21135,6 +21139,9 @@ function _nutKeyboardSafe(ov){
     });
   } catch(_e){}
 }
+
+// Nutrition's twelve sheets call this; it is the shared helper under a local name.
+function _nutKeyboardSafe(ov){ return _phxKeyboardSafe(ov); }
 
 // Tap vs long-press on one element, without the touchend/click double fire.
 function _nutBindLongPress(el, onTap, onLong){

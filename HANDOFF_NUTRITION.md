@@ -123,6 +123,44 @@ the break already shipped, so these live here.
 
 ---
 
+**`_phxKeyboardSafe(overlayElement) -> void`** (v4.9.217, promoted from `_nutKeyboardSafe`)
+
+Keeps a bottom-anchored sheet above the on-screen keyboard. Every sheet in this app is
+`position:fixed; inset:0` with `align-items:flex-end`, which is correct until the keyboard
+is up — at which point the panel's lower half renders **underneath** it, and the field with
+the cursor in it is the one the user cannot see.
+
+**Scrolling inside the panel cannot fix this.** The container itself extends below the
+keyboard, so there is nowhere for the content to go. That is why the answer is sizing the
+overlay to `window.visualViewport`, which reports the area actually visible; `flex-end` then
+places the panel just above the keyboard rather than behind it.
+
+Call it once, immediately after `document.body.appendChild(ov)`.
+
+| Behaviour | Meaning for a caller |
+|---|---|
+| Takes an overlay element | Assumes **nothing** about its contents or structure. A bare `div` is fine. |
+| **Self-detaches on removal** | You do not clean up. See the warning below for why this exists. |
+| No `visualViewport` | **No-op, not an error.** Older WebViews keep the normal full-height sheet. |
+| Never throws | Safe on `null`, `undefined` or a non-element. It runs on keyboard events, where throwing is worse than doing nothing. |
+| **Not idempotent** | Calling twice on the same overlay registers **two** listeners. Arm each overlay once. |
+
+> **Why self-detaching is load-bearing, not tidiness.** `visualViewport` listeners live on a
+> **global object** and outlive the element that registered them. A screen that opens sheets
+> repeatedly would leak one listener per open, each firing against a detached node forever.
+> This is the constraint a second consumer would otherwise rediscover by shipping it —
+> which is the whole reason it is written down here rather than left to be inferred.
+
+Pinned provider-side in `tests/nutrition.mjs` under `CONTRACT _phxKeyboardSafe` — five cases:
+sizes any overlay, self-detaches, no-ops without `visualViewport`, never throws, and is not
+idempotent. Proven to bite by removing the detach.
+
+**Wire your own sheets.** As of v4.9.217, 13 of the app's 26 `flex-end` sheets are covered —
+all of them nutrition's. The rest are Training's and Peptides', and any of them that takes
+typed input has this bug.
+
+---
+
 ### Blocked, spec ready: nutrition-label scanner
 
 **Not started. Blocked on Jon: the photo probe and the blood_panels SQL.** Nutrition owns

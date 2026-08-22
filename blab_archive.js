@@ -521,3 +521,181 @@ function openKarenSession(){
 }
 */
 
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   NUTRITION CHECK-IN TAB — archived v4.9.221 (2026-08-22), CLAUDE.md rule 9.
+
+   Unreachable, not broken. `_nutTabCheckin` had no caller: the nutrition tab
+   router routes today / recipes / week / meals and never had a 'checkin' branch.
+   Everything below is the transitive closure of that one orphan —
+   `_nutWeeklyAssessment` was called ONLY by the renderer, and the two handler
+   functions were bound ONLY by wiring inside the live `nutRenderScreen`, which
+   ran on every nutrition render and found nothing, every time.
+
+   NOT a capability loss. Weight and feeling logging live in the morning
+   check-in card (`_phxOpenMorningCheckin`) and the weekly flow
+   (`openWeeklyCheckin`), both live and both writing `weekly_checkins` /
+   `_wciState`. Nothing outside this cluster ever read `ns.daily[date].feeling`,
+   which is the only store this code wrote — verified before removal.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// ---- check-in wiring inside nutRenderScreen ----
+  var saveCI = body.querySelector('#nut-save-checkin');
+  if(saveCI) saveCI.addEventListener('click', nutSaveCheckin);
+  _nutWireFeelingBtns();
+  // Reset feeling selection to what was already saved today
+  var _todayData = (nutGetState() && nutGetState().daily && nutGetState().daily[_nutToday()]) || {};
+  _nutFeelingVal = _todayData.feeling || 0;
+// ---- _nutTabCheckin + _nutFeelingVal + _nutWireFeelingBtns + nutSaveCheckin ----
+function _nutTabCheckin(ns){
+  var today   = _nutToday();
+  var dayData = (ns.daily && ns.daily[today]) || {};
+  var feeling = dayData.feeling || 0;
+  var weight  = dayData.weight_kg || '';
+  var feelingBtns = '';
+  for(var i=1;i<=10;i++){
+    var active = (feeling === i);
+    feelingBtns += '<button data-feeling="' + i + '" style="width:32px;height:32px;border-radius:50%;border:1px solid ' + (active ? 'var(--gold)' : 'var(--border2)') + ';background:' + (active ? 'var(--gold)' : 'var(--bg2)') + ';color:' + (active ? '#000' : 'var(--text2)') + ';font-family:var(--font-d);font-size:12px;font-weight:700;cursor:pointer;touch-action:manipulation;">' + i + '</button>';
+  }
+  var h = '<div style="margin-bottom:20px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">How are you feeling today?</div>';
+  h += '<div id="nut-feeling-btns" style="display:flex;gap:6px;flex-wrap:wrap;">' + feelingBtns + '</div>';
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:6px;display:flex;justify-content:space-between;"><span>Low energy</span><span>Peak</span></div>';
+  h += '</div>';
+  h += '<div style="margin-bottom:20px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Weight</div>';
+  h += '<div style="display:flex;align-items:center;gap:10px;">';
+  h += '<input type="number" id="nut-weight-input" inputmode="decimal" step="0.1" placeholder="kg" value="' + weight + '" style="flex:1;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;">';
+  h += '<div style="font-size:13px;color:var(--text3);">kg</div>';
+  h += '</div></div>';
+  h += '<button id="nut-save-checkin" style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;margin-bottom:20px;">Save Check-in</button>';
+  if(dayData.feeling){ h += '<div style="text-align:center;margin-bottom:20px;font-size:11px;color:var(--text3);">Checked in ✔ Feeling: ' + dayData.feeling + '/10' + (dayData.weight_kg ? ' · ' + dayData.weight_kg + 'kg' : '') + '</div>'; }
+  h += _nutWeeklyAssessment(ns);
+  return h;
+}
+
+// Wires up feeling button taps in check-in tab
+var _nutFeelingVal = 0;
+function _nutWireFeelingBtns(){
+  var container = document.getElementById('nut-feeling-btns');
+  if(!container) return;
+  container.querySelectorAll('[data-feeling]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      _nutFeelingVal = parseInt(btn.getAttribute('data-feeling'));
+      container.querySelectorAll('[data-feeling]').forEach(function(b){
+        var active = parseInt(b.getAttribute('data-feeling')) === _nutFeelingVal;
+        b.style.background = active ? 'var(--gold)' : 'var(--bg2)';
+        b.style.borderColor = active ? 'var(--gold)' : 'var(--border2)';
+        b.style.color = active ? '#000' : 'var(--text2)';
+      });
+    });
+  });
+}
+
+function nutSaveCheckin(){
+  var ns = nutGetState();
+  if(!ns) return;
+  var today = _nutToday();
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[today]) ns.daily[today] = { meals: [] };
+  var feelingEl = document.getElementById('nut-feeling-btns');
+  var weightEl  = document.getElementById('nut-weight-input');
+  var feeling = _nutFeelingVal || (ns.daily[today].feeling || 0);
+  var weight  = weightEl ? parseFloat(weightEl.value) || 0 : 0;
+  if(feeling > 0) ns.daily[today].feeling = feeling;
+  if(weight > 0)  ns.daily[today].weight_kg = weight;
+  nutSaveState(ns);
+  nutRenderScreen();
+  if(typeof nutRenderTile === 'function') nutRenderTile();
+}
+
+// ---- _nutWeeklyAssessment ----
+function _nutWeeklyAssessment(ns){
+  if(!ns || !ns.daily) return '';
+  var days = [];
+  for(var i = 0; i < 14; i++){
+    var d = new Date();
+    d.setDate(d.getDate() - i);
+    var dk = _phxLocalISO(d);
+    var dd  = ns.daily[dk] || {};
+    var tot = _nutDayTotals(dd);
+    days.push({date:dk, weight:dd.weight_kg||null, kcal:tot.kcal, p:tot.protein_g, hasLog:tot.kcal>0});
+  }
+  var withWeight = days.filter(function(d){ return d.weight; });
+  var withFood   = days.filter(function(d){ return d.hasLog; });
+  if(withWeight.length < 2){
+    return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">' +
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Weekly Assessment</div>' +
+      '<div style="font-size:12px;color:var(--text3);line-height:1.5;">Log your weight on at least 2 separate days to see your trend assessment.</div></div>';
+  }
+  var newest   = withWeight[0];
+  var oldest   = withWeight[withWeight.length-1];
+  var wDelta   = Math.round((newest.weight - oldest.weight) * 10) / 10;
+  var daysSpan = withWeight.length;
+  var avgKcal  = withFood.length ? Math.round(withFood.reduce(function(a,d){ return a+d.kcal; },0) / withFood.length) : 0;
+  var tgtKcal  = (ns.targets && ns.targets.kcal) || 0;
+  var tgtProt  = (ns.targets && ns.targets.protein_g) || 0;
+  var daysHitP = withFood.filter(function(d){ return d.p >= tgtProt * 0.9; }).length;
+  var goal     = ns.goal || 'maintenance';
+  var verdict  = '', vColor = 'var(--text3)';
+  if(goal === 'fat_loss'){
+    if(wDelta <= -0.2 && wDelta >= -1.5){ verdict = 'On track — steady weight loss'; vColor = '#4CAF50'; }
+    else if(wDelta > 0.2){               verdict = 'Weight trending up — review daily intake'; vColor = 'var(--gold)'; }
+    else if(wDelta < -1.5){              verdict = 'Dropping fast — slight increase helps muscle retention'; vColor = 'var(--gold)'; }
+    else {                               verdict = 'Weight stable — small deficit may be needed'; vColor = 'var(--text3)'; }
+  } else if(goal === 'hypertrophy'){
+    if(wDelta >= 0.1 && wDelta <= 1.0){ verdict = 'On track — healthy gaining rate'; vColor = '#4CAF50'; }
+    else if(wDelta < 0){                verdict = 'Weight dropping — eat more to support growth'; vColor = 'var(--gold)'; }
+    else if(wDelta > 1.0){              verdict = 'Gaining fast — watch the rate for lean gains'; vColor = 'var(--gold)'; }
+    else {                              verdict = 'Weight stable — slight calorie increase may help'; vColor = 'var(--text3)'; }
+  } else if(goal === 'strength'){
+    if(Math.abs(wDelta) <= 0.5){ verdict = 'Weight stable — good for strength phase'; vColor = '#4CAF50'; }
+    else if(wDelta > 0.5){       verdict = 'Gaining — keep an eye on the rate'; vColor = 'var(--text3)'; }
+    else {                       verdict = 'Losing — ensure enough calories for recovery'; vColor = 'var(--gold)'; }
+  } else {
+    if(Math.abs(wDelta) <= 0.3){ verdict = 'Maintaining well'; vColor = '#4CAF50'; }
+    else {                       verdict = 'Weight moving — adjust intake to maintain'; vColor = 'var(--gold)'; }
+  }
+  var wArrow = wDelta > 0.1 ? '↑' : wDelta < -0.1 ? '↓' : '→';
+  var wColor = goal === 'fat_loss' ? (wDelta < 0 ? '#4CAF50' : 'var(--gold)') :
+               goal === 'hypertrophy' ? (wDelta > 0 ? '#4CAF50' : 'var(--gold)') : 'var(--text)';
+  var kcalDiff = avgKcal - tgtKcal;
+  // Mini weight sparkline
+  var chartDays = days.slice(0,7).reverse();
+  var wVals  = chartDays.map(function(d){ return d.weight; }).filter(Boolean);
+  var minW   = wVals.length ? Math.min.apply(null,wVals) - 0.3 : 0;
+  var maxW   = wVals.length ? Math.max.apply(null,wVals) + 0.3 : 1;
+  var chartH = 36;
+  var chartBars = chartDays.map(function(d){
+    var dayLbl = new Date(d.date + 'T12:00:00').toLocaleDateString('en-AU',{weekday:'narrow'});
+    if(!d.weight) return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:' + (chartH+18) + 'px;"><div style="height:' + chartH + 'px;"></div><div style="font-size:8px;color:var(--border2);">' + dayLbl + '</div></div>';
+    var pct = maxW > minW ? (d.weight - minW) / (maxW - minW) : 0.5;
+    var bH  = Math.max(4, Math.round(pct * chartH));
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;height:' + (chartH+18) + 'px;">' +
+      '<div style="font-size:7px;color:var(--text3);">' + d.weight + '</div>' +
+      '<div style="width:80%;max-width:18px;height:' + bH + 'px;background:var(--gold);border-radius:2px 2px 0 0;"></div>' +
+      '<div style="font-size:8px;color:var(--text3);">' + dayLbl + '</div>' +
+      '</div>';
+  }).join('');
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:14px;">Weekly Assessment</div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:14px;">';
+  h += '<div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:' + wColor + ';">' + wArrow + ' ' + Math.abs(wDelta) + 'kg</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' + daysSpan + '-day weight</div></div>';
+  h += '<div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:' + (Math.abs(kcalDiff)<100 ? '#4CAF50' : 'var(--gold)') + ';">' + (avgKcal||'—') + '</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">avg kcal &middot; tgt ' + tgtKcal + '</div></div>';
+  h += '<div style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;color:' + (daysHitP>=5 ? '#4CAF50' : 'var(--gold)') + ';">' + daysHitP + '/' + (withFood.length||7) + '</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">days hit protein</div></div>';
+  h += '</div>';
+  if(wVals.length >= 3) h += '<div style="display:flex;align-items:flex-end;gap:3px;margin-bottom:14px;padding:8px;background:var(--bg3);border-radius:var(--radius);">' + chartBars + '</div>';
+  h += '<div style="background:var(--bg3);border-left:3px solid ' + vColor + ';border-radius:0 var(--radius) var(--radius) 0;padding:10px 12px;">';
+  h += '<div style="font-size:12px;color:' + vColor + ';font-weight:600;">' + verdict + '</div>';
+  if(kcalDiff !== 0 && avgKcal > 0) h += '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Avg intake ' + Math.abs(kcalDiff) + ' kcal ' + (kcalDiff > 0 ? 'above' : 'below') + ' target</div>';
+  h += '</div></div>';
+  return h;
+}
+

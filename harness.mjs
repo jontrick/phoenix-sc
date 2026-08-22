@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.221'", 'version is 4.9.221');
+has("var APP_VERSION='4.9.222'", 'version is 4.9.222');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -203,7 +203,15 @@ hasCode('function openNutritionScreen()', 'NUT: openNutritionScreen defined');
 hasCode('function nutRenderScreen()', 'NUT: nutRenderScreen defined');
 hasCode('function nutOpenSetup()', 'NUT: nutOpenSetup defined');
 hasCode('function nutOpenMealLog(slot)', 'NUT: nutOpenMealLog defined');
-hasCode('function nutSaveCheckin()', 'NUT: nutSaveCheckin defined');
+// v4.9.222: the check-in tab is archived (blab_archive.js). It was UNREACHABLE, not
+// broken — the tab router never had a 'checkin' branch — so these four went together
+// as one transitive closure. Guarding the closure, not just the entry point: bringing
+// back any single member resurrects code nothing routes to.
+hasNotCode('function _nutTabCheckin(',      'NUT: check-in tab renderer stays archived (no router branch reaches it)');
+hasNotCode('function nutSaveCheckin()',     'NUT: its save handler stays archived');
+hasNotCode('function _nutWireFeelingBtns(', 'NUT: its button wiring stays archived');
+hasNotCode('function _nutWeeklyAssessment(','NUT: its only callee stays archived');
+hasNotCode("querySelector('#nut-save-checkin')", 'NUT: nutRenderScreen no longer wires a control nothing renders');
 hasCode("id=\"screen-nutrition\"", 'NUT: #screen-nutrition HTML screen added');
 hasCode("'nutrition':'screen-nutrition'", 'NUT: navigation route wired');
 hasCode("if(tab==='nutrition')", 'NUT: navTo renders nutrition screen');

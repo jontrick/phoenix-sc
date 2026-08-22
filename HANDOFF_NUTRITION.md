@@ -123,25 +123,40 @@ the break already shipped, so these live here.
 
 ---
 
-### Parked: nutrition-label scanner
+### Blocked, spec ready: nutrition-label scanner
 
-**Not started. Blocked. Distinct from blood panels.** Photograph a food packet's nutrition
-panel, autofill the macros. Jon asked Training for it; it was routed here. It is *not* the
-blood-panel scanner — a food label has nothing to do with pathology, and it is not Peptides'.
+**Not started. Blocked on Jon: the photo probe and the blood_panels SQL.** Nutrition owns
+the **food label** scanner; Peptides owns the **blood panel** scanner. Same Cloudflare
+Worker / Claude vision path, different domains — a food label has nothing to do with
+pathology and must not be routed here as one.
 
-Blocked on an unverified premise: whether the coach worker actually accepts image blocks.
-Peptides made that claim and **withdrew it** — the evidence was Jon saying "seems to work,
-need the results next week to test", which establishes nothing.
+**Jon's ruling, 22 Aug 2026 — capture PER SERVING, do NOT convert to per-100g.**
 
-If it is ever unblocked, the field that decides whether the numbers are right at all:
-`_NUT_FOODS` is **per-100g throughout** and `nutAddComponent` computes `value × qty_g / 100`.
-A label printed per-serving cannot flow through that path unchanged — it would be wrong by
-the serving ratio, silently, and permanently if saved as a custom food. Labels routinely give
-a serving with no gram weight ("per serving (2 biscuits)", "per slice"), which makes the
-conversion **impossible rather than hard**. So the extractor needs three outcomes, not two:
-per-100g → use it; per-serving **with** grams → convert; per-serving **without** grams →
-refuse that food and ask Jon, never assume 100g. There is no point downstream where a wrong
-basis becomes visible.
+This resolves rather than inherits the conversion trap. Labels routinely print a serving
+with no gram weight ("per serving (2 biscuits)", "per slice"), which makes a per-100g
+conversion *impossible* rather than merely hard. Capturing what the label actually prints
+sidesteps it entirely.
+
+**The serving count is an input at the point of ADDING TO A MEAL, not at the point of
+scanning.** Scan once, capture per-serving macros as printed. Then each time that food goes
+into a day or week slot, Jon enters how many servings, and the day/week views show macros
+× servings.
+
+**The engineering consequence, which is where this can still go silently wrong.**
+`_NUT_FOODS` is per-100g throughout and `nutAddComponent` computes `value × qty_g / 100`.
+A per-serving food **cannot flow through that path unchanged** — it would be wrong by the
+serving ratio, invisibly, and permanently once saved as a custom food. There is no point
+downstream where a wrong basis becomes visible.
+
+So a scanned food needs its basis carried explicitly (e.g. `basis: 'serving'` with
+`serving_label`) and a separate multiply path — servings × per-serving macros — rather than
+being coerced into the per-100g field and multiplied by grams. **Do not reuse `qty_g` to
+mean servings.** That is the same shape as every silent-wrong-value bug this domain has
+shipped: a field that looks right, means something else, and cannot be told apart downstream.
+
+Recipes already carry per-serve macros and a serving count, so the existing per-serve
+machinery (`nutRecipeMacros`, `nutAssignRecipe`'s `serves`) is the closer model to follow
+than the per-100g food path.
 
 ---
 

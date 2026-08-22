@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.210'", 'version is 4.9.210');
+has("var APP_VERSION='4.9.211'", 'version is 4.9.211');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -613,6 +613,14 @@ hasCode('function _nutSlotCard(', 'DAY: one shared slot renderer');
 hasCode('function _nutDaySummary(', 'DAY: one shared day summary');
 hasCode('function _nutDayStamp(', 'DAY: add-sheets name the day they write to');
 hasNotCode('data-nut-plan-food', 'DAY: planner-only food control folded into the shared card');
+
+// -- Week/day mismatch + view persistence (v4.9.211) --
+hasCode("else if(_nutTab === 'meals')     content = _nutTabMeals(ns);", 'BUG1: the day card is reachable from the week view');
+hasCode("_nutTab === 'meals' && t.key === 'week'", 'BUG1: WEEK stays lit on the day drill-down');
+hasCode('function _nutSaveView(', 'BUG2: the view inside the screen is persisted');
+hasCode('function _nutRestoreView(', 'BUG2: and restored');
+hasCode("if(typeof _nutRestoreView==='function') _nutRestoreView();", 'BUG2: navTo restores it instead of forcing today');
+hasNotCode("if(tab==='nutrition'){ _nutTab='today';", 'BUG2: the unconditional reset to today is gone');
 
 // ── Water drink sizes (v4.9.199) ───────────────────────────────────────────
 hasCode('var _NUT_DRINK_SIZES = [250, 330, 500, 1000, 1500];', 'WATER: the five sizes Jon asked for');

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.210';
+var APP_VERSION='4.9.211';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8572,7 +8572,7 @@ function navTo(tab){
   if(tab==='agoge') openAgoge();
   if(tab==='records') renderRecords();
   if(tab==='blab-calendar'){ if(typeof _blabCalRender==='function') _blabCalRender(); }
-  if(tab==='nutrition'){ _nutTab='today'; if(typeof nutRenderScreen==='function') nutRenderScreen(); }
+  if(tab==='nutrition'){ if(typeof _nutRestoreView==='function') _nutRestoreView(); if(typeof nutRenderScreen==='function') nutRenderScreen(); }
   if(tab==='peptide'){ _pepTab='today'; if(typeof pepRenderScreen==='function') pepRenderScreen(); var _paBtn=document.getElementById('pep-add-btn'); if(_paBtn) _paBtn.onclick=function(){ if(_pepTab==='protocol') pepOpenAddStack(); else if(_pepTab==='order') pepOpenOrderPicker(); else if(_pepTab==='adjust'){ var _n=document.getElementById('pep-note-input'); if(_n) _n.focus(); } else { _pepTab='protocol'; pepRenderScreen(); } }; }
 }
 
@@ -18315,6 +18315,36 @@ function openNutritionScreen(){
 }
 
 // navTo('nutrition') renders this
+// v4.9.211 BUG 2: the screen-level boot restore brings Jon back to Nutrition, but
+// navTo then reset _nutTab to 'today' unconditionally — so after a screen lock he
+// landed on the TODAY tab whatever he had been looking at. The screen restored;
+// the place inside it did not. Peptides has the identical line (_pepTab='today')
+// and reported the identical symptom.
+//
+// Persist where he was inside the screen, so "stay put" means the tab, the week
+// being planned and the day being edited — not just the screen.
+function _nutSaveView(){
+  try {
+    localStorage.setItem('phx_nut_view_v1', JSON.stringify({
+      tab: _nutTab, weekOffset: _nutWeekOffset, weekMode: _nutWeekMode, mealDate: _nutMealDate
+    }));
+  } catch(_e){}
+}
+
+function _nutRestoreView(){
+  var v = null;
+  try { v = JSON.parse(localStorage.getItem('phx_nut_view_v1') || 'null'); } catch(_e){}
+  if(!v || typeof v !== 'object'){ _nutTab = 'today'; return; }
+  var tab = v.tab;
+  // 'meals' is only meaningful with a date to show; without one it would render
+  // an empty day rather than the tab he left.
+  if(tab === 'meals' && !v.mealDate) tab = 'week';
+  _nutTab       = (['today','recipes','week','meals'].indexOf(tab) >= 0) ? tab : 'today';
+  _nutWeekOffset = parseInt(v.weekOffset, 10) || 0;
+  _nutWeekMode   = (v.weekMode === 'plan') ? 'plan' : 'overview';
+  _nutMealDate   = v.mealDate || null;
+}
+
 function nutRenderScreen(){
   var body = document.getElementById('nut-screen-body');
   if(!body) return;
@@ -18322,13 +18352,15 @@ function nutRenderScreen(){
   if(!ns || !ns.setup_done){ body.innerHTML = '<div style="padding:24px;text-align:center;"><div style="color:var(--text2);margin-bottom:16px;">Set up your nutrition targets to get started.</div><button onclick="nutOpenSetup()" class="btn-primary" style="width:100%;">Set Up Nutrition</button></div>'; return; }
   var tabs = [{key:'today',label:'TODAY'},{key:'recipes',label:'RECIPES'},{key:'week',label:'WEEK'}];
   var tabBar = '<div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg);">' +
-    tabs.map(function(t){ var act = _nutTab === t.key; return '<button data-nut-tab="'+t.key+'" style="flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid '+(act?'var(--gold)':'transparent')+';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(act?'var(--gold)':'var(--text3)')+';cursor:pointer;touch-action:manipulation;">'+t.label+'</button>'; }).join('') + '</div>';
+    tabs.map(function(t){ var act = (_nutTab === t.key) || (_nutTab === 'meals' && t.key === 'week'); return '<button data-nut-tab="'+t.key+'" style="flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid '+(act?'var(--gold)':'transparent')+';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(act?'var(--gold)':'var(--text3)')+';cursor:pointer;touch-action:manipulation;">'+t.label+'</button>'; }).join('') + '</div>';
   var content = '';
   if(_nutTab === 'today')          content = _nutTabToday(ns);
   else if(_nutTab === 'recipes')   content = _nutTabRecipes(ns);
   else if(_nutTab === 'week')      content = _nutTabWeek(ns);
+  else if(_nutTab === 'meals')     content = _nutTabMeals(ns);
   else                             content = _nutTabToday(ns);
   body.innerHTML = tabBar + '<div style="padding:16px;">' + content + '</div>';
+  _nutSaveView();
   body.querySelectorAll('[data-nut-tab]').forEach(function(btn){
     btn.addEventListener('click', function(){ _nutTab = btn.getAttribute('data-nut-tab'); nutRenderScreen(); });
   });

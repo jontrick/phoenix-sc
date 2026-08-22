@@ -504,6 +504,101 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(lastWriteError(), null, 'and nothing recorded');
   });
 
+  // ══ BUG 1 — the week view and the day card must agree ══════════════════════
+  // Jon: the week view indicated food on a day; opening that day showed "Empty".
+  // Cause: the day handler sets _nutTab='meals' and the router had no 'meals'
+  // branch, so it fell through to the else and rendered TODAY. _nutTabMeals was
+  // written, working, and referenced nowhere.
+
+  test('BUG1 opening a day from the week view shows THAT day, not today', () => {
+    setUp(90);
+    app.nutSaveRecipes([rec('Bowl')]);
+    const days = app._nutSelectedWeekDays();
+    const other = days.find(d => d !== app._nutToday());
+    app.nutAssignRecipe('r_Bowl', 'lunch', other, 1);   // food on another day, none today
+
+    app._nutMealDate = other;
+    app._nutTab = 'meals';
+    const d = dom();
+    app.nutRenderScreen();
+    const html = d.html('nut-screen-body');
+    assert.ok(html.indexOf('Bowl') >= 0, 'the meal logged on that day is on screen');
+    assert.ok(html.indexOf(other) >= 0, 'and the card is showing that date');
+    app._nutTab = 'today';
+  });
+
+  test('BUG1 the week view and the day card read the same slot data', () => {
+    setUp(90);
+    app.nutSaveRecipes([{ ...rec('Bowl'), components: [
+      { n: 'Chicken', cat: 'protein', k: 110, p: 23, c: 0, f: 2, qty_g: 200, cooked_g: 0, state: 'raw' },
+    ] }]);
+    const days = app._nutSelectedWeekDays();
+    const other = days.find(d => d !== app._nutToday());
+    app.nutAssignRecipe('r_Bowl', 'lunch', other, 1);
+
+    const slot = app._nutSlotTotals(app.nutGetState().daily[other], 'lunch');
+    assert.ok(slot.kcal > 0, 'the week view has something to indicate');
+
+    app._nutMealDate = other;
+    app._nutTab = 'meals';
+    const d = dom();
+    app.nutRenderScreen();
+    const html = d.html('nut-screen-body');
+    assert.equal(html.indexOf('Empty') >= 0 && html.indexOf('Bowl') === -1, false,
+      'the day card does not report Empty for a slot the week view shows as filled');
+    app._nutTab = 'today';
+  });
+
+  // ══ BUG 2 — a resume lands where he was, not on the first tab ══════════════
+  // The screen-level restore worked; navTo then reset _nutTab to 'today'.
+
+  test('BUG2 the view he left is restored, not reset to today', () => {
+    setUp(90);
+    app._nutTab = 'week';
+    app._nutWeekMode = 'plan';
+    app._nutWeekOffset = 1;
+    const d = dom();
+    app.nutRenderScreen();                    // renders and persists
+
+    app._nutTab = 'today';                    // as if arriving fresh
+    app._nutWeekMode = 'overview';
+    app._nutWeekOffset = 0;
+    app.navTo('nutrition');                   // the path Jon actually takes on resume
+    assert.equal(app._nutTab, 'week', 'back on the week tab');
+    assert.equal(app._nutWeekMode, 'plan', 'in plan mode');
+    assert.equal(app._nutWeekOffset, 1, 'on the week he was planning');
+    app._nutWeekOffset = 0; app._nutWeekMode = 'overview'; app._nutTab = 'today';
+  });
+
+  test('BUG2 the day he was editing is restored too', () => {
+    setUp(90);
+    const days = app._nutSelectedWeekDays();
+    app._nutMealDate = days[3];
+    app._nutTab = 'meals';
+    const d = dom();
+    app.nutRenderScreen();
+    app._nutTab = 'today'; app._nutMealDate = null;
+    app._nutRestoreView();
+    assert.equal(app._nutTab, 'meals', 'back on the day card');
+    assert.equal(app._nutMealDate, days[3], 'showing the same day');
+    app._nutTab = 'today';
+  });
+
+  test('BUG2 a day card with no date falls back rather than rendering an empty day', () => {
+    setUp(90);
+    seed('phx_nut_view_v1', { tab: 'meals', mealDate: null, weekMode: 'overview', weekOffset: 0 });
+    app._nutRestoreView();
+    assert.equal(app._nutTab, 'week', 'falls back to the week it came from');
+    app._nutTab = 'today';
+  });
+
+  test('BUG2 no saved view means today, not a crash', () => {
+    setUp(90);
+    seed('phx_nut_view_v1', null);
+    app._nutRestoreView();
+    assert.equal(app._nutTab, 'today', 'clean default');
+  });
+
   // ══ WATER — variable drink sizes ═══════════════════════════════════════════
   // Undo used to subtract a hard-coded 250ml, correct only while every entry WAS
   // 250ml. The cases that matter are the ones that fail under THAT behaviour, not

@@ -1873,6 +1873,128 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── BLOODSAVE — driving pepSaveBloodPanel, which nothing had ever run ──────
+  // The harness had `has('async function pepSaveBloodPanel()')` and that was
+  // the entire coverage. Presence, not behaviour — the exact gap the .165
+  // Today-card incident was about, sitting in my own domain the whole time.
+  //
+  // I went looking because I told Jon "the save path has been working the whole
+  // time" on the strength of the schema existing. The schema existing makes the
+  // save POSSIBLE. It says nothing about whether the code does it. Driving the
+  // function took ten minutes and found a silent partial failure.
+  {
+    const bsSetUp = () => {
+      reset();
+      signIn(UID);
+      const calls = [];
+      const mkQuery = (table, failUpdate) => {
+        const q = {
+          insert(r) { calls.push({ table, op: 'insert', row: r }); return q; },
+          update(r) { calls.push({ table, op: 'update', row: r }); return q; },
+          select() { return q; }, eq() { return q; }, order() { return q; },
+          limit() { return q; },
+          single() { return Promise.resolve({ data: { id: 'row-9' }, error: null }); },
+          then(a, b) { return Promise.resolve({ data: [], error: failUpdate || null }).then(a, b); },
+        };
+        return q;
+      };
+      return { calls, mkQuery };
+    };
+
+    const draft = () => ({
+      id: null, panel_date: '2026-08-20', lab: 'Lab', fasted: true,
+      photo_path: null, photoDataURL: 'data:image/jpeg;base64,AAAA',
+      markers: [{ name: 'ALT', value: '71', unit: 'U/L', ref_low: '5', ref_high: '40' }],
+      notes: 'n', source: 'manual',
+    });
+
+    test('BLOODSAVE a panel reaches blood_panels with the marker flagged', async () => {
+      const { calls, mkQuery } = bsSetUp();
+      app.sb = {
+        from: (t) => mkQuery(t),
+        storage: { from: () => ({ upload: () => Promise.resolve({ data: {}, error: null }) }) },
+      };
+      app._pepBloodDraft = draft();
+      await app.pepSaveBloodPanel();
+      const ins = calls.find(c => c.op === 'insert');
+      assert.ok(ins, 'an insert reached blood_panels');
+      assert.equal(ins.table, 'blood_panels', 'the right table');
+      assert.equal(ins.row.user_id, UID, 'scoped to the signed-in user');
+      assert.equal(ins.row.markers.length, 1, 'the named marker survived');
+      assert.equal(ins.row.markers[0].flag, 'high', 'ALT 71 against 5-40 flags high');
+    });
+
+    // THE BUG, pinned. Photo upload fails; before v4.9.230 this was a bare
+    // console.warn — invisible on iPhone — and the sheet then closed on a green
+    // "saved". Jon ends up with a pathology record and no image, and nothing
+    // anywhere tells him.
+    test('BLOODSAVE a failed photo upload is never silent', async () => {
+      const { calls, mkQuery } = bsSetUp();
+      app.sb = {
+        from: (t) => mkQuery(t),
+        storage: { from: () => ({ upload: () => Promise.resolve({ data: null, error: { message: 'bucket policy denied' } }) }) },
+      };
+      app._pepBloodDraft = draft();
+      await app.pepSaveBloodPanel();
+      const rec = read('phx_last_write_error');
+      assert.ok(rec, 'the failure was recorded where Settings -> Diagnostic can show it');
+      assert.ok(JSON.stringify(rec).includes('blood photo'), 'recorded under its own context');
+      assert.ok(calls.some(c => c.op === 'insert'), 'and the panel itself still saved');
+    });
+
+    test('BLOODSAVE the sheet stays open after a photo failure, carrying the row id', async () => {
+      const { mkQuery } = bsSetUp();
+      app.sb = {
+        from: (t) => mkQuery(t),
+        storage: { from: () => ({ upload: () => Promise.resolve({ data: null, error: { message: 'nope' } }) }) },
+      };
+      app._pepBloodDraft = draft();
+      await app.pepSaveBloodPanel();
+      assert.ok(app._pepBloodDraft, 'draft kept, so he can retry rather than re-enter everything');
+      assert.equal(app._pepBloodDraft.id, 'row-9',
+        'carrying the saved row id — a retry must UPDATE that row, not insert a second ' +
+        'pathology record for the same panel');
+    });
+
+    test('BLOODSAVE a clean save closes the sheet and clears the draft', async () => {
+      const { mkQuery } = bsSetUp();
+      app.sb = {
+        from: (t) => mkQuery(t),
+        storage: { from: () => ({ upload: () => Promise.resolve({ data: {}, error: null }) }) },
+      };
+      app._pepBloodDraft = draft();
+      await app.pepSaveBloodPanel();
+      assert.equal(app._pepBloodDraft, null, 'draft cleared only when everything landed');
+    });
+
+    test('BLOODSAVE a thrown save records diagnostics rather than only warning', async () => {
+      const { mkQuery } = bsSetUp();
+      app.sb = {
+        from: () => { const q = mkQuery('blood_panels'); q.single = () => Promise.resolve({ data: null, error: { message: 'permission denied' } }); return q; },
+        storage: { from: () => ({ upload: () => Promise.resolve({ data: {}, error: null }) }) },
+      };
+      app._pepBloodDraft = draft();
+      await app.pepSaveBloodPanel();
+      const rec = read('phx_last_write_error');
+      assert.ok(rec && JSON.stringify(rec).includes('blood panel save'),
+        'console.warn is invisible on his phone; this is the only surface he has');
+    });
+
+    // The stale instruction, pinned so it cannot come back. The migration is
+    // applied — verified against production 22 Aug 2026 — and this string sent
+    // Jon to run it anyway. Three chats spent a day passing that around.
+    test('BLOODSAVE the save error no longer tells Jon to run the migration', () => {
+      const i = html.indexOf('async function pepSaveBloodPanel');
+      const blk = html.slice(i, html.indexOf('\nasync function ', i + 1));
+      // Needle is the full USER-FACING sentence, not the fragment: the fragment
+      // also appears in the comment explaining why it was removed, so the first
+      // version of this test failed on my own note about the fix. A guard that
+      // matches its own documentation cannot distinguish fixed from described.
+      assert.notIncludes(blk, 'run the blood_panels migration in the Supabase SQL Editor first',
+        'the table exists; a schema error here is mine to diagnose, not his to fix');
+    });
+  }
+
   // ── KEYBOARD — every peptide sheet Jon types into (v4.9.221, .222) ────────
   // Jon: the iOS keyboard covers the field on the edit sheet. The argument that
   // got his go-ahead was not "a field is hidden" but WHICH field: he loses the

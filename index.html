@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.229';
+var APP_VERSION='4.9.230';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -24029,6 +24029,7 @@ async function pepSaveBloodPanel(){
   if(!uid){ if(msg) msg.textContent = "Sign in to save blood panels."; return; }
 
   if(btn){ btn.disabled = true; btn.textContent = "Saving…"; }
+  var photoErr = null;
   try {
     var markers = d.markers.filter(function(m){ return m.name && String(m.name).trim(); })
       .map(function(m){ var o = Object.assign({}, m); o.flag = _pepMarkerFlag(m); return o; });
@@ -24055,12 +24056,33 @@ async function pepSaveBloodPanel(){
       if(blob){
         var path = uid + "/" + saved.id + ".jpg";
         var upl = await sb.storage.from("blood-panels").upload(path, blob, {contentType:"image/jpeg", upsert:true});
-        if(upl.error){ console.warn("[PHX] blood photo upload failed:", upl.error); }
+        // v4.9.230: these two were bare console.warn — invisible on iPhone, and
+        // the sheet then closed on a green "saved". The panel row lands, the
+        // photo silently does not, and Jon has a pathology record with no image
+        // and no reason to suspect it. Found by DRIVING this function for the
+        // first time; it had a presence check in the harness and nothing had
+        // ever run it.
+        if(upl.error){ photoErr = upl.error; }
         else {
           var pu = await sb.from("blood_panels").update({photo_path: path}).eq("id", saved.id).eq("user_id", uid);
-          if(pu.error) console.warn("[PHX] blood photo path save failed:", pu.error);
+          if(pu.error) photoErr = pu.error;
+        }
+        if(photoErr && typeof _phxRecordWriteError === "function"){
+          _phxRecordWriteError("blood photo", photoErr, {panel_id: String(saved.id).length, path_len: path.length});
         }
       }
+    }
+
+    if(photoErr){
+      // The panel IS saved. Keep the sheet open, carrying the row id so tapping
+      // Save again UPDATES it rather than inserting a duplicate pathology row.
+      d.id = saved && saved.id ? saved.id : d.id;
+      if(msg) msg.innerHTML = "Panel saved &mdash; but the photo did not upload (" +
+        _esc((photoErr && photoErr.message) ? String(photoErr.message) : "unknown error") +
+        "). Your results are stored. Tap Save Panel to retry the photo.";
+      if(btn){ btn.disabled = false; btn.textContent = "Save Panel"; }
+      await pepBloodsLoad(true);
+      return;
     }
 
     _pepBloodDraft = null;
@@ -24071,8 +24093,16 @@ async function pepSaveBloodPanel(){
     pepRenderScreen();
   } catch(e){
     console.warn("[PHX] blood panel save failed:", e);
+    if(typeof _phxRecordWriteError === "function"){
+      _phxRecordWriteError("blood panel save", e, {markers: (d.markers || []).length, has_photo: !!d.photoDataURL});
+    }
     var detail = (e && e.message) ? String(e.message) : "unknown error";
-    if(msg) msg.innerHTML = "Save failed: " + _esc(detail) + (/relation|does not exist|schema/i.test(detail) ? " &mdash; run the blood_panels migration in the Supabase SQL Editor first." : "");
+    // v4.9.230: this used to tell him to run the blood_panels migration. It is
+    // applied — verified against production 22 Aug 2026 — and that sentence is
+    // the same stale instruction three chats spent a day bouncing between them.
+    // A schema error here now means something changed, which is my problem to
+    // diagnose, not a task to hand him.
+    if(msg) msg.innerHTML = "Save failed: " + _esc(detail) + (/relation|does not exist|schema/i.test(detail) ? " &mdash; the blood_panels table is not answering as expected. Nothing for you to run; send me this message." : "");
     if(btn){ btn.disabled = false; btn.textContent = "Save Panel"; }
   }
 }

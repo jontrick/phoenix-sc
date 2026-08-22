@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.203'", 'version is 4.9.203');
+has("var APP_VERSION='4.9.204'", 'version is 4.9.204');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1091,6 +1091,24 @@ try {
 } catch (e) {
   bad('CAL: calendar rule execution failed — ' + e.message);
 }
+
+// ── SHARED — the visibility comment must stay TRUE (STRUCTURAL, v4.9.204) ───
+// :16474 asserted "NO visibilitychange listener exists in this app" while three
+// did, one of them mine. A false claim in shared code at exactly the spot
+// someone lands when diagnosing a wake-up bug. Corrected — and pinned, because
+// a comment nobody checks is how it went stale in the first place. If a fourth
+// listener is added this FAILS until the comment is updated to match.
+(() => {
+  const n = (html.match(/addEventListener\((?:'|")visibilitychange(?:'|")/g) || []).length;
+  hasNot('NO visibilitychange listener exists in this app',
+         'SHARED: STRUCTURAL the false "no visibilitychange listener" claim is gone');
+  n === 3
+    ? ok(`SHARED: STRUCTURAL visibilitychange listener count matches the comment (${n})`)
+    : bad(`SHARED: STRUCTURAL ${n} visibilitychange listeners but the comment at :16474 says three — update it`);
+  html.includes('THE RULE, unchanged and still binding: no visibility hook may RE-ROUTE')
+    ? ok('SHARED: STRUCTURAL the no-re-route rule survived the correction')
+    : bad('SHARED: STRUCTURAL the no-re-route rule was lost when the comment was corrected');
+})();
 
 // ── PEPTIDES — cross-domain contract (STRUCTURAL) ───────────────────────────
 // _phxRecordWriteError is the ONLY foreign surface the peptide block consumes.

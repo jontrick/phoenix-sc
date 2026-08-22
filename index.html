@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.203';
+var APP_VERSION='4.9.204';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16471,11 +16471,23 @@ sb.auth.onAuthStateChange(function(event,session){
   }
 });
 
-// v4.7.41 hotfix: NO visibilitychange listener exists in this app, and none should be
-// added that re-routes. Token refresh is handled by Supabase internally; the
-// onAuthStateChange guard above ignores those refreshes for routing purposes. If a
-// future visibility hook is added, it MUST follow the same rule: fully-onboarded
-// athletes only ever get a renderTodayScreen() refresh — never a re-route.
+// v4.7.41 hotfix, CORRECTED v4.9.204: the RULE below stands; the factual claim it
+// used to open with does not. It said "NO visibilitychange listener exists in this
+// app". Three do, and one of them is mine:
+//     :3699   BLAB cloud flush on hidden
+//     :10345  timed-session wake: re-acquires the wake lock, resyncs the clock
+//     :21637  peptide cloud flush on hidden        (added by Peptides, v4.9.154)
+// Left uncorrected this was a false statement sitting in shared code at the exact
+// spot someone lands when diagnosing a wake-up bug. It nearly sent my own
+// diagnosis of Jon's screen-lock report the wrong way — I read it, did not believe
+// it, and checked; the cause turned out to be a read-before-write ordering bug in
+// the tab restore (v4.9.200), nothing to do with visibility at all.
+//
+// THE RULE, unchanged and still binding: no visibility hook may RE-ROUTE. Token
+// refresh is handled by Supabase internally and the onAuthStateChange guard above
+// ignores those refreshes for routing. All three listeners above comply — they
+// flush, re-acquire a wake lock, or repaint. A fully-onboarded athlete only ever
+// gets a renderTodayScreen() refresh, never a re-route.
 
 // ====== AUTH CHECK ======
 // v4.7.42 hotfix: reset intentional-signout flag at every boot so it can't leak across

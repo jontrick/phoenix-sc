@@ -1873,7 +1873,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
-  // ── KEYBOARD — the two sheets Jon types real numbers into (v4.9.221) ───────
+  // ── KEYBOARD — every peptide sheet Jon types into (v4.9.221, .222) ────────
   // Jon: the iOS keyboard covers the field on the edit sheet. The argument that
   // got his go-ahead was not "a field is hidden" but WHICH field: he loses the
   // dose box AND the draw-up preview under it — the number that tells him
@@ -1992,6 +1992,36 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(vv._count(), 1, 'armed once');
       assert.ok(ov.innerHTML.includes('max-height:100%'),
         'short sheet, but a short viewport would still clip Save without this');
+      kbTearDown();
+    });
+
+    // v4.9.224 — THE SHEET I MISSED, and how.
+    //
+    // .221 shipped claiming "the two sheets Jon types into" and enumerated four
+    // overlays. There are five. The fifth, pepOpenBloodPanel, has six text
+    // inputs and a textarea — the most typing-heavy screen in the domain. I did
+    // not miss it by looking and misjudging; I never re-derived the count, and
+    // the PM and I then both worked from my number.
+    //
+    // It is a different SHAPE, which is why "the bottom sheets" felt complete:
+    // full-height inset:0 with its own overflow-y:auto, so nothing overflows
+    // upward. It fails the other way — the scroll container's bottom sits
+    // behind the keyboard and cannot be scrolled to, so after typing Notes the
+    // Save Panel button under it is unreachable. Same cause, opposite geometry.
+    //
+    // The durable fix is not this test; it is the harness guard that ENUMERATES
+    // peptide overlays and fails any with a typed field that is not armed. A
+    // count I remembered is worth less than a count the machine takes.
+    test('KEYBOARD the blood panel sheet is armed at its creation site', () => {
+      const vv = kbSetUp(420);
+      seed(KEY, { stacks: [], bloods: [] });
+      const ov = openSheet(() => app.pepOpenBloodPanel(null));
+      assert.ok(ov, 'the sheet created an overlay');
+      assert.equal(ov.style.height, '420px', 'container ends where the keyboard begins');
+      assert.equal(ov.style.bottom, 'auto', 'so its bottom is reachable by scrolling');
+      assert.equal(vv._count(), 1,
+        'armed ONCE — _pepRenderBloodSheet redraws on every photo load and every ' +
+        'marker added, so arming beside the inputs would leak a listener per redraw');
       kbTearDown();
     });
 

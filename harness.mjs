@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.223'", 'version is 4.9.223');
+has("var APP_VERSION='4.9.224'", 'version is 4.9.224');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1235,9 +1235,41 @@ try {
   // means someone armed it somewhere that runs more than once, which is the
   // exact mistake the helper's own contract warns about.
   const kb = (blk.match(/_phxKeyboardSafe\s*\(/g) || []).length;
-  kb === 2
-    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 2 creation sites')
-    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 2 (pepOpenEditStack, pepOpenCustomVial); the helper is NOT idempotent`);
+  kb === 3
+    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 3 creation sites')
+    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 3 (pepOpenEditStack, pepOpenCustomVial, pepOpenBloodPanel); the helper is NOT idempotent`);
+  // v4.9.224: was 2, and the 2 came from a miscount I made and everyone
+  // downstream inherited. The count pin is only as good as the enumeration
+  // behind it, so the enumeration is now mechanical: every peptide overlay that
+  // contains a typed field must be armed. That is what this pair of guards
+  // checks, rather than a number I remembered.
+  {
+    const fns = [...blk.matchAll(/function (pepOpen[A-Za-z]+)\s*\(/g)].map(m => m[1]);
+    const miss = fns.filter(name => {
+      const i = blk.indexOf('function ' + name);
+      let j = blk.indexOf('\nfunction ', i + 1);
+      if (j < 0) j = blk.length;
+      const body = blk.slice(i, j);
+      if (!/position:fixed;inset:0/.test(body)) return false;          // not an overlay
+      // The sheet's markup may be built by a renderer it calls; follow one hop.
+      const renderer = (body.match(/_pepRender[A-Za-z]+\s*\(/g) || [])
+        .map(c => c.replace(/\s*\($/, ''));
+      let markup = body;
+      renderer.forEach(r => {
+        const k = blk.indexOf('function ' + r);
+        if (k < 0) return;
+        let e = blk.indexOf('\nfunction ', k + 1);
+        if (e < 0) e = blk.length;
+        markup += blk.slice(k, e);
+      });
+      const typed = /<input[^>]{0,300}type=\\"(text|number|date|email|tel|search|password)/.test(markup)
+                 || /<textarea/.test(markup);
+      return typed && !/_phxKeyboardSafe/.test(body);
+    });
+    miss.length === 0
+      ? ok(`PEP: STRUCTURAL every peptide overlay with a typed field is keyboard-armed (${fns.length} sheets scanned)`)
+      : bad(`PEP: STRUCTURAL typed field behind the keyboard — ${miss.join(', ')} build inputs but never call _phxKeyboardSafe`);
+  }
 })();
 
 // The other half of the keyboard fix, and the half the shared helper cannot do.

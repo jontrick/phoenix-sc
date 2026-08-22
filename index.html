@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.223';
+var APP_VERSION='4.9.224';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23495,6 +23495,17 @@ function pepOpenBloodPanel(panelId){
   ov.id = "pep-blood-sheet";
   ov.style.cssText = "position:fixed;inset:0;background:var(--bg);z-index:9700;overflow-y:auto;-webkit-overflow-scrolling:touch;";
   document.body.appendChild(ov);
+  // v4.9.224: armed HERE, not in _pepRenderBloodSheet. The renderer redraws on
+  // every photo load and every marker added; the overlay is created once. The
+  // helper is not idempotent, so arming beside the inputs — the obvious place —
+  // would leak a viewport listener per redraw. Creation site, always.
+  //
+  // Different shape from the bottom sheets and it still needs this. This one is
+  // a full-height inset:0 scroller, so nothing overflows upward; instead the
+  // container's own bottom sits behind the keyboard and cannot be scrolled to.
+  // Type in Notes and the Save Panel button below it is unreachable until the
+  // keyboard is dismissed. Sizing the container to the visible area fixes it.
+  _phxKeyboardSafe(ov);
   _pepRenderBloodSheet();
 
   if(_pepBloodDraft.photo_path){

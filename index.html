@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.219';
+var APP_VERSION='4.9.220';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5058,6 +5058,9 @@ function openCustomSessionBuilder(initExercises, initName){
   });
 
   document.body.appendChild(ov);
+  // v4.9.220: the builder rolls its own overlay rather than going through
+  // _phxLibOverlay, so the factory arming does not reach it. Name field, same bug.
+  try { if(typeof _phxKeyboardSafe === 'function') _phxKeyboardSafe(ov); } catch(_ke){}
   render();
 }
 
@@ -30730,7 +30733,20 @@ function _phxLibOverlay(id, z){
   var stale=document.getElementById(id); if(stale) stale.remove();
   var o=document.createElement('div'); o.id=id;
   o.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:'+(z||9500)+';overflow-y:auto;display:flex;flex-direction:column;';
-  document.body.appendChild(o); return o;
+  document.body.appendChild(o);
+  // Armed HERE rather than at the seven call sites. Every library sheet is built by
+  // this factory, so the next one added is covered without anyone remembering to.
+  // The sheet that actually needed it is the score entry — a notes textarea low in
+  // the panel, typed after every WOD and Core session. The other six take no input,
+  // where this is a no-op: a keyboard never opens on them.
+  //
+  // Nutrition's helper (v4.9.217), not a copy. It is NOT idempotent — once per
+  // overlay — and a fresh element is created on every call here, so that holds.
+  // Two library sheets can be open at once (score entry over a run overlay); each
+  // arms its own element and the helper only touches that element's own style, so
+  // they size independently rather than fighting. Read the helper, did not assume.
+  try { if(typeof _phxKeyboardSafe === 'function') _phxKeyboardSafe(o); } catch(_ke){}
+  return o;
 }
 function _phxLibHeader(eyebrow, title, right, onBack){
   return '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:2;">'+

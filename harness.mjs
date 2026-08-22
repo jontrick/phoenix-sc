@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.219'", 'version is 4.9.219');
+has("var APP_VERSION='4.9.220'", 'version is 4.9.220');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1839,6 +1839,32 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
   }
 })();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
+
+// ── KEYBOARD-SAFE SHEETS (v4.9.220) ─────────────────────────────────────────
+// Structural pins only. Whether the sheet that OPENS is the sheet that gets ARMED is
+// a behavioural question and lives in tests/training.mjs — the _blabCalEntryView case
+// is the reason that distinction is written down rather than assumed.
+(() => {
+  const src = codeSrc();
+  const start = src.indexOf('function _phxLibOverlay(id, z)');
+  const end = src.indexOf('function _phxLibHeader', start + 1);
+  if (start < 0 || end < 0 || end < start) {
+    bad('KEYBOARD: cannot locate _phxLibOverlay by its own code sentinels — the arming ' +
+        'check did NOT run. Fix the sentinels rather than leaving this silently green.');
+    return;
+  }
+  const seg = src.slice(start, end);
+  const arms = (seg.match(/_phxKeyboardSafe\(o\)/g) || []).length;
+  if (arms === 1) {
+    ok('KEYBOARD: the library-sheet factory arms exactly once — every PHX_LIB sheet inherits it');
+  } else {
+    bad(`KEYBOARD: _phxLibOverlay arms ${arms} times, expected exactly 1. Zero means the ` +
+        'score-entry notes box sits under the keyboard again; more than one means double ' +
+        'listeners, because the helper is NOT idempotent.');
+  }
+})();
+hasCode('_phxKeyboardSafe(ov); } catch(_ke){}',
+        'KEYBOARD: the custom session builder arms its own overlay (it bypasses the factory)');
 
 // ── CUSTOM SESSION TEMPLATES (v4.9.215) ─────────────────────────────────────
 (() => {

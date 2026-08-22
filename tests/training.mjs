@@ -1950,4 +1950,72 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(loaded.length, 1, 'saved and readable without any BLAB state');
     assert.equal(loaded[0].name, 'No Programme Yet', 'by name');
   });
+
+  // ── KEYBOARD-SAFE SHEETS (v4.9.220) ──────────────────────────────────────
+  // Jon: the on-screen keyboard covers the field he is typing into. Nutrition found
+  // the cause and built _phxKeyboardSafe; the helper itself is pinned provider-side
+  // with its own cases, so what is under test HERE is only the integration — do my
+  // sheets actually arm themselves, with the real element.
+  //
+  // These drive the entry points rather than checking the source, because "the call
+  // is in the file" is what a harness pin proves. Whether the sheet that OPENS is the
+  // sheet that gets armed is a different question, and it is the one that was wrong
+  // in the _blabCalEntryView case.
+
+  const armRecorder = () => {
+    const armed = [];
+    const real = app._phxKeyboardSafe;
+    app._phxKeyboardSafe = (ov) => { armed.push(ov); };
+    return { armed, restore: () => { app._phxKeyboardSafe = real; } };
+  };
+
+  test('KEYBOARD: the score-entry sheet arms itself — the one with the notes box', () => {
+    // Opened after every WOD and Core session. The textarea sits low in the panel,
+    // which is exactly where the keyboard lands.
+    reset(); signIn(UID);
+    const r = armRecorder();
+    // A synthetic session rather than a library lookup: PHX_LIB is an object, and
+    // coupling this to whatever happens to be in it would make the case fail for
+    // reasons that have nothing to do with arming.
+    const s = { id: 'test-wod', name: 'Test WOD', cat: 'WOD', tier: 'CONDITIONING',
+                format: 'For Time', scoreLabel: 'Fastest time', scoreType: 'time' };
+    try {
+      // Same as the builder case: the sheet wires handlers further than these DOM
+      // stubs reach. Arming happens inside _phxLibOverlay on the FIRST line, before
+      // any of that, so a later throw cannot mask a missing arming — remove the
+      // factory call and this case fails on armed.length, which is the proof.
+      try { app._phxOpenScoreEntry(s, null, null); } catch (_e) { /* past the arming point */ }
+      assert.equal(r.armed.length >= 1, true, 'the sheet armed itself on open');
+      assert.ok(r.armed[0], 'and was handed a real element, not undefined');
+    } finally { r.restore(); }
+  });
+
+  test('KEYBOARD: the custom session builder arms itself', () => {
+    // It rolls its own overlay instead of using _phxLibOverlay, so the factory
+    // arming does not reach it — a separate call site, and a separate case.
+    reset(); signIn(UID);
+    const r = armRecorder();
+    try {
+      // The builder renders further than this sandbox's DOM stubs reach, and that is
+      // not what is under test. Swallowing a LATER throw is safe: arming happens
+      // immediately after appendChild, so anything thrown before it leaves armed
+      // empty and this case still fails — which is the behaviour being asserted.
+      try { app.openCustomSessionBuilder([], ''); } catch (_e) { /* past the arming point */ }
+      assert.equal(r.armed.length >= 1, true, 'the builder armed itself on open');
+      assert.ok(r.armed[0], 'with a real element');
+    } finally { r.restore(); }
+  });
+
+  test('KEYBOARD: every library sheet arms exactly once, never twice', () => {
+    // The helper is NOT idempotent — arming one overlay twice registers two listener
+    // sets. The factory creates a fresh element per call, so this holds; the case
+    // exists because a future "arm it at the call site too" would silently double up.
+    reset(); signIn(UID);
+    const r = armRecorder();
+    try {
+      const o = app._phxLibOverlay('phx-test-sheet', 9500);
+      assert.equal(r.armed.length, 1, 'one overlay, one arming');
+      assert.equal(r.armed[0], o, 'and it is the overlay that was just built');
+    } finally { r.restore(); }
+  });
 }

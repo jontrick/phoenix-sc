@@ -207,6 +207,49 @@ it.** So:
 - **"The test passes" and "the test proves what I said" are different claims.** Only report the second. Invert the specific guard you are crediting, not a neighbour.
 - **Parked work**: if a small change must wait for a domain's next push, commit it to your `worktree-<domain>` branch and push the BRANCH (CLAUDE.md rule 2 — in-progress work is never local-only), with no APP_VERSION bump and a commit-message note that the next push must bump.
 
+## AN INVERSION MUST BE CHECKED FOR HAVING CHANGED SOMETHING (PM, 2026-08-22)
+
+We prove a guard bites by re-introducing the bug and watching it fail. Twice today an
+inversion **did not apply** — the fixture's own assertion failed, the file was never
+modified, the gate ran against the good file and printed a tick. **A no-op inversion is
+indistinguishable from a passing guard**, and both of us reported one as proof before
+catching it.
+
+  BEFORE TRUSTING AN INVERSION, CONFIRM THE FILE ACTUALLY CHANGED.
+
+Cheapest form: `git diff --stat` between applying and running, or have the fixture fail
+loudly and stop the chain rather than falling through to the gate. Chain with `&&`.
+
+Same family, and all three cost a day between them:
+- A guard whose needle matches its own explanatory comment — it cannot tell *fixed* from
+  *described*. Strip comments before matching.
+- A test that reads a variable that does not exist, loops over nothing, and passes
+  unconditionally. `app.__indexSource` was never defined; the test written specifically
+  to catch a bug did not catch it.
+- An assertion on `document.getElementById(...)` truthiness. The shared sandbox returns a
+  fresh truthy element for **any** id, so the check passes for an element never created.
+  Assert on an observable effect, never on the stub handing something back.
+
+**A green assertion is a claim.** An unverified green is worth exactly as much as an
+unverified negative — see the coach-worker section below for the negative case.
+
+## SHARED DIAGNOSTIC: RECORD EVERY WRITE FAILURE (PM, 2026-08-22, v4.9.240)
+
+`_phxRecordWriteError(context, err, payload)` **coalesces by context** — a context takes
+exactly ONE ring slot however often it fires, keeping `count` and `first_ts`. The ring is
+40 deep and is RENDERED in Settings → Diagnostic.
+
+**So: record every write failure. No suppression flags at call sites.** A looping writer
+cannot evict another domain's entry, and suppression at the call site only ever protects
+the domain that remembered to add it.
+
+History, because it is the more useful half: the ring was written from v4.9.176 and read
+by nothing — the panel showed a single entry, so any later failure overwrote the one that
+mattered. Four domains spent a day designing rationing schemes for slots in a buffer
+nobody could read. The comment above the helper claimed the ring kept writers "visible";
+it was false when written. **Before optimising against a constraint, verify the
+constraint exists.**
+
 ## THE COACH WORKER (PM, 2026-08-22 — vision now VERIFIED)
 
 `https://phoenix-coach.jon-d87.workers.dev` is outside the repo. No chat owns it, only Jon

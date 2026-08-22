@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.207'", 'version is 4.9.207');
+has("var APP_VERSION='4.9.208'", 'version is 4.9.208');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1091,6 +1091,38 @@ try {
 } catch (e) {
   bad('CAL: calendar rule execution failed — ' + e.message);
 }
+
+// ── SHARED — the service worker must not pin a stale version (v4.9.208) ────
+// sw.js was ZERO BYTES, so registration was installing an empty script: no fetch
+// handler, no version reported, no update ever detected. Jon is remote and cannot
+// git pull, so he could not receive a deploy without reinstalling the PWA.
+// Now it caches under APP_VERSION — which means a stale SW_VERSION would serve an
+// old shell while claiming to be current. That is worse than no cache, so it is
+// pinned here rather than trusted.
+(() => {
+  let sw = '';
+  try { sw = readFileSync(new URL('./sw.js', import.meta.url), 'utf8'); }
+  catch (_e) { bad('SW: STRUCTURAL sw.js is unreadable'); return; }
+
+  sw.trim().length > 0
+    ? ok('SW: STRUCTURAL sw.js is not empty')
+    : bad('SW: STRUCTURAL sw.js is EMPTY — registration installs a no-op and no update is ever detected');
+
+  const appM = html.match(/var APP_VERSION\s*=\s*'([^']+)'/);
+  const swM  = sw.match(/const SW_VERSION\s*=\s*'([^']+)'/);
+  if (!appM || !swM) { bad('SW: STRUCTURAL could not read APP_VERSION or SW_VERSION'); return; }
+  appM[1] === swM[1]
+    ? ok(`SW: STRUCTURAL sw.js version tracks APP_VERSION (${swM[1]})`)
+    : bad(`SW: STRUCTURAL sw.js is pinned to ${swM[1]} but APP_VERSION is ${appM[1]} — bump SW_VERSION`);
+
+  // Freshness is the whole point; a cache-first shell would defeat it.
+  /cache:\s*'no-store'/.test(sw)
+    ? ok('SW: STRUCTURAL the shell is fetched network-first with no-store')
+    : bad('SW: STRUCTURAL the shell is not fetched no-store — a stale build could be served as current');
+  /url\.origin !== self\.location\.origin/.test(sw)
+    ? ok('SW: STRUCTURAL cross-origin requests are never cached')
+    : bad('SW: STRUCTURAL cross-origin requests are not excluded — Supabase responses could be cached');
+})();
 
 // ── SHARED — the visibility comment must stay TRUE (STRUCTURAL, v4.9.204) ───
 // :16474 asserted "NO visibilitychange listener exists in this app" while three

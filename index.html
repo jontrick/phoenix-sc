@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.207';
+var APP_VERSION='4.9.208';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -35170,8 +35170,31 @@ async function _phxRestoreSessionVisualState(){
   if(!('serviceWorker' in navigator)) return;
   // Store current version — used for diagnostics only
   var reloading = false;
+  // v4.9.208: until now sw.js was ZERO BYTES, so no update ever activated and
+  // this reload path never fired in practice. Giving it a real service worker
+  // turns it on — which means it can now interrupt Jon mid-entry and lose a
+  // half-typed form. Enabling the mechanism makes that consequence mine.
+  //
+  // Defer while he is actually typing or has a sheet open. Capped, because a
+  // reload that never happens is the stale build this exists to prevent.
+  function _phxBusyEntering(){
+    try {
+      var ae = document.activeElement;
+      if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return true;
+      if(document.querySelector('.modal-overlay.active')) return true;
+      if(document.getElementById('pep-blood-sheet')) return true;
+      return false;
+    } catch(_e){ return false; }
+  }
+  var _deferredFor = 0;
   function reloadOnce(){
     if(reloading) return;
+    if(_phxBusyEntering() && _deferredFor < 300000){
+      _deferredFor += 15000;
+      console.log('[PHX] update reload deferred — user is mid-entry');
+      setTimeout(reloadOnce, 15000);
+      return;
+    }
     reloading = true;
     // Tiny delay so any in-flight fetches finish, then hard reload to the fresh shell.
     setTimeout(function(){ window.location.reload(); }, 50);
@@ -35201,7 +35224,7 @@ async function _phxRestoreSessionVisualState(){
         banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--gold,#C89630);color:#000;font-family:var(--font-d,"Arial");font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:10px;cursor:pointer;';
         banner.textContent = 'Phoenix updated — reloading...';
         document.body.appendChild(banner);
-        setTimeout(function(){ window.location.reload(true); }, 1500);
+        setTimeout(function(){ reloadOnce(); }, 1500);
       } else {
         console.log('[PHX] SW_UPDATED ignored — same version or already reloading');
       }

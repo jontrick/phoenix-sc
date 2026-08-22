@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.238';
+var APP_VERSION='4.9.239';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4086,13 +4086,19 @@ window._phxDevBlabSetup = function(){ window.blabOpenSetup(); };
 // ── Developer shortcuts (accessible via 5-tap diagnostic) ────────────────────
 window._phxDevForceSaveToSupabase = async function(){
   // Force save current localStorage athlete data to Supabase
-  if(!athlete){ alert('No athlete loaded'); return; }
-  if(!currentSession||!currentSession.user){ alert('Not signed in'); return; }
+  if(!athlete){ await _phxNotice('Nothing to save', 'No athlete is loaded.'); return; }
+  if(!currentSession||!currentSession.user){ await _phxNotice('Not signed in', 'Sign in before forcing a save.'); return; }
   try {
     var result = await saveAthleteToSupabase(athlete);
-    if(result && result.error){ alert('Save failed: '+result.error.message); }
-    else { alert('Saved to Supabase successfully! Now reload Safari.'); }
-  } catch(e){ alert('Error: '+e.message); }
+    if(result && result.error){
+      _phxRecordWriteError('devForceSave', result.error, athlete);
+      await _phxNotice('Save failed', String(result.error.message || result.error));
+    }
+    else { await _phxNotice('Saved', 'Athlete data was written to Supabase. Reload Safari to confirm.'); }
+  } catch(e){
+    _phxRecordWriteError('devForceSave.throw', e, athlete);
+    await _phxNotice('Save failed', String((e && e.message) || e));
+  }
 };
 
 // ============================================================
@@ -7033,7 +7039,7 @@ async function _phxConsumeInviteCode(userId){
       used_at: new Date().toISOString(),
       used_by_user_id: userId
     }).eq('code', code).eq('used', false);
-  } catch(e){ console.warn('[PHX] invite code consume failed:', e); }
+  } catch(e){ console.warn('[PHX] invite code consume failed:', e); _phxRecordWriteError('inviteCode.consume', e, null); }
   // Tag the athlete record with Pro tier on the device immediately. The Supabase
   // profile row is upserted via saveAthlete elsewhere; tier rides through FIELD_MAP.
   try {
@@ -7844,10 +7850,17 @@ function _phxRecordWriteError(context, err, payload){
 // disagree, because those edits are not shipping.
 
 // v4.9.231 [PM]: rule 8 applied to the paths Jon feels. Peptides' .230 found a blood panel
-// saving without its photo and saying nothing; following it, 24 Supabase WRITE paths still
-// reported only to console.warn — invisible in the iOS PWA — and 22 were PM/shared. The four
-// that touch his own records are now instrumented: daily weigh-in, morning photo, WOD score,
-// check-in photo. Pinned in harness.mjs as a ratchet on the named paths.
+// saving without its photo and saying nothing; following it, Supabase WRITE paths were still
+// reporting only to console — invisible in the iOS PWA. Four instrumented: daily weigh-in,
+// morning photo, WOD score, check-in photo.
+//
+// v4.9.239 [PM]: THAT SWEEP UNDERCOUNTED AND I REPORTED THE WRONG NUMBER. I said 24 paths,
+// 22 mine. Re-derived: 41. Two mistakes. (a) I grepped only console.warn — console.error is
+// EQUALLY INVISIBLE on the phone, and that omission hid supabaseLogSet, i.e. every set Jon
+// logs. (b) One "hit" was a peer's explanatory COMMENT, matched because the comment quotes
+// the phrase; the sweep now runs through phxStripComments. Both are the same error: I
+// reported a count from memory rather than re-deriving it, having written the rule saying not to.
+// Split: 21 Training-owned (handed over), 1 Peptides, 19 mine — done here.
 
 // ====== v4.9.175 SHARED DOM CONFIRM (PM-owned) ======
 // CLAUDE.md rule 4: native confirm() is SUPPRESSED in the iOS PWA — and a suppressed
@@ -7894,6 +7907,46 @@ window._phxConfirm = function(title, message, yesLabel, danger){
       ov.addEventListener('click', function(e){ if(e.target === ov) finish(false); });
       document.body.appendChild(ov);
     } catch(_e){ resolve(false); }
+  });
+};
+
+// ====== v4.9.239 SHARED DOM NOTICE (PM-owned) ======
+// A one-button message. Exists because alert() is BANNED (rule 4) and iOS silently
+// suppresses it in a PWA — so any failure path whose only user-facing output was an
+// alert() showed Jon NOTHING and then returned. Found 2026-08-22 in submitWeeklyCheckin:
+// the check-in submit failed, the alert did not appear, the flow aborted, and the screen
+// simply did not change. Indistinguishable from a dead button.
+// Resolves when acknowledged, so an async caller can await it before moving on.
+window._phxNotice = function(title, message){
+  return new Promise(function(resolve){
+    try {
+      var old = document.getElementById('phx-notice'); if(old) old.remove();
+      var done = false;
+      var finish = function(){ if(done) return; done = true; try { ov.remove(); } catch(_e){} resolve(); };
+      var ov = document.createElement('div');
+      ov.id = 'phx-notice';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9900;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:380px;width:100%;box-sizing:border-box;';
+      var h = document.createElement('div');
+      h.style.cssText = 'font-family:var(--font-d);font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#FF6B6B;margin-bottom:12px;';
+      h.textContent = title || 'Something went wrong';
+      box.appendChild(h);
+      if(message){
+        var pEl = document.createElement('div');
+        pEl.style.cssText = 'font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;';
+        pEl.textContent = String(message);
+        box.appendChild(pEl);
+      }
+      var ok = document.createElement('button');
+      ok.textContent = 'OK';
+      ok.style.cssText = 'width:100%;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;';
+      ok.addEventListener('click', finish);
+      box.appendChild(ok);
+      ov.appendChild(box);
+      ov.addEventListener('click', function(e){ if(e.target === ov) finish(); });
+      document.body.appendChild(ov);
+    } catch(_e){ resolve(); }
   });
 };
 
@@ -8767,7 +8820,7 @@ function _phxCloseResetModal(e){
 // done. Clearing in memory + storage stops the fast-path; the Supabase write keeps the
 // profile row in sync so a future reload doesn't re-hydrate the completed flag from there.
 async function _phxResetUpdateGoals(){
-  if(!athlete){ alert('No profile loaded yet — try again in a moment.'); return; }
+  if(!athlete){ await _phxNotice('Not ready yet', 'No profile loaded yet — try again in a moment.'); return; }
   if(!(await _phxConfirm('Update Goals', 'Update your goals or schedule? Your coach will rebuild your plan using your latest answers. Training history is kept.', 'Update'))) return;
   console.log('[PHX] reset: update_goals_schedule');
   _phxCloseResetModal();
@@ -8781,8 +8834,8 @@ async function _phxResetUpdateGoals(){
   if(uid){
     try {
       var res = await sb.from('profiles').update({fq_completed: null, ai_programme: null}).eq('id', uid);
-      if(res && res.error) console.warn('[PHX] update_goals_schedule: Supabase update returned error:', res.error.message || res.error);
-    } catch(e){ console.warn('[PHX] update_goals_schedule: Supabase update failed:', e); }
+      if(res && res.error){ console.warn('[PHX] update_goals_schedule: Supabase update returned error:', res.error.message || res.error); _phxRecordWriteError('updateGoalsSchedule', res.error, {fq_completed: null, ai_programme: null}); }
+    } catch(e){ console.warn('[PHX] update_goals_schedule: Supabase update failed:', e); _phxRecordWriteError('updateGoalsSchedule.throw', e, null); }
   }
   // Hydrate fqAnswers from athlete BEFORE openFoundationQ runs (it would otherwise reset
   // the answers object when fqCompleted is truthy). Then bypass the normal entry point.
@@ -9006,13 +9059,15 @@ async function _phxResetFullReset(){
       }).eq('id', uid);
       if(res && res.error){
         console.error('[PHX] full_reset: Supabase update returned error:', res.error.message || res.error);
-        alert('Reset failed — please try again.');
+        _phxRecordWriteError('fullReset.update', res.error, null);
+        await _phxNotice('Reset failed', 'Your programme was not reset and nothing has been changed. Try again — if it keeps failing, Settings > Diagnostic has the detail.');
         return;
       }
       console.log('[PHX] full_reset: Supabase update OK');
     } catch(e){
       console.error('[PHX] full_reset: Supabase update threw:', e);
-      alert('Reset failed — please try again.');
+      _phxRecordWriteError('fullReset.throw', e, null);
+      await _phxNotice('Reset failed', 'Your programme was not reset and nothing has been changed. Try again — if it keeps failing, Settings > Diagnostic has the detail.');
       return;
     }
   }
@@ -21768,7 +21823,7 @@ var _PEP_TONG = [
 // Per-stack vialMg / waterMl (set in the edit sheet) always override these.
 var _PEP_RECON = {
   // AUTHORITATIVE SOURCE: section 8 "Ordering & Reconstitution Reference" of
-  // Peptide_Protocol_2026_27.pdf, Jon's own compiled protocol. v4.9.236
+  // Peptide_Protocol_2026_27.pdf, Jon's own compiled protocol. v4.9.239
   // corrected SIX entries that disagreed with it. Every one of them made the
   // app tell him to draw MORE than his protocol says:
   //
@@ -26708,7 +26763,7 @@ async function _phxMorningSave(){
         }
       }
     }
-  } catch(e){ console.warn('[PHX] _phxMorningSave network error:', e); }
+  } catch(e){ console.warn('[PHX] _phxMorningSave network error:', e); _phxRecordWriteError('morningSave.network', e, null); }
   // Mark done locally + dismiss UI even if network failed (so the user isn't nagged).
   try { localStorage.setItem(keys.doneKey, '1'); } catch(_e){}
   var overlay = document.getElementById('phx-morning-modal');
@@ -26831,6 +26886,7 @@ window._wciGoToTimetable = async function(){
             .eq('user_id', row.user_id).eq('week_number', row.week_number).eq('week_start_date', row.week_start_date);
         } else {
           console.warn('[PHX] check-in save failed:', ins.error.message);
+          _phxRecordWriteError('checkin.save', ins.error, row);
           // Non-fatal — continue to timetable anyway
         }
       }
@@ -26839,7 +26895,7 @@ window._wciGoToTimetable = async function(){
         if(typeof _phxBrisbaneMondayISO==='function') localStorage.setItem('phoenix_weekly_checkin_done_'+_phxBrisbaneMondayISO(), '1');
         if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
       } catch(_e){}
-    } catch(e){ console.warn('[PHX] check-in save error:', e); }
+    } catch(e){ console.warn('[PHX] check-in save error:', e); _phxRecordWriteError('checkin.save.throw', e, null); }
   }
 
   // ── 2. Open the timetable overlay ─────────────────────────────────────────
@@ -26897,12 +26953,14 @@ async function submitWeeklyCheckin(){
           .eq('week_start_date', row.week_start_date);
         if(upd.error){
           console.error('[PHX] submitWeeklyCheckin update failed:', upd.error);
-          alert('Submit failed: '+upd.error.message);
+          _phxRecordWriteError('weeklyCheckin.update', upd.error, row);
+          await _phxNotice('Check-in not saved', 'Your weekly check-in did not save. Nothing has been lost — tap Submit again. If it keeps failing, Settings > Diagnostic has the detail.');
           return;
         }
       } else {
         console.error('[PHX] submitWeeklyCheckin insert failed:', ins.error);
-        alert('Submit failed: '+ins.error.message);
+        _phxRecordWriteError('weeklyCheckin.insert', ins.error, row);
+        await _phxNotice('Check-in not saved', 'Your weekly check-in did not save. Nothing has been lost — tap Submit again. If it keeps failing, Settings > Diagnostic has the detail.');
         return;
       }
     }
@@ -26925,12 +26983,14 @@ async function submitWeeklyCheckin(){
             .eq('week_start_date', row.week_start_date);
           if(urlUpd.error){
             console.warn('[PHX] photo URL update failed:', urlUpd.error);
+            _phxRecordWriteError('checkin.photoUrlUpdate', urlUpd.error, patch);
             anyMissed = true;
           }
         }
         if(anyMissed) photoWarn = 'Photos could not be saved — check-in submitted without photos.';
       } catch(e){
         console.warn('[PHX] photo flow error:', e);
+        _phxRecordWriteError('checkin.photoFlow', e, null);
         photoWarn = 'Photos could not be saved — check-in submitted without photos.';
       }
     }
@@ -26957,7 +27017,8 @@ async function submitWeeklyCheckin(){
     navTo('today');
   } catch(e){
     console.error('[PHX] submitWeeklyCheckin error:', e);
-    alert('Submit failed. Try again.');
+    _phxRecordWriteError('weeklyCheckin.throw', e, null);
+    await _phxNotice('Check-in not saved', 'Your weekly check-in did not save. Nothing has been lost — tap Submit again.');
   }
 }
 
@@ -29857,12 +29918,12 @@ function _phxRecordPreAdjustment(sess, dayName, weekN){
         week_start_date: weekStartISO,
         next_week_requests: note
       }, {onConflict:'user_id,week_number,week_start_date'}).then(function(r){
-        if(r && r.error) console.warn('[PHX] pre-adjust mirror failed:', r.error.message||r.error);
+        if(r && r.error){ console.warn('[PHX] pre-adjust mirror failed:', r.error.message||r.error); _phxRecordWriteError('preAdjust.mirror', r.error, {week_number: weekN, week_start_date: weekStartISO, next_week_requests: note}); }
         else console.log('[PHX] pre-adjustment note saved to Supabase');
-      }).catch(function(e){ console.warn('[PHX] pre-adjust mirror threw:', e); });
+      }).catch(function(e){ console.warn('[PHX] pre-adjust mirror threw:', e); _phxRecordWriteError('preAdjust.mirror.reject', e, {week_number: weekN, week_start_date: weekStartISO}); });
     }
     console.log('[PHX] pre-adjustment recorded:', note);
-  } catch(e){ console.warn('[PHX] _phxRecordPreAdjustment failed:', e); }
+  } catch(e){ console.warn('[PHX] _phxRecordPreAdjustment failed:', e); _phxRecordWriteError('preAdjust.throw', e, null); }
 }
 
 // v4.7.59: Confirm-then-remove for custom (athlete-added) sessions. Replaces the native
@@ -32269,7 +32330,7 @@ window._phxGenerateTodaySession = async function(sessionType, opts, slot){
     try { sess = JSON.parse(raw); }
     catch(e){
       console.error('[PHX] add-session parse error:', e, 'raw:', raw.substring(0,200));
-      alert('The coach returned an unexpected response. Try again.');
+      await _phxNotice('Could not add that session', 'The coach returned an unexpected response. Try again.');
       return;
     }
 
@@ -32325,7 +32386,7 @@ window._phxGenerateTodaySession = async function(sessionType, opts, slot){
     var lo = document.getElementById('phx-add-session-loading');
     if(lo) lo.remove();
     console.error('[PHX] _phxGenerateTodaySession error:', e);
-    alert('Something went wrong generating the session. Check your connection and try again.');
+    await _phxNotice('Could not build the session', 'Something went wrong generating the session. Check your connection and try again.');
   }
 };
 
@@ -32691,9 +32752,9 @@ function _mcSaveMessage(role, message, contextSnapshot){
       message: message,
       context_snapshot: contextSnapshot || null
     }).then(function(res){
-      if(res.error) console.warn('[PHX] coach message save failed:', res.error);
+      if(res.error){ console.warn('[PHX] coach message save failed:', res.error); _phxRecordWriteError('coachMessage.save', res.error, {role: role, message: message, context_snapshot: contextSnapshot || null}); }
     });
-  } catch(e){ console.warn('[PHX] coach message save error:', e); }
+  } catch(e){ console.warn('[PHX] coach message save error:', e); _phxRecordWriteError('coachMessage.save.throw', e, null); }
 }
 
 // BUILD 5: first-open opening message — auto-fires when there's no history.
@@ -33338,13 +33399,16 @@ async function _phxJoinAgoge(){
           .eq('id', currentSession.user.id);
         if(aRes && aRes.error){
           console.error('[PHX] write failed:', aRes.error.message || aRes.error, '— agoge_start_date');
+          _phxRecordWriteError('joinAgoge.startDate', aRes.error, {agoge_start_date: now, updated_at: now});
         }
       } catch(e){
         console.error('[PHX] write failed (exception):', (e && e.message) ? e.message : e, '— agoge_start_date');
+        _phxRecordWriteError('joinAgoge.startDate.throw', e, {agoge_start_date: now, updated_at: now});
       }
     }
-  } catch(e){ console.warn('[PHX] _phxJoinAgoge error:', e); }
-  alert('The Agoge has begun. Your march starts today.');
+  } catch(e){ console.warn('[PHX] _phxJoinAgoge error:', e); _phxRecordWriteError('joinAgoge.throw', e, null); }
+  // v4.9.239: was alert(), so on Jon's phone joining the Agoge confirmed NOTHING.
+  await _phxNotice('The Agoge has begun', 'Your march starts today.');
   showScreen('screen-agoge');
   // Reset the join button so a re-entry to the intro works if the athlete ever leaves.
   if(btn){ btn.disabled = false; btn.textContent = 'Join the Agoge'; }
@@ -35428,12 +35492,12 @@ window.fqNext = async function(){
       var snap = null;
       try { snap = JSON.parse(localStorage.getItem('phx_last_write_error')||'null'); } catch(_e){}
       console.error('[PHX] fqNext: verified save failed — NOT routing to Today. Snapshot:', snap);
-      alert('Something went wrong saving your details. Check your connection and tap Build my plan again. If it keeps happening, open the Diagnostic page from the menu.');
+      await _phxNotice('Details not saved', 'Something went wrong saving your details. Check your connection and tap Build my plan again. If it keeps happening, open the Diagnostic page from the menu.');
       return;
     }
   } catch(e){
     console.error('[PHX] fqNext save error:', e);
-    alert('Something went wrong saving your details. Check your connection and tap Build my plan again. If it keeps happening, open the Diagnostic page from the menu.');
+    await _phxNotice('Details not saved', 'Something went wrong saving your details. Check your connection and tap Build my plan again. If it keeps happening, open the Diagnostic page from the menu.');
     return;
   }
   fqClearProgress(); // v4.7.4 FIX 4: programme generated → drop saved snapshot

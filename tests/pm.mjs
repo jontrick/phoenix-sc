@@ -202,4 +202,65 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(ns && ns.daily && ns.daily[key], 'a nutrition day record exists for today');
     assert.equal(ns.daily[key].weight_kg, 88.4, 'the authoritative log carries this morning\'s weight');
   });
+
+  test('CONTRACT _phxNotice actually renders and resolves — alert() did neither', async () => {
+    // The bug this replaces: twelve failure paths reported ONLY through alert(), which iOS
+    // suppresses in a PWA. fqNext's "Build my plan", Fresh Start, the weekly check-in submit
+    // and the Diagnostic's own force-save all failed with a screen that did not change.
+    //
+    // NOTE ON THE HARNESS ITSELF: the shared sandbox's document.getElementById returns a
+    // fresh truthy stub for ANY id, so `assert.ok(getElementById('phx-notice'))` passes even
+    // if the function was never called. That assertion cannot fail and would have been
+    // another presence check dressed as a behaviour check. So this test supplies its own
+    // recording DOM and inspects the tree _phxNotice actually builds.
+    const made = [];
+    const mk = (tag) => {
+      const n = {
+        tagName: String(tag).toUpperCase(), style: {}, children: [], _on: {},
+        set cssText(v){}, textContent: '',
+        appendChild(c){ this.children.push(c); return c; },
+        addEventListener(ev, fn){ (this._on[ev] = this._on[ev] || []).push(fn); },
+        remove(){ this._removed = true; },
+      };
+      n.style = { set cssText(v){}, get cssText(){ return ''; } };
+      made.push(n); return n;
+    };
+    const realDoc = app.document;
+    const body = mk('body');
+    app.document = {
+      getElementById: () => null,
+      createElement: mk,
+      body,
+    };
+    let p;
+    try {
+      p = app._phxNotice('Check-in not saved', 'Nothing has been lost — tap Submit again.');
+
+      assert.equal(body.children.length, 1, '_phxNotice appended exactly one overlay to the body');
+      const ov = body.children[0];
+      assert.equal(ov.id, 'phx-notice', 'the overlay carries the id the code looks for on re-entry');
+
+      const flat = [];
+      (function walk(n){ flat.push(n); n.children.forEach(walk); })(ov);
+      const texts = flat.map(n => n.textContent).filter(Boolean);
+      assert.ok(texts.includes('Check-in not saved'), 'the title is rendered, got: ' + JSON.stringify(texts));
+      assert.ok(texts.some(t => t.includes('Nothing has been lost')), 'the message is rendered');
+
+      const btn = flat.find(n => n.tagName === 'BUTTON');
+      assert.ok(btn, 'there is a button to acknowledge with');
+
+      let settled = false;
+      p.then(() => { settled = true; });
+      await Promise.resolve(); await Promise.resolve();
+      assert.equal(settled, false, 'it must NOT resolve before the user acknowledges');
+
+      // An await on a promise that never settles hangs the caller forever — strictly worse
+      // than the alert it replaced, and invisible to any presence check.
+      btn._on.click.forEach(fn => fn());
+      await Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('_phxNotice never resolved — the caller would hang')), 500))]);
+      assert.ok(ov._removed, 'the overlay is removed once acknowledged');
+    } finally {
+      app.document = realDoc;
+    }
+  });
 }

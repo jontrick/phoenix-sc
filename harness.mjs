@@ -138,25 +138,112 @@ function phxStripComments(s){
   return out.join('\n');
 }
 
-// ── RULE 8 SWEEP (PM, v4.9.231) ────────────────────────────────────────────────
-// CLAUDE.md rule 8: no Supabase WRITE may report only to console — invisible on iPhone.
-// Found by following Peptides' .230 (a blood panel saving without its photo, silently):
-// 24 write paths were still console-only, 22 of them PM/shared, including Jon's daily
-// weigh-in, his WOD scores and his check-in photos. This pins the four highest-value ones
-// as instrumented. It is a RATCHET on the named paths, not a whole-file ban — reads that
-// warn are fine, and the remaining sites are logged for follow-up rather than hidden.
+// ── RULE 8 (PM, v4.9.239) ─────────────────────────────────────────────────────
+// CLAUDE.md rule 8: no Supabase WRITE may report only to console — BOTH console.warn and
+// console.error are invisible in the iOS PWA. The v4.9.231 version searched only `warn`,
+// so it missed supabaseLogSet — every set Jon logs.
+//
+// TWO PARTS, BECAUSE ONE OF THEM CANNOT BE MADE PRECISE.
+//
+// (a) PINNED BY NAME — exact, and this is what actually protects Jon's records.
+// (b) CANDIDATE COUNT — a proximity sweep, deliberately labelled as such. Training showed
+//     (2026-08-22) that no line-window can separate reads from writes: widen it and
+//     `.remove(` starts matching DOM nodes, narrow it and real writes sitting far from
+//     their console line are missed. So this number contains READS as well as writes.
+//     A FAILED READ SHOWS AN EMPTY SCREEN; A FAILED WRITE LOSES DATA SILENTLY. Same
+//     console symptom, different consequence, and `_phxRecordWriteError` is the WRONG
+//     helper for a read — it would record a write failure that never happened.
+//     Therefore this count must NEVER be lowered by instrumenting a read. Lines whose own
+//     statement is a `.select(` read are excluded so that shortcut does not go green, but
+//     the exclusion is not complete and the number stays a candidate list to be READ,
+//     never a target to be optimised.
 {
-  const CRITICAL = [
-    ["morningSave.weighIn",    "his daily weigh-in"],
-    ["morningSave.photoUpload","his morning photo"],
-    ["saveScore.insert",       "his WOD scores"],
-    ["checkinPhoto.upload",    "his check-in photos"],
+  const src = phxStripComments(html).split('\n');
+  const WRITE = /\.(update|upsert|insert|delete)\(|storage\.from\([^)]*\)\.(upload|remove)\(/;
+  const READ  = /\.select\(|\.getPublicUrl\(|\.createSignedUrl\(|\.download\(/;
+  const cand = [];
+  for (let i = 0; i < src.length; i++) {
+    if (!/console\.(warn|error)/.test(src[i])) continue;
+    const stmt = src.slice(Math.max(0, i - 2), i + 2).join('\n');
+    if (READ.test(stmt) && !WRITE.test(stmt)) continue;          // its own statement is a read
+    if (!WRITE.test(src.slice(Math.max(0, i - 14), i + 3).join('\n'))) continue;
+    if (/_phxRecordWriteError/.test(src.slice(Math.max(0, i - 3), i + 4).join('\n'))) continue;
+    cand.push(i + 1);
+  }
+  const CAP = 23;   // candidates at v4.9.239. Training owns most of the remainder and has
+                    // the heartbeat / bulk-migrate design decision open; Peptides owns one.
+  cand.length <= CAP
+    ? ok(`RULE 8: ${cand.length} console-only candidates (cap ${CAP}) — READ these, do not optimise the number`)
+    : bad(`RULE 8: ${cand.length} console-only candidates, cap ${CAP}. Read each one: a WRITE here means Jon loses data with nothing on screen. Lines: ${cand.join(', ')}`);
+}
+
+// ── RULE 8: PINNED PATHS (exact, no proximity guessing) ───────────────────────
+// The write paths that touch Jon's own records, pinned BY NAME so they cannot be traded
+// away against the candidate count by instrumenting something cheaper elsewhere.
+{
+  const code = phxStripComments(html);
+  const PINNED = [
+    ['morningSave.weighIn',     'his daily weigh-in'],
+    ['morningSave.photoUpload', 'his morning photo'],
+    ['saveScore.insert',        'his WOD scores'],
+    ['checkinPhoto.upload',     'his check-in photos'],
+    ['weeklyCheckin.insert',    'his weekly check-in'],
+    ['weeklyCheckin.update',    'his weekly check-in (edit)'],
+    ['fullReset.update',        'Fresh Start'],
   ];
+  const gone = PINNED.filter(([c]) => !code.includes(`_phxRecordWriteError('${c}'`));
+  gone.length === 0
+    ? ok(`RULE 8: all ${PINNED.length} pinned write paths record, not just console`)
+    : bad(`RULE 8: pinned write path reports only to console: ${gone.map(g => g[0] + ' (' + g[1] + ')').join(', ')}`);
+}
+
+// ── RULE 8: THE RECORDER MUST NOT THROW WHEN IT FIRES (PM, v4.9.239) ──────────
+// A ReferenceError inside an error branch fires ONLY when a write fails — exactly when the
+// diagnostic is needed — and nothing else can see it: runtime_check executes top level
+// only, and a presence assertion is satisfied by the broken call. Caught for real while
+// writing this: a call passed `patch` in a function with no `patch` in scope, so a failed
+// write would have thrown instead of recording. Silent failure PLUS a dead diagnostic.
+//
+// This lived in tests/pm.mjs first and was VACUOUS — it read `app.__indexSource`, which
+// does not exist, so it looped over an empty string and passed unconditionally. It only
+// became a real check once it read the source the harness already holds.
+{
   const src = phxStripComments(html);
-  const missing = CRITICAL.filter(([ctx]) => !src.includes(`_phxRecordWriteError('${ctx}'`));
-  missing.length === 0
-    ? ok(`RULE 8: all ${CRITICAL.length} critical write paths record, not just console.warn`)
-    : bad(`RULE 8: write path reports only to console — invisible on iPhone: ${missing.map(m => m[0] + ' (' + m[1] + ')').join(', ')}`);
+  const offenders = [];
+  const re = /_phxRecordWriteError\(\s*'([^']*)'\s*,\s*[^,]+,\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const [ctx, id] = [m[1], m[2]];
+    if (id === 'null' || id === 'undefined' || id === 'athlete') continue;   // athlete is a known global
+    const before = src.slice(0, m.index);
+    const starts = [/\n\s*(?:async\s+)?function\s/g, /=\s*(?:async\s+)?function/g]
+      .map(r => { let last = -1, x; while ((x = r.exec(before))) last = x.index; return last; });
+    const scope = src.slice(Math.max(0, Math.max(...starts)), m.index);
+    const declared = new RegExp('(?:var|let|const|function)\\s+' + id + '\\b|[(,]\\s*' + id + '\\s*[,)]').test(scope);
+    if (!declared) offenders.push(`${ctx} -> ${id}`);
+  }
+  offenders.length === 0
+    ? ok(`RULE 8: every _phxRecordWriteError payload identifier resolves in its own scope`)
+    : bad(`RULE 8: payload identifier not in scope — the recorder would THROW when the write fails: ${offenders.join(' | ')}`);
+}
+
+// ── RULE 4: alert() IS NOT AN ERROR PATH (PM, v4.9.239) ───────────────────────
+// iOS suppresses alert() in a PWA, so a failure path whose only user-facing output is an
+// alert shows Jon NOTHING and then returns — indistinguishable from a dead button. Found
+// in submitWeeklyCheckin: the check-in submit failed, the alert did not appear, the flow
+// aborted, the screen did not change. Bans alert() specifically where a Supabase error is
+// being reported, which is narrower than the global native-dialog ratchet below.
+{
+  const src = phxStripComments(html).split('\n');
+  const badLines = [];
+  for (let i = 0; i < src.length; i++) {
+    if (!/\balert\s*\(/.test(src[i])) continue;
+    if (!/\.error\b|err\.message|error\.message/.test(src.slice(Math.max(0, i - 2), i + 2).join('\n'))) continue;
+    badLines.push(i + 1);
+  }
+  badLines.length === 0
+    ? ok('RULE 4: no Supabase error is reported through alert() — suppressed on iOS')
+    : bad(`RULE 4: alert() used to report a write error — invisible on Jon's phone. Lines: ${badLines.join(', ')}`);
 }
 
 // ── SELF-CHECK: needles must survive their own matcher (Peptides, 22fc1e0) ──────────
@@ -199,7 +286,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.238'", 'version is 4.9.238');
+has("var APP_VERSION='4.9.239'", 'version is 4.9.239');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2035,7 +2122,7 @@ const codeOnly = stripComments(html);
   // problem outlives the measurement fix and silently becomes a hole; when you correct what a
   // guard can see, re-examine every fudge that existed because it could not see properly.
   // Training had flagged the raw count as "not a site count" — with phxStripComments it now is.
-  const NATIVE_DIALOG_CAP = 71;
+  const NATIVE_DIALOG_CAP = 55;   // 71 -> 55 at v4.9.239: twelve dead alert() error paths converted to _phxNotice
   const n = (phxStripComments(html).match(/(?:^|[^.\w])(?:alert|confirm|prompt)\(/g) || []).length;
   if (n > NATIVE_DIALOG_CAP) bad(`RULE 4: native dialogs grew to ${n} (cap ${NATIVE_DIALOG_CAP}) — use a DOM modal, iOS suppresses these silently`);
   else if (n < NATIVE_DIALOG_CAP) ok(`RULE 4: native dialogs down to ${n} (cap ${NATIVE_DIALOG_CAP}) — lower the cap in harness.mjs`);

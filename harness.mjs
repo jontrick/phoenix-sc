@@ -1180,6 +1180,29 @@ try {
     : bad('SHARED: STRUCTURAL the no-re-route rule was lost when the comment was corrected');
 })();
 
+// ── phxFnSpan — a span that knows whether it reached its own end ────────────
+// Nutrition's v4.9.229 finding, applied here: a floor must anchor to the END of
+// the span it claims to cover, not to its size. "Found enough" and "reached the
+// end" are different claims and only the second is a guarantee.
+//
+// Every peptide guard below used to end a function span with
+//   let j = blk.indexOf('\nfunction ', i + 1); if (j < 0) j = blk.length;
+// which turns "I could not find where this ends" into "I will assume it ends
+// far away". When I tested that by removing the anchor, the egress guard did
+// fail — but only because the extra 3000 chars happened to contain visible
+// keys. That is luck about the CONTENT, not a property of the guard. The same
+// fallback on a span whose overshoot is quiet would have passed.
+//
+// Returns null when the end cannot be located, so callers fail instead of
+// guessing. Never returns a span it cannot prove the extent of.
+function phxFnSpan(src, name) {
+  const i = src.indexOf('function ' + name);
+  if (i < 0) return null;
+  const j = src.indexOf('\nfunction ', i + 1);
+  if (j < 0) return null;                    // no end anchor — refuse, do not extend
+  return src.slice(i, j);
+}
+
 // ── PEPTIDES — cross-domain contract (STRUCTURAL) ───────────────────────────
 // TWO foreign surfaces, as of v4.9.223. Listing them is the point of this block:
 // an undeclared consumption is how a rename in another domain becomes a black
@@ -1245,22 +1268,19 @@ try {
   // checks, rather than a number I remembered.
   {
     const fns = [...blk.matchAll(/function (pepOpen[A-Za-z]+)\s*\(/g)].map(m => m[1]);
+    const unbounded = [];
     const miss = fns.filter(name => {
-      const i = blk.indexOf('function ' + name);
-      let j = blk.indexOf('\nfunction ', i + 1);
-      if (j < 0) j = blk.length;
-      const body = blk.slice(i, j);
+      const body = phxFnSpan(blk, name);
+      if (body === null) { unbounded.push(name); return false; }
       if (!/position:fixed;inset:0/.test(body)) return false;          // not an overlay
       // The sheet's markup may be built by a renderer it calls; follow one hop.
       const renderer = (body.match(/_pepRender[A-Za-z]+\s*\(/g) || [])
         .map(c => c.replace(/\s*\($/, ''));
       let markup = body;
       renderer.forEach(r => {
-        const k = blk.indexOf('function ' + r);
-        if (k < 0) return;
-        let e = blk.indexOf('\nfunction ', k + 1);
-        if (e < 0) e = blk.length;
-        markup += blk.slice(k, e);
+        const span = phxFnSpan(blk, r);
+        if (span === null) return;
+        markup += span;
       });
       const typed = /<input[^>]{0,300}type=\\"(text|number|date|email|tel|search|password)/.test(markup)
                  || /<textarea/.test(markup);
@@ -1282,7 +1302,9 @@ try {
     // deliberate harness change.
     const KNOWN_ARMED = ['pepOpenEditStack', 'pepOpenCustomVial', 'pepOpenBloodPanel'];
     const absent = KNOWN_ARMED.filter(n => !fns.includes(n));
-    if (fns.length < 5 || absent.length) {
+    if (unbounded.length) {
+      bad(`PEP: STRUCTURAL could not find the end of ${unbounded.join(', ')} — the span is unbounded, so anything scanned inside it is a guess. Refusing rather than extending to the end of the block.`);
+    } else if (fns.length < 5 || absent.length) {
       bad(`PEP: STRUCTURAL the overlay enumeration itself broke — found ${fns.length} pepOpen* sheets (expected >= 5)${absent.length ? `, missing ${absent.join(', ')}` : ''}. Every keyboard guard is derived from this scan, so a silent miss here makes all of them pass vacuously.`);
     } else {
       miss.length === 0
@@ -1319,22 +1341,16 @@ try {
   const fns = [...blk.matchAll(/function (pepOpen[A-Za-z]+)\s*\(/g)].map(m => m[1]);
   const armed = [], offenders = [];
   fns.forEach(name => {
-    const i = blk.indexOf('function ' + name);
-    let j = blk.indexOf('\nfunction ', i + 1);
-    if (j < 0) j = blk.length;
-    const body = blk.slice(i, j);
+    const body = phxFnSpan(blk, name);
+    if (body === null) { offenders.push(`${name} (span end not found)`); return; }
     if (!/_phxKeyboardSafe/.test(body)) return;
     armed.push(name);
     // Follow the same delegation hop the enumeration guard does: a sheet may
     // build its markup in a _pepRender* helper rather than inline.
     let markup = body;
     (body.match(/_pepRender[A-Za-z]+\s*\(/g) || []).forEach(c => {
-      const r = c.replace(/\s*\($/, '');
-      const k = blk.indexOf('function ' + r);
-      if (k < 0) return;
-      let e = blk.indexOf('\nfunction ', k + 1);
-      if (e < 0) e = blk.length;
-      markup += blk.slice(k, e);
+      const span = phxFnSpan(blk, c.replace(/\s*\($/, ''));
+      if (span !== null) markup += span;
     });
     // The overlay's own inset:0 is fine — the helper overwrites height/top on
     // it directly. It is the CHILDREN measured against the viewport that break.
@@ -1509,8 +1525,8 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   const blk = phxStripComments(html.slice(a, b));
   const send = blk.indexOf('function _pepSendCloud');
   if (send < 0) { bad('PEP: _pepSendCloud missing — the single mirror write path is gone'); return; }
-  let sendEnd = blk.indexOf('\nfunction ', send + 1);
-  if (sendEnd < 0) sendEnd = blk.length;
+  const sendEnd = blk.indexOf('\nfunction ', send + 1);
+  if (sendEnd < 0) { bad('PEP: could not find the end of _pepSendCloud — cannot say which writes are inside it, and guessing here is guessing about whether blood markers reach Supabase'); return; }
 
   // Every place the column is WRITTEN (not read). Reads look like row.peptide_state.
   const writes = [...blk.matchAll(/peptide_state\s*:/g)].map(m => m.index);
@@ -1572,11 +1588,8 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
     ? ok('PEP: exactly 2 calls leave the device for the coach worker (advisor, marker scanner)')
     : bad(`PEP: ${hits} calls to the external worker, expected 2. Every one sends Jon's data off-device to a service whose source is not in this repo — a new one must be a deliberate decision, not a diff nobody read.`);
 
-  const i = blk.indexOf('function _pepBuildContext');
-  if (i < 0) { bad('PEP: _pepBuildContext missing — the advisor egress cannot be checked'); return; }
-  let j = blk.indexOf('\nfunction ', i + 1);
-  if (j < 0) j = blk.length;
-  const ctx = blk.slice(i, j);
+  const ctx = phxFnSpan(blk, '_pepBuildContext');
+  if (ctx === null) { bad('PEP: _pepBuildContext missing, or its end could not be located — the advisor egress cannot be checked, and an unbounded span would scan unrelated code and report it as data leaving the device'); return; }
 
   // Top-level keys of the object handed to the worker. Pinned by name so a new
   // field is a conscious addition. latest_bloods is on this list deliberately:
@@ -1587,9 +1600,17 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   ];
   // The OUTER return, at function-body indent. lastIndexOf('return {') found
   // the one inside the scheduled_today .map callback instead — caught within a
-  // minute by the floor two lines below, on the very guard that added it.
+  // minute by the floor below, on the very guard that added it.
+  //
+  // END-ANCHORED to the object's own closing brace, not to the end of the
+  // function. Scanning to end-of-function meant the span's extent was never
+  // established: it happened to coincide with the object because nothing
+  // follows the return. "Nothing follows it today" is not an end anchor.
   const outer = ctx.search(/\n  return \{/);
-  const ret = outer < 0 ? '' : ctx.slice(outer);
+  if (outer < 0) { bad('PEP: could not locate the advisor context return — the egress pin has nothing to read'); return; }
+  const close = ctx.indexOf('\n  };', outer);
+  if (close < 0) { bad('PEP: found the advisor context return but not its close — refusing to scan an object whose end I cannot see, rather than reporting on however much of it I happened to read'); return; }
+  const ret = ctx.slice(outer, close);
   const found = [...ret.matchAll(/^\s{4}([a-z_0-9]+):/gm)].map(m => m[1]);
   if (found.length < EXPECTED.length) {
     bad(`PEP: the advisor-context scan found ${found.length} fields, expected >= ${EXPECTED.length} — the return shape changed and this egress pin is no longer reading it.`);

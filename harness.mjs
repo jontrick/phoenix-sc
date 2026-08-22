@@ -1273,16 +1273,59 @@ try {
 })();
 
 // The other half of the keyboard fix, and the half the shared helper cannot do.
-// It shrinks the OVERLAY to the visible area; a panel sized in vh does not
-// shrink with it. Checked here as well as functionally because it is one
-// character away from silent reversion — 88% back to 88vh reads as a typo fix.
+// It shrinks the OVERLAY to the visible area; a child sized in vh does not
+// shrink with it, so an armed sheet with a vh cap is armed and still broken —
+// which is exactly what v4.9.221 shipped.
+//
+// v4.9.226 (harness only): this was a hardcoded check that pepOpenEditStack contains
+// "max-height:88%". That guarded the one sheet I had already fixed and nothing
+// else — the same mistake as the count pin it sits next to, one layer along.
+// Arm a fourth sheet tomorrow with an 88vh cap and every gate stayed green.
+// Now it is a RULE over whatever is armed: vh units are viewport units, the
+// helper resizes the overlay and not the viewport, so the two cannot be
+// combined. Pairs with the enumeration guard above — that one says "has typed
+// input, must be armed", this one says "is armed, must not measure in vh".
+//
+// Nutrition's observation on pepOpenAddStack / pepOpenOrderPicker is the reason
+// this is conditional rather than a blanket ban: both still cap in vh and both
+// are fine, because nothing resizes their overlay. The day either is armed this
+// guard turns their vh cap into a failure, without anyone remembering to look.
 (() => {
-  const i = html.indexOf('function pepOpenEditStack');
-  if (i < 0) { bad('PEP: pepOpenEditStack missing'); return; }
-  const blk = html.slice(i, html.indexOf('function pepRemoveStack', i));
-  blk.includes('max-height:88%')
-    ? ok('PEP: edit sheet panel is bounded by the overlay (88%), not the viewport')
-    : bad('PEP: edit sheet panel must cap at 88% of the RESIZED overlay — 88vh ignores the keyboard and pushes the draw-up preview off the top of the screen');
+  const START = 'PEPTIDE BLOCK START — do not move';
+  const END   = 'PEPTIDE BLOCK END — do not move';
+  const a = html.indexOf(START), b = html.indexOf(END);
+  if (a < 0 || b < 0) { bad('PEP: sentinels missing — cannot check armed sheet sizing'); return; }
+  const blk = html.slice(a, b);
+  const fns = [...blk.matchAll(/function (pepOpen[A-Za-z]+)\s*\(/g)].map(m => m[1]);
+  const armed = [], offenders = [];
+  fns.forEach(name => {
+    const i = blk.indexOf('function ' + name);
+    let j = blk.indexOf('\nfunction ', i + 1);
+    if (j < 0) j = blk.length;
+    const body = blk.slice(i, j);
+    if (!/_phxKeyboardSafe/.test(body)) return;
+    armed.push(name);
+    // Follow the same delegation hop the enumeration guard does: a sheet may
+    // build its markup in a _pepRender* helper rather than inline.
+    let markup = body;
+    (body.match(/_pepRender[A-Za-z]+\s*\(/g) || []).forEach(c => {
+      const r = c.replace(/\s*\($/, '');
+      const k = blk.indexOf('function ' + r);
+      if (k < 0) return;
+      let e = blk.indexOf('\nfunction ', k + 1);
+      if (e < 0) e = blk.length;
+      markup += blk.slice(k, e);
+    });
+    // The overlay's own inset:0 is fine — the helper overwrites height/top on
+    // it directly. It is the CHILDREN measured against the viewport that break.
+    const vh = markup.match(/(?:max-)?height:\s*\d+(?:\.\d+)?vh/g) || [];
+    if (vh.length) offenders.push(`${name} (${[...new Set(vh)].join(', ')})`);
+  });
+  armed.length === 0
+    ? bad('PEP: no armed sheets found — the keyboard fix has been removed wholesale')
+    : offenders.length === 0
+      ? ok(`PEP: every keyboard-armed sheet sizes against the overlay, not the viewport (${armed.length} armed: ${armed.join(', ')})`)
+      : bad(`PEP: armed but still measured in vh — ${offenders.join('; ')}. _phxKeyboardSafe resizes the OVERLAY; vh tracks the viewport, so the panel overflows upward off the top of the screen with the keyboard up. Use % of the overlay.`);
 })();
 
 // ── PEPTIDE PORTAL — recon engine / Today tile / ADJUST / BLOODS ────────────

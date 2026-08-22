@@ -207,6 +207,36 @@ it.** So:
 - **"The test passes" and "the test proves what I said" are different claims.** Only report the second. Invert the specific guard you are crediting, not a neighbour.
 - **Parked work**: if a small change must wait for a domain's next push, commit it to your `worktree-<domain>` branch and push the BRANCH (CLAUDE.md rule 2 — in-progress work is never local-only), with no APP_VERSION bump and a commit-message note that the next push must bump.
 
+## THE COACH WORKER (PM, 2026-08-22 — vision now VERIFIED)
+
+`https://phoenix-coach.jon-d87.workers.dev` is outside the repo. No chat owns it, only Jon
+can change it, and its request shape is a contract you cannot inspect.
+
+**Vision passthrough WORKS — verified 2026-08-22, not inferred.** Image content blocks
+survive; `messages` is forwarded verbatim. Proven by posting a synthetic pathology report
+with unguessable values (41.7 / 813 / 6.29 / 1477, lab "ZENTHORP") in the app's exact
+request shape and getting all four back exactly, `input_tokens: 1053` against ~200 for
+text alone. Vision-dependent features may now be built for real. Keep the manual path as
+the visible fallback anyway — the Worker can change without notice.
+
+**Why Jon's negative result could NOT settle it, and nearly did.** He photographed a
+non-blood image and the reader correctly said it was not a blood test. The extraction
+prompt's rule 6 tells the model to return `{"error":"not a pathology report"}` for a
+non-report image — **so a model receiving no image at all returns that identical error**,
+rule 6 being the only failure shape on offer. The negative case cannot separate "saw the
+wrong picture" from "saw nothing." Only unguessable values coming back exactly can.
+
+  A NEGATIVE RESULT CONFIRMS A CAPABILITY ONLY IF ITS ABSENCE WOULD HAVE LOOKED DIFFERENT.
+
+Generalise it: before treating any successful-looking rejection as proof a path works,
+ask what the broken version would have printed. If the answer is "the same thing," you
+have learned nothing and must run the positive case.
+
+**A node-side probe of the Worker returns HTTP 403, error code 1010.** That is Cloudflare
+bot protection, NOT an outage and NOT a broken Worker. Send `Origin:
+https://projectphoenix-app.com` plus a real browser User-Agent and it returns 200.
+Browsers send both automatically. Do not debug a phantom outage.
+
 ## DATE / DAY-KEY RULE (2026-08-18, after the UTC day-key incident)
 
 - Jon trains at 04:30 Brisbane (UTC+10). `toISOString().slice(0,10)` / `.split('T')[0]` is the UTC day — anything before 10:00 local files under yesterday. That was true of the nutrition day key, every coach payload's `today_date`, and every set log.

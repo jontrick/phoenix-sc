@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.202'", 'version is 4.9.202');
+has("var APP_VERSION='4.9.203'", 'version is 4.9.203');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1773,6 +1773,53 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
   }
 })();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
+
+// ── RESTORE SAFE LIST (v4.9.203) ────────────────────────────────────────────
+(() => {
+  // Every entry in _safeRestoreTabs must resolve to a REAL navTo target. Two did not:
+  // 'workout' and 'settings' had no map entry and no branch, so the restore fired
+  // navTo() into a silent no-op and Jon stayed on Today — while the list READ as
+  // though training screens were covered.
+  //
+  // Derived from source at both ends rather than hard-coded, so this catches the next
+  // stale entry for ANY domain rather than only the two I removed. Nutrition, records
+  // and peptide all ride on this list too.
+  const src = codeSrc();
+  const listM = src.match(/_safeRestoreTabs\s*=\s*\[([^\]]*)\]/);
+  const mapM  = src.match(/function navTo\(tab\)\{[\s\S]{0,4000}?var map=\{([\s\S]*?)\};/);
+  if (!listM || !mapM) {
+    bad('SAFELIST: could not locate _safeRestoreTabs or navTo\'s map in source — the ' +
+        'check did NOT run. Fix the sentinels rather than leaving this silently green.');
+    return;
+  }
+  const tabs = [...listM[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+  const targets = new Set([...mapM[1].matchAll(/'?([A-Za-z][A-Za-z-]*)'?\s*:/g)].map(m => m[1]));
+  if (!tabs.length || targets.size < 5) {
+    bad(`SAFELIST: parsed ${tabs.length} tabs and ${targets.size} navTo targets — that is ` +
+        'too few to be real. The check did NOT run; fix the parse.');
+    return;
+  }
+  const dead = tabs.filter(t => !targets.has(t));
+  if (dead.length) {
+    bad(`SAFELIST: [${dead.join(', ')}] in _safeRestoreTabs ${dead.length > 1 ? 'are' : 'is'} not a ` +
+        'navTo target. The restore fires into a no-op and Jon stays on Today, while the list ' +
+        'reads as though that screen is covered.');
+  } else {
+    ok(`SAFELIST: all ${tabs.length} restore tabs resolve to real navTo targets`);
+  }
+  // The specific regression: the calendar was written to the key but never restorable.
+  if (tabs.includes('blab-calendar') && tabs.includes('programme')) {
+    ok('SAFELIST: the training calendar is restorable after an iOS PWA reload');
+  } else {
+    bad('SAFELIST: programme/blab-calendar missing from _safeRestoreTabs — a screen lock ' +
+        'on the training calendar drops Jon back to Today.');
+  }
+})();
+// The repaint that makes the calendar safe AS a restore target. Without it a cloud
+// restore landing while the calendar is on screen rehydrates the key and repaints
+// nothing — the caller only refreshes Today.
+hasCode("_cs.classList.contains('active') && typeof _blabCalRender === 'function'",
+        'SAFELIST: cloud restore repaints the calendar when it is the live screen');
 (() => {
   // blabCalSessionsOn must keep putting blabDay on BLAB entries. NOTE: as of their
   // v4.9.187 Nutrition no longer calls this — it reads blabCalGet directly, because

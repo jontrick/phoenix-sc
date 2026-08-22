@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.202';
+var APP_VERSION='4.9.203';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3823,6 +3823,14 @@ function _blabApplyCloud(key, cloud, rawLocal){
   if(typeof window.blabCalHydrateFromState === 'function'){
     try { window.blabCalHydrateFromState(); } catch(_che){ console.warn('[PHX] blabCalHydrateFromState failed:', _che); }
   }
+  // v4.9.203: the calendar became a RESTORE TARGET in this version, so it can now be
+  // the screen showing when a cloud restore lands. Hydrating its key without repainting
+  // would leave the pre-restore schedule on screen indefinitely — the caller only
+  // repaints Today. Same pattern as blabRestoreBackup.
+  try {
+    var _cs = document.getElementById('screen-blab-calendar');
+    if(_cs && _cs.classList && _cs.classList.contains('active') && typeof _blabCalRender === 'function') _blabCalRender();
+  } catch(_cre){ console.warn('[PHX] calendar repaint after cloud restore failed:', _cre); }
 }
 
 window.blabRestoreFromCloud = function(profileRow){
@@ -7395,7 +7403,20 @@ async function _loadProfileAndRouteInner(){
     navTo('today');
     // Restore last non-today tab after PWA reload (iOS kills PWA context on sleep/low-memory).
     try {
-      var _safeRestoreTabs = ['nutrition','records','workout','settings','peptide'];
+      // v4.9.203 [TRAINING]: 'workout' and 'settings' were DEAD STRINGS — neither is a
+      // navTo target (no entry in navTo's map, no branch) and the intercept that writes
+      // this key never stores either value. They made the list READ as though training
+      // screens were covered. They were not.
+      //
+      // 'programme' and 'blab-calendar' ARE written by that intercept and were missing,
+      // so the training calendar still dropped Jon back to Today on screen lock — the
+      // same symptom .200 fixed for peptides, still live in my domain because this list
+      // predates the calendar. .200 repaired the MECHANISM (the restore had never fired
+      // for any tab); this is the stale config it was reading.
+      //
+      // Pinned by a harness guard that every entry here resolves to a real navTo target,
+      // so the list cannot silently drift again for any domain.
+      var _safeRestoreTabs = ['nutrition','records','peptide','programme','blab-calendar'];
       if(_restoreTab && _safeRestoreTabs.indexOf(_restoreTab) >= 0){
         // navTo('today') above wiped the key; put it back so a SECOND reload
         // still restores. Without this the fix works exactly once.

@@ -1748,4 +1748,104 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(html.includes('Pause Programme'), 'while the rest of the sheet is intact');
     } finally { dom.restore(); }
   });
+
+  // ── RESTORE SAFE LIST (v4.9.203) ──────────────────────────────────────────
+  // .200 fixed the restore MECHANISM — it had never fired for any tab, for anyone,
+  // because the key was read after the navTo that deletes it. What it read was still
+  // stale: 'workout' and 'settings' are not navTo targets, and the two tabs the
+  // training calendar is actually written under were missing.
+  //
+  // The harness derives the list from source and checks every entry resolves. These
+  // prove the BEHAVIOUR that guard is premised on — that a dead string really does
+  // route nowhere, and that the calendar entries really do land on the calendar.
+
+  const routeRecorder = () => {
+    const shown = [];
+    const realShow = app.showScreen;
+    const realRender = app._blabCalRender;
+    app.showScreen = (id) => { shown.push(id); };
+    app._blabCalRender = () => {};   // isolate routing from rendering
+    return { shown, restore: () => { app.showScreen = realShow; app._blabCalRender = realRender; } };
+  };
+
+  test('SAFELIST: a dead entry routes NOWHERE — the diagnosis, not a reading of the map', () => {
+    // If this ever shows a screen, 'workout' became real and removing it was wrong.
+    reset(); signIn(UID); seed(KEY, AT_W5);
+    const r = routeRecorder();
+    try {
+      app.navTo('workout');
+      app.navTo('settings');
+      assert.equal(r.shown.length, 0,
+        'both removed entries route to nothing — the restore fired into a no-op and Jon stayed on Today');
+    } finally { r.restore(); }
+  });
+
+  test('SAFELIST: blab-calendar lands on the calendar', () => {
+    reset(); signIn(UID); seed(KEY, AT_W5);
+    const r = routeRecorder();
+    try {
+      app.navTo('blab-calendar');
+      assert.ok(r.shown.includes('screen-blab-calendar'), 'the restore target is the calendar screen');
+    } finally { r.restore(); }
+  });
+
+  test('SAFELIST: programme lands on the calendar while BLAB is active', () => {
+    // With BLAB running, Programme MEANS the calendar (v4.9.165) — it returns early
+    // through blabCalOpen rather than the map. Both spellings are written to the
+    // restore key by the navTo intercept, so both have to work.
+    reset(); signIn(UID); seed(KEY, AT_W5);
+    const r = routeRecorder();
+    try {
+      app.navTo('programme');
+      assert.ok(r.shown.includes('screen-blab-calendar'), 'Programme resolves to the calendar, not the dead AI-programme screen');
+    } finally { r.restore(); }
+  });
+
+  test('SAFELIST: the other domains restore tabs still route', () => {
+    // I edited a list three domains ride on. Nutrition, records and peptide must be
+    // untouched by my change.
+    reset(); signIn(UID); seed(KEY, AT_W5);
+    const r = routeRecorder();
+    try {
+      ['nutrition', 'records', 'peptide'].forEach((t) => app.navTo(t));
+      assert.ok(r.shown.includes('screen-nutrition'), 'nutrition still routes');
+      assert.ok(r.shown.includes('screen-records'), 'records still routes');
+      assert.ok(r.shown.includes('screen-peptide'), 'peptide still routes');
+    } finally { r.restore(); }
+  });
+
+  test('RESTORE: a cloud restore repaints the calendar when it is the live screen', () => {
+    // Making the calendar restorable means it can now BE the screen when a cloud
+    // restore lands. _blabApplyCloud rehydrated the calendar key and repainted
+    // nothing — the caller only refreshes Today — so the pre-restore schedule would
+    // sit there indefinitely, looking current.
+    reset(); signIn(UID); seed(KEY, AT_W1);
+    let painted = 0;
+    const realRender = app._blabCalRender;
+    const realGet = app.document.getElementById;
+    app._blabCalRender = () => { painted++; };
+    app.document.getElementById = (id) =>
+      (id === 'screen-blab-calendar' ? { classList: { contains: (c) => c === 'active' } } : null);
+    try {
+      const did = app.blabRestoreFromCloud({ blab_state: AT_W5 });
+      assert.equal(did, true, 'the restore took the cloud copy');
+      assert.ok(painted > 0, 'and repainted the calendar that was on screen');
+    } finally { app._blabCalRender = realRender; app.document.getElementById = realGet; }
+  });
+
+  test('RESTORE: no repaint when the calendar is not the live screen', () => {
+    // The repaint must be conditional, not unconditional — repainting a hidden screen
+    // is work at best and a throw at worst on a screen that was never opened.
+    reset(); signIn(UID); seed(KEY, AT_W1);
+    let painted = 0;
+    const realRender = app._blabCalRender;
+    const realGet = app.document.getElementById;
+    app._blabCalRender = () => { painted++; };
+    app.document.getElementById = (id) =>
+      (id === 'screen-blab-calendar' ? { classList: { contains: () => false } } : null);
+    try {
+      assert.equal(app.blabRestoreFromCloud({ blab_state: AT_W5 }), true, 'the restore still happens');
+      assert.equal(painted, 0, 'but nothing is repainted');
+    } finally { app._blabCalRender = realRender; app.document.getElementById = realGet; }
+  });
 }

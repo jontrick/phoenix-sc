@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.211';
+var APP_VERSION='4.9.212';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8573,7 +8573,16 @@ function navTo(tab){
   if(tab==='records') renderRecords();
   if(tab==='blab-calendar'){ if(typeof _blabCalRender==='function') _blabCalRender(); }
   if(tab==='nutrition'){ if(typeof _nutRestoreView==='function') _nutRestoreView(); if(typeof nutRenderScreen==='function') nutRenderScreen(); }
-  if(tab==='peptide'){ _pepTab='today'; if(typeof pepRenderScreen==='function') pepRenderScreen(); var _paBtn=document.getElementById('pep-add-btn'); if(_paBtn) _paBtn.onclick=function(){ if(_pepTab==='protocol') pepOpenAddStack(); else if(_pepTab==='order') pepOpenOrderPicker(); else if(_pepTab==='adjust'){ var _n=document.getElementById('pep-note-input'); if(_n) _n.focus(); } else { _pepTab='protocol'; pepRenderScreen(); } }; }
+  // v4.9.212: was _pepTab='today' unconditionally, so every entry to the portal
+  // — including the .206 boot restore after a screen lock — landed Jon on TODAY
+  // whatever tab he had been on. The .206 work restores the SCREEN; this
+  // restores the position within it. Nutrition had the identical line and fixed
+  // its own; these are two separate bugs in two separate branches, not one
+  // shared one, so fixing theirs did nothing for this.
+  //
+  // The + button also routed to 'protocol', a tab that ceased to exist in .201.
+  // Adding a compound belongs on STOCK now.
+  if(tab==='peptide'){ if(typeof _pepRestoreView==='function') _pepRestoreView(); if(typeof pepRenderScreen==='function') pepRenderScreen(); var _paBtn=document.getElementById('pep-add-btn'); if(_paBtn) _paBtn.onclick=function(){ if(_pepTab==='stock') pepOpenAddStack(); else if(_pepTab==='order') pepOpenOrderPicker(); else if(_pepTab==='adjust'){ var _n=document.getElementById('pep-note-input'); if(_n) _n.focus(); } else { _pepTab='stock'; pepRenderScreen(); } }; }
 }
 
 // v4.7.40: legacy screen-onboard removed. The questionnaire (FQ) is the single
@@ -22236,6 +22245,7 @@ function pepRenderScreen(){
   else if(_pepTab === "bloods")   content = _pepTabBloods(ps);
   else if(_pepTab === "adjust")   content = _pepTabAdjust(ps);
   else                            content = _pepTabOrder(ps);
+  _pepPersistTab();
   body.innerHTML = tabBar + "<div style=\"padding:16px;\">" + content + "</div>";
   body.querySelectorAll("[data-pep-tab]").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -23980,6 +23990,31 @@ function _pepPhases(ps){
 function _pepDayDoses(ps, iso){
   var d = _pepGetDoses(ps, iso);
   return d.morning.concat(d.anytime).concat(d.evening);
+}
+
+// v4.9.212: which tab Jon was on, remembered across a reload.
+// Plain localStorage, NOT part of peptide_state: a tab tap is not protocol data
+// and mirroring it would fire a cloud write every time he glanced at a screen.
+var _PEP_TAB_KEY = "pep_tab_v1";
+var _PEP_TABS = ["today","overview","stock","adjust","order","bloods"];
+
+function _pepTabStoreKey(){
+  var uid = currentSession && currentSession.user && currentSession.user.id;
+  return _PEP_TAB_KEY + (uid ? "_" + uid : "");
+}
+
+function _pepPersistTab(){
+  try {
+    if(_PEP_TABS.indexOf(_pepTab) < 0) return;   // never persist a transient host tab
+    localStorage.setItem(_pepTabStoreKey(), _pepTab);
+  } catch(_e){}
+}
+
+function _pepRestoreView(){
+  try {
+    var t = localStorage.getItem(_pepTabStoreKey());
+    _pepTab = (t && _PEP_TABS.indexOf(t) >= 0) ? t : "today";
+  } catch(_e){ _pepTab = "today"; }
 }
 
 var _pepPhaseSel = null;    // selected phase key, null = all

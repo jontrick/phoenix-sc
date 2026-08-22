@@ -1774,6 +1774,72 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── TABVIEW — the position WITHIN the portal survives a reload (v4.9.212) ─
+  // navTo's peptide branch did _pepTab='today' unconditionally, so every entry
+  // to the portal — including the .206 boot restore after a screen lock —
+  // dropped Jon on TODAY whatever tab he had been on. .206 restores the SCREEN;
+  // this restores the position inside it.
+  //
+  // These drive navTo('peptide'), NOT _pepRestoreView(). Calling the helper
+  // directly would pass with navTo still forcing 'today' — testing the fix while
+  // missing the bug. Nutrition made exactly that mistake on its own copy of this
+  // line and caught it before shipping.
+  {
+    test('TABVIEW entering the portal restores the tab he was on', () => {
+      reset(); signIn('tabuser');
+      app._pepTab = 'stock';
+      app.pepRenderScreen();            // persists it, as any tab change does
+      app._pepTab = 'today';            // simulate the reset a reload performs
+      app.navTo('peptide');             // the real entry point
+      assert.equal(app._pepTab, 'stock', 'back on STOCK, not TODAY');
+    });
+
+    test('TABVIEW every tab is restorable, not just stock', () => {
+      ['today','overview','stock','adjust','order','bloods'].forEach(tab => {
+        reset(); signIn('tabuser');
+        app._pepTab = tab;
+        app.pepRenderScreen();
+        app._pepTab = 'today';
+        app.navTo('peptide');
+        assert.equal(app._pepTab, tab, tab + ' restored');
+      });
+    });
+
+    test('TABVIEW a first-ever visit lands on TODAY', () => {
+      reset(); signIn('brandnew');
+      app.navTo('peptide');
+      assert.equal(app._pepTab, 'today', 'sensible default with nothing stored');
+    });
+
+    test('TABVIEW a transient host tab is never persisted', () => {
+      reset(); signIn('tabuser');
+      app._pepTab = 'stock';
+      app.pepRenderScreen();
+      app._pepTab = 'protocol';         // the edit-sheet host, not a real tab
+      app.pepRenderScreen();
+      app._pepTab = 'today';
+      app.navTo('peptide');
+      assert.equal(app._pepTab, 'stock', 'restores the last REAL tab, not the host');
+    });
+
+    test('TABVIEW the tab is remembered per user, not globally', () => {
+      reset();
+      signIn('userA'); app._pepTab = 'order';  app.pepRenderScreen();
+      signIn('userB'); app._pepTab = 'bloods'; app.pepRenderScreen();
+      signIn('userA'); app._pepTab = 'today';  app.navTo('peptide');
+      assert.equal(app._pepTab, 'order', 'A gets A\'s tab');
+      signIn('userB'); app._pepTab = 'today';  app.navTo('peptide');
+      assert.equal(app._pepTab, 'bloods', 'B gets B\'s');
+    });
+
+    test('TABVIEW the + button no longer routes to the tab that ceased to exist', () => {
+      const i = html.indexOf("if(tab==='peptide')");
+      const line = html.slice(i, html.indexOf('\n', i));
+      assert.notIncludes(line, "_pepTab='protocol'", 'the .201 orphan is gone');
+      assert.ok(line.includes("_pepTab==='stock'"), 'adding a compound belongs on STOCK');
+    });
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

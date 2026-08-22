@@ -115,14 +115,18 @@ If Desktop is blocked, Jon uses the Finder-opened terminal method above.
 
 ## PWA TESTING
 
-iOS Safari cache is aggressive. After every push, Jon must:
-1. Delete old PWA from home screen
-2. Open Safari → projectphoenix-app.com
-3. Hold reload → Reload Without Content Blockers
-4. Confirm version number at bottom of Today screen
-5. Share → Add to Home Screen (fresh install)
+**CORRECTED v4.9.208.** `sw.js` was **ZERO BYTES from v4.9.74 until v4.9.208** (found by Peptides). The update machinery inside index.html was complete and correct the whole time and was registering an empty script, so **no deploy ever reached Jon automatically** — deleting and reinstalling the PWA was the only way he could take a build. Every "hard refresh to pick this up" told to him in that window was wrong, and the procedure previously written here described a mechanism that did not exist.
 
-If version number doesn't update after hard refresh → service worker is stale. Bump APP_VERSION again and push.
+`sw.js` is now real: versioned cache (`phoenix-v<SW_VERSION>`), `install`/`activate`, `skipWaiting`, `clients.claim`, update polling, and a `SW_UPDATED` message. `SW_VERSION` must equal `APP_VERSION` — **enforced by a harness assertion**, so a stale SW_VERSION fails the gate rather than silently serving an old cache.
+
+**ONE MORE MANUAL REINSTALL IS STILL REQUIRED.** Jon's installed PWA is running whatever the empty file left behind, and an absent service worker cannot update itself. So exactly once more:
+1. Delete the PWA from the home screen
+2. Safari → projectphoenix-app.com
+3. Hold reload → Reload Without Content Blockers
+4. Confirm the version at the bottom of the Today screen
+5. Share → Add to Home Screen
+
+**After that, auto-update should work** — but that claim is UNVERIFIED until Jon confirms a version number changing without a reinstall. Do not tell him it works until he has seen it. If the version does not move after a normal open, the service worker is genuinely stale and that is a bug to investigate — **not** a reason to bump APP_VERSION again, which was the old advice and only ever masked the real fault.
 
 ---
 

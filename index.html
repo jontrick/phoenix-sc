@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.218';
+var APP_VERSION='4.9.219';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23938,6 +23938,13 @@ function _pepAuditReport(ps){
     // review uses, so the two can never disagree.
     var adh = null;
     _pepAdherence(ps, 14).forEach(function(a){ if(a.compound === c.name) adh = a; });
+    // v4.9.219: a percentage without its denominator lies about weekly compounds.
+    // Retatrutide is due TWICE in a 14-day window; missing one reads as 50% and
+    // missing both as 0% — the same numbers a daily compound earns over 14
+    // scheduled doses, and nothing on screen says one is a fortnight of evidence
+    // and the other is a coin toss.
+    var adhTaken = adh ? adh.taken : null;
+    var adhSched = adh ? adh.scheduled : null;
 
     return {
       id: st.compoundId,
@@ -23973,6 +23980,8 @@ function _pepAuditReport(ps){
       unitCost: tong ? tong.aud : null,
       loggedDoses: takenCount,
       adherencePct: adh ? adh.adherence_pct : null,
+      adherenceTaken: adhTaken,
+      adherenceScheduled: adhSched,
       reconKnown: !!(f && !f.unknown)
     };
   }).filter(Boolean);
@@ -23994,8 +24003,17 @@ function _pepAuditReport(ps){
     // reads 0%, which would report a man who has been running his protocol for
     // months as entirely non-compliant. Absence of data is not evidence of
     // failure — the same trap as the dose log above.
+    // Four scheduled doses is the floor at which "under 70%" means anything.
+    // Below that a single miss swings the figure across the threshold, so the
+    // finding would be about the window length rather than about Jon.
     poorAdherence: loggedDays === 0 ? [] :
-      rows.filter(function(r){ return r.adherencePct != null && r.adherencePct < 70; }),
+      rows.filter(function(r){
+        return r.adherencePct != null && r.adherencePct < 70 && (r.adherenceScheduled || 0) >= 4;
+      }),
+    lowSample: loggedDays === 0 ? [] :
+      rows.filter(function(r){
+        return r.adherencePct != null && r.adherencePct < 70 && (r.adherenceScheduled || 0) < 4;
+      }),
     neverLogged:  rows.filter(function(r){ return r.started && r.loggedDoses === 0; })
   };
 
@@ -24059,7 +24077,9 @@ function pepAuditText(ps){
            (r.gapStart ? " (gap from " + r.gapStart + ")" : ""); });
   section("No catalogue match — source manually or drop", a.findings.unsourceable, function(r){ return r.name; });
   section("Adherence under 70% (last 14 days)", a.findings.poorAdherence, function(r){
-    return r.name + " — " + r.adherencePct + "%"; });
+    return r.name + " — " + r.adherencePct + "% (" + r.adherenceTaken + " of " + r.adherenceScheduled + ")"; });
+  section("Too few doses in 14 days to judge adherence", a.findings.lowSample, function(r){
+    return r.name + " — " + r.adherenceTaken + " of " + r.adherenceScheduled + " logged, not enough to call"; });
   if(!a.historyKnown){
     L.push("ADHERENCE");
     L.push("  Not assessed — there is no dose log to assess. Tick doses off on");
@@ -24405,7 +24425,10 @@ function _pepAuditCard(ps){
   h += line("Stock not counted", f.uncounted, "var(--text3)");
   h += line("Reconstitution not set", f.noRecon, "#FF6B6B");
   h += line("No catalogue match — source or drop", f.unsourceable, "#FF6B6B");
-  h += line("Adherence under 70%", f.poorAdherence, "var(--gold)", function(r){ return r.name + " (" + r.adherencePct + "%)"; });
+  h += line("Adherence under 70%", f.poorAdherence, "var(--gold)", function(r){
+    return r.name + " (" + r.adherenceTaken + "/" + r.adherenceScheduled + ")"; });
+  h += line("Too few doses to judge", f.lowSample, "var(--text3)", function(r){
+    return r.name + " (" + r.adherenceTaken + "/" + r.adherenceScheduled + ")"; });
 
   if(a.toOrder.length){
     h += "<div style=\"margin-top:10px;padding-top:10px;border-top:1px solid var(--border);\">";

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.209';
+var APP_VERSION='4.9.210';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22307,6 +22307,22 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-counted]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepConfirmCount(parseInt(btn.getAttribute("data-pep-counted"),10)); });
   });
+  body.querySelectorAll("[data-pep-phase]").forEach(function(el){
+    el.addEventListener("click", function(){
+      _pepPhaseSel = el.getAttribute("data-pep-phase");
+      _pepDaySel = null;
+      pepRenderScreen();
+    });
+  });
+  body.querySelectorAll("[data-pep-day]").forEach(function(el){
+    el.addEventListener("click", function(){
+      var iso = el.getAttribute("data-pep-day");
+      _pepDaySel = (_pepDaySel === iso) ? null : iso;
+      pepRenderScreen();
+    });
+  });
+  var calMore = body.querySelector("#pep-cal-more");
+  if(calMore) calMore.addEventListener("click", function(){ _pepCalWeeks += 6; pepRenderScreen(); });
   var auditCopy = body.querySelector("#pep-audit-copy");
   if(auditCopy) auditCopy.addEventListener("click", pepCopyAudit);
   var histBtn = body.querySelector("#pep-hist-confirm");
@@ -23854,6 +23870,90 @@ function pepAuditText(ps){
   return L.join("\n");
 }
 
+// ── Phases (v4.9.210) ─────────────────────────────────────────────────────
+// Jon's spec asks for "all phases of the protocol". There is no phase field on a
+// stack and I am not adding one — it would be a third thing to keep in sync with
+// start dates that already say the same thing. A phase is DERIVED: compounds
+// that begin in the same month are one cohort, ordered in time.
+//
+// Purpose is derived too, from the categories present, rather than invented. A
+// made-up sentence about "metabolic optimisation" would read as knowledge the
+// app does not have.
+function _pepPhases(ps){
+  var todayISO = _pepToday();
+  var groups = {};
+  (ps.stacks || []).forEach(function(st){
+    if(st.status === "complete") return;
+    var c = _pepCompound(st.compoundId); if(!c) return;
+    var key = st.startDate ? st.startDate.slice(0,7) : "unscheduled";
+    (groups[key] = groups[key] || []).push({st:st, c:c});
+  });
+
+  var keys = Object.keys(groups).sort(function(a,b){
+    if(a === "unscheduled") return 1;
+    if(b === "unscheduled") return -1;
+    return a < b ? -1 : 1;
+  });
+
+  var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return keys.map(function(key, i){
+    var rows = groups[key];
+    var cats = [];
+    rows.forEach(function(r){ if(cats.indexOf(r.c.cat) < 0) cats.push(r.c.cat); });
+
+    // Span: earliest start to the latest end this cohort reaches.
+    var starts = rows.map(function(r){ return r.st.startDate; }).filter(Boolean).sort();
+    var start = starts[0] || null;
+    var end = null;
+    rows.forEach(function(r){
+      var sim = _pepSimulate(ps, r.st, {unlimited:true, horizonDays:730});
+      if(!sim || sim.unknown) return;
+      // Last scheduled dose under an unlimited-supply run = the plan's own end.
+      var last = null;
+      if(r.st.startDate){
+        var base = new Date(r.st.startDate + "T12:00:00").getTime();
+        for(var d = 0; d < 730; d++){
+          var day = new Date(base + d * 86400000);
+          if(_pepStackDueOn(r.st, r.c, day) !== null) last = _pepISO(day);
+        }
+      }
+      if(last && (!end || last > end)) end = last;
+    });
+
+    var label;
+    if(key === "unscheduled") label = "Unscheduled";
+    else {
+      var y = key.slice(0,4), m = parseInt(key.slice(5,7), 10) - 1;
+      label = months[m] + " " + y;
+    }
+
+    return {
+      key: key,
+      index: i + 1,
+      label: label,
+      start: start,
+      end: end,
+      running: !!(start && start <= todayISO && (!end || end >= todayISO)),
+      future: !!(start && start > todayISO),
+      finished: !!(end && end < todayISO),
+      categories: cats,
+      rows: rows,
+      count: rows.length
+    };
+  });
+}
+
+// Every dose due on one date, across the protocol. Used by the calendar and its
+// day detail. Reuses _pepGetDoses so the calendar can never disagree with TODAY.
+function _pepDayDoses(ps, iso){
+  var d = _pepGetDoses(ps, iso);
+  return d.morning.concat(d.anytime).concat(d.evening);
+}
+
+var _pepPhaseSel = null;    // selected phase key, null = all
+var _pepDaySel = null;      // selected calendar day
+var _pepCalWeeks = 6;       // how far the calendar is scrolled forward
+
 // ── PROTOCOL OVERVIEW tab ─────────────────────────────────────────────────
 // Read-only reference: every compound, every week, dose and timing. Gated.
 function _pepTabOverview(ps){
@@ -23882,48 +23982,144 @@ function _pepTabOverview(ps){
       h += "<button id=\"pep-hist-confirm\" style=\"width:100%;padding:12px;background:none;border:1px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Confirm history</button>";
     }
     h += "</div>";
-
-    var logged = 0;
-    Object.keys(ps.checked || {}).forEach(function(k){ logged += (ps.checked[k] || []).length; });
-    h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.6;\">" +
-         (logged ? "The app has " + logged + " logged dose" + (logged===1?"":"s") + " on record, which will be used alongside your note." :
-                   "No dose history is logged yet, so your note is the only record of what has been run.") + "</div>";
     return h;
   }
 
-  // ── Ready: the read-only forward reference ──
-  var stacks = (ps.stacks || []).filter(function(st){ return st.status !== "complete"; });
-  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;\">Full Protocol</div>";
-  h += "<div style=\"font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:14px;\">Read-only. Edit a compound on the STOCK tab.</div>";
+  // ═══ Ready — the three panels ═══════════════════════════════════════════
+  // Jon asked for them "left to right". On a 390px phone that is three stacked
+  // sections, not three columns; columns would give each about 120px, which is
+  // narrower than a single dose line. Phase selection is the thing that ties
+  // them together — picking a phase filters the calendar and the detail below.
+  var phases = _pepPhases(ps);
+  if(!phases.length) return h + "<div style=\"text-align:center;padding:32px 0;color:var(--text3);font-size:13px;\">No compounds in the forward plan.</div>";
 
-  var byCat = {};
-  stacks.forEach(function(st){
-    var c = _pepCompound(st.compoundId); if(!c) return;
-    (byCat[c.cat] = byCat[c.cat] || []).push({st:st, c:c});
+  var sel = null;
+  phases.forEach(function(p){ if(p.key === _pepPhaseSel) sel = p; });
+  if(!sel){ phases.forEach(function(p){ if(!sel && p.running) sel = p; }); }
+  if(!sel) sel = phases[0];
+
+  h += _pepPanelPhases(ps, phases, sel);
+  h += _pepPanelSchedule(ps, sel);
+  h += _pepPanelCompounds(ps, sel);
+  return h;
+}
+
+// ── Panel 1 — phases ──────────────────────────────────────────────────────
+function _pepPanelPhases(ps, phases, sel){
+  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;\">Phases</div>";
+  phases.forEach(function(p){
+    var on = p.key === sel.key;
+    var tint = p.running ? "#4CAF50" : (p.future ? "#7B68EE" : "var(--text3)");
+    h += "<div data-pep-phase=\"" + _esc(p.key) + "\" style=\"background:var(--bg2);border:1px solid " + (on?"#7B68EE":"var(--border)") + ";border-left:3px solid " + tint + ";border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;cursor:pointer;touch-action:manipulation;\">";
+    h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;\">";
+    h += "<div style=\"font-weight:700;font-size:14px;color:" + (on?"#7B68EE":"var(--text)") + ";\">Phase " + p.index + " &middot; " + _esc(p.label) + "</div>";
+    h += "<div style=\"font-size:10px;color:" + tint + ";text-transform:uppercase;letter-spacing:1px;\">" + (p.running?"Running":(p.future?"Upcoming":"Ended")) + "</div>";
+    h += "</div>";
+    h += "<div style=\"font-size:11px;color:var(--text3);margin-top:3px;\">" +
+         (p.start ? _esc(p.start) : "no start") + (p.end ? " &rarr; " + _esc(p.end) : "") +
+         " &middot; " + p.count + " compound" + (p.count===1?"":"s") + "</div>";
+    h += "<div style=\"font-size:11px;color:var(--text2);margin-top:4px;\">" +
+         p.rows.map(function(x){ return _esc(x.c.name); }).join(", ") + "</div>";
+    h += "<div style=\"font-size:10px;color:var(--text3);margin-top:3px;\">" + p.categories.map(_esc).join(" &middot; ") + "</div>";
+    h += "</div>";
   });
+  return h;
+}
 
-  Object.keys(byCat).sort().forEach(function(cat){
-    h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin:14px 0 8px;\">" + _esc(cat) + "</div>";
-    byCat[cat].forEach(function(row){
-      var st = row.st, c = row.c;
-      var dose = st.dose != null ? st.dose : c.dose;
-      var recon = _pepRecon(st, c);
-      var draw = _pepDraw(dose, c.doseUnit, recon);
-      var f = _pepStockForecast(ps, st);
-      h += "<div style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;\">";
-      h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;\">";
-      h += "<div style=\"font-weight:700;font-size:14px;color:var(--text);\">" + _esc(c.name) + "</div>";
-      h += "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;color:#7B68EE;\">" + (draw ? _pepDrawText(draw) : _pepFmtDose(dose, c.doseUnit)) + "</div>";
-      h += "</div>";
-      h += "<div style=\"font-size:11px;color:var(--text3);margin-top:3px;\">" + _pepFmtDose(dose, c.doseUnit) + " &middot; " + _esc(st.freq || c.freq) + " &middot; " + _esc(c.timing) + "</div>";
-      if(st.startDate){
-        var wk = Math.floor((new Date(_pepToday()+"T12:00:00") - new Date(st.startDate+"T12:00:00")) / 86400000 / 7) + 1;
-        h += "<div style=\"font-size:10px;color:var(--text3);margin-top:3px;\">Started " + _esc(st.startDate) + (wk > 0 ? " &middot; week " + wk : " &middot; not started") +
-             (st.cycleWeeks ? " of " + st.cycleWeeks + (st.offWeeks ? " on / " + st.offWeeks + " off" : "") : "") + "</div>";
-      }
-      if(f && !f.unknown && f.depletionDate) h += "<div style=\"font-size:10px;color:var(--gold);margin-top:3px;\">Stock runs out " + f.depletionDate + "</div>";
+// ── Panel 2 — schedule ────────────────────────────────────────────────────
+function _pepPanelSchedule(ps, sel){
+  var todayISO = _pepToday();
+  var startISO = (sel.start && sel.start > todayISO) ? sel.start : todayISO;
+  // Start the grid on the Monday of that week so columns line up with weekdays.
+  var d0 = new Date(startISO + "T12:00:00");
+  d0 = new Date(d0.getTime() - ((d0.getDay() + 6) % 7) * 86400000);
+
+  var dows = ["M","T","W","T","F","S","S"];
+  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:18px 0 8px;\">Schedule</div>";
+  h += "<div style=\"font-size:11px;color:var(--text3);margin-bottom:8px;\">Phase " + sel.index + " &middot; tap a day for the breakdown</div>";
+
+  h += "<div style=\"display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;\">";
+  dows.forEach(function(x){ h += "<div style=\"text-align:center;font-family:var(--font-d);font-size:9px;color:var(--text3);\">" + x + "</div>"; });
+  h += "</div>";
+
+  h += "<div style=\"display:grid;grid-template-columns:repeat(7,1fr);gap:3px;\">";
+  for(var i = 0; i < _pepCalWeeks * 7; i++){
+    var day = new Date(d0.getTime() + i * 86400000);
+    var iso = _pepISO(day);
+    var doses = _pepDayDoses(ps, iso);
+    // Only count this phase's compounds, so the grid answers the question the
+    // selected phase asks rather than showing everything regardless.
+    var mine = doses.filter(function(x){
+      return sel.rows.some(function(rw){ return rw.st.compoundId === x.id; });
+    });
+    var isToday = iso === todayISO;
+    var isSel = iso === _pepDaySel;
+    var bg = isSel ? "#7B68EE" : (mine.length ? "var(--bg3)" : "var(--bg2)");
+    var fg = isSel ? "#fff" : (mine.length ? "var(--text)" : "var(--text3)");
+    h += "<div data-pep-day=\"" + iso + "\" style=\"aspect-ratio:1;background:" + bg + ";border:1px solid " + (isToday?"var(--gold)":"var(--border)") + ";border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;color:" + fg + ";line-height:1;\">" + day.getDate() + "</div>";
+    if(mine.length) h += "<div style=\"font-size:8px;color:" + (isSel?"#fff":"#7B68EE") + ";margin-top:2px;\">" + mine.length + "</div>";
+    h += "</div>";
+  }
+  h += "</div>";
+
+  h += "<button id=\"pep-cal-more\" style=\"width:100%;margin-top:8px;padding:9px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Show " + (_pepCalWeeks + 6) + " weeks</button>";
+
+  if(_pepDaySel){
+    var sd = _pepDayDoses(ps, _pepDaySel);
+    h += "<div style=\"background:var(--bg2);border:1px solid #7B68EE;border-radius:var(--radius);padding:12px 14px;margin-top:10px;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;color:#7B68EE;margin-bottom:6px;\">" + _esc(_pepDaySel) + "</div>";
+    if(!sd.length) h += "<div style=\"font-size:12px;color:var(--text3);\">Nothing scheduled.</div>";
+    sd.forEach(function(x){
+      h += "<div style=\"display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--border);\">";
+      h += "<div style=\"flex:1;min-width:0;\"><div style=\"font-size:12px;font-weight:700;color:var(--text);\">" + _esc(x.name) + "</div>";
+      h += "<div style=\"font-size:10px;color:var(--text3);\">" + _esc(x.timing || "") + "</div></div>";
+      h += "<div style=\"text-align:right;\"><div style=\"font-family:var(--font-d);font-size:12px;font-weight:900;color:#7B68EE;\">" + (x.draw ? _pepDrawText(x.draw) : "—") + "</div>";
+      h += "<div style=\"font-size:10px;color:var(--text3);\">" + _pepFmtDose(x.dose, x.doseUnit) + "</div></div>";
       h += "</div>";
     });
+    h += "</div>";
+  }
+  return h;
+}
+
+// ── Panel 3 — compound detail for the selected phase ──────────────────────
+function _pepPanelCompounds(ps, sel){
+  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:18px 0 8px;\">Phase " + sel.index + " compounds</div>";
+  sel.rows.forEach(function(rw){
+    var st = rw.st, c = rw.c;
+    var dose = st.dose != null ? st.dose : c.dose;
+    var recon = _pepRecon(st, c);
+    var draw = _pepDraw(dose, c.doseUnit, recon);
+    var f = _pepStockForecast(ps, st);
+    var sf = _pepCycleShortfall(ps, st);
+    var perVial = _pepDosesPerVial(st, c);
+    var vialsForPhase = (sf && perVial) ? Math.ceil(sf.required / perVial) : null;
+
+    h += "<div style=\"background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;margin-bottom:8px;\">";
+    h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px;\">";
+    h += "<div style=\"font-weight:700;font-size:14px;color:var(--text);\">" + _esc(c.name) + "</div>";
+    h += "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;\">" + (draw ? _pepDrawText(draw) : "set recon") + "</div>";
+    h += "</div>";
+    h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.7;\">";
+    h += _pepFmtDose(dose, c.doseUnit) + " per injection &middot; " + _esc(st.freq || c.freq) + "<br>";
+    h += _esc(c.timing) + "<br>";
+    h += (recon ? _pepReconText(recon) + (recon.source === "override" ? " <span style=\"color:var(--gold);\">(manual)</span>" : "") : "reconstitution not set");
+    if(perVial) h += " &middot; " + perVial + " doses per vial";
+    h += "</div>";
+
+    if(sf) {
+      h += "<div style=\"font-size:11px;margin-top:6px;color:" + (sf.sufficient ? "#4CAF50" : "#FF6B6B") + ";font-weight:700;\">" +
+           (vialsForPhase ? vialsForPhase + " vial" + (vialsForPhase===1?"":"s") + " for this phase &middot; " : "") +
+           (sf.sufficient ? "covered" : "short " + sf.short + " dose" + (sf.short===1?"":"s")) + "</div>";
+    }
+    if(f && !f.unknown){
+      h += "<div style=\"font-size:10px;color:var(--text3);margin-top:3px;\">" +
+           (st.onOrder && st.arrivalDate ? "On order, arrives " + _esc(st.arrivalDate)
+             : (f.depletionDate ? f.dosesRemaining + " doses on hand, out " + f.depletionDate
+                                : f.dosesRemaining + " doses on hand")) + "</div>";
+    }
+    h += "</div>";
   });
   return h;
 }
@@ -23960,8 +24156,6 @@ function _pepAuditCard(ps){
                         " counted, history " + (a.ready.historyDone ? "confirmed" : "not confirmed") + ".") +
        "</div>";
 
-  // The honest statement about history, first, because every count below is
-  // read in its light.
   h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);\">" +
        (a.historyKnown
          ? a.loggedDays + " days of doses logged, " + _esc(a.firstLog) + " to " + _esc(a.lastLog) + "."

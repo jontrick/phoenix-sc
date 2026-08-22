@@ -1659,6 +1659,121 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── PANELS — the PROTOCOL OVERVIEW redesign (v4.9.210) ────────────────────
+  // Jon asked for three panels "left to right": phases, a date-mapped schedule,
+  // and compound detail for the selected phase. On a 390px phone that is three
+  // stacked sections — three columns would give each about 120px, narrower than
+  // a single dose line.
+  //
+  // These drive pepRenderScreen and read the DOM, because the whole panel set is
+  // only reachable once the readiness gate opens and nothing had ever rendered
+  // that state.
+  {
+    const pIso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const pAgo = n => pIso(new Date(Date.now() - n*86400000));
+    const pIn  = n => pIso(new Date(Date.now() + n*86400000));
+
+    // A READY protocol — stock counted, history confirmed — so the panels show.
+    const seedReady = () => {
+      reset(); signIn('paneluser');
+      const ps = app.pepGetState();
+      ps.settings = {};
+      ps.historyConfirmed = true;
+      ps.stacks = [
+        { compoundId:'bpc157',   dose:0.5, startDate: pAgo(40), vialMg:5,  waterMl:2, sealedVials:4, stockCounted:true, status:'instock' },
+        { compoundId:'ta1',      dose:1.6, startDate: pAgo(40), vialMg:5,  waterMl:2, sealedVials:3, stockCounted:true, status:'instock' },
+        { compoundId:'epitalon', dose:5,   startDate: pIn(20),  vialMg:10, waterMl:1, sealedVials:10, stockCounted:true, status:'instock' },
+      ];
+      app.pepSaveState(ps);
+      return app.pepGetState();
+    };
+
+    const renderOverview = () => {
+      const nodes = {};
+      const mk = id => ({ id, innerHTML:'', style:{}, classList:{add(){},remove(){},contains(){return false;}},
+        appendChild(){}, setAttribute(){}, getAttribute(){return null;}, addEventListener(){},
+        querySelector(){return null;}, querySelectorAll(){return [];} });
+      const real = app.document.getElementById;
+      app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
+      app._pepTab = 'overview';
+      nodes['pep-screen-body'] = mk('pep-screen-body');
+      app.pepRenderScreen();
+      const h = nodes['pep-screen-body'].innerHTML;
+      app.document.getElementById = real;
+      return h;
+    };
+
+    test('PANELS phases are derived from start dates, not a stored field', () => {
+      const ps = seedReady();
+      const phases = app._pepPhases(ps);
+      assert.ok(phases.length >= 2, 'the two start months form two phases');
+      assert.ok(phases[0].start <= phases[1].start, 'ordered in time');
+      assert.ok(phases.some(p => p.running), 'the current cohort is marked running');
+      assert.ok(phases.some(p => p.future), 'the later one is marked upcoming');
+    });
+
+    test('PANELS a phase carries its compounds, span and categories', () => {
+      const p = app._pepPhases(seedReady())[0];
+      assert.ok(p.count > 0, 'compounds');
+      assert.ok(p.start, 'a start');
+      assert.ok(p.categories.length > 0, 'categories, derived not invented');
+    });
+
+    test('PANELS all three render once the gate opens', () => {
+      seedReady();
+      const h = renderOverview();
+      assert.notIncludes(h, 'Two things first', 'gate is satisfied');
+      assert.ok(h.includes('>Phases<'), 'panel 1');
+      assert.ok(h.includes('>Schedule<'), 'panel 2');
+      assert.ok(h.includes('compounds<'), 'panel 3');
+    });
+
+    test('PANELS the calendar maps the protocol onto real dates', () => {
+      seedReady();
+      const h = renderOverview();
+      assert.ok(h.includes('data-pep-day="' + pIso(new Date()) + '"'), 'today is a cell');
+      assert.ok(h.includes('tap a day for the breakdown'), 'and is tappable');
+    });
+
+    test('PANELS a selected day shows dose and units to draw', () => {
+      seedReady();
+      app._pepDaySel = pIso(new Date());
+      const h = renderOverview();
+      app._pepDaySel = null;
+      assert.ok(h.includes('u / '), 'units to draw in the day breakdown');
+    });
+
+    test('PANELS compound detail carries dose, timing, recon and vials for the phase', () => {
+      seedReady();
+      const h = renderOverview();
+      assert.ok(h.includes('per injection'), 'dose per injection');
+      assert.ok(h.includes('mg/mL'), 'reconstitution');
+      assert.ok(h.includes('for this phase'), 'vials needed for the phase');
+    });
+
+    test('PANELS selecting a phase filters the calendar to that phase', () => {
+      const ps = seedReady();
+      const phases = app._pepPhases(ps);
+      const future = phases.find(p => p.future);
+      app._pepPhaseSel = future.key;
+      const h = renderOverview();
+      app._pepPhaseSel = null;
+      assert.ok(h.includes('Phase ' + future.index + ' &middot; tap a day'), 'schedule follows the selection');
+      assert.ok(h.includes('Epitalon'), 'and so does the compound panel');
+    });
+
+    test('PANELS the gate still hides everything when not ready', () => {
+      reset(); signIn('paneluser');
+      const ps = app.pepGetState();
+      ps.settings = {};
+      ps.stacks = [{ compoundId:'bpc157', dose:0.5, startDate: pAgo(40), vialMg:5, waterMl:2, sealedVials:4, status:'instock' }];
+      app.pepSaveState(ps);
+      const h = renderOverview();
+      assert.ok(h.includes('Two things first'), 'gate shown');
+      assert.notIncludes(h, '>Schedule<', 'and the panels are not');
+    });
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

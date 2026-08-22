@@ -1534,6 +1534,74 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
     : bad('PEP: the mirror payload no longer comes from _pepCloudPayload — the scrub is off the path');
 })();
 
+// ── THE OTHER EXIT ──────────────────────────────────────────────────────────
+// The choke-point guard above covers Supabase. It does not cover the external
+// Cloudflare worker, and blood data leaves by BOTH doors.
+//
+// Found by taking the PM's "this generalises to every sanitiser" seriously and
+// asking where else the data goes, rather than re-reading the exit I had just
+// fixed. _pepCloudPayload strips bloods from the mirror — Jon's OWN Supabase,
+// RLS-protected, in his own project — on the stated grounds that pathology
+// should not be duplicated into a second store. Meanwhile _pepBuildContext
+// sends latest_bloods (marker names, values, units, reference ranges, lab,
+// panel date) to phoenix-coach.jon-d87.workers.dev, whose source is not in this
+// repo and is owned by no chat here. pepExtractMarkers sends the PHOTOGRAPH of
+// the pathology report to the same place.
+//
+// NEITHER IS A BUG. Both are the features working as Jon asked for them — the
+// scanner is a photo-to-markers scanner by his explicit request, and an advisor
+// that cannot see his bloods is a worse advisor. What is wrong is only that I
+// applied a strict rule to the door I built and no rule at all to the door I
+// also built. Whether bloods should reach the worker is JON'S call, not mine,
+// so nothing here changes behaviour.
+//
+// What these guards do is make the egress DELIBERATE. Today two functions talk
+// to the worker and the advisor context has eight top-level fields. Adding a
+// ninth, or a third caller, now fails the harness until someone changes this
+// list on purpose — which is the choke-point shape applied to the second exit.
+(() => {
+  const START = 'PEPTIDE BLOCK START — do not move';
+  const END   = 'PEPTIDE BLOCK END — do not move';
+  const a = html.indexOf(START), b = html.indexOf(END);
+  if (a < 0 || b < 0) { bad('PEP: sentinels missing — cannot check external egress'); return; }
+  const blk = phxStripComments(html.slice(a, b));
+
+  const WORKER = 'phoenix-coach.jon-d87.workers.dev';
+  const hits = (blk.match(new RegExp(WORKER.replace(/\./g, '\\.'), 'g')) || []).length;
+  hits === 2
+    ? ok('PEP: exactly 2 calls leave the device for the coach worker (advisor, marker scanner)')
+    : bad(`PEP: ${hits} calls to the external worker, expected 2. Every one sends Jon's data off-device to a service whose source is not in this repo — a new one must be a deliberate decision, not a diff nobody read.`);
+
+  const i = blk.indexOf('function _pepBuildContext');
+  if (i < 0) { bad('PEP: _pepBuildContext missing — the advisor egress cannot be checked'); return; }
+  let j = blk.indexOf('\nfunction ', i + 1);
+  if (j < 0) j = blk.length;
+  const ctx = blk.slice(i, j);
+
+  // Top-level keys of the object handed to the worker. Pinned by name so a new
+  // field is a conscious addition. latest_bloods is on this list deliberately:
+  // it documents that pathology DOES leave, rather than hiding it.
+  const EXPECTED = [
+    'today_date', 'day_of_week', 'timezone', 'protocol', 'scheduled_today',
+    'adherence_last_14_days', 'logged_responses', 'latest_bloods',
+  ];
+  // The OUTER return, at function-body indent. lastIndexOf('return {') found
+  // the one inside the scheduled_today .map callback instead — caught within a
+  // minute by the floor two lines below, on the very guard that added it.
+  const outer = ctx.search(/\n  return \{/);
+  const ret = outer < 0 ? '' : ctx.slice(outer);
+  const found = [...ret.matchAll(/^\s{4}([a-z_0-9]+):/gm)].map(m => m[1]);
+  if (found.length < EXPECTED.length) {
+    bad(`PEP: the advisor-context scan found ${found.length} fields, expected >= ${EXPECTED.length} — the return shape changed and this egress pin is no longer reading it.`);
+  } else {
+    const extra = found.filter(f => !EXPECTED.includes(f));
+    const gone  = EXPECTED.filter(f => !found.includes(f));
+    extra.length === 0 && gone.length === 0
+      ? ok(`PEP: the advisor sends exactly the ${EXPECTED.length} pinned fields off-device, bloods included and declared`)
+      : bad(`PEP: what leaves the device changed — ${extra.length ? `added ${extra.join(', ')}` : ''}${extra.length && gone.length ? '; ' : ''}${gone.length ? `removed ${gone.join(', ')}` : ''}. This is Jon's medical data going to an unowned external service; the change may well be right, but it must be intended.`);
+  }
+})();
+
 // No swallowed cloud errors, as a rule over the whole block rather than a note
 // about the one that bit. v4.9.154 fixed an empty .then() and wrote a comment
 // saying errors here are surfaced — while a bare .catch(function(){}) sat four

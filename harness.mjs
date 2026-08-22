@@ -2123,6 +2123,80 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
 })();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
 
+// ── WHERE TRAINING'S DATA LEAVES ────────────────────────────────────────────
+// Peptides' question, applied to Training: not "is my sanitiser right" but "HOW MANY
+// EXITS does this data have?" It had pinned that blood markers are stripped from the
+// Supabase mirror, then found blood leaves by a second door it had never guarded.
+//
+// ENUMERATION, NOT REMOVAL. Sending training history to the advisor IS the feature.
+// Nothing here closes a door. The sensitive fields are deliberately ON the pinned
+// lists so the list DOCUMENTS that they leave — a new field, or a new caller, then
+// fails until someone edits it knowingly.
+//
+// Training data reaches phoenix-coach.jon-d87.workers.dev — whose source is NOT in
+// this repo and is owned by no chat here — through these doors:
+//
+//   _mcLoadRecentDataForContext   the aggregator. FOUR callers share it.
+//   generateProgramme             buildAthleteProfile()
+//   _phxBuildAIWarmup             athlete
+//   _phxGenerateTodaySession      athlete + session context
+//
+// VERIFIED CLEAN, checked rather than assumed: _phxFetchAICore (:9481) sends only
+// _phxBuildCorePrompt(fmt), a static template with no athlete data in it.
+//
+// The item worth Jon knowing about, and the Training analogue of Peptides' bloods:
+// latest_checkin carries niggle_notes — free-text injury notes — and weight_kg. Those
+// leave. That is not a bug; it is what makes the advice useful. It is pinned so it is
+// a decision rather than an accident.
+(() => {
+  const src = codeSrc();
+  const i = src.indexOf('async function _mcLoadRecentDataForContext()');
+  if (i < 0) {
+    bad('EXITS: cannot find _mcLoadRecentDataForContext — the exit enumeration DID NOT RUN.');
+    return;
+  }
+  // The `out` initialiser is the declared shape of everything this aggregator hands out.
+  const decl = src.slice(i, i + 600);
+  const m = decl.match(/var out = \{([^}]*)\}/);
+  if (!m) {
+    bad('EXITS: found the aggregator but not its `out` initialiser — the field pin DID NOT RUN. ' +
+        'Fix the parse rather than leaving this silently green.');
+    return;
+  }
+  const fields = [...m[1].matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*:/g)].map(x => x[1]).sort();
+  // FLOOR. A parse that finds two fields and passes is worse than no check — it reports
+  // the exit as covered while having read almost none of it.
+  if (fields.length < 7) {
+    bad(`EXITS: parsed only ${fields.length} fields from the aggregator, expected >= 7. ` +
+        'The pin DID NOT genuinely run.');
+    return;
+  }
+  const expected = ['exerciseSummary','lastRpe','latestCheckin','recentSessions',
+                    'recentSetLogs','total_volume_kg','weightTrend'].join(',');
+  if (fields.join(',') === expected) {
+    ok(`EXITS: the coach aggregator hands out exactly these ${fields.length} fields — incl. latestCheckin (niggle_notes, weight_kg) and recentSetLogs (notes)`);
+  } else {
+    bad(`EXITS: the coach aggregator's fields changed to [${fields.join(', ')}].\n` +
+        `      Expected [${expected}].\n` +
+        '      Something new now leaves to an external worker that is not in this repo. ' +
+        'Confirm it is intended, tell the PM, then update this list.');
+  }
+})();
+(() => {
+  // The callers. Four share the aggregator; a fifth appearing is a new exit.
+  const src = codeSrc();
+  // Exclude the declaration itself — `async function _mcLoadRecentDataForContext()`
+  // matches a bare-name regex too. My first version claimed it did not, counted 5, and
+  // failed on correct code. A guard whose comment is wrong about its own mechanism is
+  // the thing this whole exercise is about.
+  const callers = (src.match(/(?<!function\s)_mcLoadRecentDataForContext\(\)/g) || []).length;
+  if (callers === 4) ok('EXITS: exactly 4 callers of the coach aggregator, as enumerated');
+  else bad(`EXITS: ${callers} callers of the coach aggregator, expected 4. A new one is a new ` +
+           'door for set_logs, weekly_checkins and session details. Enumerate it before it ships.');
+})();
+hasCode("content:_phxBuildCorePrompt(fmt)",
+        'EXITS: the core-session fetcher still sends only its static prompt — no athlete data on that door');
+
 // ── KEYBOARD-SAFE SHEETS (v4.9.220) ─────────────────────────────────────────
 // Structural pins only. Whether the sheet that OPENS is the sheet that gets ARMED is
 // a behavioural question and lives in tests/training.mjs — the _blabCalEntryView case

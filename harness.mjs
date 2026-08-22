@@ -199,7 +199,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.234'", 'version is 4.9.234');
+has("var APP_VERSION='4.9.235'", 'version is 4.9.235');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1615,9 +1615,13 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   // Top-level keys of the object handed to the worker. Pinned by name so a new
   // field is a conscious addition. latest_bloods is on this list deliberately:
   // it documents that pathology DOES leave, rather than hiding it.
+  // v4.9.235 adds stock_on_hand — counts, dates and vial numbers, no supplier
+  // or price data. Updated here DELIBERATELY, which is the whole point of the
+  // pin: the guard failed on the new field first and made me come here and say
+  // what it is before it could ship.
   const EXPECTED = [
     'today_date', 'day_of_week', 'timezone', 'protocol', 'scheduled_today',
-    'adherence_last_14_days', 'logged_responses', 'latest_bloods',
+    'adherence_last_14_days', 'logged_responses', 'latest_bloods', 'stock_on_hand',
   ];
   // The OUTER return, at function-body indent. lastIndexOf('return {') found
   // the one inside the scheduled_today .map callback instead — caught within a

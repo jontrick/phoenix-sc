@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.234';
+var APP_VERSION='4.9.235';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23313,6 +23313,8 @@ var PEP_ADVISOR_SYSTEM =
   "5. Flag any dose that is high or low versus commonly cited research ranges. Say the range you are comparing against.\n" +
   "6. If adherence on a compound is under 70 percent, fix adherence before recommending any dose increase.\n" +
   "7. If the protocol is sound, say so plainly. Do not invent changes to look useful.\n" +
+  "7a. stock_on_hand is what he ACTUALLY HAS. Every recommendation must be executable with it. Do not propose raising a dose on a compound with days_of_supply in single figures, or starting one with doses_remaining 0 and on_order false, without saying plainly that it has to be ordered first and when it would realistically start. Where short_by is above zero, say how many vials that is before recommending anything that increases the burn rate.\n" +
+  "7b. counted:false means he has not physically counted that compound — treat its numbers as unverified and say so rather than planning precisely on them. known:false means the app cannot compute doses at all, usually a unit-dosed blend with no mg basis; do not invent a figure for it.\n" +
   "8. This is research-compound tracking, not medical care. Do not diagnose. Where a change materially affects blood glucose, blood pressure, IGF-1, thyroid or hormonal axes, say which marker to test rather than guessing.\n" +
   "9. If latest_bloods is present, use it. Tie recommendations to actual out-of-range markers and name the value and the lab range you are reading. If a compound in the protocol plausibly moves a marker that is now out of range, say so explicitly. If latest_bloods is null or older than 6 months, say which panel to book and which markers matter for THIS protocol.\n\n" +
   "FORMAT (markdown-lite, max 300 words):\n" +
@@ -23399,7 +23401,40 @@ function _pepBuildContext(ps){
     }),
     adherence_last_14_days: _pepAdherence(ps, 14),
     logged_responses: (ps.notes || []).slice(0, 10),
-    latest_bloods: _pepLatestBloods(ps)
+    latest_bloods: _pepLatestBloods(ps),
+    // v4.9.235: the advisor was asked to recommend dose and cycle changes and
+    // was never told what Jon actually HAS. It could suggest raising BPC-157
+    // with three doses left in the vial, or starting a Phase 2 compound that
+    // has not been ordered. Jon asked whether the app can build a forward plan
+    // from stock on hand; it holds the stock and it holds the planner, and
+    // this was the wire between them that had never been run.
+    //
+    // Counts and dates only — no supplier, no prices, no order history.
+    stock_on_hand: (ps.stacks || []).map(function(stack){
+      var c = _pepCompound(stack.compoundId);
+      if(!c) return null;
+      var f = _pepStockForecast(ps, stack);
+      if(!f || f.unknown){
+        return {compound: c.name, counted: stack.stockCounted === true, known: false};
+      }
+      var need = _pepCycleShortfall(ps, stack);
+      return {
+        compound: c.name,
+        counted: stack.stockCounted === true,
+        known: true,
+        doses_remaining: f.dosesRemaining,
+        doses_per_vial: f.dosesPerVial,
+        vials_held: f.vialsHeld,
+        days_of_supply: f.daysOfSupply,
+        runs_out_on: f.depletionDate,
+        order_by: f.orderByDate,
+        past_reorder_point: !!f.overdue,
+        on_order: !!f.onOrder,
+        arriving: f.arrivalDate,
+        doses_needed_this_cycle: need ? need.required : null,
+        short_by: need ? need.short : null
+      };
+    }).filter(Boolean)
   };
 }
 

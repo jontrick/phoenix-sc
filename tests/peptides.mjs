@@ -1873,6 +1873,66 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── ADVISORSTOCK — the advisor can now see what he actually has (v4.9.235) ─
+  // Jon asked whether the app can build a forward plan from stock on hand. It
+  // holds the stock and it holds the planner; _pepBuildContext was the wire
+  // between them and it had never been run. The advisor was being asked to
+  // recommend dose and cycle changes with no idea whether the vial was full or
+  // empty — so it could propose raising a dose on three remaining doses, or
+  // starting a compound that has not been ordered.
+  {
+    const advSetUp = (over) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId: 'bpc157', dose: 0.5, vialMg: 10, waterMl: 2,
+        startDate: daysAgo(30), freq: 'daily', continuous: true,
+        sealedVials: 2, openDosesUsed: 4, openedDate: daysAgo(4),
+        stockCounted: true,
+      }, over || {})] });
+      return app._pepBuildContext(app.pepGetState());
+    };
+
+    test('ADVISORSTOCK the context carries stock, not just the schedule', () => {
+      const ctx = advSetUp();
+      assert.ok(Array.isArray(ctx.stock_on_hand), 'stock_on_hand is present');
+      assert.equal(ctx.stock_on_hand.length, 1, 'one entry per stack');
+      const e = ctx.stock_on_hand[0];
+      assert.equal(e.compound, 'BPC-157', 'named, so a recommendation can reference it');
+      assert.ok(e.doses_remaining > 0, 'with real doses remaining');
+      assert.ok(e.days_of_supply != null, 'and how long that lasts');
+    });
+
+    test('ADVISORSTOCK an uncounted compound is marked unverified, not assumed', () => {
+      const ctx = advSetUp({ stockCounted: false });
+      assert.equal(ctx.stock_on_hand[0].counted, false,
+        'counted:false — the advisor must not plan precisely on a number he has not checked');
+    });
+
+    test('ADVISORSTOCK an empty compound reports zero rather than going quiet', () => {
+      const ctx = advSetUp({ sealedVials: 0, openDosesUsed: 0, openedDate: null });
+      const e = ctx.stock_on_hand[0];
+      assert.ok(e, 'still listed');
+      assert.ok(e.known === false || e.doses_remaining === 0,
+        'zero is a fact the advisor needs; omitting the compound would read as "fine"');
+    });
+
+    test('ADVISORSTOCK an incoming order is visible so a restart can be dated', () => {
+      const ctx = advSetUp({ sealedVials: 0, openDosesUsed: 0, openedDate: null,
+                             onOrder: true, arrivalDate: '2026-09-15', onOrderVials: 2 });
+      const e = ctx.stock_on_hand[0];
+      assert.equal(e.on_order, true, 'the advisor can say "resume when this lands"');
+      assert.equal(e.arriving, '2026-09-15', 'with the date');
+    });
+
+    // The system prompt has to actually ask for it, or the data rides along unused.
+    test('ADVISORSTOCK the prompt requires recommendations to be executable', () => {
+      assert.ok(html.includes('stock_on_hand is what he ACTUALLY HAS'),
+        'the advisor is told the stock is real and binding');
+      assert.ok(html.includes('must be executable with it'),
+        'and that a plan he cannot action is not a plan');
+    });
+  }
+
   // ── CYCLEREQ — a rest day is not the end of a cycle (v4.9.234) ─────────────
   // _pepCycleShortfall stopped counting at the FIRST non-dosing day after any
   // dose. Correct for an off-cycle block, wrong for every schedule with rest

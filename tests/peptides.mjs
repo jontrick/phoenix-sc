@@ -1963,6 +1963,35 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         'going into a syringe');
     });
 
+    // v4.9.248 — in-transit stock. Jon has Epitalon, Tesamorelin and NAD+ on
+    // order. Without these fields an on-order compound imports as simply
+    // ABSENT, so the forecast reports a supply gap that closes itself the week
+    // the box lands and tells him to reorder something already paid for.
+    test('IMPORT an on-order compound carries its arrival date', () => {
+      const r = V(JSON.stringify([{ compoundId:'epitalon', dose:5, startDate:'2026-09-01',
+        onOrder:true, arrivalDate:'2026-08-30', onOrderVials:10, onOrderVialMg:10 }]));
+      assert.equal(r.ok, true, 'accepted');
+      const e = r.entries[0];
+      assert.equal(e.onOrder, true, 'flagged in transit');
+      assert.equal(e.arrivalDate, '2026-08-30', 'the date _pepSimulate folds the delivery in on');
+      assert.equal(e.onOrderVials, 10, 'and how many are coming');
+      assert.equal(e.onOrderVialMg, 10, 'at what vial size');
+    });
+
+    test('IMPORT an arrivalDate implies on-order without needing the flag too', () => {
+      const r = V(JSON.stringify([{ compoundId:'nad', dose:50, arrivalDate:'2026-09-01' }]));
+      assert.equal(r.entries[0].onOrder, true,
+        'a delivery date with no onOrder flag is still a delivery — requiring both is a ' +
+        'way to have one silently ignored');
+    });
+
+    test('IMPORT a malformed arrival date is refused, not ignored', () => {
+      const r = V(JSON.stringify([{ compoundId:'nad', dose:50, arrivalDate:'1 Sep' }]));
+      assert.equal(r.ok, false,
+        'an unparseable arrival silently becomes never-arriving, which reads as a ' +
+        'permanent shortage');
+    });
+
     test('IMPORT stock figures mark the compound as counted, absent ones do not', () => {
       const withStock = V(JSON.stringify([{ compoundId:'bpc157', dose:0.5, sealedVials:2, dosesUsed:3 }]));
       assert.equal(withStock.entries[0].stockCounted, true, 'he gave real numbers');

@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.247';
+var APP_VERSION='4.9.248';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -25387,10 +25387,24 @@ function _pepValidateImport(raw){
       out.problems.push(where + " (" + c.name + ") startDate must be YYYY-MM-DD."); return;
     }
     var st = {compoundId: id, dose: dose, startDate: e.startDate || _pepToday()};
-    ["cycleWeeks","offWeeks","vialMg","waterMl","sealedVials","openDosesUsed"].forEach(function(k){
+    ["cycleWeeks","offWeeks","vialMg","waterMl","sealedVials","openDosesUsed",
+     "onOrderVials","onOrderVialMg"].forEach(function(k){
       var v = (k === "openDosesUsed" && e.dosesUsed != null) ? e.dosesUsed : e[k];
       if(v != null && v !== "" && !isNaN(parseFloat(v))) st[k] = parseFloat(v);
     });
+    // v4.9.248: in-transit stock. Without these an on-order compound imports as
+    // simply absent, and the forecast cannot see the delivery — so it reports a
+    // supply gap that closes itself the week the box lands, and tells him to
+    // reorder something already paid for. arrivalDate is what _pepSimulate folds
+    // the incoming vials in on.
+    if(typeof e.onOrder === "boolean") st.onOrder = e.onOrder;
+    if(e.arrivalDate){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(String(e.arrivalDate))){
+        out.problems.push(where + " (" + c.name + ") arrivalDate must be YYYY-MM-DD."); return;
+      }
+      st.arrivalDate = String(e.arrivalDate);
+      st.onOrder = true;
+    }
     if(st.cycleWeeks === 0) delete st.cycleWeeks;          // 0 means continuous, not a zero-length cycle
     if(e.freq) st.freq = String(e.freq);
     if(typeof e.continuous === "boolean") st.continuous = e.continuous;

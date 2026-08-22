@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.227';
+var APP_VERSION='4.9.228';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21756,7 +21756,25 @@ function _pepSendCloud(payload, useKeepalive){
           "Prefer": "return=minimal"
         },
         body: JSON.stringify({peptide_state: payload})
-      }).catch(function(){});
+      }).then(function(res){
+        // v4.9.228: a 4xx RESOLVES — fetch only rejects on network failure. The missing
+        // peptide_state column that hid for 12 versions was a 400, so checking
+        // res.ok is the half that would actually have caught it.
+        if(res && !res.ok && typeof _phxRecordWriteError === "function"){
+          _phxRecordWriteError("pep mirror keepalive",
+            {code: String(res.status), message: "HTTP " + res.status + " on keepalive PATCH"},
+            _pepErrorSummary(payload));
+        }
+      }).catch(function(err){
+        if(typeof _phxRecordWriteError === "function"){
+          _phxRecordWriteError("pep mirror keepalive", err, _pepErrorSummary(payload));
+        }
+      });
+      // Best-effort by nature: keepalive guarantees the REQUEST survives the
+      // page going away, not that our handlers get to run. Recording when we do
+      // is strictly better than the bare .catch(function(){}) this replaces —
+      // which was the exact swallow CLAUDE.md rule 8 names, four lines under a
+      // comment claiming errors here are surfaced and not swallowed.
       return;
     }
     if(!sb) return;

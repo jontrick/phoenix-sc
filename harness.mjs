@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.227'", 'version is 4.9.227');
+has("var APP_VERSION='4.9.228'", 'version is 4.9.228');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1470,6 +1470,58 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   blk.includes('k !== "bloods"')
     ? ok('PEP: bloods stripped from the mirrored payload')
     : bad('PEP: bloods NOT stripped — medical data would reach profiles.peptide_state');
+})();
+
+// v4.9.228: the guard above proves the SCRUBBER scrubs. It does not prove the
+// scrubber is on the path — a new write doing update({peptide_state: ps})
+// direct from state would ship Jon's pathology results to a jsonb column with
+// every gate still green. Highest-stakes rule I own and it rested on one
+// function's contents, which is the shape I had just generalised twice
+// elsewhere. Found by re-reading my own guards rather than by a failure.
+//
+// The rule: peptide_state is written in exactly ONE place, and that place is
+// fed by _pepCloudPayload. Enforce the choke point, not the scrub.
+(() => {
+  const START = 'PEPTIDE BLOCK START — do not move';
+  const END   = 'PEPTIDE BLOCK END — do not move';
+  const a = html.indexOf(START), b = html.indexOf(END);
+  if (a < 0 || b < 0) { bad('PEP: sentinels missing — cannot check the mirror choke point'); return; }
+  const blk = phxStripComments(html.slice(a, b));
+  const send = blk.indexOf('function _pepSendCloud');
+  if (send < 0) { bad('PEP: _pepSendCloud missing — the single mirror write path is gone'); return; }
+  let sendEnd = blk.indexOf('\nfunction ', send + 1);
+  if (sendEnd < 0) sendEnd = blk.length;
+
+  // Every place the column is WRITTEN (not read). Reads look like row.peptide_state.
+  const writes = [...blk.matchAll(/peptide_state\s*:/g)].map(m => m.index);
+  const outside = writes.filter(k => k < send || k >= sendEnd);
+  outside.length === 0
+    ? ok(`PEP: peptide_state written only inside _pepSendCloud (${writes.length} write${writes.length === 1 ? '' : 's'}, all behind the scrubber)`)
+    : bad(`PEP: ${outside.length} peptide_state write(s) OUTSIDE _pepSendCloud — anything not fed by _pepCloudPayload mirrors blood-panel markers into Supabase`);
+
+  // And the payload _pepSendCloud receives must come from the scrubber.
+  /_pepMirrorPending\s*=\s*_pepCloudPayload\(/.test(blk)
+    ? ok('PEP: the mirror payload is built by _pepCloudPayload')
+    : bad('PEP: the mirror payload no longer comes from _pepCloudPayload — the scrub is off the path');
+})();
+
+// No swallowed cloud errors, as a rule over the whole block rather than a note
+// about the one that bit. v4.9.154 fixed an empty .then() and wrote a comment
+// saying errors here are surfaced — while a bare .catch(function(){}) sat four
+// lines below it on the keepalive PATCH, unfixed until v4.9.228. A comment
+// claiming a property is not a check for it.
+(() => {
+  const START = 'PEPTIDE BLOCK START — do not move';
+  const END   = 'PEPTIDE BLOCK END — do not move';
+  const a = html.indexOf(START), b = html.indexOf(END);
+  if (a < 0 || b < 0) { bad('PEP: sentinels missing — cannot check for swallowed errors'); return; }
+  const blk = phxStripComments(html.slice(a, b));
+  // Empty PROMISE handlers only. try/catch(_e){} around DOM and localStorage is
+  // legitimate and deliberately not matched.
+  const swallows = blk.match(/\.(?:then|catch)\(\s*function\s*\([^)]*\)\s*\{\s*\}\s*\)/g) || [];
+  swallows.length === 0
+    ? ok('PEP: no empty promise handlers in the peptide block')
+    : bad(`PEP: ${swallows.length} swallowed promise result(s) — ${[...new Set(swallows)].join(' , ')}. CLAUDE.md rule 8: keepalive and pagehide paths included.`);
 })();
 
 // Diagnostic summary must be counts only — no field that could hold a value.

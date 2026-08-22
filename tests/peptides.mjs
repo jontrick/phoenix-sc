@@ -1883,6 +1883,70 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── ASSUMED — a guess must not look like a measurement (v4.9.245) ──────────
+  // The root cause behind the .236 corrections rather than the six wrong
+  // numbers. _pepRecon has always known whether a concentration came from a
+  // vial Jon confirmed or from a library default, and every display printed the
+  // resulting unit count identically. That is why wrong defaults could be
+  // DANGEROUS rather than merely wrong: nothing said the figure rested on an
+  // assumption about his vial, on the one number that goes into a syringe.
+  //
+  // It marks rather than hides. Refusing to show a draw would push him to
+  // calculate it himself, which is worse.
+  {
+    const c = () => app._pepCompound('bpc157');
+
+    test('ASSUMED a library-default vial is labelled as assumed', () => {
+      const r = app._pepRecon({}, c());
+      assert.equal(r.source, 'default', 'no vial entered, so the default is in play');
+      assert.ok(app._pepReconAssumed(r), 'flagged');
+      assert.ok(app._pepReconText(r).includes('assumed vial, not confirmed'),
+        'and the caption says so wherever it is printed');
+    });
+
+    test('ASSUMED a vial Jon entered himself is NOT labelled', () => {
+      const r = app._pepRecon({ vialMg: 10, waterMl: 1 }, c());
+      assert.ok(!app._pepReconAssumed(r), 'he confirmed this one');
+      assert.ok(!app._pepReconText(r).includes('assumed'),
+        'a confirmed vial must not be nagged about — a warning on everything is a warning on nothing');
+    });
+
+    test('ASSUMED an override is not labelled assumed either', () => {
+      const r = app._pepRecon({ vialMg: 5, waterMl: 2, actualVialMg: 2 }, c());
+      assert.equal(r.source, 'override', 'received-vial override');
+      assert.ok(!app._pepReconAssumed(r), 'an override is the most confirmed value there is');
+    });
+
+    test('ASSUMED the draw itself is still shown, not withheld', () => {
+      const r = app._pepRecon({}, c());
+      const draw = app._pepDraw(0.5, 'mg', r);
+      assert.ok(draw && draw.units > 0,
+        'the number still appears — withholding it makes him do the maths by hand, ' +
+        'which is worse than showing it with a caveat');
+    });
+
+    test('ASSUMED the Today tile marks an assumed concentration', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId: 'bpc157', dose: 0.5, startDate: daysAgo(5),
+                             freq: 'daily', continuous: true, stockCounted: true, sealedVials: 2 }],
+                  checked: {}, historyConfirmed: true });
+      const html2 = app._pepTodayTileHTML ? app._pepTodayTileHTML(app.pepGetState()) : null;
+      // no dedicated builder exported — assert on the source string instead,
+      // which is what the tile interpolates
+      assert.ok(html.includes('_pepReconAssumed(item.recon) ? " &middot; assumed" : ""'),
+        'the tile appends the marker when the vial is a library guess');
+      assert.ok(html.includes('_pepReconAssumed(item.recon) ? "var(--gold)"'),
+        'and colours it, because grey small print is not a warning');
+    });
+
+    test('ASSUMED the edit-sheet preview says what to do about it', () => {
+      assert.ok(html.includes('Vial size is a library assumption, not something you have confirmed'),
+        'the live preview names the problem');
+      assert.ok(html.includes('Check the label and set it above before drawing to this number'),
+        'and the action, which is the half that makes a warning useful');
+    });
+  }
+
   // ── RECONREF — the app must agree with Jon's own protocol document ─────────
   // Source of truth: section 8 "Ordering & Reconstitution Reference" of
   // Peptide_Protocol_2026_27.pdf, which he supplied on 22 Aug 2026. Every pair

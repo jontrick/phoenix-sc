@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.244';
+var APP_VERSION='4.9.245';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22125,7 +22125,28 @@ function _pepDrawText(draw){
 // "5mg in 2mL = 2.5mg/mL"
 function _pepReconText(recon){
   if(!recon) return "";
-  return _pepNum(recon.vialMg) + "mg in " + _pepNum(recon.waterMl) + "mL = " + _pepNum(recon.conc) + "mg/mL";
+  return _pepNum(recon.vialMg) + "mg in " + _pepNum(recon.waterMl) + "mL = " + _pepNum(recon.conc) + "mg/mL"
+    + (recon.source === "default" ? " &middot; assumed vial, not confirmed" : "");
+}
+
+// v4.9.245: the root cause behind the .236 recon corrections, rather than the
+// six wrong numbers themselves.
+//
+// _pepRecon has always known whether a concentration came from a vial Jon
+// physically confirmed or from a library default — it returns source as
+// "override" / "planned" / "default". Every display then printed the resulting
+// unit count identically. A guess and a measurement looked the same on the one
+// number in this domain that goes into a syringe.
+//
+// That is why six wrong defaults were able to be dangerous rather than merely
+// wrong: nothing on screen said "this figure rests on an assumption about your
+// vial". Correcting the numbers fixed the instance. This fixes the class.
+//
+// It marks rather than hides. Refusing to show a draw would push him to
+// calculate it himself, which is worse. The unit count still appears; it just
+// stops claiming a confidence it does not have.
+function _pepReconAssumed(recon){
+  return !!(recon && recon.source === "default");
 }
 
 // ── State management ──────────────────────────────────────────────────────
@@ -23180,7 +23201,7 @@ function pepRenderTodayTile(){
     r += "</div>";
     r += "<div style=\"text-align:right;flex-shrink:0;\">";
     r += "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;line-height:1.1;\">" + (item.draw ? _pepDrawText(item.draw) : "—") + "</div>";
-    r += "<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">" + _pepFmtDose(item.dose, item.doseUnit) + (item.recon ? " &middot; " + _pepNum(item.recon.conc) + "mg/mL" : " &middot; set recon") + "</div>";
+    r += "<div style=\"font-size:10px;color:" + (_pepReconAssumed(item.recon) ? "var(--gold)" : "var(--text3)") + ";margin-top:1px;\">" + _pepFmtDose(item.dose, item.doseUnit) + (item.recon ? " &middot; " + _pepNum(item.recon.conc) + "mg/mL" + (_pepReconAssumed(item.recon) ? " &middot; assumed" : "") : " &middot; set recon") + "</div>";
     r += "</div></div>";
     return r;
   }
@@ -23430,7 +23451,8 @@ function pepOpenEditStack(idx, newId){
       "<div style=\"font-family:var(--font-d);font-size:24px;font-weight:900;color:#7B68EE;line-height:1;\">" + _pepDrawText(draw) + "</div>" +
       "<div style=\"font-size:11px;color:var(--text3);margin-top:6px;\">" + _pepFmtDose(dose, unit) + " per dose" + (recon ? " &middot; " + _pepReconText(recon) : "") + "</div>" +
       (draw.units > 100 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Over 100 units - more than one full U-100 syringe. Use less water.</div>" : "") +
-      (draw.units > 0 && draw.units < 3 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Under 3 units - hard to measure accurately. Use more water.</div>" : "");
+      (draw.units > 0 && draw.units < 3 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Under 3 units - hard to measure accurately. Use more water.</div>" : "") +
+      (_pepReconAssumed(recon) ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Vial size is a library assumption, not something you have confirmed. Check the label and set it above before drawing to this number.</div>" : "");
   }
   // Live supply forecast from whatever is currently typed in the sheet.
   function _pepEditStockPreview(){

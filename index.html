@@ -26188,6 +26188,18 @@ async function _phxMorningSave(){
   if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
   // Cache locally first so the UI feels instant even if network is slow.
   try { localStorage.setItem('phoenix_last_weighin', JSON.stringify({date: keys.today, weight_kg: w})); } catch(_e){}
+  // v4.9.214: feed the AUTHORITATIVE weight log. PM ruling 2026-08-18 made
+  // ns.daily[date].weight_kg the source of truth and Training wired
+  // submitWeightCheckin to populate it in .167 — but submitWeightCheckin is
+  // orphaned (its banner is a display:none no-op div at :1732 and nothing calls
+  // it), so nutRecordWeight had NO reachable caller and the log was never
+  // written. Jon could weigh in every morning and his macros would not notice:
+  // _nutCurrentWeight fell through to athlete.bw, frozen at onboarding, so the
+  // .166 drift prompt compared against a weight that never moved. Found by
+  // Nutrition following the orphan sweep one level further than the sweep went.
+  // Unconditional and return ignored by contract — `false` means "nutrition not
+  // set up yet", a normal state, not an error (HANDOFF_NUTRITION).
+  try { if(typeof nutRecordWeight === 'function') nutRecordWeight(w, keys.today); } catch(_e){}
   try {
     if(typeof sb !== 'undefined' && currentSession && currentSession.user){
       var row = {

@@ -1,5 +1,5 @@
 // PM-owned shared plumbing — functional tests.
-export default function ({ test, assert, app, signIn, seed, read }) {
+export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('_phxLocalISO returns the LOCAL calendar day, not UTC', () => {
     // 2026-08-19 04:30 in UTC+10 is 2026-08-18 18:30 UTC. Construct via local components so the
     // assertion holds in any TZ the runner happens to have; the property is "matches local parts".
@@ -178,5 +178,28 @@ export default function ({ test, assert, app, signIn, seed, read }) {
     assert.ok(String(snap.context).includes('_blabSendCloud.keepalive'), 'context names the branch, got ' + snap.context);
     assert.equal(snap.code, '503', 'HTTP status carried as the code, got ' + snap.code);
     assert.ok(snap.payload_shape, 'shape recorded, not the payload');
+  });
+
+  test('ENTRY _phxMorningSave feeds the AUTHORITATIVE weight log', async () => {
+    // The chain was: PM ruled ns.daily[].weight_kg authoritative -> Training wired
+    // submitWeightCheckin to feed it (.167) -> submitWeightCheckin turned out to be
+    // orphaned behind a display:none banner -> nutRecordWeight had no reachable caller
+    // -> Jon could weigh in every morning and his macros never noticed. Three domains
+    // coordinated a contract and hung it off an unreachable function. This drives the
+    // weigh-in Jon ACTUALLY does and asserts the log is populated.
+    signIn('u-weigh');
+    reset(); signIn('u-weigh');
+    seed('phx_nut_v1_u-weigh', { targets: {}, daily: {} });
+    const el = { value: '88.4', style: {}, focus(){}, addEventListener(){} };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'phx-morning-weight' ? el : realGet.call(app.document, id));
+    try {
+      await app._phxMorningSave();
+    } catch (_e) { /* the Supabase/photo tail is stubbed; the local writes are what matter */ }
+    finally { app.document.getElementById = realGet; }
+    const key = app._phxLocalISO();
+    const ns = read('phx_nut_v1_u-weigh');
+    assert.ok(ns && ns.daily && ns.daily[key], 'a nutrition day record exists for today');
+    assert.equal(ns.daily[key].weight_kg, 88.4, 'the authoritative log carries this morning\'s weight');
   });
 }

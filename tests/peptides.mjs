@@ -1550,6 +1550,115 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── AUDIT — the protocol report (v4.9.209) ────────────────────────────────
+  // Jon asked what was planned, what is done, where the gaps are, what cannot
+  // be sourced, and what the forward schedule really is. Two of these cases
+  // exist because the first version of the report was WRONG in ways that would
+  // have misled him: it called a compound with 25 doses "out of stock" because
+  // its reorder date had passed, and it reported 0% adherence for every
+  // compound when the real answer was that no log exists yet.
+  //
+  // Setup is PER CASE. Written at suite-body level it passed alone and failed in
+  // the full run, because the serialised runner executes every body first and a
+  // later block's reset() wiped it. Same trap as the RENDER block.
+  {
+    const aIso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const aAgo = n => aIso(new Date(Date.now() - n*86400000));
+    const aIn  = n => aIso(new Date(Date.now() + n*86400000));
+
+    // Jon's protocol as documented in HANDOFF §12 plus his confirmed Epitalon.
+    // Stock left as he actually has it — uncounted — so the report reflects his
+    // real position rather than a convenient one.
+    const seedAudit = () => {
+      reset(); signIn('jon');
+      const ps = app.pepGetState();
+      ps.settings = {};
+      ps.stacks = [
+        { compoundId:'retatrutide',  dose:6,    startDate: aAgo(50), vialMg:10, waterMl:0.5, sealedVials:0, status:'instock' },
+        { compoundId:'ipamorelin',   dose:0.2,  startDate: aAgo(50), vialMg:5,  waterMl:2,   sealedVials:1, status:'instock' },
+        { compoundId:'cjc1295',      dose:0.15, startDate: aAgo(50), vialMg:5,  waterMl:2,   sealedVials:1, status:'instock' },
+        { compoundId:'bpc_ghkcu_tb', dose:14,   startDate: aAgo(50), vialMg:70, waterMl:2,   sealedVials:0, status:'instock' },
+        { compoundId:'bpc157',       dose:0.5,  startDate: aAgo(50), vialMg:5,  waterMl:2,   sealedVials:2, status:'instock' },
+        { compoundId:'ta1',          dose:1.6,  startDate: aAgo(50), vialMg:5,  waterMl:2,   sealedVials:0, status:'instock' },
+        { compoundId:'nad',          dose:100,  startDate: aAgo(50), vialMg:500,waterMl:5,   sealedVials:1, status:'instock' },
+        { compoundId:'5amq',         dose:0.5,  startDate: aAgo(50), vialMg:5,  waterMl:1,   sealedVials:0, status:'instock' },
+        { compoundId:'epitalon',     dose:5,    startDate: aIn(7),   vialMg:10, waterMl:1,   sealedVials:0, status:'pipeline' },
+        { compoundId:'motsc',        dose:10,   startDate: aIn(30),  vialMg:10, waterMl:0.5, sealedVials:0, status:'pipeline' },
+        { compoundId:'tesamorelin',  dose:1,    startDate: aIn(60),  vialMg:10, waterMl:2,   sealedVials:0, status:'pipeline' },
+        { compoundId:'slu322',       dose:0.5,  startDate: aIn(90),  vialMg:10, waterMl:1,   sealedVials:0, status:'pipeline' },
+      ];
+      app.pepSaveState(ps);
+      return app.pepGetState();
+    };
+
+    test('AUDIT produces a report against the live protocol', () => {
+      const a = app._pepAuditReport(seedAudit());
+      assert.ok(a.compounds > 0, 'compounds audited');
+      assert.ok(app.pepAuditText(app.pepGetState()).length > 200, 'and a text report');
+    });
+
+    test('AUDIT reports an empty dose log as UNKNOWN, not as missed doses', () => {
+      seedAudit();
+      const a = app._pepAuditReport(app.pepGetState());
+      assert.equal(a.historyKnown, false, 'no log');
+      assert.equal(a.findings.poorAdherence.length, 0,
+        'no adherence findings without a log — 0% for everything would report a man running his protocol as fully non-compliant');
+      assert.ok(app.pepAuditText(app.pepGetState()).includes('not evidence that doses were missed'),
+        'and it says so explicitly');
+    });
+
+    test('AUDIT out-of-stock means ZERO, not past-the-reorder-date', () => {
+      seedAudit();
+      const a = app._pepAuditReport(app.pepGetState());
+      const ipa = a.rows.find(r => r.id === 'ipamorelin');
+      assert.ok(ipa.dosesRemaining > 0, 'Ipamorelin has doses left');
+      assert.equal(a.findings.outOfStock.some(r => r.id === 'ipamorelin'), false,
+        'so it is NOT reported as out of stock');
+      assert.ok(a.findings.pastReorder.some(r => r.id === 'ipamorelin'),
+        'it is reported as past the reorder point — a different action');
+    });
+
+    test('AUDIT separates in-transit from needing an order', () => {
+      const ps = seedAudit();
+      const i = ps.stacks.findIndex(st => st.compoundId === 'ta1');
+      ps.stacks[i].onOrder = true;
+      ps.stacks[i].arrivalDate = aIn(5);
+      ps.stacks[i].onOrderVials = 2;
+      app.pepSaveState(ps);
+      const a = app._pepAuditReport(app.pepGetState());
+      assert.ok(a.findings.inTransit.some(r => r.id === 'ta1'), 'counted as in transit');
+      assert.equal(a.findings.outOfStock.some(r => r.id === 'ta1'), false, 'and not also as needing an order');
+    });
+
+    test('AUDIT costs what needs ordering and flags what cannot be sourced', () => {
+      seedAudit();
+      const a = app._pepAuditReport(app.pepGetState());
+      assert.ok(a.estimatedOrderAud > 0, 'a cost is produced');
+      assert.ok(a.findings.unsourceable.some(r => r.id === 'slu322'),
+        'SLU-PP-322 has no catalogue match — source manually or drop');
+    });
+
+    test('AUDIT the card renders on PROTOCOL OVERVIEW before the gate opens', () => {
+      seedAudit();
+      const nodes = {};
+      const mk = id => ({ id, innerHTML:'', style:{}, classList:{add(){},remove(){},contains(){return false;}},
+        appendChild(){}, setAttribute(){}, getAttribute(){return null;}, addEventListener(){},
+        querySelector(){return null;}, querySelectorAll(){return [];} });
+      const real = app.document.getElementById;
+      app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
+      app._pepTab = 'overview';
+      nodes['pep-screen-body'] = mk('pep-screen-body');
+      app.pepRenderScreen();
+      const h = nodes['pep-screen-body'].innerHTML;
+      app.document.getElementById = real;
+
+      assert.ok(h.includes('Protocol Audit'), 'card painted');
+      assert.ok(h.includes('Not ready'), 'states readiness');
+      assert.ok(h.includes('not evidence doses were missed'), 'the honest history line');
+      assert.ok(h.includes('Two things first'), 'the gate is still shown below it');
+    });
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

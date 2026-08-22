@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.208';
+var APP_VERSION='4.9.209';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22307,6 +22307,8 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-counted]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepConfirmCount(parseInt(btn.getAttribute("data-pep-counted"),10)); });
   });
+  var auditCopy = body.querySelector("#pep-audit-copy");
+  if(auditCopy) auditCopy.addEventListener("click", pepCopyAudit);
   var histBtn = body.querySelector("#pep-hist-confirm");
   if(histBtn) histBtn.addEventListener("click", pepConfirmHistory);
   var bloodAdd = body.querySelector("#pep-blood-add");
@@ -23668,11 +23670,195 @@ function _pepReadiness(ps){
   };
 }
 
+// ── Protocol audit (v4.9.209) ─────────────────────────────────────────────
+// Answers the questions Jon asked, from HIS data rather than from the plan:
+// what was intended, what has actually been logged, where the gaps are, what
+// cannot be sourced, and what the forward schedule really looks like given
+// stock and incoming deliveries.
+//
+// Deliberately reports UNKNOWN rather than guessing. Dose history lives in
+// ps.checked, which only exists from the day tick-off shipped — so "no logged
+// doses" means "not recorded here", NOT "never taken". Conflating those would
+// tell him he has missed months of a protocol he has been running.
+function _pepAuditReport(ps){
+  ps = ps || pepGetState();
+  var todayISO = _pepToday();
+  var stacks = (ps.stacks || []).filter(function(st){ return st.status !== "complete"; });
+  var readiness = _pepReadiness(ps);
+
+  // ── what has been logged ──
+  var logged = {}, firstLog = null, lastLog = null, loggedDays = 0;
+  Object.keys(ps.checked || {}).forEach(function(day){
+    var ids = ps.checked[day] || [];
+    if(!ids.length) return;
+    loggedDays++;
+    if(!firstLog || day < firstLog) firstLog = day;
+    if(!lastLog  || day > lastLog)  lastLog  = day;
+    ids.forEach(function(id){ logged[id] = (logged[id] || 0) + 1; });
+  });
+
+  var rows = stacks.map(function(st){
+    var c = _pepCompound(st.compoundId);
+    if(!c) return null;
+    var f  = _pepStockForecast(ps, st);
+    var sf = _pepCycleShortfall(ps, st);
+    var eff = _pepEffectiveVial(st, c);
+    var dose = st.dose != null ? st.dose : c.dose;
+    var tong = _pepTongForStack(st);
+    var started = st.startDate && st.startDate <= todayISO;
+    var takenCount = logged[st.compoundId] || 0;
+
+    // Adherence over the trailing 14 days, from the same engine the ADJUST
+    // review uses, so the two can never disagree.
+    var adh = null;
+    _pepAdherence(ps, 14).forEach(function(a){ if(a.compound === c.name) adh = a; });
+
+    return {
+      id: st.compoundId,
+      name: c.name,
+      category: c.cat,
+      dose: dose,
+      doseLabel: _pepFmtDose(dose, c.doseUnit),
+      freq: st.freq || c.freq,
+      timing: c.timing,
+      startDate: st.startDate || null,
+      started: !!started,
+      status: st.status || "instock",
+      vialMg: eff.mg,
+      vialSource: eff.source,
+      plannedVialMg: eff.planned,
+      dosesPerVial: f && !f.unknown ? f.dosesPerVial : null,
+      sealedVials: parseInt(st.sealedVials, 10) || 0,
+      stockCounted: st.stockCounted === true,
+      dosesRemaining: f && !f.unknown ? f.dosesRemaining : null,
+      depletionDate: f && !f.unknown ? f.depletionDate : null,
+      outOfStock: !!(f && !f.unknown && f.overdue),
+      onOrder: !!(st.onOrder && st.arrivalDate),
+      arrivalDate: st.arrivalDate || null,
+      onOrderVials: parseInt(st.onOrderVials, 10) || 0,
+      gapStart: f && !f.unknown ? f.gapStart : null,
+      resumesOn: f && !f.unknown ? f.resumesOn : null,
+      cycleRequired: sf ? sf.required : null,
+      cycleAvailable: sf ? sf.available : null,
+      cycleShort: sf ? sf.short : null,
+      sufficient: sf ? sf.sufficient : null,
+      sourceable: !!tong,
+      catalogue: tong ? tong.cat : null,
+      unitCost: tong ? tong.aud : null,
+      loggedDoses: takenCount,
+      adherencePct: adh ? adh.adherence_pct : null,
+      reconKnown: !!(f && !f.unknown)
+    };
+  }).filter(Boolean);
+
+  var findings = {
+    notStarted:   rows.filter(function(r){ return !r.started; }),
+    noRecon:      rows.filter(function(r){ return !r.reconKnown; }),
+    uncounted:    rows.filter(function(r){ return r.reconKnown && !r.stockCounted; }),
+    // v4.9.209: "out of stock" must mean ZERO. f.overdue only means the order-by
+    // date has passed, so lumping them together told Jon he was out of
+    // Ipamorelin while he had 25 doses in the fridge. Two different actions:
+    // one is urgent, the other is a reminder.
+    outOfStock:   rows.filter(function(r){ return r.dosesRemaining === 0 && !r.onOrder; }),
+    pastReorder:  rows.filter(function(r){ return r.outOfStock && r.dosesRemaining > 0 && !r.onOrder; }),
+    shortForCycle:rows.filter(function(r){ return r.sufficient === false && !r.onOrder; }),
+    inTransit:    rows.filter(function(r){ return r.onOrder; }),
+    unsourceable: rows.filter(function(r){ return !r.sourceable; }),
+    // Only meaningful once there IS a log. With an empty log every compound
+    // reads 0%, which would report a man who has been running his protocol for
+    // months as entirely non-compliant. Absence of data is not evidence of
+    // failure — the same trap as the dose log above.
+    poorAdherence: loggedDays === 0 ? [] :
+      rows.filter(function(r){ return r.adherencePct != null && r.adherencePct < 70; }),
+    neverLogged:  rows.filter(function(r){ return r.started && r.loggedDoses === 0; })
+  };
+
+  var toOrder = rows.filter(function(r){ return !r.onOrder && r.cycleShort > 0 && r.sourceable; });
+  var orderCost = 0;
+  toOrder.forEach(function(r){
+    if(r.unitCost && r.dosesPerVial) orderCost += r.unitCost * Math.ceil(r.cycleShort / r.dosesPerVial);
+  });
+
+  return {
+    generatedFor: todayISO,
+    ready: readiness,
+    historyKnown: loggedDays > 0,
+    loggedDays: loggedDays,
+    firstLog: firstLog,
+    lastLog: lastLog,
+    historyNote: ps.historyNote || "",
+    compounds: rows.length,
+    rows: rows,
+    findings: findings,
+    toOrder: toOrder,
+    estimatedOrderAud: Math.round(orderCost)
+  };
+}
+
+// Plain-text audit — the same content as the card, for copying out.
+function pepAuditText(ps){
+  var a = _pepAuditReport(ps);
+  var L = [];
+  L.push("PEPTIDE PROTOCOL AUDIT — " + a.generatedFor);
+  L.push("");
+  L.push(a.compounds + " compounds in the forward plan.");
+  L.push(a.ready.ready ? "Readiness: stock counted and history confirmed."
+                       : "Readiness: NOT READY — " + a.ready.counted + "/" + a.ready.countable +
+                         " counted, history " + (a.ready.historyDone ? "confirmed" : "NOT confirmed") + ".");
+  L.push(a.historyKnown
+    ? "Dose log: " + a.loggedDays + " days recorded, " + a.firstLog + " to " + a.lastLog + "."
+    : "Dose log: EMPTY. Nothing has been ticked off in the app, so completion cannot be assessed from data. This is not evidence that doses were missed.");
+  if(a.historyNote) L.push("Jon's note on prior months: " + a.historyNote);
+  L.push("");
+
+  function section(title, list, fmt){
+    if(!list.length) return;
+    L.push(title.toUpperCase());
+    list.forEach(function(r){ L.push("  - " + fmt(r)); });
+    L.push("");
+  }
+  section("Not yet started", a.findings.notStarted, function(r){
+    return r.name + (r.startDate ? " (starts " + r.startDate + ")" : " (no start date set)"); });
+  section("Reconstitution not set — cannot forecast or dose", a.findings.noRecon, function(r){ return r.name; });
+  section("Stock not counted", a.findings.uncounted, function(r){ return r.name; });
+  section("OUT OF STOCK — nothing left, nothing on order", a.findings.outOfStock, function(r){
+    return r.name + " — zero doses"; });
+  section("Past the reorder point (still has stock)", a.findings.pastReorder, function(r){
+    return r.name + " — " + r.dosesRemaining + " doses left, runs out " + (r.depletionDate || "?"); });
+  section("Short for the current cycle", a.findings.shortForCycle, function(r){
+    return r.name + " — needs " + r.cycleRequired + ", has " + r.cycleAvailable +
+           " (short " + r.cycleShort + (r.dosesPerVial ? ", " + Math.ceil(r.cycleShort / r.dosesPerVial) + " vials" : "") + ")"; });
+  section("In transit", a.findings.inTransit, function(r){
+    return r.name + " — " + r.onOrderVials + " vials, arriving " + r.arrivalDate +
+           (r.gapStart ? " (gap from " + r.gapStart + ")" : ""); });
+  section("No catalogue match — source manually or drop", a.findings.unsourceable, function(r){ return r.name; });
+  section("Adherence under 70% (last 14 days)", a.findings.poorAdherence, function(r){
+    return r.name + " — " + r.adherencePct + "%"; });
+  if(!a.historyKnown){
+    L.push("ADHERENCE");
+    L.push("  Not assessed — there is no dose log to assess. Tick doses off on");
+    L.push("  TODAY and this becomes meaningful within a fortnight.");
+    L.push("");
+  }
+
+  if(a.toOrder.length){
+    L.push("TO ORDER");
+    a.toOrder.forEach(function(r){
+      var v = r.dosesPerVial ? Math.ceil(r.cycleShort / r.dosesPerVial) : "?";
+      L.push("  - " + r.name + " x" + v + " " + (r.catalogue || "") +
+             (r.unitCost && r.dosesPerVial ? "  ~$" + (r.unitCost * v) + " AUD" : ""));
+    });
+    L.push("  Estimated: ~$" + a.estimatedOrderAud + " AUD before shipping");
+    L.push("");
+  }
+  return L.join("\n");
+}
+
 // ── PROTOCOL OVERVIEW tab ─────────────────────────────────────────────────
 // Read-only reference: every compound, every week, dose and timing. Gated.
 function _pepTabOverview(ps){
   var r = _pepReadiness(ps);
-  var h = "";
+  var h = _pepAuditCard(ps);
 
   if(!r.ready){
     h += "<div style=\"background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:14px;\">";
@@ -23740,6 +23926,81 @@ function _pepTabOverview(ps){
     });
   });
   return h;
+}
+
+// Audit card — sits at the top of PROTOCOL OVERVIEW, and is deliberately shown
+// BEFORE the readiness gate opens. It is most useful when the protocol is not
+// ready, because it says exactly what is missing.
+function _pepAuditCard(ps){
+  var a = _pepAuditReport(ps);
+  if(!a.compounds) return "";
+  var f = a.findings;
+
+  function line(label, list, colour, detail){
+    if(!list.length) return "";
+    return "<div style=\"display:flex;gap:8px;align-items:flex-start;margin-bottom:7px;\">" +
+      "<span style=\"flex-shrink:0;width:6px;height:6px;border-radius:50%;background:" + colour + ";margin-top:5px;\"></span>" +
+      "<div style=\"flex:1;min-width:0;\">" +
+      "<div style=\"font-size:12px;color:var(--text2);font-weight:700;\">" + label + " &middot; " + list.length + "</div>" +
+      "<div style=\"font-size:11px;color:var(--text3);line-height:1.5;\">" +
+        list.map(function(r){ return _esc(detail ? detail(r) : r.name); }).join(", ") + "</div>" +
+      "</div></div>";
+  }
+
+  var h = "<div style=\"background:var(--bg2);border:1px solid " + (a.ready.ready ? "var(--border)" : "var(--gold)") + ";border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;\">";
+  h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:" + (a.ready.ready ? "var(--text3)" : "var(--gold)") + ";\">Protocol Audit</div>";
+  h += "<div style=\"font-size:10px;color:var(--text3);\">" + _esc(a.generatedFor) + "</div>";
+  h += "</div>";
+
+  h += "<div style=\"font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px;\">" +
+       a.compounds + " compounds in the forward plan. " +
+       (a.ready.ready ? "Stock counted and history confirmed."
+                      : "<strong style=\"color:var(--gold);\">Not ready</strong> — " + a.ready.counted + "/" + a.ready.countable +
+                        " counted, history " + (a.ready.historyDone ? "confirmed" : "not confirmed") + ".") +
+       "</div>";
+
+  // The honest statement about history, first, because every count below is
+  // read in its light.
+  h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);\">" +
+       (a.historyKnown
+         ? a.loggedDays + " days of doses logged, " + _esc(a.firstLog) + " to " + _esc(a.lastLog) + "."
+         : "No dose log yet, so completion cannot be assessed from data. That is not evidence doses were missed — only that the app has not been recording them.") +
+       "</div>";
+
+  h += line("Out of stock, nothing on order", f.outOfStock, "#FF6B6B");
+  h += line("Past the reorder point", f.pastReorder, "var(--gold)", function(r){ return r.name + " (" + r.dosesRemaining + " left)"; });
+  h += line("Short for the current cycle", f.shortForCycle, "var(--gold)", function(r){ return r.name + " (short " + r.cycleShort + ")"; });
+  h += line("In transit", f.inTransit, "#7B68EE", function(r){ return r.name + " (" + r.arrivalDate + ")"; });
+  h += line("Not yet started", f.notStarted, "var(--text3)");
+  h += line("Stock not counted", f.uncounted, "var(--text3)");
+  h += line("Reconstitution not set", f.noRecon, "#FF6B6B");
+  h += line("No catalogue match — source or drop", f.unsourceable, "#FF6B6B");
+  h += line("Adherence under 70%", f.poorAdherence, "var(--gold)", function(r){ return r.name + " (" + r.adherencePct + "%)"; });
+
+  if(a.toOrder.length){
+    h += "<div style=\"margin-top:10px;padding-top:10px;border-top:1px solid var(--border);\">";
+    h += "<div style=\"font-size:12px;color:var(--text2);font-weight:700;margin-bottom:4px;\">To order &middot; ~$" + a.estimatedOrderAud + " AUD</div>";
+    h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.5;\">" +
+         a.toOrder.map(function(r){
+           var v = r.dosesPerVial ? Math.ceil(r.cycleShort / r.dosesPerVial) : "?";
+           return _esc(r.name) + " &times;" + v;
+         }).join(", ") + "</div></div>";
+  }
+
+  h += "<button id=\"pep-audit-copy\" style=\"width:100%;margin-top:12px;padding:10px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Copy full audit</button>";
+  h += "</div>";
+  return h;
+}
+
+function pepCopyAudit(){
+  var txt = pepAuditText(pepGetState());
+  try {
+    navigator.clipboard.writeText(txt).then(function(){
+      var b = document.getElementById("pep-audit-copy");
+      if(b){ b.textContent = "Copied"; setTimeout(function(){ if(b) b.textContent = "Copy full audit"; }, 2000); }
+    });
+  } catch(_e){}
 }
 
 // ── STOCK tab ─────────────────────────────────────────────────────────────

@@ -817,6 +817,41 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   // ── Bodyweight → targets ──────────────────────────────────────────────────
 
+  // v4.9.212: the weigh-in Jon actually does each morning (_phxMorningSave) writes
+  // Supabase daily_weigh_ins and caches it locally — it does NOT call
+  // nutRecordWeight, whose only caller (submitWeightCheckin) is orphaned behind a
+  // force-hidden banner. Without reading that cache, every weight-derived number
+  // here runs off athlete.bw, which the morning save does not touch either.
+  test('WEIGHT the live morning weigh-in reaches the targets', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    app.athlete = { id: UID, bw: 95 };                         // stale onboarding weight
+    seed('phoenix_last_weighin', { date: '2026-08-22', weight_kg: 88.4 });
+    const cur = app._nutCurrentWeight();
+    assert.equal(cur.kg, 88.4, 'this morning, not the profile snapshot');
+    assert.equal(cur.source, 'check-in', 'and it knows where it came from');
+  });
+
+  test('WEIGHT the drift prompt fires off the live weigh-in', () => {
+    setUp(90);                                                  // targets built at 90kg
+    seed('phoenix_last_weighin', { date: '2026-08-22', weight_kg: 85.5 });
+    app._nutTab = 'today';
+    const d = dom();
+    app.nutRenderScreen();
+    const html = d.html('nut-screen-body');
+    assert.ok(html.indexOf('Targets out of date') >= 0, 'the banner appears');
+    assert.ok(html.indexOf('85.5') >= 0, 'showing the weight he actually logged');
+    app._nutTab = 'today';
+  });
+
+  test('WEIGHT no live weigh-in still falls back rather than breaking', () => {
+    start();
+    app.nutSaveState({ setup_done: true, daily: {} });
+    app.athlete = { id: UID, bw: 88 };
+    seed('phoenix_last_weighin', null);
+    assert.equal(app._nutCurrentWeight().kg, 88, 'profile weight still used when there is nothing newer');
+  });
+
   test('the latest weigh-in wins over an undated profile weight', () => {
     start();
     app.nutSaveState({ setup_done: true, daily: {} });

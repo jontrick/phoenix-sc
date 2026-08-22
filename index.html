@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.212';
+var APP_VERSION='4.9.213';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20336,6 +20336,20 @@ function _nutWeekLabel(){
 // submitWeightCheckin's, and it is Training's banner).
 function _nutCurrentWeight(){
   var best = null;   // {kg, date, source}
+  // v4.9.213: read the LIVE daily weigh-in first. nutRecordWeight is called only
+  // from submitWeightCheckin, which is orphaned — its banner is force-hidden and
+  // nothing references the function. The weigh-in Jon actually does every morning
+  // is _phxMorningSave, which writes Supabase daily_weigh_ins and caches
+  // {date, weight_kg} here. So ns.daily[].weight_kg — the record ruled
+  // authoritative — has had NO live writer, and every weight-derived number in
+  // this domain has been running off athlete.bw, which that save does not touch
+  // either. This reads the cache the live path does write, so the drift prompt
+  // and target recalculation follow his real morning weight.
+  try {
+    var lw = JSON.parse(localStorage.getItem('phoenix_last_weighin') || 'null');
+    var lwKg = lw && parseFloat(lw.weight_kg);
+    if(lwKg > 0) best = { kg: lwKg, date: String(lw.date || '').slice(0, 10), source: 'check-in' };
+  } catch(_e0){}
   try {
     var ns = nutGetState();
     var daily = (ns && ns.daily) ? ns.daily : {};

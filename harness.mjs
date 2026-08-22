@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.212'", 'version is 4.9.212');
+has("var APP_VERSION='4.9.213'", 'version is 4.9.213');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -621,6 +621,8 @@ hasCode('function _nutSaveView(', 'BUG2: the view inside the screen is persisted
 hasCode('function _nutRestoreView(', 'BUG2: and restored');
 hasCode("if(typeof _nutRestoreView==='function') _nutRestoreView();", 'BUG2: navTo restores it instead of forcing today');
 hasNotCode("if(tab==='nutrition'){ _nutTab='today';", 'BUG2: the unconditional reset to today is gone');
+
+hasCode("localStorage.getItem('phoenix_last_weighin')", 'WEIGHT: targets read the LIVE morning weigh-in, not just athlete.bw');
 
 // ── Water drink sizes (v4.9.199) ───────────────────────────────────────────
 hasCode('var _NUT_DRINK_SIZES = [250, 330, 500, 1000, 1500];', 'WATER: the five sizes Jon asked for');

@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.243';
+var APP_VERSION='4.9.244';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -16709,7 +16709,13 @@ sb.auth.onAuthStateChange(function(event,session){
       // distinguish "session lost" from "everything is fine".
       console.error('[PHX] '+event+' fired with EMPTY session payload — currentSession unchanged');
       if(typeof _phxRecordWriteError === 'function'){
-        _phxRecordWriteError('onAuthStateChange.emptySession.'+event, {message:event+' fired with no session', code:'AUTH_EVENT_NULL_SESSION'}, {event:event});
+        // v4.9.244 [PM]: context was 'onAuthStateChange.emptySession.'+event — COMPUTED, so it
+        // was invisible to the uniqueness guard, which then reported a confident distinct-count
+        // that silently omitted it. The event is already carried in the message, so a literal
+        // loses nothing; and the three events share one remedy (the session is gone, sign in
+        // again), so they are interchangeable and safe to coalesce. Split contexts by REMEDY,
+        // not by which branch produced them — Peptides, .243.
+        _phxRecordWriteError('onAuthStateChange.emptySession', {message:event+' fired with no session', code:'AUTH_EVENT_NULL_SESSION'}, {event:event});
       }
     }
   } else if(event === 'SIGNED_OUT'){

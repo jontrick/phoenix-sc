@@ -227,22 +227,46 @@ function phxStripComments(s){
     : bad(`RULE 8: payload identifier not in scope — the recorder would THROW when the write fails: ${offenders.join(' | ')}`);
 }
 
-// ── RULE 8: CONTEXT NAMES MUST BE DISTINCT (PM, v4.9.242) ─────────────────────
+// ── RULE 8: CONTEXT NAMES MUST BE DISTINCT (PM, v4.9.242, hardened v4.9.244) ──
 // A HAZARD v4.9.240's COALESCING CREATED RATHER THAN SOLVED, predicted by Training and
-// already live when it was: two call sites sharing a context string now merge into ONE
-// ring slot, so each failure hides the other and the merge is invisible.
-// The live instance was "pep mirror keepalive" on both branches of the peptide keepalive
-// mirror — a 4xx that RESOLVES and a network REJECT, which Peptides split deliberately in
-// .228 precisely because the distinction is what caught a missing column. The collision was
-// harmless before coalescing; the PM's change made it harmful without touching that code.
-// Applies app-wide, not per domain — the ring is shared, so a collision between two
+// already live when it was: two call sites sharing a context string merge into ONE ring
+// slot, so each failure hides the other and the merge is invisible. The live instance was
+// "pep mirror keepalive" on both branches of the peptide keepalive mirror — a 4xx that
+// RESOLVES and a network REJECT, which Peptides split deliberately in .228 because that
+// distinction caught a column missing for 12 versions. Harmless before coalescing.
+//
+// Applies APP-WIDE, not per domain — the ring is shared, so a collision between two
 // DOMAINS would be worse and no domain-local check could see it.
+//
+// v4.9.244 HARDENING, found by Peptides by TRIPPING IT: the first version matched only
+// `_phxRecordWriteError("<literal>`, so a call passing a COMPUTED context was invisible —
+// and the guard still printed a confident "all 80 distinct" that silently omitted those
+// sites. NOT A VACUOUS PASS: A CONFIDENT WRONG ANSWER, which is worse, because the count
+// looks like coverage. Skipping is what makes the number a lie. It now enumerates EVERY
+// call site and FAILS on a non-literal rather than passing over it.
 {
   const src = phxStripComments(html);
+  const re = /_phxRecordWriteError\s*\(/g;
   const seen = new Map();
-  const re = /_phxRecordWriteError\(\s*["']([^"']+)["']\s*,/g;
-  let m;
-  while ((m = re.exec(src))) seen.set(m[1], (seen.get(m[1]) || 0) + 1);
+  const nonLiteral = [];
+  let m, sites = 0;
+  while ((m = re.exec(src))) {
+    const before = src.slice(Math.max(0, m.index - 24), m.index);
+    if (/function\s+$/.test(before) || /typeof\s+$/.test(before)) continue;   // definition / guard
+    sites++;
+    const after = src.slice(m.index + m[0].length).replace(/^\s*/, '');
+    const lit = after.match(/^(["'])([^"']*)\1\s*,/);
+    if (!lit) {
+      nonLiteral.push(`line ${src.slice(0, m.index).split('\n').length}: ${after.slice(0, 40).replace(/\s+/g, ' ')}`);
+      continue;
+    }
+    seen.set(lit[2], (seen.get(lit[2]) || 0) + 1);
+  }
+
+  nonLiteral.length === 0
+    ? ok(`RULE 8: all ${sites} write-error call sites pass a literal context — none can hide from the uniqueness check`)
+    : bad(`RULE 8: _phxRecordWriteError called with a COMPUTED context — it cannot be checked for collisions, and the distinct-count below would silently omit it: ${nonLiteral.join(' | ')}`);
+
   const dups = [...seen.entries()].filter(([, n]) => n > 1);
   dups.length === 0
     ? ok(`RULE 8: all ${seen.size} write-error contexts are distinct — none can silently merge in the ring`)
@@ -308,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.243'", 'version is 4.9.243');
+has("var APP_VERSION='4.9.244'", 'version is 4.9.244');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

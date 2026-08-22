@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.249';
+var APP_VERSION='4.9.250';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21954,6 +21954,22 @@ var _PEP_TONG = [
 //   units to draw         = mL * 100
 // Per-stack vialMg / waterMl (set in the edit sheet) always override these.
 var _PEP_RECON = {
+  // SOURCE, AND ITS LIMITS (v4.9.250). The block below once called the PDF
+  // authoritative for reconstitution. It is not. It has been wrong twice, both
+  // caught by Jon rather than by me:
+  //
+  //   Retatrutide RT30 "+ 5mL BAC" — the vial does not physically hold 5mL, so
+  //     every unit figure derived from it was unachievable. He uses 2.5mL.
+  //   BPC-157 "10mg + 1mL" — he reconstitutes in 2mL. Taking the PDF over
+  //     reality produced 5u for a 0.5mg dose when the answer is 10u. A HALF
+  //     DOSE, shipped from .236 to .250.
+  //
+  // The document records intent; the vial in his fridge is the fact. A value
+  // marked CONFIRMED BY JON must never be "corrected" back toward the PDF.
+  // Everything else is a starting assumption, and _pepReconAssumed marks it as
+  // one on screen rather than letting it pass as measured.
+  //
+  // Original note follows.
   // AUTHORITATIVE SOURCE: section 8 "Ordering & Reconstitution Reference" of
   // Peptide_Protocol_2026_27.pdf, Jon's own compiled protocol. v4.9.239
   // corrected SIX entries that disagreed with it. Every one of them made the
@@ -21974,7 +21990,7 @@ var _PEP_RECON = {
   retatrutide:{vialMg:10,  waterMl:0.5},
   ipamorelin: {vialMg:10,  waterMl:2},
   cjc1295:    {vialMg:10,  waterMl:2},
-  bpc157:     {vialMg:10,  waterMl:1},
+  bpc157:     {vialMg:10,  waterMl:2},   // v4.9.250: CONFIRMED BY JON. Was 1mL from the PDF -> 5u, a HALF dose.
   ta1:        {vialMg:10,  waterMl:2},
   motsc:      {vialMg:10,  waterMl:0.5},
   klow:       {vialMg:80,  waterMl:2},

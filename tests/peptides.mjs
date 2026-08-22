@@ -2188,6 +2188,22 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // correct throughout — all 14 entries below check out against their own
   // stated concentration. The app was the thing that was wrong.
   {
+    // v4.9.250 — WHAT THIS BLOCK IS PINNED TO, AND WHY THAT CHANGED.
+    //
+    // These cases were written against section 8 of the PDF and called it the
+    // source of truth. Jon has since corrected it twice: the RT30 "+5mL" is
+    // more than the vial holds, and BPC-157 is reconstituted in 2mL, not 1mL.
+    // The BPC entry here was enforcing 5u for a 0.5mg dose. The real answer is
+    // 10u. My test was holding a HALF DOSE in place.
+    //
+    // That is the part worth keeping: a test pinned to an unverified source
+    // does not make the app correct, it makes the error permanent and harder to
+    // question, because now it has a green tick defending it. Pinning is only
+    // as good as what you pin TO.
+    //
+    // Entries marked CONFIRMED BY JON come from his actual vials and outrank
+    // the document. The rest are still PDF-derived and remain unconfirmed — the
+    // app marks those as assumed on screen rather than pretending otherwise.
     // compound, dose, unit, vialMg, waterMl, units printed in the protocol
     const REF = [
       ['retatrutide',   6,    'mg', 10,  0.5,  30],
@@ -2195,7 +2211,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       ['ipamorelin',    0.3,  'mg', 10,  2,     6],
       ['cjc1295',       0.15, 'mg', 10,  2,     3],
       ['cjc1295',       0.2,  'mg', 10,  2,     4],
-      ['bpc157',        0.5,  'mg', 10,  1,     5],
+      ['bpc157',        0.5,  'mg', 10,  2,    10],   // CONFIRMED BY JON, not the PDF
       ['tb500',         2,    'mg', 10,  2,    40],
       ['tb500',         1.25, 'mg', 10,  2,    25],
       ['ta1',           1.6,  'mg', 10,  2,    32],
@@ -2227,7 +2243,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // The defaults are what a compound added WITHOUT a vial size inherits, and
     // they go straight to the Today tile. Six of these were wrong until .236.
     const DEFAULTS = [
-      ['ipamorelin', 10, 2], ['cjc1295', 10, 2], ['bpc157', 10, 1],
+      ['ipamorelin', 10, 2], ['cjc1295', 10, 2], ['bpc157', 10, 2],   // bpc CONFIRMED BY JON
       ['ta1', 10, 2], ['ghkcu', 50, 2], ['nad', 500, 2],
       ['retatrutide', 10, 0.5], ['motsc', 10, 0.5], ['epitalon', 10, 1],
       ['tb500', 10, 2], ['tesamorelin', 10, 2],

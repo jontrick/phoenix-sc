@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.233';
+var APP_VERSION='4.9.234';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21845,15 +21845,33 @@ function _pepCycleShortfall(ps, stack){
   // a continuous one there is no end, so fall back to the coverage window.
   var set = _pepSettings(ps);
   var cap = (set.coverageMonths != null ? set.coverageMonths : 6) * 30;
-  var sawGap = false;
-  for(var i = 0; i < horizon; i++){
+  // v4.9.234: this used to stop at the FIRST non-dosing day after any dose.
+  // That is right for an off-cycle block and completely wrong for a schedule
+  // with rest days built in — which is most of them. Weekly stopped at 1 dose,
+  // Wed/Sat at 1, EOD at 1, six-days-a-week at 2. Only a strictly daily
+  // compound ever reached the coverage window.
+  //
+  // The consequence was not cosmetic: "required" feeds the shortfall and the
+  // ORDER list, so every intermittent compound reported needing about one vial
+  // for the next six months. It UNDER-ordered — Jon would have run out mid-
+  // cycle believing he was covered, which is the worst direction for this
+  // particular number to be wrong in.
+  //
+  // A rest day and an off-cycle block are both gaps; what separates them is
+  // length. Nothing in this protocol rests a full week mid-cycle, and an
+  // off-block is weeks. So a gap only ends the cycle once it reaches OFF_GAP
+  // consecutive days.
+  var OFF_GAP = 7;
+  var gapRun = 0, stop = false;
+  for(var i = 0; i < horizon && !stop; i++){
     var day = new Date(baseMs + i * 86400000);
     var due = _pepStackDueOn(stack, c, day) !== null;
     if(due){
-      if(sawGap) break;                       // next cycle has begun — stop
+      gapRun = 0;
       required++; lastDue = _pepISO(day);
     } else if(required > 0){
-      sawGap = true;                          // first non-dosing day after dosing
+      gapRun++;
+      if(gapRun >= OFF_GAP) stop = true;      // a real off-block, not a rest day
     }
     if(i >= cap && !stack.cycleWeeks) break;  // continuous: cap at the window
   }

@@ -1873,6 +1873,68 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── CYCLEREQ — a rest day is not the end of a cycle (v4.9.234) ─────────────
+  // _pepCycleShortfall stopped counting at the FIRST non-dosing day after any
+  // dose. Correct for an off-cycle block, wrong for every schedule with rest
+  // days built in — which is most of them. Weekly counted 1 dose, Wed/Sat 1,
+  // EOD 1, six-days-a-week 2. Only a strictly daily compound reached the
+  // coverage window.
+  //
+  // Not cosmetic: `required` feeds the shortfall and the ORDER list, so every
+  // intermittent compound reported needing about one vial for six months. It
+  // UNDER-ordered — Jon runs out mid-cycle believing he is covered, which is
+  // the worst direction for this number to be wrong in. Found by running the
+  // audit engine against his real protocol to answer "just show me the audit",
+  // not by a test.
+  {
+    const cycSetUp = (freq, extra) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId: 'bpc157', dose: 0.5, vialMg: 10, waterMl: 2,
+        startDate: daysAgo(30), freq, continuous: true,
+        sealedVials: 0, openDosesUsed: 0, stockCounted: true,
+      }, extra || {})] });
+      const ps = app.pepGetState();
+      return app._pepCycleShortfall(ps, ps.stacks[0]);
+    };
+
+    test('CYCLEREQ a weekly compound needs a cycle of doses, not one', () => {
+      const r = cycSetUp('weekly');
+      assert.ok(r && r.required >= 20,
+        `weekly over a six-month window is ~26 doses — got ${r && r.required}. ` +
+        'Stopping at the first rest day made this 1 and under-ordered by 25 vials');
+    });
+
+    test('CYCLEREQ a twice-weekly compound counts both days every week', () => {
+      const r = cycSetUp('2x/week');
+      assert.ok(r && r.required >= 40, `~52 expected, got ${r && r.required}`);
+    });
+
+    test('CYCLEREQ every-other-day counts half the window', () => {
+      const r = cycSetUp('eod');
+      assert.ok(r && r.required >= 80 && r.required <= 95, `~90 expected, got ${r && r.required}`);
+    });
+
+    test('CYCLEREQ six-days-a-week is not truncated by its rest day', () => {
+      const r = cycSetUp('6 day');
+      assert.ok(r && r.required >= 140, `~155 expected, got ${r && r.required}`);
+    });
+
+    test('CYCLEREQ daily still reaches the coverage window', () => {
+      const r = cycSetUp('daily');
+      assert.ok(r && r.required >= 175, `~181 expected, got ${r && r.required}`);
+    });
+
+    // The behaviour the old code was reaching for, kept: a genuine off-block
+    // DOES end the cycle. Three weeks on, two weeks off — the two-week gap must
+    // stop the count, or a cycled compound gets ordered as if continuous.
+    test('CYCLEREQ a real off-cycle block still ends the count', () => {
+      const r = cycSetUp('daily', { cycleWeeks: 3, offWeeks: 2, continuous: false });
+      assert.ok(r && r.required > 0 && r.required <= 22,
+        `three weeks of daily doses then an off-block — got ${r && r.required}`);
+    });
+  }
+
   // ── COPYAUDIT — the button I sent Jon to four times without ever running it ─
   // He asked "where is the audit?". I had told him to tap Copy full audit
   // repeatedly and never once driven the handler. It called

@@ -1883,6 +1883,111 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── TITRATE — stock must know what he CONSUMED, not what he doses now ──────
+  // Jon titrates by hand and asked for the stock to be smart enough to know
+  // what he is consuming. It was not. openDosesUsed was a COUNT, and every
+  // downstream figure re-derived milligrams from it using the CURRENT dose — so
+  // changing a dose silently rewrote his history.
+  //
+  // His own NAD+ is the worked case and the reason this exists.
+  {
+    const nad = (over) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId: 'nad', dose: 50, vialMg: 500, waterMl: 2,
+        startDate: daysAgo(10), freq: '3x/week Mon/Wed/Fri',
+        sealedVials: 9, openedDate: daysAgo(4), stockCounted: true,
+      }, over || {})] });
+      return app.pepGetState();
+    };
+
+    test('TITRATE three 50mg doses leave 350mg in a 500mg vial', () => {
+      const ps = nad();
+      const st = ps.stacks[0];
+      const c = app._pepCompound('nad');
+      // tick three doses through the real consumption path
+      app._pepConsumeDose(ps, 'nad', 1);
+      app._pepConsumeDose(ps, 'nad', 1);
+      app._pepConsumeDose(ps, 'nad', 1);
+      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 150, '150mg drawn');
+      assert.equal(app._pepOpenDosesLeft(ps.stacks[0], c), 7, '7 more doses at 50mg');
+    });
+
+    test('TITRATE 50mg -> 100mg keeps the milligrams and halves the doses', () => {
+      const ps = nad();
+      const c = app._pepCompound('nad');
+      app._pepConsumeDose(ps, 'nad', 1);
+      app._pepConsumeDose(ps, 'nad', 1);
+      app._pepConsumeDose(ps, 'nad', 1);
+      // week 2: he raises the dose by hand
+      ps.stacks[0].dose = 100;
+      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 150,
+        'still 150mg consumed — the past does not change because the future did');
+      assert.equal(app._pepOpenDosesLeft(ps.stacks[0], c), 3,
+        '350mg left is 3 whole doses at 100mg. Counting doses instead would have ' +
+        'read those 3 ticks as 300mg and reported 2, quietly losing 150mg of NAD+');
+    });
+
+    test('TITRATE 100mg -> 50mg does not invent stock', () => {
+      const ps = nad({ dose: 100 });
+      const c = app._pepCompound('nad');
+      app._pepConsumeDose(ps, 'nad', 1);
+      app._pepConsumeDose(ps, 'nad', 1);   // 200mg gone
+      ps.stacks[0].dose = 50;
+      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 200, '200mg really gone');
+      assert.equal(app._pepOpenDosesLeft(ps.stacks[0], c), 6,
+        '300mg left = 6 doses at 50mg. A dose count would have said 2 used of 10, ' +
+        'claiming 8 doses that are not in the vial — the more dangerous direction');
+    });
+
+    test('TITRATE a legacy dose count migrates to an amount on load', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'nad', dose:50, vialMg:500, waterMl:2,
+        startDate: daysAgo(10), openedDate: daysAgo(3), openDosesUsed: 3, sealedVials: 9 }] });
+      const ps = app.pepGetState();
+      assert.equal(ps.stacks[0].openUsedAmt, 150,
+        'converted once, on load, at the dose those doses were taken at');
+    });
+
+    test('TITRATE the vial closes when the next dose will not come out of it', () => {
+      const ps = nad({ dose: 100, vialMg: 500 });
+      const c = app._pepCompound('nad');
+      for (let i = 0; i < 5; i++) app._pepConsumeDose(ps, 'nad', 1);
+      assert.equal(ps.stacks[0].openedDate, null, 'five 100mg doses finish a 500mg vial');
+      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 0, 'and the counter resets for the next');
+    });
+
+    test('TITRATE an awkward remainder is waste, not a phantom dose', () => {
+      // 500mg vial, 300mg dose: two doses fit, 200mg is stranded.
+      const ps = nad({ dose: 300 });
+      const c = app._pepCompound('nad');
+      app._pepConsumeDose(ps, 'nad', 1);
+      assert.equal(app._pepOpenDosesLeft(ps.stacks[0], c), 0,
+        '200mg is left but it is not a 300mg dose — real waste in the vial, and ' +
+        'rounding it up would put him a dose short on the day he needs it');
+    });
+
+    test('TITRATE undo returns the amount, not a generic dose', () => {
+      const ps = nad();
+      const c = app._pepCompound('nad');
+      app._pepConsumeDose(ps, 'nad', 1);
+      app._pepConsumeDose(ps, 'nad', 1);
+      app._pepConsumeDose(ps, 'nad', -1);
+      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 50, 'one 50mg dose handed back');
+    });
+
+    test('TITRATE a unit-dosed blend tracks units, having no mg to track', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'klow', dose:14, vialMg:80, waterMl:2,
+        startDate: daysAgo(5), openedDate: daysAgo(2), sealedVials: 1 }] });
+      const ps = app.pepGetState();
+      const c = app._pepCompound('klow');
+      app._pepConsumeDose(ps, 'klow', 1);
+      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 14,
+        '14 syringe units out of the 200 in the vial — same principle, the compound own unit');
+    });
+  }
+
   // ── IMPORT — applying a protocol without retyping it on a phone (v4.9.246) ─
   // Jon's protocol changed and the app had no way to load one. Eight compounds
   // through the edit sheet on a phone is the reason it would not get done.

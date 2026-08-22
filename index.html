@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.248';
+var APP_VERSION='4.9.249';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22185,7 +22185,20 @@ function pepGetState(){
     if(!uid) return {stacks:[], checked:{}, cart:[]};
     var raw = localStorage.getItem("peptide_v1_" + uid);
     if(!raw) return {stacks:[], checked:{}, cart:[]};
-    return JSON.parse(raw);
+    var st = JSON.parse(raw);
+    // v4.9.249: convert a legacy dose COUNT into the amount actually drawn,
+    // once, on load — before any dose change can make the conversion wrong.
+    // Deliberately does NOT save: pepGetState is called on every render and a
+    // write here would fire a cloud mirror on every paint. The next real save
+    // persists it, and until then the value is recomputed identically.
+    (st.stacks || []).forEach(function(stack){
+      if(stack && stack.openUsedAmt == null && stack.openDosesUsed != null){
+        var c = _pepCompound(stack.compoundId);
+        var d = _pepDoseSize(stack, c);
+        if(d) stack.openUsedAmt = (parseInt(stack.openDosesUsed, 10) || 0) * d;
+      }
+    });
+    return st;
   } catch(_e){ return {stacks:[], checked:{}, cart:[]}; }
 }
 
@@ -22624,6 +22637,63 @@ function _pepAddDays(iso, n){
 
 // How many doses one vial yields at this stack's dose and reconstitution.
 // Unit-dosed blends are measured against syringe volume, not mg.
+// ── Consumption is measured, not counted (v4.9.249) ──────────────────────────
+// Jon titrates by hand and asked for the stock to know what he is actually
+// consuming. It did not. openDosesUsed was a COUNT of doses, and everything
+// downstream re-derived milligrams from it using the CURRENT dose — so the
+// moment he changed a dose, his history was silently rewritten.
+//
+// Worked example, his own NAD+: three doses drawn at 50mg from a 500mg vial.
+// openDosesUsed = 3, perVial = 10, so 7 doses / 350mg remain. Correct. He then
+// titrates to 100mg on week 2. perVial becomes 5, and those same 3 doses now
+// read as 300mg consumed — 200mg left, 2 doses. He has really used 150mg and
+// has 350mg. The app quietly lost 1.5 doses. Titrate DOWN and it invents stock
+// that is not in the vial, which is the worse direction.
+//
+// A count of doses is only meaningful beside the dose it was counted at. So the
+// vial now tracks the QUANTITY drawn out of it, which does not change meaning
+// when the next dose does.
+//
+// Unit-dosed blends have no mg basis, so their capacity is the syringe units in
+// the vial (waterMl x 100) and they are tracked in units. Same principle, same
+// field, different unit — the compound's own.
+function _pepDoseSize(stack, c){
+  var dose = (stack && stack.dose != null) ? parseFloat(stack.dose) : (c && c.dose);
+  return (!dose || dose <= 0) ? 0 : dose;
+}
+
+function _pepVialCapacity(stack, c){
+  var recon = _pepRecon(stack, c);
+  if(!recon) return 0;
+  return (c && c.doseUnit === "units") ? recon.waterMl * 100 : recon.vialMg;
+}
+
+// The amount already drawn from the OPEN vial, in the compound's own unit.
+// Migrates a legacy openDosesUsed count on first read. The migration multiplies
+// by the CURRENT dose, which is exact only while the dose has not changed since
+// those doses were taken — so pepGetState stamps it once, on load, rather than
+// re-deriving it later when that assumption may no longer hold. State that was
+// already titrated before this shipped cannot be recovered; it is converted on
+// its stated dose and is as close as the data allows.
+function _pepOpenUsed(stack, c){
+  if(stack && stack.openUsedAmt != null && !isNaN(parseFloat(stack.openUsedAmt))){
+    return parseFloat(stack.openUsedAmt);
+  }
+  var count = parseInt(stack && stack.openDosesUsed, 10) || 0;
+  return count * _pepDoseSize(stack, c);
+}
+
+// Whole doses still available from the open vial at the CURRENT dose. This is
+// the number that must move when he titrates: the same 350mg is 7 doses at 50mg
+// and 3.5 at 100mg, and both are true.
+function _pepOpenDosesLeft(stack, c){
+  if(!stack || !stack.openedDate) return 0;
+  var cap = _pepVialCapacity(stack, c);
+  var dose = _pepDoseSize(stack, c);
+  if(!cap || !dose) return 0;
+  return Math.max(0, Math.floor((cap - _pepOpenUsed(stack, c)) / dose));
+}
+
 function _pepDosesPerVial(stack, c){
   var dose = stack.dose != null ? stack.dose : (c && c.dose);
   var recon = _pepRecon(stack, c);
@@ -22661,9 +22731,10 @@ function _pepSimulate(ps, stack, opts){
     var _am = Date.parse(stack.arrivalDate + "T12:00:00");
     if(!isNaN(_am)) incomingMs = _am; else incomingVials = 0;
   }
-  var used   = parseInt(stack.openDosesUsed, 10) || 0;
+  // v4.9.249: doses left in the open vial come from the amount REMAINING in it
+  // at the current dose, not from perVial minus a stale count.
   var hasOpen = !!stack.openedDate;
-  var openLeft = hasOpen ? Math.max(0, perVial - used) : 0;
+  var openLeft = hasOpen ? _pepOpenDosesLeft(stack, c) : 0;
   var openExpiryMs = hasOpen ? new Date(stack.openedDate + "T12:00:00").getTime() + set.shelfLifeDays * 86400000 : null;
 
   var todayISO = _pepToday();
@@ -23138,7 +23209,12 @@ function _pepConsumeDose(ps, compoundId, direction){
   var perVial = _pepDosesPerVial(stack, c);
   if(!perVial) return;   // no reconstitution set — nothing to count against
 
-  var used = parseInt(stack.openDosesUsed, 10) || 0;
+  // v4.9.249: works in the amount drawn, not a count of doses, so a later
+  // titration cannot rewrite what he has already taken out of the vial.
+  var cap  = _pepVialCapacity(stack, c);
+  var size = _pepDoseSize(stack, c);
+  if(!cap || !size) return;
+  var used = _pepOpenUsed(stack, c);
   var sealed = parseInt(stack.sealedVials, 10) || 0;
 
   if(direction > 0){
@@ -23147,22 +23223,26 @@ function _pepConsumeDose(ps, compoundId, direction){
       if(sealed <= 0) return;             // nothing to consume; leave stock alone
       sealed--; stack.openedDate = _pepToday(); used = 0;
     }
-    used++;
-    if(used >= perVial){ used = 0; stack.openedDate = null; }   // vial finished
+    used += size;
+    // Finished when the next dose could not be drawn from what is left. At a
+    // changed dose the remainder may not divide evenly; the shortfall is real
+    // waste in the vial, not a dose he can take.
+    if(cap - used < size){ used = 0; stack.openedDate = null; }
   } else {
     // Undo. Step back into the previous vial if this un-ticks the first dose of one.
     if(used > 0){
-      used--;
-      // Zero doses drawn means the vial is effectively unopened — hand it back
-      // to the sealed count. Without this, ticking then un-ticking silently
+      used = Math.max(0, used - size);
+      // Nothing drawn means the vial is effectively unopened — hand it back to
+      // the sealed count. Without this, ticking then un-ticking silently
       // consumed a whole vial, which is exactly the mis-tap this branch exists
       // to protect against.
-      if(used === 0 && stack.openedDate){ stack.openedDate = null; sealed++; }
+      if(used <= 0 && stack.openedDate){ used = 0; stack.openedDate = null; sealed++; }
     }
     else if(stack.openedDate){ stack.openedDate = null; sealed++; }
-    else { used = Math.max(0, perVial - 1); stack.openedDate = _pepToday(); }
+    else { used = Math.max(0, cap - size); stack.openedDate = _pepToday(); }
   }
-  stack.openDosesUsed = used;
+  stack.openUsedAmt = used;
+  stack.openDosesUsed = size ? Math.round(used / size) : 0;   // kept for the edit sheet
   stack.sealedVials = sealed;
   ps.stacks[si] = stack;
 }
@@ -25191,8 +25271,7 @@ function _pepTabStock(ps){
     var f = _pepStockForecast(ps, st);
     var perVial = _pepDosesPerVial(st, c);
     var sealed = parseInt(st.sealedVials, 10) || 0;
-    var used = parseInt(st.openDosesUsed, 10) || 0;
-    var openLeft = st.openedDate ? Math.max(0, perVial - used) : 0;
+    var openLeft = _pepOpenDosesLeft(st, c);
     var counted = st.stockCounted === true;
 
     h += "<div style=\"background:var(--bg2);border:1px solid " + (counted ? "var(--border)" : "var(--gold)") + ";border-radius:var(--radius);padding:14px;margin-bottom:10px;\">";

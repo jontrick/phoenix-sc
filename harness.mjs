@@ -1266,9 +1266,29 @@ try {
                  || /<textarea/.test(markup);
       return typed && !/_phxKeyboardSafe/.test(body);
     });
-    miss.length === 0
-      ? ok(`PEP: STRUCTURAL every peptide overlay with a typed field is keyboard-armed (${fns.length} sheets scanned)`)
-      : bad(`PEP: STRUCTURAL typed field behind the keyboard — ${miss.join(', ')} build inputs but never call _phxKeyboardSafe`);
+    // FLOOR (harness-only, Nutrition's finding on their own enumerator, taken back
+    // the other way). Everything above is derived from `fns`. If the regex ever
+    // stops matching — the pepOpen* convention changes, the sentinels move, the
+    // block is reshaped — `fns` is empty, `miss` is empty, and this reports PASS
+    // for having checked NOTHING. An enumerator that fails open turns every
+    // assertion built on it green at once, which is the exact failure mode I
+    // have spent the day hunting in other people's code and did not check in
+    // my own.
+    //
+    // The named list is a LOWER BOUND, not the coverage — the distinction that
+    // makes it legitimate after Nutrition's hand-list finding. The scan still
+    // decides what gets checked; these three only prove the scan still works.
+    // A new sheet raises the count and needs no edit here; losing one is a
+    // deliberate harness change.
+    const KNOWN_ARMED = ['pepOpenEditStack', 'pepOpenCustomVial', 'pepOpenBloodPanel'];
+    const absent = KNOWN_ARMED.filter(n => !fns.includes(n));
+    if (fns.length < 5 || absent.length) {
+      bad(`PEP: STRUCTURAL the overlay enumeration itself broke — found ${fns.length} pepOpen* sheets (expected >= 5)${absent.length ? `, missing ${absent.join(', ')}` : ''}. Every keyboard guard is derived from this scan, so a silent miss here makes all of them pass vacuously.`);
+    } else {
+      miss.length === 0
+        ? ok(`PEP: STRUCTURAL every peptide overlay with a typed field is keyboard-armed (${fns.length} sheets scanned)`)
+        : bad(`PEP: STRUCTURAL typed field behind the keyboard — ${miss.join(', ')} build inputs but never call _phxKeyboardSafe`);
+    }
   }
 })();
 
@@ -1495,9 +1515,18 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   // Every place the column is WRITTEN (not read). Reads look like row.peptide_state.
   const writes = [...blk.matchAll(/peptide_state\s*:/g)].map(m => m.index);
   const outside = writes.filter(k => k < send || k >= sendEnd);
-  outside.length === 0
-    ? ok(`PEP: peptide_state written only inside _pepSendCloud (${writes.length} write${writes.length === 1 ? '' : 's'}, all behind the scrubber)`)
-    : bad(`PEP: ${outside.length} peptide_state write(s) OUTSIDE _pepSendCloud — anything not fed by _pepCloudPayload mirrors blood-panel markers into Supabase`);
+  // FLOOR, same reason as the overlay enumeration. Zero matches is not "no
+  // violations", it is "this guard found nothing to check" — a renamed column
+  // or a reshaped block would report the strongest privacy assurance I make
+  // while verifying nothing at all. Two writes today: the keepalive PATCH body
+  // and the supabase-js update.
+  if (writes.length < 2) {
+    bad(`PEP: the peptide_state scan found ${writes.length} write(s), expected >= 2 — the column was renamed or the mirror was restructured. This guard is the only thing standing between blood-panel markers and Supabase; it must not pass by finding nothing.`);
+  } else {
+    outside.length === 0
+      ? ok(`PEP: peptide_state written only inside _pepSendCloud (${writes.length} writes, all behind the scrubber)`)
+      : bad(`PEP: ${outside.length} peptide_state write(s) OUTSIDE _pepSendCloud — anything not fed by _pepCloudPayload mirrors blood-panel markers into Supabase`);
+  }
 
   // And the payload _pepSendCloud receives must come from the scrubber.
   /_pepMirrorPending\s*=\s*_pepCloudPayload\(/.test(blk)

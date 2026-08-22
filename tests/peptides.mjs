@@ -708,18 +708,28 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       return nodes['pep-screen-body'].innerHTML;
     });
 
-    // v4.9.201 — Jon's structure. BLOODS is deliberately NOT here; it moved
-    // inside ADJUST, and a case below proves it is still reachable.
-    test('RENDER the portal paints Jon\'s five tabs', () => {
+    // v4.9.205 — Jon overruled the five-tab arrangement: BLOODS is a tab in its
+    // own right. Six labels do not fit 390px, so the bar scrolls rather than
+    // shrinking the text.
+    test('RENDER the portal paints all SIX of Jon\'s tabs', () => {
       const h = render('today');
-      ['TODAY','PROTOCOL','STOCK','ADJUST','ORDER'].forEach(t =>
+      ['TODAY','PROTOCOL','STOCK','ADJUST','ORDER','BLOODS'].forEach(t =>
         assert.ok(h.includes('>' + t + '<'), t + ' tab painted'));
     });
 
-    test('RENDER BLOODS is not a top-level tab but IS reachable from ADJUST', () => {
-      assert.notIncludes(render('today'), '>BLOODS<', 'not in the tab bar');
-      assert.ok(render('adjust').includes('Blood Panels'), 'entry point on ADJUST');
-      assert.ok(render('bloods').includes('Adjust'), 'and a way back');
+    test('RENDER the tab bar scrolls instead of squeezing six labels', () => {
+      const h = render('today');
+      assert.ok(h.includes('overflow-x:auto'), 'bar scrolls horizontally');
+      assert.ok(h.includes('white-space:nowrap'), 'labels are not wrapped');
+      assert.notIncludes(h.slice(0, h.indexOf('</div>')), 'flex:1;padding:12px 4px',
+        'tabs are no longer squeezed to equal width');
+    });
+
+    test('RENDER BLOODS opens directly, with no route through ADJUST', () => {
+      const h = render('bloods');
+      assert.ok(h.includes('Add Panel') || h.includes('No panels yet'), 'the bloods screen itself');
+      assert.notIncludes(h, 'pep-bloods-back', 'no back button — the tab bar is the way out');
+      assert.notIncludes(render('adjust'), 'pep-open-bloods', 'and ADJUST no longer needs an entry point');
     });
 
     test('RENDER the STOCK tab paints per-compound stock controls', () => {

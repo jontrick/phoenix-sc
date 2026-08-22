@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.204';
+var APP_VERSION='4.9.205';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22200,11 +22200,19 @@ function pepRenderScreen(){
   // BLOODS is NOT dropped; it moved inside ADJUST, which is the only screen that
   // consumes blood markers. Six tabs do not fit a phone and Jon's bloods arrive
   // next week, so losing the screen was not an option either.
-  var tabs = [{key:"today",label:"TODAY"},{key:"overview",label:"PROTOCOL"},{key:"stock",label:"STOCK"},{key:"adjust",label:"ADJUST"},{key:"order",label:"ORDER"}];
-  var tabBar = "<div style=\"display:flex;border-bottom:1px solid var(--border);background:var(--bg);\">" +
+  // v4.9.205 — Jon's call: BLOODS is a tab in its own right, six across.
+  // Six labels do not fit 390px at the old flex:1 width, so the bar SCROLLS
+  // rather than shrinking the text. Labels not icons, deliberately: PROTOCOL,
+  // STOCK and ADJUST have no icon that distinguishes them at a glance, and this
+  // gets read at 4:30am with a syringe in the other hand. A guessed icon is
+  // worse than a label you have to scroll two centimetres to reach.
+  // The active tab is scrolled into view after paint, so a tab off the right
+  // edge is never silently the selected one.
+  var tabs = [{key:"today",label:"TODAY"},{key:"overview",label:"PROTOCOL"},{key:"stock",label:"STOCK"},{key:"adjust",label:"ADJUST"},{key:"order",label:"ORDER"},{key:"bloods",label:"BLOODS"}];
+  var tabBar = "<div id=\"pep-tabbar\" style=\"display:flex;border-bottom:1px solid var(--border);background:var(--bg);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;\">" +
     tabs.map(function(t){
       var act = _pepTab === t.key;
-      return "<button data-pep-tab=\"" + t.key + "\" style=\"flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid " + (act?"#7B68EE":"transparent") + ";font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:" + (act?"#7B68EE":"var(--text3)") + ";cursor:pointer;touch-action:manipulation;\">" + t.label + "</button>";
+      return "<button data-pep-tab=\"" + t.key + "\" style=\"flex:0 0 auto;padding:12px 13px;white-space:nowrap;background:none;border:none;border-bottom:2px solid " + (act?"#7B68EE":"transparent") + ";font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:" + (act?"#7B68EE":"var(--text3)") + ";cursor:pointer;touch-action:manipulation;\">" + t.label + "</button>";
     }).join("") + "</div>";
   var content = "";
   if(_pepTab === "today")         content = _pepTabToday(ps);
@@ -22220,6 +22228,12 @@ function pepRenderScreen(){
       _pepTab = btn.getAttribute("data-pep-tab");
       pepRenderScreen();
     });
+    // Scroll the selected tab into view. Without this, landing on BLOODS from a
+    // restore leaves the bar showing TODAY..ORDER with nothing highlighted, and
+    // the screen below looks like it belongs to whichever tab is visible.
+    if(btn.getAttribute("data-pep-tab") === _pepTab){
+      try { if(btn.scrollIntoView) btn.scrollIntoView({inline:"center", block:"nearest"}); } catch(_e){}
+    }
   });
   body.querySelectorAll("[data-pep-check]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepToggleDose(btn.getAttribute("data-pep-check")); });
@@ -22313,10 +22327,6 @@ function pepRenderScreen(){
   });
   var histBtn = body.querySelector("#pep-hist-confirm");
   if(histBtn) histBtn.addEventListener("click", pepConfirmHistory);
-  var bloodsOpen = body.querySelector("#pep-open-bloods");
-  if(bloodsOpen) bloodsOpen.addEventListener("click", function(){ _pepTab = "bloods"; pepRenderScreen(); });
-  var bloodsBack = body.querySelector("#pep-bloods-back");
-  if(bloodsBack) bloodsBack.addEventListener("click", function(){ _pepTab = "adjust"; pepRenderScreen(); });
   var bloodAdd = body.querySelector("#pep-blood-add");
   if(bloodAdd) bloodAdd.addEventListener("click", function(){ pepOpenBloodPanel(null); });
   body.querySelectorAll("[data-pep-blood-open]").forEach(function(el){
@@ -23029,7 +23039,6 @@ function _pepTabAdjust(ps){
 
   var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Smart Protocol Review</div>";
   h += "<div style=\"font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:14px;\">Reads your live protocol, the last 14 days of adherence, your latest blood panel and every response note below, then returns specific dose, timing and cycle changes. Research tracking only — not medical advice.</div>";
-  h += "<button id=\"pep-open-bloods\" style=\"width:100%;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;margin-bottom:12px;\">Blood Panels &rsaquo;</button>";
   var _bl = _pepLatestBloods(ps);
   if(_bl){
     var _oor = (_bl.out_of_range || []).length;
@@ -23250,11 +23259,10 @@ async function _pepSignedUrl(path, seconds){
 // ── BLOODS tab ────────────────────────────────────────────────────────────
 function _pepTabBloods(ps){
   var panels = (ps && ps.bloods) || [];
-  // v4.9.201: BLOODS is no longer a top-level tab — Jon's five-tab structure has
-  // no room and six do not fit a phone. Reached from ADJUST, which is the only
-  // screen that consumes markers, with an explicit way back.
-  var h = "<button id=\"pep-bloods-back\" style=\"background:none;border:none;color:#7B68EE;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;padding:0 0 12px;cursor:pointer;touch-action:manipulation;\">&lsaquo; Adjust</button>";
-  h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;\">";
+  // v4.9.205: BLOODS is a top-level tab again at Jon's request. The .201
+  // arrangement (inside ADJUST) was my call to fit five tabs; he wants six, so
+  // the tab bar scrolls instead. No back button — the tab bar is the way out.
+  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;\">";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + panels.length + " panel" + (panels.length!==1?"s":"") + "</div>";
   h += "<button id=\"pep-blood-add\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add Panel</button>";
   h += "</div>";

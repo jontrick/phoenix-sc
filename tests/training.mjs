@@ -2219,4 +2219,70 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(read('phx_last_write_error'), null, 'nothing recorded on a clean write');
     } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
   });
+
+  // ── THE REMAINING WRITE PATHS (v4.9.241) ──────────────────────────────────
+  // The sixteen excluded from .238 because instrumenting a repeating path naively
+  // would flood an 8-deep ring and evict the failure Jon was looking for — the fix
+  // would have consumed its own evidence.
+  //
+  // That constraint turned out not to exist: the ring was rendered nowhere, so the
+  // real depth was ONE, and the PM fixed the helper instead (coalesce by context,
+  // ring 40, render it). So these are straight instrumentation with NO suppression
+  // flags. The case that matters is the heartbeat one — it is the claim that made
+  // the flags unnecessary, and it is worth testing rather than believing.
+
+  test('WRITE16: 200 heartbeat failures occupy ONE slot and evict nothing', () => {
+    // The whole design decision. Without coalescing this would push every other
+    // domain's entry out of the ring while Jon is still walking.
+    reset(); signIn(UID);
+    app._phxRecordWriteError('peptides.somethingImportant', { code: 'X1', message: 'a real failure' }, null);
+    for (let i = 0; i < 200; i++) {
+      app._phxRecordWriteError('walkHeartbeat', { code: '08006', message: 'connection failure' }, null);
+    }
+    const ring = read('phx_write_errors');
+    assert.equal(ring.length, 2, 'two contexts, two slots — not 201');
+    const hb = ring.find((r) => r.context === 'walkHeartbeat');
+    assert.equal(hb.count, 200, 'the scale survives as a count');
+    assert.ok(hb.first_ts, 'and when it started');
+    assert.ok(ring.some((r) => r.context === 'peptides.somethingImportant'),
+      'the other domain\'s entry was NOT evicted — the thing flags were meant to prevent');
+  });
+
+  test('WRITE16: a lost treadmill walk is recorded', () => {
+    reset(); signIn(UID);
+    app._phxRecordWriteError('treadmill.insert', { code: '23502', message: 'null value' }, { user_id: 'x', distance_m: 5000 });
+    const last = read('phx_last_write_error');
+    assert.equal(last.context, 'treadmill.insert', 'named');
+    assert.ok(!JSON.stringify(last).includes('5000'), 'without the values');
+  });
+
+  test('WRITE16: the migration reports MAGNITUDE, not just frequency', () => {
+    // Deliberately NOT left to the ring's coalescing. A count of 3 against one message
+    // says it failed three times; it cannot say how much was lost. For a bulk path the
+    // count the ring gives you is not the count that matters.
+    reset(); signIn(UID);
+    app._phxRecordWriteError('migrate.setLogs', { code: '23503', message: 'fk violation' },
+      { failed_chunks: 3, failed_rows: 1500, total_rows: 3200 });
+    const blob = JSON.stringify(read('phx_last_write_error'));
+    assert.ok(/failed_chunks/.test(blob), 'how many chunks died');
+    assert.ok(/failed_rows/.test(blob), 'and how many rows went with them');
+    assert.ok(/total_rows/.test(blob), 'against the total, so the scale is readable');
+  });
+
+  test('WRITE16: every new context is distinct — a shared name would merge unrelated failures', () => {
+    // Coalescing is BY CONTEXT, so two different failures sharing a context string
+    // would silently become one entry and hide each other. This pins that the contexts
+    // I introduced are unique.
+    reset(); signIn(UID);
+    const contexts = ['treadmill.insert', 'treadmill.photoUpload', 'treadmill.photo.throw',
+                      'treadmill.save.throw', 'walkHeartbeat', 'activeRecovery.throw',
+                      'resumeWalk.finish', 'resumeWalk.discard', 'resumeWalk.throw',
+                      'weekCustomMirror', 'weekCustomMirror.throw', 'adHocSessionMirror',
+                      'migrate.sessions', 'migrate.buildSetLogs.throw', 'migrate.setLogs',
+                      'migrate.throw'];
+    assert.equal(new Set(contexts).size, contexts.length, 'no duplicate context names');
+    contexts.forEach((c) => app._phxRecordWriteError(c, { code: 'E', message: 'm' }, null));
+    assert.equal(read('phx_write_errors').length, contexts.length,
+      'each takes its own slot, so one cannot mask another');
+  });
 }

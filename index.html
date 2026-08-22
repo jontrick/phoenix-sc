@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.240';
+var APP_VERSION='4.9.241';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8366,6 +8366,11 @@ async function migrateSessionsToSupabase(){
     var insertRes=await sb.from('sessions').insert(sessionRows).select('id');
     if(insertRes.error){
       console.error('[PHX] migration: sessions insert failed:',insertRes.error);
+      // Runs once ever. If it fails, historical sessions never arrive and Jon has no
+      // reason to suspect it — there is no screen that says "your old sessions are
+      // missing". Payload shape carries the row COUNT, which is the thing worth
+      // knowing here.
+      if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('migrate.sessions', insertRes.error, sessionRows);
       return;
     }
     console.log('[PHX] migrated '+insertRes.data.length+' sessions to Supabase');
@@ -8396,19 +8401,38 @@ async function migrateSessionsToSupabase(){
             });
           }
         });
-      }catch(e){console.warn('[PHX] migration: failed to build set_logs',e);}
+      }catch(e){
+        console.warn('[PHX] migration: failed to build set_logs',e);
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('migrate.buildSetLogs.throw', e, null);
+      }
     }
 
     if(setLogRows.length){
       // Batch insert in chunks of 500 to stay under Supabase limits
+      // ONE summary rather than one entry per chunk. The ring would coalesce these
+      // anyway, so this is a legibility choice, not a safety one: "3 of 7 chunks failed,
+      // 1500 of 3200 rows lost" says more than a count of 3 against a single message.
+      var _mFailedChunks = 0, _mFailedRows = 0, _mFirstErr = null;
       for(var i=0;i<setLogRows.length;i+=500){
         var chunk=setLogRows.slice(i,i+500);
         var slRes=await sb.from('set_logs').insert(chunk);
-        if(slRes.error) console.error('[PHX] migration: set_logs chunk insert failed:',slRes.error);
+        if(slRes.error){
+          console.error('[PHX] migration: set_logs chunk insert failed:',slRes.error);
+          _mFailedChunks++; _mFailedRows += chunk.length;
+          if(!_mFirstErr) _mFirstErr = slRes.error;
+        }
+      }
+      if(_mFailedChunks){
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('migrate.setLogs', _mFirstErr, {
+          failed_chunks: _mFailedChunks, failed_rows: _mFailedRows, total_rows: setLogRows.length
+        });
       }
       console.log('[PHX] migrated '+setLogRows.length+' set_logs to Supabase');
     }
-  }catch(e){console.error('[PHX] migrateSessionsToSupabase error:',e);}
+  }catch(e){
+    console.error('[PHX] migrateSessionsToSupabase error:',e);
+    if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('migrate.throw', e, null);
+  }
 }
 
 // Background sync — fetch fresh profile and update local cache
@@ -15496,7 +15520,11 @@ async function _phxTreadmillCommit(km, sec, speed, photoDataURL){
       };
       var ins = await sb.from('sessions').insert(row).select('id').single();
       var sessionId = (ins && ins.data && ins.data.id) || null;
-      if(ins.error) console.warn('[PHX] treadmill walk insert failed:', ins.error);
+      if(ins.error){
+        console.warn('[PHX] treadmill walk insert failed:', ins.error);
+        // The walk itself. Nothing else in this function recovers it.
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('treadmill.insert', ins.error, row);
+      }
       // Photo upload (best-effort, never blocks save).
       if(photoDataURL && sessionId && typeof _wciDataURLToBlob === 'function'){
         try {
@@ -15519,14 +15547,26 @@ async function _phxTreadmillCommit(km, sec, speed, photoDataURL){
               }
             } else {
               console.warn('[PHX] treadmill photo upload failed:', up.error);
+              // v4.9.241: recorded, against my own first instinct. I argued this was
+              // cosmetic — the walk row saves independently and the photo is
+              // re-takeable — and that is the same reasoning that left the BLAB backup
+              // unreachable for months. With the ring coalescing by context there is no
+              // cost side to the trade any more, so the argument evaporates.
+              if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('treadmill.photoUpload', up.error, {path: path});
             }
           }
-        } catch(e){ console.warn('[PHX] treadmill photo error:', e); }
+        } catch(e){
+          console.warn('[PHX] treadmill photo error:', e);
+          if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('treadmill.photo.throw', e, null);
+        }
       }
     }
     // Refresh The March cached total so the Agoge tile updates immediately.
     if(typeof _agogeFetchMarchTotalM === 'function'){ try { await _agogeFetchMarchTotalM(); } catch(_e){} }
-  } catch(e){ console.warn('[PHX] treadmill save error:', e); }
+  } catch(e){
+    console.warn('[PHX] treadmill save error:', e);
+    if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('treadmill.save.throw', e, null);
+  }
   // Done — close overlay, return to Today.
   _phxCloseTreadmill();
   if(typeof navTo === 'function') navTo('today');
@@ -15706,7 +15746,14 @@ function _phxWalkHeartbeat(){
       },
       updated_at: new Date().toISOString()
     }).eq('id', walkSupabaseId).then(function(res){
-      if(res.error) console.warn('[PHX] walk heartbeat failed:', res.error);
+      if(res.error){
+        console.warn('[PHX] walk heartbeat failed:', res.error);
+        // NO suppression flag. This fires every few seconds during a walk, which was
+        // the reason to ration it — but the helper coalesces by context, so 200
+        // failures occupy ONE slot and keep count + first_ts. A flag here would be one
+        // of sixteen chances to get it wrong, and would only protect this call site.
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('walkHeartbeat', res.error, null);
+      }
     });
     // Refresh the saved meta — last known elapsed / pause state — for resume math.
     try {
@@ -28022,8 +28069,19 @@ async function _phxMirrorWeekCustomToSupabase(weekStart, byDay, weekNumber){
     };
     // weekly_checkins has a UNIQUE (user_id, week_number, week_start_date) — upsert on it.
     var res = await sb.from('weekly_checkins').upsert(payload, {onConflict:'user_id,week_number,week_start_date'});
-    if(res && res.error) console.warn('[PHX] custom session mirror error:', res.error.message || res.error);
-  } catch(e){ console.warn('[PHX] custom session mirror failed:', e); }
+    if(res && res.error){
+      console.warn('[PHX] custom session mirror error:', res.error.message || res.error);
+      // "Best-effort, the local copy is authoritative, it re-mirrors next save" is
+      // precisely how the peptide mirror stayed broken for 12 versions — and it is
+      // more load-bearing now we know a full localStorage wipe is routine. Silent
+      // mirror failure plus a reinstall is total loss. Self-expiring makes this LESS
+      // bad, not fine.
+      if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('weekCustomMirror', res.error, null);
+    }
+  } catch(e){
+    console.warn('[PHX] custom session mirror failed:', e);
+    if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('weekCustomMirror.throw', e, null);
+  }
 }
 
 window.openWeekPlan = function(){
@@ -30408,7 +30466,10 @@ function openActiveRecovery(){
           status:'completed',
           details:{activities:checked}
         });
-      }catch(e){console.error('[PHX] active recovery log error:',e);}
+      }catch(e){
+        console.error('[PHX] active recovery log error:',e);
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('activeRecovery.throw', e, null);
+      }
     }
     // Also log locally
     var entry={date:new Date().toISOString(),type:'mobility',name:'Active Recovery',activities:checked,status:'completed'};
@@ -32417,6 +32478,7 @@ window._phxGenerateTodaySession = async function(sessionType, opts, slot){
         next_week_requests: note
       }, {onConflict:'user_id,week_number,week_start_date'}).catch(function(e){
         console.warn('[PHX] ad-hoc session mirror failed:', e);
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('adHocSessionMirror', e, null);
       });
     }
 
@@ -36187,7 +36249,10 @@ async function _phxResumeWalk(){
           updated_at: new Date().toISOString(),
           details: Object.assign({}, row.details||{}, {recovered_finish: true})
         }).eq('id', row.id);
-      } catch(e){ console.warn('[PHX] resumed-finish failed:', e); }
+      } catch(e){
+        console.warn('[PHX] resumed-finish failed:', e);
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('resumeWalk.finish', e, null);
+      }
       localStorage.removeItem(PHX_ACTIVE_WALK_KEY);
       localStorage.removeItem(PHX_ACTIVE_WALK_META_KEY);
       window.currentSupabaseSessionId = null;
@@ -36199,7 +36264,10 @@ async function _phxResumeWalk(){
           status: 'abandoned',
           updated_at: new Date().toISOString()
         }).eq('id', row.id);
-      } catch(e){ console.warn('[PHX] discard failed:', e); }
+      } catch(e){
+        console.warn('[PHX] discard failed:', e);
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('resumeWalk.discard', e, null);
+      }
       localStorage.removeItem(PHX_ACTIVE_WALK_KEY);
       localStorage.removeItem(PHX_ACTIVE_WALK_META_KEY);
       window.currentSupabaseSessionId = null;
@@ -36207,6 +36275,7 @@ async function _phxResumeWalk(){
     }
   } catch(e){
     console.warn('[PHX] _phxResumeWalk error:', e);
+    if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('resumeWalk.throw', e, null);
   }
 }
 window._phxResumeWalk = _phxResumeWalk;

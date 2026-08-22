@@ -286,7 +286,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.240'", 'version is 4.9.240');
+has("var APP_VERSION='4.9.241'", 'version is 4.9.241');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2321,6 +2321,30 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
           'It would fail to console only, which Jon cannot see on his phone.'));
   }
 })();
+
+// ── THE REMAINING WRITE PATHS (v4.9.241) ────────────────────────────────────
+// The sixteen held back from .238. No suppression flags anywhere: the helper coalesces
+// by context, so a repeating path occupies one slot however often it fires. Named
+// individually — a count would go green if someone deleted one and added another.
+(() => {
+  const src = codeSrc();
+  const ctx = ['treadmill.insert','treadmill.photoUpload','treadmill.photo.throw',
+               'treadmill.save.throw','walkHeartbeat','activeRecovery.throw',
+               'resumeWalk.finish','resumeWalk.discard','resumeWalk.throw',
+               'weekCustomMirror','weekCustomMirror.throw','adHocSessionMirror',
+               'migrate.sessions','migrate.buildSetLogs.throw','migrate.setLogs','migrate.throw'];
+  const missing = ctx.filter(c => !src.includes(`_phxRecordWriteError('${c}'`));
+  if (!missing.length) ok(`WRITE16: all ${ctx.length} remaining training write paths record to the diagnostic`);
+  else bad(`WRITE16: ${missing.length} write path(s) no longer record — ${missing.join(', ')}. ` +
+           'Each is a session, walk or migration Jon loses with nothing on screen to say so.');
+  // Coalescing is BY CONTEXT, so a duplicated name silently merges two unrelated
+  // failures into one entry and each hides the other.
+  if (new Set(ctx).size === ctx.length) ok('WRITE16: every context name is distinct, so none can mask another');
+  else bad('WRITE16: duplicate context name — two different failures would coalesce into one entry.');
+})();
+// The bulk path reports MAGNITUDE, not just frequency. The ring collapses repetitions
+// and cannot know each carried a different quantity: "x3" cannot say 1500 rows were lost.
+hasCode('failed_chunks: _mFailedChunks', 'WRITE16: the migration records how much was lost, not only that it failed');
 
 // ── WHERE TRAINING'S DATA LEAVES ────────────────────────────────────────────
 // Peptides' question, applied to Training: not "is my sanitiser right" but "HOW MANY

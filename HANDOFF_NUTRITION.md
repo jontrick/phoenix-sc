@@ -21,6 +21,11 @@ You are the **Nutrition Engineer** for Project Phoenix — Jon's personal fitnes
 - Nutrition tile on Today screen (`nutRenderTile`)
 
 **NOT your domain (hands off):**
+- **Blood panels / pathology photo reading — PEPTIDES ONLY.** Jon's ruling, 22 Aug 2026.
+  Nutrition has never contained blood-panel code and must not acquire any. If a blood-panel
+  or pathology-scanning task is ever routed here, it has been mis-assigned — send it to
+  Peptides rather than building it. (`blood_panels`, the `blood-panels` storage bucket and
+  everything reading them are Peptides'.)
 - Training/BLAB/WOD code → Training chat
 - Peptide Portal (`pep*` / `_pep*` / `_PEP_*`) → Peptides chat
 - Auth, profile plumbing, sidebar structure → PM chat coordinates any changes here
@@ -115,6 +120,28 @@ Contract pinned provider-side in `tests/nutrition.mjs` under `CONTRACT nutRecord
 (six cases: writes dated, defaults to LOCAL today, idempotent, `false` on no-state without
 manufacturing one, refuses non-weights, never throws). A consumer's suite going red means
 the break already shipped, so these live here.
+
+---
+
+### Parked: nutrition-label scanner
+
+**Not started. Blocked. Distinct from blood panels.** Photograph a food packet's nutrition
+panel, autofill the macros. Jon asked Training for it; it was routed here. It is *not* the
+blood-panel scanner — a food label has nothing to do with pathology, and it is not Peptides'.
+
+Blocked on an unverified premise: whether the coach worker actually accepts image blocks.
+Peptides made that claim and **withdrew it** — the evidence was Jon saying "seems to work,
+need the results next week to test", which establishes nothing.
+
+If it is ever unblocked, the field that decides whether the numbers are right at all:
+`_NUT_FOODS` is **per-100g throughout** and `nutAddComponent` computes `value × qty_g / 100`.
+A label printed per-serving cannot flow through that path unchanged — it would be wrong by
+the serving ratio, silently, and permanently if saved as a custom food. Labels routinely give
+a serving with no gram weight ("per serving (2 biscuits)", "per slice"), which makes the
+conversion **impossible rather than hard**. So the extractor needs three outcomes, not two:
+per-100g → use it; per-serving **with** grams → convert; per-serving **without** grams →
+refuse that food and ask Jon, never assume 100g. There is no point downstream where a wrong
+basis becomes visible.
 
 ---
 

@@ -248,12 +248,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('no recipe name or weight reaches the diagnostic summary', () => {
     const payload = { _ts: NEWER, recipes: [
-      { ...rec('Chilli Sauce'), components: [{ n: 'Chilli', qty_g: 30 }] },
+      { ...rec('Chilli Sauce'), components: [{ n: 'Chilli', qty_g: 137 }] },
     ] };
     const summary = app._nutErrorSummary(payload);
     assert.notIncludes(summary, 'Chilli Sauce', 'recipe name leaked to diagnostics');
     assert.notIncludes(summary, 'Chilli', 'ingredient name leaked to diagnostics');
-    assert.notIncludes(summary, '30', 'ingredient weight leaked to diagnostics');
+    assert.notIncludes(summary, '137', 'ingredient weight leaked to diagnostics');
   });
 
   test('the diagnostic summary survives empty and null payloads', () => {
@@ -440,12 +440,52 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     start();
     failingWrite({ message: 'nope', code: 'X' });
     await app._nutRecipesWriteNow({ _ts: NEWER, recipes: [
-      { ...rec('Chilli Sauce'), components: [{ n: 'Chilli', qty_g: 30 }] },
+      { ...rec('Chilli Sauce'), components: [{ n: 'Chilli', qty_g: 137 }] },
     ] });
     const snap = lastWriteError();
-    assert.notIncludes(snap, 'Chilli Sauce', 'no recipe name in the diagnostic');
-    assert.notIncludes(snap, 'Chilli', 'no ingredient name');
-    assert.notIncludes(snap, '30', 'no gram weight');
+    // Peptides, 2026-08-22: this failed about 1 run in 20. `snap` carries
+    // ts: new Date().toISOString(), and '30' appears in an ISO timestamp ~5.2%
+    // of the time (minute or second 30-39, day 30, or milliseconds) - measured
+    // independently. The failure text read 'no gram weight - found 30', pointing
+    // at the redaction logic rather than at the assertion, which is the
+    // expensive part.
+    //
+    // Two changes, not one. Dropping ts removes the only clock-dependent field
+    // while keeping the assertion BROAD - a leak in context or message still
+    // fails, which narrowing to payload_shape would have missed. And 137
+    // replaces 30 because a two-character numeric needle against a serialised
+    // object is fragile by construction, whatever it is matched against.
+    const { ts, ...body } = snap;
+    assert.ok(ts, 'the snapshot is stamped');
+    assert.notIncludes(body, 'Chilli Sauce', 'no recipe name in the diagnostic');
+    assert.notIncludes(body, 'Chilli', 'no ingredient name');
+    assert.notIncludes(body, '137', 'no gram weight');
+  });
+
+  // Regression guard for the flakiness itself: force a timestamp that CONTAINS the
+  // needle. Under the previous assertion (whole snapshot, needle '30') this is the
+  // ~1-in-20 run that failed, and it failed pointing at the redaction logic rather
+  // than at the test. Now it must pass deterministically.
+  test('the privacy check survives a timestamp containing the needle', async () => {
+    start();
+    const Real = app.Date;
+    function Colliding(...a) {
+      if (a.length) return new Real(...a);
+      return { toISOString: () => '2026-08-22T00:30:11.304Z', getTime: () => 0,
+               getFullYear: () => 2026, getMonth: () => 7, getDate: () => 22 };
+    }
+    Colliding.parse = Real.parse; Colliding.now = Real.now; Colliding.UTC = Real.UTC;
+    app.Date = Colliding;
+    try {
+      failingWrite({ message: 'nope', code: 'X' });
+      await app._nutRecipesWriteNow({ _ts: NEWER, recipes: [
+        { ...rec('Chilli Sauce'), components: [{ n: 'Chilli', qty_g: 137 }] },
+      ] });
+      const snap = lastWriteError();
+      assert.ok(String(snap.ts).indexOf('30') >= 0, 'the timestamp really does contain the needle');
+      const { ts, ...body } = snap;
+      assert.notIncludes(body, '137', 'and the privacy check is unaffected by it');
+    } finally { app.Date = Real; }
   });
 
   test('a successful write records nothing', async () => {

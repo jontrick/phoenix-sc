@@ -2221,8 +2221,33 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       await app.pepSaveBloodPanel();
       const rec = read('phx_last_write_error');
       assert.ok(rec, 'the failure was recorded where Settings -> Diagnostic can show it');
-      assert.ok(JSON.stringify(rec).includes('blood photo'), 'recorded under its own context');
+      assert.ok(JSON.stringify(rec).includes('blood photo upload'),
+        'recorded under the UPLOAD context specifically — v4.9.243 split this from ' +
+        'the path-save failure, because the PM ring coalesces by context and the two ' +
+        'have different remedies: retry the upload vs re-point a row at an image ' +
+        'that is already in the bucket');
       assert.ok(calls.some(c => c.op === 'insert'), 'and the panel itself still saved');
+    });
+
+    // v4.9.243 — one context per REMEDY, not one per function. The ring
+    // coalesces by context name (PM, v4.9.240), so two failures sharing a name
+    // hide behind each other and the later one becomes a bare count. My strings
+    // were unique; their meanings were not.
+    test('BLOODSAVE upload failure and path failure are told apart', async () => {
+      const { mkQuery } = bsSetUp();
+      // upload succeeds, the row update that records the path fails
+      const q = mkQuery('blood_panels', { message: 'row locked' });
+      app.sb = {
+        from: () => q,
+        storage: { from: () => ({ upload: () => Promise.resolve({ data: {}, error: null }) }) },
+      };
+      app._pepBloodDraft = draft();
+      await app.pepSaveBloodPanel();
+      const rec = JSON.stringify(read('phx_last_write_error') || {});
+      assert.ok(rec.includes('blood photo path orphaned'),
+        'the image IS in the bucket and the row does not point at it — an orphaned ' +
+        'blob needs re-pointing, not re-uploading, and that is a different action');
+      assert.ok(!rec.includes('blood photo upload'), 'not filed as an upload failure');
     });
 
     test('BLOODSAVE the sheet stays open after a photo failure, carrying the row id', async () => {
@@ -2317,8 +2342,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       const h = delSetUp(null, { message: 'storage policy denied' }, false);
       try { await app.pepDeleteBloodPanel(); } finally { h.restore(); }
       const rec = read('phx_last_write_error');
-      assert.ok(rec && JSON.stringify(rec).includes('blood panel delete'),
-        'the orphaned image is recorded — it used to sit in a bare try/catch(_e){}');
+      assert.ok(rec && JSON.stringify(rec).includes('blood panel photo orphaned'),
+        'its OWN context — he believes he deleted a pathology report and the image ' +
+        'is still stored. Sharing a slot with the row-delete failure meant whichever ' +
+        'landed first kept the message and this one could become a count');
       assert.ok(app._pepBloodDraft,
         'and the sheet stays open so Delete Panel can retry removing the image');
     });

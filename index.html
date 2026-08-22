@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.242';
+var APP_VERSION='4.9.243';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -24347,13 +24347,36 @@ async function pepSaveBloodPanel(){
         // and no reason to suspect it. Found by DRIVING this function for the
         // first time; it had a presence check in the harness and nothing had
         // ever run it.
-        if(upl.error){ photoErr = upl.error; }
-        else {
+        // v4.9.243: this was ONE context, "blood photo", for two different
+        // failures. The PM's .240 ring coalesces by context — one slot per name
+        // — so the second now hides behind the first as a bare count. Same
+        // defect they found on my keepalive branches, one level in, and mine:
+        // the string was unique, the MEANING was not.
+        //
+        //   upload failed    -> nothing is stored. Retry the upload.
+        //   path save failed -> the image IS in the bucket and the row does not
+        //                       point at it. Orphaned blob; re-point the row,
+        //                       do not re-upload.
+        //
+        // Written as two LITERAL call sites rather than one call with a
+        // variable context. The PM's app-wide uniqueness guard matches
+        // _phxRecordWriteError("<literal>" — a computed context is invisible to
+        // it, so a domain that builds its context dynamically silently opts out
+        // of the check that exists to stop cross-domain collisions.
+        var photoPayload = {panel_id: String(saved.id).length, path_len: path.length};
+        if(upl.error){
+          photoErr = upl.error;
+          if(typeof _phxRecordWriteError === "function"){
+            _phxRecordWriteError("blood photo upload", photoErr, photoPayload);
+          }
+        } else {
           var pu = await sb.from("blood_panels").update({photo_path: path}).eq("id", saved.id).eq("user_id", uid);
-          if(pu.error) photoErr = pu.error;
-        }
-        if(photoErr && typeof _phxRecordWriteError === "function"){
-          _phxRecordWriteError("blood photo", photoErr, {panel_id: String(saved.id).length, path_len: path.length});
+          if(pu.error){
+            photoErr = pu.error;
+            if(typeof _phxRecordWriteError === "function"){
+              _phxRecordWriteError("blood photo path orphaned", photoErr, photoPayload);
+            }
+          }
         }
       }
     }
@@ -24432,9 +24455,25 @@ async function pepDeleteBloodPanel(){
   }
 
   if(rowErr || photoErr){
-    if(typeof _phxRecordWriteError === "function"){
-      _phxRecordWriteError("blood panel delete", rowErr || photoErr,
-        {panel_id: String(d.id).length, photo: !!d.photo_path, row_failed: !!rowErr});
+    {
+      // Split for the same reason, and literal for the same reason. row_failed
+      // in the payload told them apart only for whichever landed FIRST — after
+      // coalescing the second is a count and its payload is gone. The
+      // image-left-behind case must never be the one lost: he believes he has
+      // deleted a pathology report and the photo of it is still in the bucket.
+      var delPayload = {panel_id: String(d.id).length, photo: !!d.photo_path, row_failed: !!rowErr};
+      // Each call carries its OWN typeof guard rather than sharing this block's.
+      // My structural guard counts calls against guards and requires parity — I
+      // made it strict in v4.9.191 after finding `>= calls - 1` tolerated
+      // exactly one unguarded call, which is the only one that matters. It
+      // caught this split at 11 calls / 10 guards. The block guard was correct
+      // code; the right response to a strict guard firing on a technicality is
+      // to satisfy it, not to teach it exceptions.
+      if(rowErr){
+        if(typeof _phxRecordWriteError === "function") _phxRecordWriteError("blood panel delete", rowErr, delPayload);
+      } else {
+        if(typeof _phxRecordWriteError === "function") _phxRecordWriteError("blood panel photo orphaned", photoErr, delPayload);
+      }
     }
     // Sheet stays open. d.id is intact, so Delete Panel retries both halves —
     // including removing an image orphaned by a row delete that did succeed.

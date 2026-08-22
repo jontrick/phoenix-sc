@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.215'", 'version is 4.9.215');
+has("var APP_VERSION='4.9.216'", 'version is 4.9.216');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -623,6 +623,10 @@ hasCode("if(typeof _nutRestoreView==='function') _nutRestoreView();", 'BUG2: nav
 hasNotCode("if(tab==='nutrition'){ _nutTab='today';", 'BUG2: the unconditional reset to today is gone');
 
 hasCode("localStorage.getItem('phoenix_last_weighin')", 'WEIGHT: targets read the LIVE morning weigh-in, not just athlete.bw');
+
+hasCode('function _nutKeyboardSafe(', 'KEYBOARD: sheets size to the visible area when the keyboard is up');
+hasCode("vv.addEventListener('resize', fit)", 'KEYBOARD: and follow it as it opens');
+hasCode("t.scrollIntoView({block:'center'})", 'KEYBOARD: the focused field is brought into view');
 
 // ── Water drink sizes (v4.9.199) ───────────────────────────────────────────
 hasCode('var _NUT_DRINK_SIZES = [250, 330, 500, 1000, 1500];', 'WATER: the five sizes Jon asked for');

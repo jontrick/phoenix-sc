@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.215';
+var APP_VERSION='4.9.216';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18880,6 +18880,7 @@ function nutOpenMealLog(slot){
     '<button id="nut-ml-save" style="flex:2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;">Save Meal</button>' +
     '</div></div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   ov.querySelector('#nut-ml-cancel').addEventListener('click', function(){ ov.remove(); });
   ov.querySelector('#nut-ml-save').addEventListener('click', function(){
     var name  = (ov.querySelector('#nut-ml-name').value || '').trim() || slotLabel;
@@ -18964,6 +18965,7 @@ function nutOpenSetup(){
     '<div style="margin-top:14px;font-size:10px;color:var(--text3);line-height:1.5;text-align:center;">Targets based on Mifflin-St Jeor BMR &times; 1.55 activity multiplier.<br>Not medical advice. Consult a professional for specific dietary needs.</div>' +
     '</div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   var _suGoal = currentGoal;
   function _suUpdatePreview(){
     var h   = parseFloat(ov.querySelector('#nut-su-height').value) || (ns.profile && ns.profile.height_cm) || 0;
@@ -19241,6 +19243,7 @@ function nutOpenFoodPicker(slot, dateKey, mode){
     '<button id="nut-fp-add-btn" style="flex:1;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;">Add Food</button>' +
     '</div></div></div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   _nutRenderFoodPickerCats(ov);
   _nutRenderFoodPickerList(ov);
   ov.querySelector('#nut-fp-close').addEventListener('click', function(){ ov.remove(); });
@@ -19558,6 +19561,7 @@ function nutOpenCustomFoodModal(slot, dateKey){
     '<button id="nut-cf-save" style="width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SAVE FOOD</button>' +
     '</div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   var _selCat = 'Protein';
   function _highlightCat(){
     ov.querySelectorAll('[data-nut-cf-cat]').forEach(function(b){
@@ -19711,6 +19715,7 @@ function nutOpenRecipeBuilder(editId, onSaved){
     '<button id="nut-rb-save" style="width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SAVE RECIPE</button>' +
     '</div></div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
 
   function _rbDraft(){
     return {
@@ -19866,6 +19871,7 @@ function _nutOpenPickerForRecipe(onAdd){
     '<button id="nut-fpr-add" style="flex:1;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">ADD</button>' +
     '</div></div></div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   function _rRenderCats(){
     var c = ov.querySelector('#nut-fpr-cats');
     c.innerHTML = _rCats.map(function(cat){
@@ -19930,6 +19936,7 @@ function _nutRecipeApplyPrompt(id){
     '<button id="nut-rap-cancel" style="width:100%;padding:14px;background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;touch-action:manipulation;margin-top:8px;">Cancel</button>' +
     '</div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   ov.querySelectorAll('[data-slot]').forEach(function(btn){
     btn.addEventListener('click', function(){
       ov.remove();
@@ -20008,6 +20015,7 @@ function nutOpenShopList(){
       '</div>' : '') +
     '</div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   ov.querySelector('#nut-sl-close').addEventListener('click', function(){ ov.remove(); });
   ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
   // Tick-off checkboxes
@@ -20727,6 +20735,7 @@ function nutOpenRepeatDay(fromDk){
     '<button id="nut-rpd-go" style="flex:2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Repeat</button>' +
     '</div></div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   function paint(){
     ov.querySelectorAll('[data-rp-box]').forEach(function(box){
       var dk = box.getAttribute('data-rp-box');
@@ -20787,6 +20796,7 @@ function nutOpenRecipePicker(slot, dateKey){
     '<button id="nut-rp-add" style="flex:1;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">ASSIGN</button>' +
     '</div></div></div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   function renderCats(){
     var used = {};
     recipes.forEach(function(r){ used[r.cat || 'other'] = 1; });
@@ -20952,6 +20962,7 @@ function nutOpenPrepCard(){
       '</div>' : '') +
     '</div>';
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
   ov.querySelector('#nut-pc-close').addEventListener('click', function(){ ov.remove(); });
   ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
   var copyBtn = ov.querySelector('#nut-pc-copy');
@@ -21067,6 +21078,62 @@ function _nutEatenTotals(dayData){
   t.carbs_g   = Math.round(t.carbs_g*10)/10;
   t.fat_g     = Math.round(t.fat_g*10)/10;
   return t;
+}
+
+// v4.9.216: on iOS the on-screen keyboard covers the bottom of the screen, and
+// every one of these sheets is bottom-anchored (position:fixed; inset:0;
+// align-items:flex-end). The panel therefore renders its lower half UNDERNEATH
+// the keyboard, so the field Jon is typing into is the one he cannot see.
+// Scrolling inside the panel does not help - the container itself extends below
+// the keyboard.
+//
+// visualViewport reports the area actually visible once the keyboard is up.
+// Sizing the overlay to it makes flex-end place the panel just above the
+// keyboard rather than behind it. The focus scroll then handles a field inside
+// the panel's own scroll area.
+//
+// Guarded throughout: visualViewport is absent on older WebViews and in the test
+// sandbox, where the sheet keeps its normal full-height behaviour.
+function _nutKeyboardSafe(ov){
+  if(!ov) return;
+  var vv = (typeof window !== 'undefined') ? window.visualViewport : null;
+
+  function fit(){
+    try {
+      // Detach once the sheet is gone - these listeners outlive the element.
+      var attached = !!(ov && document.body &&
+        (typeof document.body.contains === 'function' ? document.body.contains(ov) : true));
+      if(!attached){ detach(); return; }
+      if(!vv || !(vv.height > 0)) return;
+      ov.style.height = vv.height + 'px';
+      ov.style.top    = (vv.offsetTop || 0) + 'px';
+      ov.style.bottom = 'auto';
+    } catch(_e){ detach(); }
+  }
+  function detach(){
+    try {
+      if(vv){ vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); }
+    } catch(_e){}
+  }
+  if(vv){
+    try {
+      vv.addEventListener('resize', fit);
+      vv.addEventListener('scroll', fit);
+      fit();
+    } catch(_e){}
+  }
+
+  // Bring the focused field into view once the keyboard has finished animating.
+  try {
+    ov.addEventListener('focusin', function(e){
+      var t = e && e.target;
+      if(!t || !t.tagName) return;
+      if(t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && t.tagName !== 'SELECT') return;
+      setTimeout(function(){
+        try { if(t.scrollIntoView) t.scrollIntoView({block:'center'}); } catch(_e2){}
+      }, 320);
+    });
+  } catch(_e){}
 }
 
 // Tap vs long-press on one element, without the touchend/click double fire.
@@ -25085,6 +25152,7 @@ function nutOpenSuppModal(dateKey){
 
   rerender();
   document.body.appendChild(ov);
+  _nutKeyboardSafe(ov);
 }
 
 function nutAddSupp(dateKey, supp){

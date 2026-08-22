@@ -341,6 +341,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       node: (id) => nodes[id] || (nodes[id] = make()),
       html: (id) => String((nodes[id] || {}).innerHTML || ''),
       lastCreatedHtml: () => String((created[created.length - 1] || {}).innerHTML || ''),
+      lastCreated: () => created[created.length - 1] || null,
     };
   };
 
@@ -597,6 +598,93 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     seed('phx_nut_view_v1', null);
     app._nutRestoreView();
     assert.equal(app._nutTab, 'today', 'clean default');
+  });
+
+  // ══ KEYBOARD — the field being typed into must not sit under it ════════════
+  // Jon: "the keyboard and other heads up things cover what I'm trying to type at
+  // the bottom of the screen." Every sheet is position:fixed; inset:0 with
+  // align-items:flex-end, so with the keyboard up the panel's lower half renders
+  // underneath it. Scrolling inside the panel cannot help — the container itself
+  // extends below the keyboard.
+
+  // A visualViewport that reports the shrunken area, as iOS does with the
+  // keyboard up. The sandbox has none, which is why this must be injected.
+  const withKeyboard = (visibleHeight) => {
+    const listeners = {};
+    app.visualViewport = {
+      height: visibleHeight,
+      offsetTop: 0,
+      addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
+      removeEventListener: (ev, fn) => {
+        listeners[ev] = (listeners[ev] || []).filter(f => f !== fn);
+      },
+      _fire: (ev) => (listeners[ev] || []).forEach(f => f()),
+      _count: () => (listeners.resize || []).length,
+    };
+    return app.visualViewport;
+  };
+
+  test('KEYBOARD a sheet is sized to the visible area, not the whole screen', () => {
+    setUp(90);
+    const vv = withKeyboard(400);                 // 844pt screen, keyboard up
+    app.document.body.contains = () => true;
+    const ov = app.document.createElement('div');
+    ov.style.height = ''; ov.style.bottom = '0';
+    app._nutKeyboardSafe(ov);
+    assert.equal(ov.style.height, '400px', 'the overlay ends where the keyboard begins');
+    assert.equal(ov.style.bottom, 'auto', 'so flex-end puts the panel above it');
+    delete app.visualViewport;
+  });
+
+  test('KEYBOARD the sheet re-fits when the keyboard appears mid-edit', () => {
+    setUp(90);
+    const vv = withKeyboard(844);                 // no keyboard yet
+    app.document.body.contains = () => true;
+    const ov = app.document.createElement('div');
+    app._nutKeyboardSafe(ov);
+    assert.equal(ov.style.height, '844px', 'full height to start');
+    vv.height = 400;                              // keyboard comes up
+    vv._fire('resize');
+    assert.equal(ov.style.height, '400px', 'and it follows');
+    delete app.visualViewport;
+  });
+
+  test('KEYBOARD listeners detach once the sheet is gone', () => {
+    setUp(90);
+    const vv = withKeyboard(400);
+    let present = true;
+    app.document.body.contains = () => present;
+    const ov = app.document.createElement('div');
+    app._nutKeyboardSafe(ov);
+    assert.equal(vv._count(), 1, 'listening while open');
+    present = false;                              // sheet closed
+    vv._fire('resize');
+    assert.equal(vv._count(), 0, 'and not after — these outlive the element otherwise');
+    delete app.visualViewport;
+  });
+
+  test('KEYBOARD no visualViewport means no change and no throw', () => {
+    setUp(90);
+    delete app.visualViewport;
+    const ov = app.document.createElement('div');
+    ov.style.height = '';
+    app._nutKeyboardSafe(ov);
+    assert.equal(ov.style.height, '', 'older WebViews keep the normal sheet');
+  });
+
+  test('KEYBOARD every nutrition sheet that takes typing is wired', () => {
+    setUp(90);
+    const vv = withKeyboard(400);
+    app.document.body.contains = () => true;
+    ['nutOpenSetup', 'nutOpenFoodPicker', 'nutOpenCustomFoodModal',
+     'nutOpenRecipeBuilder', 'nutOpenRecipePicker'].forEach((fn) => {
+      const d = dom();
+      app[fn]('lunch', app._nutToday());
+      const created = d.lastCreated();
+      assert.equal(created && created.style.bottom, 'auto',
+        `${fn} sizes its sheet to the visible area`);
+    });
+    delete app.visualViewport;
   });
 
   // ══ WATER — variable drink sizes ═══════════════════════════════════════════

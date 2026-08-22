@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.226';
+var APP_VERSION='4.9.227';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19155,6 +19155,10 @@ function _nutSuppSection(dayData, dateKey){
 // _phxKeyboardSafe shrinks the OVERLAY; a vh cap is measured against the full
 // viewport and does not shrink with it, so with flex-end the excess overflows
 // off the TOP of the screen — inputs gone, save button still visible.
+// v4.9.227: keyboard safety is guarded as a CONDITIONAL PAIR in harness.mjs —
+// typed field => must be armed, armed => must not measure in vh. An unarmed vh
+// cap is correct, so only the combination is a bug. Enumerated mechanically, so
+// sheets added later are covered without anyone updating a list.
 function nutOpenFoodPicker(slot, dateKey, mode){
   // v4.9.172: 'log' must be asked for. Omitting the mode plans, which is the
   // harmless outcome; the ticking path is never what you get by forgetting.

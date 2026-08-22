@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.226'", 'version is 4.9.226');
+has("var APP_VERSION='4.9.227'", 'version is 4.9.227');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -633,7 +633,7 @@ hasNotCode("if(tab==='nutrition'){ _nutTab='today';", 'BUG2: the unconditional r
 hasCode("localStorage.getItem('phoenix_last_weighin')", 'WEIGHT: targets read the LIVE morning weigh-in, not just athlete.bw');
 
 hasCode('function _phxKeyboardSafe(', 'KEYBOARD: promoted to a shared helper other domains can call');
-hasCode('function _nutKeyboardSafe(ov){ return _phxKeyboardSafe(ov); }', 'KEYBOARD: nutrition keeps a thin wrapper so its twelve sheets do not churn');
+hasCode('function _nutKeyboardSafe(ov){ return _phxKeyboardSafe(ov); }', 'KEYBOARD: nutrition keeps a thin wrapper so its call sites do not churn');
 hasCode("vv.addEventListener('resize', fit)", 'KEYBOARD: and follow it as it opens');
 hasCode("t.scrollIntoView({block:'center'})", 'KEYBOARD: the focused field is brought into view');
 
@@ -2108,6 +2108,67 @@ hasCode('data-act="recover"',                  'BACKUP: the offer is wired into 
   if (reads >= 1) ok('BACKUP: the _bak key is actually READ, not just written');
   else bad('BACKUP: nothing reads blab_v1_{uid}_bak — the backup is a claim again. ' +
            'Bytes being written is not recoverability; there must be a path Jon can reach.');
+})();
+
+// ── Keyboard safety, as a CONDITIONAL PAIR rather than a list ───────────────
+// v4.9.227. Peptides' framing, and it is better than the one I shipped in .225.
+// Two rules, neither implying the other:
+//     has a typed field  ->  must be armed
+//     is armed           ->  must not measure in vh
+// An UNARMED vh cap is perfectly correct — nothing resizes its overlay — so a
+// blanket "no vh" ban sends you fixing things that are fine. Only the COMBINATION
+// is the bug.
+//
+// Enumerated MECHANICALLY, because my .225 test drove a hand-written list of ten
+// openers. That is the exact shape Peptides caught in itself: a guard that reads
+// like coverage but silently omits the sheet you add tomorrow. The scanner's sheet
+// is covered by this before it exists. Scoped to the nut/_nut prefix — my domain's
+// names — so it can never speak about another domain's markup.
+(() => {
+  const code = codeSrc();
+  const fnRe = /\bfunction\s+(_?nut[A-Za-z0-9_]*)\s*\(/g;
+  const sheets = [];
+  let m;
+  while ((m = fnRe.exec(code)) !== null) {
+    let d = 0, started = false, end = code.length;
+    for (let k = m.index; k < code.length; k++) {
+      const ch = code[k];
+      if (ch === '{') { d++; started = true; }
+      else if (ch === '}') { d--; if (started && d === 0) { end = k; break; } }
+    }
+    const body = code.slice(m.index, end + 1);
+    // A "sheet" is a function that builds an overlay and puts it on the page.
+    if (!/appendChild\(\s*ov\s*\)/.test(body)) continue;
+    sheets.push({
+      name:  m[1],
+      armed: /_(?:nut|phx)KeyboardSafe\s*\(/.test(body),
+      vh:    (/max-height:\s*(\d+)vh/.exec(body) || [null])[0],
+      typed: /<(?:input|textarea)\b/.test(body),
+    });
+  }
+
+  if (sheets.length < 10) {
+    bad(`KEYBOARD: only found ${sheets.length} nutrition sheets — the enumeration broke, ` +
+        'which would make every assertion below vacuously true');
+    return;
+  }
+  ok(`KEYBOARD: enumerated ${sheets.length} nutrition sheets mechanically (no hand-written list)`);
+
+  const unarmed = sheets.filter(s => s.typed && !s.armed);
+  if (unarmed.length === 0) ok('KEYBOARD: every nutrition sheet with a typed field is armed');
+  else bad('KEYBOARD: ' + unarmed.map(s => s.name).join(', ') +
+           ' take typed input but are not armed — the keyboard will cover the field');
+
+  const bothWays = sheets.filter(s => s.armed && s.vh);
+  if (bothWays.length === 0) ok('KEYBOARD: no armed nutrition sheet caps its panel in vh');
+  else bad('KEYBOARD: ' + bothWays.map(s => `${s.name} (${s.vh})`).join(', ') +
+           ' are armed AND capped in vh — the panel will not shrink with the overlay, ' +
+           'so the overflow goes off the TOP of the screen, hiding the inputs while ' +
+           'leaving the save button visible');
+
+  const armedCount = sheets.filter(s => s.armed).length;
+  if (armedCount >= 10) ok(`KEYBOARD: ${armedCount} nutrition sheets armed`);
+  else bad(`KEYBOARD: only ${armedCount} armed — sheets lost their arming`);
 })();
 
 console.log(`\n${fail === 0 ? '\x1b[32mPASS' : '\x1b[31mFAIL'}\x1b[0m — ${pass} passed, ${fail} failed\n`);

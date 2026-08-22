@@ -617,6 +617,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'and the overflow goes off the TOP of the screen, not the bottom');
   };
 
+  // NOT THE COVERAGE GUARD — the hand-written list below is a sample, and a sheet
+  // added tomorrow will not appear in it. The authority is the mechanical
+  // enumeration in harness.mjs (KEYBOARD:), which walks every nut/_nut function
+  // that appends an overlay. This case earns its place by inspecting the markup
+  // these openers REALLY render, which reading the source cannot do.
   test('ENTRY armed nutrition sheets cap their panel in %, never vh', () => {
     setUp(90);
     app.nutSaveRecipes([rec('Chilli Sauce')]);

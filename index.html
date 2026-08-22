@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.245';
+var APP_VERSION='4.9.246';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23023,6 +23023,8 @@ function pepRenderScreen(){
   if(auditCopy) auditCopy.addEventListener("click", pepCopyAudit);
   var histBtn = body.querySelector("#pep-hist-confirm");
   if(histBtn) histBtn.addEventListener("click", pepConfirmHistory);
+  var impOpen = body.querySelector("#pep-import-open");
+  if(impOpen) impOpen.addEventListener("click", pepOpenImport);
   var bloodAdd = body.querySelector("#pep-blood-add");
   if(bloodAdd) bloodAdd.addEventListener("click", function(){ pepOpenBloodPanel(null); });
   body.querySelectorAll("[data-pep-blood-open]").forEach(function(el){
@@ -25142,6 +25144,7 @@ function _pepTabStock(ps){
 
   h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;\">";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">Stock On Hand</div>";
+  h += "<button id=\"pep-import-open\" style=\"background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Import</button>";
   h += "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add</button>";
   h += "</div>";
   h += "<div style=\"font-size:11px;color:" + (r.stockDone ? "#4CAF50" : "var(--gold)") + ";margin-bottom:14px;\">" +
@@ -25304,6 +25307,138 @@ function pepSetVialSize(idx, mg){
 
 // Custom vial size. A DOM sheet, not prompt() — iOS PWA suppresses native
 // dialogs silently, which would look like a dead button (CLAUDE.md rule 4).
+// ── PROTOCOL IMPORT (v4.9.246) ───────────────────────────────────────────────
+// Jon's protocol changed and re-entering eight compounds through the edit sheet
+// on a phone is the reason it would not get done. This takes the canonical JSON
+// from his own context document and applies it in one action.
+//
+// SAFETY, because this REPLACES his protocol and the .158 empty-stub wipe is the
+// precedent:
+//   · every entry is validated BEFORE anything is written
+//   · nothing is silently dropped — unknown compounds are named back to him
+//   · a preview says exactly what will happen, and he confirms it
+//   · the current state is backed up first, so Settings -> Restore reverses it
+//   · it refuses outright rather than applying a partial protocol
+//
+// His document uses suffixed ids for repeat courses (motsc_c2, tb500_standalone,
+// nad_c2). The library keys the compound, not the course, so those resolve to
+// the base compound. Resolution is reported, never silent — a rename upstream
+// must look like a rename, not like a compound quietly vanishing.
+var _PEP_ID_ALIAS = {
+  ghkcu_standalone: "ghkcu", tb500_standalone: "tb500", bpc157_standalone: "bpc157",
+  motsc_c2: "motsc", motsc_c3: "motsc", "5amq_c2": "5amq", nad_c2: "nad",
+  epitalon_c2: "epitalon", epitalon_c3: "epitalon", cjc: "cjc1295",
+  "cjc1295_nodac": "cjc1295", slu332: "slupp332", tesam: "tesamorelin",
+};
+
+// Returns {ok, entries, problems, resolved} — never throws, never half-applies.
+function _pepValidateImport(raw){
+  var out = {ok:false, entries:[], problems:[], resolved:[]};
+  var parsed = null;
+  var txt = String(raw || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  if(!txt){ out.problems.push("Nothing pasted."); return out; }
+  try { parsed = JSON.parse(txt); }
+  catch(e){ out.problems.push("That is not valid JSON — " + (e && e.message ? e.message : "parse failed")); return out; }
+  if(!Array.isArray(parsed)) parsed = (parsed && Array.isArray(parsed.stacks)) ? parsed.stacks : null;
+  if(!Array.isArray(parsed)){ out.problems.push("Expected a JSON array of protocol entries, or an object with a stacks array."); return out; }
+  if(!parsed.length){ out.problems.push("The array is empty. Refusing to replace your protocol with nothing."); return out; }
+
+  parsed.forEach(function(e, i){
+    var where = "entry " + (i + 1);
+    if(!e || typeof e !== "object"){ out.problems.push(where + " is not an object."); return; }
+    var rawId = String(e.compoundId || "").trim();
+    if(!rawId){ out.problems.push(where + " has no compoundId."); return; }
+    var id = _PEP_ID_ALIAS[rawId] || rawId;
+    var c = _pepCompound(id);
+    if(!c){ out.problems.push(where + ": \"" + rawId + "\" is not a compound this app knows."); return; }
+    if(id !== rawId) out.resolved.push(rawId + " -> " + c.name);
+    var dose = parseFloat(e.dose);
+    if(isNaN(dose) || dose <= 0){ out.problems.push(where + " (" + c.name + ") has no usable dose."); return; }
+    if(e.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(e.startDate))){
+      out.problems.push(where + " (" + c.name + ") startDate must be YYYY-MM-DD."); return;
+    }
+    var st = {compoundId: id, dose: dose, startDate: e.startDate || _pepToday()};
+    ["cycleWeeks","offWeeks","vialMg","waterMl","sealedVials","openDosesUsed"].forEach(function(k){
+      var v = (k === "openDosesUsed" && e.dosesUsed != null) ? e.dosesUsed : e[k];
+      if(v != null && v !== "" && !isNaN(parseFloat(v))) st[k] = parseFloat(v);
+    });
+    if(st.cycleWeeks === 0) delete st.cycleWeeks;          // 0 means continuous, not a zero-length cycle
+    if(e.freq) st.freq = String(e.freq);
+    if(typeof e.continuous === "boolean") st.continuous = e.continuous;
+    if(e.status) st.status = String(e.status);
+    if(e.notes) st.notes = String(e.notes);
+    st.stockCounted = (e.sealedVials != null || e.dosesUsed != null);
+    out.entries.push(st);
+  });
+
+  // All-or-nothing, and entries is EMPTIED on refusal. Leaving the valid ones
+  // populated beside ok:false is safe only for as long as every caller checks
+  // ok first — a half-filled list next to a failure flag is a trap for the next
+  // reader, and applying a protocol with a compound silently missing is exactly
+  // the outcome this function exists to prevent.
+  if(out.problems.length){ out.entries = []; return out; }
+  out.ok = out.entries.length > 0;
+  return out;
+}
+
+function pepOpenImport(){
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  ov.innerHTML = "<div id=\"pep-imp-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88%;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Import protocol</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;\">Paste the protocol JSON. This <strong>replaces</strong> your current compounds. Your existing protocol is backed up first &mdash; Settings &rarr; Diagnostic can put it back.</div>" +
+    "<textarea id=\"pep-imp-json\" rows=\"8\" placeholder=\"[ { &quot;compoundId&quot;: ... } ]\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:12px;font-family:ui-monospace,Menlo,monospace;box-sizing:border-box;resize:none;\"></textarea>" +
+    "<div id=\"pep-imp-msg\" style=\"font-size:12px;line-height:1.6;margin:10px 0;min-height:16px;\"></div>" +
+    "<div style=\"display:flex;gap:10px;\">" +
+    "<button id=\"pep-imp-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Cancel</button>" +
+    "<button id=\"pep-imp-check\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Check</button>" +
+    "</div></div>";
+  document.body.appendChild(ov);
+  _phxKeyboardSafe(ov);
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+  var cancel = document.getElementById("pep-imp-cancel");
+  if(cancel) cancel.addEventListener("click", function(){ ov.remove(); });
+
+  var btn = document.getElementById("pep-imp-check");
+  if(btn) btn.addEventListener("click", function(){
+    var msg = document.getElementById("pep-imp-msg");
+    var ta  = document.getElementById("pep-imp-json");
+    var v = _pepValidateImport(ta ? ta.value : "");
+    if(!v.ok){
+      if(msg) msg.innerHTML = "<div style=\"color:var(--gold);\">Not imported. Nothing has changed.</div>" +
+        "<ul style=\"margin:6px 0 0 16px;padding:0;color:var(--text3);\">" +
+        v.problems.slice(0, 8).map(function(x){ return "<li>" + _esc(x) + "</li>"; }).join("") +
+        (v.problems.length > 8 ? "<li>and " + (v.problems.length - 8) + " more</li>" : "") + "</ul>";
+      return;
+    }
+    // Confirmed state: show what WILL happen, then require a second tap.
+    var ps = pepGetState();
+    var had = (ps.stacks || []).length;
+    if(msg) msg.innerHTML =
+      "<div style=\"color:var(--text2);\"><strong>" + v.entries.length + " compounds</strong> ready to import. This replaces the <strong>" + had + "</strong> currently in your protocol.</div>" +
+      "<div style=\"color:var(--text3);margin-top:6px;\">" + v.entries.map(function(e){
+        var c = _pepCompound(e.compoundId);
+        return _esc(c ? c.name : e.compoundId) + " " + _pepFmtDose(e.dose, c ? c.doseUnit : "mg");
+      }).join(" &middot; ") + "</div>" +
+      (v.resolved.length ? "<div style=\"color:var(--gold);margin-top:6px;\">Course ids resolved to compounds: " + _esc(v.resolved.join(", ")) + "</div>" : "");
+    btn.textContent = "Confirm import";
+    btn.onclick = function(){
+      var ps2 = pepGetState();
+      var uid = currentSession && currentSession.user && currentSession.user.id;
+      if(uid){
+        try { _pepBackupLocal("peptide_v1_" + uid, JSON.stringify(ps2)); } catch(_e){}
+      }
+      ps2.stacks = v.entries;
+      ps2.historyConfirmed = false;      // a new protocol has no reviewed history
+      pepSaveState(ps2);
+      ov.remove();
+      _pepTab = "stock";
+      pepRenderScreen();
+      if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+    };
+  });
+}
+
 function pepOpenCustomVial(idx){
   var ps = pepGetState();
   var st = ps.stacks && ps.stacks[idx]; if(!st) return;

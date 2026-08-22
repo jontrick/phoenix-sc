@@ -1883,6 +1883,96 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── IMPORT — applying a protocol without retyping it on a phone (v4.9.246) ─
+  // Jon's protocol changed and the app had no way to load one. Eight compounds
+  // through the edit sheet on a phone is the reason it would not get done.
+  //
+  // This REPLACES his protocol, so the .158 empty-stub wipe is the precedent
+  // that shapes it: validate everything before writing anything, name what it
+  // cannot resolve instead of dropping it, back up first, and refuse outright
+  // rather than apply a partial protocol.
+  {
+    const V = (raw) => app._pepValidateImport(raw);
+
+    test('IMPORT a good protocol validates and normalises', () => {
+      const r = V(JSON.stringify([
+        { compoundId:'retatrutide', dose:8, startDate:'2026-08-22', vialMg:30, waterMl:3, continuous:true, cycleWeeks:0 },
+        { compoundId:'bpc157', dose:0.5, startDate:'2026-08-22', vialMg:10, waterMl:1, continuous:true, cycleWeeks:0 },
+      ]));
+      assert.equal(r.ok, true, 'accepted');
+      assert.equal(r.entries.length, 2, 'both entries');
+      assert.equal(r.entries[0].dose, 8, 'dose carried');
+      assert.ok(!('cycleWeeks' in r.entries[0]),
+        'cycleWeeks 0 means CONTINUOUS and is dropped, not stored as a zero-length cycle');
+    });
+
+    test('IMPORT course-suffixed ids resolve and the resolution is REPORTED', () => {
+      const r = V(JSON.stringify([
+        { compoundId:'tb500_standalone', dose:1.25, vialMg:10, waterMl:2 },
+        { compoundId:'motsc_c2', dose:10, vialMg:10, waterMl:0.5 },
+      ]));
+      assert.equal(r.ok, true, 'his document uses course ids; they resolve to compounds');
+      assert.equal(r.entries[0].compoundId, 'tb500', 'mapped');
+      assert.equal(r.entries[1].compoundId, 'motsc', 'mapped');
+      assert.equal(r.resolved.length, 2,
+        'and both are named back to him — a silent remap is how a compound quietly ' +
+        'becomes a different compound');
+    });
+
+    test('IMPORT an unknown compound fails the WHOLE import, naming it', () => {
+      const r = V(JSON.stringify([
+        { compoundId:'bpc157', dose:0.5 },
+        { compoundId:'unobtainium', dose:1 },
+      ]));
+      assert.equal(r.ok, false, 'all-or-nothing');
+      assert.equal(r.entries.length, 0, 'nothing is offered for application');
+      assert.ok(r.problems.join(' ').includes('unobtainium'),
+        'named, not dropped — a partial protocol silently missing a compound is worse ' +
+        'than a refusal');
+    });
+
+    test('IMPORT an empty array is refused rather than wiping the protocol', () => {
+      const r = V('[]');
+      assert.equal(r.ok, false, 'refused');
+      assert.ok(r.problems.join(' ').toLowerCase().includes('refusing'),
+        'this is the .158 empty-stub wipe as an import: an empty payload must never ' +
+        'be mistaken for an instruction to clear everything');
+    });
+
+    test('IMPORT malformed JSON reports the parse error and changes nothing', () => {
+      const r = V('[{compoundId: bpc157,,}');
+      assert.equal(r.ok, false, 'refused');
+      assert.equal(r.entries.length, 0, 'nothing to apply');
+    });
+
+    test('IMPORT a fenced paste works, because that is what gets copied', () => {
+      const r = V('```json\n[{"compoundId":"bpc157","dose":0.5}]\n```');
+      assert.equal(r.ok, true, 'the fence is stripped — he will paste what he was given');
+    });
+
+    test('IMPORT a bad date is caught before it reaches the schedule engine', () => {
+      const r = V(JSON.stringify([{ compoundId:'bpc157', dose:0.5, startDate:'22/08/2026' }]));
+      assert.equal(r.ok, false,
+        'a non-ISO date silently becomes an invalid Date and every dose lands on NaN');
+    });
+
+    test('IMPORT a missing dose is caught rather than defaulting', () => {
+      const r = V(JSON.stringify([{ compoundId:'bpc157' }]));
+      assert.equal(r.ok, false,
+        'no dose is a refusal — a library default here would be a number he never chose ' +
+        'going into a syringe');
+    });
+
+    test('IMPORT stock figures mark the compound as counted, absent ones do not', () => {
+      const withStock = V(JSON.stringify([{ compoundId:'bpc157', dose:0.5, sealedVials:2, dosesUsed:3 }]));
+      assert.equal(withStock.entries[0].stockCounted, true, 'he gave real numbers');
+      assert.equal(withStock.entries[0].openDosesUsed, 3, 'dosesUsed maps to the app field');
+      const without = V(JSON.stringify([{ compoundId:'bpc157', dose:0.5 }]));
+      assert.equal(without.entries[0].stockCounted, false,
+        'no figures means uncounted — the readiness gate must still ask him');
+    });
+  }
+
   // ── ASSUMED — a guess must not look like a measurement (v4.9.245) ──────────
   // The root cause behind the .236 corrections rather than the six wrong
   // numbers. _pepRecon has always known whether a concentration came from a

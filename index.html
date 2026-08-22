@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.214';
+var APP_VERSION='4.9.215';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7823,6 +7823,12 @@ function _phxRecordWriteError(context, err, payload){
 // to .182 instead of highest+1. Not detectable from file state — see version_check.mjs.
 
 // v4.9.196 [PM]: commit-subject version check.
+// v4.9.215 [PM]: collision remedy. v4.9.214 was shipped TWICE — a31aec0 [TRAINING]
+// custom-template rescue and 55f86e7 [PM] the weigh-in wiring. version_check DID fire and
+// named the fix; I pushed anyway because I chained it with `;` instead of `&&`, so a red
+// gate did not stop the command. The gate was right and the operator was wrong — run gates
+// with && so a failure actually blocks the push. Second .214 rebased onto the first here.
+
 // ====== v4.9.175 SHARED DOM CONFIRM (PM-owned) ======
 // CLAUDE.md rule 4: native confirm() is SUPPRESSED in the iOS PWA — and a suppressed
 // confirm returns FALSE, so `if(!confirm(x)) return;` always returns and the feature is

@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.214'", 'version is 4.9.214');
+has("var APP_VERSION='4.9.215'", 'version is 4.9.215');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1835,7 +1835,7 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
 })();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
 
-// ── CUSTOM SESSION TEMPLATES (v4.9.214) ─────────────────────────────────────
+// ── CUSTOM SESSION TEMPLATES (v4.9.215) ─────────────────────────────────────
 (() => {
   // The bug was that templates were WRITTEN and never MIRRORED — the same shape as the
   // orphaned _bak nets. So this asserts the save path reaches blabSaveState, which is

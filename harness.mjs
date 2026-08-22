@@ -286,7 +286,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.239'", 'version is 4.9.239');
+has("var APP_VERSION='4.9.240'", 'version is 4.9.240');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1855,7 +1855,14 @@ hasNotCode("details: (err && err.details) || null",     'DIAG: details (value-ec
 hasNotCode("hint: (err && err.hint) || null",           'DIAG: hint (value-echoing) not recorded');
 has("if(msg.length > 200) msg = msg.slice(0, 200)", 'DIAG: truncation present (structural — that it TRUNCATES is tests/pm.mjs)');
 has("localStorage.setItem('phx_write_errors', JSON.stringify(ring))", 'DIAG: ring write present (structural — that it RETAINS 8 is tests/pm.mjs)');
-has('while(ring.length > 8) ring.shift();',         'DIAG: ring cap present (structural — that it EVICTS is tests/pm.mjs)');
+has('while(ring.length > 40) ring.shift();',        'DIAG: ring cap present (structural — that it EVICTS is tests/pm.mjs)');
+// v4.9.240: the ring must be RENDERED, not merely collected. It was written from v4.9.176
+// and read by nothing — the panel showed one entry, so any later failure overwrote the one
+// that mattered. Structural pin here; that an EARLIER failure survives a later one is
+// driven in tests/pm.mjs.
+has("getElementById('diag-error-ring')",             'DIAG: the write-error ring is read back for display');
+has('id="diag-error-ring"',                          'DIAG: the panel has somewhere to show it');
+has('prev.count = (prev.count || 1) + 1;',           'DIAG: ring coalesces by context so a loop cannot evict another domain');
 // _blabSendCloud: BOTH branches record. Keepalive is the pagehide write — must not swallow.
 has("_phxRecordWriteError('_blabSendCloud.keepalive'",        'BLAB MIRROR: keepalive HTTP branch calls the recorder (structural — that it RECORDS is tests/pm.mjs)');
 has("_phxRecordWriteError('_blabSendCloud.keepalive.reject'", 'BLAB MIRROR: keepalive reject branch calls the recorder (structural — that it RECORDS is tests/pm.mjs)');

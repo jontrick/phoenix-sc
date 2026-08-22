@@ -2849,6 +2849,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin:8px 0 6px;">Last write error (phx_last_write_error)</div>
   <pre id="diag-last-error" style="background:#0d0a08;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 18px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:11px;color:#d96a5e;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow-y:auto;">(loading)</pre>
 
+  <!-- Write-error ring: every failing writer, not just the most recent -->
+  <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin:8px 0 6px;">All recent write errors (phx_write_errors)</div>
+  <pre id="diag-error-ring" style="background:#0d0a08;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 18px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:11px;color:#d96a5e;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto;">(loading)</pre>
+
   <!-- Live test write button -->
   <button id="diag-test-write" class="btn-primary" style="width:100%;padding:14px;margin-bottom:10px;">Run live test write to Supabase</button>
   <pre id="diag-test-result" style="display:none;background:#0d0a08;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 12px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;"></pre>
@@ -3532,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.239';
+var APP_VERSION='4.9.240';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7274,6 +7278,24 @@ window._phxOpenDiagnostic = async function(){
     try { raw = localStorage.getItem('phx_last_write_error') || '(none)'; } catch(_e){ raw = '(localStorage unavailable)'; }
     lastErr.textContent = raw;
   }
+  // v4.9.240: render the RING, not just the newest. Until now this was collected and
+  // never shown, so a failure was visible only until the next one replaced it.
+  var ringEl = document.getElementById('diag-error-ring');
+  if(ringEl){
+    var rows = [];
+    try { rows = JSON.parse(localStorage.getItem('phx_write_errors') || '[]'); } catch(_e){ rows = []; }
+    if(!Array.isArray(rows) || !rows.length){
+      ringEl.textContent = '(none)';
+    } else {
+      ringEl.textContent = rows.slice().reverse().map(function(r){
+        var n = (r && r.count > 1) ? ('  ×' + r.count + ' (first ' + String(r.first_ts || r.ts).slice(11,19) + ')') : '';
+        return String(r && r.ts || '').slice(0,19).replace('T',' ') + '  ' + String(r && r.context || '?') + n +
+               '\n    ' + String((r && r.message) || '') +
+               ((r && r.code) ? ('  [' + r.code + ']') : '');
+      }).join('\n\n');
+    }
+  }
+
   // Wire the test-write button (idempotent — re-bind every open).
   var btn = document.getElementById('diag-test-write');
   if(btn){
@@ -7786,7 +7808,14 @@ function showMigrationModal(localAthlete,session){
 // values — and only the error code + a truncated message. `details` and `hint` are deliberately
 // NOT recorded: Postgres/PostgREST echo the offending value in those fields (e.g. a bad date,
 // a duplicate key). Keeps the latest under phx_last_write_error (Diagnostic panel reads it)
-// plus a ring of the last 8 under phx_write_errors so several failing writers stay visible.
+// plus a ring under phx_write_errors so several failing writers stay visible.
+//
+// v4.9.240 [PM]: THAT SENTENCE WAS FALSE WHEN IT WAS WRITTEN. The ring was written here
+// and READ BY NOTHING — the Diagnostic panel only ever rendered phx_last_write_error, a
+// SINGLE entry, so any later failure from any domain overwrote the one that mattered. Four
+// domains spent a day designing call-site rationing schemes for slots in a buffer nobody
+// could read, and the eviction problem was not 8-deep, it was 1-deep. The ring is now
+// rendered in Settings -> Diagnostic, coalesced by context, and 40 deep.
 function _phxShapeOf(v, depth){
   depth = depth || 0;
   try {
@@ -7821,8 +7850,29 @@ function _phxRecordWriteError(context, err, payload){
     localStorage.setItem('phx_last_write_error', txt);
     var ring = [];
     try { ring = JSON.parse(localStorage.getItem('phx_write_errors') || '[]'); if(!Array.isArray(ring)) ring = []; } catch(_r){ ring = []; }
-    ring.push(snap);
-    while(ring.length > 8) ring.shift();
+    // v4.9.240 [PM]: COALESCE BY CONTEXT. A context occupies exactly ONE slot however often
+    // it fires, so a loop — a walk heartbeat, a bulk migrate — can never evict another
+    // domain's entry. This belongs here and not at the call sites: suppression flags in 16
+    // places are 16 chances to get it wrong, and they only protect the domain that
+    // remembers to add them. The first message/code are kept because the ORIGINAL failure
+    // is the informative one; the latest are kept alongside so a changing error is visible.
+    var prevIdx = -1;
+    for(var _i = ring.length - 1; _i >= 0; _i--){ if(ring[_i] && ring[_i].context === snap.context){ prevIdx = _i; break; } }
+    if(prevIdx >= 0){
+      var prev = ring.splice(prevIdx, 1)[0];
+      prev.count = (prev.count || 1) + 1;
+      prev.first_ts = prev.first_ts || prev.ts;
+      prev.ts = snap.ts;
+      prev.last_message = snap.message;
+      prev.last_code = snap.code;
+      prev.payload_shape = snap.payload_shape;
+      ring.push(prev);
+    } else {
+      snap.count = 1;
+      snap.first_ts = snap.ts;
+      ring.push(snap);
+    }
+    while(ring.length > 40) ring.shift();
     localStorage.setItem('phx_write_errors', JSON.stringify(ring));
   } catch(_e){}
 }

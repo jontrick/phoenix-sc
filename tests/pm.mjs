@@ -90,17 +90,62 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(snap.hint, undefined, 'no hint field at all');
     assert.ok(snap.message.length <= 201, 'message truncated, got ' + snap.message.length);
   });
-  test('CONTRACT _phxRecordWriteError: ring keeps the last 8, never throws', () => {
+  test('CONTRACT _phxRecordWriteError: a looping writer cannot evict another domain', () => {
+    // THE POINT OF THE RING. It is shared by four domains. Before v4.9.240 a repeating
+    // failure — a walk heartbeat firing every few seconds, a bulk migrate over 300 rows —
+    // pushed one entry per occurrence and flushed everyone else's out. Training was about
+    // to add per-call-site suppression flags in 16 places to work around it; suppression
+    // belongs in the helper, where it protects domains that never thought about it.
     app.localStorage.removeItem('phx_write_errors');
-    for (let i = 0; i < 12; i++) app._phxRecordWriteError('ctx' + i, { message: 'e' + i }, {});
+    app._phxRecordWriteError('peptides.bloodPanel', { message: 'insert failed', code: '23505' }, {});
+    app._phxRecordWriteError('pm.weighIn', { message: 'upsert failed', code: '42703' }, {});
+    for (let i = 0; i < 200; i++) app._phxRecordWriteError('training.walkHeartbeat', { message: 'offline' }, {});
+
     const ring = JSON.parse(app.localStorage.getItem('phx_write_errors'));
-    assert.equal(ring.length, 8, 'ring capped at 8');
-    assert.equal(ring[7].context, 'ctx11', 'newest retained');
-    assert.equal(ring[0].context, 'ctx4', 'oldest evicted');
+    const ctxs = ring.map(r => r.context);
+    assert.ok(ctxs.includes('peptides.bloodPanel'), '200 heartbeat failures must NOT evict the blood panel');
+    assert.ok(ctxs.includes('pm.weighIn'), '200 heartbeat failures must NOT evict the weigh-in');
+    assert.equal(ctxs.filter(c => c === 'training.walkHeartbeat').length, 1, 'the looping context occupies exactly ONE slot');
+    const hb = ring.find(r => r.context === 'training.walkHeartbeat');
+    assert.equal(hb.count, 200, 'but the count is preserved, so the scale is not lost');
+    assert.ok(hb.first_ts, 'and when it started');
+  });
+
+  test('CONTRACT _phxRecordWriteError: ring is deep enough and evicts oldest-first', () => {
+    app.localStorage.removeItem('phx_write_errors');
+    for (let i = 0; i < 45; i++) app._phxRecordWriteError('ctx' + i, { message: 'e' + i }, {});
+    const ring = JSON.parse(app.localStorage.getItem('phx_write_errors'));
+    assert.equal(ring.length, 40, 'ring capped at 40');
+    assert.equal(ring[39].context, 'ctx44', 'newest retained');
+    assert.equal(ring[0].context, 'ctx5', 'oldest evicted');
     // Callers wrap cloud writes in this; it must never become the thing that throws.
     app._phxRecordWriteError(undefined, undefined, undefined);
     app._phxRecordWriteError('c', null, (() => { const o = {}; o.self = o; return o; })());
     assert.ok(true, 'survived undefined args and a circular payload');
+  });
+
+  test('ENTRY the Diagnostic panel actually RENDERS the ring', async () => {
+    // The ring was written from v4.9.176 and READ BY NOTHING until v4.9.240 — the panel
+    // showed only phx_last_write_error, one entry, so any later failure overwrote the one
+    // that mattered. A comment in the source claimed the ring kept writers "visible". It
+    // was false when written. This drives the panel and asserts an earlier failure is
+    // still on screen after a later one — the exact thing that was untrue for 60+ versions.
+    app.localStorage.removeItem('phx_write_errors');
+    app._phxRecordWriteError('pm.weighIn', { message: 'weigh-in upsert failed', code: '42703' }, {});
+    app._phxRecordWriteError('peptides.bloodPanel', { message: 'photo upload failed' }, {});
+
+    const el = { textContent: '', style: {}, addEventListener(){}, remove(){} };
+    const realGet = app.document.getElementById;
+    // Delegate every OTHER id to the real stub — returning null broke showScreen and the
+    // failure then arrived as an unhandled rejection, not as this test's assertion.
+    app.document.getElementById = (id) => (id === 'diag-error-ring' ? el : realGet.call(app.document, id));
+    try { await Promise.resolve(app._phxOpenDiagnostic()); }
+    catch (_e) { /* the rest of the panel is stubbed; the ring render is what matters */ }
+    finally { app.document.getElementById = realGet; }
+
+    assert.ok(el.textContent.includes('peptides.bloodPanel'), 'the newest failure is shown');
+    assert.ok(el.textContent.includes('pm.weighIn'), 'and the EARLIER one is still there — not overwritten');
+    assert.ok(el.textContent.includes('42703'), 'with its error code');
   });
 
   test('CONTRACT _phxRecordWriteError: holds for a CARELESS caller, not just a careful one', () => {

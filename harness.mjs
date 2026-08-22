@@ -1158,9 +1158,22 @@ try {
 })();
 
 // ── PEPTIDES — cross-domain contract (STRUCTURAL) ───────────────────────────
-// _phxRecordWriteError is the ONLY foreign surface the peptide block consumes.
-// Every call site is typeof-guarded, so a PM rename degrades to "no diagnostics"
-// rather than throwing inside a cloud write.
+// TWO foreign surfaces, as of v4.9.220. Listing them is the point of this block:
+// an undeclared consumption is how a rename in another domain becomes a black
+// screen here.
+//   _phxRecordWriteError  (PM)         — every call site typeof-guarded, so a
+//                                        rename degrades to "no diagnostics"
+//                                        rather than throwing inside a write.
+//   _phxKeyboardSafe      (Nutrition)  — NOT guarded, deliberately. It is called
+//                                        at overlay-creation time, not inside a
+//                                        write path, and it is pinned
+//                                        provider-side in tests/nutrition.mjs.
+//                                        A typeof guard here would convert a
+//                                        loud break into a silent one: the
+//                                        sheets would open with the keyboard
+//                                        back over the field and nothing would
+//                                        say why. Different call site, different
+//                                        right answer.
 (() => {
   const START = 'PEPTIDE BLOCK START — do not move';
   const END   = 'PEPTIDE BLOCK END — do not move';
@@ -1192,6 +1205,29 @@ try {
   /\bnut[A-Z]/.test(blk)
     ? bad('PEP: STRUCTURAL peptide block reaches into Nutrition state')
     : ok('PEP: STRUCTURAL peptide block consumes nothing from Nutrition');
+  // The declared consumption, pinned by COUNT. _phxKeyboardSafe is not
+  // idempotent — arming twice registers two viewport listeners that both
+  // outlive the sheet — so "is it called?" is the wrong question and "how many
+  // times?" is the right one. Two sheets take typed input; two calls. A third
+  // means someone armed it somewhere that runs more than once, which is the
+  // exact mistake the helper's own contract warns about.
+  const kb = (blk.match(/_phxKeyboardSafe\s*\(/g) || []).length;
+  kb === 2
+    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 2 creation sites')
+    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 2 (pepOpenEditStack, pepOpenCustomVial); the helper is NOT idempotent`);
+})();
+
+// The other half of the keyboard fix, and the half the shared helper cannot do.
+// It shrinks the OVERLAY to the visible area; a panel sized in vh does not
+// shrink with it. Checked here as well as functionally because it is one
+// character away from silent reversion — 88% back to 88vh reads as a typo fix.
+(() => {
+  const i = html.indexOf('function pepOpenEditStack');
+  if (i < 0) { bad('PEP: pepOpenEditStack missing'); return; }
+  const blk = html.slice(i, html.indexOf('function pepRemoveStack', i));
+  blk.includes('max-height:88%')
+    ? ok('PEP: edit sheet panel is bounded by the overlay (88%), not the viewport')
+    : bad('PEP: edit sheet panel must cap at 88% of the RESIZED overlay — 88vh ignores the keyboard and pushes the draw-up preview off the top of the screen');
 })();
 
 // ── PEPTIDE PORTAL — recon engine / Today tile / ADJUST / BLOODS ────────────

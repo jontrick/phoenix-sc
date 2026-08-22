@@ -1873,6 +1873,145 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── KEYBOARD — the two sheets Jon types real numbers into (v4.9.220) ───────
+  // Jon: the iOS keyboard covers the field on the edit sheet. The argument that
+  // got his go-ahead was not "a field is hidden" but WHICH field: he loses the
+  // dose box AND the draw-up preview under it — the number that tells him
+  // whether what he just typed is right. Hiding the answer is worse than hiding
+  // the question.
+  //
+  // CONSUMES A NUTRITION SURFACE: _phxKeyboardSafe, published in
+  // HANDOFF_NUTRITION under "API other domains may call", pinned provider-side
+  // in tests/nutrition.mjs. These cases are the CONSUMER half — they prove the
+  // peptide sheets are wired to it and shaped so it can work. They deliberately
+  // do NOT re-test the helper; that is Nutrition's to pin and they have.
+  //
+  // WHAT THESE CAN AND CANNOT PROVE. The sandbox has no layout engine —
+  // getBoundingClientRect returns zeroes for everything. No test here measures a
+  // pixel, and none should claim to. What decides whether the preview is on
+  // screen reduces to three facts that ARE checkable: the overlay is sized to
+  // the visible area, the panel holding the preview is bounded by that overlay
+  // rather than by the layout viewport, and the preview is inside that panel.
+  // Assert those three; do not dress them up as a visual verification.
+  {
+    const kbSetUp = (visibleHeight) => {
+      reset();
+      signIn(UID);
+      const listeners = {};
+      app.visualViewport = {
+        height: visibleHeight, offsetTop: 0,
+        addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
+        removeEventListener: (ev, fn) => { listeners[ev] = (listeners[ev] || []).filter(f => f !== fn); },
+        _fire: (ev) => (listeners[ev] || []).forEach(f => f()),
+        _count: () => (listeners.resize || []).length,
+      };
+      app.document.body.contains = () => true;
+      return app.visualViewport;
+    };
+
+    // Capture the overlay the real open function creates. It is the FIRST div
+    // created inside the call, which is the one _phxKeyboardSafe is handed.
+    const openSheet = (fn) => {
+      const realCreate = app.document.createElement;
+      const made = [];
+      app.document.createElement = function (tag) {
+        const e = realCreate.call(app.document, tag);
+        made.push(e);
+        return e;
+      };
+      try { fn(); } finally { app.document.createElement = realCreate; }
+      return made[0];
+    };
+
+    const kbTearDown = () => { delete app.visualViewport; };
+
+    test('KEYBOARD the edit sheet is sized to the visible area, not the screen', () => {
+      kbSetUp(420);
+      seed(KEY, { stacks: [{ compoundId: 'bpc157', dose: 0.5, vialMg: 5, waterMl: 2 }] });
+      // Drives pepOpenEditStack, NOT _phxKeyboardSafe. Calling the helper here
+      // would pass with the sheet unwired — the .165 mistake exactly.
+      const ov = openSheet(() => app.pepOpenEditStack(0));
+      assert.ok(ov, 'the sheet created an overlay');
+      assert.equal(ov.style.height, '420px', 'overlay ends where the keyboard begins');
+      assert.equal(ov.style.bottom, 'auto', 'so flex-end sits the panel above it');
+      kbTearDown();
+    });
+
+    test('KEYBOARD the edit panel is bounded by the OVERLAY, not the layout viewport', () => {
+      kbSetUp(420);
+      seed(KEY, { stacks: [{ compoundId: 'bpc157', dose: 0.5, vialMg: 5, waterMl: 2 }] });
+      const ov = openSheet(() => app.pepOpenEditStack(0));
+      // This is the half the helper cannot do for us. It shrinks the overlay;
+      // a panel measured in vh does not shrink with it. 88vh of an 800px screen
+      // is 704px inside a 420px overlay — it overflows UPWARD, off the top,
+      // carrying dose, vial, water and the preview with it and leaving Save
+      // visible. 88% is the same size at rest and tracks the keyboard when up.
+      assert.ok(ov.innerHTML.includes('max-height:88%'),
+        'panel capped against the resized overlay');
+      assert.notIncludes(ov.innerHTML, 'max-height:88vh',
+        'vh does not shrink when the keyboard appears — that is the whole bug');
+      assert.ok(ov.innerHTML.includes('overflow-y:auto'),
+        'and scrolls internally rather than clipping');
+      kbTearDown();
+    });
+
+    test('KEYBOARD the draw-up preview is inside the panel that gets bounded', () => {
+      kbSetUp(420);
+      seed(KEY, { stacks: [{ compoundId: 'bpc157', dose: 0.5, vialMg: 5, waterMl: 2 }] });
+      const ov = openSheet(() => app.pepOpenEditStack(0));
+      const html = ov.innerHTML;
+      const panel = html.indexOf('id="pep-e-panel"');
+      const preview = html.indexOf('id="pep-e-draw"');
+      const dose = html.indexOf('id="pep-e-dose"');
+      assert.ok(panel >= 0, 'the bounded panel exists');
+      assert.ok(preview > panel, 'the preview is inside it, so it moves with it');
+      assert.ok(dose > panel, 'and so is the field it answers');
+      // The pairing is the point: sizing the field into view while the number
+      // that validates it stays hidden would satisfy a narrower test and still
+      // leave Jon guessing.
+      kbTearDown();
+    });
+
+    test('KEYBOARD the edit sheet keeps tracking as the keyboard opens', () => {
+      const vv = kbSetUp(800);
+      seed(KEY, { stacks: [{ compoundId: 'bpc157', dose: 0.5, vialMg: 5, waterMl: 2 }] });
+      const ov = openSheet(() => app.pepOpenEditStack(0));
+      assert.equal(vv._count(), 1, 'armed exactly once — the helper is not idempotent');
+      vv.height = 380;                       // he taps Dose, the keyboard comes up
+      vv._fire('resize');
+      assert.equal(ov.style.height, '380px', 'the sheet follows it');
+      kbTearDown();
+    });
+
+    test('KEYBOARD the custom vial sheet is wired too', () => {
+      const vv = kbSetUp(420);
+      seed(KEY, { stacks: [{ compoundId: 'bpc157', dose: 0.5, vialMg: 5, waterMl: 2 }] });
+      const ov = openSheet(() => app.pepOpenCustomVial(0));
+      assert.ok(ov, 'the sheet created an overlay');
+      assert.equal(ov.style.height, '420px', 'sized to the visible area');
+      assert.equal(vv._count(), 1, 'armed once');
+      assert.ok(ov.innerHTML.includes('max-height:100%'),
+        'short sheet, but a short viewport would still clip Save without this');
+      kbTearDown();
+    });
+
+    // The two sheets NOT wired, recorded so the gap reads as a decision.
+    // pepOpenAddStack and pepOpenOrderPicker are tap-only — a compound list and
+    // a date/quantity picker. No text input means no keyboard means nothing for
+    // the helper to do, and arming it there would be a listener bought for
+    // nothing. If either grows a typed field, this note is where to start.
+    test('KEYBOARD the tap-only sheets are deliberately not armed', () => {
+      const slice = (name, next) => {
+        const i = html.indexOf('function ' + name);
+        return i < 0 ? '' : html.slice(i, html.indexOf('function ' + next, i));
+      };
+      const add = slice('pepOpenAddStack', 'pepOpenEditStack');
+      assert.ok(add.length > 0, 'found pepOpenAddStack');
+      assert.notIncludes(add, '<input', 'still tap-only — no typed field');
+      assert.notIncludes(add, '_phxKeyboardSafe', 'so nothing to arm');
+    });
+  }
+
   test('no panels logged reports null rather than an empty shell', () => {
     assert.equal(app._pepLatestBloods({}), null, 'null when nothing logged');
   });

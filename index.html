@@ -22892,7 +22892,12 @@ function pepOpenEditStack(idx, newId){
   var ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
   var title = (isNew && c) ? "Add " + c.name : (c ? "Edit " + c.name : "Edit Stack");
-  ov.innerHTML = "<div style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88vh;overflow-y:auto;box-sizing:border-box;\">" +
+  // v4.9.220: 88% not 88vh. The keyboard-safe helper shrinks the OVERLAY to the
+  // visible area; vh units do not shrink with it, so a 704px panel inside a 420px
+  // overlay overflowed UPWARD off the top of the screen — taking the dose, vial,
+  // water and the draw-up preview with it while leaving Save visible. 88% of the
+  // overlay is identical to 88vh at rest and tracks the keyboard when it is up.
+  ov.innerHTML = "<div id=\"pep-e-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88%;overflow-y:auto;box-sizing:border-box;\">" +
     "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">" +
     "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;\">" + title + "</div>" +
     "<button id=\"pep-edit-close\" style=\"width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;\">&times;</button>" +
@@ -22938,6 +22943,10 @@ function pepOpenEditStack(idx, newId){
     "<button id=\"pep-e-save\" style=\"width:100%;padding:14px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Save</button>" +
     "</div>";
   document.body.appendChild(ov);
+  // Nutrition's shared helper (see HANDOFF_NUTRITION, "API other domains may call").
+  // NOT idempotent — arming twice registers two viewport listeners — so it goes here,
+  // at the ONE place this overlay is created, and nowhere that can run again.
+  _phxKeyboardSafe(ov);
   document.getElementById("pep-edit-close").addEventListener("click", function(){ ov.remove(); });
   ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
 
@@ -24636,7 +24645,7 @@ function pepOpenCustomVial(idx){
   var eff = _pepEffectiveVial(st, c);
   var ov = document.createElement("div");
   ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
-  ov.innerHTML = "<div style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;box-sizing:border-box;\">" +
+  ov.innerHTML = "<div id=\"pep-cv-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:100%;overflow-y:auto;box-sizing:border-box;\">" +
     "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Vial size on hand</div>" +
     "<div style=\"font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;\">" + _esc(c ? c.name : "") +
       (eff.planned ? " &middot; protocol planned " + _pepNum(eff.planned) + "mg" : "") +
@@ -24647,6 +24656,7 @@ function pepOpenCustomVial(idx){
     "<button id=\"pep-cv-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Save</button>" +
     "</div></div>";
   document.body.appendChild(ov);
+  _phxKeyboardSafe(ov);           // single creation site; helper is not idempotent
   ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
   var cancel = document.getElementById("pep-cv-cancel");
   if(cancel) cancel.addEventListener("click", function(){ ov.remove(); });

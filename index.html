@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.235';
+var APP_VERSION='4.9.236';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21722,17 +21722,34 @@ var _PEP_TONG = [
 //   units to draw         = mL * 100
 // Per-stack vialMg / waterMl (set in the edit sheet) always override these.
 var _PEP_RECON = {
+  // AUTHORITATIVE SOURCE: section 8 "Ordering & Reconstitution Reference" of
+  // Peptide_Protocol_2026_27.pdf, Jon's own compiled protocol. v4.9.236
+  // corrected SIX entries that disagreed with it. Every one of them made the
+  // app tell him to draw MORE than his protocol says:
+  //
+  //    Ipamorelin  8u  -> 4u      CJC-1295  6u -> 3u
+  //    BPC-157    20u  -> 5u      TA-1     64u -> 32u
+  //    GHK-Cu     10u  -> 4u      NAD+     50u -> 20u
+  //
+  // The defaults assumed 5mg vials where he buys 10mg, and over-diluted GHK-Cu
+  // and NAD+. If a stack carries its own vialMg/waterMl those win, so anyone
+  // who entered their real vial size was unaffected — but a compound added
+  // without one took these numbers straight to the Today tile.
+  //
+  // BPC-157 was the worst: 4x. Do not "tidy" these back toward a house default.
+  // They are transcribed from his document and tests/peptides.mjs pins every
+  // one against the unit counts printed there.
   retatrutide:{vialMg:10,  waterMl:0.5},
-  ipamorelin: {vialMg:5,   waterMl:2},
-  cjc1295:    {vialMg:5,   waterMl:2},
-  bpc157:     {vialMg:5,   waterMl:2},
-  ta1:        {vialMg:5,   waterMl:2},
+  ipamorelin: {vialMg:10,  waterMl:2},
+  cjc1295:    {vialMg:10,  waterMl:2},
+  bpc157:     {vialMg:10,  waterMl:1},
+  ta1:        {vialMg:10,  waterMl:2},
   motsc:      {vialMg:10,  waterMl:0.5},
   klow:       {vialMg:80,  waterMl:2},
   bpc_ghkcu_tb:{vialMg:70, waterMl:2},
-  ghkcu:      {vialMg:50,  waterMl:5},
+  ghkcu:      {vialMg:50,  waterMl:2},
   tb500:      {vialMg:10,  waterMl:2},
-  nad:        {vialMg:500, waterMl:5},
+  nad:        {vialMg:500, waterMl:2},
   "5amq":     {vialMg:5,   waterMl:1},
   tesamorelin:{vialMg:10,  waterMl:2},
   epitalon:   {vialMg:10,  waterMl:1},

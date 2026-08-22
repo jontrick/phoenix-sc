@@ -451,8 +451,18 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(r.wastedDoses > 0, 'doses expire across the off-weeks');
     });
 
+    // v4.9.236: this hardcoded 10, which was the OLD _PEP_RECON default for
+    // BPC-157 (5mg vial). His protocol says 10mg in 1mL, so the answer is 20 —
+    // and a literal here was a second copy of the value that silently disagreed
+    // with the table the moment the table was corrected. It now DERIVES from
+    // the default, because this case is about the fallback MECHANISM. The
+    // values themselves are owned by the RECONREF block, pinned against
+    // section 8 of Peptide_Protocol_2026_27.pdf. One owner per fact.
     test('a library default reconstitution is enough to forecast', () => {
-      assert.equal(f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), sealedVials:3 }).dosesPerVial, 10, 'falls back to _PEP_RECON');
+      const d = app._PEP_RECON.bpc157;
+      const expected = Math.floor((d.vialMg / d.waterMl) * d.waterMl / 0.5);
+      assert.equal(f({ compoundId:'bpc157', dose:0.5, startDate: sAgo(30), sealedVials:3 }).dosesPerVial,
+        expected, 'falls back to _PEP_RECON rather than reporting unknown');
     });
 
     test('an unusable reconstitution reports rather than guessing', () => {
@@ -1872,6 +1882,77 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range.length, 1, 'one marker out of range');
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
+
+  // ── RECONREF — the app must agree with Jon's own protocol document ─────────
+  // Source of truth: section 8 "Ordering & Reconstitution Reference" of
+  // Peptide_Protocol_2026_27.pdf, which he supplied on 22 Aug 2026. Every pair
+  // below is transcribed from that table: dose in, units printed there.
+  //
+  // v4.9.236 found SIX entries in _PEP_RECON that disagreed with it, and every
+  // one told him to draw MORE than his protocol says — BPC-157 by 4x. These are
+  // the numbers that reach the Today tile and the syringe, so they are pinned
+  // against his document rather than left to a house default.
+  //
+  // AND A CORRECTION I OWE THE RECORD: I earlier reported that Jon's protocol
+  // had three unit counts that were 2x too high. That was read off
+  // PEPTIDE APP/Peptide Protocol/index.html, a stale snapshot that also
+  // contained a compound he has never run. His real document is arithmetically
+  // correct throughout — all 14 entries below check out against their own
+  // stated concentration. The app was the thing that was wrong.
+  {
+    // compound, dose, unit, vialMg, waterMl, units printed in the protocol
+    const REF = [
+      ['retatrutide',   6,    'mg', 10,  0.5,  30],
+      ['ipamorelin',    0.2,  'mg', 10,  2,     4],
+      ['ipamorelin',    0.3,  'mg', 10,  2,     6],
+      ['cjc1295',       0.15, 'mg', 10,  2,     3],
+      ['cjc1295',       0.2,  'mg', 10,  2,     4],
+      ['bpc157',        0.5,  'mg', 10,  1,     5],
+      ['tb500',         2,    'mg', 10,  2,    40],
+      ['tb500',         1.25, 'mg', 10,  2,    25],
+      ['ta1',           1.6,  'mg', 10,  2,    32],
+      ['motsc',        10,    'mg', 10,  0.5,  50],
+      ['epitalon',      5,    'mg', 10,  1,    50],
+      ['ghkcu',         1,    'mg', 50,  2,     4],
+      ['ghkcu',         2,    'mg', 50,  2,     8],
+      ['nad',          50,    'mg', 500, 2,    20],
+      ['nad',         100,    'mg', 500, 2,    40],
+      ['tesamorelin',   1,    'mg', 10,  2,    20],
+      ['tesamorelin',   2,    'mg', 10,  2,    40],
+      ['dsip',          0.3,  'mg', 5,   2,    12],
+      ['5amq',          0.5,  'mg', 5,   1,    10],
+      ['5amq',          1,    'mg', 5,   1,    20],
+      ['semax',         0.3,  'mg', 5,   2,    12],
+    ];
+
+    REF.forEach(([id, dose, unit, vialMg, waterMl, want]) => {
+      test(`RECONREF ${id} ${dose}${unit} draws ${want}u as his protocol prints it`, () => {
+        const c = app._pepCompound(id);
+        assert.ok(c, `${id} is in the library`);
+        const draw = app._pepDraw(dose, unit, app._pepRecon({ vialMg, waterMl }, c));
+        assert.ok(draw, 'recon resolves');
+        assert.equal(Math.round(draw.units * 10) / 10, want,
+          `section 8 of Peptide_Protocol_2026_27.pdf prints ${want} units`);
+      });
+    });
+
+    // The defaults are what a compound added WITHOUT a vial size inherits, and
+    // they go straight to the Today tile. Six of these were wrong until .236.
+    const DEFAULTS = [
+      ['ipamorelin', 10, 2], ['cjc1295', 10, 2], ['bpc157', 10, 1],
+      ['ta1', 10, 2], ['ghkcu', 50, 2], ['nad', 500, 2],
+      ['retatrutide', 10, 0.5], ['motsc', 10, 0.5], ['epitalon', 10, 1],
+      ['tb500', 10, 2], ['tesamorelin', 10, 2],
+    ];
+    DEFAULTS.forEach(([id, vialMg, waterMl]) => {
+      test(`RECONREF the ${id} DEFAULT matches the protocol vial and BAC volume`, () => {
+        const d = app._PEP_RECON[id];
+        assert.ok(d, `${id} has a default`);
+        assert.equal(d.vialMg, vialMg, `${id} vial size per section 8`);
+        assert.equal(d.waterMl, waterMl, `${id} BAC volume per section 8`);
+      });
+    });
+  }
 
   // ── ADVISORSTOCK — the advisor can now see what he actually has (v4.9.235) ─
   // Jon asked whether the app can build a forward plan from stock on hand. It

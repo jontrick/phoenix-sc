@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.246'", 'version is 4.9.246');
+has("var APP_VERSION='4.9.247'", 'version is 4.9.247');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1412,7 +1412,7 @@ function phxFnSpan(src, name) {
   // means someone armed it somewhere that runs more than once, which is the
   // exact mistake the helper's own contract warns about.
   const kb = (blk.match(/_phxKeyboardSafe\s*\(/g) || []).length;
-  // v4.9.246 raised this from 3 to 4 for pepOpenImport, which has a textarea.
+  // v4.9.247 raised this from 3 to 4 for pepOpenImport, which has a textarea.
   // Raised DELIBERATELY after the pin failed — which is the pin working. The
   // enumeration guard below would have demanded the arming anyway; this one
   // makes adding it a conscious edit rather than a silent drift.
@@ -2646,6 +2646,17 @@ hasCode("reason: 'basis_unknown'",        'LABEL: an unstated basis is REFUSED, 
         'evict every recipe and day log, and it presents as data loss, not as a storage bug');
   else ok('LABEL: no label photo is written into nutrition state');
 })();
+
+// ── Recipe builder: creating an ingredient that is not in the library ──────
+// Jon's report (v4.9.247): the recipe builder has its OWN picker, and it could
+// only SELECT. Any ingredient not already in the library made the recipe
+// unbuildable, and a filter matching nothing left the sheet with no exit but close.
+hasCode('data-fpr-scan',   'RECIPE: the ingredient picker offers a label scan');
+hasCode('data-fpr-custom', 'RECIPE: and a manual custom food');
+// Both must hand the food BACK. Logging a recipe ingredient to today's lunch is
+// the failure this design exists to avoid - writing a recipe is not eating it.
+hasCode('nutOpenLabelScanner(null, null, toRecipe)',   'RECIPE: a scan from a recipe hands the food back, it does not log a meal');
+hasCode('nutOpenCustomFoodModal(null, null, toRecipe)','RECIPE: and so does a custom food');
 
 // ── Label scanner: HOW MANY EXITS does the photo have? ──────────────────────
 // Peptides' question, answered while the feature is being designed rather than

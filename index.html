@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.246';
+var APP_VERSION='4.9.247';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19696,7 +19696,7 @@ function _nutTabWeek(ns){
 }
 
 // ── Custom food entry modal ───────────────────────────────────────────────────
-function nutOpenCustomFoodModal(slot, dateKey){
+function nutOpenCustomFoodModal(slot, dateKey, onSaved){
   var old = document.getElementById('nut-custom-food-ov');
   if(old) old.remove();
   var ov = document.createElement('div');
@@ -19761,6 +19761,7 @@ function nutOpenCustomFoodModal(slot, dateKey){
     ns.custom_foods.push(food);
     nutSaveState(ns);
     ov.remove();
+    if(typeof onSaved === 'function'){ onSaved(food, qty); return; }
     if(slot && dateKey){ (_nutPickerMode === 'plan' ? nutAddComponent : nutLogComponent)(slot, dateKey, food, qty); nutRenderScreen(); }
     else { nutRenderScreen(); }
   });
@@ -19781,7 +19782,11 @@ function nutOpenCustomFoodModal(slot, dateKey){
 // dropped on close.
 var _nutLabelPhoto = null;
 
-function nutOpenLabelScanner(slot, dateKey){
+// onSaved is the RECIPE path. Without it the scanner logs the food to a meal,
+// which is right from the day view and wrong from the recipe builder — a recipe
+// ingredient must go into the recipe, not into today's lunch. Passing the food
+// back rather than adding a mode flag keeps the meal write on one path.
+function nutOpenLabelScanner(slot, dateKey, onSaved){
   var old = document.getElementById('nut-label-ov');
   if(old) old.remove();
   _nutLabelPhoto = null;
@@ -19939,6 +19944,7 @@ function nutOpenLabelScanner(slot, dateKey){
     nutSaveState(ns);
     _nutLabelPhoto = null;
     ov.remove();
+    if(typeof onSaved === 'function'){ onSaved(food, food.defaultQty); return; }
     if(slot && dateKey){
       (_nutPickerMode === 'plan' ? nutAddComponent : nutLogComponent)(slot, dateKey, food, food.defaultQty);
       nutRenderScreen();
@@ -20245,6 +20251,10 @@ function nutOpenRecipeBuilder(editId, onSaved){
 }
 
 // Mini food picker used by recipe builder — calls onAdd(food, qty) on confirm
+// v4.9.247: this picker could only SELECT. An ingredient not already in the
+// library made the recipe unbuildable, and a filter matching nothing left the
+// sheet with no exit but close. Both create routes hand the food BACK rather
+// than logging a meal - writing a recipe is not eating it.
 function _nutOpenPickerForRecipe(onAdd){
   var old = document.getElementById('nut-fp-recipe');
   if(old) old.remove();
@@ -20285,14 +20295,33 @@ function _nutOpenPickerForRecipe(onAdd){
   function _rRenderList(){
     var foods = _nutGetFoods().filter(function(f){ return (_rCat==='all'||f.cat===_rCat) && (!_rSearch||f.n.toLowerCase().indexOf(_rSearch)>=0); });
     var list = ov.querySelector('#nut-fpr-list');
-    if(!foods.length){ list.innerHTML='<div style="padding:24px;text-align:center;font-size:12px;color:var(--text3);">No foods found</div>'; return; }
+    var addRow = '<div style="padding:14px 0 18px;border-top:1px solid var(--border);margin-top:6px;">' +
+      '<button data-fpr-scan style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">SCAN FOOD LABEL</button>' +
+      '<button data-fpr-custom style="width:100%;margin-top:8px;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ ADD CUSTOM FOOD</button>' +
+      '</div>';
+    if(!foods.length){
+      list.innerHTML='<div style="padding:24px 0 4px;text-align:center;font-size:12px;color:var(--text3);">No foods found</div>' + addRow;
+      _rWireAdd();
+      return;
+    }
     list.innerHTML = foods.map(function(f){
       var s = _rSelId===f.id;
       return '<div data-fpr-food="'+f.id+'" style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;background:'+(s?'rgba(200,150,62,0.08)':'transparent')+';"><div style="font-size:13px;font-weight:'+(s?'700':'500')+';color:'+(s?'var(--gold)':'var(--text)')+';">'+f.n+'</div><div style="font-size:11px;color:var(--text3);">'+f.k+' kcal &middot; P'+f.p+'g per 100g</div></div>';
-    }).join('');
+    }).join('') + addRow;
     list.querySelectorAll('[data-fpr-food]').forEach(function(row){
       row.addEventListener('click', function(){ _rSelId=row.getAttribute('data-fpr-food'); ov.querySelector('#nut-fpr-bar').style.display=''; _rRenderList(); });
     });
+    _rWireAdd();
+  }
+  // Both create-a-food routes hand the food straight back to the recipe rather
+  // than logging it to a meal — the picker closes, the ingredient lands in the
+  // recipe with its own default quantity.
+  function _rWireAdd(){
+    var toRecipe = function(food, qty){ ov.remove(); onAdd(food, qty); };
+    var scan = ov.querySelector('[data-fpr-scan]');
+    if(scan) scan.addEventListener('click', function(){ nutOpenLabelScanner(null, null, toRecipe); });
+    var cust = ov.querySelector('[data-fpr-custom]');
+    if(cust) cust.addEventListener('click', function(){ nutOpenCustomFoodModal(null, null, toRecipe); });
   }
   _rRenderCats(); _rRenderList();
   ov.querySelector('#nut-fpr-close').addEventListener('click', function(){ ov.remove(); });
@@ -25307,7 +25336,7 @@ function pepSetVialSize(idx, mg){
 
 // Custom vial size. A DOM sheet, not prompt() — iOS PWA suppresses native
 // dialogs silently, which would look like a dead button (CLAUDE.md rule 4).
-// ── PROTOCOL IMPORT (v4.9.246) ───────────────────────────────────────────────
+// ── PROTOCOL IMPORT (v4.9.247) ───────────────────────────────────────────────
 // Jon's protocol changed and re-entering eight compounds through the edit sheet
 // on a phone is the reason it would not get done. This takes the canonical JSON
 // from his own context document and applies it in one action.

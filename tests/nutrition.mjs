@@ -802,6 +802,106 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'and the standard qty_g/100 maths gives back the 152 kcal printed on the label');
   });
 
+  // ── Building a recipe: an ingredient that is not in the library yet ──────
+  // Jon's report: adding an ingredient to a new recipe gave no way to photograph
+  // a label. The recipe builder uses its OWN picker (_nutOpenPickerForRecipe),
+  // separate from the day view's food picker, and it could only SELECT — so any
+  // ingredient not already in the library made the recipe unbuildable, and with
+  // no foods matching the filter the sheet was a dead end.
+
+  test('ENTRY the recipe ingredient picker offers a label scan and a custom food', () => {
+    setUp(90);
+    const d = dom();
+    app._nutOpenPickerForRecipe(() => {});
+    const html = String(d.lastCreated().querySelector('#nut-fpr-list').innerHTML || '');
+    assert.ok(html.length > 0, 'the list rendered at all — otherwise the checks below are vacuous');
+    assert.ok(html.indexOf('data-fpr-scan') >= 0,
+      'the recipe picker offers SCAN FOOD LABEL — this is the gap Jon reported');
+    assert.ok(String(html).indexOf('data-fpr-custom') >= 0,
+      'and a manual custom food, so the picker is never a dead end');
+  });
+
+  test('ENTRY the empty recipe picker is not a dead end', () => {
+    setUp(90);
+    const d = dom();
+    app._nutOpenPickerForRecipe(() => {});
+    const ov = d.lastCreated();
+    // Filter to something that matches nothing.
+    const search = ov.querySelector('#nut-fpr-search');
+    search.value = 'zzzz-no-such-food';
+    d.fire(search, 'input');
+    const html = String(ov.querySelector('#nut-fpr-list').innerHTML || '');
+    assert.ok(html.indexOf('No foods found') >= 0, 'the empty state really is showing');
+    assert.ok(html.indexOf('data-fpr-scan') >= 0,
+      'and it STILL offers a way to create one — previously this was a dead end ' +
+      'with no exit but closing the sheet');
+  });
+
+  test('ENTRY a label scanned FROM a recipe goes into the recipe, not into lunch', () => {
+    setUp(90);
+    let handedBack = null;
+    const d = dom();
+    app._nutOpenPickerForRecipe((food, qty) => { handedBack = { food, qty }; });
+    const picker = d.lastCreated();
+    d.fire(picker.querySelector('[data-fpr-scan]'), 'click');
+
+    // The scanner is now the most recently created overlay, stacked over the picker.
+    const ov = d.lastCreated();
+    const set = (sel, v) => { ov.querySelector(sel).value = v; };
+    set('#nut-lb-name', 'Tahini');
+    set('#nut-lb-kcal', '178');
+    const basis = ov.querySelectorAll('[data-nut-lb-basis]')
+                    .filter((b) => b.getAttribute('data-nut-lb-basis') === 'per100')[0];
+    d.fire(basis, 'click');
+    d.fire(ov.querySelector('#nut-lb-save'), 'click');
+
+    assert.ok(handedBack, 'the food was handed back to the recipe builder');
+    assert.equal(handedBack.food.n, 'Tahini', 'and it is the one just scanned');
+    assert.equal(handedBack.food.k, 178, 'with its macros intact');
+
+    // The bug this design avoids: a recipe ingredient silently logged as eaten.
+    const day = app.nutGetState().daily[app._nutToday()] || {};
+    const lunch = (day.meals && day.meals.lunch && day.meals.lunch.components) || [];
+    assert.equal(lunch.length, 0,
+      'and NOTHING was logged to lunch — an ingredient of a recipe being written ' +
+      'is not something Jon has eaten today');
+  });
+
+  test('ENTRY a custom food added FROM a recipe also goes into the recipe', () => {
+    setUp(90);
+    let handedBack = null;
+    const d = dom();
+    app._nutOpenPickerForRecipe((food, qty) => { handedBack = { food, qty }; });
+    const picker = d.lastCreated();
+    d.fire(picker.querySelector('[data-fpr-custom]'), 'click');
+    const ov = d.lastCreated();
+    ov.querySelector('#nut-cf-name').value = 'Miso paste';
+    ov.querySelector('#nut-cf-kcal').value = '199';
+    d.fire(ov.querySelector('#nut-cf-save'), 'click');
+    assert.ok(handedBack, 'handed back rather than logged');
+    assert.equal(handedBack.food.n, 'Miso paste', 'the food just entered');
+    const day = app.nutGetState().daily[app._nutToday()] || {};
+    const lunch = (day.meals && day.meals.lunch && day.meals.lunch.components) || [];
+    assert.equal(lunch.length, 0, 'and again nothing was logged as eaten');
+  });
+
+  test('ENTRY the day view still LOGS a scanned food, unchanged by the recipe path', () => {
+    setUp(90);
+    const d = dom();
+    app.nutOpenLabelScanner('lunch', app._nutToday());   // no callback = the day path
+    const ov = d.lastCreated();
+    ov.querySelector('#nut-lb-name').value = 'Oats';
+    ov.querySelector('#nut-lb-kcal').value = '389';
+    const basis = ov.querySelectorAll('[data-nut-lb-basis]')
+                    .filter((b) => b.getAttribute('data-nut-lb-basis') === 'per100')[0];
+    d.fire(basis, 'click');
+    d.fire(ov.querySelector('#nut-lb-save'), 'click');
+    const comps = app.nutGetState().daily[app._nutToday()].meals.lunch.components;
+    assert.equal(comps.length, 1,
+      'adding the callback did not divert the day path — the meal write still happens');
+    assert.equal(comps[0].n, 'Oats', 'and it is the scanned food');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

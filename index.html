@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.201';
+var APP_VERSION='4.9.202';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21362,12 +21362,89 @@ function _pepFmtDose(dose, unit){
 }
 
 // Resolved reconstitution for a stack. Stack overrides beat compound defaults.
+// v4.9.202: THREE possible vial sizes, and the difference matters at the needle.
+//   planned  — what the protocol assumed and ordered against (stack.vialMg)
+//   actual   — what physically arrived, when it differs (stack.actualVialMg)
+//   default  — the library figure, when neither is set
+// Jon's case: he planned 5mg vials and 2mg arrived. Same water in a smaller vial
+// is a WEAKER solution, so the units he draws change. Everything downstream —
+// doses per vial, depletion, reorder quantities — keys off _pepRecon, so
+// resolving the override here makes the whole forecast recalculate at once
+// rather than needing each consumer to remember.
+var _PEP_VIAL_SIZES = [2, 5, 10];
+
+function _pepEffectiveVial(stack, c){
+  var def = (c && _PEP_RECON[c.id]) || {};
+  var actual  = (stack && stack.actualVialMg != null && stack.actualVialMg !== "") ? parseFloat(stack.actualVialMg) : null;
+  var planned = (stack && stack.vialMg       != null && stack.vialMg       !== "") ? parseFloat(stack.vialMg)       : null;
+  if(actual  && actual  > 0) return {mg: actual,  source: "override", planned: planned || def.vialMg || null};
+  if(planned && planned > 0) return {mg: planned, source: "planned",  planned: planned};
+  if(def.vialMg)             return {mg: def.vialMg, source: "default", planned: def.vialMg};
+  return {mg: null, source: "none", planned: null};
+}
+
 function _pepRecon(stack, c){
   var def = (c && _PEP_RECON[c.id]) || {};
-  var vialMg  = (stack && stack.vialMg  != null && stack.vialMg  !== "")  ? parseFloat(stack.vialMg)  : def.vialMg;
+  var eff = _pepEffectiveVial(stack, c);
+  var vialMg  = eff.mg;
   var waterMl = (stack && stack.waterMl != null && stack.waterMl !== "")  ? parseFloat(stack.waterMl) : def.waterMl;
   if(!vialMg || !waterMl || vialMg <= 0 || waterMl <= 0) return null;
-  return {vialMg:vialMg, waterMl:waterMl, conc: vialMg / waterMl};
+  return {vialMg:vialMg, waterMl:waterMl, conc: vialMg / waterMl, source: eff.source, plannedMg: eff.planned};
+}
+
+// The water volume that would keep the SAME concentration as the planned vial,
+// so a substituted vial can be mixed to draw the same units. Offered, never
+// applied — silently changing a draw volume is how someone injects the wrong
+// amount.
+function _pepWaterToMatchPlanned(stack, c){
+  var def = (c && _PEP_RECON[c.id]) || {};
+  var eff = _pepEffectiveVial(stack, c);
+  var water = (stack && stack.waterMl != null && stack.waterMl !== "") ? parseFloat(stack.waterMl) : def.waterMl;
+  if(!eff.mg || !eff.planned || !water || eff.mg === eff.planned) return null;
+  var plannedConc = eff.planned / water;
+  if(!plannedConc) return null;
+  return Math.round((eff.mg / plannedConc) * 100) / 100;
+}
+
+// Doses still required to finish the CURRENT cycle, versus what stock covers.
+// "Enough to last" is not the question Jon asked — he asked whether the stock
+// he actually received finishes the planned cycle.
+function _pepCycleShortfall(ps, stack){
+  var c = _pepCompound(stack && stack.compoundId);
+  if(!c) return null;
+  var f = _pepStockForecast(ps, stack);
+  if(!f || f.unknown) return null;
+
+  var todayISO = _pepToday();
+  var baseMs = new Date(todayISO + "T12:00:00").getTime();
+  var horizon = 730, required = 0, lastDue = null;
+
+  // Walk to the end of the current cycle. For a fixed-length course the
+  // schedule itself stops; for a cycled compound it stops at the off-block; for
+  // a continuous one there is no end, so fall back to the coverage window.
+  var set = _pepSettings(ps);
+  var cap = (set.coverageMonths != null ? set.coverageMonths : 6) * 30;
+  var sawGap = false;
+  for(var i = 0; i < horizon; i++){
+    var day = new Date(baseMs + i * 86400000);
+    var due = _pepStackDueOn(stack, c, day) !== null;
+    if(due){
+      if(sawGap) break;                       // next cycle has begun — stop
+      required++; lastDue = _pepISO(day);
+    } else if(required > 0){
+      sawGap = true;                          // first non-dosing day after dosing
+    }
+    if(i >= cap && !stack.cycleWeeks) break;  // continuous: cap at the window
+  }
+
+  var available = f.dosesRemaining || 0;
+  return {
+    required: required,
+    available: available,
+    short: Math.max(0, required - available),
+    sufficient: available >= required,
+    cycleEnd: lastDue
+  };
 }
 
 // What to actually draw up. Returns {units, ml, conc} or null when recon is unknown.
@@ -22168,6 +22245,25 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-stock]").forEach(function(btn){
     var pr = btn.getAttribute("data-pep-stock").split("|");
     btn.addEventListener("click", function(){ pepStockAdjust(parseInt(pr[0],10), parseInt(pr[1],10)); });
+  });
+  body.querySelectorAll("[data-pep-vialsize]").forEach(function(btn){
+    var vp = btn.getAttribute("data-pep-vialsize").split("|");
+    btn.addEventListener("click", function(){ pepSetVialSize(parseInt(vp[0],10), parseFloat(vp[1])); });
+  });
+  body.querySelectorAll("[data-pep-vialcustom]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepOpenCustomVial(parseInt(btn.getAttribute("data-pep-vialcustom"),10)); });
+  });
+  body.querySelectorAll("[data-pep-stockset]").forEach(function(inp){
+    inp.addEventListener("change", function(){ pepSetSealed(parseInt(inp.getAttribute("data-pep-stockset"),10), inp.value); });
+  });
+  body.querySelectorAll("[data-pep-clearoverride]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepClearVialOverride(parseInt(btn.getAttribute("data-pep-clearoverride"),10)); });
+  });
+  body.querySelectorAll("[data-pep-invial]").forEach(function(inp){
+    inp.addEventListener("change", function(){ pepSetIncomingVialMg(parseInt(inp.getAttribute("data-pep-invial"),10), inp.value); });
+  });
+  body.querySelectorAll("[data-pep-arrived]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepMarkArrived(parseInt(btn.getAttribute("data-pep-arrived"),10)); });
   });
   body.querySelectorAll("[data-pep-incoming]").forEach(function(btn){
     var pi = btn.getAttribute("data-pep-incoming").split("|");
@@ -23643,17 +23739,71 @@ function _pepTabStock(ps){
       return;
     }
 
-    // Sealed vial stepper
+    // ── Planned vs actual (v4.9.202) ──────────────────────────────────────
+    // The protocol ordered against one vial size; a different one can arrive.
+    // Both are shown because the difference is not cosmetic — it changes the
+    // concentration and therefore the units Jon draws.
+    var eff = _pepEffectiveVial(st, c);
+    var dose = st.dose != null ? st.dose : c.dose;
+    var recon = _pepRecon(st, c);
+    var draw = _pepDraw(dose, c.doseUnit, recon);
+    var overridden = eff.source === "override" && eff.planned && eff.mg !== eff.planned;
+    var sf = _pepCycleShortfall(ps, st);
+    var plannedPerVial = eff.planned ? _pepDosesPerVial(Object.assign({}, st, {actualVialMg:null, vialMg:eff.planned}), c) : 0;
+    var plannedVialsForCycle = (sf && plannedPerVial) ? Math.ceil(sf.required / plannedPerVial) : 0;
+
+    h += "<div style=\"font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.6;\">";
+    h += "Protocol planned: <strong style=\"color:var(--text2);\">" + (eff.planned ? _pepNum(eff.planned) + "mg vials" : "not set") + "</strong>";
+    if(plannedVialsForCycle) h += " &times; " + plannedVialsForCycle + " for this cycle";
+    h += "</div>";
+
+    // Vial size selector — what actually arrived.
+    h += "<div style=\"font-size:11px;color:var(--text2);margin-bottom:6px;\">Vial size on hand</div>";
+    h += "<div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;\">";
+    var sizes = _PEP_VIAL_SIZES.slice();
+    if(eff.planned && sizes.indexOf(eff.planned) < 0) sizes.push(eff.planned);
+    if(eff.mg && sizes.indexOf(eff.mg) < 0) sizes.push(eff.mg);
+    sizes.sort(function(a,b){ return a-b; });
+    sizes.forEach(function(mg){
+      var on = eff.mg === mg;
+      h += "<button data-pep-vialsize=\"" + idx + "|" + mg + "\" style=\"padding:7px 12px;border-radius:16px;border:1px solid " + (on?"#7B68EE":"var(--border2)") + ";background:" + (on?"#7B68EE22":"none") + ";color:" + (on?"#7B68EE":"var(--text3)") + ";font-family:var(--font-d);font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation;\">" + _pepNum(mg) + "mg</button>";
+    });
+    h += "<button data-pep-vialcustom=\"" + idx + "\" style=\"padding:7px 12px;border-radius:16px;border:1px dashed var(--border2);background:none;color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation;\">Custom</button>";
+    h += "</div>";
+
+    // Sealed vial stepper — the manual "current stock" figure.
     h += "<div style=\"display:flex;align-items:center;gap:10px;margin-bottom:8px;\">";
-    h += "<div style=\"flex:1;font-size:12px;color:var(--text2);\">Sealed vials</div>";
+    h += "<div style=\"flex:1;font-size:12px;color:var(--text2);\">Sealed vials on hand</div>";
     h += "<button data-pep-stock=\"" + idx + "|-1\" style=\"width:30px;height:30px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:17px;line-height:1;cursor:pointer;touch-action:manipulation;\">-</button>";
-    h += "<span style=\"font-family:var(--font-d);font-size:17px;font-weight:900;width:30px;text-align:center;color:var(--text);\">" + sealed + "</span>";
+    h += "<input data-pep-stockset=\"" + idx + "\" type=\"number\" min=\"0\" step=\"1\" value=\"" + sealed + "\" style=\"width:52px;padding:6px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:900;text-align:center;box-sizing:border-box;\">";
     h += "<button data-pep-stock=\"" + idx + "|1\" style=\"width:30px;height:30px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:17px;line-height:1;cursor:pointer;touch-action:manipulation;\">+</button>";
     h += "</div>";
 
+    if(overridden){
+      h += "<div style=\"background:var(--bg3);border-left:3px solid var(--gold);border-radius:6px;padding:9px 11px;margin-bottom:8px;\">";
+      h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:3px;\">Manual entry</div>";
+      h += "<div style=\"font-size:11px;color:var(--text2);line-height:1.6;\">On hand is <strong>" + _pepNum(eff.mg) + "mg &times; " + sealed + "</strong>, not the " + _pepNum(eff.planned) + "mg the protocol planned. Everything below is recalculated from what you actually have.</div>";
+      var suggestWater = _pepWaterToMatchPlanned(st, c);
+      if(suggestWater){
+        h += "<div style=\"font-size:11px;color:var(--text3);margin-top:5px;\">Mixing with <strong style=\"color:var(--text2);\">" + _pepNum(suggestWater) + "mL</strong> instead of " + _pepNum(recon.waterMl) + "mL would keep your usual " +
+             _pepNum(Math.round((dose / (eff.planned / recon.waterMl)) * 100)) + "u draw. Change it in Edit if you want that.</div>";
+      }
+      h += "<button data-pep-clearoverride=\"" + idx + "\" style=\"margin-top:7px;background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-size:10px;padding:4px 10px;cursor:pointer;touch-action:manipulation;\">Revert to planned</button>";
+      h += "</div>";
+    }
+
     h += "<div style=\"font-size:11px;color:var(--text3);margin-bottom:8px;\">" +
          (st.openedDate ? "Open vial: " + openLeft + " of " + perVial + " doses left, mixed " + _esc(st.openedDate) : "No vial open") +
-         " &middot; " + perVial + " doses per vial</div>";
+         " &middot; " + perVial + " doses per vial &middot; draw " + (draw ? _pepDrawText(draw) : "—") + "</div>";
+
+    if(sf && sf.required > 0){
+      h += "<div style=\"font-size:11px;color:" + (sf.sufficient ? "#4CAF50" : "#FF6B6B") + ";font-weight:700;margin-bottom:8px;\">" +
+           (sf.sufficient
+             ? "Covers this cycle — " + sf.required + " doses needed, " + sf.available + " available"
+             : "SHORT " + sf.short + " dose" + (sf.short===1?"":"s") + " for this cycle — needs " + sf.required + ", have " + sf.available +
+               (perVial ? " (" + Math.ceil(sf.short / perVial) + " more vial" + (Math.ceil(sf.short/perVial)===1?"":"s") + ")" : "")) +
+           "</div>";
+    }
 
     if(f && !f.unknown){
       var supply = f.depletionDate
@@ -23684,6 +23834,17 @@ function _pepTabStock(ps){
       h += "<button data-pep-incoming=\"" + idx + "|1\" style=\"width:26px;height:26px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;\">+</button>";
       h += "</div>";
       if(!st.arrivalDate) h += "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Set an arrival date — the forecast cannot use incoming stock without one.</div>";
+      // v4.9.202: arriving is CONFIRMED, never automatic. A delivery can change
+      // the vial size, which changes the units drawn — that must not happen
+      // silently because a date rolled over.
+      h += "<div style=\"display:flex;align-items:center;gap:8px;margin-top:8px;\">";
+      h += "<div style=\"flex:1;font-size:11px;color:var(--text3);\">Arriving vial size</div>";
+      h += "<input data-pep-invial=\"" + idx + "\" type=\"number\" min=\"0\" step=\"0.5\" value=\"" + (st.onOrderVialMg != null ? st.onOrderVialMg : "") + "\" placeholder=\"" + (eff.planned ? _pepNum(eff.planned) : "mg") + "\" style=\"width:64px;padding:6px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;text-align:center;box-sizing:border-box;\">";
+      h += "<span style=\"font-size:11px;color:var(--text3);\">mg</span>";
+      h += "</div>";
+      if(st.arrivalDate && st.arrivalDate <= _pepToday()){
+        h += "<button data-pep-arrived=\"" + idx + "\" style=\"width:100%;margin-top:8px;padding:10px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">Mark arrived &middot; add " + (parseInt(st.onOrderVials,10)||0) + " vials</button>";
+      }
     }
 
     if(!counted){
@@ -23692,6 +23853,91 @@ function _pepTabStock(ps){
     h += "</div>";
   });
   return h;
+}
+
+// v4.9.202: set what actually arrived. Choosing the planned size CLEARS the
+// override rather than storing it as an equal-but-manual value, so the label
+// stays honest about whether Jon has intervened.
+function pepSetVialSize(idx, mg){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  var c = _pepCompound(st.compoundId);
+  var planned = (st.vialMg != null && st.vialMg !== "") ? parseFloat(st.vialMg) : ((c && _PEP_RECON[c.id] || {}).vialMg || null);
+  st.actualVialMg = (planned && parseFloat(mg) === planned) ? null : parseFloat(mg);
+  pepSaveState(ps); pepRenderScreen();
+}
+
+// Custom vial size. A DOM sheet, not prompt() — iOS PWA suppresses native
+// dialogs silently, which would look like a dead button (CLAUDE.md rule 4).
+function pepOpenCustomVial(idx){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  var c = _pepCompound(st.compoundId);
+  var eff = _pepEffectiveVial(st, c);
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  ov.innerHTML = "<div style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Vial size on hand</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;\">" + _esc(c ? c.name : "") +
+      (eff.planned ? " &middot; protocol planned " + _pepNum(eff.planned) + "mg" : "") +
+      ". Changing this recalculates doses per vial, the units you draw, and how long your stock lasts.</div>" +
+    "<input id=\"pep-cv-mg\" type=\"number\" min=\"0\" step=\"0.5\" value=\"" + (eff.mg != null ? eff.mg : "") + "\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:17px;box-sizing:border-box;margin-bottom:14px;\">" +
+    "<div style=\"display:flex;gap:10px;\">" +
+    "<button id=\"pep-cv-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Cancel</button>" +
+    "<button id=\"pep-cv-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Save</button>" +
+    "</div></div>";
+  document.body.appendChild(ov);
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+  var cancel = document.getElementById("pep-cv-cancel");
+  if(cancel) cancel.addEventListener("click", function(){ ov.remove(); });
+  var save = document.getElementById("pep-cv-save");
+  if(save) save.addEventListener("click", function(){
+    var el = document.getElementById("pep-cv-mg");
+    var v = el ? parseFloat(el.value) : NaN;
+    ov.remove();
+    if(!isNaN(v) && v > 0) pepSetVialSize(idx, v);
+  });
+}
+
+function pepClearVialOverride(idx){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  st.actualVialMg = null;
+  pepSaveState(ps); pepRenderScreen();
+}
+
+function pepSetSealed(idx, n){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  var v = parseInt(n, 10);
+  st.sealedVials = (isNaN(v) || v < 0) ? 0 : v;
+  pepSaveState(ps); pepRenderScreen();
+}
+
+function pepSetIncomingVialMg(idx, mg){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  var v = parseFloat(mg);
+  st.onOrderVialMg = (isNaN(v) || v <= 0) ? null : v;
+  pepSaveState(ps); pepRenderScreen();
+}
+
+// The transition Jon asked for: the override holds until a new order lands,
+// then the new order's vial size and quantity take over.
+function pepMarkArrived(idx){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  var c = _pepCompound(st.compoundId);
+  var add = parseInt(st.onOrderVials, 10) || 0;
+  st.sealedVials = (parseInt(st.sealedVials, 10) || 0) + add;
+  if(st.onOrderVialMg){
+    var planned = (st.vialMg != null && st.vialMg !== "") ? parseFloat(st.vialMg) : ((c && _PEP_RECON[c.id] || {}).vialMg || null);
+    st.actualVialMg = (planned && st.onOrderVialMg === planned) ? null : st.onOrderVialMg;
+  }
+  st.onOrder = false; st.arrivalDate = null; st.onOrderVials = 0; st.onOrderVialMg = null;
+  st.stockCounted = true;                 // he has just physically counted it in
+  pepSaveState(ps); pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
 }
 
 function pepStockAdjust(idx, delta){

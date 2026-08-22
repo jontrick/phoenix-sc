@@ -1205,6 +1205,167 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── VIAL — planned vs received, and the override (v4.9.202) ───────────────
+  // Jon's scenario verbatim: he planned 5mg vials, 2mg arrived, he records
+  // "2mg x 6 on hand". The whole forecast has to recalculate — and the part
+  // that matters most is that the UNITS HE DRAWS change, because the same water
+  // in a smaller vial is a weaker solution.
+  {
+
+  const vIso = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const vAgo = n => vIso(new Date(Date.now() - n*86400000));
+  reset(); signIn('jon');
+
+  // BPC-157, 500mcg daily. Planned: 5mg vials in 2mL = 2.5mg/mL, 20u per dose,
+  // 10 doses per vial.
+  const planned = { compoundId:'bpc157', dose:0.5, startDate: vAgo(10),
+                    vialMg:5, waterMl:2, sealedVials:4, status:'instock' };
+  const received = Object.assign({}, planned, { actualVialMg:2, sealedVials:6 });
+  const c = app._pepCompound('bpc157');
+
+  test('VIAL planned 5mg gives 2.5mg/mL, 20u, 10 doses per vial', () => {
+    const r = app._pepRecon(planned, c);
+    assert.equal(r.conc, 2.5, 'concentration');
+    assert.equal(app._pepDosesPerVial(planned, c), 10, 'doses per vial');
+    assert.equal(r.source, 'planned', 'source');
+  });
+
+  test('VIAL the 2mg override recalculates concentration AND the draw', () => {
+    const r = app._pepRecon(received, c);
+    assert.equal(r.conc, 1, 'weaker solution — same water, less peptide');
+    assert.equal(r.source, 'override', 'flagged as an override');
+    assert.equal(r.plannedMg, 5, 'remembers what was planned');
+  });
+
+  test('VIAL the draw volume CHANGES — this is the safety-relevant bit', () => {
+    const dP = app._pepDraw(0.5, 'mg', app._pepRecon(planned, c));
+    const dR = app._pepDraw(0.5, 'mg', app._pepRecon(received, c));
+    assert.equal(Math.round(dP.units), 20, 'planned 20u');
+    assert.equal(Math.round(dR.units), 50, 'actual 50u for the same 500mcg');
+  });
+
+  test('VIAL 2mg at 500mcg gives 4 doses per vial, not 10', () => {
+    assert.equal(app._pepDosesPerVial(received, c), 4, 'doses per vial');
+  });
+
+  test('VIAL 6 x 2mg lasts 24 doses where 4 x 5mg would have lasted 40', () => {
+    const psP = { settings:{}, stacks:[planned] };
+    const psR = { settings:{}, stacks:[received] };
+    const fP = app._pepStockForecast(psP, planned);
+    const fR = app._pepStockForecast(psR, received);
+    assert.equal(fP.dosesRemaining, 40, '4 x 10');
+    assert.equal(fR.dosesRemaining, 24, '6 x 4');
+  });
+
+  test('VIAL it suggests the water that would restore the planned draw', () => {
+    const w = app._pepWaterToMatchPlanned(received, c);
+    assert.equal(w, 0.8, '2mg / 2.5mg per mL');
+  });
+
+  test('VIAL no suggestion when the vial matches the plan', () => {
+    assert.equal(app._pepWaterToMatchPlanned(planned, c), null, 'nothing to suggest');
+  });
+
+  test('SHORTFALL a fixed-length course flags when stock cannot finish it', () => {
+    // Epitalon: 20 nights x 5mg. Planned ET10 = 2 doses/vial, so 10 vials.
+    // Give him 3 vials and it must say so.
+    const epi = { compoundId:'epitalon', dose:5, startDate: vIso(new Date()),
+                  vialMg:10, waterMl:1, sealedVials:3, status:'instock' };
+    const ps = { settings:{}, stacks:[epi] };
+    const sf = app._pepCycleShortfall(ps, epi);
+    assert.equal(sf.required, 20, 'the whole course');
+    assert.equal(sf.available, 6, '3 vials x 2 doses');
+    assert.equal(sf.short, 14, 'fourteen doses short');
+    assert.equal(sf.sufficient, false, 'flagged insufficient');
+  });
+
+  test('ARRIVE marking a delivery arrived adopts its vial size and quantity', () => {
+    reset(); signIn('jon');
+    const st0 = app.pepGetState();
+    st0.settings = {};
+    st0.stacks = [Object.assign({}, planned, {
+      sealedVials: 0, onOrder: true, arrivalDate: vAgo(1), onOrderVials: 4, onOrderVialMg: 2
+    })];
+    app.pepSaveState(st0);
+    app.pepMarkArrived(0);
+    const st = app.pepGetState().stacks[0];
+    assert.equal(st.sealedVials, 4, 'stock added');
+    assert.equal(st.actualVialMg, 2, 'new vial size adopted — the override transitions');
+    assert.equal(st.onOrder, false, 'order closed out');
+    assert.equal(st.arrivalDate, null, 'date cleared');
+    assert.equal(st.stockCounted, true, 'counted, since he just received it');
+  });
+
+  test('ARRIVE a delivery matching the plan clears the override rather than storing it', () => {
+    reset(); signIn('jon');
+    const st0 = app.pepGetState();
+    st0.settings = {};
+    st0.stacks = [Object.assign({}, planned, {
+      actualVialMg: 2, sealedVials: 1, onOrder: true, arrivalDate: vAgo(1), onOrderVials: 3, onOrderVialMg: 5
+    })];
+    app.pepSaveState(st0);
+    app.pepMarkArrived(0);
+    const st = app.pepGetState().stacks[0];
+    assert.equal(st.actualVialMg, null, 'back on the planned size, no stale manual flag');
+    assert.equal(st.sealedVials, 4, '1 + 3');
+  });
+
+  test('OVERRIDE choosing the planned size clears the override flag', () => {
+    reset(); signIn('jon');
+    const st0 = app.pepGetState();
+    st0.settings = {}; st0.stacks = [Object.assign({}, received)];
+    app.pepSaveState(st0);
+    app.pepSetVialSize(0, 5);
+    assert.equal(app.pepGetState().stacks[0].actualVialMg, null, 'no override when it matches plan');
+  });
+
+  test('OVERRIDE typing a stock count directly sets it', () => {
+    reset(); signIn('jon');
+    const st0 = app.pepGetState();
+    st0.settings = {}; st0.stacks = [Object.assign({}, received)];
+    app.pepSaveState(st0);
+    app.pepSetSealed(0, '9');
+    assert.equal(app.pepGetState().stacks[0].sealedVials, 9, 'set from the field');
+    app.pepSetSealed(0, '-3');
+    assert.equal(app.pepGetState().stacks[0].sealedVials, 0, 'negative clamps to zero');
+  });
+
+  test('SHORTFALL enough stock reports sufficient', () => {
+    const epi = { compoundId:'epitalon', dose:5, startDate: vIso(new Date()),
+                  vialMg:10, waterMl:1, sealedVials:10, status:'instock' };
+    const sf = app._pepCycleShortfall({ settings:{}, stacks:[epi] }, epi);
+    assert.equal(sf.sufficient, true, 'ten vials covers twenty nights');
+    assert.equal(sf.short, 0, 'no shortfall');
+  });
+
+    test('RENDER the STOCK card shows planned vs on-hand and flags the override', () => {
+      const nodes = {};
+      const mk = id => ({ id, innerHTML:'', style:{}, classList:{add(){},remove(){},contains(){return false;}},
+        appendChild(){}, setAttribute(){}, getAttribute(){return null;}, addEventListener(){},
+        querySelector(){return null;}, querySelectorAll(){return [];} });
+      const real = app.document.getElementById;
+      app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
+
+      reset(); signIn('jon');
+      const st0 = app.pepGetState();
+      st0.settings = {}; st0.stacks = [Object.assign({}, received)];
+      app.pepSaveState(st0);
+      app._pepTab = 'stock';
+      nodes['pep-screen-body'] = mk('pep-screen-body');
+      app.pepRenderScreen();
+      const h = nodes['pep-screen-body'].innerHTML;
+      app.document.getElementById = real;
+
+      assert.ok(h.includes('Protocol planned'), 'planned line painted');
+      assert.ok(h.includes('5mg vials'), 'names the planned size');
+      assert.ok(h.includes('Manual entry'), 'override is labelled as manual');
+      assert.ok(h.includes('2mg &times; 6') || h.includes('2mg × 6'), 'shows what is actually on hand');
+      assert.ok(h.includes('Vial size on hand'), 'selector painted');
+      assert.ok(h.includes('Revert to planned'), 'a way back');
+    });
+
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

@@ -199,7 +199,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.236'", 'version is 4.9.236');
+has("var APP_VERSION='4.9.238'", 'version is 4.9.238');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2199,6 +2199,34 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
   }
 })();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
+
+// ── FAILED WRITES MUST BE VISIBLE (v4.9.238) ────────────────────────────────
+// Rule 8. These reported to console.error and NOWHERE else, and console is invisible
+// in the iOS PWA. Named individually rather than counted, so reverting ONE fails and
+// says which — a bare count goes green again the moment a recorder call is added
+// somewhere else entirely.
+//
+// NOTE for any future ratchet: the sweep that found these originally searched
+// `console.warn` only. `console.error` is equally invisible on the phone, and it is
+// where the three worst sites were. Cover BOTH or the ratchet is decorative.
+(() => {
+  const src = codeSrc();
+  const need = [
+    ["_phxRecordWriteError('supabaseLogSet',", 'every set Jon logs'],
+    ["_phxRecordWriteError('supabaseLogSet.throw',", 'a set insert that rejects outright (offline/CORS) and never reached the .then at all'],
+    ["_phxRecordWriteError('supabaseStartSession',", 'the session row every later set depends on'],
+    ["_phxRecordWriteError('supabaseCompleteSession',", 'the completion, without which the session stays in_progress forever'],
+    ["_phxRecordWriteError('blockRpe.update',", 'RPE, which decides whether the next session progresses the lift'],
+  ];
+  const missing = need.filter(([n]) => !src.includes(n));
+  if (!missing.length) {
+    ok(`WRITE: all ${need.length} core training write paths route failures to the diagnostic`);
+  } else {
+    missing.forEach(([n, why]) =>
+      bad(`WRITE: ${n.match(/'([^']+)'/)[1]} no longer records to phx_last_write_error — ${why}. ` +
+          'It would fail to console only, which Jon cannot see on his phone.'));
+  }
+})();
 
 // ── WHERE TRAINING'S DATA LEAVES ────────────────────────────────────────────
 // Peptides' question, applied to Training: not "is my sanitiser right" but "HOW MANY

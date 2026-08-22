@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.236';
+var APP_VERSION='4.9.238';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8031,11 +8031,23 @@ async function supabaseStartSession(sessionType,sessionName,rawSessionId,opts){
   };
   try{
     var res=await sb.from('sessions').insert(row).select('id').single();
-    if(res.error){console.error('[PHX] supabaseStartSession failed:',res.error);return null;}
+    if(res.error){
+      console.error('[PHX] supabaseStartSession failed:',res.error);
+      // v4.9.238: ALONGSIDE the console line, not replacing it — console is still
+      // useful in a desktop browser and invisible on Jon's phone. Without a session
+      // row, every set logged afterwards has no session_id and is dropped on the
+      // floor; he sees a normal session and loses the lot.
+      if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseStartSession',res.error,row);
+      return null;
+    }
     currentSupabaseSessionId=res.data.id;
     console.log('[PHX] session started:',currentSupabaseSessionId);
     return currentSupabaseSessionId;
-  }catch(e){console.error('[PHX] supabaseStartSession error:',e);return null;}
+  }catch(e){
+    console.error('[PHX] supabaseStartSession error:',e);
+    if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseStartSession.throw',e,row);
+    return null;
+  }
 }
 
 async function supabaseCompleteSession(updates){
@@ -8074,9 +8086,17 @@ async function supabaseCompleteSession(updates){
     delete patch.details_patch_notes;
     patch.updated_at=new Date().toISOString();
     var res=await sb.from('sessions').update(patch).eq('id',sessionId);
-    if(res.error) console.error('[PHX] supabaseCompleteSession failed:',res.error);
+    if(res.error){
+      console.error('[PHX] supabaseCompleteSession failed:',res.error);
+      // A session that never completes stays 'in_progress' forever — it drops out of
+      // history and out of the coach's 7-day window, so the advice degrades too.
+      if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseCompleteSession',res.error,patch);
+    }
     else console.log('[PHX] session completed:',sessionId);
-  }catch(e){console.error('[PHX] supabaseCompleteSession error:',e);}
+  }catch(e){
+    console.error('[PHX] supabaseCompleteSession error:',e);
+    if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseCompleteSession.throw',e,(typeof patch!=='undefined')?patch:null);
+  }
 }
 
 function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
@@ -8105,8 +8125,21 @@ function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
   // can await it before issuing its UPDATE — closes the race where the last set
   // hadn't been INSERTed yet when the user clicked Save.
   var p = sb.from('set_logs').insert(row).then(function(res){
-    if(res.error) console.error('[PHX] supabaseLogSet failed:',res.error);
+    if(res.error){
+      console.error('[PHX] supabaseLogSet failed:',res.error);
+      // THE ONE THAT MATTERS MOST. A set that fails here looks logged on screen and
+      // is gone. Worse than a plain loss: set_logs feeds previous-best and RPE, so a
+      // silent failure also degrades the targets for his NEXT session. Same shape as
+      // the weigh-in -> macro chain, in the training half.
+      if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseLogSet',res.error,row);
+    }
     return res;
+  }).catch(function(e){
+    // The insert can reject outright (offline, DNS, CORS) — that never reached the
+    // handler above at all, so it was invisible even in a desktop console.
+    console.error('[PHX] supabaseLogSet threw:',e);
+    if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseLogSet.throw',e,row);
+    return {error:e};
   });
   window._phxLastSetInsertP = p;
   return p;
@@ -10827,10 +10860,22 @@ function showExerciseBlockRPE(exIdx, ex){
             .eq('session_id', currentSupabaseSessionId)
             .eq('exercise_name', ex.name)
             .then(function(res){
-              if(res.error) console.error('[PHX] block-RPE update failed:', res.error);
+              if(res.error){
+                console.error('[PHX] block-RPE update failed:', res.error);
+                // RPE is how the programme decides whether to progress a lift. Losing
+                // it is not cosmetic — the next session is built from it.
+                if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('blockRpe.update',res.error,patch);
+              }
+            })
+            .catch(function(e){
+              console.error('[PHX] block-RPE update threw:', e);
+              if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('blockRpe.throw',e,patch);
             });
         }
-      } catch(e){ console.warn('[PHX] block-RPE skipped:', e); }
+      } catch(e){
+        console.warn('[PHX] block-RPE skipped:', e);
+        if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('blockRpe.skipped',e,null);
+      }
     }
     close();
   });

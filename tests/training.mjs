@@ -2108,4 +2108,115 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(!grid.some((w) => w.id === 'wb-150-core-p2'), 'part 2 is not offered on its own');
     assert.ok(app.phxSessionById('wb-150-core-p2'), 'but it still resolves by id');
   });
+
+  // ── FAILED WRITES MUST BE VISIBLE (v4.9.238) ──────────────────────────────
+  // CLAUDE.md rule 8. These three were reporting to console.error and NOWHERE else,
+  // and console is invisible in the iOS PWA. Jon finishes at 5am, the set looks
+  // logged, and it is gone — and because set_logs feeds previous-best and RPE, the
+  // loss ALSO degrades the targets for his next session.
+  //
+  // The assertion is that a failure REACHES THE DIAGNOSTIC, not that a helper was
+  // called: phx_last_write_error is what Jon can actually read on his phone.
+
+  const failingInsert = (err) => {
+    // Mirrors the sandbox's own query shape so the code under test cannot tell the
+    // difference — a stub that is not thenable would fail for the wrong reason.
+    const q = {
+      select: () => q, eq: () => q, single: () => Promise.resolve({ data: null, error: err }),
+      insert: () => q, update: () => q, upsert: () => q, delete: () => q,
+      then: (a, b) => Promise.resolve({ data: null, error: err }).then(a, b),
+      catch: (b) => Promise.resolve({ data: null, error: err }).catch(b)
+    };
+    return { from: () => q, storage: { from: () => ({ upload: () => Promise.resolve({ error: err }) }) } };
+  };
+
+  test('WRITE: a failed set insert reaches the diagnostic, not just the console', async () => {
+    reset(); signIn(UID);
+    const realSb = app.sb;
+    app.currentSupabaseSessionId = 'sess-1';
+    app.sb = failingInsert({ code: '23503', message: 'insert or update violates foreign key' });
+    try {
+      await app.supabaseLogSet('Back Squat', 'squat', 1, 100, 5, { rpe: 8 });
+      const last = read('phx_last_write_error');
+      assert.ok(last, 'something was recorded where Jon can see it');
+      assert.equal(last.context, 'supabaseLogSet', 'named so he can tell WHICH write died');
+      assert.equal(last.code, '23503', 'with the Postgres code');
+    } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
+  });
+
+  test('WRITE: the recorded payload carries SHAPE, never the values', async () => {
+    // I pass the real row deliberately — the redaction is enforced inside the helper,
+    // not by caller discipline. This pins that it actually is.
+    reset(); signIn(UID);
+    const realSb = app.sb;
+    app.currentSupabaseSessionId = 'sess-1';
+    app.sb = failingInsert({ code: '42703', message: 'column does not exist' });
+    try {
+      await app.supabaseLogSet('Back Squat', 'squat', 1, 137.5, 5, { notes: 'left knee twinge' });
+      const blob = JSON.stringify(read('phx_last_write_error'));
+      assert.ok(!blob.includes('137.5'), 'the load is not in the diagnostic');
+      assert.ok(!blob.includes('left knee twinge'), 'and neither is a free-text note');
+      assert.ok(blob.includes('weight_kg') || blob.includes('keys'), 'while the shape is still recorded');
+    } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
+  });
+
+  test('WRITE: an insert that REJECTS is recorded too, not only one that resolves with an error', async () => {
+    // Offline, DNS, CORS. This never reached the .then handler at all, so it was
+    // invisible even in a desktop console — a strictly worse case than the one above.
+    reset(); signIn(UID);
+    const realSb = app.sb;
+    app.currentSupabaseSessionId = 'sess-1';
+    const q = { insert: () => ({ then: (a, b) => Promise.reject(new Error('Failed to fetch')).then(a, b),
+                                 catch: (b) => Promise.reject(new Error('Failed to fetch')).catch(b) }) };
+    app.sb = { from: () => q };
+    try {
+      await app.supabaseLogSet('Bench Press', 'bench', 2, 90, 3, {});
+      const last = read('phx_last_write_error');
+      assert.ok(last, 'a rejection is recorded');
+      assert.equal(last.context, 'supabaseLogSet.throw', 'and is distinguishable from a returned error');
+    } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
+  });
+
+  test('WRITE: a failed session start is recorded — every later set depends on it', async () => {
+    // Without a session row there is no session_id, so every set logged afterwards is
+    // dropped. One invisible failure, a whole session lost.
+    reset(); signIn(UID);
+    const realSb = app.sb;
+    app.sb = failingInsert({ code: '23502', message: 'null value in column' });
+    try {
+      const id = await app.supabaseStartSession('strength', 'Upper Part 2', 'w1d1', {});
+      assert.equal(id, null, 'it still reports failure to its caller');
+      const last = read('phx_last_write_error');
+      assert.ok(last, 'and now leaves a trace Jon can read');
+      assert.equal(last.context, 'supabaseStartSession', 'named');
+    } finally { app.sb = realSb; }
+  });
+
+  test('WRITE: a failed session completion is recorded', async () => {
+    reset(); signIn(UID);
+    const realSb = app.sb;
+    app.currentSupabaseSessionId = 'sess-1';
+    app.sb = failingInsert({ code: '42P01', message: 'relation does not exist' });
+    try {
+      await app.supabaseCompleteSession({ total_volume_kg: 4200 });
+      const last = read('phx_last_write_error');
+      assert.ok(last, 'recorded');
+      assert.equal(last.context, 'supabaseCompleteSession', 'named');
+    } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
+  });
+
+  test('WRITE: a SUCCESSFUL set logs nothing to the diagnostic', async () => {
+    // A recorder that fires on success is noise that buries the real failure — the
+    // ring is only 8 deep.
+    reset(); signIn(UID);
+    const realSb = app.sb;
+    app.currentSupabaseSessionId = 'sess-1';
+    const q = { insert: () => ({ then: (a) => Promise.resolve({ data: [{}], error: null }).then(a),
+                                 catch: () => Promise.resolve({ data: [{}], error: null }) }) };
+    app.sb = { from: () => q };
+    try {
+      await app.supabaseLogSet('Deadlift', 'deadlift', 1, 150, 5, {});
+      assert.equal(read('phx_last_write_error'), null, 'nothing recorded on a clean write');
+    } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
+  });
 }

@@ -1469,6 +1469,87 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── SAVE — where it lands, and what it keeps (v4.9.207) ───────────────────
+  // Jon: adding a compound from STOCK dropped him somewhere else after saving.
+  // Cause: the handler hard-set _pepTab = "protocol", a tab that stopped
+  // existing in the .201 restructure — so Save landed on an orphaned screen with
+  // nothing highlighted in the bar.
+  //
+  // The worse bug found alongside it: the handler built a fresh object from the
+  // sheet's 12 inputs and REPLACED the stack, wiping the 8 fields it has no
+  // input for — including the vial override and the whole in-transit order.
+  {
+    // NOTE: no sheet-driving helper here on purpose. I wrote one, could not make
+    // it invoke the real Save listener through the sandbox (the sheet registers
+    // it on an element created inside the function), and deleted it rather than
+    // leave 30 lines that look like they exercise the handler and do not.
+    // These cases pin the handler's SOURCE shape plus the merge semantics.
+    test('SAVE the orphaned "protocol" tab is no longer hard-set anywhere', () => {
+      // The bug in one line: a literal that sends Save to a tab the bar does not
+      // contain. If it comes back, this fails.
+      assert.notIncludes(html, '_pepTab = "protocol";',
+        'Save must return to the tab it was opened from, not a fixed one');
+    });
+
+    test('SAVE the handler merges onto the existing stack rather than replacing it', () => {
+      const i = html.indexOf('function pepOpenEditStack');
+      const j = html.indexOf('function pepRemoveStack', i);
+      const blk = html.slice(i, j);
+      assert.ok(blk.includes('Object.assign({}, ps.stacks[idx], saved)'),
+        'merge, so fields with no input survive an edit');
+      assert.notIncludes(blk, 'ps.stacks[idx] = saved;', 'no wholesale replace');
+    });
+
+    test('SAVE records the tab it was opened from', () => {
+      const i = html.indexOf('function pepOpenEditStack');
+      const j = html.indexOf('function pepRemoveStack', i);
+      const blk = html.slice(i, j);
+      assert.ok(blk.includes('var _originTab'), 'origin captured at open');
+      assert.ok(blk.includes('_pepTab = _originTab;'), 'and restored on save');
+      assert.ok(blk.includes('"stock"'), 'with a sane fallback');
+    });
+
+    // The behavioural half: prove a merge preserves exactly the fields the sheet
+    // has no input for. This models what the handler now does.
+    test('SAVE merging keeps the override and the in-transit order', () => {
+      const existing = {
+        compoundId:'bpc157', dose:0.5, startDate:'2026-07-01',
+        vialMg:5, waterMl:2, sealedVials:6,
+        actualVialMg:2, stockCounted:true,
+        onOrder:true, arrivalDate:'2026-09-01', onOrderVials:4, onOrderVialMg:5,
+        freq:'daily', continuous:true, status:'instock',
+      };
+      const fromSheet = {
+        compoundId:'bpc157', dose:0.25, startDate:'2026-07-01',
+        cycleWeeks:null, offWeeks:0, vialMg:5, waterMl:2,
+        sealedVials:6, openDosesUsed:0, openedDate:null,
+        status:'instock', notes:'typo fixed',
+      };
+      const merged = Object.assign({}, existing, fromSheet);
+
+      assert.equal(merged.dose, 0.25, 'the edit itself applies');
+      assert.equal(merged.notes, 'typo fixed', 'and the new note');
+      assert.equal(merged.actualVialMg, 2, 'vial override survives');
+      assert.equal(merged.stockCounted, true, 'count confirmation survives — otherwise the gate re-locks');
+      assert.equal(merged.onOrder, true, 'the order survives');
+      assert.equal(merged.arrivalDate, '2026-09-01', 'and its arrival date');
+      assert.equal(merged.onOrderVials, 4, 'and its quantity');
+      assert.equal(merged.freq, 'daily', 'frequency survives');
+      assert.equal(merged.continuous, true, 'continuous survives');
+    });
+
+    test('SAVE a replace would have wiped all eight — this is what was happening', () => {
+      const existing = { compoundId:'bpc157', actualVialMg:2, stockCounted:true,
+                         onOrder:true, arrivalDate:'2026-09-01', onOrderVials:4,
+                         onOrderVialMg:5, freq:'daily', continuous:true };
+      const fromSheet = { compoundId:'bpc157', dose:0.25 };
+      const replaced = fromSheet;                       // the old behaviour
+      ['actualVialMg','stockCounted','onOrder','arrivalDate','onOrderVials','onOrderVialMg','freq','continuous']
+        .forEach(f => assert.equal(replaced[f], undefined, f + ' would have been lost'));
+      assert.equal(existing.actualVialMg, 2, 'sanity: the source had it');
+    });
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

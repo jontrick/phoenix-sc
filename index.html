@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.206';
+var APP_VERSION='4.9.207';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22649,6 +22649,11 @@ function pepOpenAddStack(){
 
 function pepOpenEditStack(idx, newId){
   var ps = pepGetState();
+  // v4.9.207: remember the tab this was opened from so Save returns there.
+  // It used to hard-set _pepTab = "protocol" — a tab that stopped existing in
+  // the .201 restructure, so saving landed on an orphaned screen with nothing
+  // highlighted in the bar. Jon read that as "it navigated me away".
+  var _originTab = ["today","overview","stock","adjust","order","bloods"].indexOf(_pepTab) >= 0 ? _pepTab : "stock";
   var isNew = idx < 0;
   var stack = isNew ? {compoundId: newId||"", status:"instock", continuous:false} : Object.assign({}, ps.stacks[idx]);
   var c = _pepCompound(stack.compoundId);
@@ -22786,12 +22791,28 @@ function pepOpenEditStack(idx, newId){
       notes:      document.getElementById("pep-e-notes").value.trim()
     };
     if(!ps.stacks) ps.stacks = [];
-    if(isNew) ps.stacks.push(saved);
-    else ps.stacks[idx] = saved;
+    if(isNew){
+      ps.stacks.push(saved);
+    } else {
+      // v4.9.207: MERGE onto the existing entry, do not replace it.
+      // The sheet has inputs for 12 of the 20 fields a stack carries. Replacing
+      // the object wiped the other eight every time Jon edited anything:
+      //   actualVialMg    the received-vial override
+      //   onOrder / arrivalDate / onOrderVials / onOrderVialMg   the whole
+      //                   in-transit delivery
+      //   stockCounted    which silently re-locked the protocol gate
+      //   freq, continuous
+      // So correcting a typo in the notes would have quietly undone the
+      // override and lost the order he is waiting on, with nothing on screen to
+      // say so. Nothing in the sheet's own fields is affected — `saved` still
+      // wins for everything it sets, including deliberate nulls.
+      ps.stacks[idx] = Object.assign({}, ps.stacks[idx], saved);
+    }
     pepSaveState(ps);
     ov.remove();
-    _pepTab = "protocol";
+    _pepTab = _originTab;
     pepRenderScreen();
+    if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
   });
 }
 

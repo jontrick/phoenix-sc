@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.232';
+var APP_VERSION='4.9.233';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -24750,18 +24750,47 @@ function _pepAuditCard(ps){
   }
 
   h += "<button id=\"pep-audit-copy\" style=\"width:100%;margin-top:12px;padding:10px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Copy full audit</button>";
+  // v4.9.233: somewhere for the text to GO when the clipboard refuses. On iOS a
+  // clipboard write can reject for reasons Jon cannot see or influence, and the
+  // old handler had no .catch — so the button did nothing, said nothing, and he
+  // was left with no way to get the text off the screen at all.
+  h += "<div id=\"pep-audit-fallback\"></div>";
   h += "</div>";
   return h;
 }
 
 function pepCopyAudit(){
   var txt = pepAuditText(pepGetState());
+  var b = document.getElementById("pep-audit-copy");
+
+  // The clipboard is the convenience. THIS is the guarantee: the audit rendered
+  // into a selectable box he can read, select or screenshot. A copy button with
+  // no fallback means a clipboard refusal takes the data with it.
+  function showText(why){
+    var box = document.getElementById("pep-audit-fallback");
+    if(!box) return;
+    box.innerHTML =
+      "<div style=\"font-size:11px;color:var(--gold);margin:10px 0 6px;line-height:1.5;\">" +
+        "Copy to clipboard did not work" + (why ? " (" + _esc(String(why)) + ")" : "") +
+        ". The full audit is below &mdash; select it and copy, or screenshot it.</div>" +
+      "<textarea readonly style=\"width:100%;height:220px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:11px;font-family:ui-monospace,Menlo,monospace;line-height:1.45;box-sizing:border-box;-webkit-user-select:text;user-select:text;\">" +
+        _esc(txt) + "</textarea>";
+    var ta = box.querySelector("textarea");
+    if(ta){ try { ta.focus(); ta.setSelectionRange(0, ta.value.length); } catch(_e){} }
+    if(b){ b.textContent = "Copy full audit"; }
+  }
+
   try {
+    if(!navigator.clipboard || !navigator.clipboard.writeText){ showText("clipboard unavailable"); return; }
+    // .writeText REJECTS rather than throwing — the try/catch around the old
+    // version could never have caught it. Same resolve-vs-throw confusion as
+    // the .delete() and keepalive-fetch bugs found earlier today.
     navigator.clipboard.writeText(txt).then(function(){
-      var b = document.getElementById("pep-audit-copy");
       if(b){ b.textContent = "Copied"; setTimeout(function(){ if(b) b.textContent = "Copy full audit"; }, 2000); }
-    });
-  } catch(_e){}
+      var box = document.getElementById("pep-audit-fallback");
+      if(box) box.innerHTML = "";
+    }).catch(function(e){ showText(e && e.message); });
+  } catch(e){ showText(e && e.message); }
 }
 
 // ── STOCK tab ─────────────────────────────────────────────────────────────

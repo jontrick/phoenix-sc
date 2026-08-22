@@ -1873,6 +1873,86 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
+  // ── COPYAUDIT — the button I sent Jon to four times without ever running it ─
+  // He asked "where is the audit?". I had told him to tap Copy full audit
+  // repeatedly and never once driven the handler. It called
+  // navigator.clipboard.writeText(...).then(...) with NO .catch, wrapped in a
+  // try/catch that cannot catch a rejection. On iOS that write can reject for
+  // reasons he can neither see nor influence — so the button did nothing, said
+  // nothing, and left him no way to get the text off the screen.
+  //
+  // Third instance today of the same confusion: .delete() resolving with
+  // {error}, fetch resolving on a 4xx, and now writeText rejecting past a
+  // try/catch. Awaiting or wrapping is not the same as handling.
+  {
+    const caSetUp = (clip) => {
+      reset();
+      signIn(UID);
+      seed(KEY, { stacks: [{ compoundId: 'bpc157', dose: 0.5, vialMg: 5, waterMl: 2, startDate: daysAgo(20) }] });
+      const nodes = {};
+      const mk = () => {
+        const el = {
+          textContent: '', innerHTML: '', value: '', style: {},
+          focus() {}, setSelectionRange() {},
+          querySelector() { return el._ta || null; },
+          addEventListener() {}, setAttribute() {}, getAttribute: () => null,
+        };
+        return el;
+      };
+      const realGet = app.document.getElementById;
+      app.document.getElementById = (id) => (nodes[id] || (nodes[id] = mk()));
+      app.navigator = app.navigator || {};
+      const realClip = app.navigator.clipboard;
+      app.navigator.clipboard = clip;
+      return { nodes, restore: () => { app.document.getElementById = realGet; app.navigator.clipboard = realClip; } };
+    };
+
+    test('COPYAUDIT a rejected clipboard write puts the audit on screen anyway', async () => {
+      const h = caSetUp({ writeText: () => Promise.reject(new Error('NotAllowedError')) });
+      try {
+        app.pepCopyAudit();
+        await new Promise(r => setTimeout(r, 0));
+        const box = h.nodes['pep-audit-fallback'];
+        assert.ok(box && box.innerHTML.length > 0,
+          'the fallback rendered — a clipboard refusal must not take the data with it');
+        assert.ok(box.innerHTML.includes('<textarea'), 'in something he can select from');
+        assert.ok(box.innerHTML.includes('did not work'), 'and it says the copy failed rather than pretending');
+      } finally { h.restore(); }
+    });
+
+    test('COPYAUDIT the fallback carries the real audit text, not a placeholder', async () => {
+      const h = caSetUp({ writeText: () => Promise.reject(new Error('nope')) });
+      try {
+        app.pepCopyAudit();
+        await new Promise(r => setTimeout(r, 0));
+        const box = h.nodes['pep-audit-fallback'];
+        assert.ok(box.innerHTML.includes('PROTOCOL AUDIT') || box.innerHTML.includes('compounds'),
+          'the actual report is in the box — a fallback that shows nothing is the same bug');
+      } finally { h.restore(); }
+    });
+
+    test('COPYAUDIT no clipboard API at all still shows the text', () => {
+      const h = caSetUp(undefined);
+      try {
+        app.pepCopyAudit();
+        const box = h.nodes['pep-audit-fallback'];
+        assert.ok(box && box.innerHTML.includes('<textarea'), 'older WebViews get the text too');
+      } finally { h.restore(); }
+    });
+
+    test('COPYAUDIT a successful copy confirms and clears the fallback', async () => {
+      let got = null;
+      const h = caSetUp({ writeText: (t) => { got = t; return Promise.resolve(); } });
+      try {
+        app.pepCopyAudit();
+        await new Promise(r => setTimeout(r, 0));
+        assert.ok(got && got.length > 50, 'the real audit text reached the clipboard');
+        assert.equal(h.nodes['pep-audit-copy'].textContent, 'Copied', 'and he is told it worked');
+        assert.equal(h.nodes['pep-audit-fallback'].innerHTML, '', 'no leftover box when it succeeded');
+      } finally { h.restore(); }
+    });
+  }
+
   // ── BLOODSAVE — driving pepSaveBloodPanel, which nothing had ever run ──────
   // The harness had `has('async function pepSaveBloodPanel()')` and that was
   // the entire coverage. Presence, not behaviour — the exact gap the .165

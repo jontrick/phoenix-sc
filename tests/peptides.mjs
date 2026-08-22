@@ -1376,6 +1376,99 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   }
 
+  // ── BOOT RESTORE — central, covers every routing exit (v4.9.206) ──────────
+  // Jon: "still navigating away when I switch to another app and come back",
+  // AFTER v4.9.200. The .200 fix repaired ONE of seven routing exits — the fast
+  // path. His boot takes the normal profile-fetch route, so it never applied to
+  // him. Six other exits reached Today with no restore, each wiping the key on
+  // the way past via the navTo intercept.
+  //
+  // Fixed centrally rather than six more times: capture before anything can
+  // wipe, suppress the wipe during boot, one scheduled restore.
+  {
+    const BKEY = 'phx_lastTab_v1';
+
+    test('BOOT the intercept still forgets the screen on a REAL tap on Today', () => {
+      reset(); signIn('jon');
+      app.window._phxBooting = false;
+      app.navTo('peptide');
+      assert.equal(read(BKEY), 'peptide', 'recorded');
+      app.navTo('today');
+      assert.equal(read(BKEY), null, 'a user tap clears it, as before');
+    });
+
+    test('BOOT routing to Today during boot does NOT forget it', () => {
+      reset(); signIn('jon');
+      app.navTo('peptide');
+      app.window._phxBooting = true;          // what _phxBootRestoreBegin sets
+      app.navTo('today');                     // any of the seven exits
+      assert.equal(read(BKEY), 'peptide', 'survives boot routing — the whole bug');
+      app.window._phxBooting = false;
+    });
+
+    test('BOOT begin captures the tab and arms boot mode', () => {
+      reset(); signIn('jon');
+      app.navTo('peptide');
+      app._phxBootRestoreBegin();
+      assert.equal(app.window._phxBooting, true, 'boot mode on');
+      assert.equal(app.window._phxBootRestoreTab, 'peptide', 'tab captured');
+      app.window._phxBooting = false; app.window._phxBootRestoreTab = null;
+    });
+
+    test('BOOT apply restores the screen, re-asserts the key, and ends boot mode', () => {
+      reset(); signIn('jon');
+      app.navTo('peptide');
+      app._phxBootRestoreBegin();
+      app.navTo('today');                     // routing runs
+      app._phxBootRestoreApply();             // the scheduled restore fires
+      assert.equal(app.window._phxBooting, false, 'boot mode ended');
+      assert.equal(read(BKEY), 'peptide', 'key re-asserted for the NEXT reload');
+    });
+
+    test('BOOT an unsafe tab is not restored, and boot mode still ends', () => {
+      reset(); signIn('jon');
+      seed(BKEY, 'session');                  // never restorable
+      app._phxBootRestoreBegin();
+      assert.equal(app.window._phxBootRestoreTab, null, 'not captured');
+      app._phxBootRestoreApply();
+      assert.equal(app.window._phxBooting, false,
+        'boot mode ends even with nothing to restore — otherwise the app could never forget a screen again');
+    });
+
+    test('BOOT with no key at all, nothing is restored and nothing throws', () => {
+      reset(); signIn('jon');
+      app._phxBootRestoreBegin();
+      app._phxBootRestoreApply();
+      assert.equal(read(BKEY), null, 'nothing invented');
+      assert.equal(app.window._phxBooting, false, 'boot mode ended');
+    });
+
+    test('BOOT restore survives a SECOND reload — it works more than once', () => {
+      reset(); signIn('jon');
+      app.navTo('peptide');
+      // reload 1
+      app._phxBootRestoreBegin(); app.navTo('today'); app._phxBootRestoreApply();
+      assert.equal(read(BKEY), 'peptide', 'still set after the first');
+      // reload 2
+      app._phxBootRestoreBegin();
+      assert.equal(app.window._phxBootRestoreTab, 'peptide', 'captured again');
+      app.navTo('today'); app._phxBootRestoreApply();
+      assert.equal(read(BKEY), 'peptide', 'and again');
+    });
+
+    test('BOOT every safe tab survives boot routing, not just peptide', () => {
+      ['nutrition','records','peptide','programme','blab-calendar'].forEach(tab => {
+        reset(); signIn('jon');
+        seed(BKEY, tab);
+        app._phxBootRestoreBegin();
+        app.navTo('today');
+        assert.equal(read(BKEY), tab, tab + ' survives');
+        app._phxBootRestoreApply();
+        app.window._phxBooting = false;
+      });
+    });
+  }
+
   // ── Marker flagging — against the lab's own printed range ──────────────────
 
   test('a value above the lab range flags high', () => {

@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.205';
+var APP_VERSION='4.9.206';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7355,6 +7355,18 @@ function _phxLoadLocalAthlete(){
 
 async function _loadProfileAndRouteInner(){
   console.log('[PHX] loadProfileAndRoute start');
+  // v4.9.206: THE RESTORE IS CENTRAL NOW, and this is why.
+  // v4.9.200 fixed the read-before-navigate ordering in ONE routing exit — the
+  // fast path. This function has SEVEN exits that reach Today, and six of them
+  // navigated there with no restore at all, each wiping phx_lastTab_v1 via the
+  // navTo intercept on the way past. Jon's boot takes the normal profile-fetch
+  // route, not the fast path, so .200 never applied to him and the portal still
+  // bounced to Today on resume.
+  //
+  // Patching six more call sites would leave the eighth to whoever adds it. So:
+  // capture the tab before anything can wipe it, tell the intercept not to wipe
+  // during boot, and schedule ONE restore that fires whichever exit is taken.
+  _phxBootRestoreBegin();
   var session;
   try{
     var res=await sb.auth.getSession();
@@ -7390,40 +7402,10 @@ async function _loadProfileAndRouteInner(){
       if(athlete.font  && typeof applyFont==='function') applyFont(athlete.font);
     } catch(_e){}
     if(typeof viewWeek!=='undefined' && typeof progWeek==='function') viewWeek = progWeek();
-    // v4.9.200: READ THE RESTORE TAB BEFORE navTo('today'), not after.
-    // The navTo intercept deletes phx_lastTab_v1 whenever the target is 'today'.
-    // This block used to navTo('today') and THEN read the key — which the
-    // navigation had just removed — so _restoreTab was always null and the
-    // restore could never fire, for peptide or any other tab in the safe list.
-    // Symptom Jon reported: iOS kills the PWA context on screen lock, the app
-    // reloads on wake, and he is dropped back on Today instead of the screen he
-    // left. Reproduced in tests/peptides.mjs under NAV.
-    var _restoreTab = null;
-    try { _restoreTab = localStorage.getItem('phx_lastTab_v1'); } catch(_re0){}
+    // v4.9.206: the restore is handled centrally by _phxBootRestoreBegin(),
+    // called at the top of this function. It covers this exit and the six
+    // others that reach Today. See the comment there for why per-exit failed.
     navTo('today');
-    // Restore last non-today tab after PWA reload (iOS kills PWA context on sleep/low-memory).
-    try {
-      // v4.9.203 [TRAINING]: 'workout' and 'settings' were DEAD STRINGS — neither is a
-      // navTo target (no entry in navTo's map, no branch) and the intercept that writes
-      // this key never stores either value. They made the list READ as though training
-      // screens were covered. They were not.
-      //
-      // 'programme' and 'blab-calendar' ARE written by that intercept and were missing,
-      // so the training calendar still dropped Jon back to Today on screen lock — the
-      // same symptom .200 fixed for peptides, still live in my domain because this list
-      // predates the calendar. .200 repaired the MECHANISM (the restore had never fired
-      // for any tab); this is the stale config it was reading.
-      //
-      // Pinned by a harness guard that every entry here resolves to a real navTo target,
-      // so the list cannot silently drift again for any domain.
-      var _safeRestoreTabs = ['nutrition','records','peptide','programme','blab-calendar'];
-      if(_restoreTab && _safeRestoreTabs.indexOf(_restoreTab) >= 0){
-        // navTo('today') above wiped the key; put it back so a SECOND reload
-        // still restores. Without this the fix works exactly once.
-        try { localStorage.setItem('phx_lastTab_v1', _restoreTab); } catch(_re1){}
-        setTimeout(function(){ if(typeof navTo==='function') navTo(_restoreTab); }, 400);
-      }
-    } catch(_re){}
     // Background profile refresh — non-blocking, never re-routes.
     try {
       sb.from('profiles').select('*').eq('id', session.user.id).single().then(function(pRes){
@@ -34970,6 +34952,13 @@ if(typeof navTo==='function'){
   var _origNavTo = navTo;
   window.navTo = function(tab){
     if(!_phxConfirmLeaveActiveSession()) return;
+    // v4.9.206: during boot routing, going to Today is the APP's doing, not the
+    // user's, and must not clear the screen the user actually left. Only a real
+    // tap on Today means "forget where I was".
+    if(window._phxBooting && tab === 'today'){
+      if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();
+      return _origNavTo.apply(this, arguments);
+    }
     // v4.7.10: any tab change cancels an in-flight count-in. The user is leaving the WOD context,
     // so we must not let a 5-second-old start tap fire startWODTimer against whatever screen they land on.
     if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();
@@ -34981,6 +34970,53 @@ if(typeof navTo==='function'){
     }
     return _origNavTo.apply(this, arguments);
   };
+}
+
+// ── v4.9.206: boot screen restore, central ─────────────────────────────────
+// Called once at the top of _loadProfileAndRouteInner, before any branch can
+// navigate. Captures the screen the user left, suppresses the intercept's wipe
+// for the duration of boot, and schedules a single restore that fires whichever
+// of the seven Today-exits routing took.
+//
+// v4.9.203 [TRAINING]: 'workout' and 'settings' were DEAD STRINGS — neither is a
+// navTo target (no entry in navTo's map, no branch) and the intercept that writes
+// this key never stores either value. They made the list READ as though training
+// screens were covered. They were not. 'programme' and 'blab-calendar' ARE
+// written by that intercept and were missing, so the calendar still dropped Jon
+// to Today on screen lock. Pinned by a harness guard (SAFELIST) that every entry
+// resolves to a real navTo target, so the list cannot silently drift again.
+//
+// session/auth/landing are deliberately absent: restoring into a live session
+// screen would drop the user into a workout they did not choose to resume.
+var _safeRestoreTabs = ['nutrition','records','peptide','programme','blab-calendar'];
+
+function _phxBootRestoreBegin(){
+  try {
+    window._phxBooting = true;
+    var tab = null;
+    try { tab = localStorage.getItem('phx_lastTab_v1'); } catch(_e){}
+    window._phxBootRestoreTab = (tab && _safeRestoreTabs.indexOf(tab) >= 0) ? tab : null;
+    // Fires after routing settles, whichever branch it took. Boot mode ends here
+    // too — and it ends even when there is nothing to restore, which is the case
+    // that would otherwise leave the app permanently unable to forget a screen.
+    setTimeout(_phxBootRestoreApply, 450);
+  } catch(_e){ window._phxBooting = false; }
+}
+
+function _phxBootRestoreApply(){
+  try {
+    var tab = window._phxBootRestoreTab;
+    window._phxBootRestoreTab = null;
+    window._phxBooting = false;
+    if(!tab) return;
+    // Re-assert the key: a branch may have cleared it before the boot flag was
+    // honoured, and without this the restore would work exactly once.
+    try { localStorage.setItem('phx_lastTab_v1', tab); } catch(_e){}
+    if(typeof navTo === 'function'){
+      console.log('[PHX] boot restore -> ' + tab);
+      navTo(tab);
+    }
+  } catch(_e){ window._phxBooting = false; }
 }
 
 // Intercept showScreen for non-session-screen targets when a session is active

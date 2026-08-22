@@ -243,6 +243,15 @@ exactly ONE ring slot however often it fires, keeping `count` and `first_ts`. Th
 cannot evict another domain's entry, and suppression at the call site only ever protects
 the domain that remembered to add it.
 
+**KNOWN LIMIT — coalescing preserves FREQUENCY, not MAGNITUDE.** The ring collapses
+repetitions of a context into one entry with a count. It has no way to know that each
+repetition carried a different quantity. `×3` says a thing failed three times; it does
+**not** say *"3 of 7 chunks failed, 1500 of 3200 rows"* — and only the second tells Jon
+how much he lost. So **on any bulk or chunked path, accumulate and record ONCE with
+totals** rather than letting the ring count for you. Found by Training (2026-08-22) on
+`migrateSessionsToSupabase`, against the PM's own advice that the summary was merely a
+legibility preference. The count the ring gives you is not always the count that matters.
+
 History, because it is the more useful half: the ring was written from v4.9.176 and read
 by nothing — the panel showed a single entry, so any later failure overwrote the one that
 mattered. Four domains spent a day designing rationing schemes for slots in a buffer

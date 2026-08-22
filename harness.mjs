@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.220'", 'version is 4.9.220');
+has("var APP_VERSION='4.9.221'", 'version is 4.9.221');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1158,7 +1158,7 @@ try {
 })();
 
 // ── PEPTIDES — cross-domain contract (STRUCTURAL) ───────────────────────────
-// TWO foreign surfaces, as of v4.9.220. Listing them is the point of this block:
+// TWO foreign surfaces, as of v4.9.221. Listing them is the point of this block:
 // an undeclared consumption is how a rename in another domain becomes a black
 // screen here.
 //   _phxRecordWriteError  (PM)         — every call site typeof-guarded, so a

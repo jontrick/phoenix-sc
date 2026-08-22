@@ -1873,7 +1873,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(latest.out_of_range[0].name, 'ALT', 'the right one');
   });
 
-  // ── KEYBOARD — the two sheets Jon types real numbers into (v4.9.220) ───────
+  // ── KEYBOARD — the two sheets Jon types real numbers into (v4.9.221) ───────
   // Jon: the iOS keyboard covers the field on the edit sheet. The argument that
   // got his go-ahead was not "a field is hidden" but WHICH field: he loses the
   // dose box AND the draw-up preview under it — the number that tells him

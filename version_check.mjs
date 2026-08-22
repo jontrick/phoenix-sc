@@ -63,7 +63,24 @@ if (ahead !== null) {
 
 let mine, theirs;
 try {
-  mine = parse(readFileSync(new URL('./index.html', import.meta.url), 'utf8'), 'working tree');
+  // v4.9.225: read what will actually be PUSHED, not the working tree. Peptides shipped
+  // .221 with a commit message saying 4.9.221 and a committed index.html saying 4.9.220 —
+  // the edits sat unstaged after a `git commit --amend -F msg.txt` (which amends the message
+  // and stages nothing). This gate then printed "CLEAN — 4.9.221 is ahead of 4.9.220" about
+  // a file that was not in the commit, and two trees shipped as 4.9.220. Its words:
+  // "a gate that validates a different artefact from the one you ship is not a gate, it is
+  // a second opinion about your intentions."
+  const headSrc = execFileSync('git', ['show', 'HEAD:index.html'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  mine = parse(headSrc, 'HEAD (the commit you are about to push)');
+  // And say so loudly when the working tree disagrees — those edits are NOT shipping.
+  try {
+    const wt = parse(readFileSync(new URL('./index.html', import.meta.url), 'utf8'), 'working tree');
+    if (wt.text !== mine.text) {
+      console.error(`VERSION CHECK FAILED — your working tree says ${wt.text} but the COMMIT says ${mine.text}.`);
+      console.error(`Unstaged or unamended edits are not in the commit. Stage them (git add index.html) and amend. DO NOT PUSH.`);
+      process.exit(1);
+    }
+  } catch { /* unreadable working tree is not this gate's problem; HEAD is authoritative */ }
 } catch (e) {
   console.error(`VERSION CHECK CANNOT RUN — ${e.message}`);
   process.exit(2);

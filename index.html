@@ -3532,7 +3532,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.225';
+var APP_VERSION='4.9.226';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7834,6 +7834,14 @@ function _phxRecordWriteError(context, err, payload){
 // named the fix; I pushed anyway because I chained it with `;` instead of `&&`, so a red
 // gate did not stop the command. The gate was right and the operator was wrong — run gates
 // with && so a failure actually blocks the push. Second .214 rebased onto the first here.
+
+// v4.9.226 [PM]: version_check now reads HEAD, not the working tree. Peptides shipped
+// .221 with a commit message saying 4.9.221 and a COMMITTED index.html saying 4.9.220 —
+// its edits sat unstaged after `git commit --amend -F msg.txt`, which amends the message
+// and stages nothing. The gate read the working tree, saw .221, and printed CLEAN about a
+// file that was not in the commit. Two trees then shipped as 4.9.220 — the exact thing that
+// number exists to rule out. It also now FAILS when the working tree and the commit
+// disagree, because those edits are not shipping.
 
 // ====== v4.9.175 SHARED DOM CONFIRM (PM-owned) ======
 // CLAUDE.md rule 4: native confirm() is SUPPRESSED in the iOS PWA — and a suppressed

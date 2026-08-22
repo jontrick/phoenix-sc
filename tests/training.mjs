@@ -1848,4 +1848,106 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(painted, 0, 'but nothing is repainted');
     } finally { app._blabCalRender = realRender; app.document.getElementById = realGet; }
   });
+
+  // ── CUSTOM SESSION TEMPLATES (v4.9.214) ───────────────────────────────────
+  // They lived at phx_custom_templates and NOWHERE else — no mirror, no backup, not in
+  // the restore table. Survivable-looking until sw.js was found empty: every deploy for
+  // 135 versions reached Jon only through a PWA reinstall, which wipes localStorage. So
+  // a full wipe was the NORMAL path and every custom session he built was destroyed on
+  // every ship, with the builder showing a healthy empty list.
+  //
+  // The case that matters is the one below marked "survives a reinstall". Asserting that
+  // a setter was called would have passed against the broken version too — written is
+  // not saved, which is exactly what made this invisible.
+
+  const BARE = { active: true, week: 3, last_completed_day: 1, log: [1, 2, 3],
+                 maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: OLDER };
+  const LEGACY_KEY = 'phx_custom_templates';
+
+  test('TEMPLATES: a saved template goes into blab_state, not a private key', () => {
+    reset(); signIn(UID); seed(KEY, BARE);
+    app._phxSaveCustomTemplate('Leg Burner', [{ name: 'Squat' }]);
+    const state = read(KEY);
+    assert.ok(Array.isArray(state.customTemplates), 'it rides inside the mirrored blob');
+    assert.equal(state.customTemplates[0].name, 'Leg Burner', 'with the template in it');
+  });
+
+  test('TEMPLATES: they survive a reinstall — the case that was actually broken', () => {
+    // The whole bug, reproduced end to end: save, wipe everything local exactly as a
+    // PWA delete-and-reinstall does, restore from what the cloud would be holding.
+    reset(); signIn(UID); seed(KEY, BARE);
+    app._phxSaveCustomTemplate('Leg Burner', [{ name: 'Squat' }]);
+    const cloudCopy = read(KEY);          // what the debounced mirror sends up
+
+    reset(); signIn(UID);                 // the reinstall — localStorage is gone
+    assert.equal(app._phxLoadCustomTemplates().length, 0, 'gone after the wipe, as it always was');
+
+    app.blabRestoreFromCloud({ blab_state: cloudCopy });
+    const back = app._phxLoadCustomTemplates();
+    assert.equal(back.length, 1, 'and back again once the cloud copy lands');
+    assert.equal(back[0].name, 'Leg Burner', 'the same template, not a placeholder');
+  });
+
+  test('TEMPLATES: existing local templates migrate IN rather than being replaced', () => {
+    // Anything already on Jon's phone must be rescued, not overwritten with an empty list.
+    reset(); signIn(UID); seed(KEY, BARE);
+    seed(LEGACY_KEY, [{ id: 1, name: 'Old Favourite', exercises: [] }]);
+    const loaded = app._phxLoadCustomTemplates();
+    assert.equal(loaded.length, 1, 'the old template is still there');
+    assert.equal(loaded[0].name, 'Old Favourite', 'by name');
+    assert.equal(read(KEY).customTemplates[0].name, 'Old Favourite', 'and it has moved into the mirrored state');
+  });
+
+  test('TEMPLATES: migration saves IMMEDIATELY, or a restore would undo the rescue', () => {
+    // A merged state that is not stamped and mirrored loses to the next cloud restore
+    // under newest-wins — which would arrive with no templates and wipe the ones the
+    // migration just rescued. The progress guard does not help: it scores training
+    // progress and templates do not move it.
+    reset(); signIn(UID); seed(KEY, BARE);
+    seed(LEGACY_KEY, [{ id: 1, name: 'Old Favourite', exercises: [] }]);
+    app._phxLoadCustomTemplates();
+    const after = read(KEY);
+    assert.ok(after.customTemplates, 'persisted on the spot, not left in memory');
+    assert.ok(Date.parse(after._ts) > Date.parse(OLDER), 're-stamped, so the cloud copy cannot win and erase it');
+  });
+
+  test('TEMPLATES: nothing to migrate does NOT re-stamp the state', () => {
+    // The hazard the guard above creates if applied unconditionally: stamping _ts on
+    // every first render would make a freshly-loaded local state beat a genuinely newer
+    // cloud copy, handing Jon back a stale programme in order to migrate nothing.
+    reset(); signIn(UID); seed(KEY, BARE);
+    assert.equal(app._phxLoadCustomTemplates().length, 0, 'no templates to offer');
+    assert.equal(read(KEY)._ts, OLDER, 'and the state was left exactly as it was found');
+  });
+
+  test('TEMPLATES: deleting one persists to the mirrored state', () => {
+    reset(); signIn(UID); seed(KEY, BARE);
+    app._phxSaveCustomTemplate('Keep', [{ name: 'Squat' }]);
+    app._phxSaveCustomTemplate('Bin', [{ name: 'Bench' }]);
+    const binId = read(KEY).customTemplates.find((t) => t.name === 'Bin').id;
+    app._phxDeleteCustomTemplate(binId);
+    const left = read(KEY).customTemplates;
+    assert.equal(left.length, 1, 'one removed');
+    assert.equal(left[0].name, 'Keep', 'and the right one survived');
+  });
+
+  test('TEMPLATES: a taken id is stepped past, deterministically', () => {
+    // The delete case above only catches the collision when both saves happen to land
+    // in the same millisecond — on a slower machine it passes with the bug present. This
+    // pins the allocator directly and does not depend on timing at all.
+    const first = app._phxNextTemplateId([]);
+    const second = app._phxNextTemplateId([{ id: first }]);
+    assert.ok(second > first, 'an id already in the list is never handed out again');
+    assert.equal(app._phxNextTemplateId([{ id: first }, { id: first + 1 }]) > first + 1, true,
+      'and it keeps stepping while ids remain taken');
+  });
+
+  test('TEMPLATES: with no BLAB state the builder still works off the legacy key', () => {
+    // A non-BLAB athlete, or one before setup. An unmirrored builder beats a broken one.
+    reset(); signIn(UID);
+    app._phxSaveCustomTemplate('No Programme Yet', [{ name: 'Row' }]);
+    const loaded = app._phxLoadCustomTemplates();
+    assert.equal(loaded.length, 1, 'saved and readable without any BLAB state');
+    assert.equal(loaded[0].name, 'No Programme Yet', 'by name');
+  });
 }

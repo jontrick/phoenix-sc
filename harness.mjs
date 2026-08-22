@@ -178,7 +178,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.213'", 'version is 4.9.213');
+has("var APP_VERSION='4.9.214'", 'version is 4.9.214');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1834,6 +1834,35 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
   }
 })();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
+
+// ── CUSTOM SESSION TEMPLATES (v4.9.214) ─────────────────────────────────────
+(() => {
+  // The bug was that templates were WRITTEN and never MIRRORED — the same shape as the
+  // orphaned _bak nets. So this asserts the save path reaches blabSaveState, which is
+  // the only thing that stamps _ts and sends to the cloud. A guard that merely found
+  // 'customTemplates' in the file would have passed against a version that still wrote
+  // to the private key and nowhere else.
+  const src = codeSrc();
+  const start = src.indexOf('function _phxSaveCustomTemplate');
+  const end = src.indexOf('function openCustomSessionBuilder', start + 1);
+  if (start < 0 || end < 0 || end < start) {
+    bad('TEMPLATES: cannot locate the save/delete pair by their own code sentinels — the ' +
+        'mirror check did NOT run. Fix the sentinels rather than leaving this silently green.');
+    return;
+  }
+  const seg = src.slice(start, end);
+  const saves = (seg.match(/window\.blabSaveState\(s\)/g) || []).length;
+  if (saves >= 2) ok('TEMPLATES: save AND delete both route through blabSaveState — mirrored, not merely written');
+  else bad(`TEMPLATES: only ${saves} of the two write paths reach blabSaveState. A template ` +
+           'written without it is not stamped and not mirrored, so it dies on the next ' +
+           'reinstall — which is the bug this replaced.');
+})();
+hasCode('s.customTemplates = legacy;',
+        'TEMPLATES: existing local templates migrate IN rather than being replaced by an empty list');
+hasCode('if(!legacy.length) return [];',
+        'TEMPLATES: nothing to migrate does not re-stamp _ts (a fresh stamp would beat a newer cloud copy)');
+hasNotCode("templates.push({id:Date.now(),",
+        'TEMPLATES: the colliding bare Date.now() id is gone — two saved in one millisecond shared an id, and delete removed both');
 
 // ── RESTORE SAFE LIST (v4.9.203) ────────────────────────────────────────────
 (() => {

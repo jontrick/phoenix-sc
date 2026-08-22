@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.213';
+var APP_VERSION='4.9.214';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4857,17 +4857,88 @@ var _phxExLib = [
   'Calf Raise','Shrug','Hip Thrust','Good Morning','Back Extension','Nordic Hamstring Curl'
 ];
 
-function _phxLoadCustomTemplates(){
+// v4.9.214 [TRAINING]: custom session templates now ride inside blab_state.
+//
+// They were localStorage-only — written and read at phx_custom_templates and nowhere
+// else. No mirror, no backup, not in the restore table. That looked survivable until
+// sw.js was found empty (.208): every deploy for 135 versions reached Jon only through
+// a PWA delete-and-reinstall, which wipes localStorage. So a full wipe was not the
+// lost-phone edge case, it was the NORMAL path — and every custom session he ever built
+// was destroyed on every ship, silently, with the builder showing a healthy empty list.
+//
+// blab_state was chosen over a new column or table because it INHERITS four properties
+// rather than needing four new ones: it is already jsonb, already mirrored on a
+// debounced write, already in the restore table under newest-wins with the progress
+// guard, and already carried by the .195 backup/Recover path. It also needs no SQL,
+// which matters — Jon cannot easily run statements and already has one outstanding.
+//
+// Fallback is deliberate: with no BLAB state (a non-BLAB athlete, or before setup) the
+// builder keeps working off the legacy key. An unmirrored builder beats a broken one.
+function _phxLegacyTemplates(){
   try{ return JSON.parse(localStorage.getItem('phx_custom_templates')||'[]'); }catch(e){ return []; }
 }
+function _phxTemplatesFrom(s){
+  if(s && Array.isArray(s.customTemplates)) return s.customTemplates;
+  return _phxLegacyTemplates();
+}
+function _phxLoadCustomTemplates(){
+  var s = (typeof window.blabGetState === 'function') ? window.blabGetState() : null;
+  if(!s) return _phxLegacyTemplates();
+  if(Array.isArray(s.customTemplates)) return s.customTemplates;
+
+  // MIGRATION — once, additive, and ONLY when there is something to rescue.
+  var legacy = _phxLegacyTemplates();
+  // Writing an empty array here would stamp _ts on every first render for every
+  // athlete, and a freshly-stamped local state beats a genuinely newer cloud copy
+  // under newest-wins — handing Jon back a stale programme to migrate nothing.
+  if(!legacy.length) return [];
+  s.customTemplates = legacy;
+  // Saved IMMEDIATELY, not deferred. A merged state that is not stamped and mirrored
+  // loses to the next cloud restore, which would arrive carrying a blab_state with no
+  // templates and wipe the very data this migration exists to rescue. The progress
+  // guard does not help — it scores training progress, and templates do not move it.
+  // Same re-stamp discipline as blabRestoreBackup (.195), same reason.
+  window.blabSaveState(s);
+  // The legacy key is deliberately LEFT IN PLACE — cheap insurance against a bad first
+  // run. Removing it can wait until a reinstall has proven the round trip.
+  return s.customTemplates;
+}
+// v4.9.214: id was a bare Date.now(). Two templates saved in the same millisecond got
+// the SAME id, and _phxDeleteCustomTemplate filters by id — so deleting one deleted
+// both. Pre-existing, found by the delete test below rather than reasoned about.
+// Kept numeric and monotonic so ids already on Jon's phone stay comparable.
+function _phxNextTemplateId(list){
+  var id = Date.now();
+  var taken = {};
+  (list || []).forEach(function(t){ if(t && t.id != null) taken[t.id] = true; });
+  while(taken[id]) id++;
+  return id;
+}
 function _phxSaveCustomTemplate(name, exercises){
-  var templates = _phxLoadCustomTemplates();
-  templates.push({id:Date.now(), name:name||'My Session', exercises:exercises, createdAt:new Date().toISOString()});
-  try{ localStorage.setItem('phx_custom_templates', JSON.stringify(templates)); }catch(e){}
+  var mk = function(list){
+    return {id:_phxNextTemplateId(list), name:name||'My Session', exercises:exercises, createdAt:new Date().toISOString()};
+  };
+  var s = (typeof window.blabGetState === 'function') ? window.blabGetState() : null;
+  if(!s){
+    var legacy = _phxLegacyTemplates();
+    legacy.push(mk(legacy));
+    try{ localStorage.setItem('phx_custom_templates', JSON.stringify(legacy)); }catch(e){}
+    return;
+  }
+  var list = _phxTemplatesFrom(s);
+  list.push(mk(list));
+  s.customTemplates = list;
+  window.blabSaveState(s);
 }
 function _phxDeleteCustomTemplate(id){
-  var templates = _phxLoadCustomTemplates().filter(function(t){ return t.id!==id; });
-  try{ localStorage.setItem('phx_custom_templates', JSON.stringify(templates)); }catch(e){}
+  var s = (typeof window.blabGetState === 'function') ? window.blabGetState() : null;
+  if(!s){
+    var legacy = _phxLegacyTemplates().filter(function(t){ return t.id!==id; });
+    try{ localStorage.setItem('phx_custom_templates', JSON.stringify(legacy)); }catch(e){}
+    return;
+  }
+  s.customTemplates = _phxTemplatesFrom(s).filter(function(t){ return t.id!==id; });
+  window.blabSaveState(s);
 }
 
 function openCustomSessionBuilder(initExercises, initName){

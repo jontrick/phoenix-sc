@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.241';
+var APP_VERSION='4.9.242';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22242,7 +22242,13 @@ function _pepSendCloud(payload, useKeepalive){
         }
       }).catch(function(err){
         if(typeof _phxRecordWriteError === "function"){
-          _phxRecordWriteError("pep mirror keepalive", err, _pepErrorSummary(payload));
+          // v4.9.242 [PM]: context renamed from "pep mirror keepalive" — it collided with the
+          // res.ok branch above. PEPTIDES SPLIT THESE TWO DELIBERATELY IN .228 (a 4xx RESOLVES;
+          // fetch only rejects on network failure) and my v4.9.240 coalescing then merged them
+          // back into one ring slot, so a schema 400 and an offline blip hid behind each other.
+          // The collision was harmless until coalescing made it harmful — I introduced the
+          // regression in Peptides' code without touching it.
+          _phxRecordWriteError("pep mirror keepalive reject", err, _pepErrorSummary(payload));
         }
       });
       // Best-effort by nature: keepalive guarantees the REQUEST survives the

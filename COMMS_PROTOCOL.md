@@ -244,13 +244,28 @@ cannot evict another domain's entry, and suppression at the call site only ever 
 the domain that remembered to add it.
 
 **KNOWN LIMIT — coalescing preserves FREQUENCY, not MAGNITUDE.** The ring collapses
-repetitions of a context into one entry with a count. It has no way to know that each
-repetition carried a different quantity. `×3` says a thing failed three times; it does
-**not** say *"3 of 7 chunks failed, 1500 of 3200 rows"* — and only the second tells Jon
-how much he lost. So **on any bulk or chunked path, accumulate and record ONCE with
-totals** rather than letting the ring count for you. Found by Training (2026-08-22) on
-`migrateSessionsToSupabase`, against the PM's own advice that the summary was merely a
-legibility preference. The count the ring gives you is not always the count that matters.
+repetitions of a context into one entry with a count, and cannot know each repetition
+carried a different quantity.
+
+  COALESCING IS SAFE WHERE FAILURES ARE INTERCHANGEABLE, AND LOSSY WHERE THEY ARE NOT.
+
+**Any PARTIAL-SUCCESS path is the lossy shape** — anything that can report "some of it
+worked" loses the *some* to a count. Bulk and chunked writes are the obvious case, not
+the only one. `×3` says a thing failed three times; it does **not** say *"3 of 7 chunks
+failed, 1500 of 3200 rows"*, and only the second tells Jon how much he lost. So on those
+paths **accumulate and record ONCE with totals** rather than letting the ring count for
+you. Found by Training on `migrateSessionsToSupabase`, against the PM's own advice that
+the summary was merely a legibility preference.
+
+**HAZARD THE COALESCING CREATES — CONTEXT NAMES MUST BE DISTINCT APP-WIDE.** Two call
+sites sharing a context string now merge into one slot and each hides the other,
+invisibly. Predicted by Training and already live when predicted: both branches of the
+peptide keepalive mirror used `"pep mirror keepalive"` — a 4xx that RESOLVES and a network
+REJECT, which Peptides split deliberately in .228 because that distinction is what caught
+a missing column. **The collision was harmless until coalescing made it harmful**, so a
+shared-plumbing change turned working code in another domain into a defect without
+touching it. Pinned app-wide in `harness.mjs`; a cross-DOMAIN collision would be worse and
+no domain-local check could see it.
 
 History, because it is the more useful half: the ring was written from v4.9.176 and read
 by nothing — the panel showed a single entry, so any later failure overwrote the one that

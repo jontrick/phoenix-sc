@@ -227,6 +227,28 @@ function phxStripComments(s){
     : bad(`RULE 8: payload identifier not in scope — the recorder would THROW when the write fails: ${offenders.join(' | ')}`);
 }
 
+// ── RULE 8: CONTEXT NAMES MUST BE DISTINCT (PM, v4.9.242) ─────────────────────
+// A HAZARD v4.9.240's COALESCING CREATED RATHER THAN SOLVED, predicted by Training and
+// already live when it was: two call sites sharing a context string now merge into ONE
+// ring slot, so each failure hides the other and the merge is invisible.
+// The live instance was "pep mirror keepalive" on both branches of the peptide keepalive
+// mirror — a 4xx that RESOLVES and a network REJECT, which Peptides split deliberately in
+// .228 precisely because the distinction is what caught a missing column. The collision was
+// harmless before coalescing; the PM's change made it harmful without touching that code.
+// Applies app-wide, not per domain — the ring is shared, so a collision between two
+// DOMAINS would be worse and no domain-local check could see it.
+{
+  const src = phxStripComments(html);
+  const seen = new Map();
+  const re = /_phxRecordWriteError\(\s*["']([^"']+)["']\s*,/g;
+  let m;
+  while ((m = re.exec(src))) seen.set(m[1], (seen.get(m[1]) || 0) + 1);
+  const dups = [...seen.entries()].filter(([, n]) => n > 1);
+  dups.length === 0
+    ? ok(`RULE 8: all ${seen.size} write-error contexts are distinct — none can silently merge in the ring`)
+    : bad(`RULE 8: duplicate _phxRecordWriteError context — coalescing MERGES these and each hides the other: ${dups.map(d => `"${d[0]}" ×${d[1]}`).join(', ')}`);
+}
+
 // ── RULE 4: alert() IS NOT AN ERROR PATH (PM, v4.9.239) ───────────────────────
 // iOS suppresses alert() in a PWA, so a failure path whose only user-facing output is an
 // alert shows Jon NOTHING and then returns — indistinguishable from a dead button. Found
@@ -286,7 +308,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.241'", 'version is 4.9.241');
+has("var APP_VERSION='4.9.242'", 'version is 4.9.242');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

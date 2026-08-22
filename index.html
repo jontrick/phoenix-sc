@@ -3529,7 +3529,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.217';
+var APP_VERSION='4.9.218';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21095,6 +21095,9 @@ function _nutEatenTotals(dayData){
 // Guarded throughout: visualViewport is absent on older WebViews and in the test
 // sandbox, where the sheet keeps its normal full-height behaviour.
 // Promoted from _nutKeyboardSafe (nutrition, v4.9.216; promoted v4.9.217) at the PM's direction so
+// v4.9.218: stacked overlays verified independent — each fit() closes over its OWN
+// element, so two sheets armed at once size themselves and never each other, and
+// closing one detaches only its listener (Training's question about score entry).
 // Training and Peptides do not each write a copy. Takes an overlay element and
 // assumes nothing about its contents. Contract and meanings in HANDOFF_NUTRITION
 // under "API other domains may call"; pinned provider-side in tests/nutrition.mjs.

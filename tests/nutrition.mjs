@@ -662,6 +662,45 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     delete app.visualViewport;
   });
 
+  // Training asked whether two overlays armed at once fight over the viewport —
+  // its score-entry sheet can have an RPE flow and a rest overlay open together.
+  // It offered to establish this itself; it is the helper's contract, so it is
+  // mine to answer, and with a test rather than reasoning.
+  test('CONTRACT _phxKeyboardSafe: stacked overlays size independently, no fight', () => {
+    setUp(90);
+    const vv = kbViewport(844);
+    app.document.body.contains = () => true;
+    const a = app.document.createElement('div');
+    const b = app.document.createElement('div');
+    app._phxKeyboardSafe(a);
+    app._phxKeyboardSafe(b);
+    vv.height = 400;
+    vv._fire('resize');
+    assert.equal(a.style.height, '400px', 'the first sheet clears the keyboard');
+    assert.equal(b.style.height, '400px', 'and so does the second');
+    assert.equal(vv._count(), 2, 'each holds its own listener, bound to its own element');
+    delete app.visualViewport;
+  });
+
+  test('CONTRACT _phxKeyboardSafe: closing one stacked overlay does not deafen the other', () => {
+    setUp(90);
+    const vv = kbViewport(844);
+    const a = app.document.createElement('div');
+    const b = app.document.createElement('div');
+    const gone = new Set();
+    app.document.body.contains = (el) => !gone.has(el);
+    app._phxKeyboardSafe(a);
+    app._phxKeyboardSafe(b);
+    gone.add(a);                                  // the top sheet closes
+    vv.height = 400;
+    vv._fire('resize');
+    assert.equal(vv._count(), 1, 'only the closed sheet detached');
+    vv.height = 300;
+    vv._fire('resize');
+    assert.equal(b.style.height, '300px', 'the one still open keeps tracking the keyboard');
+    delete app.visualViewport;
+  });
+
   test('CONTRACT _phxKeyboardSafe: call it ONCE per overlay', () => {
     setUp(90);
     const vv = kbViewport(400);

@@ -2285,4 +2285,137 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(read('phx_write_errors').length, contexts.length,
       'each takes its own slot, so one cannot mask another');
   });
+
+  // ── UPPER 2 — Jon's four reports from a real session (v4.9.251) ──────────
+  //   "chins not clear on the timer and no rep count ability"
+  //   "no way logging press up rep count"
+  //   "cant tell if the chins or press ups are completed"
+  //   "going off screen resets session still"
+  //
+  // Three of those share one root cause: the mapper writes _blabTarget / _blabChinTest
+  // and the renderers read target / chin_test, and completion was a DOM mutation on an
+  // id that NOTHING EVER SET.
+
+  test('UPPER2: the chin-up target reaches the renderer at all', () => {
+    // ex.target was undefined -> 0, so the counter read "of ? total reps", the bar never
+    // moved, and `done` was never true. Two fields of this same class were patched
+    // individually in .104 and .106; this asserts the reconciliation, not one field.
+    reset(); signIn(UID); seed(KEY, { active: true, week: 3, last_completed_day: 2,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {}, _ts: NEWER });
+    const sess = app.blabGetSessionData(3, 3);
+    const phx = app.blabToPhoenixSession(sess, 3, 3);
+    const chin = phx.exercises.find((e) => e._blabFmt === 'total_rep_goal');
+    assert.ok(chin, 'the chin-up block is in the session');
+    assert.ok(chin._blabTarget > 0, 'the mapper computed a target');
+    app.blabRunWorkout(chin, 0);
+    assert.equal(chin.target, chin._blabTarget, 'and the renderer can now see it under the name it reads');
+  });
+
+  test('UPPER2: chin_test reaches the renderer — his max was never being established', () => {
+    // The worst of the four. _blabTrLog gates the establish-your-max branch on
+    // st.ex.chin_test, which was ALWAYS undefined, so chin_max was never set — and every
+    // future chin target is calculated from it. Silent, and it degrades every session after.
+    reset(); signIn(UID); seed(KEY, { active: true, week: 1, last_completed_day: 0,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    const sess = app.blabGetSessionData(1, 3);
+    const phx = app.blabToPhoenixSession(sess, 1, 3);
+    const chin = phx.exercises.find((e) => e._blabFmt === 'total_rep_goal');
+    assert.equal(chin._blabChinTest, true, 'with no max on file this IS the test set');
+    app.blabRunWorkout(chin, 0);
+    assert.equal(chin.chin_test, true, 'and the renderer sees it, so the max actually gets stored');
+  });
+
+  test('UPPER2: aliasing never clobbers a real value', () => {
+    // The alias fills only genuinely-absent names. If it overwrote, a format that sets
+    // both would silently lose the one the renderer actually uses.
+    reset(); signIn(UID);
+    const ex = { name: 'X', format: 'total_rep_goal', _blabTarget: 40, target: 99 };
+    app.blabRunWorkout(ex, 0);
+    assert.equal(ex.target, 99, 'the existing value survived');
+  });
+
+  test('UPPER2: a completed block STAYS completed across a re-render', () => {
+    // "cant tell if the chins or press ups are completed" and "going off screen resets
+    // session" are the same defect. Completion was a DOM mutation on blab-ex-N — an id
+    // read in one place and written in NONE — so it never painted, and could not have
+    // survived a re-render even if it had.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {}, _ts: NEWER });
+    app._blabCurrentSession = { week: 3, day: 3 };
+    try {
+      assert.equal(Object.keys(app._blabGetBlockProgress()).length, 0, 'nothing done yet');
+      app._blabMarkBlockDone(0, '30 reps');
+      const again = app._blabGetBlockProgress();
+      assert.ok(again['0'] && again['0'].done, 'the block is recorded as done');
+      assert.equal(again['0'].summary, '30 reps', 'with what he actually did');
+      // The re-render: state is re-read from storage, exactly as returning to the screen does.
+      assert.ok(read(KEY).blockProgress, 'and it persisted into blab_state, so it mirrors and survives a reinstall');
+    } finally { app._blabCurrentSession = null; }
+  });
+
+  test('UPPER2: progress is keyed per session-day, so yesterday does not mark today done', () => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    app._blabCurrentSession = { week: 3, day: 3 };
+    try {
+      app._blabMarkBlockDone(0, '30 reps');
+      app._blabCurrentSession = { week: 3, day: 4 };
+      assert.equal(Object.keys(app._blabGetBlockProgress()).length, 0,
+        'a different session-day starts clean');
+      app._blabCurrentSession = { week: 3, day: 3 };
+      assert.ok(app._blabGetBlockProgress()['0'], 'while the original day still remembers');
+    } finally { app._blabCurrentSession = null; }
+  });
+
+  test('UPPER2: the block builder RENDERS the done state, not just stores it', () => {
+    // Storing it and never showing it is the _blabCalEntryView shape again. This drives
+    // the real builder and reads what it produced.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {}, _ts: NEWER });
+    app._blabCurrentSession = { week: 3, day: 3 };
+    const dom = recordingDom();
+    try {
+      app._blabMarkBlockDone(1, '42 reps');
+      const wrap = app._blabBuildTotalRepBlock({ name: 'Chin-ups', _blabTarget: 40 }, 1);
+      const btn = (wrap.children || []).find((c) => typeof c.textContent === 'string' && /Done/.test(c.textContent));
+      assert.ok(btn, 'the button says Done rather than Start');
+      assert.ok(/42 reps/.test(btn.textContent), 'and shows what he did');
+      assert.equal(wrap.id, 'blab-ex-1', 'and the id _blabWoDone looks for finally exists');
+    } finally { dom.restore(); app._blabCurrentSession = null; }
+  });
+
+  test('UPPER2: an untouched block still says Start', () => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {}, _ts: NEWER });
+    app._blabCurrentSession = { week: 3, day: 3 };
+    const dom = recordingDom();
+    try {
+      const wrap = app._blabBuildTotalRepBlock({ name: 'Chin-ups', _blabTarget: 40 }, 2);
+      const btn = (wrap.children || []).find((c) => typeof c.textContent === 'string' && /Start/.test(c.textContent));
+      assert.ok(btn, 'not marked done when it is not');
+    } finally { dom.restore(); app._blabCurrentSession = null; }
+  });
+
+  test('UPPER2: the push-up rep tally counts toward the 100', () => {
+    // "no way logging press up rep count". 100 Push-ups is ONE movement scored on time,
+    // so the renderer offered a single tick while its own note says "break into sub-sets".
+    reset(); signIn(UID);
+    app._blabWoState = { ex: { name: '100 Push-ups', format: 'afap' }, elapsed: 0 };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'afap-rep-in' ? { value: '25' } : null);
+    const realRender = app._blabWoRender;
+    app._blabWoRender = () => {};
+    try {
+      app._blabAfapRepLog();
+      app._blabAfapRepLog();
+      assert.equal(app._blabWoState.afapRepTotal, 50, 'two sub-sets of 25 make 50');
+      assert.equal(app._blabWoState.afapReps.length, 2, 'and each is kept, so he can see the breakdown');
+    } finally {
+      app.document.getElementById = realGet; app._blabWoRender = realRender; app._blabWoState = null;
+    }
+  });
 }

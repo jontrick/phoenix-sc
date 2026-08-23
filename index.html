@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.250';
+var APP_VERSION='4.9.251';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5410,6 +5410,25 @@ window._blabRestBannerAdd = function(s){
   if(el) el.textContent = window._blabRestBannerRemaining+'s';
 };
 
+// v4.9.251 — the done state for an overlay-driven block, read from persisted
+// progress rather than from a DOM mutation. Also sets the id _blabWoDone has been
+// looking for since it was written: nothing in the app ever set blab-ex-N, so the tick
+// it tried to paint could never land.
+function _blabApplyBlockDone(wrap, startBtn, idx){
+  try {
+    wrap.id = 'blab-ex-' + idx;
+    var prog = (typeof window._blabGetBlockProgress === 'function') ? window._blabGetBlockProgress() : {};
+    var mine = prog && prog[String(idx)];
+    if(!mine || !mine.done) return false;
+    startBtn.textContent = '\u2713 Done' + (mine.summary ? ' \u00b7 ' + mine.summary : '');
+    startBtn.style.background = 'rgba(58,125,68,0.1)';
+    startBtn.style.border = '1px solid #3a7d44';
+    startBtn.style.color = '#3a7d44';
+    wrap.style.borderLeft = '3px solid #3a7d44';
+    return true;
+  } catch(_e){ return false; }
+}
+
 window._blabBuildComplexBlock = function(ex, idx){
   var wrap = document.createElement('div');
   wrap.className = 'ex-block';
@@ -5455,6 +5474,7 @@ window._blabBuildComplexBlock = function(ex, idx){
     window.blabRunWorkout(ex2, idx);
   };
 
+  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(header);
   wrap.appendChild(loadDiv);
   wrap.appendChild(startBtn);
@@ -5482,6 +5502,7 @@ window._blabBuildTotalRepBlock = function(ex, idx){
     var exArr = window._blabPhxExercises || [];
     window.blabRunWorkout(exArr[idx]||ex, idx);
   };
+  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(header);
   wrap.appendChild(startBtn);
   return wrap;
@@ -5515,6 +5536,7 @@ window._blabBuildRunBlock = function(ex, idx){
     var exArr = window._blabPhxExercises || [];
     window.blabRunWorkout(exArr[idx]||ex, idx);
   };
+  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(header);
   wrap.appendChild(startBtn);
   return wrap;
@@ -5812,6 +5834,36 @@ window.blabRunWorkout = function(ex, idx){
     releaseWakeLock();
     overlay.style.display='none';
   };
+  // v4.9.251 — FIELD-NAME RECONCILIATION, one place, for the whole class.
+  //
+  // blabToPhoenixSession writes _blabTarget / _blabChinTest / _blabHasLoad, while the
+  // renderers read target / chin_test / has_load. Nothing mapped between them, so the
+  // renderer silently got undefined. Two fields of this exact class were already
+  // patched INDIVIDUALLY as they were discovered — prev_best in .104, reps_per_set in
+  // .106 — each time by adding one more carry line to the mapper. That treats the
+  // instance and leaves the class, which is why Jon still hit it.
+  //
+  // What it cost him, both reported from a real session:
+  //   ex.target    undefined -> 0, so the chin-up counter read "of ? total reps", the
+  //                progress bar never moved, `done` was never true, and the button
+  //                never changed from "Finish Early" — he could not tell if he had
+  //                finished the exercise.
+  //   ex.chin_test undefined, so the establish-your-max branch in _blabTrLog NEVER
+  //                RAN. His chin-up max was never set, and every future chin target is
+  //                calculated from it. Silent, and it degrades every subsequent session.
+  //
+  // Aliased rather than renamed: the _blab* fields stay, because other code reads them.
+  // Only fills a plain name that is genuinely absent, so a real value is never clobbered.
+  try {
+    var _alias = {_blabTarget:'target', _blabChinTest:'chin_test', _blabHasLoad:'has_load',
+                  _blabMovements:'movements', _blabSuggestedLoad:'suggested_load',
+                  _blabRepsPerSet:'reps_per_set', _blabPrevBest:'prev_best', _blabRest:'rest'};
+    for(var _k in _alias){
+      if(!_alias.hasOwnProperty(_k)) continue;
+      if(ex && ex[_k] !== undefined && ex[_alias[_k]] === undefined) ex[_alias[_k]] = ex[_k];
+    }
+  } catch(_ae){ console.warn('[PHX] blab field alias failed:', _ae); }
+
   window._blabWoState = {ex:ex, elapsed:0, restSec:0, resting:false, _elapsedBase:0, _segStart:0};
   if(window._blabWoTimer){ clearInterval(window._blabWoTimer); window._blabWoTimer=null; }
   overlay.style.display='block';
@@ -5908,6 +5960,59 @@ window._blabAddRest=function(s){ var st=window._blabWoState; if(st) st.restSec+=
 // showExerciseBlockRPE PATCH — matched by session_id + exercise_name — has rows to attach
 // to) and then fires the RPE check-in. setRows is optional [{name,setNumber,weightKg,reps,opts}];
 // when omitted, a single completion row is written under ex.name so RPE still attaches.
+// v4.9.251 — PER-BLOCK COMPLETION, PERSISTED.
+//
+// Jon, from a real session: "cant tell if the chins or press ups are completed" and
+// "going off screen resets session still".
+//
+// Both are the same defect. _blabWoDone marked a block done by mutating
+// document.getElementById('blab-ex-'+idx) — and NOTHING IN THE APP HAS EVER SET THAT
+// ID. It is read in exactly one place and written in none, so `card` was always null
+// and the tick never appeared for any overlay-driven block. Same shape as the
+// _blabCalEntryView case: a reference to something that does not exist, failing
+// silently inside a truthiness check.
+//
+// And even with the id present it would still have been a DOM mutation, so navigating
+// away and back re-rendered the session from scratch and lost it. Completion has to
+// live somewhere that survives a re-render.
+//
+// Keyed by week:day:LOCAL date — the local key matters, because a 4:30am session in
+// Brisbane files under the previous UTC day and would reopen looking untouched.
+// Rides inside blab_state, so it mirrors to Supabase and survives a reinstall.
+function _blabProgressKey(){
+  try {
+    var b = window._blabCurrentSession;
+    var day = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    if(b && b.week != null && b.day != null) return 'blab:' + b.week + ':' + b.day + ':' + day;
+    return 'ai:' + day;
+  } catch(_e){ return null; }
+}
+window._blabGetBlockProgress = function(){
+  try {
+    var s = window.blabGetState(); if(!s) return {};
+    var k = _blabProgressKey(); if(!k) return {};
+    var all = s.blockProgress || {};
+    var mine = all[k];
+    return (mine && typeof mine === 'object') ? mine : {};
+  } catch(_e){ return {}; }
+};
+window._blabMarkBlockDone = function(idx, summary){
+  try {
+    if(idx == null || idx < 0) return false;
+    var s = window.blabGetState(); if(!s) return false;
+    var k = _blabProgressKey(); if(!k) return false;
+    if(!s.blockProgress || typeof s.blockProgress !== 'object') s.blockProgress = {};
+    // Only today's key is kept for this week/day. Old keys are pruned rather than
+    // accumulating forever inside a blob that gets mirrored on every save.
+    var keys = Object.keys(s.blockProgress);
+    if(keys.length > 8){ keys.slice(0, keys.length - 8).forEach(function(old){ delete s.blockProgress[old]; }); }
+    if(!s.blockProgress[k]) s.blockProgress[k] = {};
+    s.blockProgress[k][String(idx)] = {done: true, ts: new Date().toISOString(), summary: summary || ''};
+    window.blabSaveState(s);
+    return true;
+  } catch(_e){ console.warn('[PHX] _blabMarkBlockDone failed:', _e); return false; }
+};
+
 window._blabBlockComplete = function(idx, ex, setRows){
   try {
     if(typeof supabaseLogSet === 'function'){
@@ -5963,6 +6068,14 @@ window._blabWoDone=function(){
   var overlay=document.getElementById('blab-workout-overlay');
   if(overlay) overlay.style.display='none';
   var idx=window._blabCurrentExIdx;
+  // Persist FIRST, then paint. If the paint throws, the completion still survives —
+  // and the paint is the part that depends on the DOM still being there.
+  var _doneSummary = '';
+  try {
+    if(st && st.trTotal) _doneSummary = st.trTotal + ' reps';
+    else if(st && st.elapsed) _doneSummary = blabFmt(st.elapsed);
+  } catch(_se){}
+  window._blabMarkBlockDone(idx, _doneSummary);
   var card=document.getElementById('blab-ex-'+idx);
   if(card){
     var btn=card.querySelector('button');
@@ -6010,6 +6123,21 @@ function blabRenderTR(ex,st,body){
     blabElapsed(st)+
     '<button onclick="window._blabWoDone()" style="width:100%;padding:18px;background:'+(done?'var(--gold)':'var(--bg2)')+';border:1px solid '+(done?'var(--gold)':'var(--border)')+';border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:'+(done?'#000':'var(--text2)')+';cursor:pointer;">'+(done?'Complete \u2713':'Finish Early')+'</button>';
 }
+// v4.9.251 — running rep tally for a single-movement AFAP (100 Push-ups).
+// Time is still the score; this only tracks progress toward the rep total so Jon can
+// see where he is. Deliberately NOT wired into scoring: changing what 100 Push-ups
+// scores on would break comparability with every previous attempt.
+window._blabAfapRepLog=function(){
+  var st=window._blabWoState; if(!st) return;
+  var inp=document.getElementById('afap-rep-in');
+  var r=parseInt(inp&&inp.value)||0; if(r<=0) return;
+  if(!st.afapReps) st.afapReps=[];
+  st.afapReps.push(r);
+  st.afapRepTotal=(st.afapRepTotal||0)+r;
+  if(inp) inp.value='';
+  window._blabWoRender();
+};
+
 window._blabTrLog=function(){
   var st=window._blabWoState; if(!st) return;
   var inp=document.getElementById('tr-in');
@@ -6075,6 +6203,35 @@ function blabRenderAfap(ex,st,body){
   // Elapsed timer
   h+='<div style="font-family:var(--font-d);font-size:42px;font-weight:900;color:var(--text);text-align:center;margin-bottom:4px;" id="blab-elapsed">'+blabFmt(st.elapsed)+'</div>'+
     '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:20px;letter-spacing:1px;text-transform:uppercase;">Elapsed</div>';
+
+  // v4.9.251 — RUNNING REP TALLY, single-movement AFAP only.
+  // Jon: "no way logging press up rep count". 100 Push-ups is one movement x 100 reps
+  // scored on TIME, so the renderer offered exactly one Done tick — while its own note
+  // says "break into sub-sets as needed". A tick is right for a four-movement complex
+  // and useless for 100 reps of one thing: he had no way to see where he was.
+  //
+  // Time is still the score. This tracks progress only, and is deliberately NOT wired
+  // into scoring — changing what 100 Push-ups scores on would break comparability with
+  // every attempt he has already logged.
+  var _singleMov = movs.length === 1 && totalSets === 1;
+  var _repGoal = _singleMov ? (parseInt(movs[0] && movs[0].reps, 10) || 0) : 0;
+  if(_singleMov && _repGoal > 0 && st.afapIdx < 0){
+    var _rt = st.afapRepTotal || 0;
+    var _rpct = Math.min(100, Math.round(_rt / _repGoal * 100));
+    var _rlog = (st.afapReps && st.afapReps.length) ? st.afapReps.join(' + ') + ' = ' + _rt : 'No sub-sets logged yet';
+    h+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px;">'+
+      '<div style="text-align:center;font-family:var(--font-d);font-size:34px;font-weight:900;color:'+(_rt>=_repGoal?'var(--gold)':'var(--text)')+';line-height:1;">'+_rt+
+        '<span style="font-size:15px;color:var(--text3);font-weight:700;"> / '+_repGoal+'</span></div>'+
+      '<div style="text-align:center;font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin:4px 0 10px;">Reps done</div>'+
+      '<div style="background:var(--bg3);border-radius:4px;height:6px;margin-bottom:10px;overflow:hidden;"><div style="background:var(--gold);height:6px;width:'+_rpct+'%;border-radius:4px;transition:width 0.3s;"></div></div>'+
+      '<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:10px;">'+_rlog+'</div>'+
+      '<div style="display:flex;gap:8px;">'+
+        '<input type="number" inputmode="numeric" id="afap-rep-in" placeholder="Reps" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;">'+
+        '<button onclick="window._blabAfapRepLog()" style="flex:0 0 76px;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Log</button>'+
+      '</div>'+
+      '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:8px;">The clock keeps running — this is just your count.</div>'+
+    '</div>';
+  }
 
   // Movement list
   movs.forEach(function(m,i){

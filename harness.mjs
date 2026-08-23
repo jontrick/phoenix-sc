@@ -2166,12 +2166,45 @@ has('id="nav-programme4"',         'NAV: calendar screen carries the bottom nav'
   // archive and the standard, so it is a name people WILL write about. On raw text a
   // prose mention counts as a call and the sweep reports it undefined.
   const cs = codeSrc();
-  const called  = new Set([...cs.matchAll(/\b(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]));
-  const defined = new Set([
-    ...[...cs.matchAll(/function\s+(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]),
-    ...[...cs.matchAll(/window\.(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1]),
-    ...[...cs.matchAll(/(?:var|let|const)\s+(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1])
-  ]);
+  // v4.9.254 — CANARY. This guard reports clean by finding ZERO, so it reports clean
+  // just as loudly when the regexes have quietly stopped matching, or when `cs` is empty,
+  // as when the code is genuinely sound. "Every name that is called is also defined"
+  // reads identically in all three cases — and this is the guard written BECAUSE
+  // _blabCalEntryView was called and never defined for four versions.
+  //
+  // Peptides' shape: the detector must find a known-bad case in a string built to contain
+  // exactly one, before its zero is believed. On failure it REFUSES to report on the real
+  // block rather than reporting clean with a caveat.
+  const scan = (src) => {
+    const call = new Set([...src.matchAll(/\b(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]));
+    const def  = new Set([
+      ...[...src.matchAll(/function\s+(_?blabCal[A-Za-z0-9_]*)\s*\(/g)].map(m => m[1]),
+      ...[...src.matchAll(/window\.(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1]),
+      ...[...src.matchAll(/(?:var|let|const)\s+(_?blabCal[A-Za-z0-9_]*)\s*=/g)].map(m => m[1])
+    ]);
+    return { call, def, missing: [...call].filter(n => !def.has(n)) };
+  };
+
+  // Deliberately mirrors the real bug: an underscore-prefixed call whose UNPREFIXED twin
+  // IS defined. An earlier draft of this guard accepted that as defined, which is exactly
+  // how the original escaped.
+  const canarySrc = 'window.blabCalTwin = function(){}; _blabCalTwin(); blabCalTwin();';
+  const canary = scan(canarySrc);
+  if (canary.missing.length !== 1 || canary.missing[0] !== '_blabCalTwin') {
+    bad('TODAY: the blabCal* DETECTOR is broken — it found ' + canary.missing.length +
+        ' of 1 in a string built to contain exactly one undefined call. Its verdict on the ' +
+        'real code is worthless and is NOT reported. Fix the detector.');
+    return;
+  }
+
+  const { call: called, def: defined } = scan(cs);
+  // FLOOR. A regex that matches nothing, or an empty `cs`, yields zero missing and reads
+  // as a pass. There are dozens of these names in the file.
+  if (called.size < 10 || defined.size < 10) {
+    bad(`TODAY: the blabCal* sweep saw ${called.size} calls and ${defined.size} definitions ` +
+        '— far too few to be the real file. It did NOT genuinely run.');
+    return;
+  }
   // Compared EXACTLY. An earlier draft of this guard also accepted a name with its
   // leading underscore stripped, which made _blabCalEntryView look defined because
   // blabCalEntryView exists — the precise bug it was written to catch. _blabCalX and

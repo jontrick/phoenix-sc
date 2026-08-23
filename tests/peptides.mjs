@@ -1988,6 +1988,70 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── EXPORT — the other half of import, so his real state can reach me ──────
+  // Jon asked whether I can read his stock now that he has updated it. I cannot:
+  // no database access, and localStorage is on his phone. Import existed and
+  // export did not, so the only way to show me his actual state was prose.
+  //
+  // This emits exactly what Import accepts, so it round-trips.
+  {
+    const seedFull = () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{
+        compoundId:'bpc157', dose:0.5, startDate:'2026-08-22', freq:'eod',
+        vialMg:10, waterMl:2, continuous:true, status:'instock',
+        sealedVials:3, openUsedAmt:150, openedDate:'2026-08-20', stockCounted:true,
+        onOrder:true, arrivalDate:'2026-09-01', onOrderVials:2, onOrderVialMg:10,
+        notes:'x',
+      }], bloods: [{ panel_date:'2026-08-14', lab:'ZENTHORP',
+        markers:[{name:'ALT', value:'71'}] }], checked:{}, cart:[] });
+      return app.pepGetState();
+    };
+
+    test('EXPORT carries the stock figures I cannot otherwise see', () => {
+      const out = JSON.parse(app._pepExportJSON(seedFull()));
+      assert.equal(out.length, 1, 'one compound');
+      assert.equal(out[0].vialMg, 10, 'his real vial size');
+      assert.equal(out[0].waterMl, 2, 'and BAC volume — the two the PDF got wrong');
+      assert.equal(out[0].sealedVials, 3, 'sealed count');
+      assert.equal(out[0].openUsedAmt, 150, 'and what has come out of the open vial');
+      assert.equal(out[0].arrivalDate, '2026-09-01', 'in-transit stock too');
+    });
+
+    test('EXPORT never carries blood panels', () => {
+      const raw = app._pepExportJSON(seedFull());
+      assert.notIncludes(raw, 'ZENTHORP',
+        'pathology has its own deliberate exit and this is not it — same rule as the ' +
+        'cloud mirror scrub');
+      assert.notIncludes(raw, 'markers', 'no marker data by any route');
+    });
+
+    test('EXPORT round-trips through IMPORT unchanged', () => {
+      const raw = app._pepExportJSON(seedFull());
+      const back = app._pepValidateImport(raw);
+      assert.equal(back.ok, true, 'what comes out goes back in');
+      assert.equal(back.entries[0].vialMg, 10, 'vial survives the round trip');
+      assert.equal(back.entries[0].waterMl, 2, 'and the BAC volume');
+      assert.equal(back.entries[0].arrivalDate, '2026-09-01', 'and the delivery');
+    });
+
+    // The KEEP list is explicit rather than a delete-what-we-remember, so a
+    // field added to a stack later is excluded by default instead of leaking.
+    test('EXPORT excludes an unknown field by default rather than passing it on', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, secretDiaryEntry:'private' }] });
+      const raw = app._pepExportJSON(app.pepGetState());
+      assert.notIncludes(raw, 'secretDiaryEntry',
+        'allow-list, not deny-list: anything added later stays in until someone ' +
+        'decides it should go out');
+    });
+
+    test('EXPORT an empty protocol produces an empty array, not a crash', () => {
+      reset(); signIn(UID);
+      assert.equal(app._pepExportJSON(app.pepGetState()), '[]', 'nothing to say, said cleanly');
+    });
+  }
+
   // ── IMPORT — applying a protocol without retyping it on a phone (v4.9.246) ─
   // Jon's protocol changed and the app had no way to load one. Eight compounds
   // through the edit sheet on a phone is the reason it would not get done.

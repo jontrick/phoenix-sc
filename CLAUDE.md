@@ -126,7 +126,9 @@ If Desktop is blocked, Jon uses the Finder-opened terminal method above.
 4. Confirm the version at the bottom of the Today screen
 5. Share → Add to Home Screen
 
-**After that, auto-update should work** — but that claim is UNVERIFIED until Jon confirms a version number changing without a reinstall. Do not tell him it works until he has seen it. If the version does not move after a normal open, the service worker is genuinely stale and that is a bug to investigate — **not** a reason to bump APP_VERSION again, which was the old advice and only ever masked the real fault.
+**AUTO-UPDATE IS CONFIRMED WORKING — Jon verified it on 22 Aug 2026.** Asked directly whether the version at the bottom of Today moves on its own after a normal open, he answered yes. That is the first confirmation since `sw.js` was found to be zero bytes, and it closes a claim that sat unverified from v4.9.208 to v4.9.252.
+
+So: **a normal push now reaches his phone.** No reinstall, no "hard refresh to pick this up" — that instruction was wrong for the whole period the file was empty and is unnecessary now. If the version ever stops moving after a normal open, the service worker is genuinely stale and that is a bug to investigate — **not** a reason to bump APP_VERSION again, which was the old advice and only ever masked the real fault.
 
 ---
 

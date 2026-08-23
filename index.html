@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.251';
+var APP_VERSION='4.9.252';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23296,6 +23296,8 @@ function pepRenderScreen(){
   if(auditCopy) auditCopy.addEventListener("click", pepCopyAudit);
   var histBtn = body.querySelector("#pep-hist-confirm");
   if(histBtn) histBtn.addEventListener("click", pepConfirmHistory);
+  var expOpen = body.querySelector("#pep-export-open");
+  if(expOpen) expOpen.addEventListener("click", pepExportProtocol);
   var impOpen = body.querySelector("#pep-import-open");
   if(impOpen) impOpen.addEventListener("click", pepOpenImport);
   var bloodAdd = body.querySelector("#pep-blood-add");
@@ -25426,7 +25428,9 @@ function _pepTabStock(ps){
 
   h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;\">";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">Stock On Hand</div>";
+  h += "<button id=\"pep-export-open\" style=\"background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;margin-right:6px;\">Export</button>";
   h += "<button id=\"pep-import-open\" style=\"background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Import</button>";
+  h += "</div><div id=\"pep-export-out\"></div><div style=\"display:none;\">";
   h += "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add</button>";
   h += "</div>";
   h += "<div style=\"font-size:11px;color:" + (r.stockDone ? "#4CAF50" : "var(--gold)") + ";margin-bottom:14px;\">" +
@@ -25674,6 +25678,63 @@ function _pepValidateImport(raw){
   if(out.problems.length){ out.entries = []; return out; }
   out.ok = out.entries.length > 0;
   return out;
+}
+
+// ── PROTOCOL EXPORT (v4.9.252) ───────────────────────────────────────────────
+// Jon asked whether I can read his stock now that he has updated it. I cannot —
+// no database access, and localStorage lives on his phone. I built Import and
+// never built the other half, so the only way to show me his real state was to
+// describe it in prose.
+//
+// This emits exactly what Import accepts, so it round-trips: he taps Copy, I
+// see his actual vial sizes, stock counts and doses, and any correction goes
+// straight back through Import.
+//
+// SCRUBBED. Blood panels never leave by this route, same rule as the cloud
+// mirror — that data has its own deliberate exit and this is not it. Protocol
+// fields only, and the list is explicit rather than a delete-what-we-remember,
+// so a field added later is excluded by default instead of leaking by default.
+function _pepExportJSON(ps){
+  var KEEP = ["compoundId","dose","startDate","freq","cycleWeeks","offWeeks",
+              "vialMg","waterMl","actualVialMg","continuous","status","notes",
+              "sealedVials","openDosesUsed","openUsedAmt","openedDate",
+              "stockCounted","onOrder","arrivalDate","onOrderVials","onOrderVialMg"];
+  var out = ((ps && ps.stacks) || []).map(function(st){
+    var o = {};
+    KEEP.forEach(function(k){ if(st[k] !== undefined && st[k] !== null && st[k] !== "") o[k] = st[k]; });
+    return o;
+  });
+  return JSON.stringify(out, null, 2);
+}
+
+function pepExportProtocol(){
+  var txt = _pepExportJSON(pepGetState());
+  var b = document.getElementById("pep-export-open");
+
+  // Same shape as pepCopyAudit: the clipboard is the convenience, the visible
+  // text is the guarantee. writeText REJECTS rather than throwing, and on iOS
+  // it can refuse for reasons he cannot influence.
+  function showText(why){
+    var box = document.getElementById("pep-export-out");
+    if(!box) return;
+    box.innerHTML =
+      "<div style=\"font-size:11px;color:var(--gold);margin:10px 0 6px;line-height:1.5;\">" +
+        "Copy to clipboard did not work" + (why ? " (" + _esc(String(why)) + ")" : "") +
+        ". Your protocol is below &mdash; select it and copy.</div>" +
+      "<textarea readonly style=\"width:100%;height:200px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:11px;font-family:ui-monospace,Menlo,monospace;box-sizing:border-box;-webkit-user-select:text;user-select:text;\">" +
+        _esc(txt) + "</textarea>";
+    var ta = box.querySelector("textarea");
+    if(ta){ try { ta.focus(); ta.setSelectionRange(0, ta.value.length); } catch(_e){} }
+  }
+
+  try {
+    if(!navigator.clipboard || !navigator.clipboard.writeText){ showText("clipboard unavailable"); return; }
+    navigator.clipboard.writeText(txt).then(function(){
+      if(b){ b.textContent = "Copied"; setTimeout(function(){ if(b) b.textContent = "Export"; }, 2000); }
+      var box = document.getElementById("pep-export-out");
+      if(box) box.innerHTML = "";
+    }).catch(function(e){ showText(e && e.message); });
+  } catch(e){ showText(e && e.message); }
 }
 
 function pepOpenImport(){

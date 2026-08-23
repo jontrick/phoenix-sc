@@ -2177,9 +2177,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     try {
       await app.supabaseLogSet('Back Squat', 'squat', 1, 137.5, 5, { notes: 'left knee twinge' });
       const blob = JSON.stringify(read('phx_last_write_error'));
+      // POSITIVE CONTROL FIRST. This case does fail with a silent recorder — but via the
+      // shape assertion, which reports "shape is still recorded — got false" and points
+      // the reader at the wrong thing. A negative assertion is satisfied by ABSENCE, so
+      // the two below say nothing until something is known to have been written.
+      assert.ok(blob.includes('weight_kg') || blob.includes('keys'), 'something was recorded, so the checks below mean something');
       assert.ok(!blob.includes('137.5'), 'the load is not in the diagnostic');
       assert.ok(!blob.includes('left knee twinge'), 'and neither is a free-text note');
-      assert.ok(blob.includes('weight_kg') || blob.includes('keys'), 'while the shape is still recorded');
     } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
   });
 

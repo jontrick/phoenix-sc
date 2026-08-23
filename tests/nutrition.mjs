@@ -1510,9 +1510,35 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   const FOOD = { n: 'Chicken', cat: 'protein', k: 110, p: 23, c: 0, f: 2, state: 'raw' };
 
+  // v4.9.251 [TRAINING — cross-domain, see commit message]. Both cases below took
+  // _nutWeekDays(today)[6] — index 6 of a MONDAY-START week, i.e. Sunday — and called
+  // it "a future day". On Sundays that IS today.
+  //
+  // The consequence differed, and the passing one is the more interesting:
+  //   · the nutLogComponent case FAILED, because logging today correctly ticks the
+  //     slot. Red one day in seven, blocking all four domains when it lands.
+  //   · the nutAddComponent case PASSED — but for the wrong reason. nutAddComponent
+  //     never ticks on any day, so on Sundays it asserted nothing about future days
+  //     while still reading green. Vacuous six days out of seven is invisible; vacuous
+  //     on the seventh is invisible too, because it still passes.
+  //
+  // Derived from today so it is genuinely future on every day of the week. This file's
+  // own header warns about precisely this decay class.
+  const futureDay = () => {
+    const d = new Date(app._nutToday() + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    const k = app._phxLocalISO ? app._phxLocalISO(d) : d.toISOString().slice(0, 10);
+    // Self-verifying: if this ever stops being future, the cases below are asserting
+    // something other than what they claim and must fail LOUDLY rather than quietly
+    // passing. That is the whole defect being repaired — the nutAddComponent case went
+    // green on Sundays while testing today.
+    if (k <= app._nutToday()) throw new Error(`futureDay() returned ${k}, which is not after ${app._nutToday()}`);
+    return k;
+  };
+
   test('adding a food to a FUTURE day does not mark it eaten', () => {
     setUp(90);
-    const future = app._nutWeekDays(app._nutToday())[6];
+    const future = futureDay();
     app.nutAddComponent('lunch', future, FOOD, 200);
     const day = read(`phx_nut_v1_${UID}`).daily[future];
     assert.equal(day.meals.lunch.components.length, 1, 'the food was planned');
@@ -1530,7 +1556,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('even the logging writer refuses to mark a future day eaten', () => {
     setUp(90);
-    const future = app._nutWeekDays(app._nutToday())[6];
+    const future = futureDay();
     app.nutLogComponent('dinner', future, FOOD, 200);
     const day = read(`phx_nut_v1_${UID}`).daily[future];
     assert.equal(day.meals.dinner.components.length, 1, 'still planned');

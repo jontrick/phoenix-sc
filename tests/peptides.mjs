@@ -2508,6 +2508,105 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'going into a syringe');
     });
 
+    // ── DRIVING pepOpenImport ITSELF, not just its validator ────────────────
+    // Nine cases above test _pepValidateImport. NONE tested pepOpenImport — the
+    // function Jon actually taps. That is the v4.9.165 gap: cover the helper,
+    // miss the entry point.
+    //
+    // It matters more here than anywhere else I have found it today. The confirm
+    // handler REPLACES his protocol. If the backup does not happen, Restore
+    // cannot undo it; if historyConfirmed survives, the readiness gate opens on
+    // a protocol whose history he has never reviewed; if the save does not fire,
+    // he pastes his plan and it evaporates on the next render. I have spent the
+    // last hour telling him to use this button.
+    const driveImport = (json) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'ta1', dose:1.6, vialMg:10, waterMl:2 }],
+                  historyConfirmed: true, checked:{}, cart:[] });
+      const nodes = {};
+      const mk = (id) => ({
+        id, value: '', textContent: '', innerHTML: '', style: {}, onclick: null,
+        _click: null,
+        addEventListener(ev, fn) { if (ev === 'click') this._click = fn; },
+        setAttribute() {}, getAttribute: () => null, removeAttribute() {},
+        remove() {}, focus() {}, querySelector: () => null, querySelectorAll: () => [],
+      });
+      const realCreate = app.document.createElement;
+      const realGet = app.document.getElementById;
+      app.document.createElement = (t) => { const e = realCreate.call(app.document, t); e.remove = () => {}; return e; };
+      app.document.getElementById = (id) => (nodes[id] || (nodes[id] = mk(id)));
+      try {
+        app.pepOpenImport();
+        // pepOpenImport only asks for the buttons; the textarea is fetched
+        // inside the click handler, so it does not exist in `nodes` yet.
+        // Create it through the same getter the app will use.
+        app.document.getElementById('pep-imp-json').value = json;
+        nodes['pep-imp-check']._click();      // first tap: Check
+        const btn = nodes['pep-imp-check'];
+        if (btn.onclick) btn.onclick();       // second tap: Confirm
+        return { nodes, confirmed: !!btn.onclick };
+      } finally {
+        app.document.createElement = realCreate;
+        app.document.getElementById = realGet;
+      }
+    };
+
+    const GOOD = JSON.stringify([
+      { compoundId:'bpc157', dose:0.5, startDate:'2026-08-22', freq:'eod', vialMg:10, waterMl:2 },
+      { compoundId:'retatrutide', dose:8, startDate:'2026-08-28', freq:'weekly', vialMg:30, waterMl:2.5 },
+    ]);
+
+    test('IMPORT the confirm tap actually replaces the protocol', () => {
+      driveImport(GOOD);
+      const after = read(KEY);
+      assert.equal(after.stacks.length, 2, 'the pasted compounds are live');
+      assert.equal(after.stacks[0].compoundId, 'bpc157', 'and they are the pasted ones');
+      assert.notIncludes(JSON.stringify(after.stacks), 'ta1',
+        'the old protocol is gone — this is a replace, and it has to actually happen');
+    });
+
+    test('IMPORT the previous protocol is BACKED UP before being replaced', () => {
+      driveImport(GOOD);
+      const bak = read(`${KEY}_bak`);
+      assert.ok(bak, 'a backup exists');
+      assert.ok(JSON.stringify(bak).includes('ta1'),
+        'and it holds what he had BEFORE — without this, Restore cannot undo a paste ' +
+        'and an import is an unrecoverable overwrite of his protocol');
+    });
+
+    test('IMPORT a new protocol does not inherit the old history confirmation', () => {
+      driveImport(GOOD);
+      assert.equal(read(KEY).historyConfirmed, false,
+        'he confirmed the history of a DIFFERENT protocol — carrying that over opens ' +
+        'the readiness gate on a plan he has never reviewed');
+    });
+
+    test('IMPORT the state is persisted, not just held in memory', () => {
+      driveImport(GOOD);
+      const raw = read(KEY);
+      assert.ok(raw && raw.stacks && raw.stacks.length === 2,
+        'written to localStorage — a paste that survives only until the next render ' +
+        'is worse than one that visibly fails');
+      assert.ok(raw._ts, 'and stamped, so the cloud mirror can resolve it against a peer copy');
+    });
+
+    test('IMPORT a REJECTED paste changes nothing at all', () => {
+      const r = driveImport(JSON.stringify([{ compoundId:'unobtainium', dose:1 }]));
+      assert.equal(r.confirmed, false, 'no confirm step is offered');
+      const after = read(KEY);
+      assert.equal(after.stacks.length, 1, 'his protocol is untouched');
+      assert.equal(after.stacks[0].compoundId, 'ta1', 'still what it was');
+      assert.equal(after.historyConfirmed, true, 'and his confirmation survives');
+    });
+
+    test('IMPORT the check step reports the problem rather than failing silently', () => {
+      const r = driveImport('not json at all');
+      const msg = r.nodes['pep-imp-msg'].innerHTML;
+      assert.ok(msg && msg.length > 0, 'something is said');
+      assert.ok(msg.includes('Nothing has changed') || msg.toLowerCase().includes('not imported'),
+        'and it says his protocol is intact, which is the thing he needs to know');
+    });
+
     // v4.9.248 — in-transit stock. Jon has Epitalon, Tesamorelin and NAD+ on
     // order. Without these fields an on-order compound imports as simply
     // ABSENT, so the forecast reports a supply gap that closes itself the week

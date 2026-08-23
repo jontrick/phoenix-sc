@@ -1988,6 +1988,97 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── MIRROR — the cloud write path, which had no functional test at all ─────
+  // Third instance of the same shape in one afternoon, and the highest-stakes.
+  // _pepSendCloud is how Jon's entire protocol reaches Supabase. Its error
+  // handling was protected by harness pins on SYNTAX — `.then(function(res){`,
+  // `.catch(function(e){` — with labels claiming behaviour ("mirror inspects
+  // res", "mirror handles rejection") and zero cases behind them.
+  //
+  // Those pins break if anyone writes `.then(res => ...)`, which changes
+  // nothing, and stay green if the handler body is emptied, which changes
+  // everything. Exactly inverted, on the path whose silent failure hid a
+  // missing column for twelve versions.
+  //
+  // Found by applying my own heuristic mechanically to my own region rather
+  // than trusting that I had already swept it.
+  {
+    const mirrorSetUp = (result, opts) => {
+      reset(); signIn(UID);
+      const o = opts || {};
+      app.sb = {
+        from: () => {
+          const q = {
+            update() { return q; }, eq() { return q; }, select() { return q; },
+            then(a, b) { return Promise.resolve(result).then(a, b); },
+            catch(b) { return Promise.resolve(result).catch(b); },
+          };
+          if (o.reject) {
+            q.then = (a, b) => Promise.reject(new Error('network down')).then(a, b);
+          }
+          return q;
+        },
+      };
+      return { stacks: [{ compoundId: 'bpc157', dose: 0.5 }], _ts: NEWER };
+    };
+
+    test('MIRROR a resolved Supabase error is recorded, not swallowed', async () => {
+      const payload = mirrorSetUp({ data: null, error: { code: '42703', message: 'column does not exist' } });
+      app._pepSendCloud(payload, false);
+      await new Promise(r => setTimeout(r, 0));
+      const rec = read('phx_last_write_error');
+      assert.ok(rec && JSON.stringify(rec).includes('pep mirror'),
+        'supabase-js RESOLVES with {error} rather than throwing — this is the exact ' +
+        'shape that hid a missing peptide_state column for twelve versions');
+    });
+
+    test('MIRROR a rejection is recorded under its own context', async () => {
+      const payload = mirrorSetUp(null, { reject: true });
+      app._pepSendCloud(payload, false);
+      await new Promise(r => setTimeout(r, 0));
+      const rec = JSON.stringify(read('phx_last_write_error') || {});
+      assert.ok(rec.includes('pep mirror'), 'the reject path records too');
+      assert.ok(rec.includes('exception') || rec.includes('reject'),
+        'and under a DIFFERENT context from the resolved-error branch, so the ring ' +
+        'cannot coalesce a schema fault and an offline blip into one slot');
+    });
+
+    test('MIRROR what reaches the diagnostic is the scrubbed summary, not the payload', async () => {
+      reset(); signIn(UID);
+      app.sb = { from: () => { const q = { update(){return q;}, eq(){return q;},
+        then(a,b){ return Promise.resolve({data:null,error:{code:'x',message:'y'}}).then(a,b); },
+        catch(b){ return Promise.resolve().catch(b); } }; return q; } };
+      app._pepSendCloud({ stacks: [{ compoundId:'bpc157', dose:0.5 }],
+                          bloods: [{ lab:'ZENTHORP', markers:[{name:'ALT',value:'71'}] }],
+                          _ts: NEWER }, false);
+      await new Promise(r => setTimeout(r, 0));
+      const rec = JSON.stringify(read('phx_last_write_error') || {});
+      assert.notIncludes(rec, 'ZENTHORP',
+        'the diagnostic ring is localStorage and gets read out in support — pathology ' +
+        'must not land there by way of an error report');
+      assert.notIncludes(rec, '71', 'nor a marker value');
+    });
+
+    test('MIRROR an empty protocol is declined rather than overwriting a real one', async () => {
+      reset(); signIn(UID);
+      app.window = app.window || {};
+      app.window._lastProfileRow = { peptide_state: { stacks: [{ compoundId:'bpc157' }, { compoundId:'nad' }] } };
+      let wrote = false;
+      app.sb = { from: () => { const q = { update(){ wrote = true; return q; }, eq(){return q;},
+        then(a,b){ return Promise.resolve({data:null,error:null}).then(a,b); },
+        catch(b){ return Promise.resolve().catch(b); } }; return q; } };
+      app._pepSendCloud({ stacks: [], checked: {}, cart: [], _ts: NEWER }, false);
+      await new Promise(r => setTimeout(r, 0));
+      assert.equal(wrote, false,
+        'a fresh install that has not restored yet must not push its empty stub over ' +
+        'a real cloud protocol — the v4.9.158 wipe');
+      const rec = JSON.stringify(read('phx_last_write_error') || {});
+      assert.ok(rec.includes('stubSuppressed'),
+        'and the refusal is RECORDED, not just dropped — a silent decline looks ' +
+        'identical to a successful write');
+    });
+  }
+
   // ── ADHWINDOW — _pepAdherence honours its window (v4.9.255, harness-only) ──
   // Training's addition to the pin rule: a needle may be silently load-bearing
   // for a property it does not mention, so NARROWING one is not a safe

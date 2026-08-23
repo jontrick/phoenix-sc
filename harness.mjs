@@ -1578,7 +1578,7 @@ has('var _PEP_RECON = {',                      'PEP: _PEP_RECON default table pr
 has('function _pepRecon(',            'PEP: _pepRecon resolver present');
 has('function _pepDraw(','PEP: _pepDraw units calculator present');
 has('function _pepFmtDose(',        'PEP: _pepFmtDose mg/mcg formatter present');
-has('function _pepGetDoses(',      'PEP: _pepGetDoses is date-parameterised');
+has('function _pepGetDoses(',      'PEP: _pepGetDoses present (the DATE behaviour is tests/peptides.mjs DATEPARAM — a pin cannot check it, and this label claimed it could until v4.9.255)');
 
 // v4.9.142 Today screen tile
 has('id="today-peptide-tile"',                 'PEP: Today tile container in screen-today');
@@ -1695,8 +1695,15 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   const j = html.indexOf('window._pepFlushCloud', i + 1);
   if (i < 0 || j < 0) { bad('PEP: could not isolate _pepSendCloud'); return; }
   const blk = html.slice(i, j);
-  blk.includes('.then(function(res){')  ? ok('PEP: mirror inspects res')          : bad('PEP: mirror ignores res');
-  blk.includes('.catch(function(e){')   ? ok('PEP: mirror handles rejection')     : bad('PEP: mirror has no .catch — unhandled rejection');
+// v4.9.255 — LABELS CORRECTED, NOT GUARDS DELETED. Proved by emptying the
+// resolved-error handler body while leaving `.then(function(res){` in place:
+//   "mirror inspects res"        stayed GREEN — syntax intact, behaviour gone
+//   "mirror records write errors" went RED   — that pin was load-bearing
+// One earned its keep, one was claiming a property it cannot see. Both stay;
+// only the misleading label changes, because a pin that says what it actually
+// checks is still worth having and a pin that oversells is worse than none.
+  blk.includes('.then(function(res){')  ? ok('PEP: mirror has a .then(res) branch (SYNTAX only — that it RECORDS is tests/peptides.mjs MIRROR)') : bad('PEP: mirror has no res branch');
+  blk.includes('.catch(function(e){')   ? ok('PEP: mirror has a .catch branch (SYNTAX only — behaviour in tests/peptides.mjs MIRROR)')          : bad('PEP: mirror has no .catch — unhandled rejection');
   blk.includes('_phxRecordWriteError("pep mirror"') ? ok('PEP: mirror records write errors') : bad('PEP: mirror does not record write errors');
   blk.includes('keepalive: true')       ? ok('PEP: flush uses a keepalive PATCH') : bad('PEP: flush has no keepalive path');
   blk.includes('_pepErrorSummary(payload)') ? ok('PEP: diagnostics get the scrubbed summary') : bad('PEP: diagnostics get a raw payload');
@@ -1708,7 +1715,7 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   const j = html.indexOf('function _pepErrorSummary', i + 1);
   const blk = html.slice(i, j);
   blk.includes('k !== "bloods"')
-    ? ok('PEP: bloods stripped from the mirrored payload')
+    ? ok('PEP: the bloods strip is still written here (the PROPERTY is tests/peptides.mjs, which asserts the key is absent from the payload)')
     : bad('PEP: bloods NOT stripped — medical data would reach profiles.peptide_state');
 })();
 

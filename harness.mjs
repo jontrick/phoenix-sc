@@ -342,7 +342,11 @@ has('hold_secs:35', 'NP: W4/W9 hold_secs:35');
 has('hold_secs:40', 'NP: W11 hold_secs:40');
 has('hold_secs:45', 'NP: W12 hold_secs:45');
 has('if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs', 'NP: _holdSecs carried through blabToPhoenixSession');
-has('window._phxStartHoldTimer = function(secs)', 'NP: _phxStartHoldTimer function defined');
+// v4.9.254: was pinned to `= function(secs)`. The label says the property is the
+// function EXISTING, so the parameter name is an implementation detail and renaming it —
+// which changes nothing — turned the harness red. Peptides' class, found by sweeping my
+// own region for syntax-shaped needles after it swept its own.
+has('window._phxStartHoldTimer = function(', 'NP: _phxStartHoldTimer function defined');
 has("'s Hold</button>'", 'NP: hold timer button injected in session block');
 has("lbl.textContent     = 'HOLD'", 'NP: rest overlay label changed to HOLD');
 has("skipBtn.textContent = 'Done'", 'NP: skip button relabelled Done for holds');
@@ -923,7 +927,13 @@ has("if(document.visibilityState !== 'visible') return;\n  requestWakeLock();", 
 has('var fn = window._phxTimerResync;\n  if(fn){ try{ fn(); }', 'FIX1: visible → active session recalculates elapsed');
 // every timed renderer must be timestamp-driven + registered
 has('function _blabElapsedNow(st)', 'FIX1: BLAB runner elapsed from timestamps');
-has('_phxRegisterTimer(function(){\n    var s = window._blabWoState;', 'FIX1: BLAB runner registers a resync');
+// v4.9.254: the needle was the opening of a callback body INCLUDING its first statement
+// and exact indentation — so reformatting broke it, while gutting the callback would not.
+// Pinned to the registration call itself, which is the property the label claims; the
+// label now says it is structural. The behaviour it guards — a session that ran through
+// an iOS screen lock recomputes its clock — is CLOCK:/WAKELOCK: territory in
+// tests/training.mjs.
+has('_phxRegisterTimer(function(){', 'FIX1: STRUCTURAL the BLAB runner registers a resync callback (that a locked screen does not corrupt the clock is tests/training.mjs)');
 has('function paintTime(){ elapsed=_phxElapsedSince();', 'FIX1: WOD count-up clock from timestamp');
 has('remain = plan.durationSec - _phxElapsedSince();', 'FIX1: AMRAP remaining from timestamp');
 has('var gone=_phxElapsedSince(minStart);', 'FIX1: EMOM minute from timestamp');
@@ -941,7 +951,13 @@ hasNotCode('setInterval(function(){ remain--;', 'FIX1: AMRAP tick-counter remain
 hasNotCode('setInterval(function(){ secLeft--;', 'FIX1: EMOM tick-counter secLeft-- removed');
 hasNotCode('coreSecsLeft--;', 'FIX1: Core circuit tick-counter decrement removed');
 // FIX 2 — wake lock held for every timed session, re-requested after a screen lock.
-has('if(wakeLock && !wakeLock.released) return;', 'FIX2: released sentinel replaced, live one never duplicated');
+// v4.9.254: relabelled at the same time as its sibling, deliberately. Peptides has fixed
+// the second instance of a pattern and left the first standing three times today; I
+// corrected the FIX2 visibility pin an hour ago and this one guards the other half of the
+// same property. The needle here IS the guard line, so unlike its sibling it does check
+// what it claims — the label now points at the cases that prove it, so it reads as
+// covered-and-verified rather than as a receipt.
+has('if(wakeLock && !wakeLock.released) return;', 'FIX2: the released-sentinel guard is present (behaviour: tests/training.mjs WAKELOCK:)');
 // v4.9.254: LABEL CORRECTED. This needle is the BOOT-TIME persistent call, not the one
 // inside the visibilitychange handler — the label claimed the handler and pinned
 // something else. Proved by deleting the handler's call: this stayed GREEN, and what

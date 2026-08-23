@@ -1580,7 +1580,7 @@ has("if(typeof pepRenderTodayTile==='function') pepRenderTodayTile();",
 // v4.9.143 ADJUST tab
 has('var PEP_ADVISOR_SYSTEM =',                'PEP: advisor system prompt present');
 has('function _pepBuildContext(',           'PEP: advisor context builder present');
-has('function _pepAdherence(',        'PEP: 14-day adherence calculator present');
+has('function _pepAdherence(',        'PEP: _pepAdherence present (WINDOW behaviour is in tests/peptides.mjs ADHWINDOW - a pin cannot check it)');
 has('async function pepGenerateAdvice(',      'PEP: pepGenerateAdvice present');
 has('function _pepTabAdjust(',              'PEP: ADJUST tab renderer present');
 

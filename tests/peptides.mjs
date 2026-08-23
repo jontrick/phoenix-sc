@@ -1988,6 +1988,91 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── ADHWINDOW — _pepAdherence honours its window (v4.9.255, harness-only) ──
+  // Training's addition to the pin rule: a needle may be silently load-bearing
+  // for a property it does not mention, so NARROWING one is not a safe
+  // refactor. I narrowed eighteen in the same sweep and then went looking for
+  // what that removed. This is what it removed.
+  //
+  // The pin reads `has('function _pepAdherence(', '14-day adherence calculator
+  // present')`. The label claims a WINDOW; the pin asserts a name. It used to
+  // assert `(ps, days)`, which at least named the parameter — I took that away
+  // this afternoon, and there were no functional cases behind it. Same shape as
+  // _pepGetDoses, sitting two lines below it, and my own sweep made it worse.
+  //
+  // It feeds the advisor context and the audit's adherence findings — the
+  // percentages Jon reads and acts on. A wrong window there is silent: the
+  // numbers still look like percentages.
+  {
+    const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const back = (n) => iso(new Date(Date.now() - n * 86400000));
+
+    // BPC-157 daily, started well before any window under test, so every day in
+    // the window is a scheduled day and the counts are the window length.
+    const setUpAdh = (ticked) => {
+      reset(); signIn(UID);
+      const checked = {};
+      (ticked || []).forEach(n => { checked[back(n)] = ['bpc157']; });
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: back(60), freq:'daily', continuous:true, status:'instock' }],
+        checked, cart: [] });
+      return app.pepGetState();
+    };
+    const one = (rows) => rows.find(r => r.compound === 'BPC-157');
+
+    test('ADHWINDOW the days argument sets the window', () => {
+      const ps = setUpAdh();
+      assert.equal(one(app._pepAdherence(ps, 7)).scheduled, 7, 'seven days asked for, seven counted');
+      assert.equal(one(app._pepAdherence(ps, 14)).scheduled, 14, 'and fourteen when fourteen');
+      assert.equal(one(app._pepAdherence(ps, 30)).scheduled, 30, 'and thirty when thirty');
+    });
+
+    test('ADHWINDOW omitting the window defaults to 14, as the label claims', () => {
+      const ps = setUpAdh();
+      assert.equal(one(app._pepAdherence(ps)).scheduled, 14,
+        'the harness pin has always SAID 14-day and never checked it');
+    });
+
+    test('ADHWINDOW today is excluded from the window', () => {
+      const ps = setUpAdh();
+      // 14 scheduled from a daily compound means yesterday back 14 days, not
+      // today back 13. Today is not finished, so counting it would score every
+      // morning dose as missed until he takes it.
+      const rows = app._pepAdherence(ps, 1);
+      assert.equal(one(rows).scheduled, 1, 'a one-day window is yesterday');
+      assert.equal(one(rows).taken, 0, 'and untaken');
+      const withY = app._pepAdherence(setUpAdh([1]), 1);
+      assert.equal(one(withY).taken, 1, 'ticking YESTERDAY registers, which fixes the date');
+    });
+
+    test('ADHWINDOW ticks inside the window count, ticks outside it do not', () => {
+      const inside = app._pepAdherence(setUpAdh([1, 2, 3]), 7);
+      assert.equal(one(inside).taken, 3, 'three ticks in the last week');
+      const outside = app._pepAdherence(setUpAdh([20, 21]), 7);
+      assert.equal(one(outside).taken, 0,
+        'ticks three weeks ago are outside a seven-day window and must not inflate it');
+    });
+
+    test('ADHWINDOW the percentage is taken over scheduled, not over the window', () => {
+      const rows = app._pepAdherence(setUpAdh([1, 2, 3, 4, 5, 6, 7]), 14);
+      const r = one(rows);
+      assert.equal(r.scheduled, 14, 'fourteen due');
+      assert.equal(r.taken, 7, 'seven taken');
+      assert.equal(r.adherence_pct, 50, 'and the figure is 50, not 7 or 100');
+    });
+
+    test('ADHWINDOW a compound scheduled on only some days is not counted daily', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'retatrutide', dose:6, vialMg:30, waterMl:2.5,
+        startDate: back(60), freq:'weekly', continuous:true, status:'instock' }],
+        checked: {}, cart: [] });
+      const r = app._pepAdherence(app.pepGetState(), 14).find(x => x.compound === 'Retatrutide');
+      assert.equal(r.scheduled, 2,
+        'weekly over a fortnight is two, not fourteen — the denominator the .219 ' +
+        'audit fix depends on being right');
+    });
+  }
+
   // ── DATEPARAM — _pepGetDoses honours the date it is given (v4.9.255) ───────
   // This property was protected only by a harness pin on the PARAMETER NAME:
   // `function _pepGetDoses(ps, dateStr)`, labelled "is date-parameterised".

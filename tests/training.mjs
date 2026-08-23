@@ -2723,4 +2723,129 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       });
     } finally { w.restore(); }
   });
+
+  // ── THE LAST-CHANCE WRITE (v4.9.NEXT) ─────────────────────────────────────
+  // Peptides found every one of its MIRROR cases passed useKeepalive=false, leaving the
+  // keepalive branch — the one it had specifically hardened — with none. I checked mine
+  // and it was worse: _blabSendCloud and _blabFlushCloud had ZERO cases on EITHER branch.
+  //
+  // The error routing is all there and correct. Nothing was testing it.
+  //
+  // _blabFlushCloud fires on pagehide — as Jon closes the app or the screen locks. It
+  // exists because the normal mirror is debounced 1.5s, so without it the last set of a
+  // session dies in that window. Silent failure here means the session he just finished
+  // never leaves the phone.
+  //
+  // The keepalive branch is fetch, not supabase-js, and that difference is the whole
+  // point: FETCH RESOLVES ON A 4xx. A 400 from a missing column arrives as a resolved
+  // promise with ok:false, so a .then that only looks for a thrown error sees success.
+
+  // A rejection needs TWO microtask ticks to reach .catch (the .then passes through
+  // first), a resolution needs one. The resolved cases happened to pass on a single tick
+  // — i.e. they were right by luck, and a slower chain would have made them flaky. Every
+  // case below settles the same way so none of them depends on that.
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  const cloudHarness = () => {
+    const calls = [];
+    const realFetch = app.fetch;
+    const realSb = app.sb;
+    return {
+      calls,
+      resolveWith: (r) => { app.fetch = (url, opts) => { calls.push({ url, opts }); return Promise.resolve(r); }; },
+      rejectWith: (e) => { app.fetch = () => Promise.reject(e); },
+      throwSync: (e) => { app.fetch = () => { throw e; }; },
+      restore: () => { app.fetch = realFetch; app.sb = realSb; }
+    };
+  };
+
+  test('FLUSH: a 4xx on the keepalive write is recorded — fetch RESOLVES on those', () => {
+    // The case that matters most. A missing column returns 400 as a RESOLVED promise, so
+    // a handler watching only for rejection sees a successful write.
+    reset(); signIn(UID);
+    const h = cloudHarness();
+    h.resolveWith({ ok: false, status: 400 });
+    try {
+      app._blabSendCloud(UID, { week: 3, log: [1, 2] }, true);
+      return settle().then(() => {
+        const last = read('phx_last_write_error');
+        assert.ok(last, 'the failure is visible');
+        assert.equal(last.context, '_blabSendCloud.keepalive', 'named as the keepalive path');
+        assert.equal(last.code, '400', 'with the HTTP status');
+      });
+    } finally { h.restore(); }
+  });
+
+  test('FLUSH: a rejected keepalive write is recorded separately', () => {
+    // Offline / killed mid-flight. Distinguishable from the 4xx so the ring says which.
+    reset(); signIn(UID);
+    const h = cloudHarness();
+    h.rejectWith(new Error('Failed to fetch'));
+    try {
+      app._blabSendCloud(UID, { week: 3 }, true);
+      return settle().then(() => {
+        assert.equal(read('phx_last_write_error').context, '_blabSendCloud.keepalive.reject',
+          'a rejection is its own context');
+      });
+    } finally { h.restore(); }
+  });
+
+  test('FLUSH: a SUCCESSFUL keepalive write records nothing', () => {
+    // An error ring that fills on success tells him nothing when something is wrong —
+    // the same disease as a green tick that means nothing.
+    reset(); signIn(UID);
+    const h = cloudHarness();
+    h.resolveWith({ ok: true, status: 204 });
+    try {
+      app._blabSendCloud(UID, { week: 3 }, true);
+      return settle().then(() => {
+        assert.equal(read('phx_last_write_error'), null, 'a clean flush is silent');
+      });
+    } finally { h.restore(); }
+  });
+
+  test('FLUSH: pagehide actually sends the pending payload, on the keepalive path', () => {
+    // _blabFlushCloud exists to beat the 1.5s debounce when the app is backgrounded. If
+    // it did not use keepalive the browser would cancel it on unload.
+    reset(); signIn(UID);
+    const h = cloudHarness();
+    h.resolveWith({ ok: true, status: 204 });
+    app._blabCloudPending = { week: 3, last_completed_day: 2 };
+    try {
+      app._blabFlushCloud();
+      assert.equal(h.calls.length, 1, 'the pending write went out');
+      assert.equal(h.calls[0].opts.keepalive, true, 'with keepalive, or unload cancels it');
+      assert.equal(h.calls[0].opts.method, 'PATCH', 'as a profile patch');
+      assert.equal(app._blabCloudPending, null, 'and the pending slot was cleared');
+    } finally { h.restore(); app._blabCloudPending = null; }
+  });
+
+  test('FLUSH: nothing pending means no write at all', () => {
+    reset(); signIn(UID);
+    const h = cloudHarness();
+    h.resolveWith({ ok: true, status: 204 });
+    app._blabCloudPending = null;
+    try {
+      app._blabFlushCloud();
+      assert.equal(h.calls.length, 0, 'no empty write on every backgrounding');
+    } finally { h.restore(); }
+  });
+
+  test('FLUSH: the NORMAL (non-keepalive) branch records its failures too', () => {
+    // The branch Peptides had covered and I did not. Both, or the coverage is a coin flip
+    // on which one happens to break.
+    reset(); signIn(UID);
+    const realSb = app.sb;
+    const q = { update: () => q, eq: () => q,
+                then: (a) => Promise.resolve({ error: { code: '42703', message: 'column does not exist' } }).then(a),
+                catch: () => Promise.resolve({}) };
+    app.sb = { from: () => q };
+    try {
+      app._blabSendCloud(UID, { week: 3 }, false);
+      return settle().then(() => {
+        assert.equal(read('phx_last_write_error').context, '_blabSendCloud.update',
+          'the debounced path is named distinctly from the keepalive one');
+      });
+    } finally { app.sb = realSb; }
+  });
 }

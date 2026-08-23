@@ -2413,6 +2413,27 @@ has('out.blabDay = (lead && lead.blabDay != null) ? lead.blabDay : 0;', 'CONTRAC
 })();
 has("cat: 'REST'",                                  'CONTRACT: REST is the marker for a planned rest day');
 
+// ── THE LAST-CHANCE WRITE (v4.9.254) ────────────────────────────────────────
+// _blabFlushCloud fires on pagehide — as Jon closes the app or the screen locks — and
+// exists because the normal mirror is debounced 1.5s. Six contexts, named individually
+// so removing one fails and says which.
+//
+// STRUCTURAL. That each one actually FIRES, and that a clean flush records nothing, is
+// tests/training.mjs FLUSH: — which had zero cases on either branch until today.
+(() => {
+  const src = codeSrc();
+  const need = ['_blabSendCloud.keepalive', '_blabSendCloud.keepalive.reject',
+                '_blabSendCloud.keepalive.throw', '_blabSendCloud.update',
+                '_blabSendCloud.update.reject', '_blabSendCloud.update.throw'];
+  const missing = need.filter(c => !src.includes(`_phxRecordWriteError('${c}'`));
+  if (!missing.length) ok('FLUSH: STRUCTURAL all 6 cloud-mirror failure contexts are present (behaviour: tests/training.mjs FLUSH:)');
+  else bad(`FLUSH: ${missing.join(', ')} no longer records. The pagehide write is the one that ` +
+           'carries the session he just finished; silent failure there loses it.');
+})();
+// fetch RESOLVES on a 4xx, so a handler watching only for rejection sees a 400 as success.
+// That is how a missing column hid for twelve versions on the peptide side.
+hasCode('if(r && !r.ok', 'FLUSH: the keepalive path checks res.ok, because fetch resolves on a 4xx');
+
 // ── FAILED WRITES MUST BE VISIBLE (v4.9.238) ────────────────────────────────
 // Rule 8. These reported to console.error and NOWHERE else, and console is invisible
 // in the iOS PWA. Named individually rather than counted, so reverting ONE fails and

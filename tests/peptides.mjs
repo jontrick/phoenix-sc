@@ -1988,6 +1988,68 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   }
 
+  // ── DATEPARAM — _pepGetDoses honours the date it is given (v4.9.255) ───────
+  // This property was protected only by a harness pin on the PARAMETER NAME:
+  // `function _pepGetDoses(ps, dateStr)`, labelled "is date-parameterised".
+  // Nothing functional had ever called it with a date. So renaming that
+  // parameter — a change with no behavioural meaning — would have gone red,
+  // while actually breaking the date handling would have stayed green.
+  //
+  // It matters because the calendar, the forecast and the Today tile all resolve
+  // through this one function. If it silently answered for today whatever date
+  // it was asked about, the schedule grid would show today's doses on every
+  // square and nothing would look obviously wrong.
+  {
+    const setUpDates = () => {
+      reset(); signIn(UID);
+      // Retatrutide weekly on a Friday; BPC-157 every other day from the same
+      // Friday. Two different rules, so one answer cannot satisfy both.
+      seed(KEY, { stacks: [
+        { compoundId:'retatrutide', dose:6, startDate:'2026-08-28', freq:'weekly',
+          vialMg:30, waterMl:2.5, continuous:true, status:'instock' },
+        { compoundId:'bpc157', dose:0.5, startDate:'2026-08-28', freq:'eod',
+          vialMg:10, waterMl:2, continuous:true, status:'instock' },
+      ], checked:{}, cart:[] });
+      return app.pepGetState();
+    };
+    const names = (ps, iso) => {
+      const d = app._pepGetDoses(ps, iso);
+      return [...d.morning, ...d.anytime, ...d.evening].map(x => x.name).sort();
+    };
+
+    test('DATEPARAM the start Friday returns both compounds', () => {
+      const ps = setUpDates();
+      assert.deepEqual(names(ps, '2026-08-28'), ['BPC-157', 'Retatrutide'],
+        'weekly and EOD both land on day zero');
+    });
+
+    test('DATEPARAM the next day returns neither', () => {
+      const ps = setUpDates();
+      assert.deepEqual(names(ps, '2026-08-29'), [],
+        'Saturday is not the weekly day and not an EOD day');
+    });
+
+    test('DATEPARAM two days on returns only the EOD compound', () => {
+      const ps = setUpDates();
+      assert.deepEqual(names(ps, '2026-08-30'), ['BPC-157'],
+        'EOD lands, weekly does not — different dates give different answers, ' +
+        'which is the whole property');
+    });
+
+    test('DATEPARAM the following Friday returns the weekly one again', () => {
+      const ps = setUpDates();
+      assert.deepEqual(names(ps, '2026-09-04'), ['Retatrutide'],
+        'a week on: weekly repeats, EOD has drifted off this day');
+    });
+
+    test('DATEPARAM a date before the start returns nothing', () => {
+      const ps = setUpDates();
+      assert.deepEqual(names(ps, '2026-08-01'), [],
+        'no doses before the protocol begins, rather than treating a negative ' +
+        'day offset as day zero');
+    });
+  }
+
   // ── EXPORT — the other half of import, so his real state can reach me ──────
   // Jon asked whether I can read his stock now that he has updated it. I cannot:
   // no database access, and localStorage is on his phone. Import existed and

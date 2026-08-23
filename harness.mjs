@@ -1535,33 +1535,49 @@ function phxFnSpan(src, name) {
 // chats editing the shared file.
 console.log('\nFeature check — Peptide Portal (v4.9.141-146):');
 
+// harness-only — THESE PIN THE NAME, NOT THE SIGNATURE, and that is deliberate.
+// They existed as `function _pepRecon(stack, c)` and so on: eighteen guards that
+// would go red the moment anyone renamed a parameter, which changes nothing
+// about behaviour. Training's rule, from their own .254: a guard that breaks
+// when you make a correct change teaches you to edit the guard, and once
+// editing guards is a habit they have stopped protecting anything.
+//
+// Their PURPOSE is anti-deletion — stopping another chat removing peptide code
+// while editing the shared file. For that, the function name is the property
+// and the parameter list is an implementation detail.
+//
+// One of them was carrying a real property in its parameters:
+// `function _pepGetDoses(ps, dateStr)` labelled "is date-parameterised", which
+// mattered because it once was not. Nothing functional called it with a date at
+// all, so a parameter NAME was the entire protection. That property now has its
+// own functional test and this pin no longer pretends to cover it.
 // v4.9.141 reconstitution engine
 has('var _PEP_RECON = {',                      'PEP: _PEP_RECON default table present');
-has('function _pepRecon(stack, c)',            'PEP: _pepRecon resolver present');
-has('function _pepDraw(dose, doseUnit, recon)','PEP: _pepDraw units calculator present');
-has('function _pepFmtDose(dose, unit)',        'PEP: _pepFmtDose mg/mcg formatter present');
-has('function _pepGetDoses(ps, dateStr)',      'PEP: _pepGetDoses is date-parameterised');
+has('function _pepRecon(',            'PEP: _pepRecon resolver present');
+has('function _pepDraw(','PEP: _pepDraw units calculator present');
+has('function _pepFmtDose(',        'PEP: _pepFmtDose mg/mcg formatter present');
+has('function _pepGetDoses(',      'PEP: _pepGetDoses is date-parameterised');
 
 // v4.9.142 Today screen tile
 has('id="today-peptide-tile"',                 'PEP: Today tile container in screen-today');
-has('function pepRenderTodayTile()',           'PEP: pepRenderTodayTile defined');
+has('function pepRenderTodayTile(',           'PEP: pepRenderTodayTile defined');
 has("if(typeof pepRenderTodayTile==='function') pepRenderTodayTile();",
                                                'PEP: Today tile called from renderTodayScreen');
 
 // v4.9.143 ADJUST tab
 has('var PEP_ADVISOR_SYSTEM =',                'PEP: advisor system prompt present');
-has('function _pepBuildContext(ps)',           'PEP: advisor context builder present');
-has('function _pepAdherence(ps, days)',        'PEP: 14-day adherence calculator present');
-has('async function pepGenerateAdvice()',      'PEP: pepGenerateAdvice present');
-has('function _pepTabAdjust(ps)',              'PEP: ADJUST tab renderer present');
+has('function _pepBuildContext(',           'PEP: advisor context builder present');
+has('function _pepAdherence(',        'PEP: 14-day adherence calculator present');
+has('async function pepGenerateAdvice(',      'PEP: pepGenerateAdvice present');
+has('function _pepTabAdjust(',              'PEP: ADJUST tab renderer present');
 
 // v4.9.146 BLOODS tab
-has('function _pepTabBloods(ps)',              'PEP: BLOODS tab renderer present');
-has('async function pepBloodsLoad(force)',     'PEP: blood panel loader present');
-has('async function pepExtractMarkers()',      'PEP: AI marker extraction present');
-has('async function pepSaveBloodPanel()',      'PEP: blood panel save present');
-has('function _pepMarkerFlag(m)',              'PEP: marker range flagging present');
-has('function _pepDownscale(dataURL, maxDim, quality)',
+has('function _pepTabBloods(',              'PEP: BLOODS tab renderer present');
+has('async function pepBloodsLoad(',     'PEP: blood panel loader present');
+has('async function pepExtractMarkers(',      'PEP: AI marker extraction present');
+has('async function pepSaveBloodPanel(',      'PEP: blood panel save present');
+has('function _pepMarkerFlag(',              'PEP: marker range flagging present');
+has('function _pepDownscale(',
                                                'PEP: image downscale before upload/vision');
 has('sb.storage.from("blood-panels")',         'PEP: uses the blood-panels bucket');
 has('createSignedUrl',                         'PEP: private bucket read via signed URL');
@@ -1595,7 +1611,7 @@ has('createSignedUrl',                         'PEP: private bucket read via sig
 
 // v4.9.152 restore rule — newest timestamp wins
 has('ps._ts = new Date().toISOString();',      'PEP: pepSaveState stamps _ts');
-has('function _pepBackupLocal(key, rawLocal)', 'PEP: local backup before overwrite');
+has('function _pepBackupLocal(', 'PEP: local backup before overwrite');
 // v4.9.191: hasNotCode, not hasNot. These two guard the regressions with the
 // most instructive history in my domain — the .158 protocol wipe and the mirror
 // that swallowed errors for 12 versions. Reading raw text meant that WRITING
@@ -1645,8 +1661,8 @@ hasNotCode('if(local) return;',                'PEP: old local-always-wins rule 
 })();
 
 // v4.9.155 mirror hygiene — no medical data to the cloud, no swallowed errors
-has('function _pepCloudPayload(ps)',   'PEP: cloud payload builder present');
-has('function _pepErrorSummary(ps)',   'PEP: scrubbed diagnostic summary present');
+has('function _pepCloudPayload(',   'PEP: cloud payload builder present');
+has('function _pepErrorSummary(',   'PEP: scrubbed diagnostic summary present');
 has('window._pepFlushCloud = function()', 'PEP: pagehide flush present');
 has("window.addEventListener(\"pagehide\", function(){ window._pepFlushCloud(); });",
                                        'PEP: pagehide listener wired');

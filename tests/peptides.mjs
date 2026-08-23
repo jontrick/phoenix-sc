@@ -35,6 +35,25 @@ const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
+// ── settle() — a MACROTASK, deliberately, not `await Promise.resolve()` ──────
+// Training hit this on their own mirror cases: a REJECTION needs two microtask
+// ticks to reach `.catch`, because the `.then` in the chain passes through
+// first. They awaited one tick, their rejection case died on a null read, and
+// the four that PASSED were passing by luck — a slightly longer chain would
+// have made them flaky.
+//
+// setTimeout(0) is a macrotask: the whole microtask queue drains before it
+// fires, so the depth of the chain under test cannot matter. Verified, not
+// assumed — adding five pass-through .then() links to _pepSendCloud left every
+// case green.
+//
+// Named so the reason travels with the mechanism. `await Promise.resolve()` is
+// shorter and looks cleaner; swapping it in fails four cases here (both
+// rejection paths and both clipboard-refusal paths), which is exactly the
+// tidy-up this comment exists to stop.
+const settle = () => new Promise(r => setTimeout(r, 0));
+
+
   // ── Restore resolution — newest timestamp wins ─────────────────────────────
   // Old rule was "local always wins", so a replacement device that had written
   // any state could never pull the protocol back down. Jon lost a phone; that
@@ -2025,7 +2044,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     test('MIRROR a resolved Supabase error is recorded, not swallowed', async () => {
       const payload = mirrorSetUp({ data: null, error: { code: '42703', message: 'column does not exist' } });
       app._pepSendCloud(payload, false);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       const rec = read('phx_last_write_error');
       assert.ok(rec && JSON.stringify(rec).includes('pep mirror'),
         'supabase-js RESOLVES with {error} rather than throwing — this is the exact ' +
@@ -2035,7 +2054,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     test('MIRROR a rejection is recorded under its own context', async () => {
       const payload = mirrorSetUp(null, { reject: true });
       app._pepSendCloud(payload, false);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       const rec = JSON.stringify(read('phx_last_write_error') || {});
       assert.ok(rec.includes('pep mirror'), 'the reject path records too');
       assert.ok(rec.includes('exception') || rec.includes('reject'),
@@ -2051,7 +2070,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app._pepSendCloud({ stacks: [{ compoundId:'bpc157', dose:0.5 }],
                           bloods: [{ lab:'ZENTHORP', markers:[{name:'ALT',value:'71'}] }],
                           _ts: NEWER }, false);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       const rec = JSON.stringify(read('phx_last_write_error') || {});
       assert.notIncludes(rec, 'ZENTHORP',
         'the diagnostic ring is localStorage and gets read out in support — pathology ' +
@@ -2088,7 +2107,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     test('MIRROR keepalive records a 4xx, which RESOLVES rather than rejecting', async () => {
       kaSetUp({ ok: false, status: 400 });
       app._pepSendCloud(PAYLOAD, true);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       const rec = JSON.stringify(read('phx_last_write_error') || {});
       assert.ok(rec.includes('pep mirror keepalive'),
         'fetch only REJECTS on network failure — a 400 resolves, so a .catch alone ' +
@@ -2100,7 +2119,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     test('MIRROR keepalive records a network rejection under its own context', async () => {
       kaSetUp(null, { reject: true });
       app._pepSendCloud(PAYLOAD, true);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       const rec = JSON.stringify(read('phx_last_write_error') || {});
       assert.ok(rec.includes('keepalive') && rec.includes('reject'),
         'a DIFFERENT context from the 4xx branch — the PM ring coalesces by context, ' +
@@ -2110,7 +2129,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     test('MIRROR keepalive records nothing when the write succeeds', async () => {
       kaSetUp({ ok: true, status: 204 });
       app._pepSendCloud(PAYLOAD, true);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       assert.equal(read('phx_last_write_error'), null,
         'a clean flush is silent — an error ring that fills up on success tells him ' +
         'nothing when something is actually wrong');
@@ -2119,7 +2138,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     test('MIRROR keepalive actually sets keepalive, which is the whole point', async () => {
       const seen = kaSetUp({ ok: true, status: 204 });
       app._pepSendCloud(PAYLOAD, true);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       assert.equal(seen.init.keepalive, true,
         'without this flag the browser drops the request as the page goes away, ' +
         'and the pagehide flush silently does nothing at all');
@@ -2130,7 +2149,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     test('MIRROR keepalive sends the payload it was given, not raw state', async () => {
       const seen = kaSetUp({ ok: true, status: 204 });
       app._pepSendCloud({ stacks: [{ compoundId: 'bpc157', dose: 0.5 }], _ts: NEWER }, true);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       const body = JSON.parse(seen.init.body);
       assert.ok(body.peptide_state, 'wrapped in the column name');
       assert.notIncludes(JSON.stringify(body), 'bloods',
@@ -2146,7 +2165,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         then(a,b){ return Promise.resolve({data:null,error:null}).then(a,b); },
         catch(b){ return Promise.resolve().catch(b); } }; return q; } };
       app._pepSendCloud({ stacks: [], checked: {}, cart: [], _ts: NEWER }, false);
-      await new Promise(r => setTimeout(r, 0));
+      await settle();
       assert.equal(wrote, false,
         'a fresh install that has not restored yet must not push its empty stub over ' +
         'a real cloud protocol — the v4.9.158 wipe');
@@ -2825,7 +2844,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       const h = caSetUp({ writeText: () => Promise.reject(new Error('NotAllowedError')) });
       try {
         app.pepCopyAudit();
-        await new Promise(r => setTimeout(r, 0));
+        await settle();
         const box = h.nodes['pep-audit-fallback'];
         assert.ok(box && box.innerHTML.length > 0,
           'the fallback rendered — a clipboard refusal must not take the data with it');
@@ -2838,7 +2857,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       const h = caSetUp({ writeText: () => Promise.reject(new Error('nope')) });
       try {
         app.pepCopyAudit();
-        await new Promise(r => setTimeout(r, 0));
+        await settle();
         const box = h.nodes['pep-audit-fallback'];
         assert.ok(box.innerHTML.includes('PROTOCOL AUDIT') || box.innerHTML.includes('compounds'),
           'the actual report is in the box — a fallback that shows nothing is the same bug');
@@ -2859,7 +2878,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       const h = caSetUp({ writeText: (t) => { got = t; return Promise.resolve(); } });
       try {
         app.pepCopyAudit();
-        await new Promise(r => setTimeout(r, 0));
+        await settle();
         assert.ok(got && got.length > 50, 'the real audit text reached the clipboard');
         assert.equal(h.nodes['pep-audit-copy'].textContent, 'Copied', 'and he is told it worked');
         assert.equal(h.nodes['pep-audit-fallback'].innerHTML, '', 'no leftover box when it succeeded');

@@ -2071,7 +2071,16 @@ const settle = () => new Promise(r => setTimeout(r, 0));
                           bloods: [{ lab:'ZENTHORP', markers:[{name:'ALT',value:'71'}] }],
                           _ts: NEWER }, false);
       await settle();
-      const rec = JSON.stringify(read('phx_last_write_error') || {});
+      // POSITIVE CONTROL FIRST. `read(...) || {}` means that if the recorder
+      // never fired, rec is '{}' and both notIncludes below pass — this case
+      // would have gone green whether or not the scrub works, needing only the
+      // recorder to stay silent. Training's shape: a negative that cannot fail
+      // early is not a weaker test, it is a different one. This is the highest-
+      // stakes assertion I own and it was asserting nothing.
+      const raw = read('phx_last_write_error');
+      assert.ok(raw, 'something WAS recorded — otherwise the scrub is untested, not proven');
+      const rec = JSON.stringify(raw);
+      assert.ok(rec.includes('pep mirror'), 'and it is the mirror error, not some leftover');
       assert.notIncludes(rec, 'ZENTHORP',
         'the diagnostic ring is localStorage and gets read out in support — pathology ' +
         'must not land there by way of an error report');
@@ -2127,9 +2136,14 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     });
 
     test('MIRROR keepalive records nothing when the write succeeds', async () => {
-      kaSetUp({ ok: true, status: 204 });
+      const seen = kaSetUp({ ok: true, status: 204 });
       app._pepSendCloud(PAYLOAD, true);
       await settle();
+      // POSITIVE CONTROL. "nothing was recorded" is trivially true before the
+      // write has run at all, so on its own this case can never fail from
+      // settling too early. Proving the fetch actually went out first turns it
+      // into "completed and recorded nothing".
+      assert.ok(seen.init, 'the flush actually fired — otherwise silence proves nothing');
       assert.equal(read('phx_last_write_error'), null,
         'a clean flush is silent — an error ring that fills up on success tells him ' +
         'nothing when something is actually wrong');

@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.252';
+var APP_VERSION='4.9.253';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -25430,9 +25430,16 @@ function _pepTabStock(ps){
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">Stock On Hand</div>";
   h += "<button id=\"pep-export-open\" style=\"background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;margin-right:6px;\">Export</button>";
   h += "<button id=\"pep-import-open\" style=\"background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Import</button>";
-  h += "</div><div id=\"pep-export-out\"></div><div style=\"display:none;\">";
   h += "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add</button>";
   h += "</div>";
+  // v4.9.253: the export fallback lands HERE, in normal flow after the header
+  // row. v4.9.252 spliced a closing </div> and a display:none opener in beside
+  // the Import button, which swallowed the + Add button into a hidden container
+  // and removed it from the STOCK screen. Shipped, then found by reading the
+  // generated markup rather than by Jon hitting it. Inserting raw tags into a
+  // string-built layout produces a structure nobody designed — a sibling goes
+  // AFTER the container, not through it.
+  h += "<div id=\"pep-export-out\"></div>";
   h += "<div style=\"font-size:11px;color:" + (r.stockDone ? "#4CAF50" : "var(--gold)") + ";margin-bottom:14px;\">" +
        (r.stockDone ? "All " + r.countable + " counted — the protocol overview is unlocked."
                     : r.counted + " of " + r.countable + " counted. Confirm each one to unlock the protocol overview.") + "</div>";

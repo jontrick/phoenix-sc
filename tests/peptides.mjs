@@ -2046,6 +2046,33 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         'decides it should go out');
     });
 
+    // v4.9.253 — the regression .252 shipped, and the shape of test that catches
+    // it. Adding the Export button, I spliced a closing </div> and a
+    // display:none opener into the header string beside Import. That swallowed
+    // the + Add button into a hidden container and removed it from STOCK. Every
+    // gate was green: it parses, it runs, the button exists in the source. Only
+    // the STRUCTURE was wrong, and nothing looked at the structure.
+    test('EXPORT the STOCK header keeps every button visible', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(5), freq:'eod', stockCounted:true, sealedVials:1 }] });
+      const out = app._pepTabStock(app.pepGetState());
+      assert.ok(out.includes('pep-add-stack'), '+ Add is present');
+      assert.ok(out.includes('pep-export-open'), 'Export is present');
+      assert.ok(out.includes('pep-import-open'), 'Import is present');
+      // Presence is not visibility. Walk from each button back to the start and
+      // require every display:none opened before it to have been closed.
+      ['pep-add-stack', 'pep-export-open', 'pep-import-open'].forEach(id => {
+        const before = out.slice(0, out.indexOf(id));
+        const hidden = (before.match(/display:none/g) || []).length;
+        const opens  = (before.match(/<div/g) || []).length;
+        const closes = (before.match(/<\/div>/g) || []).length;
+        assert.ok(hidden === 0 || opens === closes,
+          `${id} sits inside an unclosed display:none container — present in the ` +
+          'markup and invisible on the screen, which is the failure .252 shipped');
+      });
+    });
+
     test('EXPORT an empty protocol produces an empty array, not a crash', () => {
       reset(); signIn(UID);
       assert.equal(app._pepExportJSON(app.pepGetState()), '[]', 'nothing to say, said cleanly');

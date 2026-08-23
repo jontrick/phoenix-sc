@@ -2597,4 +2597,67 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._blabDiscardUnfinished(9, 9), false, 'reports it did nothing');
     assert.ok(app._blabUnfinishedToday(), 'and the real one is untouched');
   });
+
+  // ── A FINISHED RUNNER MUST NOT RESTART ITS CLOCK (v4.9.NEXT) ──────────────
+  // Found by applying Peptides' rule to my own guards: when a presence pin's LABEL
+  // claims a behaviour, the property has outgrown the pin.
+  //
+  // 'FIX3: finished/exited runner cannot restart its clock' pinned
+  // `window._blabWoState._finished = true` — the SETTER. The behaviour lives in the
+  // GUARD, `!st._finished` inside _blabWoRender's self-heal. Deleting the guard while
+  // keeping the setter left that pin GREEN, and functional coverage was zero.
+  //
+  // It was caught, but by accident: a DIFFERENT pin, labelled "self-heals if its
+  // count-in was cancelled", happens to include the whole line in its needle. So the
+  // property was protected by a string in someone else's assertion — remove or reword
+  // that unrelated pin and this goes unguarded silently.
+  //
+  // What it costs if it breaks: the runner restarts the clock after he has finished, so
+  // his recorded time keeps climbing after the work stopped. For 100 Push-ups and the
+  // 1.6km run that time IS the score, and it is compared against every previous attempt.
+
+  test('CLOCK: a finished runner does not restart its clock', () => {
+    reset(); signIn(UID);
+    let started = 0;
+    const realStart = app._blabStartClock;
+    const realGet = app.document.getElementById;
+    app._blabStartClock = () => { started++; };
+    app.document.getElementById = () => ({ innerHTML: '', style: {}, querySelector: () => null,
+                                           appendChild: () => {}, addEventListener: () => {} });
+    app._blabWoTimer = null;
+    app._countInState = null;
+    app._blabWoState = { ex: { name: 'X', format: 'total_rep_goal', target: 40 },
+                         elapsed: 120, resting: false, _finished: true, trTotal: 40, trSets: [40] };
+    try {
+      app._blabWoRender();
+      assert.equal(started, 0, 'the clock is NOT restarted once the block is finished');
+    } finally {
+      app._blabStartClock = realStart; app.document.getElementById = realGet;
+      app._blabWoState = null;
+    }
+  });
+
+  test('CLOCK: an unfinished runner still self-heals', () => {
+    // The other direction. The guard exists because a tab change cancels an in-flight
+    // count-in and would leave a live runner sitting at 0:00 with no clock — so it must
+    // still start for a session that is genuinely running.
+    reset(); signIn(UID);
+    let started = 0;
+    const realStart = app._blabStartClock;
+    const realGet = app.document.getElementById;
+    app._blabStartClock = () => { started++; };
+    app.document.getElementById = () => ({ innerHTML: '', style: {}, querySelector: () => null,
+                                           appendChild: () => {}, addEventListener: () => {} });
+    app._blabWoTimer = null;
+    app._countInState = null;
+    app._blabWoState = { ex: { name: 'X', format: 'total_rep_goal', target: 40 },
+                         elapsed: 0, resting: false, trTotal: 0, trSets: [] };
+    try {
+      app._blabWoRender();
+      assert.equal(started, 1, 'a live unfinished runner gets its clock back');
+    } finally {
+      app._blabStartClock = realStart; app.document.getElementById = realGet;
+      app._blabWoState = null;
+    }
+  });
 }

@@ -965,7 +965,20 @@ has('function _phxReleaseWakeLockIfIdle(){\n  if(!window._phxTimerResync){ relea
 has('    _phxReleaseWakeLockIfIdle();\n    // v4.9.97: fire-and-clear the completion callback', 'FIX2: rest-overlay completion uses the guarded release');
 // a cancelled count-in must never leave a runner frozen at 0:00
 has('if(!window._blabWoTimer && !window._countInState && !st.resting && !st._finished) _blabStartClock();', 'FIX3: BLAB runner self-heals if its count-in was cancelled');
-has('window._blabWoState._finished = true', 'FIX3: finished/exited runner cannot restart its clock');
+// v4.9.254: LABEL CORRECTED, not the needle. This pins the SETTER; the behaviour lives
+// in the GUARD (`!st._finished` inside _blabWoRender's self-heal). Deleting the guard
+// while keeping the setter left this GREEN — I proved it by doing exactly that.
+//
+// Peptides' rule, and it caught one of mine: when a presence pin's LABEL claims a
+// behaviour, the property has outgrown the pin. A pin can only assert that text exists.
+// So this now says what it actually checks, and the behaviour is covered by the CLOCK:
+// cases in tests/training.mjs — which DO fail when the guard is removed.
+//
+// Worth recording how it was caught: breaking the guard did turn the harness red, but
+// via a DIFFERENT pin ("self-heals if its count-in was cancelled") whose needle happens
+// to contain the whole line. The property was protected by a string inside an unrelated
+// assertion. Reword that pin and this would have gone unguarded silently.
+has('window._blabWoState._finished = true', 'FIX3: STRUCTURAL the finished sentinel is set on exit (that it is HONOURED is tests/training.mjs CLOCK:)');
 // the count-in itself must never stamp the session clock
 {
   const i = html.indexOf('function showCountIn(callback){');

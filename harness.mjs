@@ -1896,11 +1896,34 @@ hasNotCode('.then(function(){});',     'PEP: empty swallow-everything then() gon
   const a = html.indexOf(START), b = html.indexOf(END);
   if (a < 0 || b < 0) { bad('PEP: sentinels missing — cannot check for swallowed errors'); return; }
   const blk = phxStripComments(html.slice(a, b));
+
+  // POSITIVE CONTROL ON THE PROBE ITSELF (Training's .2c682d2 suggestion).
+  // Everything below is a NEGATIVE over a block: it reports clean by finding
+  // zero. So it reports clean just as loudly when it has scanned nothing, or
+  // when the regex has quietly stopped matching the thing it hunts — and a
+  // clean result is the one nobody re-checks.
+  //
+  // Both of us were saved from a false clean today by something incidental:
+  // Training already knew a counter-example, I noticed a suspiciously round
+  // count. Neither is a method. So the detector is fed a known-bad string and
+  // must report it before its zero is believed.
+  const SWALLOW = /\.(?:then|catch)\(\s*function\s*\([^)]*\)\s*\{\s*\}\s*\)/g;
+  const CANARY = 'x.then(function(){}).catch(function(_e){});';
+  const caught = CANARY.match(SWALLOW) || [];
+  if (caught.length !== 2) {
+    bad(`PEP: the swallow DETECTOR is broken — it found ${caught.length} of 2 in a string built to contain exactly two. Its "no swallowed handlers" result below means nothing.`);
+    return;
+  }
+  if (blk.length < 20000) {
+    bad(`PEP: the peptide block scanned for swallows is only ${blk.length} chars — it is ~90k. Scanning almost nothing and reporting clean.`);
+    return;
+  }
+
   // Empty PROMISE handlers only. try/catch(_e){} around DOM and localStorage is
   // legitimate and deliberately not matched.
-  const swallows = blk.match(/\.(?:then|catch)\(\s*function\s*\([^)]*\)\s*\{\s*\}\s*\)/g) || [];
+  const swallows = blk.match(SWALLOW) || [];
   swallows.length === 0
-    ? ok('PEP: no empty promise handlers in the peptide block')
+    ? ok(`PEP: no empty promise handlers in the peptide block (detector verified against a canary, ${blk.length} chars scanned)`)
     : bad(`PEP: ${swallows.length} swallowed promise result(s) — ${[...new Set(swallows)].join(' , ')}. CLAUDE.md rule 8: keepalive and pagehide paths included.`);
 })();
 

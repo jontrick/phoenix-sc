@@ -2418,4 +2418,183 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app.document.getElementById = realGet; app._blabWoRender = realRender; app._blabWoState = null;
     }
   });
+
+  // ── SUPERSET PER-SET HISTORY (v4.9.254) ──────────────────────────────────
+  // Jon: "for the session where there are 2 max sets (eg upper part 2 db press max rep)
+  // - need the last session to show both sets from week before only shows 1 currently".
+  //
+  // The reader broke on a missing WEIGHT, but these are MAX REPS sets where reps are the
+  // point and the load is often bodyweight, unchanged, or simply not typed. The writer
+  // stores weight and reps behind SEPARATE truthiness checks, so a reps-only set wrote
+  // _reps_setN and no _wt_setN — and the reader stopped at set 1, returned nothing, and
+  // ssPrevBanner fell through to its single-value "last weight / last reps" fallback.
+  // Which looks identical on screen to showing one set, and is why it read as "shows 1".
+
+  const SS_A = 'Front Lat Pulldowns (wide overhand)';
+  const SS_B = 'Standing DB Military Press';
+  const ssState = (records) => ({ active: true, week: 1, last_completed_day: 2,
+    maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records, _ts: NEWER });
+  const ssBlock = () => {
+    const sess = app.blabGetSessionData(1, 3);
+    const phx = app.blabToPhoenixSession(sess, 1, 3);
+    return phx.exercises.find((e) => e._blabFmt === 'superset');
+  };
+
+  test('SETS: a reps-only set still counts — the exact case Jon hit', () => {
+    // Set 1 has a load, set 2 was logged at the same weight and left blank. Before the
+    // fix the reader broke at set 2 and he saw one number.
+    reset(); signIn(UID);
+    seed(KEY, ssState({
+      [`${SS_A}_wt_set1`]: 45, [`${SS_A}_reps_set1`]: 22,
+      [`${SS_A}_reps_set2`]: 14,
+      [`${SS_B}_reps_set1`]: 18, [`${SS_B}_reps_set2`]: 12
+    }));
+    const ss = ssBlock();
+    assert.ok(ss, 'the superset block is in Upper 2');
+    assert.equal(ss.prev_sets_a.length, 2, 'both A sets come back');
+    assert.equal(ss.prev_sets_a[1].reps, 14, 'including the one with no weight');
+    assert.equal(ss.prev_sets_b.length, 2, 'and both B sets, which had no weights at all');
+    assert.equal(ss.prev_sets_b[1].reps, 12, 'with the right reps');
+  });
+
+  test('SETS: weighted sets still work — no regression on the path that did function', () => {
+    reset(); signIn(UID);
+    seed(KEY, ssState({
+      [`${SS_A}_wt_set1`]: 45, [`${SS_A}_reps_set1`]: 22,
+      [`${SS_A}_wt_set2`]: 45, [`${SS_A}_reps_set2`]: 14
+    }));
+    const ss = ssBlock();
+    assert.equal(ss.prev_sets_a.length, 2, 'two sets');
+    assert.equal(ss.prev_sets_a[0].wt, 45, 'weight preserved');
+    assert.equal(ss.prev_sets_a[0].reps, 22, 'and reps');
+  });
+
+  test('SETS: a genuine gap still stops the walk', () => {
+    // The reader walks upward until a gap. A set with NEITHER weight nor reps is a real
+    // boundary — otherwise a stale set 4 from an older session would be pulled in.
+    reset(); signIn(UID);
+    seed(KEY, ssState({
+      [`${SS_A}_reps_set1`]: 20,
+      [`${SS_A}_reps_set3`]: 9   // set 2 missing entirely
+    }));
+    assert.equal(ssBlock().prev_sets_a.length, 1, 'stops at the gap rather than skipping it');
+  });
+
+  test('SETS: no history at all yields no per-set list, so the banner can fall back', () => {
+    reset(); signIn(UID);
+    seed(KEY, ssState({}));
+    const ss = ssBlock();
+    assert.equal(ss.prev_sets_a.length, 0, 'nothing invented on a first session');
+    assert.equal(ss.prev_sets_b.length, 0, 'for either movement');
+  });
+
+  test('SETS: a shorter session clears the previous one\'s extra sets', () => {
+    // Only reachable once the reader stopped breaking early — the old bug masked it.
+    // Three sets on file, two logged today: set 3 must not survive as a phantom.
+    reset(); signIn(UID);
+    const records = {
+      [`${SS_A}_wt_set1`]: 45, [`${SS_A}_reps_set1`]: 22,
+      [`${SS_A}_wt_set2`]: 45, [`${SS_A}_reps_set2`]: 14,
+      [`${SS_A}_wt_set3`]: 45, [`${SS_A}_reps_set3`]: 9
+    };
+    seed(KEY, ssState(records));
+    assert.equal(ssBlock().prev_sets_a.length, 3, 'three sets on file to begin with');
+
+    // Simulate the writer's clear step for a two-set session.
+    const s = app.blabGetState();
+    for (let n = 3; n <= 6; n++) {
+      delete s.records[`${SS_A}_wt_set${n}`];
+      delete s.records[`${SS_A}_reps_set${n}`];
+    }
+    app.blabSaveState(s);
+    assert.equal(ssBlock().prev_sets_a.length, 2, 'the third is gone, not left behind from another session');
+  });
+
+  // ── RESUMING AN UNFINISHED SESSION (v4.9.254) ────────────────────────────
+  // Jon: "going off screen resets session still and back to main screen". iOS kills the
+  // PWA on screen lock, the app reloads, and routes to Today.
+  //
+  // NOT fixed via _safeRestoreTabs. That list is Peptides' and excludes the session
+  // screen on purpose — restoring straight into a live workout drops him into something
+  // he did not choose to resume. Offering it on Today answers that rather than
+  // overriding it. Nothing in the shared boot path is touched, which is also why these
+  // cases live entirely in Training's surface.
+
+  const todayKey = () => `blab:3:3:${app._phxLocalISO()}`;
+  const withProgress = (blocks, extra = {}) => ({
+    active: true, week: 3, last_completed_day: 2,
+    maxes: { bench: 130, squat: 150, deadlift: 170 }, chin_max: 10, records: {},
+    blockProgress: { [todayKey()]: blocks }, _ts: NEWER, ...extra
+  });
+
+  test('RESUME: an unfinished session today is found', () => {
+    reset(); signIn(UID);
+    seed(KEY, withProgress({ '0': { done: true, summary: '30 reps' }, '1': { done: true } }));
+    const u = app._blabUnfinishedToday();
+    assert.ok(u, 'there is something to resume');
+    assert.equal(u.week, 3, 'the right week');
+    assert.equal(u.day, 3, 'and day');
+    assert.equal(u.done, 2, 'and how much he already did');
+  });
+
+  test('RESUME: a COMPLETED session is not offered as unfinished', () => {
+    // last_completed_day advancing past the day is how "finished" is told from
+    // "part-way". Without this he would be invited to resume a session he just finished.
+    reset(); signIn(UID);
+    seed(KEY, withProgress({ '0': { done: true } }, { last_completed_day: 3 }));
+    assert.equal(app._blabUnfinishedToday(), null, 'nothing to resume once the day is complete');
+  });
+
+  test('RESUME: yesterday\'s unfinished session is not offered today', () => {
+    // The key carries the LOCAL date. A 4:30am Brisbane session files under the previous
+    // UTC day, so a UTC key would have made this wrong for exactly his training hour.
+    reset(); signIn(UID);
+    const s = { active: true, week: 3, last_completed_day: 2,
+      maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {},
+      blockProgress: { 'blab:3:3:2020-01-01': { '0': { done: true } } }, _ts: NEWER };
+    seed(KEY, s);
+    assert.equal(app._blabUnfinishedToday(), null, 'an old day does not surface');
+  });
+
+  test('RESUME: progress with nothing actually done is not a resumable session', () => {
+    reset(); signIn(UID);
+    seed(KEY, withProgress({ '0': { done: false } }));
+    assert.equal(app._blabUnfinishedToday(), null, 'an empty record is not progress');
+  });
+
+  test('RESUME: the card is ON the Today screen, not merely detectable', () => {
+    // Storing it and never showing it is the shape that hid the calendar bug for four
+    // versions. This drives the real renderer.
+    reset(); signIn(UID);
+    seed(KEY, withProgress({ '0': { done: true }, '1': { done: true } }));
+    const inner = { innerHTML: '', style: {}, querySelector: () => null };
+    const card = { style: {}, querySelector: () => inner, removeAttribute: () => {}, classList: { contains: () => false } };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'card-today-session' ? card : null);
+    try {
+      app.renderTodayScreen();
+      assert.ok(/In progress/i.test(inner.innerHTML), 'the card says the session is in progress');
+      assert.ok(/Resume/i.test(inner.innerHTML), 'and offers to resume it');
+      assert.ok(/blabOpenSession\(3,3\)/.test(inner.innerHTML), 'wired to the right week and day');
+      assert.ok(/Start over/i.test(inner.innerHTML), 'with a way out, so it cannot hold the card hostage');
+      assert.ok(/2 blocks already logged/.test(inner.innerHTML), 'and says how much is banked');
+    } finally { app.document.getElementById = realGet; }
+  });
+
+  test('RESUME: Start over clears it and the card stops offering', () => {
+    reset(); signIn(UID);
+    seed(KEY, withProgress({ '0': { done: true } }));
+    assert.ok(app._blabUnfinishedToday(), 'offered first');
+    assert.equal(app._blabDiscardUnfinished(3, 3), true, 'discard reports success');
+    assert.equal(app._blabUnfinishedToday(), null, 'and it is no longer offered');
+    assert.ok(read(KEY), 'while the rest of his programme state survives');
+    assert.equal(read(KEY).week, 3, 'unchanged');
+  });
+
+  test('RESUME: discarding a session that is not there changes nothing', () => {
+    reset(); signIn(UID);
+    seed(KEY, withProgress({ '0': { done: true } }));
+    assert.equal(app._blabDiscardUnfinished(9, 9), false, 'reports it did nothing');
+    assert.ok(app._blabUnfinishedToday(), 'and the real one is untouched');
+  });
 }

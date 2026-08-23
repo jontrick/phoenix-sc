@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.253';
+var APP_VERSION='4.9.254';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5357,6 +5357,19 @@ window._blabBuildSupersetBlock = function(ex, idx){
               if(partner.name&&l.kb) bs.records[partner.name+'_wt_set'+sn]=l.kb;
               if(partner.name&&l.b) bs.records[partner.name+'_reps_set'+sn]=l.b;
             });
+            // v4.9.254: clear any set beyond what was just logged. These records are
+            // written per set number and were never cleared, so a 3-set week followed by
+            // a 2-set week left set 3 on file and the reader — which walks upward until a
+            // gap — would show a phantom third set from a different session. Only visible
+            // once the reader stopped breaking early, so it was masked by the bug above.
+            for(var _cl=st.log.length+1; _cl<=6; _cl++){
+              delete bs.records[ex2.name+'_wt_set'+_cl];
+              delete bs.records[ex2.name+'_reps_set'+_cl];
+              if(partner.name){
+                delete bs.records[partner.name+'_wt_set'+_cl];
+                delete bs.records[partner.name+'_reps_set'+_cl];
+              }
+            }
             window.blabSaveState(bs);
           }
         }
@@ -5619,16 +5632,35 @@ window.blabToPhoenixSession = function(sess, week, day){
       // v4.9.106: carry previous reps too so the renderer shows LOAD × REPS for A and B.
       phxEx.prev_reps_a = _ssRec[ex.movements[0].name+'_reps'] || 0;
       phxEx.prev_reps_b = _ssRec[ex.movements[1].name+'_reps'] || 0;
-      var _ssPA=[],_ssPB=[];
-      for(var _sn=1;_sn<=6;_sn++){
-        var _swtA=_ssRec[ex.movements[0].name+'_wt_set'+_sn]; if(!_swtA) break;
-        _ssPA.push({wt:_swtA,reps:_ssRec[ex.movements[0].name+'_reps_set'+_sn]||0});
+      // v4.9.254 — Jon: "for the session where there are 2 max sets (eg upper part 2 db
+      // press max rep) - need the last session to show both sets from week before, only
+      // shows 1 currently".
+      //
+      // THE HISTORY WAS GATED ON WEIGHT. Both loops broke on a missing _wt_setN — but
+      // these supersets are MAX REPS sets ("Max reps 20-25 set 1, 10-20 set 2"), where
+      // the reps are the whole point and the load is often bodyweight, unchanged, or
+      // simply not typed. The writer stores weight and reps INDEPENDENTLY (each behind
+      // its own truthiness check), so a set logged with reps and no weight wrote
+      // _reps_setN and no _wt_setN — and the reader then broke at set 1, returned an
+      // empty array, and ssPrevBanner fell through to its single-value fallback.
+      //
+      // That fallback is why he saw exactly one number instead of two: it was not
+      // showing set 1 of 2, it was showing the separate "last weight / last reps"
+      // record, which looks the same on screen.
+      //
+      // A set now counts if it has EITHER a weight or reps.
+      function _ssPrevSets(movName){
+        var out=[];
+        for(var n=1;n<=6;n++){
+          var wt=_ssRec[movName+'_wt_set'+n]||0;
+          var rp=_ssRec[movName+'_reps_set'+n]||0;
+          if(!wt && !rp) break;
+          out.push({wt:wt,reps:rp});
+        }
+        return out;
       }
-      for(var _sni=1;_sni<=6;_sni++){
-        var _swtB=_ssRec[ex.movements[1].name+'_wt_set'+_sni]; if(!_swtB) break;
-        _ssPB.push({wt:_swtB,reps:_ssRec[ex.movements[1].name+'_reps_set'+_sni]||0});
-      }
-      phxEx.prev_sets_a=_ssPA; phxEx.prev_sets_b=_ssPB;
+      phxEx.prev_sets_a=_ssPrevSets(ex.movements[0].name);
+      phxEx.prev_sets_b=_ssPrevSets(ex.movements[1].name);
 
     } else if(fmt === 'total_rep_goal'){
       phxEx.sets = 1;
@@ -5987,6 +6019,59 @@ function _blabProgressKey(){
     return 'ai:' + day;
   } catch(_e){ return null; }
 }
+// v4.9.254 — UNFINISHED SESSION, FOUND WITHOUT THE BOOT PATH.
+//
+// Jon: "going off screen resets session still and back to main screen". iOS kills the
+// PWA on screen lock, so the app reloads and routes to Today. .251 fixed the half where
+// his progress was lost; this is the half where he cannot get back to it.
+//
+// NOT by adding 'session' to _safeRestoreTabs. That list is Peptides' and it excludes
+// the session screen deliberately — restoring straight into a live workout drops him
+// into something he did not choose to resume, which is a real hazard and not one I want
+// to override. Offering it on Today answers that objection instead of arguing with it:
+// he is asked, not dropped.
+//
+// Derived from the progress keys rather than from a new pointer, so there is no second
+// piece of state to keep in sync with the first.
+// Clearing an unfinished session. Without this the resume card holds the Today card
+// until the local day rolls over — and "I did two blocks and want to start again" is a
+// normal thing to want. Deliberately drops only that session's progress key.
+window._blabDiscardUnfinished = function(week, day){
+  try {
+    var s = window.blabGetState(); if(!s || !s.blockProgress) return false;
+    var d = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    var k = 'blab:' + week + ':' + day + ':' + d;
+    if(!s.blockProgress[k]) return false;
+    delete s.blockProgress[k];
+    window.blabSaveState(s);
+    if(typeof renderTodayScreen === 'function') renderTodayScreen();
+    return true;
+  } catch(_e){ console.warn('[PHX] _blabDiscardUnfinished failed:', _e); return false; }
+};
+
+window._blabUnfinishedToday = function(){
+  try {
+    var s = window.blabGetState(); if(!s || !s.blockProgress) return null;
+    var day = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    if(!day) return null;
+    var best = null;
+    Object.keys(s.blockProgress).forEach(function(k){
+      // blab:<week>:<day>:<localdate>
+      var p = String(k).split(':');
+      if(p[0] !== 'blab' || p[3] !== day) return;
+      var blocks = s.blockProgress[k] || {};
+      var done = Object.keys(blocks).filter(function(b){ return blocks[b] && blocks[b].done; }).length;
+      if(!done) return;
+      // A session already advanced past is not unfinished — completing day N sets
+      // last_completed_day to N, so this is how "done" is told from "part-way".
+      var w = parseInt(p[1], 10), d = parseInt(p[2], 10);
+      if(s.week === w && s.last_completed_day >= d) return;
+      if(!best || done > best.done) best = {week: w, day: d, done: done, key: k};
+    });
+    return best;
+  } catch(_e){ return null; }
+};
+
 window._blabGetBlockProgress = function(){
   try {
     var s = window.blabGetState(); if(!s) return {};
@@ -18233,6 +18318,36 @@ function renderTodayScreen(){
             if(_hrs < 47) _canTrain = false;
           }
         }
+        // v4.9.254 — UNFINISHED SESSION takes the card.
+        //
+        // Jon: "going off screen resets session still and back to main screen". iOS kills
+        // the PWA on screen lock; the app reloads and routes to Today. .251 stopped his
+        // progress being lost — this is the other half, getting back to it.
+        //
+        // OFFERED, NOT AUTO-RESUMED. The boot-restore safe list deliberately excludes the
+        // session screen (Peptides, .206) because restoring straight into a live workout
+        // drops him into something he did not choose to resume. That objection is right,
+        // so this answers it rather than overriding it: the card asks. Nothing in the
+        // shared boot path is touched.
+        //
+        // Sits BELOW paused: if the programme is paused he is not mid-session.
+        var _unfin = (!_bs.paused && typeof window._blabUnfinishedToday === 'function')
+          ? window._blabUnfinishedToday() : null;
+        if(_unfin){
+          var _ulabel = _dayLabels[_unfin.day] || ('Day ' + _unfin.day);
+          _inner.innerHTML =
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">In progress &middot; Week '+_unfin.week+'</div>'+
+            '<div class="game-card-title" style="font-size:26px;">'+_ulabel+'</div>'+
+            '<div style="font-size:13px;color:var(--text3);margin-top:6px;">'+_unfin.done+' block'+(_unfin.done===1?'':'s')+' already logged today. Your progress is saved.</div>'+
+            '<div style="display:flex;gap:10px;margin-top:16px;">'+
+              '<button onclick="event.stopPropagation();window.blabOpenSession('+_unfin.week+','+_unfin.day+');" style="flex:2;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Resume &rarr;</button>'+
+              '<button onclick="event.stopPropagation();window._blabDiscardUnfinished('+_unfin.week+','+_unfin.day+');" style="flex:1;padding:15px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);cursor:pointer;">Start over</button>'+
+            '</div>';
+          _card.style.border = '2px solid var(--gold)';
+          _renderTodayRemainingRow(_bs, _nextDay, _weekDone);
+          return;
+        }
+
         // PAUSED STATE — takes priority over all other card states
         if(_bs.paused){
           var _pausedDays = _bs.pausedAt ? Math.floor((Date.now()-new Date(_bs.pausedAt).getTime())/86400000) : 0;
@@ -25432,7 +25547,7 @@ function _pepTabStock(ps){
   h += "<button id=\"pep-import-open\" style=\"background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Import</button>";
   h += "<button id=\"pep-add-stack\" style=\"background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;padding:8px 14px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">+ Add</button>";
   h += "</div>";
-  // v4.9.253: the export fallback lands HERE, in normal flow after the header
+  // v4.9.254: the export fallback lands HERE, in normal flow after the header
   // row. v4.9.252 spliced a closing </div> and a display:none opener in beside
   // the Import button, which swallowed the + Add button into a hidden container
   // and removed it from the STOCK screen. Shipped, then found by reading the

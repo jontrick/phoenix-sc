@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.253'", 'version is 4.9.253');
+has("var APP_VERSION='4.9.254'", 'version is 4.9.254');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -823,8 +823,16 @@ has('_banA=ssPrevBanner(', 'P11-B1: _banA computed from ssPrevBanner');
 has('_banB=ssPrevBanner(', 'P11-B1: _banB computed from ssPrevBanner');
 has("bs.records[ex2.name+'_wt_set'+sn]", 'P11-B1: per-set weight saved by set number');
 has("bs.records[ex2.name+'_reps_set'+sn]", 'P11-B1: per-set reps saved by set number');
-has("phxEx.prev_sets_a=_ssPA", 'P11-B1: prev_sets_a passed to renderer');
-has("phxEx.prev_sets_b=_ssPB", 'P11-B1: prev_sets_b passed to renderer');
+// v4.9.254: was pinned to the literal "phxEx.prev_sets_a=_ssPA" — the old inline
+// accumulator variable. That is an implementation detail, and it failed the moment the
+// weight-gating bug was fixed by extracting the walk into _ssPrevSets(). Pinned to the
+// ASSIGNMENT now, which is the property that matters: the renderer only shows both sets
+// if these reach it. The behaviour itself is covered by SETS: cases in tests/training.mjs,
+// which fail if the walk stops at a missing weight again.
+hasCode("phxEx.prev_sets_a=", 'P11-B1: prev_sets_a passed to renderer');
+hasCode("phxEx.prev_sets_b=", 'P11-B1: prev_sets_b passed to renderer');
+hasCode("if(!wt && !rp) break;", 'SETS: per-set history counts a set with reps and no weight (max-reps supersets)');
+hasNotCode("var _swtA=_ssRec[ex.movements[0].name+'_wt_set'", 'SETS: the weight-gated walk is gone — it stopped at set 1 and the banner fell back to a single value');
 // Bug 2: iOS tap counter — button elements with touch-action
 has("class=\"phx-tt-minus\"", 'P11-B2: phx-tt-minus exists');
 has("touch-action:manipulation", 'P11-B2: touch-action:manipulation on tap counter buttons');

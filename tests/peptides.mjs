@@ -2059,6 +2059,84 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.notIncludes(rec, '71', 'nor a marker value');
     });
 
+    // ── THE SIBLING I LEFT STANDING, fourth time today ─────────────────────
+    // Every MIRROR case above passes useKeepalive=false. The keepalive branch —
+    // the pagehide flush — had none.
+    //
+    // Which is the wrong way round twice over. It is the branch I specifically
+    // hardened in v4.9.228, adding the res.ok check because fetch RESOLVES on a
+    // 4xx and the missing-column bug was a 400. And it is the last-chance write:
+    // it fires as he closes the app or the screen locks, so if it fails
+    // silently the day's dose ticks never leave the phone.
+    //
+    // I wrote the fix for this path, then wrote tests for the other one.
+    // Training named the pattern — fix the second instance, leave the first,
+    // because the first feels handled once you have just thought about it — and
+    // I did it again inside the hour.
+    const kaSetUp = (response, opts) => {
+      reset(); signIn(UID);
+      const seen = {};
+      app.fetch = (url, init) => {
+        seen.url = url; seen.init = init;
+        if (opts && opts.reject) return Promise.reject(new Error('offline'));
+        return Promise.resolve(response);
+      };
+      return seen;
+    };
+    const PAYLOAD = { stacks: [{ compoundId: 'bpc157', dose: 0.5 }], _ts: NEWER };
+
+    test('MIRROR keepalive records a 4xx, which RESOLVES rather than rejecting', async () => {
+      kaSetUp({ ok: false, status: 400 });
+      app._pepSendCloud(PAYLOAD, true);
+      await new Promise(r => setTimeout(r, 0));
+      const rec = JSON.stringify(read('phx_last_write_error') || {});
+      assert.ok(rec.includes('pep mirror keepalive'),
+        'fetch only REJECTS on network failure — a 400 resolves, so a .catch alone ' +
+        'would miss it. This is the exact shape that hid a missing peptide_state ' +
+        'column for twelve versions');
+      assert.ok(rec.includes('400'), 'and the status is in the record');
+    });
+
+    test('MIRROR keepalive records a network rejection under its own context', async () => {
+      kaSetUp(null, { reject: true });
+      app._pepSendCloud(PAYLOAD, true);
+      await new Promise(r => setTimeout(r, 0));
+      const rec = JSON.stringify(read('phx_last_write_error') || {});
+      assert.ok(rec.includes('keepalive') && rec.includes('reject'),
+        'a DIFFERENT context from the 4xx branch — the PM ring coalesces by context, ' +
+        'so a schema fault and an offline blip sharing one would hide each other');
+    });
+
+    test('MIRROR keepalive records nothing when the write succeeds', async () => {
+      kaSetUp({ ok: true, status: 204 });
+      app._pepSendCloud(PAYLOAD, true);
+      await new Promise(r => setTimeout(r, 0));
+      assert.equal(read('phx_last_write_error'), null,
+        'a clean flush is silent — an error ring that fills up on success tells him ' +
+        'nothing when something is actually wrong');
+    });
+
+    test('MIRROR keepalive actually sets keepalive, which is the whole point', async () => {
+      const seen = kaSetUp({ ok: true, status: 204 });
+      app._pepSendCloud(PAYLOAD, true);
+      await new Promise(r => setTimeout(r, 0));
+      assert.equal(seen.init.keepalive, true,
+        'without this flag the browser drops the request as the page goes away, ' +
+        'and the pagehide flush silently does nothing at all');
+      assert.equal(seen.init.method, 'PATCH', 'against the REST endpoint');
+      assert.ok(String(seen.url).includes('/rest/v1/profiles'), 'the profiles row');
+    });
+
+    test('MIRROR keepalive sends the payload it was given, not raw state', async () => {
+      const seen = kaSetUp({ ok: true, status: 204 });
+      app._pepSendCloud({ stacks: [{ compoundId: 'bpc157', dose: 0.5 }], _ts: NEWER }, true);
+      await new Promise(r => setTimeout(r, 0));
+      const body = JSON.parse(seen.init.body);
+      assert.ok(body.peptide_state, 'wrapped in the column name');
+      assert.notIncludes(JSON.stringify(body), 'bloods',
+        'and whatever the caller scrubbed stays scrubbed on this path too');
+    });
+
     test('MIRROR an empty protocol is declined rather than overwriting a real one', async () => {
       reset(); signIn(UID);
       app.window = app.window || {};

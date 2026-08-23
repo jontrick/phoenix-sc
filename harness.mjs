@@ -942,7 +942,16 @@ hasNotCode('setInterval(function(){ secLeft--;', 'FIX1: EMOM tick-counter secLef
 hasNotCode('coreSecsLeft--;', 'FIX1: Core circuit tick-counter decrement removed');
 // FIX 2 — wake lock held for every timed session, re-requested after a screen lock.
 has('if(wakeLock && !wakeLock.released) return;', 'FIX2: released sentinel replaced, live one never duplicated');
-has('requestWakeLock(); // persistent', 'FIX2: wake lock re-requested when the page becomes visible (persistent)');
+// v4.9.254: LABEL CORRECTED. This needle is the BOOT-TIME persistent call, not the one
+// inside the visibilitychange handler — the label claimed the handler and pinned
+// something else. Proved by deleting the handler's call: this stayed GREEN, and what
+// went red was FIX1's hook pin, whose needle spans the handler and happens to contain
+// the line. Second load-bearing-needle instance found today by the same inversion.
+//
+// The handler cannot be fired in the sandbox (document.addEventListener is a noop), so
+// the wiring stays structural — but the PROPERTY it depends on is now covered by the
+// WAKELOCK: cases in tests/training.mjs, which had nothing behind them either.
+has('requestWakeLock(); // persistent', 'FIX2: STRUCTURAL the boot-time persistent wake-lock call is present (the visibility hook is FIX1; the replace/no-duplicate behaviour is tests/training.mjs WAKELOCK:)');
 has('function showCountIn(callback){\n  // Kill any prior count-in still running before we start a new one\n  _phxCancelCountIn();\n  requestWakeLock();', 'FIX2: wake lock held through the count-in');
 hasNotCode("navigator.wakeLock.request('screen').then(function(lock){", 'FIX2: BLAB inline wakeLock request replaced by shared helper');
 // FIX 3 — one 5-4-3-2-1-GO! count-in before every timed session, never scored.

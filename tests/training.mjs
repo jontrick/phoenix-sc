@@ -2660,4 +2660,67 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app._blabWoState = null;
     }
   });
+
+  // ── THE WAKE LOCK (v4.9.NEXT) ─────────────────────────────────────────────
+  // Second instance of the load-bearing-needle variant, found the same way as the first:
+  // break the property, see which pin goes red, ask whether that pin's label mentions it.
+  //
+  // 'FIX2: wake lock re-requested when the page becomes visible' pins the line
+  // `requestWakeLock(); // persistent` — which is a DIFFERENT call site, the boot-time
+  // persistent one, not the visibilitychange handler. Deleting the handler's call left
+  // that pin GREEN; what went red was 'FIX1: visibilitychange→visible hook', whose needle
+  // spans the handler and happens to contain the line. Functional coverage: zero.
+  //
+  // Why it matters at 4:30am: iOS releases the wake-lock sentinel when the screen locks.
+  // If it is not re-acquired on wake, the screen sleeps again mid-session — during a
+  // timed effort, with his hands on a barbell.
+  //
+  // The handler itself cannot be fired here (document.addEventListener is a noop in the
+  // sandbox), so that wiring stays structural and its pin now SAYS so. What IS testable
+  // is the property the handler depends on, which had nothing behind it either.
+
+  const wakeHarness = () => {
+    let requests = 0;
+    const realNav = app.navigator;
+    app.navigator = { wakeLock: { request: () => { requests++; return Promise.resolve({ released: false, release: () => Promise.resolve() }); } } };
+    return { count: () => requests, restore: () => { app.navigator = realNav; app.wakeLock = null; } };
+  };
+
+  test('WAKELOCK: a RELEASED sentinel is replaced — the iOS screen-lock case', () => {
+    // iOS hands back a sentinel with released:true after a screen lock. If that is
+    // treated as "already held", the screen sleeps for the rest of the session.
+    reset(); signIn(UID);
+    const w = wakeHarness();
+    try {
+      app.wakeLock = { released: true, release: () => Promise.resolve() };
+      return app.requestWakeLock().then(() => {
+        assert.equal(w.count(), 1, 'a new sentinel was acquired to replace the dead one');
+      });
+    } finally { w.restore(); }
+  });
+
+  test('WAKELOCK: a LIVE sentinel is never duplicated', () => {
+    // The other half, and the reason the guard is not simply "always request": each
+    // request returns a new sentinel, so re-requesting over a live one orphans it. Leak
+    // one per screen lock and the browser eventually stops honouring them.
+    reset(); signIn(UID);
+    const w = wakeHarness();
+    try {
+      app.wakeLock = { released: false, release: () => Promise.resolve() };
+      return app.requestWakeLock().then(() => {
+        assert.equal(w.count(), 0, 'no second sentinel while one is still live');
+      });
+    } finally { w.restore(); }
+  });
+
+  test('WAKELOCK: with none held, one is acquired', () => {
+    reset(); signIn(UID);
+    const w = wakeHarness();
+    try {
+      app.wakeLock = null;
+      return app.requestWakeLock().then(() => {
+        assert.equal(w.count(), 1, 'acquired from cold');
+      });
+    } finally { w.restore(); }
+  });
 }

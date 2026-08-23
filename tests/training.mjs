@@ -36,6 +36,21 @@
 
 import { recordingDom as sharedRecordingDom } from './helpers/dom.mjs';
 
+// ── SETTLING ASYNC WORK ─────────────────────────────────────────────────────
+// setTimeout(0) is a MACROTASK: the entire microtask queue drains before it fires, so
+// the depth of the promise chain under test cannot matter. `await Promise.resolve()`
+// is shorter and looks cleaner, and it makes the case depend on counting ticks inside
+// code it does not own.
+//
+// COST DEMONSTRATED, not reasoned: adding two behaviourally-meaningless pass-through
+// .then links to _blabConfirm broke the hand-counted version of the confirm case. Two
+// links, zero behaviour change, red suite.
+//
+// A rejection also needs one more tick than a resolution — the .then passes through
+// before .catch sees it — which is how this was found: one sibling case failed loudly
+// enough to indict four that were passing by luck.
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
 const UID = 'test-user';
 const KEY = `blab_v1_${UID}`;
 const OLDER = '2026-08-01T00:00:00.000Z';
@@ -998,7 +1013,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       ov.handlers.click({ target: { not: 'the overlay' } });
       let settled = false;
       p.then(() => { settled = true; });
-      await Promise.resolve();
+      await settle();
       assert.equal(settled, false, 'clicking the box itself leaves the decision open');
       dom.byButton('Cancel').handlers.click();
       assert.equal(await p, false, 'and it still resolves when a button is used');
@@ -1025,8 +1040,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     try {
       app._blabConfirm('Start Week 6', 'Begin the next week?', () => { ran = true; }, 'Start Week 6');
       dom.byButton('Start Week 6').handlers.click();
-      await Promise.resolve();
-      await Promise.resolve();
+      await settle();
       assert.equal(ran, true, 'confirming runs the action');
     } finally { dom.restore(); }
   });
@@ -1035,10 +1049,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     let ran = false;
     const dom = recordingDom();
     try {
+      // POSITIVE CONTROL FIRST. `ran === false` is also true when the callback has
+      // simply not run yet, so this case could never fail from settling too early — it
+      // stayed green under the pass-through inversion that reddened its sibling. Proving
+      // the callback WOULD have fired by now is what makes the negative mean something.
+      let control = false;
+      app._blabConfirm('Control', 'x', () => { control = true; }, 'Control');
+      dom.byButton('Control').handlers.click();
+      await settle();
+      assert.equal(control, true, 'a confirmed callback has definitely run by this point');
+
       app._blabConfirm('Start Week 6', 'Begin the next week?', () => { ran = true; }, 'Start Week 6');
       dom.byButton('Cancel').handlers.click();
-      await Promise.resolve();
-      await Promise.resolve();
+      await settle();
       assert.equal(ran, false, 'cancelling runs nothing');
     } finally { dom.restore(); }
   });
@@ -2739,12 +2762,6 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // The keepalive branch is fetch, not supabase-js, and that difference is the whole
   // point: FETCH RESOLVES ON A 4xx. A 400 from a missing column arrives as a resolved
   // promise with ok:false, so a .then that only looks for a thrown error sees success.
-
-  // A rejection needs TWO microtask ticks to reach .catch (the .then passes through
-  // first), a resolution needs one. The resolved cases happened to pass on a single tick
-  // — i.e. they were right by luck, and a slower chain would have made them flaky. Every
-  // case below settles the same way so none of them depends on that.
-  const settle = () => new Promise((r) => setTimeout(r, 0));
 
   const cloudHarness = () => {
     const calls = [];

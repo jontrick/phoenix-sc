@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.260';
+var APP_VERSION='4.9.261';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23118,16 +23118,26 @@ function _pepDoseOn(stack, c, dayNum){
 
 // The step that starts today, if one does — so the app can say so rather than
 // leaving him to notice a number changed.
+// v4.9.261: announced on the first DOSING day at or after the step, not on the
+// step's calendar day. NAD+ escalates on day 7 from its start, which lands on a
+// Sunday — and NAD+ only runs Mon/Wed/Fri. Comparing against yesterday meant the
+// banner fired on a day the compound was not due, so it never rendered at all
+// and the dose simply changed underneath him at the next injection.
+//
+// The right comparison is against the dose the last time he actually INJECTED
+// it, which is the only "changed" he can perceive.
 function _pepDoseStepToday(stack, c, dayNum){
   var steps = stack && stack.doseSteps;
-  if(!Array.isArray(steps) || !(dayNum >= 0)) return null;
-  var hit = null;
-  steps.forEach(function(st){
-    if(parseInt(st && st.fromDay, 10) === dayNum && parseFloat(st && st.dose) > 0) hit = parseFloat(st.dose);
-  });
-  if(hit === null) return null;
-  var prev = _pepDoseOn(stack, c, dayNum - 1);
-  return (prev !== hit) ? {from: prev, to: hit} : null;
+  if(!Array.isArray(steps) || !steps.length || !(dayNum >= 0)) return null;
+  var now = _pepDoseOn(stack, c, dayNum);
+  if(!(now > 0) || !stack.startDate) return null;
+  var base = new Date(stack.startDate + "T12:00:00").getTime();
+  for(var k = dayNum - 1; k >= 0; k--){
+    if(_pepStackDueOn(stack, c, new Date(base + k * 86400000)) === null) continue;
+    var was = _pepDoseOn(stack, c, k);
+    return (was > 0 && was !== now) ? {from: was, to: now} : null;
+  }
+  return null;   // first dose of the course: nothing has changed yet
 }
 
 function _pepLiveRecon(stack, c){
@@ -23892,7 +23902,7 @@ function pepRenderTodayTile(){
       "<div style=\"display:flex;align-items:center;justify-content:space-between;\">" +
       "<div style=\"font-size:13px;color:var(--text2);\">No doses scheduled today.</div>" +
       "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:700;color:#7B68EE;letter-spacing:1px;white-space:nowrap;margin-left:12px;\">PORTAL &rsaquo;</div>" +
-      "</div></div>";
+      "</div>" + "<button data-pep-tile-add=\"1\" style=\"width:100%;padding:9px;margin-top:10px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>" + "</div>";
     _pepBindTile(tile);
     return;
   }
@@ -23940,6 +23950,9 @@ function pepRenderTodayTile(){
   h += block("Morning", doses.morning);
   h += block("Any Time", doses.anytime);
   h += block("Evening", doses.evening);
+  // v4.9.261: adding a dose from the main screen, without opening the portal.
+  // stopPropagation on the handler, because the whole tile navigates.
+  h += "<button data-pep-tile-add=\"1\" style=\"width:100%;padding:9px;margin-top:10px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:700;color:#7B68EE;letter-spacing:1px;padding-top:10px;\">OPEN PORTAL &rsaquo;</div>";
   h += "</div>";
   tile.innerHTML = h;
@@ -23953,17 +23966,21 @@ function _pepBindTile(tile){
   tile.querySelectorAll("[data-pep-tile-check]").forEach(function(btn){
     btn.addEventListener("click", function(e){
       e.stopPropagation();
-      var ps = pepGetState();
-      var today = _pepToday();
-      if(!ps.checked) ps.checked = {};
-      if(!ps.checked[today]) ps.checked[today] = [];
-      var id = btn.getAttribute("data-pep-tile-check");
-      var i = ps.checked[today].indexOf(id);
-      if(i >= 0) ps.checked[today].splice(i, 1);
-      else ps.checked[today].push(id);
-      pepSaveState(ps);
+      // v4.9.261: routes through pepToggleDose rather than writing ps.checked
+      // itself. This handler was a SECOND implementation of ticking a dose and
+      // it did not decrement stock — so a dose ticked from the Today tile came
+      // out of no vial, while the same dose ticked inside the portal did. His
+      // stock drifted by however often he used the quicker surface.
+      //
+      // Two paths for one action is the bug; deleting one is the fix. Skip
+      // clearing, mg-accurate consumption and the titrated dose all live in
+      // pepToggleDose and were all silently missing here.
+      pepToggleDose(btn.getAttribute("data-pep-tile-check"));
       pepRenderTodayTile();
     });
+  });
+  tile.querySelectorAll("[data-pep-tile-add]").forEach(function(btn){
+    btn.addEventListener("click", function(e){ e.stopPropagation(); pepOpenAddDose(); });
   });
 }
 
@@ -25631,8 +25648,16 @@ function _pepTabOverview(ps){
   if(!sel) sel = phases[0];
 
   h += _pepPanelProtocolPhases(ps);
-  h += _pepPanelPhases(ps, phases, sel);
-  h += _pepPanelSchedule(ps, sel);
+  // v4.9.261: the calendar IS the protocol page now. The derived-cohort panels
+  // and the count grid described the protocol; this one tells him what to do,
+  // which is what he opens the page for. _pepPanelPhases / _pepPanelSchedule /
+  // _pepPanelCompounds are kept in the file rather than deleted — they are the
+  // compound-detail views and are reachable from a compound row.
+  h += _pepPanelCalendar(ps);
+  // Compound detail stays, BELOW the calendar. He asked for the calendar
+  // instead of the current page, not for the loss of per-compound recon, doses
+  // per vial and stock — that panel answers a different question and dropping
+  // it would have been me over-reading "instead of".
   h += _pepPanelCompounds(ps, sel);
   return h;
 }
@@ -25739,6 +25764,86 @@ function _pepPanelPhases(ps, phases, sel){
 }
 
 // ── Panel 2 — schedule ────────────────────────────────────────────────────
+// ── PROTOCOL as a calendar (v4.9.261) ────────────────────────────────────────
+// Jon: "the protocol page should be a calendar view with the compounds and
+// dosages in each day instead of the current page."
+//
+// A vertical agenda rather than a 7-column month grid, deliberately. On a 390px
+// phone a week grid gives each day about 50px, which fits a dot and a number and
+// nothing he actually wants — the compound names and the doses. He reads this at
+// 4:30am to find out what to draw; the answer has to be on the page, not behind
+// a tap.
+//
+// Shows every compound on its day with dose AND units, marks today, and folds
+// runs of empty days into one line so a quiet week does not push October off the
+// bottom of the screen.
+function _pepPanelCalendar(ps){
+  var todayISO = _pepToday();
+  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var MON  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var span = _pepCalWeeks * 7;
+
+  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">Schedule</div>";
+  h += "<div style=\"font-size:10px;color:var(--text3);\">next " + span + " days</div>";
+  h += "</div>";
+
+  var base = new Date(todayISO + "T12:00:00").getTime();
+  var emptyRun = 0, emptyFrom = null;
+
+  function flushEmpty(){
+    if(!emptyRun) return "";
+    var txt = emptyRun === 1 ? "1 rest day" : emptyRun + " rest days";
+    var r = "<div style=\"font-size:11px;color:var(--text3);padding:6px 14px;margin-bottom:6px;\">" +
+            _esc(txt) + (emptyFrom ? " &middot; from " + _esc(emptyFrom) : "") + "</div>";
+    emptyRun = 0; emptyFrom = null;
+    return r;
+  }
+
+  for(var i = 0; i < span; i++){
+    var day = new Date(base + i * 86400000);
+    var iso = _pepISO(day);
+    var due = _pepGetDoses(ps, iso);
+    var items = due.morning.concat(due.anytime).concat(due.evening);
+    if(!items.length){
+      if(!emptyRun) emptyFrom = DAYS[day.getDay()].slice(0,3) + " " + day.getDate() + " " + MON[day.getMonth()];
+      emptyRun++;
+      continue;
+    }
+    h += flushEmpty();
+
+    var isToday = iso === todayISO;
+    var checked = (ps.checked && ps.checked[iso]) || [];
+    h += "<div style=\"background:var(--bg2);border:1px solid " + (isToday ? "#7B68EE" : "var(--border)") + ";border-radius:var(--radius);padding:10px 14px;margin-bottom:8px;\">";
+    h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;\">";
+    h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:" + (isToday ? "#7B68EE" : "var(--text2)") + ";\">" +
+         (isToday ? "Today &middot; " : "") + _esc(DAYS[day.getDay()]) + "</div>";
+    h += "<div style=\"font-size:10px;color:var(--text3);flex-shrink:0;\">" + day.getDate() + " " + MON[day.getMonth()] + "</div>";
+    h += "</div>";
+
+    items.forEach(function(it){
+      var done = checked.indexOf(it.id) >= 0;
+      var skipped = _pepIsSkipped(ps, iso, it.id);
+      h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:3px 0;" + (done || skipped ? "opacity:0.5;" : "") + "\">";
+      h += "<div style=\"font-size:13px;color:var(--text);" + (skipped ? "text-decoration:line-through;" : "") + "min-width:0;\">" + _esc(it.name) +
+           (it.extra ? " <span style=\"font-size:9px;color:var(--text3);\">ADDED</span>" : "") + "</div>";
+      // The two numbers he actually needs: the dose, and what to draw.
+      h += "<div style=\"text-align:right;flex-shrink:0;\">";
+      h += "<span style=\"font-size:12px;color:var(--text2);\">" + _pepFmtDose(it.dose, it.doseUnit) + "</span>";
+      if(it.draw) h += "<span style=\"font-family:var(--font-d);font-size:12px;font-weight:900;color:#7B68EE;margin-left:8px;\">" + _pepNum(it.draw.units) + "u</span>";
+      h += "</div></div>";
+      if(it.doseStep){
+        h += "<div style=\"font-size:10px;color:var(--gold);padding:0 0 4px;\">Dose changes this day &middot; " +
+             _pepFmtDose(it.doseStep.from, it.doseUnit) + " &rarr; " + _pepFmtDose(it.doseStep.to, it.doseUnit) + "</div>";
+      }
+    });
+    h += "</div>";
+  }
+  h += flushEmpty();
+  h += "<button id=\"pep-cal-more\" style=\"width:100%;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;margin-bottom:8px;\">Show 6 more weeks</button>";
+  return h;
+}
+
 function _pepPanelSchedule(ps, sel){
   var todayISO = _pepToday();
   var startISO = (sel.start && sel.start > todayISO) ? sel.start : todayISO;

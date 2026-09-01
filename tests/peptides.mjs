@@ -1748,20 +1748,29 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(p.categories.length > 0, 'categories, derived not invented');
     });
 
-    test('PANELS all three render once the gate opens', () => {
+    // v4.9.261: the three-panel page is gone. Jon asked for a calendar "instead
+    // of the current page", so the derived-cohort panel and the count grid went
+    // and the agenda took their place. Compound detail was KEPT below it — he
+    // asked to replace the page, not to lose per-compound recon and stock.
+    //
+    // Updated rather than deleted: these cases were the only thing asserting the
+    // gate opens onto a working page at all, and dropping them with the panels
+    // would have quietly removed that check too.
+    test('PANELS the gate opens onto the calendar and the compound detail', () => {
       seedReady();
       const h = renderOverview();
       assert.notIncludes(h, 'Two things first', 'gate is satisfied');
-      assert.ok(h.includes('>Phases<'), 'panel 1');
-      assert.ok(h.includes('>Schedule<'), 'panel 2');
-      assert.ok(h.includes('compounds<'), 'panel 3');
+      assert.ok(h.includes('>Schedule<'), 'the calendar is the body of the page');
+      assert.ok(h.includes('compounds<'), 'and compound detail survives below it');
     });
 
     test('PANELS the calendar maps the protocol onto real dates', () => {
       seedReady();
       const h = renderOverview();
-      assert.ok(h.includes('data-pep-day="' + pIso(new Date()) + '"'), 'today is a cell');
-      assert.ok(h.includes('tap a day for the breakdown'), 'and is tappable');
+      // No longer a grid of tappable cells: the compounds and doses are ON the
+      // page, which is the whole change. Assert the day is present and named.
+      assert.ok(h.includes('Today'), 'today is marked in the agenda');
+      assert.ok(/\d+u/.test(h), 'and the units to draw are on the page, not behind a tap');
     });
 
     test('PANELS a selected day shows dose and units to draw', () => {
@@ -1780,15 +1789,19 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(h.includes('for this phase'), 'vials needed for the phase');
     });
 
-    test('PANELS selecting a phase filters the calendar to that phase', () => {
+    // Phase FILTERING of the calendar is gone with the grid — the agenda shows
+    // what is actually due, which is not a per-phase question. The selection
+    // still drives the compound detail panel, and that is what this now checks.
+    test('PANELS selecting a phase still drives the compound detail', () => {
       const ps = seedReady();
       const phases = app._pepPhases(ps);
       const future = phases.find(p => p.future);
       app._pepPhaseSel = future.key;
       const h = renderOverview();
       app._pepPhaseSel = null;
-      assert.ok(h.includes('Phase ' + future.index + ' &middot; tap a day'), 'schedule follows the selection');
-      assert.ok(h.includes('Epitalon'), 'and so does the compound panel');
+      assert.ok(h.includes('Epitalon'),
+        'the compound panel follows the selected phase — the calendar deliberately ' +
+        'does not, because what is due today does not depend on which phase he tapped');
     });
 
     test('PANELS the gate still hides everything when not ready', () => {
@@ -2287,6 +2300,99 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.equal(r.scheduled, 2,
         'weekly over a fortnight is two, not fourteen — the denominator the .219 ' +
         'audit fix depends on being right');
+    });
+  }
+
+  // ── CALENDAR — the protocol page tells him what to draw ────────────────────
+  // Jon: "the protocol page should be a calendar view with the compounds and
+  // dosages in each day instead of the current page."
+  //
+  // A vertical agenda, not a 7-column grid: on a 390px phone a week grid gives
+  // each day ~50px, which fits a dot and a number and none of what he needs.
+  // He reads this at 4:30am to find out what to draw.
+  //
+  // Driven through pepRenderScreen — the .165 standard — rather than calling
+  // the panel builder, because a panel that renders perfectly and is never
+  // reached is the failure this suite exists to catch.
+  {
+    const renderProtocol = () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [
+        { compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2, startDate: daysAgo(10),
+          freq:'daily', continuous:true, status:'instock', stockCounted:true, sealedVials:2 },
+        { compoundId:'nad', dose:50, vialMg:500, waterMl:2, startDate: daysAgo(2),
+          freq:'mon/wed/fri', status:'instock', stockCounted:true, sealedVials:5,
+          doseSteps:[{fromDay:0,dose:50},{fromDay:7,dose:100}] },
+      ], checked:{}, skipped:{}, extra:{}, cart:[], historyConfirmed:true });
+      app._pepTab = 'overview';
+      let html2 = '';
+      const realGet = app.document.getElementById;
+      const body = { get innerHTML(){ return html2; }, set innerHTML(v){ html2 = v; },
+                     querySelectorAll: () => [], querySelector: () => null,
+                     addEventListener(){}, style:{} };
+      app.document.getElementById = (id) => (id === 'pep-screen-body' ? body : realGet.call(app.document, id));
+      try { app.pepRenderScreen(); } finally { app.document.getElementById = realGet; }
+      return html2;
+    };
+
+    test('CALENDAR the protocol page names the compound and its dose', () => {
+      const h = renderProtocol();
+      assert.ok(h.includes('BPC-157'), 'the compound is on the page');
+      assert.ok(h.includes('500mcg'), 'with its dose — not just a count in a cell');
+    });
+
+    test('CALENDAR it shows the units to draw, which is the point', () => {
+      const h = renderProtocol();
+      assert.ok(/10u/.test(h),
+        'BPC 0.5mg at 5mg/mL is 10 units. The dose tells him what he is taking; ' +
+        'the units tell him what to pull into the syringe, and only one of those ' +
+        'can be done half asleep');
+    });
+
+    test('CALENDAR today is marked', () => {
+      const h = renderProtocol();
+      assert.ok(h.includes('Today'), 'so he knows where he is in the list');
+    });
+
+    test('CALENDAR a titration is announced on the day it lands', () => {
+      const h = renderProtocol();
+      assert.ok(h.includes('Dose changes this day'),
+        'NAD+ steps 50 -> 100 five days out and the calendar says so in advance, ' +
+        'rather than the number quietly being different when he gets there');
+    });
+
+    test('CALENDAR rest days are folded, not listed one by one', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'retatrutide', dose:10, vialMg:30, waterMl:1.8,
+        startDate: daysAgo(0), freq:'weekly', continuous:true, status:'instock',
+        stockCounted:true, sealedVials:2 }],
+        checked:{}, cart:[], historyConfirmed:true });
+      const ps = app.pepGetState();
+      const h = app._pepPanelCalendar(ps);
+      assert.ok(/rest days/.test(h),
+        'six empty days between weekly doses collapse to one line — otherwise a ' +
+        'quiet week pushes next month off the bottom of the screen');
+    });
+
+    test('CALENDAR a skipped dose reads as decided, not outstanding', () => {
+      reset(); signIn(UID);
+      const skipped = {}; skipped[app._pepToday()] = ['bpc157'];
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(10), freq:'daily', continuous:true, status:'instock' }],
+        checked:{}, skipped, cart:[], historyConfirmed:true });
+      const h = app._pepPanelCalendar(app.pepGetState());
+      assert.ok(h.includes('line-through'), 'struck through, so a glance tells him it was a choice');
+    });
+
+    test('CALENDAR an added dose is labelled as added', () => {
+      reset(); signIn(UID);
+      const extra = {}; extra[app._pepToday()] = [{ compoundId:'dsip', dose:0.3 }];
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(10), freq:'daily', continuous:true, status:'instock' }],
+        checked:{}, extra, cart:[], historyConfirmed:true });
+      const h = app._pepPanelCalendar(app.pepGetState());
+      assert.ok(h.includes('DSIP') && h.includes('ADDED'),
+        'so the record distinguishes what the protocol asked for from what he chose');
     });
   }
 

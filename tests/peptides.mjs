@@ -1804,7 +1804,81 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'does not, because what is due today does not depend on which phase he tapped');
     });
 
-    test('PANELS the gate still hides everything when not ready', () => {
+    // ── THE GATE MUST NOT HIDE THE PLAN (v4.9.262) ─────────────────────────
+    // Jon applied Phase 2 and reported "protocol page not calendar view". It
+    // was not: applying a phase clears historyConfirmed, the readiness gate
+    // then returned early, and the calendar I had just built was unreachable.
+    // The Apply buttons went with it, so he could not even switch protocol
+    // without first satisfying a gate about the protocol he was leaving.
+    //
+    // The line is what a thing CLAIMS. A forecast asserts he has stock and
+    // needs the count to be true. A calendar states the plan — true whether or
+    // not anything is counted, and the thing he reads to know what to count.
+    // Gating it inverted the dependency.
+    const afterApply = () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [], checked:{}, cart:[] });
+      app.pepApplyPhase('phase2');
+      app._pepTab = 'overview';
+      let out = '';
+      const realGet = app.document.getElementById;
+      const body = { get innerHTML(){ return out; }, set innerHTML(v){ out = v; },
+                     querySelectorAll: () => [], querySelector: () => null,
+                     addEventListener(){}, style:{} };
+      app.document.getElementById = (id) => (id === 'pep-screen-body' ? body : realGet.call(app.document, id));
+      try { app.pepRenderScreen(); } finally { app.document.getElementById = realGet; }
+      return out;
+    };
+
+    test('GATE applying a phase leaves the gate CLOSED', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [], checked:{}, cart:[] });
+      app.pepApplyPhase('phase2');
+      assert.equal(app.pepGetState().historyConfirmed, false,
+        'still correct — a new protocol has a history he has not reviewed');
+      assert.equal(app._pepReadiness(app.pepGetState()).ready, false, 'so the gate is shut');
+    });
+
+    test('GATE the calendar renders anyway, with compounds and units', () => {
+      const h = afterApply();
+      assert.ok(h.includes('Two things first'), 'the gate is on the page');
+      assert.ok(h.includes('Retatrutide') && h.includes('BPC-157'),
+        'AND the compounds are shown — this is the exact state he reported as broken');
+      assert.ok(/60u/.test(h), 'with the units to draw: Retatrutide 10mg at 16.67mg/mL is 60u');
+      assert.ok(h.includes('Today'), 'and today is marked');
+    });
+
+    test('GATE the phase buttons stay reachable when the gate is shut', () => {
+      const h = afterApply();
+      assert.ok(h.includes('data-pep-applyphase'),
+        'or applying a phase would lock him out of changing phase — the gate would ' +
+        'be about the protocol he is trying to leave');
+      assert.ok(h.includes('pep-phase-save'), 'and building the next one stays available');
+    });
+
+    test('GATE stock-dependent detail is still withheld', () => {
+      const h = afterApply();
+      assert.notIncludes(h, 'doses per vial',
+        'the compound panel reports vials held and doses per vial — those ARE the ' +
+        'claims the gate protects, and they stay behind it');
+    });
+
+    test('GATE the copy says what is actually hidden', () => {
+      const h = afterApply();
+      assert.ok(h.includes('forecast'),
+        'it used to say "the forward protocol stays hidden", which was both wrong ' +
+        'now and the reason the old behaviour looked deliberate');
+    });
+
+    // v4.9.262: this used to assert the gate hid EVERYTHING, including the
+    // schedule. That was the behaviour Jon reported as broken — applying a
+    // phase clears historyConfirmed, so the protocol page became the gate
+    // message and the calendar was unreachable.
+    //
+    // The gate now withholds what depends on stock being COUNTED, and shows
+    // what is simply the plan. Rewritten rather than deleted: it is still the
+    // case that pins the gate closing at all.
+    test('PANELS the gate withholds the stock claims, not the plan', () => {
       reset(); signIn('paneluser');
       const ps = app.pepGetState();
       ps.settings = {};
@@ -1812,7 +1886,10 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       app.pepSaveState(ps);
       const h = renderOverview();
       assert.ok(h.includes('Two things first'), 'gate shown');
-      assert.notIncludes(h, '>Schedule<', 'and the panels are not');
+      assert.notIncludes(h, 'doses per vial',
+        'the stock-dependent detail is withheld — that is what the gate is for');
+      assert.ok(h.includes('BPC-157'),
+        'but the plan is visible, because it is what he reads to know what to count');
     });
   }
 

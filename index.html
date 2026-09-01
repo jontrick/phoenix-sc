@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.261';
+var APP_VERSION='4.9.262';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -25609,10 +25609,27 @@ function _pepTabOverview(ps){
   var r = _pepReadiness(ps);
   var h = _pepAuditCard(ps);
 
+  // v4.9.262: the phase list and the calendar render BEFORE the gate, always.
+  //
+  // The gate was hiding both, and applying a phase clears historyConfirmed — so
+  // the moment he applied Phase 2 the protocol page became the gate message and
+  // the calendar he had just asked for was unreachable. Worse, the Apply
+  // buttons went with it, so he could not switch protocol at all without first
+  // satisfying a gate about the protocol he was trying to leave.
+  //
+  // The line is what a thing CLAIMS. The gate exists because a forecast built
+  // on unknown stock would tell him to inject what he does not have — that is a
+  // claim about the world and it needs the stock counted. A calendar is a
+  // statement of the PLAN: it is true whether or not he has counted anything,
+  // and it is what he reads to know what to count. Gating it inverted the
+  // dependency.
+  h += _pepPanelProtocolPhases(ps);
+  h += _pepPanelCalendar(ps);
+
   if(!r.ready){
     h += "<div style=\"background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:14px;\">";
     h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;\">Two things first</div>";
-    h += "<div style=\"font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;\">The forward protocol stays hidden until the app knows what you actually have and what you have already done. Built on guesses it would schedule compounds you are out of and repeat months you have finished.</div>";
+    h += "<div style=\"font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;\">The schedule above is your plan and is always shown. What stays hidden is the <strong>forecast</strong> &mdash; supply, reorder dates and the order list &mdash; because built on unknown stock it would tell you to inject what you do not have.</div>";
 
     h += "<div style=\"display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;\">";
     h += "<div style=\"flex-shrink:0;width:20px;height:20px;border-radius:50%;border:2px solid " + (r.stockDone?"#4CAF50":"var(--border2)") + ";background:" + (r.stockDone?"#4CAF50":"transparent") + ";display:flex;align-items:center;justify-content:center;\">";
@@ -25647,17 +25664,8 @@ function _pepTabOverview(ps){
   if(!sel){ phases.forEach(function(p){ if(!sel && p.running) sel = p; }); }
   if(!sel) sel = phases[0];
 
-  h += _pepPanelProtocolPhases(ps);
-  // v4.9.261: the calendar IS the protocol page now. The derived-cohort panels
-  // and the count grid described the protocol; this one tells him what to do,
-  // which is what he opens the page for. _pepPanelPhases / _pepPanelSchedule /
-  // _pepPanelCompounds are kept in the file rather than deleted — they are the
-  // compound-detail views and are reachable from a compound row.
-  h += _pepPanelCalendar(ps);
-  // Compound detail stays, BELOW the calendar. He asked for the calendar
-  // instead of the current page, not for the loss of per-compound recon, doses
-  // per vial and stock — that panel answers a different question and dropping
-  // it would have been me over-reading "instead of".
+  // Compound detail stays BEHIND the gate, deliberately: it reports doses per
+  // vial and vials held, which are exactly the stock claims the gate protects.
   h += _pepPanelCompounds(ps, sel);
   return h;
 }

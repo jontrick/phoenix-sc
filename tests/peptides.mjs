@@ -2290,6 +2290,138 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     });
   }
 
+  // ── SKIP + PERIODS — declining a dose, and one compound in two windows ─────
+  // Jon, after applying Phase 2: "can I add BPC daily with option to not take"
+  // and "CJC is still running — can this be added until it runs out and Tesa
+  // takes over".
+  //
+  // The second was my error. I built the phase with CJC starting 3 Oct and
+  // dropped the run he is on right now, because the handoff document lists
+  // active_periods and I took only the last one.
+  {
+    // ── a deliberate skip is not a miss ───────────────────────────────────
+    const daily = () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(30), freq:'daily', continuous:true, status:'instock',
+        sealedVials:2, openedDate: daysAgo(2), openVialMg:10, openWaterMl:2, openUsedAmt:0 }],
+        checked:{}, skipped:{}, cart:[] });
+      return app.pepGetState();
+    };
+
+    test('SKIP a skipped dose is recorded as a decision, not a gap', () => {
+      daily();
+      app.pepSkipDose('bpc157');
+      const ps = app.pepGetState();
+      assert.ok(app._pepIsSkipped(ps, app._pepToday(), 'bpc157'), 'recorded for today');
+      assert.equal((ps.checked[app._pepToday()] || []).length, 0, 'and not counted as taken');
+    });
+
+    test('SKIP skipping does not consume stock', () => {
+      const before = app._pepOpenUsed(daily().stacks[0], app._pepCompound('bpc157'));
+      app.pepSkipDose('bpc157');
+      const after = app._pepOpenUsed(app.pepGetState().stacks[0], app._pepCompound('bpc157'));
+      assert.equal(after, before, 'nothing came out of the vial, because nothing was drawn');
+    });
+
+    test('SKIP skipping something already ticked returns the stock', () => {
+      daily();
+      app.pepToggleDose('bpc157');
+      assert.equal(app._pepOpenUsed(app.pepGetState().stacks[0], app._pepCompound('bpc157')), 0.5, 'drawn');
+      app.pepSkipDose('bpc157');
+      assert.equal(app._pepOpenUsed(app.pepGetState().stacks[0], app._pepCompound('bpc157')), 0,
+        'changing his mind puts it back — otherwise the vial reports less than it holds');
+      assert.equal((app.pepGetState().checked[app._pepToday()] || []).indexOf('bpc157'), -1, 'and it is no longer ticked');
+    });
+
+    test('SKIP taking it clears the skip — the two are exclusive', () => {
+      daily();
+      app.pepSkipDose('bpc157');
+      app.pepToggleDose('bpc157');
+      const ps = app.pepGetState();
+      assert.ok(!app._pepIsSkipped(ps, app._pepToday(), 'bpc157'), 'not both at once');
+      assert.ok((ps.checked[app._pepToday()] || []).indexOf('bpc157') >= 0, 'taken');
+    });
+
+    test('SKIP tapping Skip twice un-skips it', () => {
+      daily();
+      app.pepSkipDose('bpc157');
+      app.pepSkipDose('bpc157');
+      assert.ok(!app._pepIsSkipped(app.pepGetState(), app._pepToday(), 'bpc157'),
+        'a mis-tap is recoverable without leaving a decision on the record');
+    });
+
+    // The point of the whole feature: using it must not damage the figure.
+    test('SKIP a skipped day leaves the adherence DENOMINATOR', () => {
+      reset(); signIn(UID);
+      const iso = (n) => { const d = new Date(Date.now() - n*86400000);
+        return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+      const skipped = {}; skipped[iso(1)] = ['bpc157']; skipped[iso(2)] = ['bpc157'];
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(60), freq:'daily', continuous:true, status:'instock' }],
+        checked:{}, skipped, cart:[] });
+      const r = app._pepAdherence(app.pepGetState(), 7).find(x => x.compound === 'BPC-157');
+      assert.equal(r.scheduled, 5, 'seven days minus the two he chose to skip');
+      assert.equal(r.skipped, 2, 'counted separately, so the choice is visible');
+      assert.equal(r.taken, 0, 'none taken');
+      assert.equal(r.adherence_pct, 0,
+        '0 of 5, not 0 of 7 — scoring a deliberate skip as a miss would mean the ' +
+        'feature quietly damaged his figure every time he used it as intended');
+    });
+
+    // ── one compound, two active windows ──────────────────────────────────
+    test('PERIODS CJC runs now, pauses for the bridge, and resumes', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'cjc1295', dose:0.2, vialMg:10, waterMl:2,
+        startDate:'2026-05-30', freq:'6 day', status:'instock',
+        periods:[{from:'2026-05-30', to:'2026-09-07'},{from:'2026-10-03', to:null}] }],
+        checked:{}, cart:[] });
+      const ps = app.pepGetState();
+      const on = (d) => app._pepGetDoses(ps, d).evening.concat(app._pepGetDoses(ps, d).anytime,
+                        app._pepGetDoses(ps, d).morning).length > 0;
+      assert.equal(on('2026-09-02'), true,  'running right now');
+      // NOT 7 Sep — that is a Monday, which is CJC's own rest day, so it would
+      // be absent for a reason unrelated to the window. My first version of this
+      // asserted it and failed on correct code. Pick a day the rule fires on.
+      assert.equal(on('2026-09-06'), true,  'to the last dosing day inside the window (Sunday)');
+      assert.equal(on('2026-09-08'), false, 'then Tesamorelin takes the slot');
+      assert.equal(on('2026-09-25'), false, 'still paused mid-bridge');
+      assert.equal(on('2026-10-03'), true,  'and back the day Tesamorelin ends');
+    });
+
+    test('PERIODS the paused window is dropped on import, not kept and flagged', () => {
+      const r = app._pepValidateImport(JSON.stringify([{ compoundId:'cjc1295', dose:0.2,
+        vialMg:10, waterMl:2, startDate:'2026-05-30',
+        active_periods:[{from:'2026-05-30',to:'2026-09-08',status:'active'},
+                        {from:'2026-09-08',to:'2026-10-03',status:'paused_tesamorelin'},
+                        {from:'2026-10-03',to:null,status:'active'}] }]));
+      assert.equal(r.ok, true, 'his document shape is accepted');
+      assert.equal(r.entries[0].periods.length, 2,
+        'the paused window is gone, not carried as a flag — a schedule you must ' +
+        'read twice to know whether it fires is how a dose lands on a wrong day');
+    });
+
+    test('PERIODS an unreadable window fails the import rather than vanishing', () => {
+      const r = app._pepValidateImport(JSON.stringify([{ compoundId:'cjc1295', dose:0.2,
+        active_periods:[{from:'2026-05-30',to:'2026-09-08'},{from:'October'}] }]));
+      assert.equal(r.ok, false,
+        'a window that silently disappears takes a whole run of doses with it');
+    });
+
+    // ── the shipped phase now carries both corrections ────────────────────
+    test('SKIP+PERIODS Phase 2 has BPC daily and CJC in two windows', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [], checked:{}, cart:[] });
+      const ph = app._pepPhaseById(app.pepGetState(), 'phase2');
+      const bpc = ph.stacks.find(x => x.compoundId === 'bpc157');
+      assert.equal(bpc.freq, 'daily', 'BPC every day, skippable');
+      const cjc = ph.stacks.find(x => x.compoundId === 'cjc1295');
+      assert.equal(cjc.periods.length, 2, 'CJC keeps its current run AND its return');
+      assert.equal(cjc.periods[0].from, '2026-05-30', 'the run he is on now');
+      assert.equal(cjc.periods[1].from, '2026-10-03', 'and the one after the bridge');
+    });
+  }
+
   // ── PHASES — the protocol lives in the code, not in a paste ────────────────
   // Jon: "I don't want imports, I want it built into the code, and the app able
   // to build further phases inside it."

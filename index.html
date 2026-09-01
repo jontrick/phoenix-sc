@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.256';
+var APP_VERSION='4.9.257';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22923,11 +22923,13 @@ function _pepGetDoses(ps, dateStr){
     if(dayNum === null) return;
 
     var timing = (c.timing || "").toLowerCase();
-    var dose = stack.dose != null ? stack.dose : c.dose;
+    // v4.9.257: the dose in force on THIS day, not the flat stack dose.
+    var dose = _pepDoseOn(stack, c, dayNum);
+    var step = _pepDoseStepToday(stack, c, dayNum);
     // v4.9.256: the LIVE recon — what is in the vial he will draw from today.
     var recon = _pepLiveRecon(stack, c);
     var item = {id:stack.compoundId, name:c.name, cat:c.cat, dose:dose, doseUnit:c.doseUnit,
-                timing:c.timing, notes:c.notes, dayNum:dayNum,
+                timing:c.timing, notes:c.notes, dayNum:dayNum, doseStep:step,
                 recon:recon, draw:_pepDraw(dose, c.doseUnit, recon)};
 
     if(timing.indexOf("fasted am") >= 0 || timing.indexOf("morning") >= 0) morning.push(item);
@@ -22995,6 +22997,49 @@ function _pepAddDays(iso, n){
 // openVialMg / openWaterMl are stamped when a vial is opened and are what the
 // draw-up uses until that vial is finished. The plan then governs the NEXT vial,
 // which is the correct scope for changing your mind about dilution.
+// ── Titration: the dose in force on a given day (v4.9.257) ───────────────────
+// Jon asked whether the app can give the new dosages when a titration is due.
+// It could not — one dose per compound, and his Phase 2 protocol escalates four
+// of them mid-course (NAD+ at week 2, GHK-Cu at day 16, TA-1 at week 5, 5-AMQ
+// at weeks 3 and 5). Every one was a note saying CHANGE THE DOSE BY HAND, which
+// is a reminder to do arithmetic on a morning he is fasted and half awake.
+//
+// doseSteps is [{fromDay, dose}] — the dose that applies from that many days
+// after startDate. Sorted ascending; the last step whose fromDay has passed
+// wins. No steps means the flat stack.dose, so nothing changes for compounds
+// that do not titrate.
+//
+// Deliberately keyed on DAY NUMBER rather than a date, because that is what the
+// protocol says — "week 5", "day 16" — and a date would silently be wrong the
+// moment a course start slips.
+function _pepDoseOn(stack, c, dayNum){
+  var flat = (stack && stack.dose != null) ? parseFloat(stack.dose) : (c && c.dose);
+  var steps = stack && stack.doseSteps;
+  if(!Array.isArray(steps) || !steps.length || !(dayNum >= 0)) return flat;
+  var best = null;
+  steps.forEach(function(st){
+    var from = parseInt(st && st.fromDay, 10);
+    var dv   = parseFloat(st && st.dose);
+    if(!(dv > 0) || isNaN(from)) return;
+    if(dayNum >= from && (best === null || from >= best.fromDay)) best = {fromDay: from, dose: dv};
+  });
+  return best ? best.dose : flat;
+}
+
+// The step that starts today, if one does — so the app can say so rather than
+// leaving him to notice a number changed.
+function _pepDoseStepToday(stack, c, dayNum){
+  var steps = stack && stack.doseSteps;
+  if(!Array.isArray(steps) || !(dayNum >= 0)) return null;
+  var hit = null;
+  steps.forEach(function(st){
+    if(parseInt(st && st.fromDay, 10) === dayNum && parseFloat(st && st.dose) > 0) hit = parseFloat(st.dose);
+  });
+  if(hit === null) return null;
+  var prev = _pepDoseOn(stack, c, dayNum - 1);
+  return (prev !== hit) ? {from: prev, to: hit} : null;
+}
+
 function _pepLiveRecon(stack, c){
   if(stack && stack.openedDate && stack.openVialMg > 0 && stack.openWaterMl > 0){
     var vm = parseFloat(stack.openVialMg), wm = parseFloat(stack.openWaterMl);
@@ -23028,7 +23073,15 @@ function pepLogMakeUp(idx, vialMg, waterMl){
 }
 
 function _pepDoseSize(stack, c){
-  var dose = (stack && stack.dose != null) ? parseFloat(stack.dose) : (c && c.dose);
+  // v4.9.257: today's dose, so a titrated compound decrements stock by what he
+  // actually drew. Reading the flat dose would under-count from the day an
+  // escalation lands, and the vial would appear to last longer than it does.
+  var dose = null;
+  if(stack && stack.startDate){
+    var dn = Math.round((new Date(_pepToday() + "T12:00:00") - new Date(stack.startDate + "T12:00:00")) / 86400000);
+    if(dn >= 0) dose = _pepDoseOn(stack, c, dn);
+  }
+  if(dose == null) dose = (stack && stack.dose != null) ? parseFloat(stack.dose) : (c && c.dose);
   return (!dose || dose <= 0) ? 0 : dose;
 }
 
@@ -23694,6 +23747,10 @@ function pepRenderTodayTile(){
     r += "</div>";
     r += "<div style=\"text-align:right;flex-shrink:0;\">";
     r += "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;line-height:1.1;\">" + (item.draw ? _pepDrawText(item.draw) : "—") + "</div>";
+    if(item.doseStep){
+      r += "<div style=\"font-size:10px;color:var(--gold);font-weight:700;margin-top:1px;\">Dose changes today &middot; " +
+           _pepFmtDose(item.doseStep.from, item.doseUnit) + " &rarr; " + _pepFmtDose(item.doseStep.to, item.doseUnit) + "</div>";
+    }
     r += "<div style=\"font-size:10px;color:" + (_pepReconAssumed(item.recon) ? "var(--gold)" : "var(--text3)") + ";margin-top:1px;\">" + _pepFmtDose(item.dose, item.doseUnit) + (item.recon ? " &middot; " + _pepNum(item.recon.conc) + "mg/mL" + (_pepReconAssumed(item.recon) ? " &middot; assumed" : "") : " &middot; set recon") + "</div>";
     r += "</div></div>";
     return r;
@@ -25858,7 +25915,16 @@ function _pepValidateImport(raw){
     var c = _pepCompound(id);
     if(!c){ out.problems.push(where + ": \"" + rawId + "\" is not a compound this app knows."); return; }
     if(id !== rawId) out.resolved.push(rawId + " -> " + c.name);
-    var dose = parseFloat(e.dose);
+    // v4.9.257: the document writes dose_mg, the app writes dose, and a
+    // titrating compound may state neither at the top level because its first
+    // escalation step IS the starting dose. Read all three, in that order of
+    // specificity, rather than rejecting his own field names.
+    var dose = parseFloat(e.dose != null ? e.dose : e.dose_mg);
+    if(isNaN(dose) || dose <= 0){
+      var firstStep = (e.doseSteps || e.escalation_schedule || [])[0];
+      var fd = parseFloat(firstStep && (firstStep.dose != null ? firstStep.dose : firstStep.dose_mg));
+      if(fd > 0) dose = fd;
+    }
     if(isNaN(dose) || dose <= 0){ out.problems.push(where + " (" + c.name + ") has no usable dose."); return; }
     if(e.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(e.startDate))){
       out.problems.push(where + " (" + c.name + ") startDate must be YYYY-MM-DD."); return;
@@ -25897,6 +25963,33 @@ function _pepValidateImport(raw){
         out.problems.push(where + " (" + c.name + ") endDate must be YYYY-MM-DD."); return;
       }
       st.endDate = String(ed);
+    }
+    // v4.9.257: titration steps. Accepts doseSteps directly, or the handoff
+    // document's escalation_schedule which expresses the same thing in weeks or
+    // day-ranges: {week:1}, {week_from:2}, {weeks:"1-4"}, {days:"16-30"}.
+    // Translated here rather than adding a second interpreter downstream.
+    var stepsIn = e.doseSteps || e.escalation_schedule;
+    if(Array.isArray(stepsIn) && stepsIn.length){
+      var steps = [], stepBad = 0;
+      stepsIn.forEach(function(x){
+        var dv = parseFloat(x && (x.dose != null ? x.dose : x.dose_mg));
+        if(!(dv > 0)){ stepBad++; return; }
+        var from = null;
+        if(x.fromDay != null)        from = parseInt(x.fromDay, 10);
+        else if(x.week_from != null) from = (parseInt(x.week_from, 10) - 1) * 7;
+        else if(x.week != null)      from = (parseInt(x.week, 10) - 1) * 7;
+        else if(x.day_from != null)  from = parseInt(x.day_from, 10) - 1;
+        else if(typeof x.weeks === "string") from = (parseInt(x.weeks.split("-")[0], 10) - 1) * 7;
+        else if(typeof x.days  === "string") from = parseInt(x.days.split("-")[0], 10) - 1;
+        if(from == null || isNaN(from) || from < 0){ stepBad++; return; }
+        steps.push({fromDay: from, dose: dv});
+      });
+      if(stepBad){
+        out.problems.push(where + " (" + c.name + ") has " + stepBad + " dose step(s) with no readable dose or start. A titration that silently loses a step gives him the wrong dose on the day it changes."); return;
+      }
+      steps.sort(function(a2, b2){ return a2.fromDay - b2.fromDay; });
+      st.doseSteps = steps;
+      st.dose = steps[0].dose;      // the starting dose is the first step
     }
     var dl = e.dates || e.injection_dates || e.night_dates;
     if(Array.isArray(dl) && dl.length){

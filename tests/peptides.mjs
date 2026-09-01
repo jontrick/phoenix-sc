@@ -2290,6 +2290,117 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     });
   }
 
+  // ── TITRATE2 — the app gives the dose, instead of telling him to work it out ─
+  // Jon asked whether the app can supply the new dosages when a titration is
+  // due. It could not: one dose per compound, and his Phase 2 protocol escalates
+  // four of them mid-course. Every one was a note reading CHANGE THE DOSE BY
+  // HAND — arithmetic on a morning he is fasted and half awake.
+  //
+  // Keyed on DAY NUMBER, not a date, because that is what the protocol says
+  // ("week 5", "day 16") and a date is silently wrong the moment a start slips.
+  {
+    const withSteps = (steps, over) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId:'nad', dose:50, vialMg:500, waterMl:2,
+        startDate: '2026-09-05', freq:'daily', continuous:true, status:'instock',
+        doseSteps: steps,
+      }, over || {})] });
+      return app.pepGetState();
+    };
+    const doseOn = (ps, dayNum) => {
+      const st = ps.stacks[0];
+      return app._pepDoseOn(st, app._pepCompound(st.compoundId), dayNum);
+    };
+
+    // NAD+ from his document: 50mg week 1, 100mg week 2 onward.
+    const NAD = [{ fromDay: 0, dose: 50 }, { fromDay: 7, dose: 100 }];
+
+    test('TITRATE2 the dose steps up on the stated day, not before', () => {
+      const ps = withSteps(NAD);
+      assert.equal(doseOn(ps, 0), 50, 'day 0');
+      assert.equal(doseOn(ps, 6), 50, 'day 6 — still week 1');
+      assert.equal(doseOn(ps, 7), 100, 'day 7 — week 2 begins');
+      assert.equal(doseOn(ps, 60), 100, 'and stays there');
+    });
+
+    test('TITRATE2 a compound with no steps is unaffected', () => {
+      const ps = withSteps(undefined, { doseSteps: undefined, dose: 0.5 });
+      assert.equal(doseOn(ps, 0), 0.5, 'the flat dose');
+      assert.equal(doseOn(ps, 100), 0.5, 'forever — nothing changes for compounds that do not titrate');
+    });
+
+    test('TITRATE2 three steps resolve to the latest one reached', () => {
+      // 5-AMQ: 500mcg weeks 1-2, 750mcg weeks 3-4, 1mg week 5+
+      const ps = withSteps([{fromDay:0,dose:0.5},{fromDay:14,dose:0.75},{fromDay:28,dose:1}]);
+      assert.equal(doseOn(ps, 13), 0.5,  'week 2');
+      assert.equal(doseOn(ps, 14), 0.75, 'week 3');
+      assert.equal(doseOn(ps, 27), 0.75, 'week 4');
+      assert.equal(doseOn(ps, 28), 1,    'week 5');
+    });
+
+    test('TITRATE2 steps out of order still resolve correctly', () => {
+      const ps = withSteps([{fromDay:28,dose:1},{fromDay:0,dose:0.5},{fromDay:14,dose:0.75}]);
+      assert.equal(doseOn(ps, 20), 0.75,
+        'the LAST step reached wins regardless of array order — a hand-written ' +
+        'protocol will not always be sorted');
+    });
+
+    test('TITRATE2 Today announces the change on the day it happens', () => {
+      const ps = withSteps(NAD);
+      const st = ps.stacks[0], c = app._pepCompound('nad');
+      assert.equal(app._pepDoseStepToday(st, c, 6), null, 'nothing to say on day 6');
+      const step = app._pepDoseStepToday(st, c, 7);
+      assert.ok(step, 'day 7 has a change');
+      assert.equal(step.from, 50, 'from');
+      assert.equal(step.to, 100, 'to — so the tile can say it rather than leaving ' +
+        'him to notice a number moved');
+      assert.equal(app._pepDoseStepToday(st, c, 8), null, 'and it is not repeated after');
+    });
+
+    test('TITRATE2 stock decrements by what he actually drew today', () => {
+      // startDate 60 days ago puts him past the step, so today's dose is 100mg.
+      const ps = withSteps(NAD, { startDate: daysAgo(60), sealedVials: 3,
+                                  openedDate: daysAgo(1), openUsedAmt: 0,
+                                  openVialMg: 500, openWaterMl: 2 });
+      app._pepConsumeDose(ps, 'nad', 1);
+      assert.equal(app._pepOpenUsed(ps.stacks[0], app._pepCompound('nad')), 100,
+        '100mg out of the vial, not the 50mg starting dose. Reading the flat dose ' +
+        'would under-count from the day the escalation lands and the vial would ' +
+        'appear to last twice as long as it does');
+    });
+
+    // ── the document's own escalation_schedule shapes ──────────────────────
+    test('TITRATE2 escalation_schedule in weeks imports as day steps', () => {
+      const r = app._pepValidateImport(JSON.stringify([{ compoundId:'nad', vialMg:500, waterMl:2,
+        startDate:'2026-09-05',
+        escalation_schedule:[{week:1,dose_mg:50},{week_from:2,dose_mg:100}] }]));
+      assert.equal(r.ok, true, 'accepted');
+      assert.deepEqual(r.entries[0].doseSteps, [{fromDay:0,dose:50},{fromDay:7,dose:100}],
+        'week 1 is day 0, week 2 is day 7');
+      assert.equal(r.entries[0].dose, 50, 'and the starting dose comes from the first step');
+    });
+
+    test('TITRATE2 escalation_schedule in day-ranges imports too', () => {
+      // GHK-Cu: days 1-15 at 1mg, days 16-30 at 2mg
+      const r = app._pepValidateImport(JSON.stringify([{ compoundId:'ghkcu', vialMg:50, waterMl:2,
+        startDate:'2026-09-24',
+        escalation_schedule:[{days:'1-15',dose_mg:1},{days:'16-30',dose_mg:2}] }]));
+      assert.deepEqual(r.entries[0].doseSteps, [{fromDay:0,dose:1},{fromDay:15,dose:2}],
+        'day 16 of a course is day-number 15 counting from zero — off by one here ' +
+        'is a dose on the wrong day');
+    });
+
+    test('TITRATE2 a step with no readable dose fails the import', () => {
+      const r = app._pepValidateImport(JSON.stringify([{ compoundId:'ta1', dose:1.6,
+        escalation_schedule:[{weeks:'1-4',dose_mg:1.6},{week_from:5,label:'3.2mg'}] }]));
+      assert.equal(r.ok, false,
+        'the second step has a label and no dose — silently dropping it would ' +
+        'leave him at 1.6mg forever while the plan said 3.2mg');
+      assert.ok(r.problems.join(' ').includes('dose step'), 'and it says so');
+    });
+  }
+
   // ── MAKEUP — what he actually mixed, not what the plan intended ────────────
   // Jon: "need to make sure volume make-ups are editable and what I decide to
   // make up logs into the plan for doses etc."

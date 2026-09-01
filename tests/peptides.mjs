@@ -2290,6 +2290,144 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     });
   }
 
+  // ── PHASES — the protocol lives in the code, not in a paste ────────────────
+  // Jon: "I don't want imports, I want it built into the code, and the app able
+  // to build further phases inside it."
+  //
+  // So Phase 2 ships as data and applying it is one tap. Building the next one
+  // is Save current — set the protocol up on screen, keep it under a name. The
+  // import path stays for one-off pastes but is no longer how a phase gets in.
+  {
+    const fresh = () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'ta1', dose:1.6, vialMg:10, waterMl:2, startDate: daysAgo(30) }],
+                  historyConfirmed: true, checked:{}, cart:[] });
+      return app.pepGetState();
+    };
+
+    test('PHASES Phase 2 is in the code and holds his thirteen compounds', () => {
+      fresh();
+      const ph = app._pepPhaseById(app.pepGetState(), 'phase2');
+      assert.ok(ph, 'shipped, not pasted');
+      assert.equal(ph.stacks.length, 13, 'every compound from the handoff document');
+      const reta = ph.stacks.find(x => x.compoundId === 'retatrutide');
+      assert.equal(reta.dose, 10, 'Retatrutide at the dose he confirmed, not the doc six');
+      assert.equal(reta.waterMl, 1.8, 'and the volume he confirmed');
+      assert.equal(reta.startDate, '2026-09-04', 'anchored to the Friday he named');
+      const bpc = ph.stacks.find(x => x.compoundId === 'bpc157');
+      assert.equal(bpc.waterMl, 2, 'BPC at 2mL — the doc says 1mL, which is a half dose');
+      const ipa = ph.stacks.find(x => x.compoundId === 'ipamorelin');
+      assert.equal(ipa.continuous, true, 'Ipamorelin continuous, running with both partners');
+    });
+
+    test('PHASES applying a phase replaces the protocol and records which one', () => {
+      fresh();
+      const r = app.pepApplyPhase('phase2');
+      assert.equal(r.ok, true, 'applied');
+      assert.equal(r.applied, 13, 'all thirteen');
+      const after = read(KEY);
+      assert.equal(after.stacks.length, 13, 'live');
+      assert.equal(after.activePhase, 'phase2', 'and the app knows which phase is running');
+      // NOT notIncludes('ta1') — Phase 2 CONTAINS Thymosin Alpha-1, so the id
+      // legitimately survives. My first version of this asserted its absence and
+      // failed on correct code. Assert the identifying detail instead: the TA-1
+      // now present is the PHASE's, starting 8 Oct, not the one that was there.
+      const ta1 = after.stacks.find(x => x.compoundId === 'ta1');
+      assert.equal(ta1.startDate, '2026-10-08',
+        'the TA-1 in the protocol is the phase version — apply is a replace, not a merge');
+    });
+
+    test('PHASES applying backs up first and clears the stale history confirmation', () => {
+      fresh();
+      app.pepApplyPhase('phase2');
+      const bak = read(`${KEY}_bak`);
+      assert.ok(bak && JSON.stringify(bak).includes('ta1'),
+        'the previous protocol is recoverable — Restore has to be able to undo this');
+      assert.equal(read(KEY).historyConfirmed, false,
+        'a different protocol has a different history; carrying the confirmation ' +
+        'over would open the readiness gate on a plan he has never reviewed');
+    });
+
+    test('PHASES a phase goes through the SAME validation as a paste', () => {
+      fresh();
+      const ps = app.pepGetState();
+      ps.phases = [{ id:'user_bad', name:'Bad', stacks:[{ compoundId:'unobtainium', dose:1 }] }];
+      app.pepSaveState(ps);
+      const r = app.pepApplyPhase('user_bad');
+      assert.equal(r.ok, false, 'refused');
+      assert.ok(r.problems.join(' ').includes('unobtainium'), 'and says why');
+      assert.equal(read(KEY).stacks[0].compoundId, 'ta1',
+        'his protocol untouched — one gate, and no way in that skips it');
+    });
+
+    test('PHASES Save current keeps what is on screen as a new phase', () => {
+      fresh();
+      const r = app.pepSavePhase('Phase 3 - Nov', '2026-11-01', '2027-01-31', 'cognitive layer');
+      assert.equal(r.ok, true, 'saved');
+      assert.equal(r.compounds, 1, 'holding what was live');
+      const ph = app._pepPhaseById(app.pepGetState(), r.id);
+      assert.ok(ph, 'and it is offered alongside the built-in ones');
+      assert.equal(ph.stacks[0].compoundId, 'ta1', 'with the actual compounds');
+      assert.equal(ph.builtOn, app._pepToday(), 'dated, so he can tell versions apart');
+    });
+
+    test('PHASES a saved phase is a SNAPSHOT, not a live reference', () => {
+      fresh();
+      app.pepSavePhase('Snapshot', null, null, null);
+      const ps = app.pepGetState();
+      ps.stacks[0].dose = 99;            // he changes the live protocol afterwards
+      app.pepSaveState(ps);
+      const ph = app._pepPhaseById(app.pepGetState(), 'user_snapshot');
+      assert.equal(ph.stacks[0].dose, 1.6,
+        'the phase still holds what it held when saved — a phase that tracked the ' +
+        'live protocol would be unable to restore anything');
+    });
+
+    test('PHASES saving over a name replaces rather than duplicating', () => {
+      fresh();
+      app.pepSavePhase('Phase 3', null, null, null);
+      app.pepSavePhase('Phase 3', null, null, 'second go');
+      const mine = app.pepGetState().phases.filter(x => x.name === 'Phase 3');
+      assert.equal(mine.length, 1,
+        'one entry — two identically named phases in a list he cannot tell apart ' +
+        'is how the wrong one gets applied');
+      assert.equal(mine[0].summary, 'second go', 'and it is the newer one');
+    });
+
+    test('PHASES an unnamed or empty phase is refused', () => {
+      fresh();
+      assert.equal(app.pepSavePhase('', null, null, null).ok, false, 'needs a name');
+      reset(); signIn(UID); seed(KEY, { stacks: [], checked:{}, cart:[] });
+      assert.equal(app.pepSavePhase('Nothing', null, null, null).ok, false,
+        'and refuses to keep an empty protocol as a phase he could later apply');
+    });
+
+    test('PHASES built-in phases cannot be deleted, his own can', () => {
+      fresh();
+      app.pepSavePhase('Mine', null, null, null);
+      assert.equal(app.pepDeletePhase('phase2'), false,
+        'Phase 2 is the record of what shipped — not his to remove by a mis-tap');
+      assert.equal(app.pepDeletePhase('user_mine'), true, 'his own goes');
+      assert.ok(app._pepPhaseById(app.pepGetState(), 'phase2'), 'and Phase 2 survives');
+    });
+
+    test('PHASES the built-in phase actually schedules once applied', () => {
+      fresh();
+      app.pepApplyPhase('phase2');
+      const ps = app.pepGetState();
+      const on = (iso) => {
+        const d = app._pepGetDoses(ps, iso);
+        return [...d.morning, ...d.anytime, ...d.evening].map(x => x.name);
+      };
+      assert.ok(on('2026-09-04').includes('Retatrutide'),
+        'first Retatrutide lands on the Friday — applying a phase has to produce a ' +
+        'working calendar, not just a list of compounds');
+      assert.ok(on('2026-09-04').includes('Epitalon'), 'and Epitalon night 1');
+      assert.ok(on('2026-09-07').includes('TB-500'), 'TB-500 on the Monday');
+      assert.ok(!on('2026-09-05').includes('Retatrutide'), 'and not the day after');
+    });
+  }
+
   // ── TITRATE2 — the app gives the dose, instead of telling him to work it out ─
   // Jon asked whether the app can supply the new dosages when a titration is
   // due. It could not: one dose per compound, and his Phase 2 protocol escalates

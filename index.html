@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.257';
+var APP_VERSION='4.9.258';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23551,6 +23551,26 @@ function pepRenderScreen(){
   if(auditCopy) auditCopy.addEventListener("click", pepCopyAudit);
   var histBtn = body.querySelector("#pep-hist-confirm");
   if(histBtn) histBtn.addEventListener("click", pepConfirmHistory);
+  body.querySelectorAll("[data-pep-applyphase]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var r = pepApplyPhase(btn.getAttribute("data-pep-applyphase"));
+      var msg = document.getElementById("pep-phase-msg");
+      if(r.ok){ pepRenderScreen(); return; }
+      // A phase that fails validation must say why, in the place he tapped.
+      if(msg) msg.innerHTML = "<span style=\"color:var(--gold);\">Not applied. Nothing has changed.</span><br>" +
+        (r.problems || []).slice(0, 4).map(function(x){ return _esc(x); }).join("<br>");
+    });
+  });
+  body.querySelectorAll("[data-pep-delphase]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      if(btn.getAttribute("data-confirm") !== "1"){
+        btn.setAttribute("data-confirm", "1"); btn.textContent = "Tap again"; return;
+      }
+      if(pepDeletePhase(btn.getAttribute("data-pep-delphase"))) pepRenderScreen();
+    });
+  });
+  var phSave = body.querySelector("#pep-phase-save");
+  if(phSave) phSave.addEventListener("click", pepOpenSavePhase);
   var expOpen = body.querySelector("#pep-export-open");
   if(expOpen) expOpen.addEventListener("click", pepExportProtocol);
   var impOpen = body.querySelector("#pep-import-open");
@@ -25452,6 +25472,7 @@ function _pepTabOverview(ps){
   if(!sel){ phases.forEach(function(p){ if(!sel && p.running) sel = p; }); }
   if(!sel) sel = phases[0];
 
+  h += _pepPanelProtocolPhases(ps);
   h += _pepPanelPhases(ps, phases, sel);
   h += _pepPanelSchedule(ps, sel);
   h += _pepPanelCompounds(ps, sel);
@@ -25459,6 +25480,85 @@ function _pepTabOverview(ps){
 }
 
 // ── Panel 1 — phases ──────────────────────────────────────────────────────
+// The protocol phase library, on PROTOCOL OVERVIEW. Distinct from
+// _pepPanelPhases below, which groups the CURRENT protocol into cohorts by
+// start month — that describes what is running; this switches what runs.
+function _pepPanelProtocolPhases(ps){
+  var all = _pepAllPhases(ps);
+  var active = ps.activePhase || null;
+  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">Protocol phases</div>";
+  h += "<button id=\"pep-phase-save\" style=\"background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Save current</button>";
+  h += "</div>";
+  h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;\">Applying a phase replaces your compounds with that phase's. The current protocol is backed up first. <strong>Save current</strong> keeps what is on screen now as a new phase, which is how the next one gets built.</div>";
+
+  all.forEach(function(ph){
+    var on = ph.id === active;
+    var mine = ph.id.indexOf("user_") === 0;
+    var n = (ph.stacks || []).length;
+    h += "<div style=\"background:var(--bg2);border:1px solid " + (on ? "#4CAF50" : "var(--border)") + ";border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;\">";
+    h += "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;\">";
+    h += "<div style=\"font-weight:700;font-size:14px;color:var(--text);\">" + _esc(ph.name) + (on ? " <span style=\"font-size:10px;color:#4CAF50;\">ACTIVE</span>" : "") + "</div>";
+    h += "<div style=\"font-size:10px;color:var(--text3);flex-shrink:0;\">" + n + " compound" + (n === 1 ? "" : "s") + "</div>";
+    h += "</div>";
+    if(ph.from || ph.to){
+      h += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + _esc(ph.from || "") + (ph.to ? " to " + _esc(ph.to) : "") + (ph.builtOn ? " &middot; built " + _esc(ph.builtOn) : "") + "</div>";
+    }
+    if(ph.summary){
+      h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.5;margin-top:6px;\">" + _esc(ph.summary) + "</div>";
+    }
+    h += "<div style=\"display:flex;gap:8px;margin-top:10px;\">";
+    h += "<button data-pep-applyphase=\"" + _esc(ph.id) + "\" style=\"flex:1;padding:9px;background:" + (on ? "none" : "#7B68EE") + ";border:" + (on ? "1px solid var(--border2)" : "none") + ";border-radius:var(--radius);color:" + (on ? "var(--text3)" : "#fff") + ";font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">" + (on ? "Re-apply" : "Apply") + "</button>";
+    if(mine){
+      h += "<button data-pep-delphase=\"" + _esc(ph.id) + "\" style=\"padding:9px 12px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">Delete</button>";
+    }
+    h += "</div></div>";
+  });
+  h += "<div id=\"pep-phase-msg\" style=\"font-size:12px;line-height:1.6;min-height:16px;margin-bottom:14px;\"></div>";
+  return h;
+}
+
+// Naming sheet for keeping the current protocol as a phase.
+function pepOpenSavePhase(){
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  ov.innerHTML = "<div id=\"pep-sp-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88%;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Save current as a phase</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;\">Keeps every compound exactly as it is now, under a name you can come back to. Saving over an existing name replaces it.</div>" +
+    "<div style=\"margin-bottom:10px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Name</label><br>" +
+    "<input id=\"pep-sp-name\" type=\"text\" placeholder=\"Phase 3 - Nov 2026\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;\">" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">From</label><br>" +
+    "<input id=\"pep-sp-from\" type=\"date\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">To</label><br>" +
+    "<input id=\"pep-sp-to\" type=\"date\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "</div>" +
+    "<div style=\"margin-bottom:14px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">What it is for (optional)</label><br>" +
+    "<textarea id=\"pep-sp-summary\" rows=\"2\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;margin-top:4px;resize:none;\"></textarea></div>" +
+    "<div id=\"pep-sp-msg\" style=\"font-size:12px;color:var(--gold);min-height:16px;margin-bottom:10px;\"></div>" +
+    "<div style=\"display:flex;gap:10px;\">" +
+    "<button id=\"pep-sp-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Cancel</button>" +
+    "<button id=\"pep-sp-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Save phase</button>" +
+    "</div></div>";
+  document.body.appendChild(ov);
+  _phxKeyboardSafe(ov);
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+  var cancel = document.getElementById("pep-sp-cancel");
+  if(cancel) cancel.addEventListener("click", function(){ ov.remove(); });
+  var save = document.getElementById("pep-sp-save");
+  if(save) save.addEventListener("click", function(){
+    var nm = document.getElementById("pep-sp-name");
+    var fr = document.getElementById("pep-sp-from");
+    var to = document.getElementById("pep-sp-to");
+    var su = document.getElementById("pep-sp-summary");
+    var r = pepSavePhase(nm ? nm.value : "", fr ? fr.value : null, to ? to.value : null, su ? su.value : "");
+    var msg = document.getElementById("pep-sp-msg");
+    if(!r.ok){ if(msg) msg.textContent = (r.problems || ["Could not save."])[0]; return; }
+    ov.remove();
+    pepRenderScreen();
+  });
+}
+
 function _pepPanelPhases(ps, phases, sel){
   var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;\">Phases</div>";
   phases.forEach(function(p){
@@ -26079,6 +26179,116 @@ function pepExportProtocol(){
     }).catch(function(e){ showText(e && e.message); });
   } catch(e){ showText(e && e.message); }
 }
+
+// ── PHASE LIBRARY (v4.9.258) ─────────────────────────────────────────────────
+// Jon: "I don't want imports, I want it built into the code."
+//
+// So the protocol lives HERE, as data, and applying it is one tap. The import
+// path stays for one-off pastes but is no longer the way a phase gets in.
+//
+// A phase is a named set of stacks plus the window it covers. Built-in phases
+// are in this array; ones he builds in the app are stored in ps.phases and both
+// are offered the same way, because a phase he defined is not a lesser thing
+// than one shipped in the code.
+//
+// PHASE 2 IS TRANSCRIBED FROM PHASE2_APP_IMPLEMENTATION.md with three
+// corrections he gave directly, all of which override the document:
+//   Retatrutide  10mg from Fri 4 Sep, 1.8mL BAC -> 60u. The doc said 6mg at 5mL
+//                anchored to Thu 3 Sep. Titration is complete; no steps.
+//   Ipamorelin   continuous. The doc's 16/4 cycle would have stopped it 19 Sep
+//                to 16 Oct, leaving Tesamorelin unpartnered for 14 of its 25
+//                bridge days.
+//   BPC-157      10mg in 2mL. The doc says 1mL, which is a half dose.
+var _PEP_PHASES = [
+  {
+    id: "phase2",
+    name: "Phase 2 - Sep to Nov 2026",
+    from: "2026-09-01",
+    to: "2026-11-30",
+    summary: "Tesamorelin bridge, Epitalon course 2, NAD+ and GHK-Cu courses, TA-1 and MOTS-c from October.",
+    stacks: [
+    {compoundId:"retatrutide", dose:10, startDate:"2026-09-04", interval_days:6, vialMg:30, waterMl:1.8, continuous:true, status:"instock", notes:"10mg from Fri 4 Sep - titration COMPLETE after 3-4 months, no further steps. Every 6 days, rotating: 4 Sep, 10, 16, 22, 28 Sep, 4 Oct. Fasted AM 3hr+. RT30 + 1.8mL = 16.67mg/mL -> 60u. NOTE: your handoff doc anchored this to Thu 3 Sep; you said Friday, so it is Friday. STOCK: 3 doses per vial at 10mg, not the 5 you got at 6mg - a 30mg vial now lasts 18 days."},
+    {compoundId:"ipamorelin", dose:0.3, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"300mcg pre-sleep, Monday OFF. Inject FIRST, GHRH partner 15 min after. 5mg/mL -> 6u. CONTINUOUS - Jon confirmed 22 Aug: Ipa runs with BOTH Tesamorelin and CJC, no October break. The 16/4 cycle in the handoff doc would have stopped it 19 Sep to 16 Oct, leaving Tesamorelin unpartnered for 14 of its 25 bridge days."},
+    {compoundId:"cjc1295", dose:0.2, startDate:"2026-10-03", freq:"6 day", vialMg:10, waterMl:2, status:"instock", sealedVials:8, notes:"RESUMES 3 Oct after the Tesamorelin bridge. 200mcg, +15 min after Ipamorelin. 8 x 10mg = 80mg. No washout needed either direction - 30 min half-life."},
+    {compoundId:"tesamorelin", dose:2, startDate:"2026-09-08", end_date:"2026-10-02", freq:"6 day", vialMg:10, waterMl:2, status:"instock", sealedVials:5, notes:"25-day bridge, 8 Sep to 2 Oct. Straight to 2mg - no titration, already conditioned to GHRH agonism. +15 min after Ipamorelin, same slot as CJC. 5mg/mL -> 40u. 50mg total."},
+    {compoundId:"bpc157", dose:0.5, startDate:"2026-05-31", freq:"eod", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Continuous EOD systemic, no cycle end. CONFIRMED 10mg in 2mL = 5mg/mL -> 10u. Your PDF says 1mL; your vials are 2mL."},
+    {compoundId:"tb500", dose:2, startDate:"2026-09-01", freq:"mon", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"2mg maintenance, MONDAY only - your lightest day, Ipamorelin off, only NAD+ alongside. Bumped from 1.25mg on 1 Sep. 5mg/mL -> 40u."},
+    {compoundId:"epitalon", dose:5, startDate:"2026-09-04", vialMg:10, waterMl:1, status:"instock", sealedVials:10, night_dates:["2026-09-04", "2026-09-05", "2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23"], notes:"Course 2. 20 CONSECUTIVE nights, 4-23 Sep. 10mg/mL -> 50u pre-sleep. ONE VIAL AT A TIME - each 10mg vial = 2 nights, reconstitute fresh every 2 nights, rest frozen. 100mg = exactly one course, zero waste. Next course ~23 Mar 2027."},
+    {compoundId:"nad", dose:50, startDate:"2026-09-05", vialMg:500, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", sealedVials:10, active_days:[1, 3, 5], escalation_schedule:[{"week": 1, "dose_mg": 50}, {"week_from": 2, "dose_mg": 100}], notes:"Mon/Wed/Fri AM ONLY - never evening, it will wreck your sleep. Pre-training ideal, 30-60 min before. 250mg/mL: 50mg = 20u, 100mg = 40u. The app steps you to 100mg on 12 Sep and says so on Today. Course 1 ends 3 Nov."},
+    {compoundId:"ghkcu", dose:1, startDate:"2026-09-24", end_date:"2026-10-23", freq:"daily", vialMg:50, waterMl:2, cycleWeeks:5, offWeeks:4, status:"instock", escalation_schedule:[{"days": "1-15", "dose_mg": 1}, {"days": "16-30", "dose_mg": 2}], notes:"30-day course, 24 Sep to 23 Oct - starts the day after Epitalon finishes. 25mg/mL: 1mg = 4u, 2mg = 8u. The app steps you to 2mg on 9 Oct. 450mg stock = 10 courses."},
+    {compoundId:"ta1", dose:1.6, startDate:"2026-10-08", freq:"wed/sat", vialMg:10, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", escalation_schedule:[{"weeks": "1-4", "dose_mg": 1.6}, {"week_from": 5, "dose_mg": 3.2}], notes:"Course 2 from 8 Oct. WEDNESDAY + SATURDAY specifically, not every-3-4-days. 5mg/mL: 1.6mg = 32u, 3.2mg = 64u. The app steps you to 3.2mg on 5 Nov. Course ends 3 Dec."},
+    {compoundId:"motsc", dose:10, startDate:"2026-10-14", vialMg:10, waterMl:0.5, status:"instock", sealedVials:6, injection_dates:["2026-10-14", "2026-10-19", "2026-10-24", "2026-10-29"], notes:"Course 2 - 4 injections exactly 5 days apart, fasted AM. 20mg/mL -> 50u. Bachmeyer protocol: never weekly, never 3x/week. Course 3 not before 28 Feb 2027. WARNING: 20mg left after this course, C3 needs 40mg - order 2x MS10 before Feb."},
+    {compoundId:"5amq", dose:0.5, startDate:"2026-11-01", freq:"daily", vialMg:5, waterMl:1, cycleWeeks:8, offWeeks:4, status:"pipeline", sealedVials:3, escalation_schedule:[{"weeks": "1-2", "dose_mg": 0.5}, {"weeks": "3-4", "dose_mg": 0.75}, {"week_from": 5, "dose_mg": 1}], notes:"ON HOLD - 15mg stock, a full course needs 45mg. Do not start until 30mg more arrives. HIGH order priority. Fasted AM, black coffee fine. 5mg/mL: 500mcg = 10u, 750mcg = 15u, 1mg = 20u. Steps handled by the app once it starts."},
+    {compoundId:"dsip", dose:0.3, startDate:"2026-09-01", freq:"as needed", vialMg:5, waterMl:2, continuous:true, status:"instock", notes:"As needed, 30-60 min before intended sleep - not immediately before. 2.5mg/mL -> 12u. If it becomes nightly, cycle 4 weeks on / 2 off."}
+  ]
+  }
+];
+
+// Built-in phases plus anything he has built in the app.
+function _pepAllPhases(ps){
+  var mine = (ps && Array.isArray(ps.phases)) ? ps.phases : [];
+  return _PEP_PHASES.concat(mine);
+}
+
+function _pepPhaseById(ps, id){
+  var all = _pepAllPhases(ps), hit = null;
+  all.forEach(function(p){ if(p && p.id === id) hit = p; });
+  return hit;
+}
+
+// Apply a phase. Runs the same validation the paste path uses, so a phase
+// defined in the app cannot install something the importer would have refused
+// — one gate, not two, and no way in that skips it.
+function pepApplyPhase(id){
+  var ps = pepGetState();
+  var ph = _pepPhaseById(ps, id);
+  if(!ph || !Array.isArray(ph.stacks) || !ph.stacks.length) return {ok:false, problems:["That phase has no compounds."]};
+  var v = _pepValidateImport(JSON.stringify(ph.stacks));
+  if(!v.ok) return {ok:false, problems:v.problems};
+  var uid = currentSession && currentSession.user && currentSession.user.id;
+  if(uid){ try { _pepBackupLocal("peptide_v1_" + uid, JSON.stringify(ps)); } catch(_e){} }
+  ps.stacks = v.entries;
+  ps.activePhase = ph.id;
+  ps.historyConfirmed = false;   // a different protocol has a different history
+  pepSaveState(ps);
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true, applied:v.entries.length, name:ph.name};
+}
+
+// Build a phase from what is on screen now. This is how the next phase gets
+// made: set the protocol up, then keep it under a name. No JSON, no export.
+function pepSavePhase(name, from, to, summary){
+  var ps = pepGetState();
+  var nm = String(name || "").trim();
+  if(!nm) return {ok:false, problems:["Give the phase a name."]};
+  if(!(ps.stacks || []).length) return {ok:false, problems:["There are no compounds to save."]};
+  var id = "user_" + nm.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  if(!id || id === "user_") id = "user_phase";
+  if(!Array.isArray(ps.phases)) ps.phases = [];
+  // Overwrite a phase of the same name rather than quietly making a second one
+  // he cannot tell apart in a list.
+  ps.phases = ps.phases.filter(function(p){ return p && p.id !== id; });
+  ps.phases.push({
+    id: id, name: nm, from: from || null, to: to || null,
+    summary: String(summary || "").trim() || null,
+    builtOn: _pepToday(),
+    stacks: JSON.parse(JSON.stringify(ps.stacks))
+  });
+  pepSaveState(ps);
+  return {ok:true, id:id, name:nm, compounds:ps.stacks.length};
+}
+
+function pepDeletePhase(id){
+  var ps = pepGetState();
+  if(!Array.isArray(ps.phases)) return false;
+  // Built-in phases are not his to delete; they are the record of what shipped.
+  var before = ps.phases.length;
+  ps.phases = ps.phases.filter(function(p){ return p && p.id !== id; });
+  if(ps.phases.length === before) return false;
+  pepSaveState(ps);
+  return true;
+}
+
 
 function pepOpenImport(){
   var ov = document.createElement("div");

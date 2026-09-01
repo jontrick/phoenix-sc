@@ -2290,6 +2290,109 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     });
   }
 
+  // ── ADDDOSE — a dose added by hand, all the way through ────────────────────
+  // Jon: "can you add an add-for-today button that works through and draws too."
+  //
+  // Works through is the requirement, not the button. It has to appear on Today
+  // with its draw-up, tick as taken, and come out of the vial. A button that
+  // only wrote a note would be a worse version of remembering.
+  {
+    const setUpAdd = (over) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId:'cjc1295', dose:0.2, vialMg:10, waterMl:2,
+        startDate: daysAgo(30), freq:'6 day', status:'instock',
+        sealedVials:3, openedDate: daysAgo(2), openVialMg:10, openWaterMl:2, openUsedAmt:0,
+      }, over || {})], checked:{}, extra:{}, cart:[] });
+      return app.pepGetState();
+    };
+    const todayItems = () => {
+      const d = app._pepGetDoses(app.pepGetState(), app._pepToday());
+      return [...d.morning, ...d.anytime, ...d.evening];
+    };
+
+    test('ADDDOSE an added dose appears on Today with its draw-up', () => {
+      setUpAdd();
+      const r = app.pepAddExtraDose('cjc1295', 0.2);
+      assert.equal(r.ok, true, 'accepted');
+      const it = todayItems().find(x => x.id === 'cjc1295' && x.extra);
+      assert.ok(it, 'it is on Today');
+      assert.ok(it.draw && it.draw.units === 4,
+        '200mcg at 5mg/mL is 4 units — the draw comes through, which was the ask');
+    });
+
+    test('ADDDOSE it ticks as taken and comes out of the vial', () => {
+      setUpAdd();
+      app.pepAddExtraDose('cjc1295', 0.2);
+      const ps = app.pepGetState();
+      assert.ok((ps.checked[app._pepToday()] || []).indexOf('cjc1295') >= 0, 'ticked');
+      assert.equal(app._pepOpenUsed(ps.stacks[0], app._pepCompound('cjc1295')), 0.2,
+        '0.2mg out of the open vial — he has just injected it');
+    });
+
+    test('ADDDOSE it uses the vial he actually mixed, not the plan', () => {
+      setUpAdd({ waterMl: 4, openWaterMl: 2 });   // plan says 4mL, the open vial is 2mL
+      app.pepAddExtraDose('cjc1295', 0.2);
+      const it = todayItems().find(x => x.extra);
+      assert.equal(it.draw.units, 4,
+        'the open vial is 10mg in 2mL = 5mg/mL -> 4u. Reading the plan would have ' +
+        'said 8u from a vial that needs 4');
+    });
+
+    test('ADDDOSE undo returns the stock', () => {
+      setUpAdd();
+      app.pepAddExtraDose('cjc1295', 0.2);
+      assert.equal(app.pepRemoveExtraDose('cjc1295'), true, 'removed');
+      const ps = app.pepGetState();
+      assert.equal(app._pepOpenUsed(ps.stacks[0], app._pepCompound('cjc1295')), 0,
+        'back in the vial — a mis-tap here costs a real dose, so it has to reverse');
+      assert.equal(todayItems().filter(x => x.extra).length, 0, 'and it is off Today');
+    });
+
+    test('ADDDOSE undo does not un-tick a dose that was also SCHEDULED', () => {
+      // BPC-157 daily: scheduled today AND he adds a second one.
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(30), freq:'daily', continuous:true, status:'instock',
+        sealedVials:2, openedDate: daysAgo(1), openVialMg:10, openWaterMl:2, openUsedAmt:0 }],
+        checked:{}, extra:{}, cart:[] });
+      app.pepToggleDose('bpc157');            // the scheduled one
+      app.pepAddExtraDose('bpc157', 0.5);     // a second, by hand
+      app.pepRemoveExtraDose('bpc157');
+      const ps = app.pepGetState();
+      assert.ok((ps.checked[app._pepToday()] || []).indexOf('bpc157') >= 0,
+        'the scheduled dose is still ticked — undoing the extra must not erase the ' +
+        'record of the one he actually took on schedule');
+      assert.equal(app._pepOpenUsed(ps.stacks[0], app._pepCompound('bpc157')), 0.5,
+        'and only the extra came back out');
+    });
+
+    test('ADDDOSE a compound not in his protocol still logs and draws', () => {
+      setUpAdd();
+      const r = app.pepAddExtraDose('dsip', 0.3);
+      assert.equal(r.ok, true, 'accepted from the library');
+      const it = todayItems().find(x => x.id === 'dsip');
+      assert.ok(it && it.draw, 'with a draw-up from the library recon');
+      assert.equal(it.draw.units, 12, '300mcg at 2.5mg/mL is 12u');
+    });
+
+    test('ADDDOSE nonsense is refused rather than logged', () => {
+      setUpAdd();
+      assert.equal(app.pepAddExtraDose('cjc1295', 0).ok, false, 'zero is not a dose');
+      assert.equal(app.pepAddExtraDose('unobtainium', 1).ok, false, 'nor is an unknown compound');
+      assert.equal(todayItems().filter(x => x.extra).length, 0, 'and neither was recorded');
+    });
+
+    test('ADDDOSE extras belong to their day, not to every day', () => {
+      setUpAdd();
+      app.pepAddExtraDose('cjc1295', 0.2);
+      const ps = app.pepGetState();
+      const other = app._pepGetDoses(ps, '2026-01-15');
+      assert.equal([...other.morning, ...other.anytime, ...other.evening].filter(x => x.extra).length, 0,
+        'a dose added today does not reappear on an unrelated date');
+    });
+  }
+
   // ── SKIP + PERIODS — declining a dose, and one compound in two windows ─────
   // Jon, after applying Phase 2: "can I add BPC daily with option to not take"
   // and "CJC is still running — can this be added until it runs out and Tesa

@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.259';
+var APP_VERSION='4.9.260';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22950,7 +22950,84 @@ function _pepGetDoses(ps, dateStr){
     else anytime.push(item);
   });
 
+  // v4.9.260: doses added by hand for this day. They are not on any schedule —
+  // that is the point — so they are appended after the rules have run, and
+  // marked `extra` so the UI can say where they came from and offer to remove
+  // one. Without this, an added dose would decrement stock and then be
+  // invisible, which is the worst of both.
+  ((ps && ps.extra && ps.extra[today]) || []).forEach(function(x){
+    if(!x || !x.compoundId) return;
+    var xc = _pepCompound(x.compoundId);
+    if(!xc) return;
+    // Use his own stack for this compound if he has one, so the recon and the
+    // vial in his fridge are the same ones the scheduled doses use.
+    var xs = null;
+    (ps.stacks || []).forEach(function(st){ if(st.compoundId === x.compoundId && !xs) xs = st; });
+    var xdose = (x.dose != null) ? parseFloat(x.dose) : (xs && xs.dose != null ? xs.dose : xc.dose);
+    var xrecon = _pepLiveRecon(xs || {}, xc);
+    var xitem = {id:xc.id, name:xc.name, cat:xc.cat, dose:xdose, doseUnit:xc.doseUnit,
+                 timing:xc.timing, notes:xc.notes, dayNum:null, doseStep:null, extra:true,
+                 recon:xrecon, draw:_pepDraw(xdose, xc.doseUnit, xrecon)};
+    var xt = (xc.timing || "").toLowerCase();
+    if(xt.indexOf("fasted am") >= 0 || xt.indexOf("morning") >= 0) morning.push(xitem);
+    else if(xt.indexOf("bed") >= 0 || xt.indexOf("evening") >= 0) evening.push(xitem);
+    else anytime.push(xitem);
+  });
+
   return {morning:morning, anytime:anytime, evening:evening};
+}
+
+// ── Doses added by hand (v4.9.260) ────────────────────────────────────────
+// Jon: "can you add an add-for-today button that works through and draws too."
+//
+// Works through means the whole path: it shows on Today with its draw-up, it
+// ticks as taken, and it comes out of the vial. A button that only writes a
+// note would be a worse version of remembering.
+function pepAddExtraDose(compoundId, dose){
+  var c = _pepCompound(compoundId);
+  if(!c) return {ok:false, problem:"That compound is not in the library."};
+  var d = parseFloat(dose);
+  if(!(d > 0)) return {ok:false, problem:"Enter a dose."};
+  var ps = pepGetState();
+  var today = _pepToday();
+  if(!ps.extra) ps.extra = {};
+  if(!ps.extra[today]) ps.extra[today] = [];
+  ps.extra[today].push({compoundId: c.id, dose: d, at: new Date().toISOString()});
+  // Tick it and take it out of stock, because he has just injected it.
+  if(!ps.checked) ps.checked = {};
+  if(!ps.checked[today]) ps.checked[today] = [];
+  if(ps.checked[today].indexOf(c.id) < 0) ps.checked[today].push(c.id);
+  _pepConsumeDose(ps, c.id, 1);
+  pepSaveState(ps);
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true, name:c.name, dose:d, unit:c.doseUnit};
+}
+
+// Remove the most recent added dose for a compound, returning its stock. A
+// mis-tap here costs a real dose out of a vial, so it has to be reversible.
+function pepRemoveExtraDose(compoundId){
+  var ps = pepGetState();
+  var today = _pepToday();
+  var list = (ps.extra && ps.extra[today]) || [];
+  var idx = -1;
+  list.forEach(function(x, i){ if(x && x.compoundId === compoundId) idx = i; });
+  if(idx < 0) return false;
+  list.splice(idx, 1);
+  _pepConsumeDose(ps, compoundId, -1);
+  // Only un-tick if this compound has no scheduled dose today as well — he may
+  // have taken the scheduled one AND an extra.
+  var stillDue = false;
+  var due = _pepGetDoses(ps, today);
+  [].concat(due.morning, due.anytime, due.evening).forEach(function(it){
+    if(it.id === compoundId && !it.extra) stillDue = true;
+  });
+  if(!stillDue && ps.checked && ps.checked[today]){
+    var k = ps.checked[today].indexOf(compoundId);
+    if(k >= 0) ps.checked[today].splice(k, 1);
+  }
+  pepSaveState(ps);
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return true;
 }
 
 // ── Stock + reorder forecast (v4.9.180) ───────────────────────────────────
@@ -23454,6 +23531,13 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-check]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepToggleDose(btn.getAttribute("data-pep-check")); });
   });
+  body.querySelectorAll("[data-pep-unextra]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      if(pepRemoveExtraDose(btn.getAttribute("data-pep-unextra"))) pepRenderScreen();
+    });
+  });
+  var addDose = body.querySelector("#pep-add-dose");
+  if(addDose) addDose.addEventListener("click", pepOpenAddDose);
   body.querySelectorAll("[data-pep-skip]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepSkipDose(btn.getAttribute("data-pep-skip")); });
   });
@@ -23622,7 +23706,10 @@ function _pepTabToday(ps){
       "<div style=\"font-size:48px;margin-bottom:12px;\">&#10003;</div>" +
       "<div style=\"font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text2);margin-bottom:6px;\">Rest Day</div>" +
       "<div style=\"font-size:13px;\">No doses scheduled for " + dayNames[d.getDay()] + "</div>" +
-      "</div>";
+      "</div>" +
+      // The rest-day path returns early, so the button has to appear here too —
+      // and a day with nothing scheduled is exactly when he reaches for it.
+      "<button id=\"pep-add-dose\" style=\"width:100%;padding:11px;margin-bottom:14px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose for today</button>";
   }
 
   var doneCount = 0;
@@ -23634,6 +23721,7 @@ function _pepTabToday(ps){
   h += "<div style=\"height:4px;flex:1;background:var(--bg3);border-radius:2px;margin:0 12px;overflow:hidden;\"><div style=\"height:4px;width:" + Math.round(doneCount/total*100) + "%;background:#7B68EE;border-radius:2px;\"></div></div>";
   h += "<div style=\"font-size:11px;color:" + (doneCount===total?"#7B68EE":"var(--text3)") + ";\">" + today + "</div>";
   h += "</div>";
+  h += "<button id=\"pep-add-dose\" style=\"width:100%;padding:11px;margin-bottom:14px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose for today</button>";
 
   function renderSection(label, items){
     if(!items.length) return "";
@@ -23653,7 +23741,9 @@ function _pepTabToday(ps){
       s += "<div style=\"font-weight:700;font-size:14px;color:var(--text);" + (skipped ? "text-decoration:line-through;" : "") + "\">" + item.name + "</div>";
       // Skip is deliberately small and secondary — the primary action is taking
       // the dose. It only offers itself on a dose not already ticked.
-      if(!done){
+      if(item.extra){
+        s += "<button data-pep-unextra=\"" + item.id + "\" style=\"flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:800;padding:3px 9px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Added &middot; undo</button>";
+      } else if(!done){
         s += "<button data-pep-skip=\"" + item.id + "\" style=\"flex-shrink:0;background:none;border:1px solid " + (skipped ? "var(--text3)" : "var(--border2)") + ";border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:800;padding:3px 9px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">" + (skipped ? "Skipped" : "Skip") + "</button>";
       }
       s += "</div>";
@@ -26439,6 +26529,101 @@ function pepOpenImport(){
 // Sheet for recording a make-up. Pre-filled from the plan, because that is what
 // he usually does — but every field is editable, since the whole point is that
 // what he actually mixed can differ from what was planned.
+// Add a dose for today. His own compounds first — those are what he actually
+// reaches for — then the rest of the library, so an unplanned compound is still
+// one tap away rather than requiring a protocol edit.
+function pepOpenAddDose(){
+  var ps = pepGetState();
+  var mine = [], rest = [];
+  var have = {};
+  (ps.stacks || []).forEach(function(st){
+    var c = _pepCompound(st.compoundId);
+    if(c && !have[c.id]){ have[c.id] = 1; mine.push({c:c, st:st}); }
+  });
+  _PEP_COMPOUNDS.forEach(function(c){ if(!have[c.id]) rest.push({c:c, st:null}); });
+
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  function opts(list, label){
+    if(!list.length) return "";
+    return "<optgroup label=\"" + label + "\">" + list.map(function(x){
+      return "<option value=\"" + _esc(x.c.id) + "\">" + _esc(x.c.name) + "</option>";
+    }).join("") + "</optgroup>";
+  }
+  ov.innerHTML = "<div id=\"pep-ad-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88%;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Add a dose for today</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;\">Logs it on Today, ticks it as taken, and takes it out of the vial. For anything you inject that was not on the schedule.</div>" +
+    "<div style=\"margin-bottom:10px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Compound</label><br>" +
+    "<select id=\"pep-ad-comp\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;margin-top:4px;\">" +
+    opts(mine, "In your protocol") + opts(rest, "Library") + "</select></div>" +
+    "<div style=\"margin-bottom:10px;\"><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Dose</label><br>" +
+    "<input id=\"pep-ad-dose\" type=\"number\" step=\"0.01\" min=\"0\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:17px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div id=\"pep-ad-preview\" style=\"background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px;\"></div>" +
+    "<div style=\"display:flex;gap:10px;\">" +
+    "<button id=\"pep-ad-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Cancel</button>" +
+    "<button id=\"pep-ad-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Log dose</button>" +
+    "</div></div>";
+  document.body.appendChild(ov);
+  _phxKeyboardSafe(ov);
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+
+  function stackFor(id){
+    var found = null;
+    (ps.stacks || []).forEach(function(st){ if(st.compoundId === id && !found) found = st; });
+    return found;
+  }
+  function preview(){
+    var sel = document.getElementById("pep-ad-comp");
+    var dEl = document.getElementById("pep-ad-dose");
+    var box = document.getElementById("pep-ad-preview");
+    if(!sel || !dEl || !box) return;
+    var c = _pepCompound(sel.value);
+    if(!c){ box.innerHTML = ""; return; }
+    var st = stackFor(c.id);
+    var d = parseFloat(dEl.value);
+    if(!(d > 0)){ box.innerHTML = "<div style=\"font-size:12px;color:var(--text3);\">Enter a dose to see what to draw.</div>"; return; }
+    var recon = _pepLiveRecon(st || {}, c);
+    var draw = _pepDraw(d, c.doseUnit, recon);
+    box.innerHTML =
+      "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;\">Draw up</div>" +
+      "<div style=\"font-family:var(--font-d);font-size:24px;font-weight:900;color:#7B68EE;line-height:1;\">" + (draw ? _pepDrawText(draw) : "set a vial size first") + "</div>" +
+      "<div style=\"font-size:11px;color:var(--text3);margin-top:6px;\">" + _pepFmtDose(d, c.doseUnit) + (recon ? " &middot; " + _pepReconText(recon) : "") + "</div>" +
+      (!st ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Not in your protocol — this uses the library vial size, and no stock will be tracked for it.</div>" : "") +
+      (draw && draw.units > 100 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Over 100 units — more than one full U-100 syringe.</div>" : "");
+  }
+  function fillDose(){
+    var sel = document.getElementById("pep-ad-comp");
+    var dEl = document.getElementById("pep-ad-dose");
+    if(!sel || !dEl) return;
+    var c = _pepCompound(sel.value);
+    var st = stackFor(sel.value);
+    dEl.value = (st && st.dose != null) ? st.dose : (c ? c.dose : "");
+    preview();
+  }
+  var selEl = document.getElementById("pep-ad-comp");
+  if(selEl) selEl.addEventListener("change", fillDose);
+  var dEl2 = document.getElementById("pep-ad-dose");
+  if(dEl2) dEl2.addEventListener("input", preview);
+  fillDose();
+
+  var cancel = document.getElementById("pep-ad-cancel");
+  if(cancel) cancel.addEventListener("click", function(){ ov.remove(); });
+  var save = document.getElementById("pep-ad-save");
+  if(save) save.addEventListener("click", function(){
+    var sel = document.getElementById("pep-ad-comp");
+    var dEl = document.getElementById("pep-ad-dose");
+    var r = pepAddExtraDose(sel ? sel.value : null, dEl ? dEl.value : null);
+    if(!r.ok){
+      var box = document.getElementById("pep-ad-preview");
+      if(box) box.innerHTML = "<div style=\"font-size:12px;color:var(--gold);\">" + _esc(r.problem) + "</div>";
+      return;
+    }
+    ov.remove();
+    pepRenderScreen();
+  });
+}
+
+
 function pepOpenMakeUp(idx){
   var ps = pepGetState();
   var st = ps.stacks && ps.stacks[idx]; if(!st) return;

@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.254';
+var APP_VERSION='4.9.256';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22841,8 +22841,44 @@ function _pepStackDueOn(stack, c, d){
     if(fullLen > 0 && dayNum % fullLen >= cycleLen) return null;
   }
 
+  // ── v4.9.255: schedule shapes the Phase 2 protocol needs ─────────────────
+  // Added because the PHASE2 handoff describes four schedules this engine could
+  // not express, and an import that produces the wrong calendar is worse than
+  // no import — he would inject on the days the app showed him.
+  //
+  //   endDate       Tesamorelin is a 25-day bridge, GHK-Cu a 30-day course.
+  //                 cycleWeeks approximates a length; an end DATE is what the
+  //                 protocol actually states, and rounding it is a real dose.
+  //   dates[]       MOTS-c is four explicit dates and Epitalon twenty explicit
+  //                 nights. Deriving those from a rule is how "every 5 days"
+  //                 becomes "roughly every 5 days" after a month.
+  //   intervalDays  Retatrutide moved from Friday-weekly to every SIX days, so
+  //                 it rotates through the week. No weekday rule can say that.
+  //   weekday names TB-500 is Monday only. "mon/wed/fri" needed all three.
+
+  // Explicit dates win outright — they ARE the schedule, not a hint at one.
+  if(Array.isArray(stack.dates) && stack.dates.length){
+    var iso = _pepISO(d);
+    return stack.dates.indexOf(iso) >= 0 ? dayNum : null;
+  }
+
+  // A stated end date stops the schedule dead, whatever the rule says.
+  if(stack.endDate && _pepISO(d) > String(stack.endDate)) return null;
+
+  // Every N days from the start date, rotating through the week.
+  var everyN = parseInt(stack.intervalDays, 10);
+  if(everyN > 0) return (dayNum % everyN === 0) ? dayNum : null;
+
   var freq = (stack.freq || c.freq || "daily").toLowerCase();
   var shouldDose = false;
+
+  // Named weekdays, so "monday" or "mon" alone is expressible. Checked before
+  // the combination rules below so "mon/wed/fri" still reaches its own branch.
+  var DOW = {sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6};
+  var named = Object.keys(DOW).filter(function(k){ return freq.indexOf(k) >= 0; });
+  if(named.length && freq.indexOf("/") < 0 && freq.indexOf("+") < 0 && freq.indexOf(" and ") < 0){
+    return named.some(function(k){ return dow === DOW[k]; }) ? dayNum : null;
+  }
 
   if(freq.indexOf("daily") >= 0 || freq.indexOf("every day") >= 0){
     shouldDose = true;
@@ -22888,7 +22924,8 @@ function _pepGetDoses(ps, dateStr){
 
     var timing = (c.timing || "").toLowerCase();
     var dose = stack.dose != null ? stack.dose : c.dose;
-    var recon = _pepRecon(stack, c);
+    // v4.9.256: the LIVE recon — what is in the vial he will draw from today.
+    var recon = _pepLiveRecon(stack, c);
     var item = {id:stack.compoundId, name:c.name, cat:c.cat, dose:dose, doseUnit:c.doseUnit,
                 timing:c.timing, notes:c.notes, dayNum:dayNum,
                 recon:recon, draw:_pepDraw(dose, c.doseUnit, recon)};
@@ -22945,13 +22982,60 @@ function _pepAddDays(iso, n){
 // Unit-dosed blends have no mg basis, so their capacity is the syringe units in
 // the vial (waterMl x 100) and they are tracked in units. Same principle, same
 // field, different unit — the compound's own.
+// ── What is actually in the open vial (v4.9.256) ─────────────────────────────
+// Jon: "need to make sure volume make-ups are editable and what I decide to make
+// up logs into the plan for doses etc."
+//
+// The BAC volume was already editable, but only as a PLAN value. Nothing
+// recorded what he actually mixed. So changing the plan retroactively changed
+// the concentration of the vial already in his fridge, and every unit count
+// drawn from it. Same defect as counting doses instead of measuring them
+// (v4.9.249), one level up: the plan is an intention, the open vial is a fact.
+//
+// openVialMg / openWaterMl are stamped when a vial is opened and are what the
+// draw-up uses until that vial is finished. The plan then governs the NEXT vial,
+// which is the correct scope for changing your mind about dilution.
+function _pepLiveRecon(stack, c){
+  if(stack && stack.openedDate && stack.openVialMg > 0 && stack.openWaterMl > 0){
+    var vm = parseFloat(stack.openVialMg), wm = parseFloat(stack.openWaterMl);
+    return {vialMg: vm, waterMl: wm, conc: vm / wm, source: "mixed",
+            plannedMg: (stack.vialMg != null ? parseFloat(stack.vialMg) : null)};
+  }
+  return _pepRecon(stack, c);
+}
+
+// Record a make-up. Opens a vial at the volume he actually used, stamps the
+// date for shelf life, and resets consumption for the new vial.
+function pepLogMakeUp(idx, vialMg, waterMl){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return false;
+  var vm = parseFloat(vialMg), wm = parseFloat(waterMl);
+  if(!(vm > 0) || !(wm > 0)) return false;
+  var sealed = parseInt(st.sealedVials, 10) || 0;
+  // Opening consumes a sealed vial when there is one. If there is not, the make
+  // -up is still recorded — he may be mixing something the count does not know
+  // about, and refusing to record it would leave the draw-up wrong instead.
+  if(sealed > 0 && !st.openedDate) st.sealedVials = sealed - 1;
+  st.openedDate  = _pepToday();
+  st.openVialMg  = vm;
+  st.openWaterMl = wm;
+  st.openUsedAmt = 0;
+  st.openDosesUsed = 0;
+  ps.stacks[idx] = st;
+  pepSaveState(ps);
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return true;
+}
+
 function _pepDoseSize(stack, c){
   var dose = (stack && stack.dose != null) ? parseFloat(stack.dose) : (c && c.dose);
   return (!dose || dose <= 0) ? 0 : dose;
 }
 
 function _pepVialCapacity(stack, c){
-  var recon = _pepRecon(stack, c);
+  // The OPEN vial's real make-up when there is one — its capacity is what he
+  // actually dissolved, not what the plan intends for the next one.
+  var recon = _pepLiveRecon(stack, c);
   if(!recon) return 0;
   return (c && c.doseUnit === "units") ? recon.waterMl * 100 : recon.vialMg;
 }
@@ -23363,6 +23447,9 @@ function pepRenderScreen(){
     var vp = btn.getAttribute("data-pep-vialsize").split("|");
     btn.addEventListener("click", function(){ pepSetVialSize(parseInt(vp[0],10), parseFloat(vp[1])); });
   });
+  body.querySelectorAll("[data-pep-makeup]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepOpenMakeUp(parseInt(btn.getAttribute("data-pep-makeup"),10)); });
+  });
   body.querySelectorAll("[data-pep-vialcustom]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepOpenCustomVial(parseInt(btn.getAttribute("data-pep-vialcustom"),10)); });
   });
@@ -23512,6 +23599,11 @@ function _pepConsumeDose(ps, compoundId, direction){
       // No vial open. Open one if there is a sealed vial to open.
       if(sealed <= 0) return;             // nothing to consume; leave stock alone
       sealed--; stack.openedDate = _pepToday(); used = 0;
+      // Stamp what this vial was made up at, from the plan in force right now.
+      // Without it, editing the plan later would silently restate the strength
+      // of a vial already dissolved.
+      var pr = _pepRecon(stack, c);
+      if(pr){ stack.openVialMg = pr.vialMg; stack.openWaterMl = pr.waterMl; }
     }
     used += size;
     // Finished when the next dose could not be drawn from what is left. At a
@@ -25614,6 +25706,13 @@ function _pepTabStock(ps){
       h += "<button data-pep-vialsize=\"" + idx + "|" + mg + "\" style=\"padding:7px 12px;border-radius:16px;border:1px solid " + (on?"#7B68EE":"var(--border2)") + ";background:" + (on?"#7B68EE22":"none") + ";color:" + (on?"#7B68EE":"var(--text3)") + ";font-family:var(--font-d);font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation;\">" + _pepNum(mg) + "mg</button>";
     });
     h += "<button data-pep-vialcustom=\"" + idx + "\" style=\"padding:7px 12px;border-radius:16px;border:1px dashed var(--border2);background:none;color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation;\">Custom</button>";
+    // v4.9.256: record what was actually mixed. Shows the live make-up when
+    // there is one, so the button reads as a statement of fact rather than an
+    // action he has to remember he took.
+    var _lr = _pepLiveRecon(st, c);
+    var _mixed = !!(st.openedDate && st.openVialMg > 0 && st.openWaterMl > 0);
+    h += "<button data-pep-makeup=\"" + idx + "\" style=\"padding:7px 12px;border-radius:16px;border:1px solid " + (_mixed ? "#4CAF50" : "var(--border2)") + ";background:" + (_mixed ? "#4CAF5022" : "none") + ";color:" + (_mixed ? "#4CAF50" : "var(--text3)") + ";font-family:var(--font-d);font-size:11px;font-weight:800;cursor:pointer;touch-action:manipulation;\">" +
+      (_mixed ? "Mixed " + _pepNum(st.openVialMg) + "mg/" + _pepNum(st.openWaterMl) + "mL" : "Mix vial") + "</button>";
     h += "</div>";
 
     // Sealed vial stepper — the manual "current stock" figure.
@@ -25785,6 +25884,35 @@ function _pepValidateImport(raw){
     }
     if(st.cycleWeeks === 0) delete st.cycleWeeks;          // 0 means continuous, not a zero-length cycle
     if(e.freq) st.freq = String(e.freq);
+    // v4.9.255: the Phase 2 schedule shapes. Accepts the handoff document's own
+    // field names (schedule_type / interval_days / injection_dates /
+    // night_dates / active_days / end_date) as well as the app's, because the
+    // document is what gets pasted and a rename between the two is a silent
+    // schedule change.
+    var iv = parseInt(e.intervalDays != null ? e.intervalDays : e.interval_days, 10);
+    if(iv > 0) st.intervalDays = iv;
+    var ed = e.endDate || e.end_date;
+    if(ed){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(String(ed))){
+        out.problems.push(where + " (" + c.name + ") endDate must be YYYY-MM-DD."); return;
+      }
+      st.endDate = String(ed);
+    }
+    var dl = e.dates || e.injection_dates || e.night_dates;
+    if(Array.isArray(dl) && dl.length){
+      var badDate = dl.filter(function(x){ return !/^\d{4}-\d{2}-\d{2}$/.test(String(x)); });
+      if(badDate.length){
+        out.problems.push(where + " (" + c.name + ") has " + badDate.length + " date(s) that are not YYYY-MM-DD."); return;
+      }
+      st.dates = dl.map(String).sort();
+    }
+    // active_days is 1=Mon..7=Sun in his document; translate to a freq string
+    // the engine already understands rather than adding a parallel mechanism.
+    if(!st.freq && Array.isArray(e.active_days) && e.active_days.length){
+      var NAMES = {1:"mon",2:"tue",3:"wed",4:"thu",5:"fri",6:"sat",7:"sun"};
+      var days = e.active_days.map(function(n){ return NAMES[n]; }).filter(Boolean);
+      if(days.length) st.freq = days.length === 1 ? days[0] : days.join("/");
+    }
     if(typeof e.continuous === "boolean") st.continuous = e.continuous;
     if(e.status) st.status = String(e.status);
     if(e.notes) st.notes = String(e.notes);
@@ -25914,6 +26042,74 @@ function pepOpenImport(){
       pepRenderScreen();
       if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
     };
+  });
+}
+
+// Sheet for recording a make-up. Pre-filled from the plan, because that is what
+// he usually does — but every field is editable, since the whole point is that
+// what he actually mixed can differ from what was planned.
+function pepOpenMakeUp(idx){
+  var ps = pepGetState();
+  var st = ps.stacks && ps.stacks[idx]; if(!st) return;
+  var c = _pepCompound(st.compoundId);
+  var plan = _pepRecon(st, c) || {};
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  ov.innerHTML = "<div id=\"pep-mu-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88%;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Mix a vial &middot; " + _esc(c ? c.name : "") + "</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;\">Record what you actually made up. This vial's strength is taken from these numbers until it is finished &mdash; changing the plan later will not restate what is already dissolved.</div>" +
+    "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;\">" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Vial (mg)</label><br>" +
+    "<input id=\"pep-mu-vial\" type=\"number\" step=\"0.1\" min=\"0\" value=\"" + (plan.vialMg != null ? plan.vialMg : "") + "\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:17px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">BAC water (mL)</label><br>" +
+    "<input id=\"pep-mu-water\" type=\"number\" step=\"0.1\" min=\"0\" value=\"" + (plan.waterMl != null ? plan.waterMl : "") + "\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:17px;box-sizing:border-box;margin-top:4px;\"></div>" +
+    "</div>" +
+    "<div id=\"pep-mu-preview\" style=\"background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px;\"></div>" +
+    "<div style=\"display:flex;gap:10px;\">" +
+    "<button id=\"pep-mu-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Cancel</button>" +
+    "<button id=\"pep-mu-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Log make-up</button>" +
+    "</div></div>";
+  document.body.appendChild(ov);
+  _phxKeyboardSafe(ov);
+  ov.addEventListener("click", function(e){ if(e.target===ov) ov.remove(); });
+
+  function preview(){
+    var box = document.getElementById("pep-mu-preview");
+    if(!box) return;
+    var vEl = document.getElementById("pep-mu-vial");
+    var wEl = document.getElementById("pep-mu-water");
+    var vm = vEl ? parseFloat(vEl.value) : NaN;
+    var wm = wEl ? parseFloat(wEl.value) : NaN;
+    if(!(vm > 0) || !(wm > 0)){
+      box.innerHTML = "<div style=\"font-size:12px;color:var(--text3);\">Enter the vial size and the water you added.</div>";
+      return;
+    }
+    var dose = st.dose != null ? st.dose : (c ? c.dose : null);
+    var draw = _pepDraw(dose, c ? c.doseUnit : "mg", {vialMg:vm, waterMl:wm, conc: vm/wm});
+    var perVial = (dose > 0) ? Math.floor(vm / dose) : 0;
+    box.innerHTML =
+      "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;\">This vial</div>" +
+      "<div style=\"font-family:var(--font-d);font-size:24px;font-weight:900;color:#7B68EE;line-height:1;\">" + (draw ? _pepDrawText(draw) : "&mdash;") + "</div>" +
+      "<div style=\"font-size:11px;color:var(--text3);margin-top:6px;\">" + _pepNum(vm/wm) + "mg/mL &middot; " + _pepFmtDose(dose, c ? c.doseUnit : "mg") + " per dose &middot; " + perVial + " doses in the vial</div>" +
+      (draw && draw.units > 100 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Over 100 units &mdash; more than one full U-100 syringe. Use less water.</div>" : "") +
+      (draw && draw.units > 0 && draw.units < 3 ? "<div style=\"font-size:11px;color:var(--gold);margin-top:6px;\">Under 3 units &mdash; hard to measure accurately. Use more water.</div>" : "");
+  }
+  ["pep-mu-vial","pep-mu-water"].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener("input", preview);
+  });
+  preview();
+
+  var cancel = document.getElementById("pep-mu-cancel");
+  if(cancel) cancel.addEventListener("click", function(){ ov.remove(); });
+  var save = document.getElementById("pep-mu-save");
+  if(save) save.addEventListener("click", function(){
+    var vEl = document.getElementById("pep-mu-vial");
+    var wEl = document.getElementById("pep-mu-water");
+    if(pepLogMakeUp(idx, vEl ? vEl.value : null, wEl ? wEl.value : null)){
+      ov.remove();
+      pepRenderScreen();
+    }
   });
 }
 

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.254'", 'version is 4.9.254');
+has("var APP_VERSION='4.9.256'", 'version is 4.9.256');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1462,9 +1462,10 @@ function phxFnSpan(src, name) {
   // Raised DELIBERATELY after the pin failed — which is the pin working. The
   // enumeration guard below would have demanded the arming anyway; this one
   // makes adding it a conscious edit rather than a silent drift.
-  kb === 4
-    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 4 creation sites')
-    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 4 (pepOpenEditStack, pepOpenCustomVial, pepOpenBloodPanel, pepOpenImport); the helper is NOT idempotent`);
+  // v4.9.256 raised this to 5 for pepOpenMakeUp, which has two typed fields.
+  kb === 5
+    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 5 creation sites')
+    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 5 (pepOpenEditStack, pepOpenCustomVial, pepOpenBloodPanel, pepOpenImport, pepOpenMakeUp); the helper is NOT idempotent`);
   // v4.9.224: was 2, and the 2 came from a miscount I made and everyone
   // downstream inherited. The count pin is only as good as the enumeration
   // behind it, so the enumeration is now mechanical: every peptide overlay that
@@ -1504,12 +1505,12 @@ function phxFnSpan(src, name) {
     // decides what gets checked; these three only prove the scan still works.
     // A new sheet raises the count and needs no edit here; losing one is a
     // deliberate harness change.
-    const KNOWN_ARMED = ['pepOpenEditStack', 'pepOpenCustomVial', 'pepOpenBloodPanel', 'pepOpenImport'];
+    const KNOWN_ARMED = ['pepOpenEditStack', 'pepOpenCustomVial', 'pepOpenBloodPanel', 'pepOpenImport', 'pepOpenMakeUp'];
     const absent = KNOWN_ARMED.filter(n => !fns.includes(n));
     if (unbounded.length) {
       bad(`PEP: STRUCTURAL could not find the end of ${unbounded.join(', ')} — the span is unbounded, so anything scanned inside it is a guess. Refusing rather than extending to the end of the block.`);
-    } else if (fns.length < 6 || absent.length) {
-      bad(`PEP: STRUCTURAL the overlay enumeration itself broke — found ${fns.length} pepOpen* sheets (expected >= 6)${absent.length ? `, missing ${absent.join(', ')}` : ''}. Every keyboard guard is derived from this scan, so a silent miss here makes all of them pass vacuously.`);
+    } else if (fns.length < 7 || absent.length) {
+      bad(`PEP: STRUCTURAL the overlay enumeration itself broke — found ${fns.length} pepOpen* sheets (expected >= 7)${absent.length ? `, missing ${absent.join(', ')}` : ''}. Every keyboard guard is derived from this scan, so a silent miss here makes all of them pass vacuously.`);
     } else {
       miss.length === 0
         ? ok(`PEP: STRUCTURAL every peptide overlay with a typed field is keyboard-armed (${fns.length} sheets scanned)`)

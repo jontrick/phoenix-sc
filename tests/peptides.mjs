@@ -2084,7 +2084,22 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.notIncludes(rec, 'ZENTHORP',
         'the diagnostic ring is localStorage and gets read out in support — pathology ' +
         'must not land there by way of an error report');
-      assert.notIncludes(rec, '71', 'nor a marker value');
+      // v4.9.255: this used to be notIncludes(rec, '71'). The record carries an
+      // ISO timestamp, so a two-digit needle matches whenever the clock happens
+      // to contain those digits — it failed on an unrelated schedule change at
+      // 08:26:44.971Z. A flaky assertion I shipped, found by accident.
+      //
+      // Assert on STRUCTURE instead: the shape record must describe only counts,
+      // and must not mention the blood fields at all. That cannot collide with a
+      // clock, and it says what the property actually is.
+      assert.notIncludes(rec, 'markers', 'no marker structure described');
+      assert.notIncludes(rec, 'bloods', 'the bloods key is not even named');
+      assert.ok(JSON.parse(rec).payload_shape,
+        'a shape record exists — otherwise the two negatives above are vacuous');
+      Object.values(JSON.parse(rec).payload_shape).forEach(v => {
+        assert.ok(/^(number|string\(\d+\)|boolean|array\(\d+\)|object)$/.test(String(v)),
+          `every shape entry is a TYPE, never a value — got ${v}`);
+      });
     });
 
     // ── THE SIBLING I LEFT STANDING, fourth time today ─────────────────────
@@ -2272,6 +2287,223 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.equal(r.scheduled, 2,
         'weekly over a fortnight is two, not fourteen — the denominator the .219 ' +
         'audit fix depends on being right');
+    });
+  }
+
+  // ── MAKEUP — what he actually mixed, not what the plan intended ────────────
+  // Jon: "need to make sure volume make-ups are editable and what I decide to
+  // make up logs into the plan for doses etc."
+  //
+  // The BAC volume was already editable, but only as a PLAN value. Nothing
+  // recorded what he actually mixed, so editing the plan retroactively restated
+  // the strength of the vial already in his fridge and every unit count drawn
+  // from it. Same defect as counting doses instead of measuring them, one level
+  // up: the plan is an intention, the open vial is a fact.
+  {
+    const mk = (over) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(10), freq:'eod', continuous:true,
+        sealedVials:3, status:'instock',
+      }, over || {})] });
+      return app.pepGetState();
+    };
+    const drawUnits = (ps) => {
+      const st = ps.stacks[0], c = app._pepCompound(st.compoundId);
+      const d = app._pepDraw(st.dose, c.doseUnit, app._pepLiveRecon(st, c));
+      return d ? Math.round(d.units * 10) / 10 : null;
+    };
+
+    test('MAKEUP logging a mix records the vial and the water actually used', () => {
+      mk();
+      assert.equal(app.pepLogMakeUp(0, 10, 1), true, 'accepted');
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.openVialMg, 10, 'vial recorded');
+      assert.equal(st.openWaterMl, 1, 'and the water HE used, not the plan value of 2');
+      assert.ok(st.openedDate, 'dated, so shelf life runs from the mix');
+    });
+
+    test('MAKEUP the draw follows what is in the vial, not the plan', () => {
+      mk();
+      // plan says 10mg in 2mL -> 5mg/mL -> 0.5mg = 10u
+      assert.equal(drawUnits(app.pepGetState()), 10, 'the plan draw');
+      app.pepLogMakeUp(0, 10, 1);   // he actually used 1mL -> 10mg/mL -> 5u
+      assert.equal(drawUnits(app.pepGetState()), 5,
+        'half the volume, half the units — this is the number that goes in the syringe');
+    });
+
+    test('MAKEUP editing the plan does NOT restate a vial already dissolved', () => {
+      mk();
+      app.pepLogMakeUp(0, 10, 1);
+      const ps = app.pepGetState();
+      ps.stacks[0].waterMl = 4;         // he changes his mind for NEXT time
+      app.pepSaveState(ps);
+      assert.equal(drawUnits(app.pepGetState()), 5,
+        'the open vial is still 10mg in 1mL. Without this the app would tell him ' +
+        'to draw 20u from a vial that needs 5u — a four-fold dose off a plan edit');
+    });
+
+    test('MAKEUP the plan governs the NEXT vial, which is the right scope', () => {
+      mk();
+      app.pepLogMakeUp(0, 10, 1);
+      const ps = app.pepGetState();
+      ps.stacks[0].waterMl = 4;
+      ps.stacks[0].openedDate = null;   // that vial is finished
+      ps.stacks[0].openVialMg = null;
+      ps.stacks[0].openWaterMl = null;
+      app.pepSaveState(ps);
+      assert.equal(drawUnits(app.pepGetState()), 20,
+        '10mg in 4mL = 2.5mg/mL -> 0.5mg = 20u. Changing your mind about dilution ' +
+        'applies from the next vial, not backwards');
+    });
+
+    test('MAKEUP opening a vial takes it from the sealed count, once', () => {
+      mk();
+      app.pepLogMakeUp(0, 10, 1);
+      assert.equal(app.pepGetState().stacks[0].sealedVials, 2, 'three became two');
+      app.pepLogMakeUp(0, 10, 2);   // re-mixing the same open vial
+      assert.equal(app.pepGetState().stacks[0].sealedVials, 2,
+        'still two — correcting the numbers on a vial already open must not ' +
+        'consume another one from the box');
+    });
+
+    test('MAKEUP a mix resets consumption for the new vial', () => {
+      const ps = mk({ openedDate: daysAgo(3), openUsedAmt: 4, openDosesUsed: 8 });
+      app.pepSaveState(ps);
+      app.pepLogMakeUp(0, 10, 1);
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.openUsedAmt, 0,
+        'a fresh vial is full — carrying the last one’s usage over would ' +
+        'under-report what he has');
+    });
+
+    test('MAKEUP nonsense volumes are refused rather than stored', () => {
+      mk();
+      assert.equal(app.pepLogMakeUp(0, 10, 0), false, 'zero water is not a mix');
+      assert.equal(app.pepLogMakeUp(0, 0, 2), false, 'nor is an empty vial');
+      assert.equal(app.pepLogMakeUp(0, 'abc', 'def'), false, 'nor is text');
+      assert.equal(app.pepGetState().stacks[0].openedDate, undefined,
+        'and none of them opened a vial');
+    });
+
+    test('MAKEUP consumption stamps the make-up when it opens a vial itself', () => {
+      const ps = mk();
+      app._pepConsumeDose(ps, 'bpc157', 1);
+      assert.equal(ps.stacks[0].openVialMg, 10, 'stamped from the plan in force');
+      assert.equal(ps.stacks[0].openWaterMl, 2,
+        'so a later plan edit cannot restate this vial either — the ticking path ' +
+        'gets the same protection as the explicit one');
+    });
+  }
+
+  // ── PHASE2SCHED — the four schedule shapes the Phase 2 protocol needs ──────
+  // From PHASE2_APP_IMPLEMENTATION.md. The engine could not express any of
+  // these, and an import that produces the wrong calendar is worse than no
+  // import: he injects on the days the app shows him.
+  //
+  // Dates here are literals taken straight from his document, and that is safe
+  // for once — they are the protocol's own fixed dates, not relative positions
+  // that decay. MOTS-c really is 14/19/24/29 October.
+  {
+    const sched = (stack) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({ status: 'instock' }, stack)], checked: {}, cart: [] });
+      const ps = app.pepGetState();
+      return (iso) => {
+        const d = app._pepGetDoses(ps, iso);
+        return [...d.morning, ...d.anytime, ...d.evening].length > 0;
+      };
+    };
+
+    // ── RETATRUTIDE: every 6 days, rotating through the week ────────────────
+    // It was Friday-weekly. Six days means it walks: 3 Sep is a Thursday, the
+    // next is 9 Sep which is a Wednesday. No weekday rule can say that.
+    test('PHASE2SCHED an interval of 6 days rotates through the week', () => {
+      const due = sched({ compoundId:'retatrutide', dose:6, vialMg:30, waterMl:5,
+                          startDate:'2026-09-03', intervalDays:6 });
+      assert.equal(due('2026-09-03'), true,  'first dose');
+      assert.equal(due('2026-09-04'), false, 'not the day after');
+      assert.equal(due('2026-09-09'), true,  'six days on — a Wednesday, not a Friday');
+      assert.equal(due('2026-09-10'), false, 'and not the day after that');
+      assert.equal(due('2026-09-15'), true,  'twelve days on');
+      assert.equal(due('2026-11-02'), true,  'and still in step two months later, ' +
+        'which a weekly rule would have drifted off by ten days');
+    });
+
+    // ── MOTS-c: four explicit dates, nothing derived ────────────────────────
+    test('PHASE2SCHED explicit dates are the schedule, not a hint at one', () => {
+      const due = sched({ compoundId:'motsc', dose:10, vialMg:10, waterMl:0.5,
+                          startDate:'2026-10-14',
+                          dates:['2026-10-14','2026-10-19','2026-10-24','2026-10-29'] });
+      ['2026-10-14','2026-10-19','2026-10-24','2026-10-29'].forEach(d =>
+        assert.equal(due(d), true, `injection on ${d}`));
+      ['2026-10-15','2026-10-20','2026-10-30','2026-11-03'].forEach(d =>
+        assert.equal(due(d), false, `nothing on ${d}`));
+    });
+
+    test('PHASE2SCHED an explicit-date course simply stops when the dates run out', () => {
+      const due = sched({ compoundId:'motsc', dose:10, vialMg:10, waterMl:0.5,
+                          startDate:'2026-10-14',
+                          dates:['2026-10-14','2026-10-19','2026-10-24','2026-10-29'] });
+      assert.equal(due('2026-11-03'), false,
+        'no fifth injection — the 4-month lock is a property of the dates ending, ' +
+        'not a rule that has to be remembered separately');
+    });
+
+    // ── EPITALON: 20 consecutive nights, as explicit dates ──────────────────
+    test('PHASE2SCHED Epitalon runs its twenty nights and then stops', () => {
+      const nights = [];
+      for (let i = 0; i < 20; i++) {
+        const d = new Date(Date.parse('2026-09-04T12:00:00') + i * 86400000);
+        nights.push(d.toISOString().slice(0, 10));
+      }
+      const due = sched({ compoundId:'epitalon', dose:5, vialMg:10, waterMl:1,
+                          startDate:'2026-09-04', dates:nights });
+      assert.equal(due('2026-09-04'), true,  'night 1');
+      assert.equal(due('2026-09-13'), true,  'night 10, mid-course');
+      assert.equal(due('2026-09-23'), true,  'night 20, the last');
+      assert.equal(due('2026-09-24'), false, 'and nothing on the 21st night');
+    });
+
+    // ── TB-500: Monday only ────────────────────────────────────────────────
+    // Monday is his lightest day — Ipamorelin is off, only NAD+ is scheduled.
+    // "mon/wed/fri" needed all three days; a single named weekday did not work.
+    test('PHASE2SCHED a single named weekday works on its own', () => {
+      const due = sched({ compoundId:'tb500', dose:2, vialMg:10, waterMl:2,
+                          startDate:'2026-09-01', freq:'monday' });
+      assert.equal(due('2026-09-07'), true,  'Monday');
+      assert.equal(due('2026-09-08'), false, 'not Tuesday');
+      assert.equal(due('2026-09-14'), true,  'the following Monday');
+    });
+
+    test('PHASE2SCHED mon/wed/fri still means all three, not just Monday', () => {
+      const due = sched({ compoundId:'nad', dose:50, vialMg:500, waterMl:2,
+                          startDate:'2026-09-05', freq:'3x/week Mon/Wed/Fri' });
+      assert.equal(due('2026-09-07'), true,  'Monday');
+      assert.equal(due('2026-09-09'), true,  'Wednesday');
+      assert.equal(due('2026-09-11'), true,  'Friday');
+      assert.equal(due('2026-09-08'), false, 'not Tuesday — the new weekday parsing ' +
+        'must not swallow the combination rules that already worked');
+    });
+
+    // ── END DATES: a bridge that actually ends ──────────────────────────────
+    test('PHASE2SCHED an end date stops the schedule dead', () => {
+      const due = sched({ compoundId:'tesamorelin', dose:2, vialMg:10, waterMl:2,
+                          startDate:'2026-09-08', endDate:'2026-10-02',
+                          freq:'daily' });
+      assert.equal(due('2026-09-08'), true,  'day 1 of the bridge');
+      assert.equal(due('2026-10-02'), true,  'the last stated day is INCLUSIVE');
+      assert.equal(due('2026-10-03'), false, 'and it is over — CJC resumes here, ' +
+        'so a Tesamorelin dose on the 3rd would be both compounds at once');
+    });
+
+    test('PHASE2SCHED an end date is honoured even when the rule would fire', () => {
+      const due = sched({ compoundId:'ghkcu', dose:2, vialMg:50, waterMl:2,
+                          startDate:'2026-09-24', endDate:'2026-10-23',
+                          freq:'daily' });
+      assert.equal(due('2026-10-23'), true,  'day 30');
+      assert.equal(due('2026-10-24'), false, 'daily would say yes; the course says no');
     });
   }
 
@@ -2605,6 +2837,67 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(msg && msg.length > 0, 'something is said');
       assert.ok(msg.includes('Nothing has changed') || msg.toLowerCase().includes('not imported'),
         'and it says his protocol is intact, which is the thing he needs to know');
+    });
+
+    // ── PHASE 2 FIELD NAMES — the document's own, not just the app's ────────
+    // PHASE2_APP_IMPLEMENTATION.md is what gets pasted. It writes
+    // interval_days, injection_dates, night_dates, active_days, end_date. If
+    // the importer only accepted the app's camelCase, those fields would be
+    // silently dropped and the compound would fall back to a default schedule —
+    // a wrong calendar that validates cleanly, which is the worst outcome
+    // available here.
+    test('IMPORT interval_days from the handoff document is honoured', () => {
+      const r = V(JSON.stringify([{ compound_id:'retatrutide', compoundId:'retatrutide',
+        dose:6, startDate:'2026-09-03', interval_days:6, vialMg:30, waterMl:5 }]));
+      assert.equal(r.ok, true, 'accepted');
+      assert.equal(r.entries[0].intervalDays, 6,
+        'six-day rotation carried — dropped, Retatrutide would fall back to daily');
+    });
+
+    test('IMPORT injection_dates and night_dates both land as explicit dates', () => {
+      const mots = V(JSON.stringify([{ compoundId:'motsc', dose:10, vialMg:10, waterMl:0.5,
+        startDate:'2026-10-14',
+        injection_dates:['2026-10-14','2026-10-19','2026-10-24','2026-10-29'] }]));
+      assert.deepEqual(mots.entries[0].dates,
+        ['2026-10-14','2026-10-19','2026-10-24','2026-10-29'], 'MOTS-c four dates');
+      const epi = V(JSON.stringify([{ compoundId:'epitalon', dose:5, vialMg:10, waterMl:1,
+        startDate:'2026-09-04', night_dates:['2026-09-04','2026-09-05'] }]));
+      assert.equal(epi.entries[0].dates.length, 2, 'Epitalon nights use the same field');
+    });
+
+    test('IMPORT active_days becomes a frequency the engine already understands', () => {
+      const mon = V(JSON.stringify([{ compoundId:'tb500', dose:2, vialMg:10, waterMl:2, active_days:[1] }]));
+      assert.equal(mon.entries[0].freq, 'mon',
+        'a single day translates rather than adding a parallel mechanism');
+      const mwf = V(JSON.stringify([{ compoundId:'nad', dose:50, vialMg:500, waterMl:2, active_days:[1,3,5] }]));
+      assert.equal(mwf.entries[0].freq, 'mon/wed/fri', 'and three days keep the combination form');
+    });
+
+    test('IMPORT an explicit freq is not overwritten by active_days', () => {
+      const r = V(JSON.stringify([{ compoundId:'ta1', dose:1.6, vialMg:10, waterMl:2,
+        freq:'wed/sat', active_days:[3,6] }]));
+      assert.equal(r.entries[0].freq, 'wed/sat',
+        'whatever he wrote explicitly wins — two sources for one property must ' +
+        'have a stated precedence, not a last-writer race');
+    });
+
+    test('IMPORT end_date is carried and validated', () => {
+      const ok = V(JSON.stringify([{ compoundId:'tesamorelin', dose:2, vialMg:10, waterMl:2,
+        startDate:'2026-09-08', end_date:'2026-10-02', freq:'daily' }]));
+      assert.equal(ok.entries[0].endDate, '2026-10-02', 'the bridge ends when it says');
+      const bad = V(JSON.stringify([{ compoundId:'tesamorelin', dose:2, end_date:'Oct 2' }]));
+      assert.equal(bad.ok, false,
+        'an unparseable end date would silently mean never-ending, and this one ' +
+        'overlaps CJC resuming — two GHRH compounds on the same night');
+    });
+
+    test('IMPORT a malformed date inside a date list fails the whole import', () => {
+      const r = V(JSON.stringify([{ compoundId:'motsc', dose:10,
+        injection_dates:['2026-10-14','14 Oct','2026-10-24'] }]));
+      assert.equal(r.ok, false, 'refused');
+      assert.ok(r.problems.join(' ').includes('1 date'),
+        'and it says how many were wrong — silently keeping two of three would ' +
+        'be a course of the wrong length');
     });
 
     // v4.9.248 — in-transit stock. Jon has Epitalon, Tesamorelin and NAD+ on

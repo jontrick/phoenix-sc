@@ -826,6 +826,93 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(h.includes('u / ') || h.includes('No doses scheduled'), 'units or rest-day line');
     });
 
+    // ── A SKIP HAS TO SHOW ON THE TODAY SCREEN (v4.9.270) ──────────────────
+    // Jon: "when the peptide gets skipped needs to show on the today screen."
+    //
+    // The portal has drawn skips since .259. The main Today tile — the surface
+    // he actually looks at — read ps.checked and never ps.skipped, so a dose he
+    // had deliberately declined looked exactly like one he had not got to yet,
+    // and kept counting itself in "doses remaining".
+    //
+    // These drive pepRenderTodayTile itself, not its helpers. A hand-picked
+    // helper test is how this domain shipped a Today card that never ran for
+    // four versions.
+    const seedTwoDaily = () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [
+        { compoundId:'bpc157',     dose:0.5, startDate: daysAgo(40), freq:'daily', vialMg:10, waterMl:2, sealedVials:2, status:'instock' },
+        { compoundId:'ipamorelin', dose:0.3, startDate: daysAgo(40), freq:'daily', vialMg:10, waterMl:2, sealedVials:2, status:'instock' },
+      ];
+      app.pepSaveState(st);
+    };
+    const tileHTML = () => withStubbedDom(() => {
+      nodes['today-peptide-tile'] = mk('today-peptide-tile');
+      app.pepRenderTodayTile();
+      return nodes['today-peptide-tile'].innerHTML;
+    });
+
+    test('SKIPTILE a skipped dose is LABELLED on the Today tile', () => {
+      const h = withStubbedDom(() => {
+        seedTwoDaily();
+        app.pepSkipDose('bpc157');
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.ok(h.includes('Skipped'),
+        'the word is on the tile — this is the whole of what Jon asked for');
+      assert.ok(h.includes('line-through'),
+        'and the name is struck through, the same language the portal already uses');
+    });
+
+    test('SKIPTILE a skipped dose stops counting as REMAINING', () => {
+      const before = withStubbedDom(() => { seedTwoDaily(); return tileHTML(); });
+      assert.ok(before.includes('>2</div>'), 'two doses outstanding to start with');
+      const after = withStubbedDom(() => {
+        app.pepSkipDose('bpc157');
+        return tileHTML();
+      });
+      assert.ok(after.includes('>1</div>'),
+        'one outstanding after a skip — a decision he has made must stop being ' +
+        'counted as work still to do');
+      assert.ok(after.includes('2 scheduled'),
+        'while the day still SCHEDULED two: skipping is not the dose vanishing');
+    });
+
+    test('SKIPTILE the header reconciles — the skips are named', () => {
+      const h = withStubbedDom(() => {
+        seedTwoDaily();
+        app.pepSkipDose('bpc157');
+        return tileHTML();
+      });
+      assert.ok(h.includes('0/2 done'), 'nothing taken');
+      assert.ok(h.includes('1 skipped'),
+        '"1 outstanding of 2 scheduled, 0 done" is arithmetic that does not add ' +
+        'up unless the skip is named');
+    });
+
+    test('SKIPTILE an untouched dose is NOT struck through', () => {
+      const h = withStubbedDom(() => { seedTwoDaily(); return tileHTML(); });
+      assert.ok(!h.includes('line-through'),
+        'the negative control — a rule that strikes everything would satisfy the ' +
+        'case above and be worse than no rule at all');
+      assert.ok(!h.includes('Skipped'), 'and nothing is labelled');
+    });
+
+    test('SKIPTILE taking it after all clears the skip from the tile', () => {
+      const h = withStubbedDom(() => {
+        seedTwoDaily();
+        app.pepSkipDose('bpc157');
+        app.pepToggleDose('bpc157');      // the circle stays tappable on a skipped row
+        return tileHTML();
+      });
+      assert.ok(!h.includes('Skipped'),
+        'skipped and taken are exclusive states of the same day');
+      assert.ok(h.includes('1/2 done'), 'and it counts as done');
+    });
+
     test('RENDER the tile stays empty when there is no protocol', () => {
       const h = withStubbedDom(() => {
         reset(); signIn('jon');

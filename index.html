@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.269';
+var APP_VERSION='4.9.270';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -24040,26 +24040,44 @@ function pepRenderTodayTile(){
     return;
   }
 
-  var done = 0;
-  all.forEach(function(it){ if(checked.indexOf(it.id) >= 0) done++; });
-  var remaining = all.length - done;
+  // v4.9.270: the tile read ps.checked and never ps.skipped, so a dose Jon had
+  // DELIBERATELY declined was indistinguishable from one he had not got to yet
+  // — same empty circle, and it kept counting itself in "doses remaining". The
+  // portal has drawn skips since .259; the main Today screen, which is the
+  // surface he actually looks at, did not.
+  //
+  // A skip is a DECISION, and the tile has to stop asking about it. Done wins
+  // over skipped if a day somehow carries both, matching the portal.
+  var done = 0, nSkip = 0;
+  all.forEach(function(it){
+    if(checked.indexOf(it.id) >= 0){ done++; return; }
+    if(_pepIsSkipped(ps, today, it.id)) nSkip++;
+  });
+  var remaining = all.length - done - nSkip;
 
   var h = "<div data-pep-tile-open=\"1\" style=\"background:var(--bg2);border:1px solid " + (remaining ? "#7B68EE" : "var(--border)") + ";border-radius:var(--radius);padding:14px 16px;cursor:pointer;\">";
   h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#7B68EE;margin-bottom:8px;\">Peptides &middot; Today</div>";
   h += "<div style=\"display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px;\">";
   h += "<div><div style=\"font-family:var(--font-d);font-size:40px;font-weight:900;line-height:1;color:" + (remaining ? "var(--text)" : "#7B68EE") + ";\">" + remaining + "</div>";
   h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + (remaining === 1 ? "dose remaining" : "doses remaining") + " &middot; " + all.length + " scheduled</div></div>";
-  h += "<div style=\"font-family:var(--font-d);font-size:11px;color:var(--text3);\">" + done + "/" + all.length + " done</div>";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;color:var(--text3);text-align:right;\">" + done + "/" + all.length + " done" +
+       (nSkip ? "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + nSkip + " skipped</div>" : "") + "</div>";
   h += "</div>";
 
   function row(item){
     var isDone = checked.indexOf(item.id) >= 0;
-    var r = "<div style=\"display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);" + (isDone ? "opacity:0.5;" : "") + "\">";
+    var isSkip = !isDone && _pepIsSkipped(ps, today, item.id);
+    var r = "<div style=\"display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);" + (isDone || isSkip ? "opacity:0.5;" : "") + "\">";
+    // The circle stays tappable on a skipped row: changing his mind and taking
+    // it is one tap, and pepToggleDose clears the skip on the way through.
     r += "<button data-pep-tile-check=\"" + item.id + "\" style=\"flex-shrink:0;width:22px;height:22px;border-radius:50%;border:2px solid " + (isDone ? "#7B68EE" : "var(--border2)") + ";background:" + (isDone ? "#7B68EE" : "transparent") + ";cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;padding:0;\">";
     if(isDone) r += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='12' height='12'><polyline points='20 6 9 17 4 12'/></svg>";
     r += "</button>";
     r += "<div style=\"flex:1;min-width:0;\">";
-    r += "<div style=\"font-size:13px;font-weight:700;color:var(--text);\">" + _esc(item.name) + "</div>";
+    r += "<div style=\"display:flex;align-items:center;gap:6px;\">";
+    r += "<div style=\"font-size:13px;font-weight:700;color:var(--text);" + (isSkip ? "text-decoration:line-through;" : "") + "\">" + _esc(item.name) + "</div>";
+    if(isSkip) r += "<span style=\"flex-shrink:0;border:1px solid var(--border2);border-radius:10px;color:var(--text3);font-family:var(--font-d);font-size:8px;font-weight:900;padding:2px 6px;text-transform:uppercase;letter-spacing:1px;\">Skipped</span>";
+    r += "</div>";
     r += "<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">" + _esc(item.timing || "") + "</div>";
     r += "</div>";
     r += "<div style=\"text-align:right;flex-shrink:0;\">";

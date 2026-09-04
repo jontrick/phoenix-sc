@@ -3289,4 +3289,171 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(read(KEY).chin_max, 12, 'his max is untouched by an edit further down');
     } finally { app._blabWoRender = realRender; app._blabWoState = null; }
   });
+
+  // ── THREE FROM A LIVE SESSION (v4.9.291) ─────────────────────────────────
+
+  // 1. SCREEN REVERT. Jon asked for session/plan to go on the safe restore list. I did
+  // not do that: the list is Peptides' shared plumbing and its stated objection still
+  // partly holds. The precise signal is not "is there an unfinished session" (true all
+  // day) but "WAS HE LOOKING AT IT when the app died".
+
+  test('REOPEN: nothing reopens when he was not on the session screen', () => {
+    reset(); signIn(UID);
+    assert.equal(app._phxShouldReopenSession(), null, 'no flag, no reopen');
+  });
+
+  test('REOPEN: an unfinished session he was watching comes back', () => {
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 3, last_completed_day: 2, maxes: { bench: 130, squat: 150, deadlift: 170 },
+                blockProgress: { ['blab:3:3:' + today]: { '0': { done: true, ts: today } } }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:3:3:' + today);
+    const r = app._phxShouldReopenSession();
+    assert.ok(r, 'it reopens');
+    assert.equal(r.week, 3, 'the right week');
+    assert.equal(r.day, 3, 'and day');
+  });
+
+  test('REOPEN: YESTERDAY\'s session is not reopened this morning', () => {
+    // The identity carries the local date, so this needs no time window — which matters
+    // for a 4:30am session, where any window measured in hours is a guess.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 3, last_completed_day: 2, maxes: { bench: 130, squat: 150, deadlift: 170 },
+                blockProgress: { ['blab:3:3:' + today]: { '0': { done: true, ts: today } } }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:3:3:2026-01-01');
+    assert.equal(app._phxShouldReopenSession(), null, 'a different day never reopens');
+  });
+
+  test('REOPEN: a FINISHED session is not reopened', () => {
+    // The original objection to putting session on the safe list — "resuming one he did
+    // not choose is worse than Today" — and it is still right for this case.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 3, last_completed_day: 3, maxes: { bench: 130, squat: 150, deadlift: 170 },
+                blockProgress: { ['blab:3:3:' + today]: { '0': { done: true, ts: today } } }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:3:3:' + today);
+    assert.equal(app._phxShouldReopenSession(), null, 'day 3 is already completed, so Today is right');
+  });
+
+  test('REOPEN: leaving on purpose clears the flag', () => {
+    reset(); signIn(UID);
+    seed('phoenix_session_screen_open', 'blab:3:3:2026-09-05');
+    app._phxClearSessionScreenOpen();
+    assert.equal(read('phoenix_session_screen_open'), null, 'walking out means walking out');
+  });
+
+  // 2. LAST-SESSION DELAY. The banner is read SYNCHRONOUSLY from records; the async part
+  // is the profile fetch that PUTS them there after a wipe. Open a session first and the
+  // cards render permanently blank — _blabApplyCloud repaints the calendar and Today, but
+  // never the session screen.
+
+  test('LOADORDER: with records present it never waits', async () => {
+    // The normal morning. A wait that fires every session would be a regression.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Flat DB Press_max': 22 }, _ts: NEWER });
+    app._phxProfileReady = new Promise(() => {});   // never settles
+    // The timer is driven here too. Without it, a broken guard does not FAIL — it HANGS,
+    // because the race would have nothing to resolve it, and a hang gives no message and
+    // reads as an infrastructure fault. Found by inverting the guard and watching the
+    // suite stop rather than go red.
+    const realTimeout = app.setTimeout;
+    app.setTimeout = (fn) => { fn(); return 0; };
+    try {
+      const outcome = await app._blabAwaitRecords();
+      assert.equal(outcome, 'skipped', 'it did not wait at all — the records were already there');
+    } finally { app.setTimeout = realTimeout; app._phxProfileReady = null; }
+  });
+
+  test('LOADORDER: with records missing it waits for the fetch', async () => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    app._phxProfileReady = Promise.resolve({ data: {} });
+    try {
+      assert.equal(await app._blabAwaitRecords(), 'ready', 'it waited for the data to land');
+    } finally { app._phxProfileReady = null; }
+  });
+
+  test('LOADORDER: a fetch that never settles cannot strand him', async () => {
+    // The cap is the point. At 4:30am the network is the least reliable thing in the
+    // room, and a session that will not open is worse than a missing banner.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    app._phxProfileReady = new Promise(() => {});   // never settles, like a dead network
+    // The sandbox stubs setTimeout to a no-op, so the cap can never fire on its own here
+    // — and an unfired cap against a never-settling promise hangs the whole suite, which
+    // is how I found that out. Driving the timer is the only way to exercise the branch.
+    const realTimeout = app.setTimeout;
+    app.setTimeout = (fn) => { fn(); return 0; };
+    try {
+      assert.equal(await app._blabAwaitRecords(), 'timeout', 'it gave up rather than hanging');
+    } finally { app.setTimeout = realTimeout; app._phxProfileReady = null; }
+  });
+
+  // 3. WEIGHT SUGGESTION.
+
+  const withWeeks = (name, weeks) => {
+    reset(); signIn(UID);
+    const rec = {}; rec[name + '_wk'] = weeks;
+    seed(KEY, { active: true, week: 4, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: rec, _ts: NEWER });
+  };
+
+  test('SUGGEST: hitting the rep target moves the weight up — his BB Shrugs example', () => {
+    withWeeks('BB Shrugs', { '3': { wt: 45, reps: 10, date: '2026-08-28' } });
+    const s = app.blabSuggestWeight('BB Shrugs', 10);
+    assert.ok(s, 'a suggestion is made');
+    assert.equal(s.kg, 47.5, '45 + one 2.5kg increment');
+    assert.ok(/45kg/.test(s.basis), 'and it shows what it was derived from');
+  });
+
+  test('SUGGEST: missing the target holds the weight and says why', () => {
+    withWeeks('BB Shrugs', { '3': { wt: 45, reps: 7, date: '2026-08-28' } });
+    const s = app.blabSuggestWeight('BB Shrugs', 10);
+    assert.equal(s.kg, 45, 'same weight');
+    assert.ok(/chase the reps/i.test(s.note), 'and the reason is on screen, not implied');
+  });
+
+  test('SUGGEST: a big lower-body lift moves in 5kg, not 2.5', () => {
+    withWeeks('Back Squat', { '3': { wt: 100, reps: 5, date: '2026-08-28' } });
+    assert.equal(app.blabSuggestWeight('Back Squat', 5).kg, 105, 'squat jumps 5kg');
+  });
+
+  test('SUGGEST: no history means NO suggestion, not a guess', () => {
+    // A number invented from nothing reads as knowledge. Blank is the honest output.
+    withWeeks('Never Done', {});
+    assert.equal(app.blabSuggestWeight('Never Done', 10), null, 'nothing is offered');
+  });
+
+  test('SUGGEST: movement patterns stay separate', () => {
+    // Jon raised that incline and flat, single-arm and seated, reverse flyes and lateral
+    // raises are different. Keyed by name, so nothing crosses over.
+    reset(); signIn(UID);
+    const rec = {};
+    rec['Incline DB Press_wk'] = { '3': { wt: 30, reps: 10 } };
+    seed(KEY, { active: true, week: 4, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: rec, _ts: NEWER });
+    // 30 + 2.5 = 32.5, which roundToEquipment lands on 32 for dumbbells — they do not
+    // come in 2.5kg steps, and a suggestion he cannot load off the rack is useless. So
+    // this asserts the DIRECTION, not a figure the equipment gets a say in. The exact
+    // arithmetic is pinned on BB Shrugs above, where a barbell can take 47.5.
+    const inc = app.blabSuggestWeight('Incline DB Press', 10);
+    assert.ok(inc && inc.kg > 30, 'incline has history and the suggestion moves up from 30');
+    assert.equal(app.blabSuggestWeight('Flat DB Press', 10), null,
+      'flat does NOT inherit it — a different movement is a different history');
+  });
+
+  test('SUGGEST: weekly maxes come back in order for the progression view', () => {
+    withWeeks('BB Shrugs', {
+      '4': { wt: 47.5, reps: 10 }, '2': { wt: 42.5, reps: 10 }, '3': { wt: 45, reps: 10 },
+    });
+    const h = app.blabWeeklyMaxes('BB Shrugs');
+    assert.equal(h.length, 3, 'every recorded week');
+    assert.deepEqual(h.map((r) => r.week), [2, 3, 4], 'in week order, not insertion order');
+    assert.equal(h[2].wt, 47.5, 'with the load he hit');
+  });
 }

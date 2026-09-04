@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.290';
+var APP_VERSION='4.9.291';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4184,7 +4184,125 @@ window._blabConfirm = function(title, message, onYes, yesLabel){
   } catch(_e){ console.warn('[PHX] _blabConfirm failed:', _e); }
 };
 
+// v4.9.291 — wait for the profile fetch ONLY when the records it carries are actually
+// missing, and only briefly.
+//
+// Jon asked for the last-session data to be present before the cards render. It cannot
+// be unconditionally: at 4:30am in a garage the network is the least reliable thing in
+// the room, and blocking the session on it would trade a missing banner for a session
+// that will not open. So:
+//
+//   records already present  -> open immediately, no wait at all. This is every normal
+//                               morning; the wait never fires.
+//   records missing          -> the state was wiped and only the cloud has them. Wait up
+//                               to 1.2s, then open regardless.
+//
+// The cap matters more than the wait. A promise that never settles must not strand him
+// in front of a tile that does nothing, so the race resolves on whichever comes first.
+window._blabAwaitRecords = function(){
+  try {
+    var s = window.blabGetState();
+    var have = s && s.records && Object.keys(s.records).length > 0;
+    // Three OUTCOMES, not a boolean. 'skipped' and 'timeout' both mean "did not get
+    // data", but only one of them means "did not wait" — and that distinction is the
+    // whole property. Returning false for both made the guard untestable: inverting it
+    // left every case green because the answer was the same either way.
+    if(have || !window._phxProfileReady) return Promise.resolve('skipped');
+    return Promise.race([
+      window._phxProfileReady.then(function(){ return 'ready'; }).catch(function(){ return 'timeout'; }),
+      new Promise(function(res){ setTimeout(function(){ res('timeout'); }, 1200); })
+    ]);
+  } catch(_e){ return Promise.resolve('skipped'); }
+};
+
+// v4.9.291 — WEIGHT SUGGESTION AND WEEKLY PROGRESSION.
+//
+// Jon: "if last week was 45kg x 10 on BB Shrugs at target 10, suggest 47.5kg or 50kg
+// this week".
+//
+// The rule is deliberately dull, and states its own basis on screen so he can disagree
+// with it rather than having to trust it:
+//
+//   hit the rep target      -> add one increment
+//   missed the rep target   -> hold the same weight, and say why
+//   no history              -> NO SUGGESTION. A number invented from nothing is worse
+//                              than a blank, because it looks like it knows something.
+//
+// Increment is 2.5 kg by default and 5 kg for the big lower-body barbell lifts, which is
+// the smallest jump each is normally loadable in.
+//
+// Per exercise NAME, so incline and flat, single-arm and seated, reverse flyes and
+// lateral raises are all separate histories. No attempt is made to relate them — Jon
+// raised that they are different movements and the honest handling is to keep them apart
+// rather than guess a mapping between them.
+var _BLAB_BIG_LIFTS = ['squat', 'deadlift', 'bench', 'hip thrust', 'leg press', 'rack pull'];
+
+function blabWeeklyMaxes(name){
+  try {
+    var s = window.blabGetState();
+    if(!s || !s.records) return [];
+    var map = s.records[name + '_wk'];
+    if(!map || typeof map !== 'object') return [];
+    return Object.keys(map)
+      .map(function(w){ return { week: parseInt(w, 10), wt: map[w].wt || 0, reps: map[w].reps || 0, date: map[w].date || '' }; })
+      .filter(function(r){ return r.week > 0; })
+      .sort(function(a, b){ return a.week - b.week; });
+  } catch(_e){ return []; }
+}
+
+function _blabIncrementFor(name){
+  var n = String(name || '').toLowerCase();
+  for(var i = 0; i < _BLAB_BIG_LIFTS.length; i++){
+    if(n.indexOf(_BLAB_BIG_LIFTS[i]) >= 0) return 5;
+  }
+  return 2.5;
+}
+
+// Returns {kg, basis, note} or null. NULL IS A REAL ANSWER — it means "not enough
+// history", and the card shows nothing rather than a made-up number.
+function blabSuggestWeight(name, targetReps){
+  try {
+    var hist = blabWeeklyMaxes(name);
+    if(!hist.length) return null;
+    var last = hist[hist.length - 1];
+    if(!(last.wt > 0)) return null;
+    var tgt = parseInt(targetReps, 10) || 0;
+    var inc = _blabIncrementFor(name);
+    var basis = 'Last: ' + last.wt + 'kg \u00d7 ' + last.reps + ' (wk ' + last.week + ')';
+    if(tgt > 0 && last.reps >= tgt){
+      var next = last.wt + inc;
+      if(typeof roundToEquipment === 'function'){
+        try { next = roundToEquipment(next, (typeof phxDetectEquipType === 'function') ? phxDetectEquipType(name) : null); } catch(_re){}
+      }
+      return { kg: next, basis: basis, note: 'Hit ' + tgt + ', so up ' + inc + 'kg.' };
+    }
+    if(tgt > 0){
+      return { kg: last.wt, basis: basis,
+               note: 'Short of ' + tgt + ' last time \u2014 same weight, chase the reps.' };
+    }
+    // No rep target on this block: hold, and say that is why rather than implying a plan.
+    return { kg: last.wt, basis: basis, note: 'No rep target on this one \u2014 repeat and beat it.' };
+  } catch(_e){ return null; }
+}
+
 window.blabOpenSession = function(week, day){
+  // If the records are missing and a fetch is in flight, let it land first — otherwise
+  // every card renders a blank "Last session" that nothing will ever fill in, because
+  // _blabApplyCloud repaints the calendar and Today but not the session screen.
+  try {
+    var s0 = window.blabGetState();
+    var haveRecords = s0 && s0.records && Object.keys(s0.records).length > 0;
+    if(!haveRecords && window._phxProfileReady && !window._blabOpenRetry){
+      window._blabOpenRetry = true;
+      window._blabAwaitRecords().then(function(){
+        window._blabOpenRetry = false;
+        window.blabOpenSession(week, day);
+      });
+      return;
+    }
+    window._blabOpenRetry = false;
+  } catch(_e){ window._blabOpenRetry = false; }
+
   var sess = window.blabGetSessionData(week, day);
   if(!sess){
     // v4.9.171: was a native alert, which iOS PWA suppresses silently — the tap simply did
@@ -7969,7 +8087,21 @@ async function _loadProfileAndRouteInner(){
     navTo('today');
     // Background profile refresh — non-blocking, never re-routes.
     try {
-      sb.from('profiles').select('*').eq('id', session.user.id).single().then(function(pRes){
+      // v4.9.291 — Jon: "the 'Last session: Xkg x Y reps' data wasn't showing at 6:23 but
+      // appeared by 7:04 ... Fix the load order so last session data is present before the
+      // cards render, not fetched asynchronously after."
+      //
+      // The banner is read SYNCHRONOUSLY from blab_state.records at render. Nothing about
+      // it is async — the async part is this fetch, which is what puts the records THERE
+      // after a localStorage wipe. Open a session before it lands and the cards render
+      // from an empty record set, correctly and permanently blank: _blabApplyCloud
+      // repaints the calendar and Today when the data arrives, but never the session
+      // screen. That is the forty minutes — the data was there within seconds; nothing
+      // redrew the cards until something else did.
+      //
+      // Held as a promise so opening a session can WAIT for it. Deliberately not awaited
+      // here: boot must not block on the network.
+      window._phxProfileReady = sb.from('profiles').select('*').eq('id', session.user.id).single().then(function(pRes){
         if(pRes && pRes.data && !pRes.error){
           // v4.9.99: hydrate BLAB state from server if local was wiped (PWA reinstall).
           window._lastProfileRow = pRes.data; // v4.9.102: cache for blabForceClearLocal recovery
@@ -11579,6 +11711,35 @@ function autoLogSet(row){
           if(_wt) _bs.records[_bex.blab_lift+'_amrap_w'+_bex._blabWeek+'_wt']=_wt;
           _dirty=true;
         }
+        // v4.9.291 — PER-WEEK BEST, for every exercise and every format.
+        //
+        // Jon wants a suggested load and "a dropdown or expandable showing weekly maxes
+        // achieved for that exercise so he can see progression over time". Nothing in the
+        // app could answer that: records held only _lastsets/_prevsets (two generations)
+        // and _amrap_wN for the three main lifts. There was no per-week history to read.
+        //
+        // Keyed by exercise NAME, which does the movement-pattern separation he raised for
+        // free — "Incline DB Press" and "Flat DB Press" are different keys, so a suggestion
+        // for one is never derived from the other. Nothing here tries to be clever about
+        // which movements are related; treating them as unrelated is the correct default.
+        //
+        // Best of the week by WEIGHT, with the reps that were done at it. Weight first
+        // because that is what the suggestion moves; reps decide whether it may move.
+        try {
+          var _wkNum = _bex._blabWeek || (window._blabCurrentSession && window._blabCurrentSession.week) || 0;
+          if(_wkNum > 0 && (_wt > 0 || _rp > 0)){
+            var _wkKey = exerciseName + '_wk';
+            var _wkMap = _bs.records[_wkKey];
+            if(!_wkMap || typeof _wkMap !== 'object') _wkMap = {};
+            var _prevWk = _wkMap[String(_wkNum)];
+            if(!_prevWk || _wt > (_prevWk.wt || 0) || (_wt === (_prevWk.wt || 0) && _rp > (_prevWk.reps || 0))){
+              _wkMap[String(_wkNum)] = { wt: _wt || 0, reps: _rp || 0,
+                                         date: (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '' };
+              _bs.records[_wkKey] = _wkMap;
+              _dirty = true;
+            }
+          }
+        } catch(_wke){ console.warn('[PHX] weekly best save failed:', _wke); }
         if(_dirty) window.blabSaveState(_bs);
       }
     }
@@ -17241,10 +17402,17 @@ sb.auth.onAuthStateChange(function(event,session){
 
 // v4.7.41 hotfix, CORRECTED v4.9.204: the RULE below stands; the factual claim it
 // used to open with does not. It said "NO visibilitychange listener exists in this
-// app". Three do, and one of them is mine:
+// app". FOUR do, and two of them are Training's:
 //     :3699   BLAB cloud flush on hidden
 //     :10345  timed-session wake: re-acquires the wake lock, resyncs the clock
 //     :21637  peptide cloud flush on hidden        (added by Peptides, v4.9.154)
+//     ~40380  session-screen-open flag on hidden   (added by Training, v4.9.291)
+//
+// v4.9.291 [TRAINING]: the fourth is mine and the COUNT GUARD caught me adding it —
+// which is the point of that guard, and the first time it has fired on a real change
+// rather than an injection test. It records only whether the session screen was showing
+// when the app was backgrounded, so a phone lock mid-workout can reopen it. It does not
+// route: the reopen happens on the next BOOT, in _phxBootRestoreApply, not from here.
 // Left uncorrected this was a false statement sitting in shared code at the exact
 // spot someone lands when diagnosing a wake-up bug. It nearly sent my own
 // diagnosis of Jon's screen-lock report the wrong way — I read it, did not believe
@@ -17253,8 +17421,8 @@ sb.auth.onAuthStateChange(function(event,session){
 //
 // THE RULE, unchanged and still binding: no visibility hook may RE-ROUTE. Token
 // refresh is handled by Supabase internally and the onAuthStateChange guard above
-// ignores those refreshes for routing. All three listeners above comply — they
-// flush, re-acquire a wake lock, or repaint. A fully-onboarded athlete only ever
+// ignores those refreshes for routing. All FOUR listeners above comply — they flush,
+// re-acquire a wake lock, repaint, or record a flag. A fully-onboarded athlete only ever
 // gets a renderTodayScreen() refresh, never a re-route.
 
 // ====== AUTH CHECK ======
@@ -38222,6 +38390,46 @@ function openTodaySession(){
           '</div>'+
         '</div>';
     }
+    // v4.9.291 — SUGGESTED WEIGHT + WEEKLY PROGRESSION.
+    //
+    // Jon: "A suggested weight shown at session start for each exercise, derived from past
+    // session data and progressive overload logic" and "a dropdown or expandable showing
+    // weekly maxes achieved for that exercise".
+    //
+    // Rendered only when there IS history. No history means no suggestion — a number
+    // invented from nothing reads as knowledge and is worse than a blank space.
+    //
+    // The BASIS is on screen next to the number, deliberately: he can see it came from
+    // "45kg x 10 in wk 3" and overrule it, rather than being handed a figure to trust.
+    var suggestSection = '';
+    try {
+      if(typeof blabSuggestWeight === 'function'){
+        var _tgtReps = parseInt(String((perSetTargets[0] || {}).reps || ex.reps || ''), 10) || 0;
+        var _sg = blabSuggestWeight(ex.name, _tgtReps);
+        if(_sg){
+          var _hist = blabWeeklyMaxes(ex.name);
+          var _rows = _hist.slice().reverse().map(function(r){
+            return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+              '<span style="color:var(--text3);">Week ' + r.week + '</span>' +
+              '<span style="font-family:var(--font-d);font-weight:700;color:var(--text);">' + (r.wt ? r.wt + 'kg' : '\u2014') + (r.reps ? ' \u00d7 ' + r.reps : '') + '</span>' +
+            '</div>';
+          }).join('');
+          suggestSection =
+            '<div style="margin-top:10px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;">' +
+              '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">' +
+                '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Suggested</div>' +
+                '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">' + _sg.kg + '<span style="font-size:12px;color:var(--text3);">kg</span></div>' +
+              '</div>' +
+              '<div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4;">' + _sg.basis + ' \u00b7 ' + _sg.note + '</div>' +
+              (_rows
+                ? '<div data-blab-hist="' + i + '" style="font-family:var(--font-d);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-top:7px;cursor:pointer;touch-action:manipulation;">Weekly maxes \u25be</div>' +
+                  '<div id="blab-hist-' + i + '" style="display:none;margin-top:6px;">' + _rows + '</div>'
+                : '') +
+            '</div>';
+        }
+      }
+    } catch(_sge){ console.warn('[PHX] weight suggestion failed:', _sge); }
+
     // v4.7.60: in customise mode, render swap (↔) + add-superset (+) buttons next to the
     // exercise name. The swap targets the ORIGINAL coach-prescribed name (if this row was
     // already swapped) so re-swapping is a single click. Superset rows themselves can't
@@ -38289,6 +38497,7 @@ function openTodaySession(){
       '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
       targetSection+
+      suggestSection+
       customiseControlsHTML+
       '</div></div>'+
       prevBestSection+
@@ -38299,6 +38508,20 @@ function openTodaySession(){
     body.appendChild(block);
     if(upNextHTML){var upDiv=document.createElement('div');upDiv.innerHTML=upNextHTML;body.appendChild(upDiv.firstChild);}
   });
+  // The weekly-maxes expandable. Wired here rather than with an inline onclick so it
+  // cannot be lost to a re-render that rebuilds innerHTML.
+  try {
+    body.querySelectorAll('[data-blab-hist]').forEach(function(tog){
+      tog.addEventListener('click', function(){
+        var panel = document.getElementById('blab-hist-' + tog.getAttribute('data-blab-hist'));
+        if(!panel) return;
+        var open = panel.style.display !== 'none';
+        panel.style.display = open ? 'none' : 'block';
+        tog.innerHTML = 'Weekly maxes ' + (open ? '\u25be' : '\u25b4');
+      });
+    });
+  } catch(_he){ console.warn('[PHX] weekly-max toggle wiring failed:', _he); }
+
   // Wire up set done buttons for AI sessions
   setTimeout(function(){
     exercises.forEach(function(ex,i){
@@ -40130,7 +40353,11 @@ if(typeof supabaseCompleteSession==='function'){
   var _origSupabaseCompleteSession = supabaseCompleteSession;
   window.supabaseCompleteSession = async function(){
     try { await _origSupabaseCompleteSession.apply(this, arguments); }
-    finally { _phxSaveActiveSessionId(null); }
+    finally {
+      _phxSaveActiveSessionId(null);
+      // A completed session must never reopen itself.
+      if(typeof window._phxClearSessionScreenOpen === 'function') window._phxClearSessionScreenOpen();
+    }
   };
 }
 
@@ -40378,6 +40605,13 @@ if(typeof navTo==='function'){
     } else if(tab === 'today') {
       try { localStorage.removeItem('phx_lastTab_v1'); } catch(_e){}
     }
+    // v4.9.291: navigating away is a CHOICE to leave, so the session must not reopen
+    // itself on the next boot. Without this the flag would only ever be set, and he
+    // would be dragged back into a session he had deliberately walked out of — which is
+    // precisely the objection that kept 'session' off the restore list.
+    if(tab && tab !== 'session' && typeof window._phxClearSessionScreenOpen === 'function'){
+      window._phxClearSessionScreenOpen();
+    }
     return _origNavTo.apply(this, arguments);
   };
 }
@@ -40425,6 +40659,59 @@ var _safeRestoreTabs = ['nutrition','records','peptide','programme','blab-calend
 //   auth/landing/alpha-welcome   pre-onboarding routing must always win
 var _neverRestoreTabs = ['today','session','walk','weekly-checkin','auth','landing','alpha-welcome'];
 
+// v4.9.291 — Jon: "The plan screen still navigates away to today when the phone screen
+// locks mid-session. This was supposed to be fixed."
+//
+// It was not, and I should be precise about what .267 did fix: it stopped his PROGRESS
+// being lost across the reload. The NAVIGATION was untouched. iOS kills the PWA on screen
+// lock, the app reloads, routes to Today, and `session` is on _neverRestoreTabs.
+//
+// HE ASKED FOR 'session' TO GO ON THE SAFE LIST AND I HAVE NOT DONE THAT, for two
+// reasons. The list is Peptides' shared plumbing, and its stated objection is still
+// partly right: "resuming one he did not choose is worse than Today" — a blanket restore
+// would also fire hours later, or after he had finished and walked away.
+//
+// The precise signal is not "is there an unfinished session" (true all day) but "WAS HE
+// LOOKING AT IT when the app died". That is recorded here, on the same pagehide/hidden
+// pair the cloud flush already uses, and it carries the session identity — which embeds
+// the LOCAL DATE, so returning tomorrow cannot reopen yesterday's session. No time window
+// needed; the date does that work and does it correctly across a 4:30am session.
+var PHX_SESSION_OPEN_KEY = 'phoenix_session_screen_open';
+
+function _phxMarkSessionScreenOpen(){
+  try {
+    var el = document.getElementById('screen-session');
+    var onIt = !!(el && el.classList && el.classList.contains('active'));
+    if(onIt && window._phxActiveSessionKey){
+      localStorage.setItem(PHX_SESSION_OPEN_KEY, String(window._phxActiveSessionKey));
+    }
+  } catch(_e){}
+}
+window._phxClearSessionScreenOpen = function(){
+  try { localStorage.removeItem(PHX_SESSION_OPEN_KEY); } catch(_e){}
+};
+// Reopen only when ALL of these hold: he was on the screen, the identity matches today's
+// (the date is inside the key), and the session is genuinely unfinished. Any one missing
+// and Today is the right answer.
+window._phxShouldReopenSession = function(){
+  try {
+    var stored = localStorage.getItem(PHX_SESSION_OPEN_KEY);
+    if(!stored) return null;
+    var day = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    var parts = String(stored).split(':');
+    if(parts[0] !== 'blab' || parts[3] !== day) return null;   // yesterday's session
+    var unfinished = (typeof window._blabUnfinishedToday === 'function') ? window._blabUnfinishedToday() : null;
+    if(!unfinished) return null;                                // finished, or never started
+    return { week: unfinished.week, day: unfinished.day };
+  } catch(_e){ return null; }
+};
+try {
+  window.addEventListener('pagehide', _phxMarkSessionScreenOpen);
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'hidden') _phxMarkSessionScreenOpen();
+  });
+} catch(_e){}
+
 function _phxBootRestoreBegin(){
   try {
     window._phxBooting = true;
@@ -40443,6 +40730,16 @@ function _phxBootRestoreApply(){
     var tab = window._phxBootRestoreTab;
     window._phxBootRestoreTab = null;
     window._phxBooting = false;
+    // v4.9.291: an unfinished session he was looking at wins over any stored tab. This
+    // runs BEFORE the tab restore rather than being folded into _safeRestoreTabs, so the
+    // shared list keeps meaning exactly what it says and this stays Training's decision
+    // about Training's data.
+    var _reopen = (typeof window._phxShouldReopenSession === 'function') ? window._phxShouldReopenSession() : null;
+    if(_reopen && typeof window.blabOpenSession === 'function'){
+      console.log('[PHX] reopening unfinished session', _reopen.week, _reopen.day);
+      window.blabOpenSession(_reopen.week, _reopen.day);
+      return;
+    }
     if(!tab) return;
     // Re-assert the key: a branch may have cleared it before the boot flag was
     // honoured, and without this the restore would work exactly once.

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.290'", 'version is 4.9.290');
+has("var APP_VERSION='4.9.291'", 'version is 4.9.291');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1384,9 +1384,18 @@ try {
   const n = (html.match(/addEventListener\((?:'|")visibilitychange(?:'|")/g) || []).length;
   hasNot('NO visibilitychange listener exists in this app',
          'SHARED: STRUCTURAL the false "no visibilitychange listener" claim is gone');
-  n === 3
+  // v4.9.291 [TRAINING]: 3 -> 4. I added the fourth (the session-screen-open flag) and
+  // THIS GUARD CAUGHT ME, which is the first time it has fired on a real change rather
+  // than its own injection test. Comment updated to name mine before touching this line.
+  //
+  // The expected count is now a named constant so the FAILURE MESSAGE cannot disagree
+  // with the CHECK. It previously said "the comment says three" in prose while comparing
+  // against a literal 3 — two copies of one number, which is the same staleness this
+  // guard exists to prevent, one level up. Whoever adds the fifth changes one thing.
+  const VIS_EXPECTED = 4;
+  n === VIS_EXPECTED
     ? ok(`SHARED: STRUCTURAL visibilitychange listener count matches the comment (${n})`)
-    : bad(`SHARED: STRUCTURAL ${n} visibilitychange listeners but the comment at :16474 says three — update it`);
+    : bad(`SHARED: STRUCTURAL ${n} visibilitychange listeners but the comment at :16474 documents ${VIS_EXPECTED} — update the comment to name the new one, then this constant`);
   html.includes('THE RULE, unchanged and still binding: no visibility hook may RE-ROUTE')
     ? ok('SHARED: STRUCTURAL the no-re-route rule survived the correction')
     : bad('SHARED: STRUCTURAL the no-re-route rule was lost when the comment was corrected');

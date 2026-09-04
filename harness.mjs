@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.291'", 'version is 4.9.291');
+has("var APP_VERSION='4.9.292'", 'version is 4.9.292');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2544,6 +2544,14 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── TODAY'S SETS SURVIVE A LOCK (v4.9.292) ──────────────────────────────────
+// The shadow store built to survive a screen lock was keyed on, and gated by, the
+// SUPABASE session id — so the local safety net depended on a network call succeeding at
+// 4:30am in a garage. Now keyed on the local identity, which needs no network.
+has("keys.push('phoenix_sets_' + window._phxActiveSessionKey)", 'LOCK: the shadow store has a LOCAL key that needs no network');
+has('!_shadowKeys.length && !currentSupabaseSessionId', 'LOCK: the restore runs on a local key alone (it used to return early without a cloud id)');
+has('_doneShadowKeys.forEach', 'LOCK: both shadow keys are cleared on completion, so they cannot accumulate per session-day');
 
 // ── MID-SESSION RELOAD (v4.9.268) ───────────────────────────────────────────
 // iOS reloads the PWA on screen lock. The session id was persisted and recovered; the

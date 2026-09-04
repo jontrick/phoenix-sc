@@ -3456,4 +3456,112 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(h.map((r) => r.week), [2, 3, 4], 'in week order, not insertion order');
     assert.equal(h[2].wt, 47.5, 'with the load he hit');
   });
+
+  // ── TODAY'S SETS SURVIVE A SCREEN LOCK (v4.9.292) ────────────────────────
+  // Jon: "when the phone screen locks mid-session and unlocks, the completed sets from
+  // today's session are lost ... showing last session's data as if nothing has been done
+  // today."
+  //
+  // The shadow store built to survive exactly this was KEYED ON, AND GATED BY, the
+  // Supabase session id. No id, no write — silently. No id, no restore. So the LOCAL
+  // safety net depended on a NETWORK CALL succeeding at session start, and the place it
+  // is most likely to fail is a garage at 4:30am, which is the only place it matters.
+
+  test('SETSAVE: a shadow key exists from the LOCAL identity alone, with no cloud id', () => {
+    reset(); signIn(UID);
+    app._phxActiveSessionKey = 'blab:3:3:2026-09-05';
+    app.currentSupabaseSessionId = null;
+    try {
+      const keys = app._phxSetShadowKeys();
+      assert.equal(keys.length, 1, 'one key, from the identity');
+      assert.equal(keys[0], 'phoenix_sets_blab:3:3:2026-09-05', 'and it needs no network');
+    } finally { app._phxActiveSessionKey = null; }
+  });
+
+  test('SETSAVE: with BOTH available it writes under both, local first', () => {
+    // The cloud key is kept so a session already in flight under the old scheme keeps
+    // working through the upgrade rather than losing its ticks at the version boundary.
+    reset(); signIn(UID);
+    app._phxActiveSessionKey = 'blab:3:3:2026-09-05';
+    app.currentSupabaseSessionId = 'sess-abc';
+    try {
+      const keys = app._phxSetShadowKeys();
+      assert.equal(keys.length, 2, 'both');
+      assert.ok(/^phoenix_sets_/.test(keys[0]), 'the local one is first, so it wins on read');
+    } finally { app._phxActiveSessionKey = null; app.currentSupabaseSessionId = null; }
+  });
+
+  test('SETSAVE: NO identity and NO id means no silent write', () => {
+    // The old code took this branch and wrote nothing without saying so. It still writes
+    // nothing — there is nowhere to put it — but the absence is now visible in the log
+    // rather than being indistinguishable from success.
+    reset(); signIn(UID);
+    app._phxActiveSessionKey = null;
+    app.currentSupabaseSessionId = null;
+    assert.equal(app._phxSetShadowKeys().length, 0, 'no key is manufactured');
+  });
+
+  test('LOCK: ticked sets and their weights come back after a reload', () => {
+    // The whole bug. Everything in-memory is gone; only localStorage remains — which is
+    // exactly what a screen lock leaves behind.
+    reset(); signIn(UID);
+    const key = 'blab:3:3:2026-09-05';
+    seed('phoenix_sets_' + key, [
+      { exId: 'ai-0', setIdx: 0, exerciseName: 'Flat DB Press', kg: 30, reps: 12, ts: 1 },
+      { exId: 'ai-0', setIdx: 1, exerciseName: 'Flat DB Press', kg: 30, reps: 10, ts: 2 },
+    ]);
+    app._phxActiveSessionKey = key;
+    app.currentSupabaseSessionId = null;
+    // COUNT WHAT IT TOUCHED. My first version asserted the returned value was a promise
+    // — which an async function returns even when it returns EARLY, so it passed with the
+    // gate restored and proved nothing about the property it named. The observable
+    // difference is whether it goes looking for the set rows at all.
+    const looked = [];
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => {
+      if(String(id || '').indexOf('done-') === 0) looked.push(id);
+      return { classList: { add: () => {} }, style: {}, value: '' };
+    };
+    const realQS = app.document.querySelectorAll;
+    app.document.querySelectorAll = () => [];
+    try {
+      app._phxRestoreSessionVisualState();
+      assert.equal(looked.length, 2, 'it went looking for BOTH of his ticked sets');
+      assert.ok(looked.indexOf('done-ai-0-0') >= 0, 'set 1');
+      assert.ok(looked.indexOf('done-ai-0-1') >= 0, 'set 2');
+      const stored = read('phoenix_sets_' + key);
+      assert.equal(stored[1].kg, 30, 'and the weight he logged is still on disk');
+    } finally {
+      app.document.getElementById = realGet;
+      app.document.querySelectorAll = realQS;
+      app._phxActiveSessionKey = null;
+    }
+  });
+
+  test('LOCK: the restore no longer refuses to run without a cloud id', () => {
+    // The precise defect: `if(!currentSupabaseSessionId) return;` returned BEFORE reading
+    // the local store that was sitting right there.
+    reset(); signIn(UID);
+    app._phxActiveSessionKey = 'blab:3:3:2026-09-05';
+    app.currentSupabaseSessionId = null;
+    seed('phoenix_sets_blab:3:3:2026-09-05', [
+      { exId: 'ai-1', setIdx: 0, exerciseName: 'Row', kg: 60, reps: 8, ts: 1 },
+    ]);
+    const looked = [];
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => {
+      if(String(id || '').indexOf('done-') === 0) looked.push(id);
+      return { classList: { add: () => {} }, style: {}, value: '' };
+    };
+    const realQS = app.document.querySelectorAll;
+    app.document.querySelectorAll = () => [];
+    try {
+      app._phxRestoreSessionVisualState();
+      assert.equal(looked.length, 1, 'it read the local store instead of returning at the gate');
+    } finally {
+      app.document.getElementById = realGet;
+      app.document.querySelectorAll = realQS;
+      app._phxActiveSessionKey = null;
+    }
+  });
 }

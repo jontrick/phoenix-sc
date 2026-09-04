@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.291';
+var APP_VERSION='4.9.292';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8762,12 +8762,17 @@ async function supabaseCompleteSession(updates){
   currentSupabaseSessionId=null;
   // v4.9.179: release the re-entry key with the row it belongs to, so a later session
   // with the same identity opens a fresh row rather than reusing a completed one.
+  // v4.9.292: read the shadow keys BEFORE clearing the identity — one of them is derived
+  // from it, and clearing first would strand the key it names. Ordering, not style.
+  var _doneShadowKeys = (typeof _phxSetShadowKeys === 'function') ? _phxSetShadowKeys() : [];
   try { window._phxActiveSessionKey = null; } catch(_ak){}
   // Clear the persisted identity with the in-memory one, or the next session of the same
   // week/day/date would be treated as a re-entry into this finished row.
   try { if(typeof _phxSaveActiveSessionIdentity === 'function') _phxSaveActiveSessionIdentity(null); } catch(_ak2){}
   // v4.7.29 FIX 3: session done — clear the per-session completed-sets shadow.
+  // v4.9.292: both keys, or the local one accumulates a row per session-day forever.
   try { localStorage.removeItem('phoenix_completed_sets_' + sessionId); } catch(_e){}
+  try { _doneShadowKeys.forEach(function(k){ localStorage.removeItem(k); }); } catch(_e2){}
   try{
     // Merge details: read existing, merge new
     if(patch.details||patch.details_patch_notes){
@@ -11656,15 +11661,21 @@ function autoLogSet(row){
   // session id. _phxRestoreSessionVisualState reads this on screen mount so the
   // visual tick state (and the entered kg/reps) survives navigation away & back.
   try {
-    var sbSid = (typeof currentSupabaseSessionId !== 'undefined' && currentSupabaseSessionId) ? currentSupabaseSessionId : null;
-    if(sbSid){
-      var k = 'phoenix_completed_sets_' + sbSid;
+    // v4.9.292: written under EVERY key we have, local first. The local one needs no
+    // network; the cloud-id one is kept so a session already in flight under the old
+    // scheme keeps working through the upgrade.
+    var _keys = (typeof _phxSetShadowKeys === 'function') ? _phxSetShadowKeys() : [];
+    if(!_keys.length && typeof currentSupabaseSessionId !== 'undefined' && currentSupabaseSessionId){
+      _keys = ['phoenix_completed_sets_' + currentSupabaseSessionId];
+    }
+    _keys.forEach(function(k){
       var arr = JSON.parse(localStorage.getItem(k) || '[]');
       // Replace any prior entry for the same exId+setIdx (so re-ticks update kg/reps).
       arr = arr.filter(function(e){ return !(e.exId === exId && e.setIdx === setIdx); });
       arr.push({exId:exId, setIdx:setIdx, exerciseName:exerciseName, kg:kg, reps:reps, ts:Date.now()});
       localStorage.setItem(k, JSON.stringify(arr));
-    }
+    });
+    if(!_keys.length) console.warn('[PHX] no shadow key available — completed sets not persisted');
   } catch(e){ console.warn('[PHX] completed-sets shadow write failed:', e); }
   // Supabase real-time set logging
   supabaseLogSet(exerciseName,exId,setIdx,kg,reps);
@@ -40799,8 +40810,45 @@ document.addEventListener('DOMContentLoaded', function(){
 //   This fires synchronously after the screen mounts so the user sees no flicker.
 // Step 2 (cross-device safety net): query Supabase set_logs and apply the same
 //   restoration for any rows we didn't already see locally.
+// v4.9.292 — Jon: "when the phone screen locks mid-session and unlocks, the completed
+// sets from today's session are lost ... showing last session's data as if nothing has
+// been done today."
+//
+// The shadow store that exists to survive exactly this was KEYED ON, AND GATED BY, the
+// SUPABASE SESSION ID:
+//
+//     var sbSid = currentSupabaseSessionId ? ... : null;
+//     if(sbSid){ ...write... }            <- no id, no write, silently
+//     if(!currentSupabaseSessionId) return;   <- no id, no restore
+//
+// So the LOCAL safety net depended on a successful NETWORK CALL at session start. If
+// supabaseStartSession failed — offline, patchy signal, a 4xx — nothing was ever written,
+// and there was nothing to lose the ticks from. The one place this is most likely to fail
+// is a garage at 4:30am, which is the only place it matters.
+//
+// The identity is now the LOCAL one: week/day/local-date, which _phxActiveSessionKey
+// already carries and which .267 made survive a reload. It needs no network, no row, and
+// no account. The cloud id is still used as a fallback so anything written under the old
+// scheme today is not stranded.
+function _phxSetShadowKeys(){
+  var keys = [];
+  try {
+    if(window._phxActiveSessionKey) keys.push('phoenix_sets_' + window._phxActiveSessionKey);
+  } catch(_e){}
+  try {
+    if(typeof currentSupabaseSessionId !== 'undefined' && currentSupabaseSessionId){
+      keys.push('phoenix_completed_sets_' + currentSupabaseSessionId);
+    }
+  } catch(_e){}
+  return keys;
+}
+
 async function _phxRestoreSessionVisualState(){
-  if(!currentSupabaseSessionId) return;
+  // v4.9.292: NOT gated on the cloud id any more. That gate is what made a failed
+  // session-start silently cost him every tick — the local shadow store was right there
+  // and this returned before reading it.
+  var _shadowKeys = _phxSetShadowKeys();
+  if(!_shadowKeys.length && !currentSupabaseSessionId) return;
   // Helper: tick a single set row+button and restore inputs.
   function _phxApplySetTick(exId, setIdx, kg, reps){
     if(exId == null) return;
@@ -40836,16 +40884,21 @@ async function _phxRestoreSessionVisualState(){
   var seen = {};
   // Step 1 — local shadow store (instant).
   try {
-    var k = 'phoenix_completed_sets_' + currentSupabaseSessionId;
-    var local = JSON.parse(localStorage.getItem(k) || '[]');
-    local.forEach(function(e){
-      _phxApplySetTick(e.exId, e.setIdx, e.kg, e.reps);
-      seen[e.exId + '|' + e.setIdx] = true;
+    var _restored = 0;
+    _shadowKeys.forEach(function(k){
+      var local = JSON.parse(localStorage.getItem(k) || '[]');
+      local.forEach(function(e){
+        var id = e.exId + '|' + e.setIdx;
+        if(seen[id]) return;          // the local key wins; it is the fresher of the two
+        _phxApplySetTick(e.exId, e.setIdx, e.kg, e.reps);
+        seen[id] = true;
+        _restored++;
+      });
     });
-    if(local.length) console.log('[PHX] restored', local.length, 'sets from local shadow');
+    if(_restored) console.log('[PHX] restored', _restored, 'sets from local shadow');
   } catch(e){ console.warn('[PHX] local shadow restore failed:', e); }
   // Step 2 — Supabase fallback (cross-device + insurance against localStorage loss).
-  if(typeof sb === 'undefined') return;
+  if(typeof sb === 'undefined' || !currentSupabaseSessionId) return;
   try {
     var res = await sb.from('set_logs')
       .select('exercise_name, exercise_id, set_number, weight_kg, reps')

@@ -1450,20 +1450,21 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('SWAP a week-long protein swap keeps the portion and changes the animal', () => {
     setUp(110);
-    const before = item(meal('2026-09-16','dinner'), /Salmon/);
-    app.nutProgSetSwap('dinner_protein', 'sirloin');
-    const after = item(meal('2026-09-16','dinner'), /Sirloin/);
+    // LUNCH, because it is batch-cooked on Sunday and so must be decided once.
+    const before = item(meal('2026-09-16','lunch'), /Chicken/);
+    app.nutProgSetSwap('lunch_protein', 'whitefish');
+    const after = item(meal('2026-09-16','lunch'), /White fish/);
     assert.ok(after, 'the plate now names sirloin');
     assert.equal(after.g, before.g,
       'and the PORTION is unchanged — a round number you can cook to, which is ' +
       'the whole reason the day absorbs the difference instead of the steak');
-    assert.ok(after.f < before.f, 'sirloin is leaner than salmon');
+    assert.ok(after.f < before.f, 'white fish is leaner than chicken');
   });
 
   test('SWAP the day absorbs the difference — the oil moves, not the meat', () => {
     setUp(110);
     const oilBefore = item(meal('2026-09-16','dinner'), /Olive oil/).g;
-    app.nutProgSetSwap('dinner_protein', 'sirloin');
+    app.nutProgSetSwap('lunch_protein', 'whitefish');
     const oilAfter = item(meal('2026-09-16','dinner'), /Olive oil/).g;
     assert.ok(oilAfter > oilBefore,
       'a leaner cut means MORE oil, so the day still hits its fat: ' +
@@ -1475,7 +1476,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('SWAP the compensation follows the phase, not just phase 1', () => {
     setUp(110);
-    app.nutProgSetSwap('dinner_protein', 'sirloin');
+    app.nutProgSetSwap('lunch_protein', 'whitefish');
     const early = app.nutProgSwapCompensation(0);
     const late  = app.nutProgSwapCompensation(4);
     assert.ok(Math.abs(late.fat_delta) > Math.abs(early.fat_delta),
@@ -1484,28 +1485,28 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('SWAP choosing the base option is not a swap at all', () => {
     setUp(110);
-    const plain = item(meal('2026-09-16','dinner'), /Salmon/).g;
-    app.nutProgSetSwap('dinner_protein', 'salmon');
-    assert.equal(item(meal('2026-09-16','dinner'), /Salmon/).g, plain, 'nothing moves');
+    const plain = item(meal('2026-09-16','lunch'), /Chicken/).g;
+    app.nutProgSetSwap('lunch_protein', 'chicken');
+    assert.equal(item(meal('2026-09-16','lunch'), /Chicken/).g, plain, 'nothing moves');
     assert.equal(app.nutProgSwapCompensation(0).oil_ml_delta, 0, 'and nothing is compensated');
   });
 
   test('SWAP a nonsense option is refused rather than silently applied', () => {
     setUp(110);
-    assert.equal(app.nutProgSetSwap('dinner_protein', 'unicorn'), false, 'unknown food');
-    assert.equal(app.nutProgSetSwap('elevenses', 'salmon'), false, 'unknown meal slot');
+    assert.equal(app.nutProgSetSwap('lunch_protein', 'unicorn'), false, 'unknown food');
+    assert.equal(app.nutProgSetSwap('elevenses', 'chicken'), false, 'unknown meal slot');
     assert.deepEqual(app.nutProgSwaps(), {}, 'and nothing was stored');
   });
 
   test('SWAP the shopping list buys what was actually chosen', () => {
     setUp(110);
-    app.nutProgSetSwap('dinner_protein', 'sirloin');
+    app.nutProgSetSwap('lunch_protein', 'whitefish');
     const shop = app.nutProgShoppingFor(1, 'basmati');
     const names = [];
     shop.groups.forEach((g) => g.items.forEach((it) => names.push(it.n)));
-    assert.ok(names.indexOf('Sirloin steak') >= 0, 'sirloin is on the list');
-    assert.equal(names.indexOf('Salmon fillet'), -1,
-      'and salmon is not — buying both is what a week-long swap exists to prevent');
+    assert.ok(names.indexOf('White fish') >= 0, 'white fish is on the list');
+    assert.equal(names.indexOf('Chicken breast'), -1,
+      'and chicken is not — buying both is what a week-long swap exists to prevent');
   });
 
   // ── per-meal greens ──
@@ -1832,6 +1833,124 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(mon.indexOf('Programme begins'), -1, 'no longer counting down');
     assert.ok(mon.indexOf('data-prog-tick') >= 0, 'now there is food to tick');
     assert.ok(mon.indexOf('data-nut-swap-open') >= 0, 'and Substitutions stays reachable');
+  });
+
+  // ── tonight's dinner ─────────────────────────────────────────────────────
+  // v4.9.288. Four proteins and six green sides, chosen ON THE NIGHT. Lunch stays
+  // a week choice because it is batch-cooked on Sunday; dinner is cooked fresh,
+  // so it is not.
+
+  const dinnerOn = (d) => (app.nutProgMealsOn(d, 'basmati') || []).filter((m) => m.id === 'dinner')[0];
+  const partOf = (m, re) => m.items.filter((it) => re.test(it.n))[0];
+
+  test('NIGHT each protein is sized to land the SAME protein, not the same weight', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const got = {};
+    ['salmon','steak','basa','prawns'].forEach((id) => {
+      app.nutProgSetNightly(d, 'dinner_protein', id);
+      const it = partOf(dinnerOn(d), /Salmon|Sirloin|Basa|Prawn/);
+      got[id] = { g: it.g, p: it.p };
+    });
+    assert.equal(got.salmon.g, 135, 'salmon 135 g');
+    assert.equal(got.steak.g,  105, 'sirloin only 105 g — it is denser in protein');
+    assert.equal(got.basa.g,   200, 'basa 200 g — lean enough to need half again');
+    assert.equal(got.prawns.g, 125, 'prawns 125 g');
+    Object.keys(got).forEach((id) => {
+      assert.ok(Math.abs(got[id].p - 30) <= 1,
+        id + ' lands ' + got[id].p + ' g protein — swapping gram-for-gram would ' +
+        'have cost 15 g on a basa night, silently');
+    });
+  });
+
+  test('NIGHT the oil holds the fat steady whatever is chosen', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const fats = {}, oils = {};
+    ['salmon','steak','basa','prawns'].forEach((id) => {
+      app.nutProgSetNightly(d, 'dinner_protein', id);
+      const dn = dinnerOn(d);
+      fats[id] = dn.f;
+      oils[id] = partOf(dn, /Olive oil/).g;
+    });
+    ['steak','basa','prawns'].forEach((id) => {
+      assert.ok(Math.abs(fats[id] - fats.salmon) <= 0.5,
+        id + ' dinner fat ' + fats[id] + ' vs salmon ' + fats.salmon + ' — the day must not drift');
+    });
+    assert.ok(oils.prawns > oils.salmon,
+      'prawns are nearly fat-free so the oil climbs: ' + oils.salmon + ' -> ' + oils.prawns + ' ml');
+    assert.ok(oils.prawns > 25, 'to about 30 ml, which is worth seeing before pouring it');
+  });
+
+  test('NIGHT the green side can be swapped too', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetNightly(d, 'dinner_veg', 'asparagus');
+    assert.ok(partOf(dinnerOn(d), /Asparagus/), 'asparagus is on the plate');
+    app.nutProgSetNightly(d, 'dinner_veg', 'zucchini');
+    assert.ok(partOf(dinnerOn(d), /Zucchini/), 'and swaps again');
+    assert.equal(partOf(dinnerOn(d), /^Greens$/), undefined, 'replacing the default greens');
+  });
+
+  test('NIGHT it is per NIGHT — tomorrow is untouched', () => {
+    setUp(110);
+    app.nutProgSetNightly('2026-09-16', 'dinner_protein', 'prawns');
+    assert.ok(partOf(dinnerOn('2026-09-16'), /Prawn/), 'prawns tonight');
+    assert.ok(partOf(dinnerOn('2026-09-17'), /Salmon/),
+      'salmon tomorrow — a nightly choice that stuck for the week would be the week-long one');
+  });
+
+  test('NIGHT with no choice made it follows what he SHOPPED for', () => {
+    setUp(110);
+    app.nutProgSetDinnerDefault('dinner_protein', 'steak');   // what he shopped for
+    const pick = app.nutProgNightlyOn('2026-09-16');
+    assert.equal(pick.dinner_protein, 'steak',
+      'the thing in the fridge is what appears unless he says otherwise on the night');
+    app.nutProgSetNightly('2026-09-16', 'dinner_protein', 'basa');
+    assert.equal(app.nutProgNightlyOn('2026-09-16').dinner_protein, 'basa', 'and tonight overrides it');
+    assert.equal(app.nutProgNightlyOn('2026-09-17').dinner_protein, 'steak', 'without moving other days');
+  });
+
+  test('NIGHT the shopping list counts the real mix, not seven of one thing', () => {
+    setUp(110);
+    app.nutProgSetNightly('2026-09-16', 'dinner_protein', 'prawns');
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const names = [];
+    shop.groups.forEach((g) => g.items.forEach((it) => names.push(it.n)));
+    assert.ok(names.indexOf('Prawns') >= 0, 'the prawn night is bought for');
+    assert.ok(names.indexOf('Salmon fillet') >= 0, 'and the six salmon nights too');
+  });
+
+  test('NIGHT a nonsense choice is refused, not stored', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetNightly('2026-09-16', 'dinner_protein', 'octopus'), false, 'unknown food');
+    assert.equal(app.nutProgSetNightly('2026-09-16', 'second_breakfast', 'basa'), false, 'unknown slot');
+    assert.equal(app.nutProgNightlyOn('2026-09-16').dinner_protein, 'salmon', 'still the default');
+  });
+
+  // ── the door ──
+  test('NIGHT the sheet actually OFFERS tonight\'s options', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-night') >= 0, 'tonight\'s rows are tappable');
+    assert.ok(/Tonight/.test(html), 'and labelled as tonight, not this week');
+    ['Sirloin steak','Basa fillet','Prawns','Asparagus','Zucchini','Spinach'].forEach((n) => {
+      assert.ok(html.indexOf(n) >= 0, n + ' is offered');
+    });
+    assert.ok(/200 g/.test(html), 'with the serve size shown, since it changes with the choice');
+  });
+
+  test('NIGHT the sheet does not show two competing dinner lists', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('Lunch protein') >= 0, 'lunch is still a week choice — it is batch cooked');
+    assert.equal(html.indexOf('Mackerel'), -1,
+      'the old week-long dinner list is gone from the sheet; two sets of dinner ' +
+      'proteins on one screen is worse than one');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
@@ -3006,12 +3125,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // The engine already did this. Pinned because the whole feature is only worth
     // anything if the choice changes what he is told to eat.
     setUp(90);
-    app.nutProgSetSwap('dinner_protein', 'cod');
+    app.nutProgSetNightly('2026-09-14', 'dinner_protein', 'basa');
     const meals = app.nutProgMealsOn('2026-09-14', app.nutProgRiceChoice()) || [];
     const dinner = meals.find((m) => m.id === 'dinner');
     assert.ok(dinner, 'dinner exists');
     const names = dinner.items.map((i) => i.n).join(' ');
-    assert.ok(/Cod/i.test(names), 'the swap shows on the plate');
+    assert.ok(/Basa/i.test(names), 'the swap shows on the plate');
     assert.ok(!/Salmon/i.test(names), 'and the default is gone');
   });
 

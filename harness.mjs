@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.287'", 'version is 4.9.287');
+has("var APP_VERSION='4.9.288'", 'version is 4.9.288');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3003,6 +3003,26 @@ hasCode("out.verdict = 'no-data'",
 // Two swap mechanisms, deliberately separate. Merging them would either lock a
 // per-meal decision for a week or try to rebalance a day already in the fridge.
 hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored');
+
+// ── Tonight's dinner ────────────────────────────────────────────────────────
+hasCode('_NUT_PROG_DINNER_PROTEIN', 'NIGHT: four evening proteins exist');
+hasCode('_NUT_PROG_DINNER_VEG',     'NIGHT: and the green sides');
+hasCode('function nutProgSetNightly(',        'NIGHT: a choice can be made for tonight');
+hasCode('function nutProgSetDinnerDefault(',  'NIGHT: and a default for the week he shops');
+hasCode('function nutProgNightlyFatDelta(',   'NIGHT: the oil absorbs what the choice changes');
+hasCode('data-nut-night',                     'NIGHT: the sheet OFFERS them');
+hasCode("ov.querySelectorAll('[data-nut-night]')",
+        'NIGHT: and the rows are WIRED — a drawn option nothing listens to is inert');
+
+// Serve sizes are sized to the PROTEIN, not equal weights. Gram-for-gram would
+// cost 15 g of protein on a basa night, silently.
+hasCode('name = _pick.n; grams = _pick.g;',
+        'NIGHT: the SERVE SIZE moves with the choice, not just the label');
+
+// One vocabulary for dinner. The week-long list said sirloin, the nightly list
+// said steak, and a default set in one could not be read by the other.
+hasNotCode("{ id:'sirloin',  n:'Sirloin steak',  k:201",
+        'NIGHT: dinner has ONE list of proteins, not two disagreeing ones');
 hasCode('function nutProgToggleGreens(',     'SWAP: greens powder is per meal, per day');
 hasCode('function nutProgSwapCompensation(', 'SWAP: and the day absorbs the difference');
 hasCode('comp.oil_ml_delta',                 'SWAP: the compensation is APPLIED, not merely calculated');

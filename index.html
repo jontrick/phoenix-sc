@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.284';
+var APP_VERSION='4.9.285';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21081,8 +21081,26 @@ function _nutProgTodayCard(){
       '<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--gold);"></div></div>' +
       '</div>';
   };
-  h += '<div style="display:flex;gap:8px;margin-bottom:16px;">' +
+  h += '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
        mac('protein', con.total.p, t.total.p) + mac('carbs', con.total.c, t.total.c) + mac('fat', con.total.f, t.total.f) +
+       '</div>';
+
+  // v4.9.285 — Jon's ruling: KEEP the stated label calories, and say why the two numbers
+  // do not reconcile, rather than making them agree.
+  //
+  // The calorie figure sums each food's own stated kcal-per-100g. The target derives its
+  // macros from a calorie figure at 4/4/9. Those two are not the same arithmetic, and a
+  // real food label rarely obeys 4/4/9 — peanut butter states 588 against 630 from its
+  // macros, chicken 165 against 152. Measured across the five phases the plate runs
+  // 59, 59, 62, 64 and 64 kcal above its own macro-derived total.
+  //
+  // He chose to keep the label figures because they are the truer number, which leaves a
+  // standing ~60 kcal gap that looks like a bug every time he reads it. So it is
+  // explained ONCE, where both numbers are visible, in the tone of a footnote rather than
+  // a warning — there is nothing here for him to act on.
+  h += '<div style="font-size:10px;line-height:1.5;color:var(--text3);text-align:center;margin-bottom:16px;padding:0 6px;">' +
+       'Calories come from each food\'s label; macros are calculated. Labels vary, so the ' +
+       'total sits a little above the macro target. That is normal &mdash; follow the macros.' +
        '</div>';
 
   meals.forEach(function(m){

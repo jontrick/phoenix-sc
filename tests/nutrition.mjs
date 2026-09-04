@@ -2803,6 +2803,29 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // Written by TRAINING against Nutrition's code at Jon's direct request — flagged in
   // the commit and here. Invite revert.
 
+  test('NOTE: the calorie/macro difference is explained where both numbers are', () => {
+    // v4.9.285 — Jon chose to KEEP the stated label calories rather than derive them
+    // from macros, which leaves a standing ~60 kcal gap against the target. Measured
+    // across the five phases: 59, 59, 62, 64, 64. Without a word on screen that reads as
+    // a bug every single time he opens it.
+    //
+    // Drives the real screen: an explanation stored and never rendered is the shape this
+    // codebase keeps finding.
+    setUp(90);
+    // The card only renders once the programme is running — today is its SETUP day, so
+    // it draws nothing yet. Pinned to week 1 day 1 rather than "now", or this case would
+    // start passing and failing depending on the date it is run.
+    const realToday = app._nutToday;
+    app._nutToday = () => '2026-09-14';
+    let html;
+    try { html = String(app._nutProgTodayCard() || ''); }
+    finally { app._nutToday = realToday; }
+    assert.ok(html.length > 200, 'the card rendered at all — otherwise the checks below are vacuous');
+    assert.ok(/label/i.test(html), 'it says the calories come from labels');
+    assert.ok(/normal/i.test(html), 'and that the difference is expected, not a fault');
+    assert.ok(!/error|wrong|incorrect|warning/i.test(html), 'and it is a footnote, not an alarm');
+  });
+
   test('LABEL: a count item has no unit at all', () => {
     // Rice cakes: g:[2,1,0,0,0] is 2 CAKES. It rendered "2 g Rice cakes".
     assert.equal(app._nutProgItemLabel({ n: 'Rice cakes', g: 2, u: '', count: true }),

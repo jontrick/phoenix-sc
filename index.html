@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.264';
+var APP_VERSION='4.9.265';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5350,26 +5350,55 @@ window._blabBuildSupersetBlock = function(ex, idx){
             if(last.a) bs.records[ex2.name+'_reps'] = last.a;
             if(partner.name && last.kb) bs.records[partner.name+'_wt'] = last.kb;
             if(partner.name && last.b) bs.records[partner.name+'_reps'] = last.b;
-            st.log.forEach(function(l,li){
-              var sn=li+1;
-              if(l.ka) bs.records[ex2.name+'_wt_set'+sn]=l.ka;
-              if(l.a) bs.records[ex2.name+'_reps_set'+sn]=l.a;
-              if(partner.name&&l.kb) bs.records[partner.name+'_wt_set'+sn]=l.kb;
-              if(partner.name&&l.b) bs.records[partner.name+'_reps_set'+sn]=l.b;
-            });
-            // v4.9.254: clear any set beyond what was just logged. These records are
-            // written per set number and were never cleared, so a 3-set week followed by
-            // a 2-set week left set 3 on file and the reader — which walks upward until a
-            // gap — would show a phantom third set from a different session. Only visible
-            // once the reader stopped breaking early, so it was masked by the bug above.
-            for(var _cl=st.log.length+1; _cl<=6; _cl++){
-              delete bs.records[ex2.name+'_wt_set'+_cl];
-              delete bs.records[ex2.name+'_reps_set'+_cl];
-              if(partner.name){
-                delete bs.records[partner.name+'_wt_set'+_cl];
-                delete bs.records[partner.name+'_reps_set'+_cl];
+            // v4.9.265 — DATED BLOB, ROTATED. Replaces both the per-set-number writes
+            // and the .254 delete loop, which between them destroyed the history this is
+            // supposed to preserve. Jon, third report of the same symptom:
+            //
+            //   "its still not showing the 2nd set reps achieved on the upper second
+            //    blocks" ... "when started to fill out again it told me that the
+            //    completed i had done were now last weeks records before finished the
+            //    full session"
+            //
+            // The second sentence is the diagnosis. This block wrote TODAY's sets into
+            // records[name+'_wt_setN'] — THE SAME KEYS THE READER USES FOR LAST WEEK —
+            // with no rotation. So the moment a block completed, today overwrote last
+            // week; and re-entering the session (he was flicked back to Today mid-set)
+            // showed him his own partial labelled as the previous session.
+            //
+            // My .254 delete loop then made it destructive rather than merely confusing:
+            // completing a block with one set logged DELETED _reps_set2, wiping last
+            // week's second set before he had done today's. That is precisely the
+            // "2nd set never shows" he has now reported three times, and I introduced it
+            // while fixing the reader.
+            //
+            // Same shape as recSets/_lastsets/_prevsets, which has worked since .179:
+            // one blob per movement carrying its DATE, and the previous one kept beside
+            // it. Today's session can be re-entered as often as he likes — the reader
+            // keeps showing last week until the date rolls over. Wholesale replacement
+            // also means a shorter week cannot leave a phantom set behind, which is what
+            // the delete loop was for.
+            var _slToday = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+            function _slWrite(movName, pick){
+              var sets = [];
+              st.log.forEach(function(l){
+                var wt = pick === 'a' ? l.ka : l.kb;
+                var rp = pick === 'a' ? l.a  : l.b;
+                if(!wt && !rp) return;
+                sets.push({wt: wt || 0, reps: rp || 0});
+              });
+              if(!sets.length) return;
+              var key = movName + '_setlog';
+              var cur = bs.records[key];
+              // Only rotate when the stored blob is from an EARLIER day. Re-completing a
+              // block today must not push today's own earlier attempt into the previous
+              // slot — that would lose last week outright on the second completion.
+              if(cur && typeof cur === 'object' && cur.date && cur.date !== _slToday){
+                bs.records[key + '_prev'] = cur;
               }
+              bs.records[key] = {date: _slToday, sets: sets};
             }
+            _slWrite(ex2.name, 'a');
+            if(partner.name) _slWrite(partner.name, 'b');
             window.blabSaveState(bs);
           }
         }
@@ -5649,7 +5678,20 @@ window.blabToPhoenixSession = function(sess, week, day){
       // record, which looks the same on screen.
       //
       // A set now counts if it has EITHER a weight or reps.
+      // v4.9.265: read the dated blob, and pick the PREVIOUS one whenever the stored
+      // blob is today's — so a session re-entered part-way through still shows last week,
+      // not what he has already done today.
+      //
+      // The legacy _wt_setN / _reps_setN walk is kept as a fallback, NOT removed: those
+      // keys hold every superset session Jon has logged up to this version, and dropping
+      // the read would blank his history on the release that claims to fix it.
+      var _slToday = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
       function _ssPrevSets(movName){
+        var cur = _ssRec[movName + '_setlog'];
+        var prv = _ssRec[movName + '_setlog_prev'];
+        var pick = (cur && typeof cur === 'object' && cur.date === _slToday) ? prv : cur;
+        if(pick && Array.isArray(pick.sets) && pick.sets.length) return pick.sets.slice();
+        // Legacy fallback — pre-blob sessions.
         var out=[];
         for(var n=1;n<=6;n++){
           var wt=_ssRec[movName+'_wt_set'+n]||0;

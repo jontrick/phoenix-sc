@@ -2625,7 +2625,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(app._blabUnfinishedToday(), 'and the real one is untouched');
   });
 
-  // ── A FINISHED RUNNER MUST NOT RESTART ITS CLOCK (v4.9.NEXT) ──────────────
+  // ── A FINISHED RUNNER MUST NOT RESTART ITS CLOCK (v4.9.265) ──────────────
   // Found by applying Peptides' rule to my own guards: when a presence pin's LABEL
   // claims a behaviour, the property has outgrown the pin.
   //
@@ -2688,7 +2688,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     }
   });
 
-  // ── THE WAKE LOCK (v4.9.NEXT) ─────────────────────────────────────────────
+  // ── THE WAKE LOCK (v4.9.265) ─────────────────────────────────────────────
   // Second instance of the load-bearing-needle variant, found the same way as the first:
   // break the property, see which pin goes red, ask whether that pin's label mentions it.
   //
@@ -2751,7 +2751,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     } finally { w.restore(); }
   });
 
-  // ── THE LAST-CHANCE WRITE (v4.9.NEXT) ─────────────────────────────────────
+  // ── THE LAST-CHANCE WRITE (v4.9.265) ─────────────────────────────────────
   // Peptides found every one of its MIRROR cases passed useKeepalive=false, leaving the
   // keepalive branch — the one it had specifically hardened — with none. I checked mine
   // and it was worse: _blabSendCloud and _blabFlushCloud had ZERO cases on EITHER branch.
@@ -2868,5 +2868,100 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
           'the debounced path is named distinctly from the keepalive one');
       });
     } finally { app.sb = realSb; }
+  });
+
+  // ── SUPERSET HISTORY, THIRD REPORT (v4.9.265) ────────────────────────────
+  // Jon: "its still not showing the 2nd set reps achieved on the upper second blocks" —
+  // and the sentence that diagnoses it: "when started to fill out again it told me that
+  // the completed i had done were now last weeks records before finished the full
+  // session".
+  //
+  // The writer put TODAY's sets into records[name+'_wt_setN'] — the same keys the reader
+  // uses for LAST WEEK — with no rotation. And my own .254 delete loop then removed every
+  // set number beyond what had been logged so far, so completing a block with one set
+  // deleted last week's set 2 before he had done today's.
+  //
+  // Both of my previous fixes were tested with ONE session in storage, so neither could
+  // see it. These write a week, then write again, which is the whole point.
+
+  // Reuses SS_A / ssState / ssBlock from the SETS: block above. Those five cases seed
+  // records directly and read them back — they exercise the READER and nothing else,
+  // which is exactly why none of them could see a writer that overwrites the keys it
+  // reads. Same shape as the calendar bug: the helpers were covered, the path was not.
+  const seedLastWeek = (sets) => {
+    reset(); signIn(UID);
+    const rec = {};
+    rec[SS_A + '_setlog'] = { date: '2026-08-16', sets };
+    seed(KEY, ssState(rec));
+  };
+
+  const prevSetsFor = () => {
+    const ss = ssBlock();
+    return ss ? { a: ss.prev_sets_a, b: ss.prev_sets_b, name: ss.name } : null;
+  };
+
+  test('SSHIST: BOTH sets from last week come back, not just the first', () => {
+    // The original complaint, still unfixed after two attempts.
+    seedLastWeek([{ wt: 0, reps: 24 }, { wt: 0, reps: 15 }]);
+    const got = prevSetsFor();
+    assert.ok(got, 'the superset block exists in this session');
+    assert.equal(got.a.length, 2, 'two sets, not one');
+    assert.equal(got.a[0].reps, 24, 'set 1 reps');
+    assert.equal(got.a[1].reps, 15, 'set 2 reps — the one he keeps not seeing');
+  });
+
+  test('SSHIST: a bodyweight set counts — reps with no weight is still a set', () => {
+    // These are max-reps supersets. The load is often bodyweight or simply not typed, and
+    // the history used to be gated on weight.
+    seedLastWeek([{ wt: 0, reps: 22 }, { wt: 0, reps: 13 }]);
+    assert.equal(prevSetsFor().a.length, 2, 'both sets survive with no weight recorded');
+  });
+
+  test('SSHIST: mid-session, he still sees LAST WEEK — not what he just did', () => {
+    // His exact sequence: flicked back to Today part-way, re-entered, and the app showed
+    // his own partial as the previous session's record.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    const rec = {};
+    rec[SS_A + '_setlog']      = { date: today,        sets: [{ wt: 0, reps: 26 }] };
+    rec[SS_A + '_setlog_prev'] = { date: '2026-08-16', sets: [{ wt: 0, reps: 24 }, { wt: 0, reps: 15 }] };
+    seed(KEY, ssState(rec));
+    const got = prevSetsFor();
+    assert.equal(got.a.length, 2, 'last week, both sets');
+    assert.equal(got.a[0].reps, 24, 'and it is LAST week');
+    assert.ok(!got.a.some((s) => s.reps === 26), "today's partial is not presented as history");
+  });
+
+  test('SSHIST: a short session cannot delete last week\'s later sets', () => {
+    // The .254 delete loop, reproduced. Last week had two sets; today only one is logged
+    // so far. Last week's set 2 must survive.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    const rec = {};
+    rec[SS_A + '_setlog']      = { date: today,        sets: [{ wt: 0, reps: 26 }] };
+    rec[SS_A + '_setlog_prev'] = { date: '2026-08-16', sets: [{ wt: 0, reps: 24 }, { wt: 0, reps: 15 }] };
+    seed(KEY, ssState(rec));
+    assert.equal(prevSetsFor().a.length, 2,
+      "one set logged today does not truncate last week's record");
+  });
+
+  test('SSHIST: pre-blob history still reads — his existing sessions are not blanked', () => {
+    // Every superset session he has logged before this version lives in the old
+    // per-set-number keys. Dropping that read would blank his history on the very
+    // release that claims to fix it.
+    reset(); signIn(UID);
+    const rec = {};
+    rec[SS_A + '_reps_set1'] = 21;
+    rec[SS_A + '_reps_set2'] = 14;
+    seed(KEY, ssState(rec));
+    const got = prevSetsFor();
+    assert.equal(got.a.length, 2, 'legacy keys still produce two sets');
+    assert.equal(got.a[1].reps, 14, 'including the second');
+  });
+
+  test('SSHIST: with nothing on file, no phantom sets are invented', () => {
+    reset(); signIn(UID);
+    seed(KEY, ssState({}));
+    assert.equal(prevSetsFor().a.length, 0, 'empty, not a fabricated set');
   });
 }

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.264'", 'version is 4.9.264');
+has("var APP_VERSION='4.9.265'", 'version is 4.9.265');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -825,8 +825,17 @@ hasCode("out.scheduled = (out.state !== 'none');", 'CAL: a scheduled rest day st
 has('function ssPrevBanner(', 'P11-B1: ssPrevBanner helper defined');
 has('_banA=ssPrevBanner(', 'P11-B1: _banA computed from ssPrevBanner');
 has('_banB=ssPrevBanner(', 'P11-B1: _banB computed from ssPrevBanner');
-has("bs.records[ex2.name+'_wt_set'+sn]", 'P11-B1: per-set weight saved by set number');
-has("bs.records[ex2.name+'_reps_set'+sn]", 'P11-B1: per-set reps saved by set number');
+// v4.9.265: the per-set-NUMBER writes are gone and these two pins went with them. They
+// pinned a writer that put today's sets into the same keys the reader uses for last week,
+// with no rotation — so the pins were faithfully protecting the bug. Replaced with the
+// dated blob and its rotation, which is the property that actually matters.
+//
+// STRUCTURAL. That mid-session re-entry still shows last week, and that a short session
+// cannot truncate last week, is tests/training.mjs SSHIST: — the reader-only cases above
+// could not see either, because they never ran the writer.
+has("bs.records[key] = {date: _slToday, sets: sets};", 'P11-B1: STRUCTURAL per-set history is written as a dated blob (behaviour: tests/training.mjs SSHIST:)');
+has("bs.records[key + '_prev'] = cur;", 'P11-B1: STRUCTURAL an earlier day rotates into the previous slot rather than being overwritten');
+hasNotCode("for(var _cl=st.log.length+1; _cl<=6; _cl++){", "P11-B1: the .254 delete loop is gone - it wiped last week's later sets when today logged fewer");
 // v4.9.254: was pinned to the literal "phxEx.prev_sets_a=_ssPA" — the old inline
 // accumulator variable. That is an implementation detail, and it failed the moment the
 // weight-gating bug was fixed by extracting the walk into _ssPrevSets(). Pinned to the

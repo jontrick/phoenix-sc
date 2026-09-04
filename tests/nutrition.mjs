@@ -1079,6 +1079,82 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgTargetsOn(null), null, 'nor is nothing');
   });
 
+  // ── the plate must actually serve the phase it claims to ─────────────────
+  // A hand-written quantity table is exactly the kind of thing that looks right
+  // and is 15 g out. These check the food against the engine's own target rather
+  // than against the numbers I typed, so a typo fails the build.
+
+  const PHASE_WED = ['2026-09-16','2026-10-07','2026-10-28','2026-11-18','2026-12-09'];
+
+  test('PLATE every phase serves the carbs its own target asks for', () => {
+    setUp(110);
+    PHASE_WED.forEach((d, ix) => {
+      const t = app.nutProgTargetsOn(d);
+      const got = app.nutProgDayTotals(d);
+      assert.equal(t.phase_n, ix + 1, d + ' is phase ' + (ix + 1));
+      assert.equal(t.lift, false, 'a Wednesday is a non-lift day');
+      const drift = Math.round(Math.abs(got.c - t.total.c) * 10) / 10;
+      assert.equal(drift <= 2, true,
+        'phase ' + (ix + 1) + ' plate gives ' + got.c + ' g carbs against a target of ' +
+        t.total.c + ' — ' + drift + ' g out. The quantity table and the ladder disagree.');
+    });
+  });
+
+  test('PLATE every phase serves roughly its protein and fat too', () => {
+    setUp(110);
+    PHASE_WED.forEach((d, ix) => {
+      const t = app.nutProgTargetsOn(d);
+      const got = app.nutProgDayTotals(d);
+      const dp = Math.round(Math.abs(got.p - t.total.p) * 10) / 10;
+      const df = Math.round(Math.abs(got.f - t.total.f) * 10) / 10;
+      assert.equal(dp <= 3, true,
+        'phase ' + (ix+1) + ' protein: plate ' + got.p + ' vs target ' + t.total.p + ' (' + dp + ' out)');
+      assert.equal(df <= 4, true,
+        'phase ' + (ix+1) + ' fat: plate ' + got.f + ' vs target ' + t.total.f + ' (' + df + ' out)');
+    });
+  });
+
+  test('PLATE a lift day drops the banana and nothing else', () => {
+    setUp(110);
+    const wed = app.nutProgMealsOn('2026-09-16');   // HIIT
+    const tue = app.nutProgMealsOn('2026-09-15');   // lift
+    const names = (ms) => ms.map((m) => m.id);
+    assert.equal(names(wed).indexOf('pre') >= 0, true, 'the non-lift day has the pre-training banana');
+    assert.equal(names(tue).indexOf('pre'), -1,
+      'the lift day does not — the intra already delivered that block');
+    const foodWed = names(wed).filter((n) => ['bfast','midam','lunch','arvo','dinner'].indexOf(n) >= 0);
+    const foodTue = names(tue).filter((n) => ['bfast','midam','lunch','arvo','dinner'].indexOf(n) >= 0);
+    assert.deepEqual(foodTue, foodWed, 'every other meal is identical — one change, not a second menu');
+  });
+
+  test('PLATE the formulas appear on the days they are actually due', () => {
+    setUp(110);
+    const ids = (d) => app.nutProgMealsOn(d).filter((m) => m.supp).map((m) => m.id);
+    assert.deepEqual(ids('2026-09-14').sort(), ['coffee','post'],       'Mon rest: coffee and post only');
+    assert.deepEqual(ids('2026-09-15').sort(), ['coffee','intra','post'],'Tue lift: intra as well');
+    assert.deepEqual(ids('2026-09-16').sort(), ['coffee','intra','post'],'Wed HIIT: the shot fills the intra slot');
+    const wedIntra = app.nutProgMealsOn('2026-09-16').filter((m) => m.id === 'intra')[0];
+    assert.equal(wedIntra.code, 'JON-BHS-BBY', 'and it is the HIIT shot, not the lift drink');
+    assert.equal(wedIntra.c, 0.2, 'which carries no meaningful carbohydrate');
+  });
+
+  test('PLATE choosing brown rice changes the grams, not the carbs', () => {
+    setUp(110);
+    const bas = app.nutProgMealsOn('2026-09-16', 'basmati').filter((m) => m.id === 'lunch')[0];
+    const brn = app.nutProgMealsOn('2026-09-16', 'brown').filter((m) => m.id === 'lunch')[0];
+    const rice = (m) => m.items.filter((it) => /rice|Basmati|Brown/i.test(it.n))[0];
+    assert.equal(Math.abs(rice(bas).c - rice(brn).c) <= 1, true,
+      'same carbohydrate from either grain — that is the whole point');
+    assert.equal(rice(brn).g > rice(bas).g, true, 'brown weighs more for it');
+    assert.equal(rice(brn).n, 'Brown, long grain', 'and the plate names what you actually cook');
+  });
+
+  test('PLATE nothing outside the programme produces a plate', () => {
+    setUp(110);
+    assert.equal(app.nutProgMealsOn('2026-09-13'), null, 'the day before it starts');
+    assert.equal(app.nutProgDayTotals('2026-12-28'), null, 'the day after it ends');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

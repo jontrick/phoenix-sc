@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.275';
+var APP_VERSION='4.9.276';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20676,6 +20676,133 @@ function nutProgRiceFor(riceId, blocks){
     p:        Math.round(r.p100 * cooked / 100 * 10) / 10,
     f:        Math.round(r.f100 * cooked / 100 * 10) / 10
   };
+}
+
+// ── the plate ──────────────────────────────────────────────────────────────
+// v4.9.276. Quantities per phase, checked against the engine's own target by
+// test — a typo in this table fails the build rather than quietly feeding wrong.
+// Six meals and four formulas. Quantities are per PHASE (index 0..4), because
+// the carbs are what move — protein and fat barely change across the fifteen
+// weeks. Every gram here is checked against the engine's own target by test, so
+// a typo in this table fails the build rather than quietly feeding him wrong.
+//
+// `carb:true` marks an item the ladder acts on. Everything else is an anchor.
+var _NUT_PROG_PLATE = [
+  // meal    name                     per-phase grams          macros per 100 g
+  { m:'pre',    n:'Banana',            g:[120,120,120,120,85],  carb:true,  u:'',        k:89,  p:1.1, c:21,  f:0.3 },
+
+  { m:'bfast',  n:'Oats',              g:[60,60,52,45,43],      carb:true,  u:' dry',    k:389, p:13,  c:67,  f:7 },
+  { m:'bfast',  n:'Whey protein',      g:[38,46,50,56,58],                  u:'',        k:400, p:82,  c:5,   f:5 },
+  { m:'bfast',  n:'Blueberries',       g:[80,80,80,80,80],      carb:true,  u:'',        k:57,  p:0.7, c:10,  f:0.3 },
+  { m:'bfast',  n:'Semi-skimmed milk', g:[80,80,50,35,20],      carb:true,  u:' ml',     k:50,  p:3.5, c:5,   f:1.8 },
+
+  { m:'midam',  n:'Greek yoghurt, 0%', g:[200,200,200,200,200],             u:'',        k:57,  p:10,  c:4,   f:0.2 },
+  { m:'midam',  n:'Almonds',           g:[30,30,28,26,24],                  u:'',        k:579,p:21,c:9,f:50 },
+
+  { m:'lunch',  n:'Chicken breast',    g:[135,135,154,165,172],             u:' cooked', k:165, p:30,  c:0,   f:3.6 },
+  { m:'lunch',  n:'Rice',              g:[230,179,143,79,61],   carb:true,  u:' cooked', k:130, p:2.7, c:28,  f:0.3 },
+  { m:'lunch',  n:'Avocado',           g:[80,80,75,70,60],                  u:'',        k:160, p:2,   c:1,   f:15 },
+  { m:'lunch',  n:'Mixed vegetables',  g:[150,150,150,150,150], carb:true,  u:'',        k:35,  p:2,   c:5.3, f:0.3 },
+
+  { m:'arvo',   n:'Tuna, springwater', g:[100,100,100,100,100],             u:'',        k:109, p:25,  c:0,   f:0.8 },
+  { m:'arvo',   n:'Rice cakes',        g:[2,1,0,0,0],           carb:true,  u:'',        k:387, p:8,   c:81,  f:3, each:9.5 },
+  { m:'arvo',   n:'Peanut butter',     g:[15,15,8,0,0],                     u:'',        k:588, p:25,  c:20,  f:50 },
+
+  { m:'dinner', n:'Salmon fillet',     g:[135,135,140,150,160],             u:'',        k:208, p:22,  c:0,   f:13 },
+  { m:'dinner', n:'Sweet potato',      g:[260,144,115,75,35],   carb:true,  u:'',        k:86,  p:1.6, c:20,  f:0.1 },
+  { m:'dinner', n:'Greens',            g:[200,200,200,200,200], carb:true,  u:'',        k:35,  p:2.8, c:4,   f:0.4 },
+  { m:'dinner', n:'Olive oil',         g:[13,12,12,11,10],                  u:' ml',     k:884, p:0,   c:0,   f:100 }
+];
+
+// Meal order, times and how each one behaves. `skipOnLift` is the whole
+// supplement rule in one flag: the pre-training banana is not eaten on a lifting
+// day, because the intra already delivered that block during the session.
+var _NUT_PROG_MEALS = [
+  { id:'coffee', t:'03:50', n:'Coffee shot',      supp:'coffee' },
+  { id:'pre',    t:'04:15', n:'Pre-training',     skipOnLift:true },
+  { id:'intra',  t:'04:30', n:'Intra',            supp:'lift', alt:'hiit' },
+  { id:'post',   t:'05:45', n:'Post-workout',     supp:'post' },
+  { id:'bfast',  t:'06:15', n:'Breakfast' },
+  { id:'midam',  t:'09:30', n:'Mid-morning' },
+  { id:'lunch',  t:'12:30', n:'Lunch',            prepped:true },
+  { id:'arvo',   t:'15:30', n:'Afternoon' },
+  { id:'dinner', t:'19:00', n:'Dinner',           prepped:true }
+];
+
+function _nutProgItemMacros(it, grams){
+  var g = parseFloat(grams) || 0;
+  var mult = it.each ? (g * it.each / 100) : (g / 100);
+  return { k: it.k * mult, p: it.p * mult, c: it.c * mult, f: it.f * mult };
+}
+
+// The day's meals, with real quantities. riceId picks which rice the grams are
+// computed for — the carbohydrate is fixed, the weight follows the grain.
+function nutProgMealsOn(dateKey, riceId){
+  var t = nutProgTargetsOn(dateKey);
+  if(!t) return null;
+  var ix = t.phase_n - 1;
+  var lift = t.lift;
+  var out = [];
+  for(var mi = 0; mi < _NUT_PROG_MEALS.length; mi++){
+    var M = _NUT_PROG_MEALS[mi];
+    if(M.skipOnLift && lift) continue;
+    if(M.supp){
+      var due = (M.supp === 'coffee' || M.supp === 'post') ||
+                (t.sessions.indexOf(M.supp) >= 0) || (M.alt && t.sessions.indexOf(M.alt) >= 0);
+      if(!due) continue;
+      var which = (t.sessions.indexOf(M.supp) >= 0) ? M.supp : (M.alt || M.supp);
+      var sup = null;
+      for(var si = 0; si < _NUT_SUPPS.length; si++) if(_NUT_SUPPS[si].id === which) sup = _NUT_SUPPS[si];
+      if(!sup) continue;
+      out.push({ id:M.id, time:M.t, name:sup.name, supp:true, code:sup.code,
+                 items:[], k:sup.kcal, p:sup.p, c:sup.c, f:sup.f });
+      continue;
+    }
+    var items = [], K = 0, P = 0, C = 0, F = 0;
+    for(var i = 0; i < _NUT_PROG_PLATE.length; i++){
+      var it = _NUT_PROG_PLATE[i];
+      if(it.m !== M.id) continue;
+      var g = it.g[ix];
+      if(!(g > 0)) continue;
+      var name = it.n, grams = g, unit = it.u, mac = null;
+      // Rice is the one item whose weight depends on a choice rather than the phase.
+      // Its macros MUST come from the chosen grain, not from the plate row — brown
+      // is 23 g carbs per 100 g against basmati's 28, so reusing the row's figure
+      // would count a correctly-resized portion as a third more carbohydrate.
+      if(it.n === 'Rice' && riceId){
+        var carbs = it.c * g / 100;                    // hold the carbohydrate
+        var r = nutProgRiceFor(riceId, carbs / _NUT_BLOCK_G);
+        if(r){
+          name = r.name; grams = r.cooked_g;
+          mac = { k: r.carbs_g * 4 + r.p * 4 + r.f * 9, p: r.p, c: r.carbs_g, f: r.f };
+        }
+      }
+      if(!mac) mac = _nutProgItemMacros(it, grams);
+      items.push({ n:name, g:grams, u:unit, carb:!!it.carb,
+                   k:Math.round(mac.k), p:Math.round(mac.p*10)/10,
+                   c:Math.round(mac.c*10)/10, f:Math.round(mac.f*10)/10 });
+      K += mac.k; P += mac.p; C += mac.c; F += mac.f;
+    }
+    if(!items.length) continue;
+    out.push({ id:M.id, time:M.t, name:M.n, supp:false, prepped:!!M.prepped, items:items,
+               k:Math.round(K), p:Math.round(P*10)/10, c:Math.round(C*10)/10, f:Math.round(F*10)/10,
+               blocks: Math.round((C / _NUT_BLOCK_G) * 100) / 100 });
+  }
+  return out;
+}
+
+// Day totals actually delivered by the plate above — used to prove the table
+// matches the phase it claims to serve, rather than assuming it.
+function nutProgDayTotals(dateKey, riceId){
+  var meals = nutProgMealsOn(dateKey, riceId);
+  if(!meals) return null;
+  var t = { kcal:0, p:0, c:0, f:0 };
+  meals.forEach(function(m){ t.kcal += m.k; t.p += m.p; t.c += m.c; t.f += m.f; });
+  t.kcal = Math.round(t.kcal);
+  t.p = Math.round(t.p * 10) / 10;
+  t.c = Math.round(t.c * 10) / 10;
+  t.f = Math.round(t.f * 10) / 10;
+  return t;
 }
 
 // ── projection ─────────────────────────────────────────────────────────────

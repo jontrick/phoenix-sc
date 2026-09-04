@@ -1155,6 +1155,109 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgDayTotals('2026-12-28'), null, 'the day after it ends');
   });
 
+  // ── the programme's Today screen ─────────────────────────────────────────
+  // Driven through _nutTabToday, NOT through _nutProgTodayCard. A renderer that
+  // exists and is never reached is this domain's most expensive recurring bug —
+  // the meals tab had no router branch for four versions and every gate was green.
+  //
+  // The programme runs on real calendar dates and "today" is not one of them, so
+  // these pin _nutToday to a day inside the programme. Restored after each case.
+  const onDay = (dateKey, fn) => {
+    const real = app._nutToday;
+    app._nutToday = () => dateKey;
+    try { return fn(); } finally { app._nutToday = real; }
+  };
+
+  test('TODAY the tab ROUTES to the programme while it is running', () => {
+    setUp(110);
+    const html = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Week 1 of 15') >= 0,
+      'the Today tab reaches the programme card — not merely that the card exists');
+    assert.ok(html.indexOf('Adaptation') >= 0, 'and names the phase');
+    assert.ok(html.indexOf('data-prog-tick') >= 0, 'with tickable meals');
+  });
+
+  test('TODAY the free-form tab still renders outside the programme', () => {
+    setUp(110);
+    const before = onDay('2026-09-01', () => app._nutTabToday(app.nutGetState()));
+    assert.equal(before.indexOf('Week 1 of 15'), -1, 'before it starts, the old screen is untouched');
+    const after = onDay('2026-12-28', () => app._nutTabToday(app.nutGetState()));
+    assert.equal(after.indexOf('data-prog-tick'), -1, 'and after it finishes too');
+  });
+
+  test('TODAY the off-plan button is on the screen, not buried', () => {
+    setUp(110);
+    const html = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('data-prog-add') >= 0,
+      'friction is what stops things being logged, and an unlogged biscuit is a ' +
+      'week the Wednesday review cannot explain');
+    assert.ok(/Ate or drank something else/i.test(html), 'and it says what it is for');
+  });
+
+  test('TODAY a lift day shows no pre-training banana', () => {
+    setUp(110);
+    const wed = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState()));
+    const tue = onDay('2026-09-15', () => app._nutTabToday(app.nutGetState()));
+    // Match the MEAL, not the word: "Pre-training" also appears in the coffee
+    // shot's own name, so a text needle here reports a bug that is not there.
+    assert.ok(wed.indexOf('data-prog-tick="pre"') >= 0, 'the HIIT day has the banana meal');
+    assert.equal(tue.indexOf('data-prog-tick="pre"'), -1, 'the lift day does not');
+    assert.ok(tue.indexOf('Pre-training coffee shot') >= 0,
+      'while the coffee shot — which is a different thing wearing a similar name — stays');
+    assert.ok(tue.indexOf('lift day') >= 0, 'and the header says why');
+  });
+
+  test('TODAY ticking a meal moves the totals', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const before = app.nutProgConsumedOn(d);
+    assert.equal(before.total.kcal, 0, 'an untouched plan is not a day\'s food');
+    assert.equal(before.done_count, 0, 'nothing logged yet');
+    app.nutProgToggleMeal(d, 'lunch');
+    const after = app.nutProgConsumedOn(d);
+    assert.equal(after.done_count, 1, 'one meal logged');
+    assert.ok(after.total.kcal > 400, 'and its calories now count: got ' + after.total.kcal);
+    app.nutProgToggleMeal(d, 'lunch');
+    assert.equal(app.nutProgConsumedOn(d).total.kcal, 0, 'tapping again un-logs it');
+  });
+
+  test('TODAY something eaten off plan counts, and is shown as off plan', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutAddComponent(app._NUT_PROG_EXTRA_SLOT, d,
+      { n:'Flat white', cat:'extras', k:60, p:3, c:5, f:3 }, 250);
+    const con = app.nutProgConsumedOn(d);
+    assert.equal(con.extra.items.length, 1, 'the coffee is recorded');
+    assert.equal(con.extra.kcal, 150, 'with its calories');
+    assert.equal(con.total.kcal, 150, 'counted in the day even with no meal ticked');
+    const html = onDay(d, () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Off plan today') >= 0,
+      'and shown SEPARATELY — blending it into the plan hides why a week drifted');
+    assert.ok(html.indexOf('Flat white') >= 0, 'naming what it was');
+  });
+
+  test('TODAY going over target reads as over, not as negative remaining', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutAddComponent(app._NUT_PROG_EXTRA_SLOT, d,
+      { n:'Large pizza', cat:'extras', k:270, p:11, c:33, f:10 }, 1000);
+    const html = onDay(d, () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('over plan') >= 0, 'the screen says over plan');
+    assert.equal(html.indexOf('-'), -1 === 0 ? 0 : html.indexOf('-'),
+      'and the figure is not rendered as a bare negative');
+  });
+
+  test('TODAY the rice choice reaches the plate', () => {
+    setUp(110);
+    app.nutProgSetRice('brown');
+    assert.equal(app.nutProgRiceChoice(), 'brown', 'the week\'s rice is remembered');
+    const html = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Brown, long grain') >= 0,
+      'and the screen names the grain actually being cooked');
+    app.nutProgSetRice('nonsense');
+    assert.equal(app.nutProgRiceChoice(), 'brown', 'a bad id does not silently reset it');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

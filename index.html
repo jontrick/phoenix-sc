@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.276';
+var APP_VERSION='4.9.277';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19251,6 +19251,17 @@ function nutRenderScreen(){
   });
   var recalcBtn = body.querySelector('[data-nut-recalc]');
   if(recalcBtn) recalcBtn.addEventListener('click', function(){ nutRecalcTargets(); });
+  // v4.9.277: programme day — tick a meal, or log something off plan.
+  body.querySelectorAll('[data-prog-tick]').forEach(function(row){
+    row.addEventListener('click', function(){
+      nutProgToggleMeal(_nutToday(), row.getAttribute('data-prog-tick'));
+      nutRenderScreen();
+    });
+  });
+  var progAdd = body.querySelector('[data-prog-add]');
+  if(progAdd) progAdd.addEventListener('click', function(){
+    nutOpenFoodPicker(_NUT_PROG_EXTRA_SLOT, _nutToday(), 'log');
+  });
 }
 
 // v4.9.166: targets are frozen at the weight they were built from. When the
@@ -19382,6 +19393,12 @@ function _nutDaySummary(ns, dk, opts){
 
 function _nutTabToday(ns){
   var today = _nutToday();
+  // v4.9.277: while the cut programme is running it owns this screen. Recipes,
+  // the week planner and the scanner keep working underneath for anything else.
+  if(typeof nutProgStatusOn === 'function' && nutProgStatusOn(today) === 'running'){
+    var progCard = _nutProgTodayCard();
+    if(progCard) return progCard;
+  }
   var targets = nutAdjustForToday(ns.targets);
   var dayData = (ns.daily && ns.daily[today]) || {};
   var logged = _nutEatenTotals(dayData);      // v4.9.145: ticked-off meals only
@@ -20803,6 +20820,189 @@ function nutProgDayTotals(dateKey, riceId){
   t.c = Math.round(t.c * 10) / 10;
   t.f = Math.round(t.f * 10) / 10;
   return t;
+}
+
+// ── what has actually been eaten ───────────────────────────────────────────
+// v4.9.277. Ticks live under ns.daily[date].prog_done, keyed by meal id.
+// ANYTHING EATEN OFF-PLAN goes into the ordinary meals structure under the slot
+// 'extra', so it flows through the same totals as every other component and
+// cannot be hidden. A plan that assumes perfect adherence starts lying in week
+// three; worse, it lies in the direction that looks like the plan failing.
+var _NUT_PROG_EXTRA_SLOT = 'extra';
+
+function _nutProgDay(ns, dateKey){
+  if(!ns) return null;
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[dateKey]) ns.daily[dateKey] = {};
+  return ns.daily[dateKey];
+}
+
+function nutProgTicked(dateKey){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  return (day && day.prog_done) ? day.prog_done : {};
+}
+
+function nutProgToggleMeal(dateKey, mealId){
+  if(!dateKey || !mealId) return false;
+  var ns = nutGetState();
+  var day = _nutProgDay(ns, dateKey);
+  if(!day) return false;
+  if(!day.prog_done) day.prog_done = {};
+  if(day.prog_done[mealId]) delete day.prog_done[mealId];
+  else day.prog_done[mealId] = true;
+  nutSaveState(ns);
+  return !!day.prog_done[mealId];
+}
+
+// Off-plan components only. Kept separate in the read so the day can show
+// "on plan" and "plus" as two numbers rather than one blended figure that hides
+// which is which.
+function nutProgExtrasOn(dateKey){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  var meals = day && day.meals;
+  var slot = meals && !Array.isArray(meals) && meals[_NUT_PROG_EXTRA_SLOT];
+  var comps = (slot && slot.components) || [];
+  var out = { items: [], kcal: 0, p: 0, c: 0, f: 0 };
+  comps.forEach(function(c){
+    var mult = (parseFloat(c.qty_g) || 0) / 100;
+    out.items.push({ n: c.n || '', g: parseFloat(c.qty_g) || 0,
+                     k: Math.round((c.k || 0) * mult) });
+    out.kcal += (c.k || 0) * mult;
+    out.p += (c.p || 0) * mult; out.c += (c.c || 0) * mult; out.f += (c.f || 0) * mult;
+  });
+  out.kcal = Math.round(out.kcal);
+  out.p = Math.round(out.p * 10) / 10;
+  out.c = Math.round(out.c * 10) / 10;
+  out.f = Math.round(out.f * 10) / 10;
+  return out;
+}
+
+// Consumed = ticked programme meals + everything off-plan. The plan's own meals
+// count only once TICKED — an untouched plan is not a day's food, and the whole
+// point of the Thursday review is that it reads what happened, not what was
+// intended.
+function nutProgConsumedOn(dateKey, riceId){
+  var meals = nutProgMealsOn(dateKey, riceId);
+  if(!meals) return null;
+  var done = nutProgTicked(dateKey);
+  var plan = { kcal:0, p:0, c:0, f:0 };
+  meals.forEach(function(m){
+    if(!done[m.id]) return;
+    plan.kcal += m.k; plan.p += m.p; plan.c += m.c; plan.f += m.f;
+  });
+  var ex = nutProgExtrasOn(dateKey);
+  return {
+    plan: { kcal:Math.round(plan.kcal), p:Math.round(plan.p*10)/10,
+            c:Math.round(plan.c*10)/10, f:Math.round(plan.f*10)/10 },
+    extra: ex,
+    total: { kcal: Math.round(plan.kcal + ex.kcal),
+             p: Math.round((plan.p + ex.p)*10)/10,
+             c: Math.round((plan.c + ex.c)*10)/10,
+             f: Math.round((plan.f + ex.f)*10)/10 },
+    done_count: meals.filter(function(m){ return !!done[m.id]; }).length,
+    meal_count: meals.length
+  };
+}
+
+// The rice chosen for the week. Locked on the Wednesday review; falls back to
+// basmati so a day never renders without a portion weight.
+function nutProgRiceChoice(){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var r = ns && ns.prog_rice;
+  return _nutRiceById(r) ? r : 'basmati';
+}
+function nutProgSetRice(riceId){
+  if(!_nutRiceById(riceId)) return false;
+  var ns = nutGetState();
+  ns.prog_rice = riceId;
+  nutSaveState(ns);
+  return true;
+}
+
+// ── the Today card ─────────────────────────────────────────────────────────
+// v4.9.277. Renders the programme day. Drawn from nutProgMealsOn, so it can
+// never disagree with the shopping list or the prep plan — they read the same
+// function.
+function _nutProgTodayCard(){
+  var today = _nutToday();
+  var t = nutProgTargetsOn(today);
+  if(!t) return '';
+  var rice  = nutProgRiceChoice();
+  var meals = nutProgMealsOn(today, rice) || [];
+  var done  = nutProgTicked(today);
+  var con   = nutProgConsumedOn(today, rice) || { total:{kcal:0,p:0,c:0,f:0}, extra:{items:[],kcal:0} };
+
+  var rem = t.total.kcal - con.total.kcal;
+  var over = rem < 0;
+  var h = '';
+
+  // Phase header: five segments, one per phase, so where he is in fifteen weeks
+  // is legible without reading a number.
+  h += '<div style="margin-bottom:14px;">' +
+       '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
+       '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Week ' + t.week + ' of 15</div>' +
+       '<div style="font-size:11px;color:var(--text3);">' + t.phase + (t.lift ? ' &middot; lift day' : '') + '</div>' +
+       '</div><div style="display:flex;gap:3px;margin-top:6px;">';
+  for(var ph = 1; ph <= 5; ph++){
+    var cls = (ph < t.phase_n) ? 'var(--gold)' : (ph === t.phase_n ? 'rgba(200,150,62,0.55)' : 'var(--bg3)');
+    h += '<div style="height:5px;flex:1;border-radius:2px;background:' + cls + ';"></div>';
+  }
+  h += '</div></div>';
+
+  h += '<div style="text-align:center;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:60px;font-weight:900;line-height:1;color:' + (over ? 'var(--gold)' : 'var(--text)') + ';">' +
+      (over ? '+' + Math.abs(rem) : rem) + '</div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-top:4px;">kcal ' + (over ? 'over plan' : 'remaining') +
+      ' &middot; ' + t.total.kcal + ' target</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:3px;">' + con.done_count + ' of ' + con.meal_count + ' logged</div>' +
+    '</div>';
+
+  var mac = function(lbl, got, tgt){
+    var pct = tgt ? Math.min(100, Math.round(got / tgt * 100)) : 0;
+    return '<div style="flex:1;text-align:center;">' +
+      '<div style="font-family:var(--font-d);font-size:15px;font-weight:700;">' + got + '<span style="font-size:10px;color:var(--text3);">/' + tgt + '</span></div>' +
+      '<div style="font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">' + lbl + '</div>' +
+      '<div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--gold);"></div></div>' +
+      '</div>';
+  };
+  h += '<div style="display:flex;gap:8px;margin-bottom:16px;">' +
+       mac('protein', con.total.p, t.total.p) + mac('carbs', con.total.c, t.total.c) + mac('fat', con.total.f, t.total.f) +
+       '</div>';
+
+  meals.forEach(function(m){
+    var on = !!done[m.id];
+    var line = m.supp
+      ? (m.code || '')
+      : m.items.map(function(it){ return it.g + (it.u || ' g') + ' ' + it.n; }).join(' &middot; ');
+    h += '<div data-prog-tick="' + m.id + '" style="display:flex;gap:10px;align-items:flex-start;padding:10px 11px;background:var(--bg2);border:1px solid ' + (m.supp ? 'rgba(200,150,62,0.35)' : 'var(--border)') + ';border-radius:9px;margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
+      '<div style="width:19px;height:19px;border-radius:50%;flex-shrink:0;margin-top:2px;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;">' + (on ? '&#10003;' : '') + '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="display:flex;gap:7px;align-items:baseline;flex-wrap:wrap;">' +
+          '<span style="font-size:10px;font-weight:700;color:var(--gold);">' + m.time + '</span>' +
+          '<span style="font-size:13px;font-weight:600;' + (on ? 'color:var(--text3);text-decoration:line-through;' : '') + '">' + m.name + '</span>' +
+          (m.prepped ? '<span style="font-size:8px;letter-spacing:1px;text-transform:uppercase;padding:1px 5px;border-radius:3px;background:rgba(200,150,62,0.16);color:var(--gold);">Prepped</span>' : '') +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:2px;' + (on ? 'text-decoration:line-through;' : '') + '">' + line + '</div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' + m.k + ' kcal &middot; P' + m.p + ' &middot; C' + m.c + ' &middot; F' + m.f + '</div>' +
+      '</div></div>';
+  });
+
+  // Off-plan. Present on every day, not hidden behind a menu — the friction of
+  // finding it is what stops things being logged, and an unlogged biscuit is a
+  // week the Wednesday review cannot explain.
+  h += '<button data-prog-add style="width:100%;padding:12px;margin-top:4px;background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Ate or drank something else</button>';
+
+  if(con.extra.items.length){
+    h += '<div style="margin-top:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;">' +
+      '<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Off plan today &middot; ' + con.extra.kcal + ' kcal</div>';
+    con.extra.items.forEach(function(it){
+      h += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span>' + it.n + '</span><span style="color:var(--text3);">' + it.g + ' g &middot; ' + it.k + ' kcal</span></div>';
+    });
+    h += '</div>';
+  }
+  return h;
 }
 
 // ── projection ─────────────────────────────────────────────────────────────

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.276'", 'version is 4.9.276');
+has("var APP_VERSION='4.9.277'", 'version is 4.9.277');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2942,6 +2942,18 @@ hasCode('(week - 1) * 7 - 5',          'PROG: the review is the WEDNESDAY before
   if (covered === 15) ok('PROG: five phases cover exactly 15 weeks, no gap and no overlap');
   else bad(`PROG: phases cover ${covered} weeks, not 15 — a week with no phase has no targets at all`);
 })();
+
+// ── Programme Today screen ──────────────────────────────────────────────────
+hasCode('function _nutProgTodayCard(', 'TODAY: the programme day card exists');
+// Existing is not reached. The meals tab had no router branch for four versions
+// and every gate stayed green, so the ROUTE is what gets asserted here.
+hasCode("nutProgStatusOn(today) === 'running'",
+        'TODAY: _nutTabToday actually ROUTES to it while the programme runs');
+hasCode('data-prog-tick', 'TODAY: meals are tickable');
+hasCode('data-prog-add',  'TODAY: and anything off plan can be logged from the same screen');
+hasCode('function nutProgToggleMeal(', 'TODAY: the tick is persisted, not just drawn');
+hasCode("body.querySelectorAll('[data-prog-tick]')",
+        'TODAY: the ticks are WIRED — a drawn control nothing listens to is inert');
 
 // ── Label scanner: HOW MANY EXITS does the photo have? ──────────────────────
 // Peptides' question, answered while the feature is being designed rather than

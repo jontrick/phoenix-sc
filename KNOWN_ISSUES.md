@@ -106,6 +106,28 @@ the visible seven treated as all of them; there were twelve.
 **Re-derive counts, never remember them.** Do not read a gate's output through a truncating
 pipe and then trust the visible rows.
 
+## A contradiction in a source document produces several confident readers, disagreeing
+
+`CLAUDE.md` asserted **both** "ONE MORE MANUAL REINSTALL IS STILL REQUIRED" and
+"AUTO-UPDATE IS CONFIRMED WORKING" — on adjacent lines, the stale one first.
+
+**Two handoffs written weeks apart each copied the stale half out.** Training's caveated
+three open bug reports on auto-update being unconfirmed — offering "he may not have the
+build" as an out for three reproducible failures. A relayed Nutrition summary carried it as
+a **BLOCKING** item that would have sent Jon to delete and reinstall his PWA for no reason.
+
+**Scope, stated honestly:** Nutrition's *canonical* handoff on origin does NOT contain it —
+they had already corrected theirs. The stale claim was in a scratchpad summary, which is its
+own lesson: the summary and the repo document had diverged, and only the repo one was right.
+Neither chat was careless; both read the source and took the first claim.
+
+> **When you supersede a claim, DELETE it.** Leaving it standing above the correction and
+> relying on the reader reaching the second half is not a correction — it is a coin flip,
+> and it resolves independently for every reader.
+
+A stale handoff is worse than none, because it gets followed. A stale *rules* file is worse
+again, because it gets copied into handoffs and then followed at one remove.
+
 ## An instrument reports on its proxy, not its subject
 
 - **A version number agreeing is not a record agreeing.**

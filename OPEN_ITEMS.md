@@ -34,6 +34,16 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — REPO / TOOLING
 
+- [ ] **URGENT — v4.9.265 IS COMMITTED AND UNPUSHED. GitHub was unreachable (DNS) at the
+      moment of pushing.** Training's superset-history fix — Jon's THIRD report of the same
+      bug. Rebase resolved by the PM, all four gates green (runtime 6/6 100%, harness 748/0,
+      functional 750/750, version clean). Commit `3ddc2f2` in `.claude/worktrees/training`,
+      HEAD of that worktree, working tree clean. **Nothing is lost; it just is not on
+      origin.** To finish when the network is back:
+      `cd ~/Desktop/phoenix-sc/.claude/worktrees/training && git push origin HEAD:main`
+      Pre-resolution copies of all four files are in the PM session scratchpad — treat those
+      as gone; the commit is the artefact.
+
 - [ ] ??? — The `training` worktree has UNRESOLVED MERGE CONFLICTS (`UU` on harness.mjs,
       index.html, sw.js), found by board_check on 2026-09-04. Either a live TRAINING
       session is mid-rebase, or one died in one. NOT touched — it may be live work.
@@ -71,6 +81,11 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       because it is Training's. Closes when Training either wires it or archives it under
       CLAUDE.md rule 9. Nothing is broken by it today — it is dead weight plus three
       misleading comments.
+- [ ] ??? — A relayed Nutrition SUMMARY and the canonical `HANDOFF_NUTRITION.md` on origin
+      had DIVERGED — the summary carried a stale BLOCKING reinstall instruction the repo
+      document does not. Only the repo one is authoritative. If summaries are being kept
+      outside the repo, they are a second copy of a thing that must have one. Closes when
+      whoever maintains it either drops it or points it at the repo file.
 
 ## ??? — GAPS. Things nobody currently knows.
 
@@ -80,7 +95,12 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 - `???` Which domain chats are live right now, and what each is mid-build on. Peer names
   rotate constantly (six rotations in one day) and `SendMessage` was unavailable to the
   PM on 2026-09-04. Derive from `board_check.mjs` CHECKOUTS, not from memory.
-- `???` Whether the five other .236-corrected reconstitution defaults match his vials.
+- `???` Whether the other reconstitution defaults match his vials. **STATE THE CUT:**
+  PEPTIDES says **five** — ipamorelin, TA-1, GHK-Cu, NAD+, TB-500 — meaning *the .236-corrected
+  batch minus bpc157*. The PM said **16**, meaning *every entry in `_PEP_RECON` except the one
+  marked CONFIRMED BY JON*. Both are true of different populations and neither is wrong; a
+  bare "five" and a bare "16" would have read as a contradiction. Five are known-suspect;
+  the other eleven are merely unconfirmed.
 
 ## ARCHIVE — closed, kept only where the closing evidence matters
 

@@ -119,12 +119,18 @@ If Desktop is blocked, Jon uses the Finder-opened terminal method above.
 
 `sw.js` is now real: versioned cache (`phoenix-v<SW_VERSION>`), `install`/`activate`, `skipWaiting`, `clients.claim`, update polling, and a `SW_UPDATED` message. `SW_VERSION` must equal `APP_VERSION` — **enforced by a harness assertion**, so a stale SW_VERSION fails the gate rather than silently serving an old cache.
 
-**ONE MORE MANUAL REINSTALL IS STILL REQUIRED.** Jon's installed PWA is running whatever the empty file left behind, and an absent service worker cannot update itself. So exactly once more:
-1. Delete the PWA from the home screen
-2. Safari → projectphoenix-app.com
-3. Hold reload → Reload Without Content Blockers
-4. Confirm the version at the bottom of the Today screen
-5. Share → Add to Home Screen
+**THE "ONE MORE MANUAL REINSTALL IS STILL REQUIRED" INSTRUCTION LIVED HERE AND IS WRONG. REMOVED 2026-09-04.**
+It sat directly above the paragraph that contradicts it, and it was superseded on 22 Aug —
+Jon has since reinstalled once and auto-update has been confirmed. **The cost was not
+theoretical: TWO independent domain handoffs, written weeks apart, copied the stale half
+out of this file.** Nutrition's carried it as a **BLOCKING** item that would have sent him
+to delete his PWA for no reason; Training's caveated three open bugs on auto-update
+"never confirmed end-to-end". Neither chat was careless — **they read a source document
+that asserted both things on adjacent lines**, and each took the first one.
+
+> **A CONTRADICTION IN A SOURCE DOCUMENT DOES NOT PRODUCE ONE CONFUSED READER. IT PRODUCES
+> SEVERAL CONFIDENT ONES, DISAGREEING.** When you supersede a claim, DELETE it — do not
+> leave it standing above the correction and rely on the reader reaching the second half.
 
 **AUTO-UPDATE IS CONFIRMED WORKING — Jon verified it on 22 Aug 2026.** Asked directly whether the version at the bottom of Today moves on its own after a normal open, he answered yes. That is the first confirmation since `sw.js` was found to be zero bytes, and it closes a claim that sat unverified from v4.9.208 to v4.9.252.
 

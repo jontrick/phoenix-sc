@@ -913,7 +913,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'Wed 9 Sept is the FINAL weigh-in and setup — the number all 15 weeks are measured against');
     assert.equal(app.nutProgStatusOn('2026-09-08'), 'trial',
       'the 8th is a trial day — the baseline falls INSIDE the rehearsal week by design');
-    assert.equal(app.nutProgStatusOn('2026-09-06'), 'before', 'the day before the rehearsal is not');
+    assert.equal(app.nutProgStatusOn('2026-09-06'), 'trial-setup',
+      'the run-up is a WINDOW, not one date — on the 6th Jon got a generic food ' +
+      'logger because this answered "before" and every programme surface hung off it');
     assert.equal(app.nutProgWeekFor('2026-09-09'), 0, 'and it is not week 1');
   });
 
@@ -1359,7 +1361,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     ['2026-09-07','2026-09-08','2026-09-10','2026-09-13'].forEach((d) => {
       assert.equal(app.nutProgStatusOn(d), 'trial', d + ' is a rehearsal day');
     });
-    assert.equal(app.nutProgStatusOn('2026-09-06'), 'before', 'the day before is outside it');
+    assert.equal(app.nutProgStatusOn('2026-09-06'), 'trial-setup', 'the day before is still prep');
+    assert.equal(app.nutProgStatusOn('2026-09-01'), 'trial-setup', 'and so is a week earlier');
     assert.equal(app.nutProgStatusOn('2026-09-14'), 'running', 'and the 14th is the real thing');
   });
 
@@ -1768,6 +1771,67 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(txt.indexOf('2026-09-07') >= 0 && txt.indexOf('2026-09-13') >= 0,
       'the rehearsal list covers Mon 7 to Sun 13 September');
     assert.equal(txt.indexOf('2026-09-14'), -1, 'and not week 1');
+  });
+
+  // ── the day before it starts ─────────────────────────────────────────────
+  // v4.9.287. Jon opened the app on Sat 6 Sept and got the generic food logger:
+  // empty Breakfast / Lunch / Dinner slots with "+ Food" buttons. The programme
+  // was fine. 'trial-setup' was a SINGLE DATE (the 5th), so on the 6th the
+  // status fell to 'before' and every programme surface hung off that one answer
+  // — the setup card, the shopping list, the week ahead, and the Substitutions
+  // button all disappeared together.
+  //
+  // One root cause, three reports. These pin each report separately, because a
+  // single test would have gone green the moment any one of them was fixed.
+
+  test('PRESTART the day before the start does NOT fall through to the food logger', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Programme begins') >= 0,
+      'the screen says what is happening instead of going silent');
+    assert.ok(/Monday/.test(html), 'and which day it begins');
+    assert.ok(/tomorrow/.test(html), 'and how far away that is');
+  });
+
+  test('PRESTART it shows the first day\'s plate before the week opens', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Banana') >= 0, 'Monday is a rest day, so the banana is on it');
+    assert.ok(html.indexOf('Chicken breast') >= 0, 'and the food he is prepping');
+  });
+
+  test('PRESTART the Substitutions door is open BEFORE the shop, not after', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('data-nut-swap-open') >= 0,
+      'swaps are chosen before shopping, so a button that only exists on a ' +
+      'running day is unreachable on every day he would actually use it');
+  });
+
+  test('PRESTART the shopping list and prep plan are still reachable', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Shopping list') >= 0, 'the list is there on the 6th');
+    assert.ok(html.indexOf('Prep plan') >= 0, 'and the prep plan');
+    assert.ok(html.indexOf('The week ahead') >= 0, 'and the week ahead');
+  });
+
+  test('PRESTART every day of the run-up behaves the same way', () => {
+    setUp(110);
+    // The original defect was ONE date working and the next not. Walk the window.
+    ['2026-09-03','2026-09-04','2026-09-05','2026-09-06'].forEach((d) => {
+      const html = onDay(d, () => app._nutTabToday(app.nutGetState()));
+      assert.ok(html.indexOf('Programme begins') >= 0, d + ' announces the start');
+      assert.ok(html.indexOf('Shopping list') >= 0, d + ' can still reach the list');
+    });
+  });
+
+  test('PRESTART once it starts, the card gives way to the day itself', () => {
+    setUp(110);
+    const mon = onDay('2026-09-07', () => app._nutTabToday(app.nutGetState()));
+    assert.equal(mon.indexOf('Programme begins'), -1, 'no longer counting down');
+    assert.ok(mon.indexOf('data-prog-tick') >= 0, 'now there is food to tick');
+    assert.ok(mon.indexOf('data-nut-swap-open') >= 0, 'and Substitutions stays reachable');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
@@ -2902,11 +2966,28 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/kcal/.test(html), 'and each day carries its totals');
   });
 
-  test('WEEK: a day outside the programme says so rather than rendering blank', () => {
-    // 2026-09-01 predates the programme start. An empty row would read as "no food".
+  // v4.9.287. TRAINING's case, amended with the reason. They chose "nothing"
+  // over a misleading blank row, which was right — but Jon then reported the
+  // nothing itself as the bug: the weekly prep screen showed only a shopping
+  // list, because the week on screen was 31 Aug - 6 Sept, entirely before the
+  // programme. Their concern is preserved (real data, never blank rows); the
+  // answer changes from "show nothing" to "show the week he is prepping FOR".
+  test('WEEK: a week entirely outside the programme shows the UPCOMING week', () => {
     setUp(90);
     const html = String(app._nutProgWeekBreakdown(['2026-09-01']) || '');
-    assert.equal(html, '', 'a week entirely outside the programme renders nothing at all');
+    assert.ok(html.length > 0, 'it no longer renders nothing — that was the reported bug');
+    assert.ok(html.indexOf('What each day contains') >= 0, 'it shows a real week');
+    assert.ok(/Monday/.test(html), 'starting at the programme\'s first day');
+  });
+
+  test('WEEK: an off day INSIDE a shown week still says so rather than blanking', () => {
+    setUp(90);
+    // 13 Sept is the last trial day, 14 Sept starts week 1 — both on programme.
+    // Pair a real day with one that is not, and the off day must be named.
+    const html = String(app._nutProgWeekBreakdown(['2026-09-13','2027-01-05']) || '');
+    assert.ok(html.indexOf('Not on the programme this day') >= 0,
+      'Training\'s actual safeguard: a blank row reads as "no food", which is a ' +
+      'different claim from "not part of the plan"');
   });
 
   test('SWAP: recording a choice actually persists it', () => {

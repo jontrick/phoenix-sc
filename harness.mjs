@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.286'", 'version is 4.9.286');
+has("var APP_VERSION='4.9.287'", 'version is 4.9.287');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2957,6 +2957,20 @@ hasCode("body.querySelectorAll('[data-prog-tick]')",
 
 // ── Shopping list and prep plan ─────────────────────────────────────────────
 hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
+
+// ── The run-up is a WINDOW, not a date ──────────────────────────────────────
+// 'trial-setup' matched exactly one calendar day. On the next day the status fell
+// to 'before' and every programme surface hung off that one answer — Today went
+// back to the generic food logger, and the list, week ahead and Substitutions
+// button all vanished with it. TWO functions carried the same assumption.
+hasCode('function _nutProgStartsCard(', 'PRESTART: the screen says when the programme begins');
+hasCode('_nutProgStartsCard(today)',    'PRESTART: and Today actually RENDERS it');
+hasNotCode("if(dateKey === _NUT_PROG.trial_setup) return 'trial-setup';",
+        'PRESTART: the status covers the whole run-up, not a single date');
+hasNotCode('if(dateKey === _NUT_PROG.trial_setup) return 0;',
+        'PRESTART: and so does the review-week lookup — the same bug lived twice');
+hasCode('function _nutProgUpcomingWeekDates(',
+        'PRESTART: weekly prep falls back to the week being prepped FOR');
 // EXISTING IS NOT REACHED. Both of these were built, tested and called by nothing
 // — the list existed only as a function, and Jon opened the app to find prose
 // where his shopping list should be. Guard the CALL, not the definition.

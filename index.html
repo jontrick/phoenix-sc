@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.286';
+var APP_VERSION='4.9.287';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19424,7 +19424,7 @@ function _nutTabToday(ns){
   }
   var _setupCard = '';
   if(_progStatus === 'trial-setup' || _progStatus === 'baseline'){
-    _setupCard = _nutProgReviewCard(today);
+    _setupCard = _nutProgStartsCard(today) + _nutProgReviewCard(today);
   }
   var targets = nutAdjustForToday(ns.targets);
   var dayData = (ns.daily && ns.daily[today]) || {};
@@ -20623,7 +20623,8 @@ function nutProgStatusOn(dateKey){
   if(!_nutProgDate(dateKey)) return 'before';
   if(dateKey === _NUT_PROG.baseline) return 'baseline';
   if(nutProgIsTrial(dateKey)) return 'trial';
-  if(dateKey === _NUT_PROG.trial_setup) return 'trial-setup';
+  var _toTrial = _nutProgDaysBetween(dateKey, _NUT_PROG.trial_start);
+  if(_toTrial !== null && _toTrial > 0) return 'trial-setup';
   var wk = nutProgWeekFor(dateKey);
   if(wk === -1) return 'done';
   if(wk >= 1)   return 'running';
@@ -21712,10 +21713,62 @@ function _nutProgWeekAheadCard(week){
   return h;
 }
 
+// v4.9.287. Before the programme opens there is no day to tick, and the screen
+// used to say nothing at all — Jon opened it the day before the start and got an
+// empty food logger, which reads as "the programme is not built".
+//
+// Says when it starts, how far away that is, and shows the first day's plate so
+// the week is visible before it begins.
+function _nutProgStartsCard(dateKey){
+  var days = _nutProgDaysBetween(dateKey, _NUT_PROG.trial_start);
+  if(days === null || days <= 0) return '';
+  var when = (days === 1) ? 'tomorrow' : ('in ' + days + ' days');
+  var d0 = _NUT_PROG.trial_start;
+  var dt = _nutProgDate(d0);
+  var nm = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()];
+  var h = '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:10px;padding:15px 16px;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Programme begins ' + nm + '</div>' +
+    '<div style="font-size:12px;color:var(--text2);margin-top:5px;line-height:1.5;">' +
+      'Trial week starts ' + when + ', ' + d0 + '. Nothing to tick until then &mdash; shop and prep before it opens.</div>';
+  var ms = nutProgMealsOn(d0, nutProgRiceChoice()) || [];
+  if(ms.length){
+    h += '<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:12px 0 5px;font-weight:700;">' + nm + '&rsquo;s plate</div>';
+    ms.forEach(function(m){
+      var line = m.supp ? (m.code || '') :
+        m.items.map(function(it){ return _nutProgItemLabel(it); }).join(' &middot; ');
+      h += '<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:11px;">' +
+        '<span style="color:var(--gold);font-weight:700;">' + m.time + '</span> ' +
+        '<span style="font-weight:600;">' + m.name + '</span>' +
+        '<div style="color:var(--text3);margin-top:1px;">' + line + '</div></div>';
+    });
+  }
+  // Swaps are chosen BEFORE the shop, so the door has to be open before the
+  // programme is. Putting it only on the running day made it unreachable on
+  // every day he would actually use it.
+  h += '<button data-nut-swap-open style="width:100%;margin-top:12px;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Substitutions</button>';
+  h += '</div>';
+  return h;
+}
+
+// The next seven programme days from a given date — the week Jon is prepping
+// for. Returns null once the programme has finished.
+function _nutProgUpcomingWeekDates(fromKey){
+  var probe = fromKey || _nutToday();
+  for(var i = 0; i < 400; i++){
+    var st = nutProgStatusOn(probe);
+    if(st === 'trial')   return _nutProgWeekDates(0);
+    if(st === 'running') return _nutProgWeekDates(nutProgWeekFor(probe));
+    probe = _nutProgShift(probe, 1);
+    if(!probe) return null;
+  }
+  return null;
+}
+
 // Which week is being reviewed today, if any. Returns 0 for the rehearsal's
 // Saturday setup and null on every other day.
 function nutProgReviewWeekOn(dateKey){
-  if(dateKey === _NUT_PROG.trial_setup) return 0;
+  var _pre = _nutProgDaysBetween(dateKey, _NUT_PROG.trial_start);
+  if(_pre !== null && _pre > 0) return 0;
   for(var w = 1; w <= _NUT_PROG.weeks; w++) if(nutProgReviewDate(w) === dateKey) return w;
   return null;
 }
@@ -23141,6 +23194,18 @@ function nutOpenRecipePicker(slot, dateKey){
 // This is the read-only half of that: what the week actually contains.
 function _nutProgWeekBreakdown(days){
   if(typeof nutProgMealsOn !== 'function' || typeof nutProgStatusOn !== 'function') return '';
+  // v4.9.287: if not one day of the week being shown is on the programme, show
+  // the week he is PREPARING FOR instead of nothing. Prep happens before the
+  // week it is for, so the useful answer is almost never "this week".
+  var _onPlan = false;
+  for(var _q = 0; _q < days.length; _q++){
+    var _st0 = nutProgStatusOn(days[_q]);
+    if(_st0 === 'running' || _st0 === 'trial'){ _onPlan = true; break; }
+  }
+  if(!_onPlan && typeof _nutProgUpcomingWeekDates === 'function'){
+    var _up = _nutProgUpcomingWeekDates(days[0]);
+    if(_up) days = _up;
+  }
   var rice = (typeof nutProgRiceChoice === 'function') ? nutProgRiceChoice() : null;
   var rows = [], any = false;
   for(var i = 0; i < days.length; i++){

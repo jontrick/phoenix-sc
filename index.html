@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.293';
+var APP_VERSION='4.9.294';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8798,6 +8798,104 @@ async function supabaseCompleteSession(updates){
   }
 }
 
+// v4.9.NEXT — OFFLINE OUTBOX FOR SET LOGS.
+//
+// Jon asked whether the local session state syncs back when signal returns. It did not.
+// supabaseLogSet fired once, and since .238 a failure was RECORDED to the diagnostic —
+// but never RETRIED. The shadow store kept the ticks on screen, so the session looked
+// complete forever while the rows had never reached Supabase.
+//
+// That is a slow data-loss path rather than an obvious one: the phone shows a full
+// session, and the sets only turn out to be missing when localStorage is next cleared —
+// at which point there is nothing left to sync.
+//
+// IDEMPOTENCY WITHOUT A SCHEMA CHANGE. A naive retry duplicates rows, and duplicates are
+// worse than the gap: they inflate volume and previous-best, which feed next week's
+// targets. There is no unique constraint to upsert against and adding one means SQL Jon
+// has to run by hand, which is a real constraint here rather than a preference. So the
+// flush READS the session's existing rows once, builds a key set from
+// (exercise_name, set_number), and inserts only what is genuinely missing. One read per
+// flush, not per row.
+var PHX_OUTBOX_KEY = 'phx_outbox_setlogs_v1';
+var PHX_OUTBOX_MAX = 500;
+
+function _phxOutboxAll(){
+  try {
+    var a = JSON.parse(localStorage.getItem(PHX_OUTBOX_KEY) || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch(_e){ return []; }
+}
+function _phxOutboxWrite(rows){
+  try {
+    // Capped, oldest dropped. An unbounded queue eventually fills localStorage and takes
+    // the BLAB state down with it — losing the programme to protect the set logs.
+    while(rows.length > PHX_OUTBOX_MAX) rows.shift();
+    localStorage.setItem(PHX_OUTBOX_KEY, JSON.stringify(rows));
+  } catch(_e){ console.warn('[PHX] outbox write failed:', _e); }
+}
+window._phxOutboxAdd = function(row){
+  if(!row || !row.session_id) return false;   // no session row to attach to; nothing to retry
+  var rows = _phxOutboxAll();
+  // Same set queued twice (a re-tick) replaces rather than stacks.
+  rows = rows.filter(function(r){
+    return !(r.session_id === row.session_id && r.exercise_name === row.exercise_name && r.set_number === row.set_number);
+  });
+  rows.push(row);
+  _phxOutboxWrite(rows);
+  return true;
+};
+window._phxOutboxCount = function(){ return _phxOutboxAll().length; };
+
+// Drains the queue. Safe to call often — it returns immediately when empty, and it never
+// throws, because every caller is an event handler where throwing is worse than failing.
+window._phxOutboxFlush = async function(){
+  var rows = _phxOutboxAll();
+  if(!rows.length) return { flushed: 0, left: 0 };
+  if(typeof sb === 'undefined' || !sb) return { flushed: 0, left: rows.length };
+  var uid = (currentSession && currentSession.user && currentSession.user.id) || null;
+  if(!uid) return { flushed: 0, left: rows.length };
+
+  var bySession = {};
+  rows.forEach(function(r){ (bySession[r.session_id] = bySession[r.session_id] || []).push(r); });
+
+  var flushed = 0, keep = [];
+  for(var sid in bySession){
+    if(!bySession.hasOwnProperty(sid)) continue;
+    var batch = bySession[sid];
+    try {
+      // What is already there. If this read fails we keep the whole batch rather than
+      // risk duplicating — a delayed set is recoverable, a doubled one silently is not.
+      var existing = await sb.from('set_logs').select('exercise_name,set_number').eq('session_id', sid);
+      if(existing && existing.error) throw existing.error;
+      var have = {};
+      (existing && existing.data ? existing.data : []).forEach(function(e){
+        have[String(e.exercise_name) + '|' + String(e.set_number)] = true;
+      });
+      var missing = batch.filter(function(r){ return !have[String(r.exercise_name) + '|' + String(r.set_number)]; });
+      if(missing.length){
+        var ins = await sb.from('set_logs').insert(missing);
+        if(ins && ins.error) throw ins.error;
+      }
+      // Everything in this batch is now either inserted or already present.
+      flushed += batch.length;
+    } catch(e){
+      if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('outbox.flush', e, {rows: batch.length});
+      keep = keep.concat(batch);
+    }
+  }
+  _phxOutboxWrite(keep);
+  if(flushed) console.log('[PHX] outbox flushed', flushed, 'set(s);', keep.length, 'left');
+  return { flushed: flushed, left: keep.length };
+};
+
+// Try whenever the world might have changed. Cheap when empty.
+try {
+  window.addEventListener('online', function(){ window._phxOutboxFlush(); });
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') window._phxOutboxFlush();
+  });
+} catch(_e){}
+
 function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
   if(!currentSupabaseSessionId||!currentSession||!currentSession.user) return;
   var row={
@@ -8831,6 +8929,9 @@ function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
       // silent failure also degrades the targets for his NEXT session. Same shape as
       // the weigh-in -> macro chain, in the training half.
       if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseLogSet',res.error,row);
+      // v4.9.NEXT: recorded AND queued. Recording alone told him it broke; it never got
+      // the set to Supabase.
+      if(typeof window._phxOutboxAdd==='function') window._phxOutboxAdd(row);
     }
     return res;
   }).catch(function(e){
@@ -8838,6 +8939,8 @@ function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
     // handler above at all, so it was invisible even in a desktop console.
     console.error('[PHX] supabaseLogSet threw:',e);
     if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseLogSet.throw',e,row);
+    // The offline case, and the one this queue exists for.
+    if(typeof window._phxOutboxAdd==='function') window._phxOutboxAdd(row);
     return {error:e};
   });
   window._phxLastSetInsertP = p;
@@ -17418,10 +17521,13 @@ sb.auth.onAuthStateChange(function(event,session){
 //     :10345  timed-session wake: re-acquires the wake lock, resyncs the clock
 //     :21637  peptide cloud flush on hidden        (added by Peptides, v4.9.154)
 //     ~40380  session-screen-open flag on hidden   (added by Training, v4.9.291)
+//     ~8800   outbox flush on visible               (added by Training, v4.9.294)
 //
-// v4.9.291 [TRAINING]: the fourth is mine and the COUNT GUARD caught me adding it —
-// which is the point of that guard, and the first time it has fired on a real change
-// rather than an injection test. It records only whether the session screen was showing
+// v4.9.291/294 [TRAINING]: the fourth AND fifth are mine, and the COUNT GUARD caught me
+// both times — the first time it has fired on real changes rather than an injection test.
+// The second catch was more useful than the first: its message named the order to fix
+// things in (comment, then constant), because the expected count had been made a named
+// constant precisely so the message could not drift from the check. It records only whether the session screen was showing
 // when the app was backgrounded, so a phone lock mid-workout can reopen it. It does not
 // route: the reopen happens on the next BOOT, in _phxBootRestoreApply, not from here.
 // Left uncorrected this was a false statement sitting in shared code at the exact

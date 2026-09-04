@@ -3564,4 +3564,106 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app._phxActiveSessionKey = null;
     }
   });
+
+  // ── OFFLINE OUTBOX (v4.9.294) ─────────────────────────────────────────────
+  // Jon asked whether the local session state syncs back when signal returns. It did not.
+  // A failed set log was RECORDED to the diagnostic since .238 and never RETRIED, so the
+  // shadow store kept the ticks on screen while the rows never reached Supabase — a
+  // session that looked complete forever and was not.
+  //
+  // The duplicate risk is the hard part: a naive retry inflates volume and previous-best,
+  // which feed next week's targets. There is no unique constraint to upsert against and
+  // adding one means SQL Jon has to run by hand, so the flush reads what is already there
+  // and inserts only the gap.
+
+  const ROW = (n, set) => ({ session_id: 'sess-1', user_id: UID, exercise_name: n,
+                             set_number: set, weight_kg: 60, reps: 8 });
+
+  test('OUTBOX: a failed set is queued, not just recorded', async () => {
+    reset(); signIn(UID);
+    app.currentSupabaseSessionId = 'sess-1';
+    const q = { insert: () => ({ then: (a, b) => Promise.reject(new Error('Failed to fetch')).then(a, b),
+                                 catch: (b) => Promise.reject(new Error('Failed to fetch')).catch(b) }) };
+    const realSb = app.sb;
+    app.sb = { from: () => q };
+    try {
+      await app.supabaseLogSet('Back Squat', 'squat', 1, 100, 5, {});
+      assert.equal(app._phxOutboxCount(), 1, 'the set is waiting to be sent');
+    } finally { app.sb = realSb; app.currentSupabaseSessionId = null; }
+  });
+
+  test('OUTBOX: re-ticking a set replaces its queued row rather than stacking', () => {
+    reset(); signIn(UID);
+    app._phxOutboxAdd(ROW('Back Squat', 1));
+    app._phxOutboxAdd(Object.assign(ROW('Back Squat', 1), { weight_kg: 105 }));
+    assert.equal(app._phxOutboxCount(), 1, 'one row, not two');
+  });
+
+  test('OUTBOX: a row with no session cannot be queued', () => {
+    // Nothing to attach it to on the far side, so queuing it would guarantee a permanent
+    // failure rather than a delayed success.
+    reset(); signIn(UID);
+    assert.equal(app._phxOutboxAdd({ exercise_name: 'X', set_number: 1 }), false, 'refused');
+    assert.equal(app._phxOutboxCount(), 0, 'and nothing stored');
+  });
+
+  test('OUTBOX: flushing inserts ONLY what is missing — no duplicates', async () => {
+    // The property that matters most. A duplicated set inflates volume and previous-best,
+    // and those feed next week's targets, so a double is worse than a gap.
+    reset(); signIn(UID);
+    app._phxOutboxAdd(ROW('Back Squat', 1));
+    app._phxOutboxAdd(ROW('Back Squat', 2));
+    let inserted = null;
+    const realSb = app.sb;
+    app.sb = { from: () => ({
+      select: () => ({ eq: () => Promise.resolve({ data: [{ exercise_name: 'Back Squat', set_number: 1 }], error: null }) }),
+      insert: (rows) => { inserted = rows; return Promise.resolve({ error: null }); },
+    }) };
+    try {
+      const r = await app._phxOutboxFlush();
+      assert.equal(inserted.length, 1, 'only the set that was actually missing');
+      assert.equal(inserted[0].set_number, 2, 'and it is the right one');
+      assert.equal(r.left, 0, 'the queue is drained');
+    } finally { app.sb = realSb; }
+  });
+
+  test('OUTBOX: a failed READ keeps the whole batch rather than risking duplicates', async () => {
+    // If we cannot see what is already there, inserting is a coin flip on doubling his
+    // volume. A delayed set is recoverable; a silently doubled one is not.
+    reset(); signIn(UID);
+    app._phxOutboxAdd(ROW('Back Squat', 1));
+    let insertCalled = false;
+    const realSb = app.sb;
+    app.sb = { from: () => ({
+      select: () => ({ eq: () => Promise.resolve({ data: null, error: { message: 'offline' } }) }),
+      insert: () => { insertCalled = true; return Promise.resolve({ error: null }); },
+    }) };
+    try {
+      const r = await app._phxOutboxFlush();
+      assert.equal(insertCalled, false, 'it did not insert blind');
+      assert.equal(r.left, 1, 'and kept the row for next time');
+      assert.ok(read('phx_last_write_error'), 'with the failure visible in Diagnostic');
+    } finally { app.sb = realSb; }
+  });
+
+  test('OUTBOX: an empty queue costs nothing', async () => {
+    // It runs on every visibilitychange, so it must be cheap when there is nothing to do.
+    reset(); signIn(UID);
+    let touched = false;
+    const realSb = app.sb;
+    app.sb = { from: () => { touched = true; return {}; } };
+    try {
+      const r = await app._phxOutboxFlush();
+      assert.equal(r.flushed, 0, 'nothing flushed');
+      assert.equal(touched, false, 'and it never reached for the network');
+    } finally { app.sb = realSb; }
+  });
+
+  test('OUTBOX: the queue is capped so it cannot fill localStorage', () => {
+    // An unbounded queue eventually takes the BLAB state down with it — losing the
+    // programme to protect the set logs.
+    reset(); signIn(UID);
+    for(let i = 1; i <= 520; i++) app._phxOutboxAdd(ROW('Ex' + i, i));
+    assert.ok(app._phxOutboxCount() <= 500, 'capped at 500');
+  });
 }

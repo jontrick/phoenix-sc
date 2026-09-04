@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.293'", 'version is 4.9.293');
+has("var APP_VERSION='4.9.294'", 'version is 4.9.294');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1392,7 +1392,7 @@ try {
   // with the CHECK. It previously said "the comment says three" in prose while comparing
   // against a literal 3 — two copies of one number, which is the same staleness this
   // guard exists to prevent, one level up. Whoever adds the fifth changes one thing.
-  const VIS_EXPECTED = 4;
+  const VIS_EXPECTED = 5;   // 4 -> 5: outbox flush on visible, v4.9.294
   n === VIS_EXPECTED
     ? ok(`SHARED: STRUCTURAL visibilitychange listener count matches the comment (${n})`)
     : bad(`SHARED: STRUCTURAL ${n} visibilitychange listeners but the comment at :16474 documents ${VIS_EXPECTED} — update the comment to name the new one, then this constant`);
@@ -2544,6 +2544,17 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── OFFLINE OUTBOX (v4.9.293) ───────────────────────────────────────────────
+// A failed set log was recorded and never retried, so the shadow store kept the ticks on
+// screen while the rows never reached Supabase.
+has('window._phxOutboxAdd', 'OUTBOX: failed set logs are queued');
+has("window.addEventListener('online'", 'OUTBOX: and flushed when signal returns');
+// The dedupe is the property that must not regress: a duplicated set inflates volume and
+// previous-best, and those feed next week's targets.
+has('var missing = batch.filter', 'OUTBOX: the flush inserts only what is missing (behaviour: tests/training.mjs OUTBOX:)');
+has('keep = keep.concat(batch);', 'OUTBOX: a failed READ keeps the batch rather than inserting blind');
+has('while(rows.length > PHX_OUTBOX_MAX)', 'OUTBOX: the queue is capped, so it cannot fill localStorage and take blab_state with it');
 
 // ── TODAY'S SETS SURVIVE A LOCK (v4.9.292) ──────────────────────────────────
 // The shadow store built to survive a screen lock was keyed on, and gated by, the

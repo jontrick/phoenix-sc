@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.292'", 'version is 4.9.292');
+has("var APP_VERSION='4.9.293'", 'version is 4.9.293');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2981,6 +2981,10 @@ hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
 // back to the generic food logger, and the list, week ahead and Substitutions
 // button all vanished with it. TWO functions carried the same assumption.
 hasCode('function _nutProgStartsCard(', 'PRESTART: the screen says when the programme begins');
+hasCode('if(startCard) return startCard;',
+        'OWNS: the run-up RETURNS the programme card — it does not sit on top of the logger');
+hasCode('+ Log what you ate today',
+        'OWNS: and logging is still possible before the programme opens');
 hasCode('_nutProgStartsCard(today)',    'PRESTART: and Today actually RENDERS it');
 hasNotCode("if(dateKey === _NUT_PROG.trial_setup) return 'trial-setup';",
         'PRESTART: the status covers the whole run-up, not a single date');

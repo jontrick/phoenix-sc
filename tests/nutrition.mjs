@@ -414,6 +414,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   });
 
   test('the drift banner renders once the latest weigh-in has moved 1kg+', () => {
+    // The programme owns Today from 7 Sept to 27 Dec; this is the free-form
+    // screen, so it is checked on a day outside the programme.
+    const _realToday = app._nutToday;
+    app._nutToday = () => '2027-01-05';
+    try {
     setUp(90);
     app.nutRecordWeight(86.4, '2026-08-18');
     app._nutTab = 'today';
@@ -423,6 +428,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('Targets out of date') >= 0, 'banner drawn');
     assert.ok(html.indexOf('data-nut-recalc') >= 0, 'recalculate control drawn');
     assert.ok(html.indexOf('86.4') >= 0, 'shows the current weight');
+    } finally { app._nutToday = _realToday; }
   });
 
   test('no drift banner for a sub-1kg wobble', () => {
@@ -2171,6 +2177,64 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(totals.protein_g > 40, 'and its protein counted too');
   });
 
+  // ── the programme owns Today, on every day it governs ────────────────────
+  // v4.9.292. Jon reported the generic logger on the Today tab and I read it as
+  // "the programme card is missing". A probe proved otherwise: the card rendered
+  // at index 254 with the free-form slots at 1618. It was not missing, it was
+  // sitting on top of a logger that should not have been there.
+  //
+  // On a running or trial day the logger was already gone (early return). On a
+  // RUN-UP day it was left underneath. One screen behaving two ways depending on
+  // the date, and only one of them matching the ruling that the programme takes
+  // over Today.
+
+  // The needle MUST be something the logger really emits. My first attempt used
+  // data-nut-slot, which does not exist anywhere in the file — so the helper
+  // returned 0 for every input and four "no logger" cases passed while the logger
+  // was fully present. data-nut-pick is the "+ Food" control on each slot card,
+  // i.e. exactly the thing Jon photographed.
+  const freeFormSlots = (html) => (String(html).match(/data-nut-pick/g) || []).length;
+
+  test('OWNS the run-up day shows the programme and NOT the food logger', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Programme begins') >= 0, 'the programme card is there');
+    assert.equal(freeFormSlots(html), 0,
+      'and the empty Breakfast/Lunch/Dinner slots are not — that was the report');
+  });
+
+  test('OWNS a running day behaves the same way', () => {
+    setUp(110);
+    const html = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('data-prog-tick') >= 0, 'programme meals to tick');
+    assert.equal(freeFormSlots(html), 0, 'no free-form slots underneath');
+  });
+
+  test('OWNS every day the programme governs looks the same', () => {
+    setUp(110);
+    // The defect was one date behaving differently from the next. Walk the join.
+    ['2026-09-05','2026-09-06','2026-09-07','2026-09-08'].forEach((d) => {
+      const html = onDay(d, () => app._nutTabToday(app.nutGetState()));
+      assert.equal(freeFormSlots(html), 0, d + ' shows no generic logger');
+    });
+  });
+
+  test('OWNS removing the logger did not remove the ability to log', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('data-prog-add') >= 0,
+      'nothing to tick before Monday, but he still eats today — taking the logger ' +
+      'away without this would take the only way to record a meal with it');
+  });
+
+  test('OWNS the free-form screen still exists outside the programme', () => {
+    setUp(110);
+    const after = onDay('2027-01-05', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(freeFormSlots(after) > 0,
+      'once the fifteen weeks are done the ordinary screen comes back — the ' +
+      'programme owns Today, it does not replace it permanently');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL
@@ -2658,6 +2722,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   });
 
   test('WEIGHT the drift prompt fires off the live weigh-in', () => {
+    // The programme owns Today from 7 Sept to 27 Dec; this is the free-form
+    // screen, so it is checked on a day outside the programme.
+    const _realToday = app._nutToday;
+    app._nutToday = () => '2027-01-05';
+    try {
     setUp(90);                                                  // targets built at 90kg
     seed('phoenix_last_weighin', { date: '2026-08-22', weight_kg: 85.5 });
     app._nutTab = 'today';
@@ -2667,6 +2736,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('Targets out of date') >= 0, 'the banner appears');
     assert.ok(html.indexOf('85.5') >= 0, 'showing the weight he actually logged');
     app._nutTab = 'today';
+    } finally { app._nutToday = _realToday; }
   });
 
   test('WEIGHT no live weigh-in still falls back rather than breaking', () => {
@@ -3071,6 +3141,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   };
 
   test('every day-editing surface offers the same controls', () => {
+    // The programme owns Today from 7 Sept to 27 Dec; this is the free-form
+    // screen, so it is checked on a day outside the programme.
+    const _realToday = app._nutToday;
+    app._nutToday = () => '2027-01-05';
+    try {
     setUp(90);
     app.nutSaveRecipes([rec('Sauce')]);
     const days = app._nutSelectedWeekDays();
@@ -3088,9 +3163,15 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(plan.indexOf('data-nut-pick') >= 0, 'planner: + Food present');
     assert.ok(plan.indexOf('data-nut-add-recipe') >= 0, 'planner: + Recipe present');
     app._nutWeekMode = 'overview';
+    } finally { app._nutToday = _realToday; }
   });
 
   test('every day-editing surface shows what the day is meant to add up to', () => {
+    // The programme owns Today from 7 Sept to 27 Dec; this is the free-form
+    // screen, so it is checked on a day outside the programme.
+    const _realToday = app._nutToday;
+    app._nutToday = () => '2027-01-05';
+    try {
     setUp(90);
     const dk = app._nutToday();
     schedule(dk, 2);
@@ -3102,9 +3183,15 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(plan.indexOf(target) >= 0, `planner: shows the ${target} kcal target — it never had one before`);
     assert.ok(plan.indexOf('Lower Body') >= 0, 'planner: names the scheduled session for that day');
     app._nutWeekMode = 'overview';
+    } finally { app._nutToday = _realToday; }
   });
 
   test('the planner plans and the today screen logs', () => {
+    // The programme owns Today from 7 Sept to 27 Dec; this is the free-form
+    // screen, so it is checked on a day outside the programme.
+    const _realToday = app._nutToday;
+    app._nutToday = () => '2027-01-05';
+    try {
     setUp(90);
     app.nutSaveRecipes([rec('Sauce')]);
     app.nutAssignRecipe('r_Sauce', 'lunch', app._nutToday(), 1);
@@ -3112,6 +3199,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const plan = renderTab('week', 'plan');
     assert.equal(plan.indexOf('|log"'), -1, 'the planner never logs');
     app._nutWeekMode = 'overview';
+    } finally { app._nutToday = _realToday; }
   });
 
   // Jon: "need day and date on the card adding to in any of the views" — opened

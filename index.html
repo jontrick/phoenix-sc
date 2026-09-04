@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.292';
+var APP_VERSION='4.9.293';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19611,10 +19611,16 @@ function _nutTabToday(ns){
     var progCard = _nutProgTodayCard();
     if(progCard) return _nutProgReviewCard(today) + progCard;
   }
-  var _setupCard = '';
+  // v4.9.293: RETURN, do not prepend. The card was already rendering on the
+  // run-up — a probe put it at index 254 with the free-form slots at 1618 — so
+  // the report was never "it is missing", it was "the generic logger is still
+  // here". A running day removed the logger; a run-up day left it underneath.
+  // One screen behaving two ways depending on the date.
   if(_progStatus === 'trial-setup' || _progStatus === 'baseline'){
-    _setupCard = _nutProgStartsCard(today) + _nutProgReviewCard(today);
+    var startCard = _nutProgStartsCard(today) + _nutProgReviewCard(today);
+    if(startCard) return startCard;
   }
+  var _setupCard = '';
   var targets = nutAdjustForToday(ns.targets);
   var dayData = (ns.daily && ns.daily[today]) || {};
   var logged = _nutEatenTotals(dayData);      // v4.9.145: ticked-off meals only
@@ -22109,6 +22115,10 @@ function _nutProgStartsCard(dateKey){
   // programme is. Putting it only on the running day made it unreachable on
   // every day he would actually use it.
   h += '<button data-nut-swap-open style="width:100%;margin-top:12px;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Substitutions</button>';
+  // The programme has not started, so there is nothing to tick — but he still
+  // eats today. Removing the logger without this would remove the only way to
+  // record a meal before Monday.
+  h += '<button data-prog-add style="width:100%;margin-top:8px;padding:11px;background:var(--bg2);border:1px dashed var(--border2);border-radius:9px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Log what you ate today</button>';
   h += '</div>';
   return h;
 }

@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.268';
+var APP_VERSION='4.9.269';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22326,7 +22326,7 @@ var _PEP_RECON = {
   // BPC-157 was the worst: 4x. Do not "tidy" these back toward a house default.
   // They are transcribed from his document and tests/peptides.mjs pins every
   // one against the unit counts printed there.
-  retatrutide:{vialMg:10,  waterMl:0.5},
+  retatrutide:{vialMg:30,  waterMl:1.8},  // v4.9.269: CONFIRMED BY JON. Was 10mg/0.5mL from the PDF -> 50u for a 10mg dose; his real vial draws 60u.
   ipamorelin: {vialMg:10,  waterMl:2},
   cjc1295:    {vialMg:10,  waterMl:2},
   bpc157:     {vialMg:10,  waterMl:2},   // v4.9.250: CONFIRMED BY JON. Was 1mL from the PDF -> 5u, a HALF dose.
@@ -22414,7 +22414,8 @@ function _pepRecon(stack, c){
   var vialMg  = eff.mg;
   var waterMl = (stack && stack.waterMl != null && stack.waterMl !== "")  ? parseFloat(stack.waterMl) : def.waterMl;
   if(!vialMg || !waterMl || vialMg <= 0 || waterMl <= 0) return null;
-  return {vialMg:vialMg, waterMl:waterMl, conc: vialMg / waterMl, source: eff.source, plannedMg: eff.planned};
+  return {vialMg:vialMg, waterMl:waterMl, conc: vialMg / waterMl, source: eff.source, plannedMg: eff.planned,
+          compoundId: (c && c.id) || null};
 }
 
 // The water volume that would keep the SAME concentration as the planned vial,
@@ -22509,8 +22510,12 @@ function _pepDrawText(draw){
 // "5mg in 2mL = 2.5mg/mL"
 function _pepReconText(recon){
   if(!recon) return "";
+  // v4.9.269: was its own `source === "default"` test. That is the same rule
+  // written twice, and the second copy is the one that gets forgotten — this
+  // domain has shipped "fixed the second, left the first" four times. One
+  // helper decides what counts as an assumption.
   return _pepNum(recon.vialMg) + "mg in " + _pepNum(recon.waterMl) + "mL = " + _pepNum(recon.conc) + "mg/mL"
-    + (recon.source === "default" ? " &middot; assumed vial, not confirmed" : "");
+    + (_pepReconAssumed(recon) ? " &middot; assumed vial, not confirmed" : "");
 }
 
 // v4.9.245: the root cause behind the .236 recon corrections, rather than the
@@ -22529,8 +22534,47 @@ function _pepReconText(recon){
 // It marks rather than hides. Refusing to show a draw would push him to
 // calculate it himself, which is worse. The unit count still appears; it just
 // stops claiming a confidence it does not have.
-function _pepReconAssumed(recon){
-  return !!(recon && recon.source === "default");
+// WHAT JON HAS ACTUALLY CONFIRMED, FIELD BY FIELD (v4.9.269).
+//
+// "Confirmed" was a source comment. A comment cannot be queried, so seven
+// values he had personally confirmed still displayed in gold as "a library
+// assumption, not something you have confirmed" — which is the flag lying in
+// the safe direction, but lying. A warning that fires on values known to be
+// right is a warning he learns to scroll past, and then it is not there for
+// the one that is actually a guess.
+//
+// vialMg and waterMl are recorded SEPARATELY because they were confirmed
+// separately and only both together give a concentration. On 2026-09-04 he
+// gave vial sizes as "count x size" — reta 30 x 8, BPC 7 x 10, TB 7 x 10,
+// Ipa 8 x 10, CJC 8 x 10, plus "ta1 is 10mg, ghk-cu is 50mg". Those are VIAL
+// SIZES. He did not restate the BAC volumes, so those stay unconfirmed except
+// where he has separately given them.
+//
+// Dates are the day he said it. Never add an entry here from a document —
+// the document is the thing this exists to outrank.
+var _PEP_CONFIRMED = {
+  retatrutide: {vialMg:"2026-09-04", waterMl:"2026-08-31"},  // "no reta is a 30mg vial"; "will be 2 - 2.5ml - the vial cant hold that much" -> 1.8mL
+  bpc157:      {vialMg:"2026-09-04", waterMl:"2026-08-31"},  // "bpc is 10mg in 2ml"
+  tb500:       {vialMg:"2026-09-04"},
+  ipamorelin:  {vialMg:"2026-09-04"},
+  cjc1295:     {vialMg:"2026-09-04"},
+  ta1:         {vialMg:"2026-09-04"},                        // "ta1 is 10mg"
+  ghkcu:       {vialMg:"2026-09-04"},                        // "ghk-cu is 50mg"
+  nad:         {vialMg:"2026-08-31"}                         // "i have 10 x 500mg nad"
+};
+
+function _pepVialConfirmed(compoundId){
+  var e = compoundId && _PEP_CONFIRMED[compoundId];
+  return !!(e && e.vialMg);
+}
+
+// A library default is an ASSUMPTION only where he has not confirmed the vial
+// size. Where he has, the number is his, and saying otherwise trains him to
+// ignore the flag.
+function _pepReconAssumed(recon, compoundId){
+  if(!recon || recon.source !== "default") return false;
+  if(compoundId === undefined && recon.compoundId !== undefined) compoundId = recon.compoundId;
+  return !_pepVialConfirmed(compoundId);
 }
 
 // ── State management ──────────────────────────────────────────────────────

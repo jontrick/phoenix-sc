@@ -24,36 +24,33 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       (v4.9.268). He reports stock as TOTAL MG, not vial counts, so the sheet takes mg
       and does the division. Fixes for context: `pepApplyPhase` used to replace ps.stacks
       wholesale, so applying a phase overwrote counted stock (fixed v4.9.266).
-      HIS FIGURES, given 2026-09-04 — recorded here because they exist nowhere else:
-        Tesamorelin 50mg · Epitalon 100mg · NAD+ 5000mg · GHK-Cu 450mg · TA-1 60mg
-        MOTS-c 60mg · 5-AMQ 15mg · DSIP "have, use when required" (no figure)
-        Semax NOT ORDERED · SLU NOT ORDERED (neither is in Phase 2)
-      Five of these match the Phase 2 figures EXACTLY (tesa 5x10, epi 10x10, nad 10x500,
-      mots 6x10, 5amq 3x5). That confirms the TOTALS. It does NOT confirm the VIAL SIZES
-      — both numbers trace back to his own ordering document, so they are one measurement
-      with two signatures. The vial size sets the CONCENTRATION and therefore the units
-      he draws; see the reconstitution item below.
+      HIS FULL STOCK TAKE, given 2026-09-04 — recorded here because it exists nowhere
+      else. 12 of the 13 Phase 2 compounds; only DSIP is outstanding.
+        Retatrutide  8 x 30mg = 240mg      Tesamorelin  5 x 10mg =   50mg
+        Ipamorelin   8 x 10mg =  80mg      Epitalon    10 x 10mg =  100mg
+        CJC-1295     8 x 10mg =  80mg      NAD+        10 x 500mg = 5000mg
+        BPC-157      7 x 10mg =  70mg      GHK-Cu       9 x 50mg =  450mg
+        TB-500       7 x 10mg =  70mg      TA-1         6 x 10mg =   60mg
+        MOTS-c       6 x 10mg =  60mg      5-AMQ        3 x  5mg =   15mg
+        DSIP — "have, use when required", NO FIGURE. Still open.
+        Semax and SLU — NOT ORDERED. Neither is in Phase 2.
+      NOTE ON FORMAT: he writes these as two numbers whose ORDER VARIES — "reta 30 x 8"
+      is size-then-count, "BPC 7 X 10" is count-then-size. It is unambiguous only
+      because the vial size is known in each case. Do NOT write a parser that assumes
+      an order; ask.
+      Where Phase 2 already carried a figure his count agrees EXACTLY (tesa, epi, nad,
+      mots, 5amq, cjc). That confirms the TOTALS. It is not independent confirmation of
+      the VIAL SIZES — both trace to his own ordering document — but he has now stated
+      the sizes directly, which is, and they are recorded in `_PEP_CONFIRMED` (v4.9.269).
       Closes when the STOCK screen reads what he counted.
-- [ ] JON — Peptide stock, the part he did NOT answer. His list covers 8 of the 13 Phase 2
-      compounds. NO figure was given for Retatrutide, Ipamorelin, BPC-157, TB-500 or
-      CJC-1295 — all five are ACTIVE and running. Unknown, not zero and not fine: the
-      stock-take sheet leaves a blank row untouched rather than zeroing it, so nothing
-      has been assumed. Closes when he gives totals for those five, or says they are
-      deliberately untracked.
-- [ ] JON — Peptide vial sizes for GHK-Cu and TA-1 specifically. These are the two NEW
-      figures in his stock take — Phase 2 carried no stock for either — and both rest on
-      a LIBRARY-ASSUMED vial size (GHK-Cu 50mg, TA-1 10mg). 450 ÷ 50 = 9 and 60 ÷ 10 = 6
-      both divide cleanly, which is weak supporting evidence and not proof: 450mg is also
-      9x50 or 4.5x100, and 60mg is 6x10 or 12x5. If TA-1 vials are 5mg rather than 10mg
-      the concentration halves and his 1.6mg dose becomes 64u instead of 32u — the exact
-      shape of the BPC-157 half-dose that shipped for 14 versions. Closes when he reads
-      the two labels. The stock-take sheet marks an assumed size in gold and refuses any
-      total that does not divide cleanly, so a wrong size cannot be entered silently.
-- [ ] JON — Reconstitution: only `bpc157` is marked CONFIRMED BY JON. The other 16 entries
-      in `_PEP_RECON` are transcribed from Peptide_Protocol_2026_27.pdf and unconfirmed
-      against a real vial. Two have already been wrong in opposite directions. Closes
-      compound-by-compound as he checks labels; each one confirmed should be marked in
-      the source the way bpc157 is.
+- [ ] JON — Reconstitution: WATER volumes, not vial sizes. As of 2026-09-04 he has
+      confirmed EIGHT vial sizes directly (retatrutide 30mg, bpc157, tb500, ipamorelin,
+      cjc1295, ta1 10mg, ghkcu 50mg, nad 500mg) and they are recorded per-field in
+      `_PEP_CONFIRMED` with the date he said it. What is still PDF-derived is the BAC
+      VOLUME for all but retatrutide and bpc157 — and a concentration needs both, so an
+      unconfirmed waterMl is an unconfirmed draw. Closes compound-by-compound as he
+      states the volume he actually mixes; add it to `_PEP_CONFIRMED`, never from the
+      document, which is the thing that table exists to outrank.
 - [ ] JON — Should a live WALK and the WEEKLY CHECK-IN be restored after a screen lock?
       Both are deliberately in `_neverRestoreTabs` (v4.9.264) — a walk would imply one is
       running, and the check-in form reloads EMPTY so returning to it invites a second

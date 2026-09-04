@@ -3903,7 +3903,11 @@ const settle = () => new Promise(r => setTimeout(r, 0));
   // It marks rather than hides. Refusing to show a draw would push him to
   // calculate it himself, which is worse.
   {
-    const c = () => app._pepCompound('bpc157');
+    // motsc: a library default Jon has NOT confirmed. bpc157 used to sit here
+    // and stopped being the right fixture in v4.9.269, when he confirmed its
+    // vial size — the case was then asserting that a number he had personally
+    // given was an assumption.
+    const c = () => app._pepCompound('motsc');
 
     test('ASSUMED a library-default vial is labelled as assumed', () => {
       const r = app._pepRecon({}, c());
@@ -3918,6 +3922,28 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(!app._pepReconAssumed(r), 'he confirmed this one');
       assert.ok(!app._pepReconText(r).includes('assumed'),
         'a confirmed vial must not be nagged about — a warning on everything is a warning on nothing');
+    });
+
+    // v4.9.269. He confirmed eight vial sizes; the flag kept calling them
+    // assumptions because "confirmed" lived in a source COMMENT, which nothing
+    // can query. A warning that fires on values known to be right is a warning
+    // he learns to scroll past — and then it is not there for the real guess.
+    test('ASSUMED a DEFAULT whose vial size Jon confirmed is NOT flagged', () => {
+      const r = app._pepRecon({}, app._pepCompound('bpc157'));
+      assert.equal(r.source, 'default', 'still coming from the library');
+      assert.ok(!app._pepReconAssumed(r),
+        'but he said "bpc is 10mg in 2ml" himself — the library agreeing with him ' +
+        'does not make it a guess');
+      assert.ok(!app._pepReconText(r).includes('assumed'),
+        'and the caption must not contradict him either — this is the half of the ' +
+        'fix that lived in a second copy of the rule');
+    });
+
+    test('ASSUMED confirmation is per compound, not global', () => {
+      assert.ok(!app._pepReconAssumed(app._pepRecon({}, app._pepCompound('ta1'))),
+        'ta1 confirmed 2026-09-04');
+      assert.ok(app._pepReconAssumed(app._pepRecon({}, app._pepCompound('tesamorelin'))),
+        'tesamorelin never confirmed — it must still be flagged');
     });
 
     test('ASSUMED an override is not labelled assumed either', () => {
@@ -3991,7 +4017,11 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     // app marks those as assumed on screen rather than pretending otherwise.
     // compound, dose, unit, vialMg, waterMl, units printed in the protocol
     const REF = [
-      ['retatrutide',   6,    'mg', 10,  0.5,  30],
+      // v4.9.269: was ['retatrutide', 6, 'mg', 10, 0.5, 30] — section 8's vial,
+      // not his. He has said "no reta is a 30mg vial" and gave the BAC volume
+      // himself. 10mg at 30mg/1.8mL is 16.67mg/mL -> 0.6mL -> 60u, which is
+      // the number he worked out and asked me to confirm.
+      ['retatrutide',  10,    'mg', 30,  1.8,  60],
       ['ipamorelin',    0.2,  'mg', 10,  2,     4],
       ['ipamorelin',    0.3,  'mg', 10,  2,     6],
       ['cjc1295',       0.15, 'mg', 10,  2,     3],
@@ -4030,7 +4060,8 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     const DEFAULTS = [
       ['ipamorelin', 10, 2], ['cjc1295', 10, 2], ['bpc157', 10, 2],   // bpc CONFIRMED BY JON
       ['ta1', 10, 2], ['ghkcu', 50, 2], ['nad', 500, 2],
-      ['retatrutide', 10, 0.5], ['motsc', 10, 0.5], ['epitalon', 10, 1],
+      ['retatrutide', 30, 1.8],  // CONFIRMED BY JON, outranks section 8
+      ['motsc', 10, 0.5], ['epitalon', 10, 1],
       ['tb500', 10, 2], ['tesamorelin', 10, 2],
     ];
     DEFAULTS.forEach(([id, vialMg, waterMl]) => {

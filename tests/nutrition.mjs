@@ -911,14 +911,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     assert.equal(app.nutProgStatusOn('2026-09-09'), 'baseline',
       'Wed 9 Sept is the FINAL weigh-in and setup — the number all 15 weeks are measured against');
-    assert.equal(app.nutProgStatusOn('2026-09-08'), 'before', 'the day before is not');
+    assert.equal(app.nutProgStatusOn('2026-09-08'), 'trial',
+      'the 8th is a trial day — the baseline falls INSIDE the rehearsal week by design');
+    assert.equal(app.nutProgStatusOn('2026-09-06'), 'before', 'the day before the rehearsal is not');
     assert.equal(app.nutProgWeekFor('2026-09-09'), 0, 'and it is not week 1');
   });
 
-  test('PROG the prep window is Thursday to Sunday before week 1', () => {
+  test('PROG week 1 is shopped during the back half of the trial week', () => {
     setUp(110);
+    // These four days do two jobs at once: Jon is EATING the rehearsal plan and
+    // SHOPPING for week 1. The day's status follows what he eats; prep is a
+    // window you ask for, not a state the day is in.
     ['2026-09-10','2026-09-11','2026-09-12','2026-09-13'].forEach((d) => {
-      assert.equal(app.nutProgStatusOn(d), 'prep', d + ' is shop-and-prep');
+      assert.equal(app.nutProgStatusOn(d), 'trial', d + ' is still a trial day to eat');
     });
     const w = app.nutProgPrepWindow(1);
     assert.equal(w.from, '2026-09-10', 'prep opens Thursday');
@@ -1073,7 +1078,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('PROG nothing outside the programme returns a target', () => {
     setUp(110);
-    assert.equal(app.nutProgTargetsOn('2026-09-13'), null, 'the day before it starts');
+    assert.equal(app.nutProgTargetsOn('2026-09-06'), null, 'the day before the trial starts');
     assert.equal(app.nutProgTargetsOn('2026-12-28'), null, 'the day after it ends');
     assert.equal(app.nutProgTargetsOn('not-a-date'), null, 'and junk is not week 1');
     assert.equal(app.nutProgTargetsOn(null), null, 'nor is nothing');
@@ -1151,8 +1156,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('PLATE nothing outside the programme produces a plate', () => {
     setUp(110);
-    assert.equal(app.nutProgMealsOn('2026-09-13'), null, 'the day before it starts');
-    assert.equal(app.nutProgDayTotals('2026-12-28'), null, 'the day after it ends');
+    // NB 7-13 Sept is now the trial week and DOES produce a plate. The last day
+    // outside everything is 6 Sept.
+    assert.equal(app.nutProgMealsOn('2026-09-01'), null, 'before the trial week even opens');
+    assert.equal(app.nutProgMealsOn('2026-09-06'), null, 'the day before the trial starts');
+    assert.equal(app.nutProgDayTotals('2026-12-28'), null, 'the day after it all ends');
   });
 
   // ── the programme's Today screen ─────────────────────────────────────────
@@ -1339,6 +1347,94 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'so a drift between them would mean two sources of truth');
     const spud = shopItem(shop, 'Sweet potato');
     assert.ok(prep.batches[1].steps[0].indexOf(String(spud.qty)) >= 0, 'and the same for sweet potato');
+  });
+
+  // ── week 0: the dress rehearsal ──────────────────────────────────────────
+  // Mon 7 to Sun 13 September on week 1's macros. Its whole job is that the loop
+  // gets run once — shop, prep, tick, log something off plan — while nothing is
+  // being measured yet.
+
+  test('W0 the trial week is the seven days before the programme', () => {
+    setUp(110);
+    ['2026-09-07','2026-09-08','2026-09-10','2026-09-13'].forEach((d) => {
+      assert.equal(app.nutProgStatusOn(d), 'trial', d + ' is a rehearsal day');
+    });
+    assert.equal(app.nutProgStatusOn('2026-09-06'), 'before', 'the day before is outside it');
+    assert.equal(app.nutProgStatusOn('2026-09-14'), 'running', 'and the 14th is the real thing');
+  });
+
+  test('W0 runs on week 1 macros but is NOT week 1', () => {
+    setUp(110);
+    const trial = app.nutProgTargetsOn('2026-09-08');
+    const real  = app.nutProgTargetsOn('2026-09-15');
+    assert.equal(trial.trial, true, 'flagged as a rehearsal');
+    assert.equal(trial.week, 0, 'week 0 — outside the count, not week 1 minus one');
+    assert.deepEqual(trial.total, real.total, 'identical macros to week 1');
+    assert.equal(trial.phase, 'Trial week', 'and it says so on the screen');
+    assert.equal(real.trial, false, 'the real week is not flagged');
+  });
+
+  test('W0 the lift rule still applies during the rehearsal', () => {
+    setUp(110);
+    const tue = app.nutProgTargetsOn('2026-09-08');   // Tue — lift
+    const wed = app.nutProgTargetsOn('2026-09-09');   // Wed — HIIT
+    assert.equal(tue.lift, true,  'Tuesday still lifts in the rehearsal');
+    assert.equal(wed.lift, false, 'Wednesday still does not');
+    assert.ok(tue.blocks < wed.blocks, 'so the intra still replaces a block — the whole point of a dry run');
+  });
+
+  test('W0 is set up on the Saturday and prepped over the weekend', () => {
+    setUp(110);
+    assert.equal(app.nutProgReviewDate(0), '2026-09-05',
+      'set up on Saturday — there is no Thursday left between deciding and starting');
+    const w = app.nutProgPrepWindow(0);
+    assert.equal(w.from, '2026-09-05', 'prep opens Saturday');
+    assert.equal(w.to,   '2026-09-06', 'and closes Sunday, the day before it begins');
+  });
+
+  test('W0 produces a real shopping list for the right seven days', () => {
+    setUp(110);
+    const shop = app.nutProgShoppingFor(0, 'basmati');
+    assert.ok(shop, 'the rehearsal has its own list');
+    assert.equal(shop.from, '2026-09-07', 'Monday 7 Sept');
+    assert.equal(shop.to,   '2026-09-13', 'to Sunday 13 Sept');
+    const f = {};
+    shop.formulas.forEach((x) => { f[x.n] = x.serves; });
+    assert.equal(f['Beet HIIT shot'], 3, 'and the Saturday double still counts correctly');
+  });
+
+  test('W0 proposes nothing — a rehearsal is not evidence', () => {
+    setUp(110);
+    assert.equal(app.nutProgCanPropose(0), false,
+      'nothing measured during the dry run may change the real weeks');
+  });
+
+  test('W0 the baseline weigh-in falls inside it, deliberately', () => {
+    setUp(110);
+    assert.equal(app.nutProgStatusOn('2026-09-09'), 'baseline',
+      'Wed 9 Sept still reports as the baseline, not as a trial day — it is the ' +
+      'number all fifteen weeks are judged against and must not be lost inside the rehearsal');
+    assert.equal(app.nutProgIsTrial('2026-09-09'), true, 'while still being a day he eats the plan');
+  });
+
+  test('W0 the Today screen actually renders during the rehearsal', () => {
+    setUp(110);
+    const html = onDay('2026-09-08', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Trial week') >= 0, 'the screen says it is a rehearsal');
+    assert.ok(html.indexOf('data-prog-tick') >= 0, 'with tickable meals');
+    assert.ok(html.indexOf('data-prog-add') >= 0, 'and the off-plan button, which is the bit worth testing');
+    assert.equal(html.indexOf('of 15'), -1, 'and it does not claim to be one of the fifteen');
+  });
+
+  test('RICE sushi rice is available and behaves like a short grain', () => {
+    setUp(110);
+    const r = app.nutProgRiceFor('sushi', 2.75);
+    assert.ok(r, 'sushi rice is an option');
+    assert.equal(r.name, 'Sushi, short grain');
+    assert.equal(r.carbs_g, 68.8, 'the carbohydrate is what the block fixes');
+    const bas = app.nutProgRiceFor('basmati', 2.75);
+    assert.equal(r.carbs_g, bas.carbs_g, 'identical carbs to any other grain at the same blocks');
+    assert.ok(r.dry_g > bas.dry_g, 'but it absorbs less water, so more dry weight for the same cooked carbs');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

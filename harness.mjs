@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.279'", 'version is 4.9.279');
+has("var APP_VERSION='4.9.280'", 'version is 4.9.280');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2947,8 +2947,8 @@ hasCode('(week - 1) * 7 - 5',          'PROG: the review is the WEDNESDAY before
 hasCode('function _nutProgTodayCard(', 'TODAY: the programme day card exists');
 // Existing is not reached. The meals tab had no router branch for four versions
 // and every gate stayed green, so the ROUTE is what gets asserted here.
-hasCode("nutProgStatusOn(today) === 'running'",
-        'TODAY: _nutTabToday actually ROUTES to it while the programme runs');
+hasCode("_progStatus === 'running' || _progStatus === 'trial'",
+        'TODAY: _nutTabToday ROUTES to the programme card — in the real weeks AND the rehearsal');
 hasCode('data-prog-tick', 'TODAY: meals are tickable');
 hasCode('data-prog-add',  'TODAY: and anything off plan can be logged from the same screen');
 hasCode('function nutProgToggleMeal(', 'TODAY: the tick is persisted, not just drawn');
@@ -2957,6 +2957,11 @@ hasCode("body.querySelectorAll('[data-prog-tick]')",
 
 // ── Shopping list and prep plan ─────────────────────────────────────────────
 hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
+hasCode('function nutProgIsTrial(',    'W0: the rehearsal week exists');
+hasCode("trial_start: '2026-09-07'",  'W0: it runs Mon 7 Sept');
+hasCode("trial_setup: '2026-09-05'",  'W0: set up on the Saturday, not a Wednesday');
+hasCode("if(week === 0) return false;",'W0: a rehearsal never proposes a change to a real week');
+hasCode("id:'sushi'",                 'RICE: sushi rice is an option');
 hasCode('function nutProgPrepFor(',     'SHOP: and the prep plan');
 
 // It must aggregate seven REAL days. Multiplying one day by seven buys seven

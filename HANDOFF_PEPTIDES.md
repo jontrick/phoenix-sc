@@ -1,191 +1,202 @@
-# PHOENIX APP — PEPTIDES CHAT HANDOFF
-# Paste this as the first message in the "Phoenix App - Peptides" chat.
-# Read CLAUDE.md in the repo root FIRST — all its rules apply here without exception.
-# Then read COMMS_PROTOCOL.md — cross-chat messaging is REQUIRED, not optional.
+# PHOENIX — PEPTIDES DOMAIN HANDOFF
+# Rewritten 2026-09-01 at v4.9.263. Supersedes the previous version entirely.
+# Read CLAUDE.md first — every rule in it applies here. Then COMMS_PROTOCOL.md.
+#
+# The previous handoff described "TODAY | PROTOCOL | ORDER" and pointed at line
+# ~19100. Neither had been true for weeks. Everything below was verified against
+# the shipped file on the day it was written, not recalled — if you are reading
+# this more than a few days later, re-derive before relying on any number in it.
 
 ---
 
-## YOUR ROLE
+## 1. WHAT THIS DOMAIN IS
 
-You are the **Peptides Engineer** for Project Phoenix — Jon's personal fitness PWA at projectphoenix-app.com. You own the Peptide Portal: regime scheduling, compound information, and ordering. You report to the PM chat ("PHOENIX APP CENTRAL PM") which triages work across three domain chats: Training, Nutrition, and Peptides (you).
+The Peptide Portal: `#screen-peptide`, six tabs, backed by `profiles.peptide_state`
+(jsonb) and `localStorage['peptide_v1_{uid}']`.
 
-**Your domain:**
-- Peptide Portal screen (`#screen-peptide`): TODAY | PROTOCOL | ORDER tabs
-- Compound library (`_PEP_COMPOUNDS` — 44 compounds: dose, frequency, timing, notes)
-- Scheduling engine (`_pepGetDoses`) — daily, EOD, Wed+Sat, weekly, 6-on-1-off, every-5-days, 20-night courses, 10-day courses, 3x/week, 2x/week
-- Daily dose checklist with morning/anytime/evening grouping
-- Protocol management: stacks with dose, start date, cycle/off weeks, status (In Stock / Pipeline / On Order / Complete)
-- Tong catalogue (`_PEP_TONG` — July 2026 AUD pricing) + order cart + copy-order-summary
-- Supabase sync: `profiles.peptide_state` (jsonb)
+**Tabs — label vs key.** The key is what persists and restores; the label is
+cosmetic and has changed. Do not rename keys.
 
-**NOT your domain (hands off):**
-- Training/BLAB/WOD code → Training chat
-- Nutrition module (`nut*` / `_nut*`) → Nutrition chat
-- Auth, profile plumbing, sidebar structure → PM chat coordinates any changes here
+| key        | label     | what it is |
+|------------|-----------|------------|
+| `today`    | TODAY     | today's doses, tick / skip / add |
+| `overview` | SCHEDULE  | the calendar, and nothing else |
+| `stock`    | STOCK     | counts, vial sizes, mix log, import/export |
+| `adjust`   | ADJUST    | Protocol info + AI review + bloods |
+| `order`    | ORDER     | Tong cart |
+| `bloods`   | BLOODS    | blood panels |
 
-**Reference material:** `PEPTIDE APP/peptide-app2/index.html` in the repo — the standalone v20 prototype this portal was ported from. Read-only reference for compound data and scheduling logic.
+`overview` carries the label SCHEDULE since v4.9.263. The key stayed so his
+persisted tab and every restore path still resolve.
 
----
-
-## THE STACK (summary — full detail in CLAUDE.md)
-
-- Single-file PWA: `index.html` (~1.7MB, 28,000+ lines) at ~/Desktop/phoenix-sc
-- Supabase project `mxtowhccuqarszcwpbkq` (Sydney). Jon's UUID: `df7fc046-0dd6-4416-b0ce-44b55fa2fb8e`
-- Deploy: `git push origin main` → GitHub Pages → live in ~60s
-- Current version at handoff: **v4.9.140**
-
-## KEY FUNCTIONS YOU OWN (~lines 19100–19800)
-
-- `pepGetState()` / `pepSaveState(ps)` — localStorage `peptide_v1_{uid}` + debounced cloud mirror
-- `_pepMirrorToCloud(ps)` — 2s debounce → `profiles.peptide_state`
-- `pepRestoreFromCloud(profileRow)` — hydrates localStorage from Supabase (local wins if present)
-- `pepRenderScreen()` — tab bar + content router (`_pepTab`)
-- `_pepTabToday(ps)` / `_pepGetDoses(ps)` / `pepToggleDose(compId)`
-- `_pepTabProtocol(ps)` / `pepOpenAddStack()` / `pepOpenEditStack(idx)` / `pepRemoveStack(idx)`
-- `_pepTabOrder(ps)` / `pepOpenOrderPicker()` / `pepCartAdd/Remove/UpdateQty` / `pepCopyOrder()`
-- Screen access: hamburger sidebar → Peptide Portal; navTo route `'peptide':'screen-peptide'`
-- Accent colour: `#7B68EE` (purple — distinguishes from gold training / nutrition UI)
-
-## DATA MODEL (localStorage `peptide_v1_{uid}` ↔ profiles.peptide_state)
-
-```
-{
-  stacks: [{compoundId, dose, startDate:'YYYY-MM-DD', cycleWeeks?, offWeeks?, status, notes, continuous?}],
-  checked: { 'YYYY-MM-DD': [compoundId, ...] },
-  cart: [{cat, name, aud, qty}]
-}
-```
-
-Status values: `instock` (active — scheduled), `pipeline`, `onorder`, `complete` (all three = NOT scheduled).
-
-Stock fields per stack (v4.9.180): `vialMg`, `waterMl`, `sealedVials`, `openDosesUsed`, `openedDate`.
-Settings (v4.9.180–182): `settings: {leadTimeDays, bufferWeeks, shelfLifeDays, coverageMonths}`.
-Also present: `notes[]` (response log), `advice` (last AI review), `bloods[]` (LOCAL CACHE of the
-`blood_panels` table — stripped from the cloud mirror, see below).
-
-### MEANINGS — not just shapes
-
-Shapes above are not enough to use this data safely. Three meanings you cannot infer from the schema:
-
-**`stacks: []` is AMBIGUOUS.** It means either "Jon deliberately cleared his protocol" or "the app
-synthesised an empty default because localStorage had no key yet". `pepGetState()` returns a literal
-`{stacks:[], checked:{}, cart:[]}` on a cache miss, and all 12 save paths will persist that with a
-fresh `_ts`. The two are byte-identical. **Never treat an empty `stacks` as authoritative** — that
-assumption wiped a live protocol in v4.9.158 and is guarded in `pepRestoreFromCloud` and
-`_pepStubWouldClobber` (v4.9.159). If you write code that reads `peptide_state`, an empty `stacks`
-means "no information", not "no protocol".
-
-**`_ts` is written on SAVE, never on read.** Stamping on read would make merely opening the app look
-like an edit and let a stale device win a restore. Restore rule is newest-timestamp-wins with ties to
-local; full table in COMMS_PROTOCOL § RESTORE / MERGE RULES.
-
-**`bloods[]` never goes to the cloud.** `blood_panels` is the source of truth; `ps.bloods` is a local
-cache. `_pepCloudPayload()` strips it, because mirroring it would duplicate pathology values into a
-second store. Anything that builds a peptide cloud payload must go through `_pepCloudPayload()`.
-
-## API OTHER DOMAINS MAY CALL (provider-pinned)
-
-Pinned in `tests/peptides.mjs` under CONTRACT, and in `harness.mjs` under STRUCTURAL. Per
-COMMS_PROTOCOL, the provider owns these pins — a consumer's pin only goes red after the break has
-already shipped.
-
-| Surface | Contract | Called by |
-|---|---|---|
-| `pepRestoreFromCloud(row)` | Returns **boolean**. `true` ONLY when local was actually replaced. Never throws — returns a boolean for `null`/`{}`/missing `peptide_state`. | PM's `_phxOnProfileFetched` wrapper |
-| `_pepAfterRestore()` | Repaints the Today tile and the portal. Safe with no DOM. Call ONLY when the above returned true. | same wrapper |
-| `pepRenderTodayTile()` | Renders `#today-peptide-tile`. No-ops when there is no protocol or no element. | `renderTodayScreen()` |
-| `pepRenderScreen()` | Renders the portal. | `navTo('peptide')` |
-| `pepOpenAddStack()` / `pepOpenOrderPicker()` | Sheet openers. | the `+` button handler in `navTo` |
-
-**Why the boolean matters:** the shared wrapper repaints only on `true`. If it ever returned
-`undefined`, a fresh install would restore the protocol and then show an empty Today tile until the
-user navigated away and back — silent. That was the v4.9.152 bug; breaking the return value now fails
-two named tests.
-
-### Shared image helpers (v4.9.197) — any domain may call
-
-Promoted from `_pepDownscale` / `_pepDataURLToBlob` at the PM's ruling so Nutrition's
-nutrition-panel capture reuses them rather than growing a second copy. `_pep*` names remain
-as thin wrappers. Pinned in `tests/peptides.mjs` under `IMG`.
-
-| Surface | Contract |
-|---|---|
-| `_phxDownscaleImage(dataURL, maxDim, quality)` | Resolves a JPEG data URL with the **long edge capped at `maxDim`, default 1600px**. **NEVER THROWS and never rejects** — anything it cannot decode resolves to the **input unchanged**. |
-| `_phxDataURLToBlob(dataURL)` | Returns a `Blob`, or **`null`** on anything it cannot parse. Never throws. **Strict since v4.9.197**: a header that does not declare `;base64` returns null rather than decoding anyway. |
-
-**MEANINGS — the constraints a second consumer would otherwise rediscover by hitting them:**
-
-- **1600px is not arbitrary.** A raw phone photo is 3–5MB. The Anthropic API **refuses images over 5MB**, and 1600px on the long edge reads printed text fine at roughly a tenth the size. Raising it risks the ceiling; lowering it costs legibility on small print.
-- **Never-throwing is the contract, not an implementation detail.** These are used on the upload path. Failing to shrink is recoverable; throwing loses the user's photo. A rewrite that "cleans up" the silent fallback into a throw breaks the contract — the pin exists for that.
-- **`null` from the Blob converter is a real outcome, not an error case to ignore.** Callers must handle it. Before v4.9.197 a malformed header produced a **0-byte Blob**, so a caller could upload an empty file believing it had a photo.
-- **These carry NO claim about what the coach worker does with the result.** They are image-handling primitives. Whether the worker passes image blocks through to the API is **UNVERIFIED** as of v4.9.197 — see COMMS_PROTOCOL. Build the manual-entry fallback regardless.
-
-## WHAT PEPTIDES CONSUMES FROM OTHER DOMAINS
-
-Exactly one surface: **`_phxRecordWriteError(context, err, payload)`** (PM-owned). Every call site is
-`typeof`-guarded, so a rename degrades to "no diagnostics" rather than throwing inside a cloud write.
-Asserted structurally in `harness.mjs`.
-
-Peptides reads **nothing** from Training or Nutrition state — no `blab*`, no `nut*`. Also asserted
-structurally, so if that ever changes the owning domain must be told, per COMMS_PROTOCOL.
-
-Payloads passed to `_phxRecordWriteError` are **counts and timestamps only**, never medical values —
-it serialises into `localStorage.phx_last_write_error`, which is visible in Settings and readable from
-the URL bar via `phxLastError()`.
-
-## JON'S ACTUAL REGIME (context — confirm current state with Jon before assuming)
-
-Key compounds from his stack: Retatrutide (weekly Fri AM fasted), Ipamorelin + CJC-1295 No DAC (nightly, 15-min gap, Mon off), BPC-157, Thymosin Alpha-1 (Wed+Sat), MOTS-c (every 5 days ×4 then 4 months off), Klow blend (EOD), NAD+ (Mon/Wed/Fri AM — never PM), Epitalon (20 consecutive nights, 6-month break).
-
-## CROSSOVER DATA — READ-ONLY FOR YOU
-
-You may READ but must NOT restructure (PM coordinates schema changes):
-- `profiles` row: goals, bodyweight
-- Weigh-in trend (owned by Nutrition) — relevant for GLP-1 dose assessment discussions
-- Training schedule (owned by Training) — relevant for timing (e.g. post-workout vs fasted dosing)
+**Not yours:** `blab*` / WOD (Training), `nut*` (Nutrition), auth and profile
+plumbing (PM). A harness guard fails if the peptide block references either
+prefix.
 
 ---
 
-## NON-NEGOTIABLE WORKFLOW RULES
+## 2. STATE SHAPE
 
-1. **Follow CLAUDE.md fully** — runtime check before every push, harness must pass, version bump every push, no native dialogs, no single quotes inside single-quoted JS strings.
-2. **Version coordination:** Before starting work, ALWAYS `git pull origin main` and confirm the version. Other chats push to the same file. If the version jumped since your last session, re-read your section of the code before editing.
-3. **One change at a time.** Small commits, push immediately after each confirmed-clean build.
-4. **Commit message format:** `v4.9.XXX — [PEPTIDES] description`. The tag lets the PM chat track which domain shipped what.
-5. **Never edit another domain's code.** If a task requires touching training/nutrition/shared code, report back: "This needs PM coordination" and stop.
-6. **Update the harness** when you add new functionality. `node harness.mjs` must stay green.
-7. **Information accuracy:** Compound doses/frequencies in `_PEP_COMPOUNDS` came from Jon's protocol documents. Never change dose data on your own initiative — flag discrepancies to Jon and let him decide.
+`localStorage['peptide_v1_{uid}']`, mirrored to `profiles.peptide_state`.
 
-## CROSS-CHAT COMMS
-
-Full protocol in `COMMS_PROTOCOL.md` — read it. Summary for you:
-- **FIRST: `EnterWorktree {name:"peptides"}`** (or `{path:".claude/worktrees/peptides"}` if it exists, then `git fetch origin && git rebase origin/main`). Never edit the shared Desktop tree — see COMMS_PROTOCOL.md § ISOLATION.
-- Load comms tools at session start via ToolSearch: `select:SendMessage,mcp__ccd_session_mgmt__list_sessions,mcp__ccd_session_mgmt__send_message`
-- Your address is `Phoenix App - Peptides`; the PM is `PHOENIX APP CENTRAL PM`
-- Send the PM a PUSH-NOTICE when you start a build task and after every push
-- Push from the worktree: `git fetch origin && git rebase origin/main` → APP_VERSION = highest+1 → runtime check + harness → `git add index.html harness.mjs` → `git push origin HEAD:main`
-- Need weigh-in trend or training schedule? Send a QUERY to Nutrition / Training for data shape; any code change on their side goes through the PM
-- Escalate anything outside your domain to the PM; never resolve another domain's merge conflicts
-
-## SESSION START RITUAL
-
-```bash
-# (after EnterWorktree — pwd should be .../.claude/worktrees/peptides)
-pwd
-git fetch origin && git rebase origin/main
-grep "APP_VERSION" index.html | head -1
-git status                            # must be clean
-git log --oneline -5                  # see what other chats shipped
+```
+stacks[]           the protocol — one entry per compound
+checked{iso:[id]}  doses ticked
+skipped{iso:[id]}  doses DELIBERATELY declined  (v4.9.259)
+extra{iso:[{compoundId,dose,at}]}  doses added by hand  (v4.9.260)
+phases[]           phases he built in the app     (v4.9.258)
+activePhase        id of the phase last applied
+historyConfirmed   readiness gate, half 2
+bloods[]           blood panels — NEVER mirrored to the cloud
+notes[] cart[] advice settings
 ```
 
-Also read `COMMS_PROTOCOL.md` and load the comms tools (ToolSearch select above).
+### Stack fields
 
-Then report: current version, recent commits from other domains, ready for task.
+Scheduling — `_pepStackDueOn` reads these, in this precedence:
 
-## CONTEXT: WHERE THINGS STAND (August 2026)
+```
+dates[]        explicit ISO dates. If present these ARE the schedule.
+endDate        no doses after it, whatever the rule says
+periods[]      [{from,to}] several active windows for ONE compound
+intervalDays   every N days from startDate (Reta = 6, rotates the week)
+freq           string, see below
+cycleWeeks / offWeeks / continuous
+```
 
-- Portal shipped v4.9.138, nav fix v4.9.139 — TODAY/PROTOCOL/ORDER all functional
-- Supabase column may still need creating — confirm with Jon that he ran:
-  `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS peptide_state jsonb;`
-- Jon is actively using the portal and will report adjustments needed
-- Known gaps / future candidates: vial reconstitution calculator (mg → units on syringe), inventory tracking (vials on hand, days remaining), dose history view, reorder alerts when stock runs low
+`freq` understands: `daily`, `eod`, `weekly`, `2x/week`, `3x/week`,
+`mon/wed/fri`, `wed`+`sat`, `6 day` (Monday off), `every 5 day`,
+`20 consecutive nights`, `10 day`, `as needed`, and any single weekday name
+(`mon`, `tue`…) — the last added v4.9.263 for TB-500 Monday-only.
+
+Dosing and stock:
+
+```
+dose            flat dose
+doseSteps[]     [{fromDay,dose}] titration; last step reached wins  (v4.9.257)
+vialMg waterMl  the PLAN's reconstitution
+actualVialMg    override for a differently-sized vial received
+openVialMg openWaterMl  what he ACTUALLY mixed into the open vial  (v4.9.256)
+openedDate      when, for shelf life
+openUsedAmt     amount drawn from the open vial, in mg (or units)   (v4.9.249)
+openDosesUsed   legacy count, kept for the edit sheet only
+sealedVials, onOrder, arrivalDate, onOrderVials, onOrderVialMg
+stockCounted    he has physically counted this one
+status          instock | pipeline | onorder | complete
+```
+
+---
+
+## 3. THREE INVARIANTS THAT COST REAL DOSES WHEN BROKEN
+
+Each of these was a shipped bug. They are not style preferences.
+
+**1. Consumption is MEASURED, not counted.** `openUsedAmt` holds the amount
+drawn. A count of doses is only meaningful beside the dose it was counted at, so
+counting them means a titration silently rewrites history — three 50mg doses
+became "300mg used" the moment he stepped to 100mg. Fixed v4.9.249.
+
+**2. The open vial is a fact; the plan is an intention.** `_pepLiveRecon` returns
+the mixed vial when one is open, the plan otherwise. Editing the plan must not
+restate the strength of a vial already dissolved. Fixed v4.9.256.
+
+**3. A guessed vial size must never look like a measured one.** `_pepRecon`
+returns `source`; `_pepReconAssumed` flags a library default; every display
+marks it. Six wrong defaults were dangerous rather than merely wrong because
+nothing said the number rested on an assumption. Fixed v4.9.245 / .250.
+
+---
+
+## 4. WHAT THE APP DOES NOW (all shipped, all tested)
+
+- **Phase library** — Phase 2 lives in `_PEP_PHASES` as code. `pepApplyPhase()`
+  installs it in one tap; `pepSavePhase()` keeps the current protocol as a new
+  phase. Both go through `_pepValidateImport`, so there is ONE gate and no way in
+  that skips it.
+- **Titration** — `_pepDoseOn(stack,c,dayNum)`. Today and the calendar announce
+  the change on the first DOSING day at or after the step, not its calendar day.
+- **Make-up log** — `pepLogMakeUp()` records vial + water actually used.
+- **Skip** — `pepSkipDose()`. A skipped day leaves the adherence DENOMINATOR; it
+  is not a miss.
+- **Add a dose** — `pepAddExtraDose()` on TODAY and on the main-screen tile.
+  Appears with its draw-up, ticks, and comes out of the vial. Undo returns stock.
+- **Compound panels** — ADJUST → tap a compound → make-up, dose, draw, doses per
+  vial, editable vial and water. Editing maps through everything because one
+  compound is one stack.
+- **Calendar** — SCHEDULE, day by day, compounds with dose AND units.
+
+---
+
+## 5. WHERE THE GATE IS AND WHY IT MOVED
+
+`_pepGateCard` lives on **ADJUST**, with the forecast it protects. SCHEDULE is
+never gated.
+
+The line is what a thing CLAIMS. A forecast asserts he has stock and needs the
+count to be true. A calendar states the plan — true whether or not anything is
+counted, and the thing he reads to know what to count. Gating it inverted the
+dependency and made the calendar unreachable the moment he applied a phase
+(applying clears `historyConfirmed`, correctly). Fixed v4.9.262.
+
+---
+
+## 6. OPEN — NOT DONE, NEEDS JON
+
+1. **Five vial sizes unconfirmed.** Ipamorelin, TA-1, GHK-Cu, NAD+, TB-500 are
+   still PDF-derived. That document has been **wrong twice** (RT30 "+5mL" the
+   vial cannot hold; BPC-157 1mL when he uses 2mL — which shipped a HALF DOSE
+   from .236 to .250). Do not "correct" a value marked CONFIRMED BY JON back
+   toward the document.
+2. **Photo scanner untested on a real report.** Vision passthrough is proven
+   (PM, against the live worker). His end is not. Real panel due ~week of 8 Sep.
+3. **Stock counts likely read high.** Until .261 the main Today tile ticked doses
+   without decrementing. Tell him to physically recount.
+4. **Blood data leaves by two doors.** `_pepCloudPayload` strips bloods from the
+   Supabase mirror; `_pepBuildContext` sends `latest_bloods` and
+   `pepExtractMarkers` sends the PHOTO to the coach worker, whose source is not
+   in this repo. **Neither is a bug** — both are features he asked for. He was
+   told and has not objected. The egress is pinned at 2 worker calls and 9
+   context fields; adding either fails the harness deliberately.
+
+---
+
+## 7. TRAPS — EVERY ONE OF THESE COST A REAL BUG TODAY
+
+- **A pin whose LABEL claims behaviour is redundant or lying.** A pin can only
+  assert text exists. Found three: `_pepGetDoses` "is date-parameterised",
+  `_pepAdherence` "14-day", the mirror's "inspects res" — all zero coverage.
+- **Narrowing a needle is not a safe refactor.** It can remove protection
+  somewhere else. My own sweep of 18 pins stripped the `_pepAdherence` guard.
+- **A negative that cannot fail early asserts nothing.** `read(x) || {}` turns
+  absent into empty, and empty satisfies every "does not contain". My pathology
+  assertion passed whether or not the scrub worked. Put a POSITIVE control first.
+- **A probe that fails to match reports "nothing wrong" in the same words as a
+  probe that worked.** Three false cleans today. Feed the probe a known-bad case.
+- **Fix the second instance, leave the first.** Four times. Proximity does not
+  help — mine were two lines apart.
+- **A test helper that ignores its caller reads exactly like a product bug.**
+- **`git checkout <file>` destroyed uncommitted work three times.** Copy aside.
+  Never `git stash` — the stack is shared across worktrees.
+
+---
+
+## 8. GATES
+
+```
+node runtime_check.mjs      every block parses and its top level runs
+node harness.mjs            source assertions
+node functional_check.mjs   calls the real functions, 4 domains
+node version_check.mjs      reads the STAGED file, not the working tree
+```
+
+Deliberately no assertion counts here. I wrote them, and they were stale within
+the minute — another domain pushed while this file was being saved. A number
+that decays that fast is a thing you check, not a thing you record.
+
+All four, unpiped, before every push. `version_check` compares against
+origin/main and refuses a collision — three domains ship concurrently and the
+number moves under you.
+
+---
+
+*Verified against origin/main at v4.9.263, 2026-09-01. Peptides domain.*

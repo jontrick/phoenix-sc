@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.272'", 'version is 4.9.272');
+has("var APP_VERSION='4.9.273'", 'version is 4.9.273');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2888,6 +2888,46 @@ hasCode('data-fpr-custom', 'RECIPE: and a manual custom food');
 // the failure this design exists to avoid - writing a recipe is not eating it.
 hasCode('nutOpenLabelScanner(null, null, toRecipe)',   'RECIPE: a scan from a recipe hands the food back, it does not log a meal');
 hasCode('nutOpenCustomFoodModal(null, null, toRecipe)','RECIPE: and so does a custom food');
+
+// ── Cut programme engine ────────────────────────────────────────────────────
+hasCode('function nutProgTargetsOn(', 'PROG: the day target function exists');
+hasCode('function nutProgSuppsOn(',   'PROG: the supplement calculator exists');
+hasCode('function nutProgRiceFor(',   'PROG: rice conversion exists');
+hasCode('function nutProgCanPropose(','PROG: the settle-period gate exists');
+
+// Dates Jon acts on. Wrong here means he shops on the wrong day.
+hasCode("start:      '2026-09-14'",   'PROG: week 1 starts Mon 14 Sept');
+hasCode("baseline:   '2026-09-09'",   'PROG: Wed 9 Sept is the final weigh-in and setup');
+
+// The rule the whole supplement integration rests on. If the intra ever becomes
+// a daily formula, lift days silently gain a carb block and the cut stalls in a
+// way that looks like the plan not working.
+hasCode("code:'JON-BLD-BBY',     when:'lift'",
+        'PROG: the lift intra is a LIFT-day formula, not a daily one');
+hasCode("code:'JON-CRE-PST',     when:'daily'",
+        'PROG: the post-workout drink IS daily — creatine needs unbroken dosing');
+
+// Jon asked for three weeks before anything is proposed. That covers water,
+// glycogen and creatine loading in one rule.
+hasCode('settle_weeks: 3',            'PROG: the review proposes nothing before week 4');
+
+// Structural: five phases, three weeks each, covering exactly 15.
+(() => {
+  const code = codeSrc();
+  const m = /_NUT_PROG_PHASES\s*=\s*\[([\s\S]*?)\];/.exec(code);
+  if (!m) { bad('PROG: could not read the phase table — every check below would be vacuous'); return; }
+  const rows = m[1].match(/\{[^}]*\}/g) || [];
+  if (rows.length !== 5) { bad(`PROG: found ${rows.length} phases, expected 5`); return; }
+  let covered = 0, ok2 = true;
+  rows.forEach((r) => {
+    const f = /from:\s*(\d+)/.exec(r), t = /to:\s*(\d+)/.exec(r);
+    if (!f || !t) { ok2 = false; return; }
+    covered += (+t[1] - +f[1] + 1);
+  });
+  if (!ok2) { bad('PROG: a phase is missing its from/to'); return; }
+  if (covered === 15) ok('PROG: five phases cover exactly 15 weeks, no gap and no overlap');
+  else bad(`PROG: phases cover ${covered} weeks, not 15 — a week with no phase has no targets at all`);
+})();
 
 // ── Label scanner: HOW MANY EXITS does the photo have? ──────────────────────
 // Peptides' question, answered while the feature is being designed rather than

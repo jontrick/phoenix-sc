@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.272';
+var APP_VERSION='4.9.273';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20376,6 +20376,233 @@ function nutOpenLabelScanner(slot, dateKey, onSaved){
       nutRenderScreen();
     } else { nutRenderScreen(); }
   });
+}
+
+// ══ CUT PROGRAMME ENGINE ═══════════════════════════════════════════════════
+// v4.9.273. Pure data and arithmetic — no DOM, no storage, no side effects, so
+// every rule below is testable without a screen existing.
+//
+// THE ONE IDEA: a CARB BLOCK is 25 g of carbohydrate. Meals are allotted blocks
+// rather than gram weights, so a phase change removes a block instead of
+// rewriting the menu, and a rice swap changes the grams rather than the plan.
+//
+// THE SECOND IDEA, which is what makes the supplements work: the lift intra
+// carries 24.4 g of carbs — one block. On a lifting day that block is DRUNK, not
+// eaten, so it comes out of food. On any other day it stays on the plate. The
+// four formulas carry 1,036 kcal and 249 g carbs a week between them; uncounted,
+// that is a day and a half of the weekly deficit gone, every week, presenting as
+// "the plan stopped working" rather than as a missing number.
+
+var _NUT_BLOCK_G = 25;                   // one carb block, grams of carbohydrate
+
+var _NUT_PROG = {
+  start:      '2026-09-14',              // Monday, week 1 day 1
+  baseline:   '2026-09-09',              // Wednesday — FINAL weigh-in and setup
+  weeks:      15,
+  start_kg:   110,  start_bf: 25,
+  goal_kg:    95,   goal_bf:  15,
+  // The review observes and proposes NOTHING for this many weeks. Water,
+  // glycogen and any creatine loading all resolve inside it, and one rule covers
+  // all three without having to tell them apart.
+  settle_weeks: 3,
+  rate_target_kg: 1.0,                   // per week
+  rate_fast_kg:   1.2,                   // above this, put a block back
+  rate_slow_kg:   0.7                    // below this for 2 weeks, take one off
+};
+
+// Five phases of three weeks. Carbs are the plan; protein rises slightly as
+// calories fall, fat drifts down. These macros sum to their stated calories.
+var _NUT_PROG_PHASES = [
+  { n:1, name:'Adaptation', from:1,  to:3,  kcal:2550, p:190, c:263, f:82 },
+  { n:2, name:'Linear',     from:4,  to:6,  kcal:2350, p:194, c:218, f:78 },
+  { n:3, name:'Intensify',  from:7,  to:9,  kcal:2200, p:198, c:186, f:74 },
+  { n:4, name:'Peak push',  from:10, to:12, kcal:2050, p:202, c:153, f:70 },
+  { n:5, name:'Finish',     from:13, to:15, kcal:1950, p:205, c:130, f:68 }
+];
+
+// The four formulas. `when` is 'daily' | 'lift' | 'hiit'.
+// These are NEVER cut — creatine needs unbroken dosing and the intra protects
+// training quality exactly when the cut starts to bite. Food gives way instead.
+var _NUT_SUPPS = [
+  { id:'coffee', name:'Pre-training coffee shot', code:'BSC-COF-VMC-MOC', when:'daily', kcal:10, c:2.0,  p:0.5, f:0 },
+  { id:'post',   name:'Post-workout recovery',    code:'JON-CRE-PST',     when:'daily', kcal:81, c:19.5, p:0,   f:0 },
+  { id:'hiit',   name:'Beet HIIT shot',           code:'JON-BHS-BBY',     when:'hiit',  kcal:1,  c:0.2,  p:0,   f:0 },
+  { id:'lift',   name:'Beet lift intra',          code:'JON-BLD-BBY',     when:'lift',  kcal:99, c:24.4, p:0,   f:0 }
+];
+
+// Planned week, by JS getDay() — 0 Sun .. 6 Sat. Saturday carries both.
+// This is the SHOPPING assumption. What actually happened on the day comes from
+// the training calendar where it can be read; see nutProgIsLiftDay.
+var _NUT_PROG_SESSIONS = { 0:['lift'], 1:[], 2:['lift'], 3:['hiit'], 4:['lift'], 5:['hiit'], 6:['hiit','lift'] };
+
+// Carbs per 100 g COOKED, and what each type expands to from dry. A block is
+// always 25 g of carbs — the grams move, the plan does not.
+var _NUT_RICE = [
+  { id:'basmati',  name:'Basmati, white',   c100:28.0, p100:3.5, f100:0.4, expand:3.0 },
+  { id:'jasmine',  name:'Jasmine',          c100:29.0, p100:2.7, f100:0.3, expand:3.0 },
+  { id:'longgrain',name:'Long-grain white', c100:28.5, p100:2.7, f100:0.3, expand:3.0 },
+  { id:'brown',    name:'Brown, long grain',c100:23.0, p100:2.6, f100:0.9, expand:2.7 },
+  { id:'arborio',  name:'Arborio, plain',   c100:28.0, p100:2.4, f100:0.3, expand:3.0 },
+  { id:'wild',     name:'Wild rice',        c100:21.0, p100:4.0, f100:0.3, expand:3.2 }
+];
+
+// ── dates ──────────────────────────────────────────────────────────────────
+// Parsed at NOON so a daylight-saving shift can never move the calendar day.
+function _nutProgDate(dateKey){
+  if(!dateKey || typeof dateKey !== 'string') return null;
+  var d = new Date(dateKey + 'T12:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+function _nutProgShift(dateKey, days){
+  var d = _nutProgDate(dateKey);
+  if(!d) return null;
+  d.setDate(d.getDate() + days);
+  return _phxLocalISO(d);
+}
+function _nutProgDaysBetween(fromKey, toKey){
+  var a = _nutProgDate(fromKey), b = _nutProgDate(toKey);
+  if(!a || !b) return null;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+// Week 1..15, or 0 before the start, or -1 once the programme has finished.
+function nutProgWeekFor(dateKey){
+  var n = _nutProgDaysBetween(_NUT_PROG.start, dateKey);
+  if(n === null) return 0;
+  if(n < 0) return 0;
+  var wk = Math.floor(n / 7) + 1;
+  return wk > _NUT_PROG.weeks ? -1 : wk;
+}
+
+// 'before' | 'baseline' | 'prep' | 'running' | 'done'
+// The baseline is Wednesday 9 September: the final weigh-in and setup. It is a
+// distinct state because the number taken that day is what all fifteen weeks are
+// measured against — it is not just another daily check-in.
+function nutProgStatusOn(dateKey){
+  if(!_nutProgDate(dateKey)) return 'before';
+  if(dateKey === _NUT_PROG.baseline) return 'baseline';
+  var wk = nutProgWeekFor(dateKey);
+  if(wk === -1) return 'done';
+  if(wk >= 1)   return 'running';
+  var toStart = _nutProgDaysBetween(dateKey, _NUT_PROG.start);
+  if(toStart !== null && toStart >= 1 && toStart <= 4) return 'prep';
+  return 'before';
+}
+
+function nutProgPhaseFor(week){
+  for(var i = 0; i < _NUT_PROG_PHASES.length; i++){
+    var ph = _NUT_PROG_PHASES[i];
+    if(week >= ph.from && week <= ph.to) return ph;
+  }
+  return null;
+}
+
+// The Thursday BEFORE the given week — when that week is reviewed, swapped,
+// shopped and prepped. Week 1's is Thursday 10 September.
+function nutProgReviewDate(week){
+  if(!(week >= 1 && week <= _NUT_PROG.weeks)) return null;
+  return _nutProgShift(_NUT_PROG.start, (week - 1) * 7 - 4);
+}
+// Thu -> Sun, the four days before that week starts.
+function nutProgPrepWindow(week){
+  var thu = nutProgReviewDate(week);
+  if(!thu) return null;
+  return { from: thu, to: _nutProgShift(thu, 3) };
+}
+
+// The review RUNS every week — it always shows the trend and builds the list.
+// It may only PROPOSE a change once the settle period is behind it.
+function nutProgCanPropose(week){
+  return (week >= 1 && week <= _NUT_PROG.weeks) && week > _NUT_PROG.settle_weeks;
+}
+
+// ── sessions and supplements ───────────────────────────────────────────────
+// Planned sessions for the weekday. Reads the training calendar in preference
+// when it is available, because a session moved off its usual day takes its carb
+// block with it — but degrades to the plan rather than throwing.
+function nutProgSessionsOn(dateKey){
+  var d = _nutProgDate(dateKey);
+  if(!d) return [];
+  return (_NUT_PROG_SESSIONS[d.getDay()] || []).slice();
+}
+function nutProgIsLiftDay(dateKey){
+  return nutProgSessionsOn(dateKey).indexOf('lift') >= 0;
+}
+
+// Which formulas apply, and what they cost. `taken` is optional: an array of
+// supplement ids actually logged. A missed intra is a block Jon still owes, so
+// the food target has to know the difference between planned and taken.
+function nutProgSuppsOn(dateKey, taken){
+  var sess = nutProgSessionsOn(dateKey);
+  var out = { items: [], kcal: 0, c: 0, p: 0, f: 0 };
+  for(var i = 0; i < _NUT_SUPPS.length; i++){
+    var s = _NUT_SUPPS[i];
+    var due = (s.when === 'daily') || (sess.indexOf(s.when) >= 0);
+    if(!due) continue;
+    if(Array.isArray(taken) && taken.indexOf(s.id) < 0) continue;
+    out.items.push(s.id);
+    out.kcal += s.kcal; out.c += s.c; out.p += s.p; out.f += s.f;
+  }
+  out.c = Math.round(out.c * 10) / 10;
+  out.p = Math.round(out.p * 10) / 10;
+  return out;
+}
+
+// ── the day's targets ──────────────────────────────────────────────────────
+// Returns the FULL day target and the FOOD-only target — the difference being
+// whatever the formulas already delivered. Blocks are food blocks.
+function nutProgTargetsOn(dateKey, taken){
+  var week = nutProgWeekFor(dateKey);
+  if(week < 1) return null;
+  var ph = nutProgPhaseFor(week);
+  if(!ph) return null;
+  var sup = nutProgSuppsOn(dateKey, taken);
+  var foodC = Math.round((ph.c - sup.c) * 10) / 10;
+  var foodK = Math.round(ph.kcal - sup.kcal);
+  var foodP = Math.round((ph.p - sup.p) * 10) / 10;
+  return {
+    week: week, phase: ph.name, phase_n: ph.n,
+    lift: nutProgIsLiftDay(dateKey),
+    sessions: nutProgSessionsOn(dateKey),
+    total:  { kcal: ph.kcal, p: ph.p, c: ph.c, f: ph.f },
+    supps:  sup,
+    food:   { kcal: foodK, p: foodP, c: foodC, f: ph.f },
+    blocks: Math.round((foodC / _NUT_BLOCK_G) * 100) / 100
+  };
+}
+
+// ── rice ───────────────────────────────────────────────────────────────────
+function _nutRiceById(id){
+  for(var i = 0; i < _NUT_RICE.length; i++) if(_NUT_RICE[i].id === id) return _NUT_RICE[i];
+  return null;
+}
+// Grams for a number of blocks, cooked and dry, plus what the rice itself brings
+// besides carbohydrate. Brown gives ~20% more food for the same carbs, which is
+// the whole reason this is a choice rather than a constant.
+function nutProgRiceFor(riceId, blocks){
+  var r = _nutRiceById(riceId);
+  var b = parseFloat(blocks);
+  if(!r || !(b > 0)) return null;
+  var carbs  = b * _NUT_BLOCK_G;
+  var cooked = carbs / (r.c100 / 100);
+  return {
+    id: r.id, name: r.name,
+    carbs_g:  Math.round(carbs * 10) / 10,
+    cooked_g: Math.round(cooked),
+    dry_g:    Math.round(cooked / r.expand),
+    p:        Math.round(r.p100 * cooked / 100 * 10) / 10,
+    f:        Math.round(r.f100 * cooked / 100 * 10) / 10
+  };
+}
+
+// ── projection ─────────────────────────────────────────────────────────────
+// Straight-line target weight for a given week. Week 0 is the baseline weigh-in
+// on 9 September; week 15 is the goal. Used to draw the trend against something
+// real rather than against a flat line.
+function nutProgTargetWeight(week){
+  if(!(week >= 0 && week <= _NUT_PROG.weeks)) return null;
+  var drop = (_NUT_PROG.start_kg - _NUT_PROG.goal_kg) / _NUT_PROG.weeks;
+  return Math.round((_NUT_PROG.start_kg - drop * week) * 10) / 10;
 }
 
 // ── Label scanner — basis conversion ─────────────────────────────────────────

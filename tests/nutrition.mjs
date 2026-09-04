@@ -902,6 +902,162 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(comps[0].n, 'Oats', 'and it is the scanned food');
   });
 
+  // ══ CUT PROGRAMME ENGINE ═════════════════════════════════════════════════
+  // Pure arithmetic, so these are exact rather than approximate. Fixed dates
+  // throughout — a programme keyed to real calendar days must never be tested
+  // against "today", which is how this file's future-day cases decayed before.
+
+  test('PROG the baseline weigh-in is its own state, not just another check-in', () => {
+    setUp(110);
+    assert.equal(app.nutProgStatusOn('2026-09-09'), 'baseline',
+      'Wed 9 Sept is the FINAL weigh-in and setup — the number all 15 weeks are measured against');
+    assert.equal(app.nutProgStatusOn('2026-09-08'), 'before', 'the day before is not');
+    assert.equal(app.nutProgWeekFor('2026-09-09'), 0, 'and it is not week 1');
+  });
+
+  test('PROG the prep window is Thursday to Sunday before week 1', () => {
+    setUp(110);
+    ['2026-09-10','2026-09-11','2026-09-12','2026-09-13'].forEach((d) => {
+      assert.equal(app.nutProgStatusOn(d), 'prep', d + ' is shop-and-prep');
+    });
+    const w = app.nutProgPrepWindow(1);
+    assert.equal(w.from, '2026-09-10', 'prep opens Thursday');
+    assert.equal(w.to,   '2026-09-13', 'and closes Sunday');
+  });
+
+  test('PROG week boundaries land on Mondays and the programme ends 27 Dec', () => {
+    setUp(110);
+    assert.equal(app.nutProgWeekFor('2026-09-14'), 1,  'Mon 14 Sept is day one');
+    assert.equal(app.nutProgWeekFor('2026-09-20'), 1,  'Sunday still week 1');
+    assert.equal(app.nutProgWeekFor('2026-09-21'), 2,  'next Monday rolls the week');
+    assert.equal(app.nutProgWeekFor('2026-12-27'), 15, 'Sun 27 Dec is the last day');
+    assert.equal(app.nutProgWeekFor('2026-12-28'), -1, 'Mon 28 Dec is past the end');
+    assert.equal(app.nutProgStatusOn('2026-12-28'), 'done', 'and reports done, not week 16');
+  });
+
+  test('PROG phases are five blocks of three weeks', () => {
+    setUp(110);
+    const seen = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((w) => app.nutProgPhaseFor(w).n);
+    assert.deepEqual(seen, [1,1,1,2,2,2,3,3,3,4,4,4,5,5,5], 'three weeks each, in order');
+    assert.equal(app.nutProgPhaseFor(1).name, 'Adaptation');
+    assert.equal(app.nutProgPhaseFor(15).name, 'Finish');
+  });
+
+  test('PROG every phase\'s macros add up to its stated calories', () => {
+    setUp(110);
+    app._NUT_PROG_PHASES.forEach((ph) => {
+      const fromMacros = ph.p * 4 + ph.c * 4 + ph.f * 9;
+      assert.equal(Math.abs(fromMacros - ph.kcal) <= 2, true,
+        ph.name + ': macros give ' + fromMacros + ' kcal but the phase says ' + ph.kcal +
+        ' — the source plan had this gap and it must not be inherited');
+    });
+  });
+
+  // ── the supplement rule, which is the whole reason this engine exists ──
+  test('PROG the lift intra IS a carb block — lift days get one less on the plate', () => {
+    setUp(110);
+    const tue = app.nutProgTargetsOn('2026-09-15');   // lift
+    const wed = app.nutProgTargetsOn('2026-09-16');   // HIIT
+    assert.equal(tue.lift, true,  'Tuesday lifts');
+    assert.equal(wed.lift, false, 'Wednesday does not');
+    assert.equal(tue.total.c, wed.total.c, 'the DAY target is identical — same plan, same carbs');
+    assert.equal(Math.round((wed.blocks - tue.blocks) * 100) / 100, 0.97,
+      'but the lift day eats ~1 block less, because 24.4 g of it arrived as HBCD');
+    assert.equal(tue.blocks < wed.blocks, true, 'drunk, not extra');
+  });
+
+  test('PROG the formulas cost 1,036 kcal and 249 g of carbs across a week', () => {
+    setUp(110);
+    let kcal = 0, carbs = 0;
+    ['2026-09-14','2026-09-15','2026-09-16','2026-09-17','2026-09-18','2026-09-19','2026-09-20']
+      .forEach((d) => { const s = app.nutProgSuppsOn(d); kcal += s.kcal; carbs += s.c; });
+    assert.equal(kcal, 1036, 'a day and a half of the weekly deficit, if left uncounted');
+    assert.equal(Math.round(carbs), 249, 'and 249 g of carbs');
+  });
+
+  test('PROG Saturday carries both a HIIT shot and a lift intra', () => {
+    setUp(110);
+    const sat = app.nutProgSuppsOn('2026-09-19');
+    assert.deepEqual(sat.items.sort(), ['coffee','hiit','lift','post'],
+      'AM conditioning and PM strength — all four formulas on one day');
+    assert.equal(app.nutProgIsLiftDay('2026-09-19'), true, 'and it counts as a lift day for the block');
+  });
+
+  test('PROG the post-workout drink is taken on the REST day too', () => {
+    setUp(110);
+    const mon = app.nutProgSuppsOn('2026-09-14');    // rest
+    assert.equal(mon.items.indexOf('post') >= 0, true,
+      'creatine saturation needs unbroken daily dosing — skipping rest days breaks it');
+    assert.equal(mon.items.indexOf('lift'), -1, 'but no intra without a lift');
+    assert.equal(mon.kcal, 91, 'coffee plus post-workout only');
+  });
+
+  test('PROG a MISSED intra puts the block back on the plate', () => {
+    setUp(110);
+    const planned = app.nutProgTargetsOn('2026-09-15');
+    const missed  = app.nutProgTargetsOn('2026-09-15', ['coffee','post']);   // intra not taken
+    assert.equal(missed.blocks > planned.blocks, true,
+      'a block he did not drink is a block he still owes — the day must not come in short');
+    assert.equal(Math.round((missed.blocks - planned.blocks) * 100) / 100, 0.98,
+      'and it is the same one block, returned');
+  });
+
+  // ── the review ──
+  test('PROG the review is the Thursday before the week it reviews', () => {
+    setUp(110);
+    assert.equal(app.nutProgReviewDate(1), '2026-09-10', 'week 1 is reviewed Thu 10 Sept');
+    assert.equal(app.nutProgReviewDate(4), '2026-10-01', 'week 4 on Thu 1 Oct');
+    assert.equal(app.nutProgReviewDate(15),'2026-12-17', 'week 15 on Thu 17 Dec');
+    assert.equal(app.nutProgReviewDate(16), null, 'and there is no week 16');
+  });
+
+  test('PROG the review proposes NOTHING for the first three weeks', () => {
+    setUp(110);
+    [1,2,3].forEach((w) => assert.equal(app.nutProgCanPropose(w), false,
+      'week ' + w + ' is inside the settle period — water, glycogen and creatine ' +
+      'loading all resolve here, and reacting to them is reacting to noise'));
+    assert.equal(app.nutProgCanPropose(4), true, 'week 4 is the first that may propose');
+    assert.equal(app.nutProgReviewDate(4), '2026-10-01', 'which happens on Thu 1 Oct');
+  });
+
+  // ── rice ──
+  test('PROG rice type changes the grams, never the blocks', () => {
+    setUp(110);
+    const b = 2.75;
+    const bas = app.nutProgRiceFor('basmati', b);
+    const brn = app.nutProgRiceFor('brown', b);
+    assert.equal(bas.carbs_g, brn.carbs_g, 'identical carbohydrate — that is the point');
+    assert.equal(bas.cooked_g, 246, 'basmati at 2.75 blocks');
+    assert.equal(brn.cooked_g, 299, 'brown at the same blocks');
+    assert.equal(brn.cooked_g - bas.cooked_g, 53,
+      '53 g more food for the same macros — worth having once the plate gets small');
+    assert.equal(bas.dry_g, 82, 'and the dry weight to cook from');
+  });
+
+  test('PROG rice refuses what it cannot compute rather than guessing', () => {
+    setUp(110);
+    assert.equal(app.nutProgRiceFor('quinoa', 2), null, 'unknown rice is not silently basmati');
+    assert.equal(app.nutProgRiceFor('basmati', 0), null, 'nor is zero blocks a portion');
+    assert.equal(app.nutProgRiceFor('basmati', -1), null, 'nor a negative one');
+  });
+
+  // ── projection ──
+  test('PROG the projection runs from the baseline to the goal', () => {
+    setUp(110);
+    assert.equal(app.nutProgTargetWeight(0),  110, 'week 0 is the 9 Sept weigh-in');
+    assert.equal(app.nutProgTargetWeight(15), 95,  'week 15 is the goal');
+    assert.equal(app.nutProgTargetWeight(5),  105, 'roughly 105 kg at week 5');
+    assert.equal(app.nutProgTargetWeight(10), 100, 'and 100 kg at week 10');
+  });
+
+  test('PROG nothing outside the programme returns a target', () => {
+    setUp(110);
+    assert.equal(app.nutProgTargetsOn('2026-09-13'), null, 'the day before it starts');
+    assert.equal(app.nutProgTargetsOn('2026-12-28'), null, 'the day after it ends');
+    assert.equal(app.nutProgTargetsOn('not-a-date'), null, 'and junk is not week 1');
+    assert.equal(app.nutProgTargetsOn(null), null, 'nor is nothing');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

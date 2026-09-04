@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.265';
+var APP_VERSION='4.9.266';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -26705,12 +26705,49 @@ function pepApplyPhase(id){
   if(!v.ok) return {ok:false, problems:v.problems};
   var uid = currentSession && currentSession.user && currentSession.user.id;
   if(uid){ try { _pepBackupLocal("peptide_v1_" + uid, JSON.stringify(ps)); } catch(_e){} }
+
+  // v4.9.266: a COUNTED compound keeps its stock across a phase change.
+  //
+  // This replaced ps.stacks wholesale, so applying a phase destroyed a stock
+  // take. Jon counted his stock and I twice told him to apply Phase 2 — which
+  // silently overwrote what he had counted with the plan-time figures I had
+  // transcribed from his handoff document.
+  //
+  // Same invariant as everywhere else in this domain: the phase is an
+  // INTENTION, the fridge is a FACT. A phase defines dose, schedule and
+  // reconstitution. It does not get to tell him how many vials he owns.
+  //
+  // Precedence: his count wins wherever stockCounted is true. A phase's stock
+  // figure is a guess made when the phase was written; his is a thing he
+  // physically did. Where he has NOT counted, the phase's figure stands —
+  // better than nothing, and still flagged uncounted so the gate keeps asking.
+  var KEEP = ["sealedVials","openedDate","openVialMg","openWaterMl","openUsedAmt",
+              "openDosesUsed","stockCounted","actualVialMg",
+              "onOrder","arrivalDate","onOrderVials","onOrderVialMg"];
+  var prior = {};
+  (ps.stacks || []).forEach(function(st){ if(st && st.compoundId) prior[st.compoundId] = st; });
+  var carried = 0;
+  v.entries.forEach(function(st){
+    var was = prior[st.compoundId];
+    if(was && was.stockCounted === true){
+      KEEP.forEach(function(k){ if(was[k] !== undefined) st[k] = was[k]; });
+      carried++;
+      return;
+    }
+    // A stock figure that came from the PHASE is not a count. The importer
+    // treats "has sealedVials" as counted, which is right for a paste where he
+    // typed his own numbers and wrong for a phase where I transcribed them from
+    // a document. Left as-is, applying Phase 2 marked six compounds counted that
+    // he had never counted — the readiness gate partly satisfied by my typing.
+    st.stockCounted = false;
+  });
+
   ps.stacks = v.entries;
   ps.activePhase = ph.id;
   ps.historyConfirmed = false;   // a different protocol has a different history
   pepSaveState(ps);
   if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
-  return {ok:true, applied:v.entries.length, name:ph.name};
+  return {ok:true, applied:v.entries.length, name:ph.name, stockKept:carried};
 }
 
 // Build a phase from what is on screen now. This is how the next phase gets

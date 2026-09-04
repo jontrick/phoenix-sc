@@ -20,8 +20,14 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.
-- [ ] JON — Peptide stock figures. PEPTIDES is blocked on these; it has no DB access and
-      localStorage is on his phone, so Import/Export (v4.9.252) is the only route in.
+- [ ] JON — Peptide stock: RE-CHECK the counts on STOCK after updating to v4.9.266.
+      NOT an export request — that was the wrong ask and PEPTIDES has withdrawn it. He
+      has done a full stock take; the problem was that the app was throwing it away.
+      `pepApplyPhase` replaced ps.stacks wholesale, so applying a phase overwrote counted
+      stock with the phase's plan-time figures — and he was told to apply Phase 2 twice.
+      Fixed v4.9.266: a compound with `stockCounted === true` keeps sealedVials, the open
+      vial and its mix date across a phase change. The PLAN still comes from the phase.
+      Closes when he confirms the STOCK numbers read what he counted.
 - [ ] JON — Reconstitution: only `bpc157` is marked CONFIRMED BY JON. The other 16 entries
       in `_PEP_RECON` are transcribed from Peptide_Protocol_2026_27.pdf and unconfirmed
       against a real vial. Two have already been wrong in opposite directions. Closes
@@ -95,6 +101,15 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       document does not. Only the repo one is authoritative. If summaries are being kept
       outside the repo, they are a second copy of a thing that must have one. Closes when
       whoever maintains it either drops it or points it at the repo file.
+
+## RESOLVED SINCE THE LAST BOARD
+
+- **A phase's stock figures were being treated as a COUNT.** The importer sets
+  `stockCounted` from the presence of `sealedVials` — right for a paste where Jon typed his
+  own numbers, wrong for a phase where PEPTIDES transcribed them from a document. Applying
+  Phase 2 marked SIX of thirteen compounds counted that he had never counted, so the
+  readiness gate was partly satisfied by transcription. Fixed v4.9.266: a phase-supplied
+  figure never sets `stockCounted`.
 
 ## ??? — GAPS. Things nobody currently knows.
 

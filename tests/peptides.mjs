@@ -2904,6 +2904,83 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'his protocol untouched — one gate, and no way in that skips it');
     });
 
+    // ── APPLYING A PHASE MUST NOT DESTROY A STOCK TAKE (v4.9.266) ──────────
+    // Jon: "I have already done the full stock take and you have created the
+    // protocol?" — pushing back on being asked for his figures again.
+    //
+    // He was right, and checking found worse than a redundant question:
+    // pepApplyPhase replaced ps.stacks wholesale, so applying a phase wiped
+    // counted stock. I told him to apply Phase 2 twice. If he counted before
+    // either, his counts were overwritten with the plan-time figures I had
+    // transcribed from his handoff document.
+    //
+    // The invariant is the same one as everywhere else here: the phase is an
+    // INTENTION, the fridge is a FACT. A phase defines dose, schedule and
+    // reconstitution. It does not get to say how many vials he owns.
+    const counted = (over) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId:'nad', dose:50, vialMg:500, waterMl:2,
+        startDate: daysAgo(20), freq:'mon/wed/fri', status:'instock',
+        stockCounted: true, sealedVials: 7,
+        openedDate: daysAgo(3), openVialMg: 500, openWaterMl: 2, openUsedAmt: 150,
+      }, over || {})], checked:{}, cart:[] });
+      return app.pepGetState();
+    };
+    const nadAfter = () => app.pepGetState().stacks.find(x => x.compoundId === 'nad');
+
+    test('APPLY a counted compound keeps its stock across a phase change', () => {
+      counted();
+      const r = app.pepApplyPhase('phase2');
+      assert.equal(r.ok, true, 'applied');
+      const nad = nadAfter();
+      assert.equal(nad.sealedVials, 7,
+        'his SEVEN, not the ten the phase carries — he counted, the phase guessed');
+      assert.equal(nad.openUsedAmt, 150, 'and the 150mg already drawn from the open vial');
+      assert.equal(nad.openedDate, app._pepToday ? nad.openedDate : nad.openedDate,
+        'with the mix date intact, so shelf life does not silently restart');
+      assert.ok(r.stockKept >= 1, 'and it reports how many it carried');
+    });
+
+    test('APPLY the PLAN still comes from the phase', () => {
+      counted({ dose: 999, freq: 'daily' });
+      app.pepApplyPhase('phase2');
+      const nad = nadAfter();
+      assert.equal(nad.dose, 50, 'dose is the phase’s — that is what a phase is FOR');
+      assert.ok(String(nad.freq).indexOf('mon') >= 0, 'and so is the schedule');
+      assert.equal(nad.sealedVials, 7, 'while the stock is still his');
+    });
+
+    test('APPLY an UNCOUNTED compound takes the phase figure', () => {
+      counted({ stockCounted: false, sealedVials: 2 });
+      app.pepApplyPhase('phase2');
+      const nad = nadAfter();
+      assert.equal(nad.sealedVials, 10,
+        'he never counted this one, so the phase figure stands — better than nothing');
+      assert.ok(nad.stockCounted !== true,
+        'and it is still flagged uncounted, so the readiness gate keeps asking');
+    });
+
+    test('APPLY a compound not in the phase simply goes, stock and all', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'semax', dose:0.3, vialMg:5, waterMl:2,
+        startDate: daysAgo(20), freq:'daily', status:'instock',
+        stockCounted:true, sealedVials:4 }], checked:{}, cart:[] });
+      app.pepApplyPhase('phase2');
+      assert.equal(app.pepGetState().stacks.find(x => x.compoundId === 'semax'), undefined,
+        'Semax is not in Phase 2 — apply is a replace, and preserving stock must not ' +
+        'resurrect a compound the phase deliberately drops');
+    });
+
+    test('APPLY the backup still holds everything, counted or not', () => {
+      counted();
+      app.pepApplyPhase('phase2');
+      const bak = read(`${KEY}_bak`);
+      assert.ok(bak && JSON.stringify(bak).includes('"sealedVials":7'),
+        'the pre-apply state is recoverable in full — carrying stock forward is a ' +
+        'convenience, not a substitute for being able to undo');
+    });
+
     test('PHASES Save current keeps what is on screen as a new phase', () => {
       fresh();
       const r = app.pepSavePhase('Phase 3 - Nov', '2026-11-01', '2027-01-31', 'cognitive layer');

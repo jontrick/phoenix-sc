@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.283';
+var APP_VERSION='4.9.284';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20875,7 +20875,7 @@ function nutProgMealsOn(dateKey, riceId){
         }
       }
       if(!mac) mac = _nutProgItemMacros(it, grams);
-      items.push({ n:name, g:grams, u:unit, carb:!!it.carb,
+      items.push({ n:name, g:grams, u:unit, carb:!!it.carb, count:!!it.count,
                    k:Math.round(mac.k), p:Math.round(mac.p*10)/10,
                    c:Math.round(mac.c*10)/10, f:Math.round(mac.f*10)/10 });
       K += mac.k; P += mac.p; C += mac.c; F += mac.f;
@@ -20886,6 +20886,39 @@ function nutProgMealsOn(dateKey, riceId){
                blocks: Math.round((C / _NUT_BLOCK_G) * 100) / 100 });
   }
   return out;
+}
+
+// v4.9.284 — Jon: '"2 g Rice cakes" should display as "2 rice cakes"' and
+// '"60 dry Oats" should display as "60 g dry Oats"'.
+//
+// Both came from one expression: `it.g + (it.u || ' g') + ' ' + it.n`, which overloads
+// the `u` field two ways at once.
+//
+//   `u` EMPTY means "no unit given, so use grams" — but a COUNT item (rice cakes, where
+//   g:[2,1,0,0,0] is 2 cakes, not 2 grams) also has an empty `u`, so it rendered as
+//   "2 g Rice cakes". The row already carries count:true; nothing consulted it.
+//
+//   `u` SET means "use this INSTEAD of grams" — correct for ' ml', wrong for ' dry' and
+//   ' cooked', which are STATE QUALIFIERS on a gram weight. So oats lost their unit
+//   entirely and read "60 dry Oats".
+//
+// So the field conflates a UNIT with a QUALIFIER, and empty conflates "grams" with
+// "none". Three cases, named:
+//   count      -> no unit at all          2 Rice cakes
+//   volume     -> replaces grams          13 ml Olive oil
+//   qualifier  -> follows grams           60 g dry Oats  /  135 g cooked Chicken breast
+//   (default)  -> grams                   200 g Greek yoghurt, 0%
+//
+// The shopping list ten lines below already got this right — it branches on row.count
+// and row.piece. This line reimplemented the rule and lost both.
+var _NUT_VOLUME_UNITS = [' ml'];
+function _nutProgItemLabel(it){
+  if(!it) return '';
+  var qty = it.g;
+  if(it.count) return qty + ' ' + it.n;                        // 2 Rice cakes
+  var u = it.u || '';
+  if(_NUT_VOLUME_UNITS.indexOf(u) >= 0) return qty + u + ' ' + it.n;   // 13 ml Olive oil
+  return qty + ' g' + u + ' ' + it.n;                          // 60 g dry Oats
 }
 
 // Day totals actually delivered by the plate above — used to prove the table
@@ -21056,7 +21089,7 @@ function _nutProgTodayCard(){
     var on = !!done[m.id];
     var line = m.supp
       ? (m.code || '')
-      : m.items.map(function(it){ return it.g + (it.u || ' g') + ' ' + it.n; }).join(' &middot; ');
+      : m.items.map(_nutProgItemLabel).join(' &middot; ');
     h += '<div data-prog-tick="' + m.id + '" style="display:flex;gap:10px;align-items:flex-start;padding:10px 11px;background:var(--bg2);border:1px solid ' + (m.supp ? 'rgba(200,150,62,0.35)' : 'var(--border)') + ';border-radius:9px;margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
       '<div style="width:19px;height:19px;border-radius:50%;flex-shrink:0;margin-top:2px;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;">' + (on ? '&#10003;' : '') + '</div>' +
       '<div style="flex:1;min-width:0;">' +

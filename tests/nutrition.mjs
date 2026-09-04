@@ -2791,4 +2791,62 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutCopyDay(days[0], [days[0]]), 0, 'self-copy is a no-op');
     assert.equal(app.nutCopyDay(days[5], [days[6]]), 0, 'empty source is a no-op');
   });
+
+  // ── PLATE ITEM LABELS (v4.9.284) ─────────────────────────────────────────
+  // Jon: '"2 g Rice cakes" should display as "2 rice cakes"' and '"60 dry Oats" should
+  // display as "60 g dry Oats"'.
+  //
+  // One expression caused both: `it.g + (it.u || ' g') + ' ' + it.n`. It overloads `u`
+  // twice over — empty means "use grams" AND "no unit" (count rows), while a set value
+  // means "instead of grams" (' ml') AND "as well as grams" (' dry', ' cooked').
+  //
+  // Written by TRAINING against Nutrition's code at Jon's direct request — flagged in
+  // the commit and here. Invite revert.
+
+  test('LABEL: a count item has no unit at all', () => {
+    // Rice cakes: g:[2,1,0,0,0] is 2 CAKES. It rendered "2 g Rice cakes".
+    assert.equal(app._nutProgItemLabel({ n: 'Rice cakes', g: 2, u: '', count: true }),
+      '2 Rice cakes', 'the quantity is a count, not a weight');
+  });
+
+  test('LABEL: a state qualifier keeps the grams', () => {
+    // Oats: u:' dry' REPLACED the unit, so it read "60 dry Oats".
+    assert.equal(app._nutProgItemLabel({ n: 'Oats', g: 60, u: ' dry' }),
+      '60 g dry Oats', 'dry describes the grams, it does not replace them');
+    assert.equal(app._nutProgItemLabel({ n: 'Chicken breast', g: 135, u: ' cooked' }),
+      '135 g cooked Chicken breast', 'and the same for cooked');
+  });
+
+  test('LABEL: a volume unit DOES replace the grams', () => {
+    // The case the old expression got right, and which must not regress — this is why
+    // the fix is a named branch and not "always append g".
+    assert.equal(app._nutProgItemLabel({ n: 'Olive oil', g: 13, u: ' ml' }),
+      '13 ml Olive oil', 'ml is a unit, not a qualifier');
+  });
+
+  test('LABEL: a plain gram item is unchanged', () => {
+    assert.equal(app._nutProgItemLabel({ n: 'Greek yoghurt, 0%', g: 200, u: '' }),
+      '200 g Greek yoghurt, 0%', 'the ordinary case still reads the same');
+  });
+
+  test('LABEL: count wins over any unit, and nothing throws on a junk row', () => {
+    assert.equal(app._nutProgItemLabel({ n: 'X', g: 3, u: ' ml', count: true }), '3 X',
+      'a count row is a count row');
+    assert.equal(app._nutProgItemLabel(null), '', 'a missing row is empty, not a crash');
+  });
+
+  test('LABEL: the real plate renders rice cakes and oats correctly', () => {
+    // Drives the actual data rather than synthetic rows — the labels are only right if
+    // the real rows carry the flags the helper reads. count:true lives on the plate row,
+    // and had to be carried onto the built item before the label could ever see it.
+    const rows = app._NUT_PROG_PLATE || [];
+    const cakes = rows.find((r) => r.n === 'Rice cakes');
+    const oats = rows.find((r) => r.n === 'Oats');
+    assert.ok(cakes && oats, 'both rows exist in the plate');
+    assert.equal(cakes.count, true, 'rice cakes are flagged as a count item');
+    assert.equal(app._nutProgItemLabel({ n: cakes.n, g: cakes.g[0], u: cakes.u, count: cakes.count }),
+      '2 Rice cakes', 'phase 1 rice cakes');
+    assert.equal(app._nutProgItemLabel({ n: oats.n, g: oats.g[0], u: oats.u, count: !!oats.count }),
+      '60 g dry Oats', 'phase 1 oats');
+  });
 }

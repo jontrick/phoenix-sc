@@ -1003,12 +1003,33 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   });
 
   // ── the review ──
-  test('PROG the review is the Thursday before the week it reviews', () => {
+  test('PROG the review is the WEDNESDAY before the week it reviews', () => {
     setUp(110);
-    assert.equal(app.nutProgReviewDate(1), '2026-09-10', 'week 1 is reviewed Thu 10 Sept');
-    assert.equal(app.nutProgReviewDate(4), '2026-10-01', 'week 4 on Thu 1 Oct');
-    assert.equal(app.nutProgReviewDate(15),'2026-12-17', 'week 15 on Thu 17 Dec');
+    // Jon's request: decide the day before shopping opens, not the same morning.
+    assert.equal(app.nutProgReviewDate(1), '2026-09-09', 'week 1 is reviewed Wed 9 Sept');
+    assert.equal(app.nutProgReviewDate(4), '2026-09-30', 'week 4 on Wed 30 Sept');
+    assert.equal(app.nutProgReviewDate(15),'2026-12-16', 'week 15 on Wed 16 Dec');
     assert.equal(app.nutProgReviewDate(16), null, 'and there is no week 16');
+    [1,4,8,15].forEach((w) => {
+      const d = new Date(app.nutProgReviewDate(w) + 'T12:00:00');
+      assert.equal(d.getDay(), 3, 'week ' + w + ' review falls on a Wednesday');
+    });
+  });
+
+  test('PROG week 1\'s review IS the baseline weigh-in — one event, not two', () => {
+    setUp(110);
+    assert.equal(app.nutProgReviewDate(1), app._NUT_PROG.baseline,
+      'Wed 9 Sept is both the final weigh-in and the first review — setup happens once');
+    assert.equal(app.nutProgStatusOn('2026-09-09'), 'baseline', 'and it reports as the baseline');
+  });
+
+  test('PROG moving the review did NOT move shopping and prep', () => {
+    setUp(110);
+    const w = app.nutProgPrepWindow(1);
+    assert.equal(w.from, '2026-09-10', 'prep still opens Thursday');
+    assert.equal(w.to,   '2026-09-13', 'and still closes Sunday');
+    assert.equal(app.nutProgReviewDate(1) < w.from, true,
+      'the decision comes BEFORE the shop — that is the whole point of the move');
   });
 
   test('PROG the review proposes NOTHING for the first three weeks', () => {
@@ -1017,7 +1038,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'week ' + w + ' is inside the settle period — water, glycogen and creatine ' +
       'loading all resolve here, and reacting to them is reacting to noise'));
     assert.equal(app.nutProgCanPropose(4), true, 'week 4 is the first that may propose');
-    assert.equal(app.nutProgReviewDate(4), '2026-10-01', 'which happens on Thu 1 Oct');
+    assert.equal(app.nutProgReviewDate(4), '2026-09-30', 'which happens on Wed 30 Sept');
   });
 
   // ── rice ──

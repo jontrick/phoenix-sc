@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.273';
+var APP_VERSION='4.9.274';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20497,16 +20497,18 @@ function nutProgPhaseFor(week){
   return null;
 }
 
-// The Thursday BEFORE the given week — when that week is reviewed, swapped,
-// shopped and prepped. Week 1's is Thursday 10 September.
+// v4.9.274: the review is WEDNESDAY, the day before shopping opens — decide,
+// then shop, rather than deciding in the aisle. Week 1's falls on Wed 9 Sept,
+// which is also the baseline weigh-in, so setup and first review are one event.
 function nutProgReviewDate(week){
   if(!(week >= 1 && week <= _NUT_PROG.weeks)) return null;
-  return _nutProgShift(_NUT_PROG.start, (week - 1) * 7 - 4);
+  return _nutProgShift(_NUT_PROG.start, (week - 1) * 7 - 5);
 }
-// Thu -> Sun, the four days before that week starts.
+// Thu -> Sun. Unchanged by the review moving: shopping and prep still run the
+// four days before the week starts, they are just decided a day earlier.
 function nutProgPrepWindow(week){
-  var thu = nutProgReviewDate(week);
-  if(!thu) return null;
+  if(!(week >= 1 && week <= _NUT_PROG.weeks)) return null;
+  var thu = _nutProgShift(_NUT_PROG.start, (week - 1) * 7 - 4);
   return { from: thu, to: _nutProgShift(thu, 3) };
 }
 

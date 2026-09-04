@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.273'", 'version is 4.9.273');
+has("var APP_VERSION='4.9.274'", 'version is 4.9.274');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2910,6 +2910,7 @@ hasCode("code:'JON-CRE-PST',     when:'daily'",
 // Jon asked for three weeks before anything is proposed. That covers water,
 // glycogen and creatine loading in one rule.
 hasCode('settle_weeks: 3',            'PROG: the review proposes nothing before week 4');
+hasCode('(week - 1) * 7 - 5',          'PROG: the review is the WEDNESDAY before its week, not the Thursday');
 
 // Structural: five phases, three weeks each, covering exactly 15.
 (() => {

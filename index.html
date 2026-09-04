@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.285';
+var APP_VERSION='4.9.286';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19258,6 +19258,12 @@ function nutRenderScreen(){
       nutRenderScreen();
     });
   });
+  var swapOpen = body.querySelector('[data-nut-swap-open]');
+  if(swapOpen) swapOpen.addEventListener('click', function(e){
+    // Stop it reaching the meal-tick handler on the row behind.
+    e.stopPropagation();
+    nutOpenSwapSheet();
+  });
   var progCopy = body.querySelector('[data-prog-copy]');
   if(progCopy) progCopy.addEventListener('click', function(){
     var txt = nutProgListText(parseInt(progCopy.getAttribute('data-prog-copy'), 10));
@@ -21085,6 +21091,17 @@ function _nutProgTodayCard(){
        mac('protein', con.total.p, t.total.p) + mac('carbs', con.total.c, t.total.c) + mac('fat', con.total.f, t.total.f) +
        '</div>';
 
+  // The door. Shows the current choice so he can see at a glance what he is eating
+  // without opening it.
+  var _swNow = nutProgSwaps();
+  var _swL = _nutProgSwapOpt('lunch_protein', _swNow.lunch_protein);
+  var _swD = _nutProgSwapOpt('dinner_protein', _swNow.dinner_protein);
+  h += '<button data-nut-swap-open style="width:100%;padding:11px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;color:var(--text2);font-size:12px;cursor:pointer;touch-action:manipulation;text-align:left;">' +
+       '<span style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Substitutions</span>' +
+       '<span style="display:block;font-size:11px;color:var(--text3);margin-top:2px;">' +
+         (_swL ? _swL.n : 'Chicken breast') + ' &middot; ' + (_swD ? _swD.n : 'Salmon fillet') + ' &mdash; tap to swap' +
+       '</span></button>';
+
   // v4.9.285 — Jon's ruling: KEEP the stated label calories, and say why the two numbers
   // do not reconcile, rather than making them agree.
   //
@@ -21341,6 +21358,77 @@ function nutProgSwaps(){
   var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
   return (ns && ns.prog_swaps) ? ns.prog_swaps : {};
 }
+// v4.9.286 — Jon: "The meal list has no substitutions option. This was discussed as a
+// feature — the ability to swap a food item for an alternative within a meal."
+//
+// THE ENGINE WAS ALREADY BUILT AND UNREACHABLE. _NUT_PROG_SWAPS carries four proteins
+// per slot with full macros; _nutProgSwapOpt resolves a choice; nutProgSwapCompensation
+// adjusts the olive oil so the day still lands on its fat target; nutProgMealsOn already
+// renders whichever protein is chosen. All of it worked.
+//
+// nutProgSetSwap — the single function that RECORDS a choice — was defined and CALLED
+// FROM NOWHERE. Defined once, referenced never. So the feature existed in every sense
+// except the one that matters.
+//
+// Same shape as the shopping list ("existed only as a function. Jon could not open it",
+// .283), the orphaned BLAB backup, and _blabCalEntryView. This codebase's most common
+// defect is not broken code, it is finished code with no door.
+//
+// HANDOFF_5 specifies it: "Tap meal to: adjust quantities, swap a component, add notes".
+function nutOpenSwapSheet(){
+  var old = document.getElementById('nut-swap-sheet');
+  if(old) old.remove();
+  var cur = nutProgSwaps();
+  var h = '';
+  Object.keys(_NUT_PROG_SWAPS).forEach(function(slot){
+    var def = _NUT_PROG_SWAPS[slot];
+    var chosenId = cur[slot];
+    h += '<div style="margin-bottom:16px;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">' +
+         (slot === 'lunch_protein' ? 'Lunch protein' : 'Dinner protein') + '</div>';
+    def.opts.forEach(function(o){
+      var on = o.base ? (!chosenId || chosenId === o.id) : (chosenId === o.id);
+      h += '<div data-nut-swap="' + slot + '|' + o.id + '" style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+        '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;color:var(--text);">' + o.n + (o.base ? ' <span style="font-size:9px;color:var(--text3);font-weight:400;">default</span>' : '') + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + o.k + ' kcal &middot; P' + o.p + ' C' + o.c + ' F' + o.f + ' per 100 g</div>' +
+        '</div></div>';
+    });
+    h += '</div>';
+  });
+  // The portion is held constant and the fat is rebalanced elsewhere in the day, so a
+  // swap does not quietly move his macros. Saying so stops the swap looking risky.
+  h += '<div style="font-size:10px;line-height:1.5;color:var(--text3);text-align:center;padding:0 4px;">' +
+       'Portion stays the same. The day rebalances its fat around your choice, so the macros still land.' +
+       '</div>';
+
+  var ov = document.createElement('div');
+  ov.id = 'nut-swap-sheet';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9500;display:flex;align-items:flex-end;';
+  ov.innerHTML =
+    '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88%;">' +
+    '<div style="padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+      '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Substitutions</div>' +
+      '<button id="nut-swap-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
+    '</div>' +
+    '<div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 20px 20px;">' + h + '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  if(typeof _nutKeyboardSafe === 'function') _nutKeyboardSafe(ov);
+  ov.querySelector('#nut-swap-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  ov.querySelectorAll('[data-nut-swap]').forEach(function(row){
+    row.addEventListener('click', function(){
+      var parts = String(row.getAttribute('data-nut-swap')).split('|');
+      if(nutProgSetSwap(parts[0], parts[1])){
+        ov.remove();
+        if(typeof nutRenderScreen === 'function') nutRenderScreen();
+      }
+    });
+  });
+}
+
 function nutProgSetSwap(slot, id){
   if(!_nutProgSwapOpt(slot, id)) return false;
   var ns = nutGetState();
@@ -23038,6 +23126,67 @@ function nutOpenRecipePicker(slot, dateKey){
 }
 
 // ── WEEKLY PREP card ──────────────────────────────────────────────────────
+// v4.9.286 — Jon: "each day's full meal constitution for next week ... not just a
+// shopping list, but a day-by-day breakdown showing what each meal contains so he can
+// prep. This should be visible on the WEEKLY PREP screen."
+//
+// WEEKLY PREP already existed and worked, but it aggregates RECIPES he has assigned in
+// the PLAN tab — a different thing from the cut programme's fixed plate. The programme
+// already computes exactly what he wants, per day, through nutProgMealsOn(); nothing
+// ever displayed it across a week.
+//
+// So this is not a new calculation. It is the existing one, shown.
+//
+// HANDOFF_5 specifies "Weekly Meal Planner ... Feeds into daily Today view for the week".
+// This is the read-only half of that: what the week actually contains.
+function _nutProgWeekBreakdown(days){
+  if(typeof nutProgMealsOn !== 'function' || typeof nutProgStatusOn !== 'function') return '';
+  var rice = (typeof nutProgRiceChoice === 'function') ? nutProgRiceChoice() : null;
+  var rows = [], any = false;
+  for(var i = 0; i < days.length; i++){
+    var dk = days[i];
+    var st = nutProgStatusOn(dk);
+    // Only the days the programme actually governs. A day outside it is not "empty",
+    // it is not part of the plan, and saying so beats an blank row he has to interpret.
+    if(st !== 'running' && st !== 'trial'){ rows.push({ date: dk, off: true }); continue; }
+    var meals = nutProgMealsOn(dk, rice) || [];
+    if(!meals.length){ rows.push({ date: dk, off: true }); continue; }
+    any = true;
+    var k = 0, p = 0, c = 0, f = 0;
+    meals.forEach(function(m){ k += m.k || 0; p += m.p || 0; c += m.c || 0; f += m.f || 0; });
+    rows.push({ date: dk, meals: meals, k: Math.round(k), p: Math.round(p), c: Math.round(c), f: Math.round(f) });
+  }
+  if(!any) return '';
+
+  var h = '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:2px 0 8px;">What each day contains</div>';
+  rows.forEach(function(r){
+    var d = new Date(r.date + 'T12:00:00');
+    var dayName = d.toLocaleDateString('en-AU', { weekday: 'long' });
+    var dayDate = d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:' + (r.off ? '0' : '8px') + ';">' +
+         '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">' + dayName + '</div>' +
+         '<div style="font-size:10px;color:var(--text3);">' + dayDate + (r.off ? '' : (' &middot; ' + r.k + ' kcal &middot; P' + r.p + ' C' + r.c + ' F' + r.f)) + '</div>' +
+         '</div>';
+    if(r.off){
+      h += '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Not on the programme this day.</div>';
+    } else {
+      r.meals.forEach(function(m){
+        var line = m.supp ? (m.code || '') : m.items.map(_nutProgItemLabel).join(' &middot; ');
+        h += '<div style="padding:5px 0;border-top:1px solid var(--border);">' +
+             '<div style="display:flex;gap:7px;align-items:baseline;">' +
+               '<span style="font-size:10px;font-weight:700;color:var(--gold);flex-shrink:0;">' + m.time + '</span>' +
+               '<span style="font-size:12px;font-weight:600;color:var(--text);">' + m.name + '</span>' +
+             '</div>' +
+             (line ? '<div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:2px;">' + line + '</div>' : '') +
+             '</div>';
+      });
+    }
+    h += '</div>';
+  });
+  return h;
+}
+
 function nutOpenPrepCard(){
   var days = _nutSelectedWeekDays();
   var plan = nutBuildPrepPlan(days);
@@ -23110,6 +23259,18 @@ function nutOpenPrepCard(){
       body += '</div>';
     });
   }
+  // The programme week goes ABOVE the recipe prep plan: it is what he is prepping FOR,
+  // and it is the thing he asked to see. The recipe aggregator keeps working underneath
+  // for anything he has assigned himself.
+  var weekBreakdown = _nutProgWeekBreakdown(days);
+  if(weekBreakdown){
+    body = weekBreakdown +
+      '<div style="height:1px;background:var(--border);margin:14px 0;"></div>' +
+      (plan.length
+        ? '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Recipes to batch</div>' + body
+        : '');
+  }
+
   var old = document.getElementById('nut-prep-card');
   if(old) old.remove();
   var ov = document.createElement('div');

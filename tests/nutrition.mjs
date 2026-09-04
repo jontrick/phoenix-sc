@@ -2872,4 +2872,91 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._nutProgItemLabel({ n: oats.n, g: oats.g[0], u: oats.u, count: !!oats.count }),
       '60 g dry Oats', 'phase 1 oats');
   });
+
+  // ── WEEK BREAKDOWN + SUBSTITUTIONS (v4.9.286) ────────────────────────────
+  // Jon: "each day's full meal constitution for next week ... on the WEEKLY PREP screen",
+  // and "The meal list has no substitutions option."
+  //
+  // The substitution ENGINE was already complete — four proteins per slot, macro
+  // compensation, the renderer already honouring the choice. nutProgSetSwap, the one
+  // function that records a choice, was defined and CALLED FROM NOWHERE. So these cases
+  // are mostly about REACHABILITY, which is this codebase's most common defect.
+
+  const PROG_WEEK = ['2026-09-14','2026-09-15','2026-09-16','2026-09-17','2026-09-18','2026-09-19','2026-09-20'];
+
+  test('WEEK: the breakdown lists every programme day with its meals', () => {
+    setUp(90);
+    const html = String(app._nutProgWeekBreakdown(PROG_WEEK) || '');
+    assert.ok(html.length > 400, 'it rendered at all — without this the checks below are vacuous');
+    ['Monday', 'Wednesday', 'Sunday'].forEach((d) => {
+      assert.ok(html.indexOf(d) >= 0, `${d} is in the breakdown`);
+    });
+  });
+
+  test('WEEK: each day shows what the meals actually CONTAIN, not just their names', () => {
+    // The whole point — he is prepping from this. A list of meal names would not help.
+    setUp(90);
+    const html = String(app._nutProgWeekBreakdown(PROG_WEEK) || '');
+    assert.ok(/Oats/.test(html), 'a named food appears');
+    assert.ok(/60 g dry Oats/.test(html), 'with its quantity, through the same label rule as the plate');
+    assert.ok(/kcal/.test(html), 'and each day carries its totals');
+  });
+
+  test('WEEK: a day outside the programme says so rather than rendering blank', () => {
+    // 2026-09-01 predates the programme start. An empty row would read as "no food".
+    setUp(90);
+    const html = String(app._nutProgWeekBreakdown(['2026-09-01']) || '');
+    assert.equal(html, '', 'a week entirely outside the programme renders nothing at all');
+  });
+
+  test('SWAP: recording a choice actually persists it', () => {
+    setUp(90);
+    assert.equal(app.nutProgSetSwap('lunch_protein', 'turkey'), true, 'the choice is accepted');
+    assert.equal(app.nutProgSwaps().lunch_protein, 'turkey', 'and stored');
+  });
+
+  test('SWAP: an unknown option is refused', () => {
+    setUp(90);
+    assert.equal(app.nutProgSetSwap('lunch_protein', 'unicorn'), false, 'refused');
+    assert.ok(!app.nutProgSwaps().lunch_protein, 'and nothing was written');
+  });
+
+  test('SWAP: the chosen protein reaches the plate', () => {
+    // The engine already did this. Pinned because the whole feature is only worth
+    // anything if the choice changes what he is told to eat.
+    setUp(90);
+    app.nutProgSetSwap('dinner_protein', 'cod');
+    const meals = app.nutProgMealsOn('2026-09-14', app.nutProgRiceChoice()) || [];
+    const dinner = meals.find((m) => m.id === 'dinner');
+    assert.ok(dinner, 'dinner exists');
+    const names = dinner.items.map((i) => i.n).join(' ');
+    assert.ok(/Cod/i.test(names), 'the swap shows on the plate');
+    assert.ok(!/Salmon/i.test(names), 'and the default is gone');
+  });
+
+  test('SWAP: the sheet is REACHABLE — a button exists and opens it', () => {
+    // nutProgSetSwap was defined and called from nowhere. The engine being correct was
+    // never the problem; there was no door. This drives the card and looks for one.
+    setUp(90);
+    const realToday = app._nutToday;
+    app._nutToday = () => '2026-09-14';
+    let html;
+    try { html = String(app._nutProgTodayCard() || ''); }
+    finally { app._nutToday = realToday; }
+    assert.ok(html.length > 200, 'the card rendered');
+    assert.ok(html.indexOf('data-nut-swap-open') >= 0, 'a substitutions control is on the meal list');
+    assert.ok(/Substitutions/i.test(html), 'and it is labelled');
+    assert.equal(typeof app.nutOpenSwapSheet, 'function', 'and the sheet it opens exists');
+  });
+
+  test('SWAP: the button shows the current choice without opening anything', () => {
+    setUp(90);
+    app.nutProgSetSwap('lunch_protein', 'beef5');
+    const realToday = app._nutToday;
+    app._nutToday = () => '2026-09-14';
+    let html;
+    try { html = String(app._nutProgTodayCard() || ''); }
+    finally { app._nutToday = realToday; }
+    assert.ok(/Beef mince/.test(html), 'the current pick is visible on the button');
+  });
 }

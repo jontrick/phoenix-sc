@@ -2235,6 +2235,160 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'programme owns Today, it does not replace it permanently');
   });
 
+  // ── the mid-morning dairy ────────────────────────────────────────────────
+  // v4.9.294. Same mechanism as the evening protein: sized to hold the PROTEIN,
+  // so the weight moves and the macro the plan defends does not.
+
+  const midamOn = (d) => (app.nutProgMealsOn(d, 'basmati') || []).filter((m) => m.id === 'midam')[0];
+
+  test('DAIRY cottage cheese is portioned to match the yoghurt\'s protein', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const before = midamOn(d).items.filter((it) => /yoghurt/i.test(it.n))[0];
+    app.nutProgSetNightly(d, 'midam_dairy', 'cottage');
+    const after = midamOn(d).items.filter((it) => /Cottage/i.test(it.n))[0];
+    assert.ok(after, 'cottage cheese is on the plate');
+    assert.equal(after.g, 180, 'at 180 g, not the yoghurt\'s 200');
+    assert.ok(Math.abs(after.p - before.p) <= 1,
+      'landing the same protein: ' + before.p + ' -> ' + after.p +
+      ' — a straight 200 g swap would have moved it');
+  });
+
+  test('DAIRY the extra fat in cottage cheese is absorbed by the day', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const oil = () => (app.nutProgMealsOn(d, 'basmati') || [])
+      .filter((m) => m.id === 'dinner')[0].items.filter((it) => /Olive oil/.test(it.n))[0].g;
+    const oilBefore = oil();
+    app.nutProgSetNightly(d, 'midam_dairy', 'cottage');
+    assert.ok(oil() < oilBefore,
+      'cottage cheese carries ~4 g more fat, so the oil comes DOWN: ' +
+      oilBefore + ' -> ' + oil() + ' ml');
+  });
+
+  test('DAIRY skyr is offered as well, and also matched', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const yog = midamOn(d).items.filter((it) => /yoghurt/i.test(it.n))[0];
+    app.nutProgSetNightly(d, 'midam_dairy', 'skyr');
+    const skyr = midamOn(d).items.filter((it) => /Skyr/i.test(it.n))[0];
+    assert.ok(skyr, 'skyr is an option');
+    assert.ok(Math.abs(skyr.p - yog.p) <= 1, 'and lands the same protein');
+  });
+
+  test('DAIRY it is per meal, per day — tomorrow is untouched', () => {
+    setUp(110);
+    app.nutProgSetNightly('2026-09-16', 'midam_dairy', 'cottage');
+    assert.ok(midamOn('2026-09-16').items.some((it) => /Cottage/.test(it.n)), 'today swapped');
+    assert.ok(midamOn('2026-09-17').items.some((it) => /yoghurt/i.test(it.n)), 'tomorrow is not');
+  });
+
+  test('DAIRY the almonds are left alone — only the dairy moves', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const before = midamOn(d).items.filter((it) => /Almonds/.test(it.n))[0].g;
+    app.nutProgSetNightly(d, 'midam_dairy', 'cottage');
+    assert.equal(midamOn(d).items.filter((it) => /Almonds/.test(it.n))[0].g, before,
+      'a dairy swap is not licence to rewrite the whole meal');
+  });
+
+  test('DAIRY a nonsense choice is refused', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetNightly('2026-09-16', 'midam_dairy', 'custard'), false, 'unknown dairy');
+    assert.ok(midamOn('2026-09-16').items.some((it) => /yoghurt/i.test(it.n)), 'still the default');
+  });
+
+  test('DAIRY the sheet OFFERS it', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('Mid-morning dairy') >= 0, 'the section is there');
+    assert.ok(html.indexOf('Cottage cheese') >= 0, 'with cottage cheese');
+    assert.ok(html.indexOf('180 g') >= 0, 'and its matched serve size');
+  });
+
+  test('DAIRY the shopping list buys what was chosen', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(0);
+    days.forEach((x) => app.nutProgSetNightly(x, 'midam_dairy', 'cottage'));
+    const names = [];
+    app.nutProgShoppingFor(0, 'basmati').groups
+      .forEach((g) => g.items.forEach((it) => names.push(it.n)));
+    assert.ok(names.indexOf('Cottage cheese') >= 0, 'cottage cheese is on the list');
+    assert.equal(names.indexOf('Greek yoghurt, 0%'), -1, 'and the yoghurt is not');
+  });
+
+  // ── batch cook recipes ───────────────────────────────────────────────────
+  // v4.9.294. Driven through _nutTabRecipes, because a recipe card nothing
+  // renders is the sixth instance of this domain's favourite defect.
+
+  test('BATCH the cards render in the Recipes section', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabRecipes(app.nutGetState()));
+    assert.ok(html.indexOf('Batch cook') >= 0, 'the section is there');
+    ['Basmati, white','Chicken breast','Sweet potato','Oats'].forEach((n) => {
+      assert.ok(html.indexOf(n) >= 0, n + ' has a card');
+    });
+  });
+
+  test('BATCH the quantities come from the real shopping list', () => {
+    setUp(110);
+    const rc = app.nutProgBatchRecipes(0);
+    const grain = rc.filter((r) => r.id === 'grain')[0];
+    assert.equal(grain.headline, '537 g dry : 806 ml water',
+      'the dry weight is the list\'s, and the water is derived from it: ' + grain.headline);
+    const chicken = rc.filter((r) => r.id === 'chicken')[0];
+    assert.equal(chicken.headline, '1260 g raw', 'raw chicken as bought');
+    assert.ok(/945 g cooked/.test(chicken.yields), 'with the cooked yield: ' + chicken.yields);
+  });
+
+  test('BATCH the grain recipe changes when the carb base changes', () => {
+    setUp(110);
+    const white = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain')[0];
+    app.nutProgSetRice('brown');
+    const brown = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain')[0];
+    assert.equal(brown.name, 'Brown, long grain', 'the card names the grain actually chosen');
+    assert.ok(brown.headline !== white.headline,
+      'and its water changes with it — brown takes 2.2x its weight, white 1.5x');
+    assert.ok(/28 minutes/.test(brown.steps.join(' ')), 'with its own cook time, not the white one');
+    assert.ok(/12 minutes/.test(white.steps.join(' ')), 'which is less than half');
+  });
+
+  test('BATCH every grain carries its own water and time', () => {
+    setUp(110);
+    const seen = {};
+    ['basmati','brown','sushi','wild','quinoa'].forEach((id) => {
+      app.nutProgSetRice(id);
+      const g = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain')[0];
+      seen[id] = g.headline + ' | ' + g.steps[2];
+    });
+    // NB this harness has no assert.notEqual — express difference as a boolean.
+    assert.equal(seen.brown === seen.basmati, false, 'brown is not basmati');
+    assert.equal(seen.wild === seen.sushi, false,
+      'wild takes 45 minutes and three times its weight in water; sushi 12 and barely more ' +
+      'than its own — one rice recipe would be wrong for most of them');
+    assert.equal(new Set(Object.keys(seen).map((k) => seen[k])).size, 5,
+      'all five grains differ from each other, not just two of them');
+  });
+
+  test('BATCH oats are marked fresh, not batched', () => {
+    setUp(110);
+    const oats = app.nutProgBatchRecipes(0).filter((r) => r.id === 'oats')[0];
+    assert.equal(oats.fresh, true, 'made each morning');
+    assert.ok(/60 g dry per morning/.test(oats.headline), 'per serve, not per week: ' + oats.headline);
+    assert.ok(/DRY/.test(oats.steps.join(' ')),
+      'and it says to weigh them dry — cooked oats are mostly water, and weighing ' +
+      'them cooked is how a breakfast quietly doubles');
+  });
+
+  test('BATCH nothing renders outside the programme', () => {
+    setUp(110);
+    const html = onDay('2027-01-05', () => app._nutTabRecipes(app.nutGetState()));
+    assert.equal(html.indexOf('Batch cook'), -1, 'no week to prep for once it is over');
+    assert.equal(app.nutProgBatchRecipes(16), null, 'and no week 16');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

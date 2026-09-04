@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.294'", 'version is 4.9.294');
+has("var APP_VERSION='4.9.295'", 'version is 4.9.295');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3039,6 +3039,20 @@ hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored')
 
 // ── Tonight's dinner ────────────────────────────────────────────────────────
 hasCode('_NUT_PROG_DINNER_PROTEIN', 'NIGHT: four evening proteins exist');
+hasCode('_NUT_PROG_MIDAM_DAIRY', 'DAIRY: the mid-morning dairy can be swapped');
+hasCode("_NUT_MIDAM_DAIRY_ITEM = 'Greek yoghurt, 0%'",
+        'DAIRY: named once, so removing the slot cannot leave a dangling lookup');
+hasCode("['midam_dairy', pick.midam_dairy]",
+        'DAIRY: its fat difference is absorbed like every other swap');
+
+// Batch recipes must read the LIVE list. A card with its own hardcoded 537 g
+// would be wrong the first time the grain changed, and quietly.
+hasCode('function nutProgBatchRecipes(', 'BATCH: the week\'s cook-down exists');
+hasCode('function _nutProgBatchCard(',   'BATCH: it has a renderer');
+hasCode('return _batch + h;',            'BATCH: rendered in the EMPTY recipes state too — where Jon actually is');
+hasCode('return _batch + (h);',          'BATCH: and in the populated one');
+hasCode('nutProgShoppingFor(week)',      'BATCH: quantities come from the live shopping list');
+hasCode('grain.qty * r.water',           'BATCH: water is derived per grain, not one ratio for all of them');
 hasCode('function _nutProgWeekPickerCard(', 'WEEKPICK: the week\'s evenings can be set in advance');
 // nutProgSetRice shipped in .273 and was called by NOTHING until .290 — the fifth
 // finished function in this domain with no door on it.

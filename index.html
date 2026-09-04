@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.294';
+var APP_VERSION='4.9.295';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19760,6 +19760,19 @@ function _nutTabToday(ns){
 
 function _nutTabRecipes(ns){
   var recipes = nutGetRecipes();
+  // v4.9.295: the week's batch-cook cards sit at the top of Recipes. The
+  // quantities come from the live shopping list, so changing grain or an evening
+  // protein rewrites them — a card with its own hardcoded weights would be wrong
+  // the first time he swapped and would stay wrong quietly.
+  var _batch = '';
+  if(typeof _nutProgBatchCard === 'function' && typeof nutProgReviewWeekOn === 'function'){
+    var _bw = nutProgReviewWeekOn(_nutToday());
+    if(_bw === null && typeof nutProgWeekFor === 'function'){
+      var _cur = nutProgWeekFor(_nutToday());
+      _bw = (_cur >= 1) ? _cur : (nutProgIsTrial(_nutToday()) ? 0 : null);
+    }
+    if(_bw !== null) _batch = _nutProgBatchCard(_bw);
+  }
   // v4.9.194: the replaced copy is now reachable. Only shown when there is
   // something to offer — nutBackupInfo returns null if the backup matches live.
   var _bak = nutBackupInfo();
@@ -19783,7 +19796,7 @@ function _nutTabRecipes(ns){
     h += '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text2);margin-bottom:8px;">No recipes saved</div>';
     h += '<div style="font-size:12px;line-height:1.6;">Build a recipe as a single serving.<br>Weekly Prep totals them across your week.</div>';
     h += '</div>';
-    return h;
+    return _batch + h;
   }
   // Group by category so sauces / proteins / carbs read as a prep library
   var order = _NUT_REC_CATS.map(function(c){ return c.key; });
@@ -19817,7 +19830,7 @@ function _nutTabRecipes(ns){
       h += '</div>';
     });
   });
-  return h;
+  return _batch + (h);
 }
 
 function _nutBigMacro(label, logged, target, pct, color){
@@ -20884,14 +20897,14 @@ var _NUT_PROG_SESSIONS = { 0:['lift'], 1:[], 2:['lift'], 3:['hiit'], 4:['lift'],
 // Carbs per 100 g COOKED, and what each type expands to from dry. A block is
 // always 25 g of carbs — the grams move, the plan does not.
 var _NUT_RICE = [
-  { id:'basmati',  name:'Basmati, white',   c100:28.0, p100:3.5, f100:0.4, expand:3.0 },
-  { id:'jasmine',  name:'Jasmine',          c100:29.0, p100:2.7, f100:0.3, expand:3.0 },
-  { id:'longgrain',name:'Long-grain white', c100:28.5, p100:2.7, f100:0.3, expand:3.0 },
-  { id:'brown',    name:'Brown, long grain',c100:23.0, p100:2.6, f100:0.9, expand:2.7 },
-  { id:'arborio',  name:'Arborio, plain',   c100:28.0, p100:2.4, f100:0.3, expand:3.0 },
-  { id:'sushi',    name:'Sushi, short grain',c100:29.0, p100:2.4, f100:0.2, expand:2.7 },
-  { id:'wild',     name:'Wild rice',        c100:21.0, p100:4.0, f100:0.3, expand:3.2 },
-  { id:'quinoa',   name:'Quinoa',           c100:21.0, p100:4.4, f100:1.9, expand:3.0 }
+  { id:'basmati',  name:'Basmati, white',   c100:28.0, p100:3.5, f100:0.4, expand:3.0 , water:1.5, mins:12, tip:'Rinse until the water runs clear, then rest 10 min off the heat' },
+  { id:'jasmine',  name:'Jasmine',          c100:29.0, p100:2.7, f100:0.3, expand:3.0 , water:1.5, mins:12, tip:'Rinse first. Rest 10 min covered' },
+  { id:'longgrain',name:'Long-grain white', c100:28.5, p100:2.7, f100:0.3, expand:3.0 , water:1.6, mins:15, tip:'Rest 5 min covered' },
+  { id:'brown',    name:'Brown, long grain',c100:23.0, p100:2.6, f100:0.9, expand:2.7 , water:2.2, mins:28, tip:'Longer and wetter than white. Rest 10 min' },
+  { id:'arborio',  name:'Arborio, plain',   c100:28.0, p100:2.4, f100:0.3, expand:3.0 , water:2.0, mins:18, tip:'Stir occasionally so it does not catch' },
+  { id:'sushi',    name:'Sushi, short grain',c100:29.0, p100:2.4, f100:0.2, expand:2.7 , water:1.2, mins:12, tip:'Rinse hard. Rest 10 min covered, then fold through' },
+  { id:'wild',     name:'Wild rice',        c100:21.0, p100:4.0, f100:0.3, expand:3.2 , water:3.0, mins:45, tip:'Nearly ready when the grains split' },
+  { id:'quinoa',   name:'Quinoa',           c100:21.0, p100:4.4, f100:1.9, expand:3.0 , water:2.0, mins:15, tip:'Rinse to take the bitterness off. Rest 5 min, fork through' }
 ];
 
 // ── dates ──────────────────────────────────────────────────────────────────
@@ -21175,6 +21188,16 @@ function nutProgMealsOn(dateKey, riceId){
         if(pick && !pick.base){
           name = pick.n;
           mac = { k: pick.k * g / 100, p: pick.p * g / 100, c: pick.c * g / 100, f: pick.f * g / 100 };
+        }
+      }
+      // Mid-morning dairy, chosen per meal. Sized to hold the protein.
+      if(M.id === 'midam' && it.n === _NUT_MIDAM_DAIRY_ITEM){
+        var _md = nutProgNightlyOn(dateKey);
+        var _dp = _nutProgNightlyOpt('midam_dairy', _md.midam_dairy);
+        if(_dp && !_dp.base){
+          name = _dp.n; grams = _dp.g;
+          mac = { k:_dp.k * _dp.g / 100, p:_dp.p * _dp.g / 100,
+                  c:_dp.c * _dp.g / 100, f:_dp.f * _dp.g / 100 };
         }
       }
       // Tonight's dinner protein and green side. Sized to hold the protein, so
@@ -21677,6 +21700,7 @@ var _NUT_PROG_SWAPS = {
 
 // A scoop of greens. Values are a typical powder — Jon can scan his own tub and
 // the scanner's basis rule will store it properly.
+var _NUT_MIDAM_DAIRY_ITEM = 'Greek yoghurt, 0%';  // the plate row the dairy pick replaces
 var _NUT_DINNER_PROTEIN_ITEM = 'Salmon fillet';   // the plate row the nightly pick replaces
 var _NUT_GREENS_POWDER = { n:'Greens powder', g:10, k:350, p:20, c:50, f:5 };
 var _NUT_GREENS_SWAPPABLE = { lunch:'Mixed vegetables', dinner:'Greens' };
@@ -21704,6 +21728,12 @@ var _NUT_PROG_DINNER_PROTEIN = [
 // matching 8 g of carbohydrate would ask for 570 g of spinach, which is a
 // gardening project, not a side. The spread across these is about five grams of
 // carbohydrate, a fifth of a block, and the day absorbs it.
+var _NUT_PROG_MIDAM_DAIRY = [
+  { id:'yoghurt', n:'Greek yoghurt, 0%', g:200, k:57, p:10,   c:4.0, f:0.2, base:true },
+  { id:'cottage', n:'Cottage cheese',    g:180, k:81, p:11,   c:4.3, f:2.3 },
+  { id:'skyr',    n:'Skyr, natural',     g:190, k:63, p:10.6, c:4.0, f:0.2 }
+];
+
 var _NUT_PROG_DINNER_VEG = [
   { id:'greens', n:'Greens',        g:200, k:35,  p:2.8, c:4.0, f:0.4, base:true },
   { id:'shake',  n:'Greens powder', g:10,  k:350, p:20,  c:50,  f:5 }
@@ -21717,13 +21747,15 @@ function _nutNightlyIdByName(name){
 }
 function _nutProgNightlyOpt(slot, id){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
-           : (slot === 'dinner_veg')     ? _NUT_PROG_DINNER_VEG : null;
+           : (slot === 'dinner_veg')     ? _NUT_PROG_DINNER_VEG
+           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY : null;
   if(!list) return null;
   for(var i = 0; i < list.length; i++) if(list[i].id === id) return list[i];
   return null;
 }
 function _nutProgNightlyBase(slot){
-  var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN : _NUT_PROG_DINNER_VEG;
+  var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
+           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY : _NUT_PROG_DINNER_VEG;
   for(var i = 0; i < list.length; i++) if(list[i].base) return list[i];
   return list[0];
 }
@@ -21740,7 +21772,8 @@ function nutProgNightlyOn(dateKey){
            (_nutProgNightlyOpt(slot, dflt[slot]) ? dflt[slot] : null) ||
            _nutProgNightlyBase(slot).id;
   };
-  return { dinner_protein: pick('dinner_protein'), dinner_veg: pick('dinner_veg') };
+  return { dinner_protein: pick('dinner_protein'), dinner_veg: pick('dinner_veg'),
+           midam_dairy: pick('midam_dairy') };
 }
 
 // What he SHOPPED for. Set on the Wednesday; any night can override it without
@@ -21769,7 +21802,8 @@ function nutProgSetNightly(dateKey, slot, id){
 function nutProgNightlyFatDelta(dateKey){
   var pick = nutProgNightlyOn(dateKey);
   var d = 0;
-  [['dinner_protein', pick.dinner_protein], ['dinner_veg', pick.dinner_veg]].forEach(function(pair){
+  [['dinner_protein', pick.dinner_protein], ['dinner_veg', pick.dinner_veg],
+   ['midam_dairy', pick.midam_dairy]].forEach(function(pair){
     var chosen = _nutProgNightlyOpt(pair[0], pair[1]);
     var base = _nutProgNightlyBase(pair[0]);
     if(!chosen || !base || chosen.id === base.id) return;
@@ -21841,7 +21875,8 @@ function nutOpenSwapSheet(forDate){
   // Wednesday. The serve size MOVES with the choice — each is sized to land the
   // same protein, which gram-for-gram swapping would not do.
   [['dinner_protein', 'Tonight&rsquo;s protein', _NUT_PROG_DINNER_PROTEIN],
-   ['dinner_veg',     'Tonight&rsquo;s greens &mdash; fresh or shake', _NUT_PROG_DINNER_VEG]].forEach(function(sec){
+   ['dinner_veg',     'Tonight&rsquo;s greens &mdash; fresh or shake', _NUT_PROG_DINNER_VEG],
+   ['midam_dairy',    'Mid-morning dairy',                            _NUT_PROG_MIDAM_DAIRY]].forEach(function(sec){
     var slot = sec[0], label = sec[1], opts = sec[2];
     h += '<div style="margin-bottom:16px;">';
     h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + label + '</div>';
@@ -22241,6 +22276,117 @@ function _nutProgUpcomingWeekDates(fromKey){
     if(!probe) return null;
   }
   return null;
+}
+
+// ── batch cook recipes ─────────────────────────────────────────────────────
+// v4.9.295. The prep plan says WHAT to cook and how much. These say how.
+//
+// Quantities come from the week's real shopping list, so they follow the carb
+// base, the evening proteins and the phase without anyone editing a recipe. A
+// recipe card carrying its own hardcoded 537 g would be wrong the first time Jon
+// changed grain, and would go on being wrong quietly.
+function nutProgBatchRecipes(week){
+  var shop = nutProgShoppingFor(week);
+  if(!shop) return null;
+  var find = function(n){
+    for(var i = 0; i < shop.groups.length; i++)
+      for(var j = 0; j < shop.groups[i].items.length; j++)
+        if(shop.groups[i].items[j].n === n) return shop.groups[i].items[j];
+    return null;
+  };
+  var out = [], r = _nutRiceById(shop.rice);
+
+  var grain = r ? find(r.name) : null;
+  if(grain && r){
+    var water = Math.round(grain.qty * r.water);
+    out.push({
+      id:'grain', name:r.name, portions:7,
+      headline: grain.qty + ' g dry : ' + water + ' ml water',
+      yields: (grain.note || ''),
+      steps: [
+        'Weigh ' + grain.qty + ' g dry and add ' + water + ' ml water — a ratio of 1 : ' + r.water + ' by weight.',
+        'Bring to the boil uncovered, then cover and drop to the lowest simmer.',
+        'Simmer ' + r.mins + ' minutes. Do not lift the lid.',
+        r.tip + '.',
+        'Portion into 7 containers while warm — it separates better than cold.'
+      ]
+    });
+  }
+
+  var chicken = find('Chicken breast');
+  if(chicken){
+    out.push({
+      id:'chicken', name:'Chicken breast', portions:7,
+      headline: chicken.qty + ' g raw',
+      yields: (chicken.note || ''),
+      steps: [
+        'Oven 200 C, fan 180 C.',
+        'Season and lay flat in one layer — stacked breasts steam instead of roasting.',
+        'Roast 22-25 minutes. Thick breasts need the upper end.',
+        'Cooked at 74 C in the middle of the thickest piece. Under-cooking chicken is not a macro problem.',
+        'Rest 10 minutes before slicing, or the juice ends up on the board.',
+        'Portion into 7. Expect about a quarter of the raw weight to be lost.'
+      ]
+    });
+  }
+
+  var spud = find('Sweet potato');
+  if(spud){
+    out.push({
+      id:'sweetpotato', name:'Sweet potato', portions:7,
+      headline: spud.qty + ' g',
+      yields: 'Roughly the same cooked — it loses water, not much weight',
+      steps: [
+        'Oven 200 C, fan 180 C.',
+        'Cut into even 3 cm chunks so they finish together.',
+        'Roast 35-40 minutes, turning once.',
+        'Portion into 7 while warm.'
+      ]
+    });
+  }
+
+  var oats = find('Oats');
+  if(oats){
+    out.push({
+      id:'oats', name:'Oats', portions:7, fresh:true,
+      headline: Math.round(oats.qty / 7) + ' g dry per morning',
+      yields: 'Made fresh — three minutes, and cold overnight oats go claggy by day three',
+      steps: [
+        'Per serve: ' + Math.round(oats.qty / 7) + ' g oats to about ' + Math.round(oats.qty / 7 * 3) + ' ml water or milk, a ratio of 1 : 3.',
+        'Hob 4-5 minutes stirring, or microwave 2 minutes in a bowl twice the size you think you need.',
+        'Weigh the oats DRY. Cooked oats are mostly water and weighing them cooked is how a breakfast doubles.',
+        'The whey goes in off the heat — boiling it turns it grainy.'
+      ]
+    });
+  }
+  return out;
+}
+
+function _nutProgBatchCard(week){
+  var recipes = nutProgBatchRecipes(week);
+  if(!recipes || !recipes.length) return '';
+  var prep = nutProgPrepFor(week);
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
+      '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Batch cook</div>' +
+      '<div style="font-size:10px;color:var(--text3);">' + (prep ? prep.window.from + ' &rarr; ' + prep.window.to : '') + '</div></div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Quantities follow this week&rsquo;s list &mdash; change the grain and these change with it</div>';
+  recipes.forEach(function(rc){
+    h += '<div style="margin-top:12px;padding:11px 12px;background:var(--bg3);border-radius:8px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
+        '<div style="font-size:13px;font-weight:700;">' + rc.name + '</div>' +
+        '<div style="font-size:10px;color:var(--gold);font-weight:700;white-space:nowrap;">' +
+          (rc.fresh ? 'fresh daily' : rc.portions + ' portions') + '</div></div>' +
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--gold);margin-top:5px;">' + rc.headline + '</div>' +
+      (rc.yields ? '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + rc.yields + '</div>' : '');
+    rc.steps.forEach(function(st, ix){
+      h += '<div style="display:flex;gap:8px;font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;">' +
+        '<span style="color:var(--text3);flex-shrink:0;">' + (ix + 1) + '</span><span>' + st + '</span></div>';
+    });
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
 }
 
 // ── the carb base ──────────────────────────────────────────────────────────

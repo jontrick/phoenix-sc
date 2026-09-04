@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.289';
+var APP_VERSION='4.9.290';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19058,7 +19058,7 @@ function _nutDayTotals(dayData){
   if(!dayData) return t;
   if(dayData.meals && !Array.isArray(dayData.meals)){
     // new component format
-    var _NUT_SLOT_KEYS = ['breakfast','lunch','dinner','snack','post_workout'];
+    var _NUT_SLOT_KEYS = ['breakfast','lunch','dinner','snack','post_workout','extra'];
     _NUT_SLOT_KEYS.forEach(function(sl){
       var m = dayData.meals[sl]; if(!m || !m.components) return;
       m.components.forEach(function(c){ var f=(c.qty_g||0)/100; t.kcal+=Math.round((c.k||0)*f); t.protein_g+=(c.p||0)*f; t.carbs_g+=(c.c||0)*f; t.fat_g+=(c.f||0)*f; });
@@ -19263,6 +19263,11 @@ function nutRenderScreen(){
     // Stop it reaching the meal-tick handler on the row behind.
     e.stopPropagation();
     nutOpenSwapSheet();
+  });
+  body.querySelectorAll('[data-prog-carb]').forEach(function(row){
+    row.addEventListener('click', function(){
+      if(nutProgSetRice(row.getAttribute('data-prog-carb'))) nutRenderScreen();
+    });
   });
   body.querySelectorAll('[data-prog-night-day]').forEach(function(row){
     row.addEventListener('click', function(){
@@ -20205,6 +20210,18 @@ function _nutTabWeek(ns){
   days.forEach(function(dk, idx){
     var dayData = (ns.daily && ns.daily[dk]) || {};
     var tot = _nutDayTotals(dayData);
+    // v4.9.290: on a programme day read what the programme says he ate, against
+    // THAT DAY's target. Off-plan extras are already inside nutProgConsumedOn,
+    // so nothing is counted twice.
+    var dayTarget = targets;
+    if(typeof nutProgTargetsOn === 'function'){
+      var _pt = nutProgTargetsOn(dk);
+      if(_pt){
+        dayTarget = { kcal:_pt.total.kcal, protein_g:_pt.total.p, carbs_g:_pt.total.c, fat_g:_pt.total.f };
+        var _pc = (typeof nutProgConsumedOn === 'function') ? nutProgConsumedOn(dk) : null;
+        if(_pc) tot = { kcal:_pc.total.kcal, protein_g:_pc.total.p, carbs_g:_pc.total.c, fat_g:_pc.total.f };
+      }
+    }
     var isToday = (dk === today);
     var kPct = (targets.kcal && tot.kcal) ? Math.min(100, Math.round(tot.kcal/targets.kcal*100)) : 0;
     if(tot.kcal > 0){ weekTotals.kcal+=tot.kcal; weekTotals.p+=tot.protein_g; weekTotals.c+=tot.carbs_g; weekTotals.f+=tot.fat_g; weekTotals.days++; }
@@ -20225,8 +20242,8 @@ function _nutTabWeek(ns){
     if(tot.kcal > 0){
       h += '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px;">';
       h += '<span style="font-size:13px;font-weight:700;color:var(--text);">'+tot.kcal+'</span>';
-      h += '<span style="font-size:10px;color:var(--text3);">of '+(targets.kcal||0)+' kcal</span>';
-      h += '<span style="font-size:10px;font-weight:600;color:#4CAF50;">P'+Math.round(tot.protein_g)+'g</span>';
+      h += '<span style="font-size:10px;color:var(--text3);">of '+(dayTarget.kcal||0)+' kcal</span>';
+      h += '<span style="font-size:10px;font-weight:600;color:#4CAF50;">P'+Math.round(tot.protein_g)+' / '+Math.round(dayTarget.protein_g||0)+'g</span>';
       h += '</div>';
       h += '<div style="height:3px;background:var(--bg3);border-radius:2px;margin-bottom:3px;"><div style="width:'+kPct+'%;height:3px;background:'+(kPct>=95?'var(--gold)':'#4CAF50')+';border-radius:2px;transition:width 0.3s;"></div></div>';
       h += '<div style="font-size:10px;color:var(--text3);">B / L / D: '+slotKcals+ (recCount ? (' &middot; ' + recCount + ' recipe serve' + (recCount !== 1 ? 's' : '')) : '') +'</div>';
@@ -20240,12 +20257,12 @@ function _nutTabWeek(ns){
   // Weekly average
   if(weekTotals.days > 0){
     h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-top:8px;">';
-    h += '<div style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;color:var(--text3);margin-bottom:8px;">WEEK AVERAGE ('+weekTotals.days+' day'+(weekTotals.days>1?'s':'')+' logged)</div>';
+    h += '<div style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;color:var(--text3);margin-bottom:8px;">PER DAY &mdash; average of '+weekTotals.days+' logged day'+(weekTotals.days>1?'s':'')+'</div>';
     h += '<div style="display:flex;gap:14px;">';
     h += '<div><div style="font-size:17px;font-weight:700;color:var(--text);">'+Math.round(weekTotals.kcal/weekTotals.days)+'</div><div style="font-size:10px;color:var(--text3);">kcal</div></div>';
-    h += '<div><div style="font-size:17px;font-weight:700;color:#4CAF50;">'+Math.round(weekTotals.p/weekTotals.days)+'g</div><div style="font-size:10px;color:var(--text3);">protein</div></div>';
-    h += '<div><div style="font-size:17px;font-weight:700;color:var(--gold);">'+Math.round(weekTotals.c/weekTotals.days)+'g</div><div style="font-size:10px;color:var(--text3);">carbs</div></div>';
-    h += '<div><div style="font-size:17px;font-weight:700;color:#FF6B6B;">'+Math.round(weekTotals.f/weekTotals.days)+'g</div><div style="font-size:10px;color:var(--text3);">fat</div></div>';
+    h += '<div><div style="font-size:17px;font-weight:700;color:#4CAF50;">'+Math.round(weekTotals.p/weekTotals.days)+'g</div><div style="font-size:10px;color:var(--text3);">protein / day</div></div>';
+    h += '<div><div style="font-size:17px;font-weight:700;color:var(--gold);">'+Math.round(weekTotals.c/weekTotals.days)+'g</div><div style="font-size:10px;color:var(--text3);">carbs / day</div></div>';
+    h += '<div><div style="font-size:17px;font-weight:700;color:#FF6B6B;">'+Math.round(weekTotals.f/weekTotals.days)+'g</div><div style="font-size:10px;color:var(--text3);">fat / day</div></div>';
     h += '</div></div>';
   }
   return h;
@@ -20582,7 +20599,8 @@ var _NUT_RICE = [
   { id:'brown',    name:'Brown, long grain',c100:23.0, p100:2.6, f100:0.9, expand:2.7 },
   { id:'arborio',  name:'Arborio, plain',   c100:28.0, p100:2.4, f100:0.3, expand:3.0 },
   { id:'sushi',    name:'Sushi, short grain',c100:29.0, p100:2.4, f100:0.2, expand:2.7 },
-  { id:'wild',     name:'Wild rice',        c100:21.0, p100:4.0, f100:0.3, expand:3.2 }
+  { id:'wild',     name:'Wild rice',        c100:21.0, p100:4.0, f100:0.3, expand:3.2 },
+  { id:'quinoa',   name:'Quinoa',           c100:21.0, p100:4.4, f100:1.9, expand:3.0 }
 ];
 
 // ── dates ──────────────────────────────────────────────────────────────────
@@ -21930,6 +21948,36 @@ function _nutProgUpcomingWeekDates(fromKey){
   return null;
 }
 
+// ── the carb base ──────────────────────────────────────────────────────────
+// v4.9.290. nutProgSetRice existed from .273 and was CALLED BY NOTHING — the
+// fifth function in this domain finished with no door on it. The engine already
+// resized every portion to hold the carbohydrate; there was simply no way to
+// choose.
+//
+// This is a WEEK choice, not a nightly one, and that is deliberate: the prep plan
+// batch-cooks the week's rice in one pot on the Sunday. Seven different grains
+// would need seven pots, which is not a plan Jon would follow twice.
+function _nutProgCarbPickerCard(week){
+  var cur = nutProgRiceChoice();
+  var blocks = 2.75;                                  // lunch, phase 1 — a fair comparison
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Carb base &mdash; this week</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">One grain for the week &mdash; the Sunday batch is cooked in a single pot</div>';
+  _NUT_RICE.forEach(function(r){
+    var on = (r.id === cur);
+    var q = nutProgRiceFor(r.id, blocks);
+    h += '<div data-prog-carb="' + r.id + '" style="display:flex;align-items:center;gap:10px;padding:9px 10px;margin-top:7px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg3)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+      '<div style="width:16px;height:16px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:13px;font-weight:600;">' + r.name + '</div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' +
+          q.cooked_g + ' g cooked at lunch &middot; ' + q.dry_g + ' g dry &middot; same ' + q.carbs_g + ' g carbs</div>' +
+      '</div></div>';
+  });
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:9px;line-height:1.5;">The carbohydrate is fixed, so the WEIGHT changes with the grain. Brown and wild give the most food for it.</div></div>';
+  return h;
+}
+
 // ── the week's evenings, set in advance ────────────────────────────────────
 // v4.9.289. Jon picks each evening's protein and greens at the START of the week,
 // Monday through Sunday, and the shopping list recalculates from those choices.
@@ -22019,7 +22067,8 @@ function _nutProgReviewCard(dateKey){
   }
   h += '</div>';
   // Order matters: choose the evenings, THEN read the list they produce.
-  h += _nutProgWeekAheadCard(wk) + _nutProgWeekPickerCard(wk) + _nutProgListCard(wk);
+  h += _nutProgWeekAheadCard(wk) + _nutProgCarbPickerCard(wk) +
+       _nutProgWeekPickerCard(wk) + _nutProgListCard(wk);
   return h;
 }
 

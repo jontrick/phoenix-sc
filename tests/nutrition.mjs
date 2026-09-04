@@ -1064,7 +1064,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('PROG rice refuses what it cannot compute rather than guessing', () => {
     setUp(110);
-    assert.equal(app.nutProgRiceFor('quinoa', 2), null, 'unknown rice is not silently basmati');
+    // NB quinoa became a real option in v4.9.290 — it is not a rice, but it
+    // answers the same question and sits in the same slot, so it lives in the
+    // same table. The needle here has to be something genuinely absent.
+    assert.equal(app.nutProgRiceFor('couscous', 2), null, 'unknown grain is not silently basmati');
+    assert.ok(app.nutProgRiceFor('quinoa', 2), 'while quinoa now resolves');
     assert.equal(app.nutProgRiceFor('basmati', 0), null, 'nor is zero blocks a portion');
     assert.equal(app.nutProgRiceFor('basmati', -1), null, 'nor a negative one');
   });
@@ -2066,6 +2070,105 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('Evening meals') >= 0, 'week 5 review carries it too');
     assert.ok(html.indexOf('data-prog-night-day="2026-10-12"') >= 0,
       'set against the week being reviewed, not the week being eaten');
+  });
+
+  // ── the carb base ────────────────────────────────────────────────────────
+  // v4.9.290. nutProgSetRice existed from .273 and was called by NOTHING — the
+  // fifth function in this domain finished with no door on it. The engine already
+  // resized every portion to hold the carbohydrate; there was no way to choose.
+
+  test('CARB the picker is on screen and offers the grains', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Carb base') >= 0, 'the picker is reachable at all');
+    ['Basmati, white','Brown, long grain','Jasmine','Quinoa'].forEach((n) => {
+      assert.ok(html.indexOf(n) >= 0, n + ' is offered');
+    });
+    assert.ok(html.indexOf('data-prog-carb="quinoa"') >= 0, 'and each is tappable');
+  });
+
+  test('CARB the rows are WIRED, not merely drawn', () => {
+    setUp(110);
+    assert.equal(app.nutProgRiceChoice(), 'basmati', 'basmati by default');
+    app.nutProgSetRice('quinoa');
+    assert.equal(app.nutProgRiceChoice(), 'quinoa', 'the choice is stored');
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Quinoa') >= 0, 'and shown back');
+  });
+
+  test('CARB the choice reaches the plate and the shopping list', () => {
+    setUp(110);
+    app.nutProgSetRice('quinoa');
+    const lunch = (app.nutProgMealsOn('2026-09-16', app.nutProgRiceChoice()) || [])
+      .filter((m) => m.id === 'lunch')[0];
+    assert.ok(lunch.items.some((it) => /Quinoa/.test(it.n)), 'quinoa is what he cooks');
+    const shop = app.nutProgShoppingFor(0, app.nutProgRiceChoice());
+    const names = [];
+    shop.groups.forEach((g) => g.items.forEach((it) => names.push(it.n)));
+    assert.ok(names.indexOf('Quinoa') >= 0, 'and what he buys');
+    assert.equal(names.indexOf('Basmati, white'), -1, 'instead of the default, not as well as');
+  });
+
+  test('CARB a grain still converts from dry, unlike a protein', () => {
+    setUp(110);
+    app.nutProgSetRice('quinoa');
+    const shop = app.nutProgShoppingFor(0, 'quinoa');
+    let q = null;
+    shop.groups.forEach((g) => g.items.forEach((it) => { if(it.n === 'Quinoa') q = it; }));
+    assert.ok(/cooked/.test(q.note || ''), 'dry weight with the cooked yield beside it: ' + q.note);
+    assert.ok(q.qty < 900, 'and it is the DRY figure, the smaller of the two');
+  });
+
+  // ── protein read per day, not per week ───────────────────────────────────
+  // The week screen read only free-form logged components. On the programme the
+  // food is TICKED, so every programme day looked empty and the protein figure
+  // came from whatever off-plan food happened to be logged — against a target
+  // that was not that day's.
+
+  test('PERDAY the week screen counts what was actually ticked', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgToggleMeal(d, 'lunch');
+    app.nutProgToggleMeal(d, 'dinner');
+    const before = onDay(d, () => app._nutTabWeek(app.nutGetState()));
+    const emptyAfter = (before.match(/No meals logged/g) || []).length;
+    // The other six days are genuinely empty — nothing ticked is nothing eaten.
+    // What matters is that the ONE day with ticked meals is no longer among them.
+    assert.equal(emptyAfter, 6,
+      'six untouched days stay empty and the ticked day does not — got ' + emptyAfter);
+  });
+
+  test('PERDAY protein is shown against THAT DAY\'s target', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgToggleMeal(d, 'lunch');
+    const html = onDay(d, () => app._nutTabWeek(app.nutGetState()));
+    assert.ok(/P\d+ \/ 190g/.test(html),
+      'the row reads "P<eaten> / 190g" — a bare number with no target can be ' +
+      'read as a week\'s worth, which is exactly what happened');
+  });
+
+  test('PERDAY every summary figure says per day', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgToggleMeal(d, 'lunch');
+    const html = onDay(d, () => app._nutTabWeek(app.nutGetState()));
+    assert.equal(html.indexOf('WEEK AVERAGE'), -1,
+      '"protein" under a heading containing WEEK reads as a week of protein');
+    assert.ok(html.indexOf('PER DAY') >= 0, 'the heading states the unit');
+    assert.ok(html.indexOf('protein / day') >= 0, 'and so does the figure itself');
+  });
+
+  test('PERDAY food eaten off plan is no longer invisible to the week', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutAddComponent(app._NUT_PROG_EXTRA_SLOT, d,
+      { n:'Pizza', cat:'extras', k:270, p:11, c:33, f:10 }, 400);
+    const totals = app._nutDayTotals(app.nutGetState().daily[d]);
+    assert.ok(totals.kcal > 1000,
+      'the extra slot was missing from the totals, so anything logged off plan ' +
+      'moved the Today screen and nothing else: got ' + totals.kcal);
+    assert.ok(totals.protein_g > 40, 'and its protein counted too');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

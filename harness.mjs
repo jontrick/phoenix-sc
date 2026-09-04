@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.289'", 'version is 4.9.289');
+has("var APP_VERSION='4.9.290'", 'version is 4.9.290');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2974,7 +2974,7 @@ hasCode('function _nutProgUpcomingWeekDates(',
 // EXISTING IS NOT REACHED. Both of these were built, tested and called by nothing
 // — the list existed only as a function, and Jon opened the app to find prose
 // where his shopping list should be. Guard the CALL, not the definition.
-hasCode('_nutProgWeekAheadCard(wk) + _nutProgWeekPickerCard(wk) + _nutProgListCard(wk)',
+hasCode('_nutProgWeekAheadCard(wk) + _nutProgCarbPickerCard(wk) +',
         'SHOP: the review card RENDERS the week ahead, the evening picker and the list — ' +
         'and in that order, because you choose the evenings before you read the list they produce');
 hasCode('function _nutProgListCard(',  'SHOP: the list has a renderer at all');
@@ -3008,6 +3008,25 @@ hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored')
 // ── Tonight's dinner ────────────────────────────────────────────────────────
 hasCode('_NUT_PROG_DINNER_PROTEIN', 'NIGHT: four evening proteins exist');
 hasCode('function _nutProgWeekPickerCard(', 'WEEKPICK: the week\'s evenings can be set in advance');
+// nutProgSetRice shipped in .273 and was called by NOTHING until .290 — the fifth
+// finished function in this domain with no door on it.
+hasCode('function _nutProgCarbPickerCard(', 'CARB: the grain can be chosen');
+hasCode('_nutProgCarbPickerCard(wk)',       'CARB: and the review card RENDERS it');
+hasCode('data-prog-carb',                   'CARB: each grain is a row');
+hasCode("body.querySelectorAll('[data-prog-carb]')",
+        'CARB: the rows are WIRED — nutProgSetRice had no caller for 17 versions');
+hasCode("id:'quinoa'",                      'CARB: quinoa is an option');
+
+// The week screen read only free-form components, so a programme day — where the
+// food is TICKED — looked empty, and its protein came from off-plan food alone.
+hasCode('var _pt = nutProgTargetsOn(dk);',
+        'PERDAY: the week screen reads the programme day, not just logged components');
+hasCode("Math.round(dayTarget.protein_g||0)+'g</span>'",
+        'PERDAY: protein is shown against THAT DAY\'s target, never bare');
+hasNotCode('WEEK AVERAGE (',
+        'PERDAY: no figure sits under a heading that reads as a week of protein');
+hasCode("'post_workout','extra']",
+        'PERDAY: off-plan food counts in the day totals — it was silently omitted');
 hasCode('_nutProgWeekPickerCard(wk)',       'WEEKPICK: and the review card RENDERS it');
 hasCode('data-prog-night-day',              'WEEKPICK: each evening is its own row');
 hasCode("body.querySelectorAll('[data-prog-night-day]')",

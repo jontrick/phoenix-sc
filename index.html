@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.263';
+var APP_VERSION='4.9.264';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7488,6 +7488,10 @@ window._phxOpenDiagnostic = async function(){
   var local = null;
   try { local = JSON.parse(localStorage.getItem('phoenix_athlete')||'null'); } catch(_e){}
   var rows = [
+    // v4.9.264: is the screen actually being held awake? Jon reports standby interrupting
+    // him; this is the only way to tell a refused lock from a held one on the device.
+    ['screen wake lock', String(window._phxWakeLockState || 'not requested')],
+    ['last screen (restored on reload)', (function(){ try { return localStorage.getItem('phx_lastTab_v1') || '(none — will open on Today)'; } catch(_e){ return '(unreadable)'; } })()],
     ['navigator.onLine', String(!!navigator.onLine)],
     ['_phxLastProbeOk (just probed)', String(_phxLastProbeOk)],
     ['SUPABASE_URL', (typeof SUPABASE_URL==='string') ? SUPABASE_URL : '(undefined)'],
@@ -10816,15 +10820,33 @@ function _phxElapsedSince(from){
 function _phxRegisterTimer(resync){ window._phxTimerResync = (typeof resync==='function') ? resync : null; }
 function _phxUnregisterTimer(){ window._phxTimerResync = null; window._phxTimerStart = 0; }
 
+// v4.9.264 [PM]: the outcome is now RECORDED. Jon reports the phone still sleeping, and
+// every failure here went into a bare `catch(e){}` — so there was no way, from his phone,
+// to tell "iOS refused the lock" from "the lock is held and something else is wrong".
+// Not a Supabase write, so it does not belong in the write-error ring; it is surfaced in
+// Settings -> Diagnostic instead. Values only, no behaviour change.
+window._phxWakeLockState = 'not requested';
 async function requestWakeLock(){
   try{
-    if('wakeLock' in navigator){
-      // v4.9.118 FIX 2: iOS releases the sentinel when the screen locks, so a released one
-      // must be replaced — but re-requesting while one is still live would orphan (leak) it.
-      if(wakeLock && !wakeLock.released) return;
-      wakeLock=await navigator.wakeLock.request('screen');
+    if(!('wakeLock' in navigator)){
+      window._phxWakeLockState = 'UNSUPPORTED — this iOS version has no Screen Wake Lock API';
+      return;
     }
-  }catch(e){}
+    // v4.9.118 FIX 2: iOS releases the sentinel when the screen locks, so a released one
+    // must be replaced — but re-requesting while one is still live would orphan (leak) it.
+    if(wakeLock && !wakeLock.released){ window._phxWakeLockState = 'held'; return; }
+    wakeLock=await navigator.wakeLock.request('screen');
+    window._phxWakeLockState = 'held (acquired ' + new Date().toLocaleTimeString() + ')';
+    try {
+      wakeLock.addEventListener('release', function(){
+        window._phxWakeLockState = 'released by iOS at ' + new Date().toLocaleTimeString() +
+          ' — re-requested on next visibility change';
+      });
+    } catch(_e){}
+  }catch(e){
+    window._phxWakeLockState = 'REFUSED: ' + ((e && e.name) ? e.name : '') + ' ' +
+      ((e && e.message) ? String(e.message).slice(0,120) : '');
+  }
 }
 function releaseWakeLock(){
   if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock=null; }
@@ -37991,8 +38013,10 @@ if(typeof navTo==='function'){
     // v4.7.10: any tab change cancels an in-flight count-in. The user is leaving the WOD context,
     // so we must not let a 5-second-old start tap fire startWODTimer against whatever screen they land on.
     if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();
-    // Screen persistence: save last non-session tab so iOS PWA reload can restore it.
-    if(tab && tab !== 'today' && tab !== 'session' && tab !== 'auth' && tab !== 'landing') {
+    // Screen persistence: save the tab so an iOS PWA reload can restore it.
+    // v4.9.264: gated on _safeRestoreTabs — the SAME list the restore reads. Storing a tab
+    // the restore will refuse is how Stats and Profile came to be saved-then-discarded.
+    if(tab && typeof _safeRestoreTabs !== 'undefined' && _safeRestoreTabs.indexOf(tab) >= 0) {
       try { localStorage.setItem('phx_lastTab_v1', tab); } catch(_e){}
     } else if(tab === 'today') {
       try { localStorage.removeItem('phx_lastTab_v1'); } catch(_e){}
@@ -38015,9 +38039,34 @@ if(typeof navTo==='function'){
 // to Today on screen lock. Pinned by a harness guard (SAFELIST) that every entry
 // resolves to a real navTo target, so the list cannot silently drift again.
 //
-// session/auth/landing are deliberately absent: restoring into a live session
-// screen would drop the user into a workout they did not choose to resume.
-var _safeRestoreTabs = ['nutrition','records','peptide','programme','blab-calendar'];
+// v4.9.264 [PM]: THE WRITER AND THE READER DISAGREED, AND ONLY THE READER WAS PINNED.
+// The navTo intercept stored EVERY tab except today/session/auth/landing — fifteen of
+// them. This list restored five. So Stats, Profile, My Coach and Agoge were faithfully
+// saved on every navigation and then silently refused at boot: Jon locked his phone on
+// Stats, came back to Today, and nothing anywhere recorded that a restore was declined.
+// Reported by him as "it keeps reverting to today page".
+//
+// The SAFELIST guard checked that every entry here resolves to a real navTo target. It
+// could not see this, because the defect was not a dead entry — it was a MISSING one, and
+// an absent entry looks identical to a screen nobody wanted restored. Both sides now
+// derive from these two lists, and the harness asserts every navTo target appears in
+// exactly one of them, so a screen added later cannot fall through unclassified.
+//
+// session/auth/landing are deliberately absent: restoring into a live session screen would
+// drop the user into a workout he did not choose to resume.
+var _safeRestoreTabs = ['nutrition','records','peptide','programme','blab-calendar',
+                        'stats','athlete','my-coach','agoge','agoge-intro','coming','feedback'];
+
+// Deliberately NOT restorable, each for a stated reason. Being on this list is a decision;
+// being on neither list is a bug the harness will not let through.
+//   today          the fallback itself
+//   session        a live workout — resuming one he did not choose is worse than Today
+//   walk           a live activity with its own resume path (_phxResumeWalk); restoring the
+//                  screen without that state would imply a walk is running when none is
+//   weekly-checkin a multi-step form that reloads EMPTY; landing back in it invites a
+//                  second submission of a check-in he already sent
+//   auth/landing/alpha-welcome   pre-onboarding routing must always win
+var _neverRestoreTabs = ['today','session','walk','weekly-checkin','auth','landing','alpha-welcome'];
 
 function _phxBootRestoreBegin(){
   try {

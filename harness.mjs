@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.263'", 'version is 4.9.263');
+has("var APP_VERSION='4.9.264'", 'version is 4.9.264');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -957,7 +957,10 @@ hasNotCode('coreSecsLeft--;', 'FIX1: Core circuit tick-counter decrement removed
 // same property. The needle here IS the guard line, so unlike its sibling it does check
 // what it claims — the label now points at the cases that prove it, so it reads as
 // covered-and-verified rather than as a receipt.
-has('if(wakeLock && !wakeLock.released) return;', 'FIX2: the released-sentinel guard is present (behaviour: tests/training.mjs WAKELOCK:)');
+// v4.9.264 [PM]: needle updated, NOT relaxed — the statement gained a state assignment
+// (window._phxWakeLockState) inside the same block. Condition and early return are
+// unchanged, so the leak guard this pins is intact: a live sentinel is never re-requested.
+has("if(wakeLock && !wakeLock.released){ window._phxWakeLockState = 'held'; return; }", 'FIX2: the released-sentinel guard is present (behaviour: tests/training.mjs WAKELOCK:)');
 // v4.9.254: LABEL CORRECTED. This needle is the BOOT-TIME persistent call, not the one
 // inside the visibilitychange handler — the label claimed the handler and pinned
 // something else. Proved by deleting the handler's call: this stayed GREEN, and what
@@ -2713,6 +2716,47 @@ hasNotCode("templates.push({id:Date.now(),",
   } else {
     ok(`SAFELIST: all ${tabs.length} restore tabs resolve to real navTo targets`);
   }
+  // v4.9.264 [PM]: the wake-lock outcome must not be swallowed. Jon reports the phone still
+  // sleeping; every failure went to a bare catch(e){}, so a REFUSED lock and a held one were
+  // indistinguishable from the device. Not a Supabase write — surfaced in Diagnostic instead.
+  hasNotCode('}catch(e){}\n}\nfunction releaseWakeLock',
+             'WAKELOCK: requestWakeLock no longer swallows its outcome');
+  has('window._phxWakeLockState', 'WAKELOCK: outcome recorded');
+  has("['screen wake lock', String(window._phxWakeLockState", 'WAKELOCK: shown in Settings -> Diagnostic');
+  has("['last screen (restored on reload)'", 'SAFELIST: the screen that will be restored is visible in Diagnostic');
+
+  // v4.9.264 [PM]: EVERY navTo TARGET MUST BE CLASSIFIED. The bug this catches is not a
+  // dead entry — it is a MISSING one, which the check above cannot see because an absent
+  // tab looks exactly like a screen nobody wanted restored. The writer stored fifteen tabs
+  // and the reader restored five, so Stats, Profile, My Coach and Agoge were saved on every
+  // navigation and silently refused at boot. Jon reported it as the app "reverting to today".
+  // A screen added later must now be named in one list or the other; it cannot fall through.
+  {
+    const neverM = html.match(/var _neverRestoreTabs = \[([\s\S]*?)\];/);
+    if (!neverM) {
+      bad('SAFELIST: _neverRestoreTabs not found — the classification check did NOT run.');
+    } else {
+      const never = [...neverM[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+      const classified = new Set([...tabs, ...never]);
+      const unclassified = [...targets].filter(t => !classified.has(t));
+      unclassified.length === 0
+        ? ok(`SAFELIST: all ${targets.size} navTo targets are classified (${tabs.length} restorable, ${never.length} deliberately not)`)
+        : bad(`SAFELIST: [${unclassified.join(', ')}] ${unclassified.length > 1 ? 'are' : 'is'} in navTo but in NEITHER list. ` +
+              'A screen saved on navigation and refused at boot drops Jon to Today with nothing recording why — ' +
+              'name it in _safeRestoreTabs or in _neverRestoreTabs with a reason.');
+      const both = tabs.filter(t => never.includes(t));
+      both.length === 0
+        ? ok('SAFELIST: no tab is both restorable and never-restorable')
+        : bad(`SAFELIST: [${both.join(', ')}] in BOTH lists — the writer and reader would disagree again.`);
+    }
+  }
+
+  // The specific regression Jon reported: locking the phone on Stats lost the screen.
+  ['stats', 'athlete', 'my-coach'].every(t => tabs.includes(t))
+    ? ok('SAFELIST: Stats / Profile / My Coach survive a screen lock')
+    : bad('SAFELIST: stats/athlete/my-coach missing from _safeRestoreTabs — the screens Jon ' +
+          'reported losing on standby. They are written to the key and refused at boot.');
+
   // The specific regression: the calendar was written to the key but never restorable.
   if (tabs.includes('blab-calendar') && tabs.includes('programme')) {
     ok('SAFELIST: the training calendar is restorable after an iOS PWA reload');

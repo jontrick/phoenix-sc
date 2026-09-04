@@ -308,4 +308,44 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app.document = realDoc;
     }
   });
+
+  test('ENTRY navigating to Stats survives an iOS PWA reload', async () => {
+    // Jon: "it keeps reverting to today page". The cause was not the restore failing — it
+    // was the WRITER saving a tab the READER refused. Stats was stored on every navigation
+    // and discarded at boot, and nothing recorded that a restore had been declined.
+    // This drives both halves: navigate, then boot, and assert where he lands.
+    reset(); signIn('u-nav');
+    const shown = [];
+    const realShow = app.showScreen;
+    app.showScreen = function(id){ shown.push(id); };
+    try {
+      app.navTo('stats');
+      assert.equal(read('phx_lastTab_v1'), 'stats', 'navigating to Stats records it');
+
+      // iOS discards the page; the app boots fresh and routing heads for Today.
+      shown.length = 0;
+      app._phxBootRestoreBegin();
+      app.navTo('today');                       // what boot routing does
+      assert.equal(read('phx_lastTab_v1'), 'stats',
+        'boot routing to Today must NOT erase the screen he actually left');
+      app._phxBootRestoreApply();
+      assert.ok(shown.includes('screen-stats'),
+        'after boot settles he is returned to Stats, got: ' + JSON.stringify(shown));
+    } finally { app.showScreen = realShow; }
+  });
+
+  test('ENTRY a tab the restore would refuse is never recorded', async () => {
+    // The invariant the old code broke: writer and reader must agree. Storing a tab that
+    // will be refused is indistinguishable, from the outside, from losing the screen.
+    reset(); signIn('u-nav2');
+    const realShow = app.showScreen;
+    app.showScreen = function(){};
+    try {
+      app.navTo('stats');
+      assert.equal(read('phx_lastTab_v1'), 'stats', 'a restorable tab is recorded');
+      app.navTo('weekly-checkin');   // deliberately not restorable — a form that reloads empty
+      assert.equal(read('phx_lastTab_v1'), 'stats',
+        'a non-restorable tab must not overwrite the last restorable one, or he loses both');
+    } finally { app.showScreen = realShow; }
+  });
 }

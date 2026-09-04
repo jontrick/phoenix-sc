@@ -34,9 +34,6 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — REPO / TOOLING
 
-- [ ] ??? — `peptides` worktree was on 4.9.263 while origin was 4.9.264. Stale checkouts
-      are how one chat ships another's old code. Closes when it pulls.
-      (`nutrition` was on 4.9.254; it pulled and is on 4.9.264 as of 2026-09-04.)
 - [ ] PM — `.git` was deleted from the main checkout on 2026-09-04, orphaning all three
       worktrees. Restored from a fresh clone and worktrees re-registered; nothing was
       lost (verified byte-for-byte against origin). CAUSE UNKNOWN — `???`. Reopen with

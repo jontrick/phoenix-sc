@@ -141,6 +141,27 @@ again, because it gets copied into handoffs and then followed at one remove.
   vision worked. It was not: the prompt's rule 6 hands the model that same error string,
   so a model receiving NO image returns it too. Only the positive case settled it.
 
+## The board reads the checkout it runs in, so half of it can be stale
+
+`board_check.mjs` derives CHECKOUTS from git — which is why it correctly said
+`nutrition ... BEHIND origin`. But it reads OPEN ITEMS by opening `OPEN_ITEMS.md`
+**from the working tree it is run in**. Run from a BEHIND worktree it prints the stale
+list, including items closed on origin, and prints it directly under the line saying
+you are behind.
+
+2026-09-04, NUTRITION: the session-start ritual says run the board *first*, then pull.
+Doing exactly that produced a board asserting an unresolved-merge-conflict item that
+had been closed two commits earlier, and I read three closed items as open.
+
+> **The instrument was not wrong — it was answering about the local checkout while I
+> read it as answering about the project.** Its CHECKOUTS block was simultaneously
+> telling me the answer was stale. Two halves of one output, disagreeing, with nothing
+> marking which half to trust.
+
+**Pull, THEN read the board's content sections.** Treat a board printed from a BEHIND
+checkout as a report on your own directory, not on the project. Only CHECKOUTS is
+meaningful before pulling — which is the one thing you need it for at that moment.
+
 ## Silent failure: the console does not exist on the phone
 
 `console.warn` and `console.error` are both invisible in the iOS PWA. A Supabase write that

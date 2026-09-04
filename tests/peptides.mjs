@@ -2981,6 +2981,89 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'convenience, not a substitute for being able to undo');
     });
 
+    // ── STOCK TAKE: HE COUNTS IN MG, THE APP STORES VIALS (v4.9.268) ──────
+    // Jon's stock take arrived as totals: "Tesamorelin - 50mg / Nad - 5000mg /
+    // GHK-Cu - 450mg / 5Amq - 15mg". Every one of those had to be divided by a
+    // vial size to become the sealed-vial count the app stores, and for most
+    // compounds that vial size is a library ASSUMPTION, not a measurement.
+    //
+    // The division is therefore the dangerous step, and a remainder is the
+    // evidence that the assumed size is wrong. These cases exist to keep the
+    // remainder LOUD rather than rounded away.
+    const stakeState = (over) => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [Object.assign({
+        compoundId:'ghkcu', dose:1, vialMg:50, waterMl:2,
+        startDate: daysAgo(5), freq:'daily', status:'instock',
+      }, over || {})], checked:{}, cart:[] });
+    };
+    const ghk = () => app.pepGetState().stacks.find(x => x.compoundId === 'ghkcu');
+
+    test('STAKE 450mg of 50mg vials is nine, and it says so before saving', () => {
+      const r = app._pepStockTakeRow(50, 450);
+      assert.equal(r.state, 'ok', 'clean division');
+      assert.equal(r.vials, 9, 'his 450mg is 9 vials — the number he never has to work out');
+    });
+
+    test('STAKE a remainder is REFUSED, not rounded', () => {
+      const r = app._pepStockTakeRow(100, 450);
+      assert.equal(r.state, 'remainder',
+        '450mg into 100mg vials is 4.5. Rounding that to 4 or 5 buries the only ' +
+        'signal available that the vial size is wrong');
+      assert.ok(String(r.why).includes('4.5'), 'and it shows the fractional answer');
+    });
+
+    test('STAKE nothing is written while any row is blocked', () => {
+      stakeState({ sealedVials: 2, stockCounted: false });
+      const res = app.pepStockTakeApply([{ idx:0, vialMg:100, totalMg:450 }]);
+      assert.equal(res.ok, false, 'refused');
+      assert.equal(res.applied, 0, 'and applied NOTHING');
+      assert.equal(ghk().sealedVials, 2, 'the stored count is untouched');
+      assert.ok(ghk().stockCounted !== true,
+        'and it is emphatically not marked counted — a vial size in doubt is a ' +
+        'draw-up in doubt');
+      assert.ok(res.blocked.length === 1 && res.blocked[0].name,
+        'the blocked row is NAMED, so he knows which one to fix');
+    });
+
+    test('STAKE a good count sets the vials and marks it counted', () => {
+      stakeState({ sealedVials: 0, stockCounted: false });
+      const res = app.pepStockTakeApply([{ idx:0, vialMg:50, totalMg:450 }]);
+      assert.equal(res.ok, true, 'saved');
+      assert.equal(ghk().sealedVials, 9, 'nine sealed');
+      assert.equal(ghk().stockCounted, true,
+        'counted — unlike a phase figure, this one he physically did');
+      assert.equal(res.applied, 1, 'and it reports what it wrote');
+    });
+
+    test('STAKE a BLANK row is skipped, never zeroed', () => {
+      stakeState({ sealedVials: 6, stockCounted: true });
+      const res = app.pepStockTakeApply([{ idx:0, vialMg:50, totalMg:'' }]);
+      assert.equal(res.ok, true, 'saving is not blocked by a blank');
+      assert.equal(ghk().sealedVials, 6,
+        'he listed ten compounds and the protocol has thirteen — silence means ' +
+        'he did not count it, NOT that he has none');
+      assert.equal(res.skipped, 1, 'and it is reported as skipped, not applied');
+    });
+
+    test('STAKE an explicit 0 IS a count — "not ordered"', () => {
+      stakeState({ sealedVials: 4, stockCounted: false });
+      app.pepStockTakeApply([{ idx:0, vialMg:50, totalMg:0 }]);
+      assert.equal(ghk().sealedVials, 0, 'typing zero is how he says none');
+      assert.equal(ghk().stockCounted, true, 'and none is a counted answer');
+    });
+
+    test('STAKE a corrected vial size rides along with the count', () => {
+      stakeState({ sealedVials: 0, stockCounted: false });
+      // He opens the sheet, sees GHK-Cu marked "assumed 50mg", and corrects it.
+      app.pepStockTakeApply([{ idx:0, vialMg:100, totalMg:400 }]);
+      const st = ghk();
+      assert.equal(st.sealedVials, 4, 'four 100mg vials');
+      assert.equal(parseFloat(st.actualVialMg), 100,
+        'and the corrected size is stored, so the DRAW recalculates too — the ' +
+        'vial size is not just a divisor, it sets the concentration');
+    });
+
     test('PHASES Save current keeps what is on screen as a new phase', () => {
       fresh();
       const r = app.pepSavePhase('Phase 3 - Nov', '2026-11-01', '2027-01-31', 'cognitive layer');
@@ -4541,6 +4624,25 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     // a date/quantity picker. No text input means no keyboard means nothing for
     // the helper to do, and arming it there would be a listener bought for
     // nothing. If either grows a typed field, this note is where to start.
+    // The stock take is the WORST case for the keyboard: two number fields per
+    // compound, thirteen compounds, so the row he is typing into is usually
+    // far down a scrolling panel. Drives the real open function, not the helper.
+    test('KEYBOARD the stock take is armed, and it renders a row per compound', () => {
+      kbSetUp(420);
+      seed(KEY, { stacks: [
+        { compoundId: 'ghkcu', dose: 1, vialMg: 50, waterMl: 2 },
+        { compoundId: 'ta1',   dose: 1.6, vialMg: 10, waterMl: 2 },
+      ] });
+      const ov = openSheet(() => app.pepOpenStockTake());
+      assert.ok(ov, 'the sheet created an overlay');
+      assert.equal(ov.style.height, '420px', 'overlay ends where the keyboard begins');
+      assert.ok(ov.innerHTML.includes('pep-stk-t-0'), 'a total-mg field for the first compound');
+      assert.ok(ov.innerHTML.includes('pep-stk-t-1'), 'and one for the second');
+      assert.ok(ov.innerHTML.includes('Total mg sealed'),
+        'labelled in the units he actually counts in');
+      kbTearDown();
+    });
+
     test('KEYBOARD the tap-only sheets are deliberately not armed', () => {
       const slice = (name, next) => {
         const i = html.indexOf('function ' + name);

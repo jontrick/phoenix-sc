@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.267';
+var APP_VERSION='4.9.268';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23772,6 +23772,8 @@ function pepRenderScreen(){
   if(expOpen) expOpen.addEventListener("click", pepExportProtocol);
   var impOpen = body.querySelector("#pep-import-open");
   if(impOpen) impOpen.addEventListener("click", pepOpenImport);
+  var stkOpen = document.getElementById("pep-stocktake-open");
+  if(stkOpen) stkOpen.addEventListener("click", pepOpenStockTake);
   var bloodAdd = body.querySelector("#pep-blood-add");
   if(bloodAdd) bloodAdd.addEventListener("click", function(){ pepOpenBloodPanel(null); });
   body.querySelectorAll("[data-pep-blood-open]").forEach(function(el){
@@ -26245,9 +26247,12 @@ function _pepTabStock(ps){
   // string-built layout produces a structure nobody designed — a sibling goes
   // AFTER the container, not through it.
   h += "<div id=\"pep-export-out\"></div>";
-  h += "<div style=\"font-size:11px;color:" + (r.stockDone ? "#4CAF50" : "var(--gold)") + ";margin-bottom:14px;\">" +
+  h += "<div style=\"font-size:11px;color:" + (r.stockDone ? "#4CAF50" : "var(--gold)") + ";margin-bottom:8px;\">" +
        (r.stockDone ? "All " + r.countable + " counted — the protocol overview is unlocked."
                     : r.counted + " of " + r.countable + " counted. Confirm each one to unlock the protocol overview.") + "</div>";
+  // v4.9.268: the way IN to counting, put where he already is when he is
+  // thinking about it, rather than as a fourth button in a crowded header row.
+  h += "<button id=\"pep-stocktake-open\" style=\"width:100%;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:900;padding:9px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;\">Count stock by total mg</button>";
 
   if(!stacks.length){
     h += "<div style=\"text-align:center;padding:32px 0;color:var(--text3);font-size:13px;\">No compounds yet.<br>Tap + Add to start.</div>";
@@ -27124,6 +27129,170 @@ function pepConfirmCount(idx){
   var st = ps.stacks && ps.stacks[idx]; if(!st) return;
   st.stockCounted = true;
   pepSaveState(ps); pepRenderScreen();
+}
+
+// ── STOCK TAKE (v4.9.268) ───────────────────────────────────────────────────
+// Jon reports stock the way he buys it: a TOTAL in milligrams, one line per
+// compound. "Tesamorelin - 50mg / Epitalon - 100mg / Nad - 5000mg / GHK-Cu -
+// 450mg / TA1 - 60mg / Mots-c - 60mg / 5Amq - 15mg".
+//
+// The app stores SEALED VIALS, so entering that meant dividing by a vial size
+// in his head, once per compound, on a phone. That division is the whole
+// problem. It is silent, and it runs against a number that for most compounds
+// is a LIBRARY ASSUMPTION rather than anything he has measured — see the
+// warning at the top of _PEP_RECON, where the document has been wrong twice.
+//
+// Get the vial size wrong and it breaks in two directions at once: the vial
+// COUNT is wrong, so the forecast lies, AND the concentration is wrong, so the
+// units he draws are wrong. That second one is the BPC-157 shape — a half dose
+// that shipped for fourteen versions.
+//
+// So this takes the number he actually says, shows the division, and REFUSES a
+// row that does not divide cleanly. A remainder is the best evidence available
+// that the assumed vial size is wrong: 450mg into 50mg vials is 9, and into
+// 100mg vials it is 4.5. The right response to 4.5 is not to round it.
+function _pepStockTakeRow(vialMgIn, totalMgIn){
+  var raw = String(totalMgIn == null ? "" : totalMgIn).trim();
+  if(raw === "") return {state:"blank"};
+  var total = parseFloat(raw);
+  var vial  = parseFloat(vialMgIn);
+  if(isNaN(total) || total < 0) return {state:"bad", why:"Total must be a number, in mg."};
+  if(!(vial > 0))               return {state:"bad", why:"Set the vial size before counting this one."};
+  if(total === 0)               return {state:"zero", vials:0, vialMg:vial};
+  var n = total / vial;
+  var r = Math.round(n);
+  if(Math.abs(n - r) > 1e-6){
+    return {state:"remainder", vialMg:vial, exact:Math.round(n * 100) / 100,
+      why: _pepNum(total) + "mg does not divide into " + _pepNum(vial) + "mg vials — that is " +
+           _pepNum(Math.round(n * 100) / 100) + " vials. The vial size is probably wrong."};
+  }
+  return {state:"ok", vials:r, vialMg:vial};
+}
+
+// ALL OR NOTHING. A blocked row means a vial size is in doubt, and a vial size
+// in doubt is a draw-up in doubt — so nothing is written until it is resolved.
+// Saving the good rows and reporting the bad ones would leave him half counted
+// with no record of which half.
+//
+// A BLANK row is left untouched, never zeroed. He listed ten compounds and the
+// protocol has thirteen; silence means he did not count it, not that he has
+// none. Typing an explicit 0 is how he says none - "Semax - not ordered".
+function pepStockTakeApply(rows){
+  var ps = pepGetState();
+  var applied = 0, skipped = 0, blocked = [];
+  (rows || []).forEach(function(row){
+    var st = ps.stacks && ps.stacks[row.idx];
+    if(!st) return;
+    var c = _pepCompound(st.compoundId);
+    var res = _pepStockTakeRow(row.vialMg, row.totalMg);
+    if(res.state === "blank"){ skipped++; return; }
+    if(res.state === "bad" || res.state === "remainder"){
+      blocked.push({name: (c ? c.name : st.compoundId), why: res.why});
+      return;
+    }
+    var planned = (st.vialMg != null && st.vialMg !== "")
+      ? parseFloat(st.vialMg)
+      : (((c && _PEP_RECON[c.id]) || {}).vialMg || null);
+    st.actualVialMg = (planned && res.vialMg === planned) ? null : res.vialMg;
+    st.sealedVials  = res.vials;
+    st.stockCounted = true;               // he has physically counted this one
+    applied++;
+  });
+  if(blocked.length) return {ok:false, applied:0, skipped:skipped, blocked:blocked};
+  pepSaveState(ps);
+  return {ok:true, applied:applied, skipped:skipped, blocked:[]};
+}
+
+function pepOpenStockTake(){
+  var ps = pepGetState();
+  var rows = [];
+  (ps.stacks || []).forEach(function(st, i){
+    if(st && st.status !== "complete") rows.push({idx:i, st:st});
+  });
+
+  var body = "";
+  rows.forEach(function(row){
+    var st = row.st;
+    var c  = _pepCompound(st.compoundId);
+    var eff = _pepEffectiveVial(st, c);
+    var held = parseInt(st.sealedVials, 10) || 0;
+    body +=
+      "<div style=\"padding:12px 0;border-top:1px solid var(--border2);\">" +
+      "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:8px;\">" +
+      "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;color:var(--text);\">" + _esc(c ? c.name : st.compoundId) + "</div>" +
+      "<div style=\"font-size:10px;color:var(--text3);\">" + (st.stockCounted ? "counted · " : "") + held + " sealed now</div>" +
+      "</div>" +
+      "<div style=\"display:flex;gap:8px;margin-top:8px;\">" +
+      "<div style=\"flex:1;\"><div style=\"font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;\">Vial size mg" +
+        (eff.source === "default" ? " <span style=\"color:var(--gold);\">assumed</span>" : "") + "</div>" +
+        "<input id=\"pep-stk-v-" + row.idx + "\" type=\"number\" min=\"0\" step=\"0.5\" value=\"" + (eff.mg != null ? eff.mg : "") + "\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid " + (eff.source === "default" ? "var(--gold)" : "var(--border2)") + ";border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;\"></div>" +
+      "<div style=\"flex:1;\"><div style=\"font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;\">Total mg sealed</div>" +
+        "<input id=\"pep-stk-t-" + row.idx + "\" type=\"number\" min=\"0\" step=\"any\" placeholder=\"leave blank\" style=\"width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;\"></div>" +
+      "</div>" +
+      "<div id=\"pep-stk-o-" + row.idx + "\" style=\"font-size:11px;color:var(--text3);margin-top:6px;min-height:15px;\"></div>" +
+      "</div>";
+  });
+
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  ov.innerHTML = "<div id=\"pep-stk-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:100%;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Stock take</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:4px;line-height:1.6;\">Enter the TOTAL milligrams you hold SEALED, the way you buy it — &ldquo;450mg&rdquo;, not &ldquo;9 vials&rdquo;. The app does the division and shows its working.</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.6;\">Do NOT include a vial you already have open — that one is tracked separately, by how much has been drawn from it. Leave a compound BLANK to skip it; blank means not counted, not none. Type 0 for none.</div>" +
+    "<div id=\"pep-stk-err\" style=\"font-size:12px;color:var(--gold);margin-bottom:10px;line-height:1.6;\"></div>" +
+    (rows.length ? body : "<div style=\"padding:24px 0;color:var(--text3);font-size:13px;text-align:center;\">No compounds to count.</div>") +
+    "<div style=\"display:flex;gap:10px;margin-top:18px;\">" +
+    "<button id=\"pep-stk-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Cancel</button>" +
+    "<button id=\"pep-stk-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Save count</button>" +
+    "</div></div>";
+  document.body.appendChild(ov);
+  _phxKeyboardSafe(ov);
+  ov.addEventListener("click", function(e){ if(e.target === ov) ov.remove(); });
+
+  function preview(idx){
+    var out = document.getElementById("pep-stk-o-" + idx);
+    var vEl = document.getElementById("pep-stk-v-" + idx);
+    var tEl = document.getElementById("pep-stk-t-" + idx);
+    if(!out) return;
+    var res = _pepStockTakeRow(vEl ? vEl.value : null, tEl ? tEl.value : null);
+    if(res.state === "blank"){ out.innerHTML = "<span style=\"color:var(--text3);\">not counted</span>"; return; }
+    if(res.state === "zero"){  out.innerHTML = "<span style=\"color:var(--text2);\">none on hand</span>"; return; }
+    if(res.state === "ok"){
+      out.innerHTML = "<span style=\"color:#4CAF50;\">= " + res.vials + " sealed vial" + (res.vials === 1 ? "" : "s") + "</span>";
+      return;
+    }
+    out.innerHTML = "<span style=\"color:var(--gold);\">" + _esc(res.why || "") + "</span>";
+  }
+  rows.forEach(function(row){
+    ["pep-stk-v-", "pep-stk-t-"].forEach(function(pre){
+      var el = document.getElementById(pre + row.idx);
+      if(el) el.addEventListener("input", function(){ preview(row.idx); });
+    });
+    preview(row.idx);
+  });
+
+  var cancel = document.getElementById("pep-stk-cancel");
+  if(cancel) cancel.addEventListener("click", function(){ ov.remove(); });
+  var save = document.getElementById("pep-stk-save");
+  if(save) save.addEventListener("click", function(){
+    var payload = rows.map(function(row){
+      var vEl = document.getElementById("pep-stk-v-" + row.idx);
+      var tEl = document.getElementById("pep-stk-t-" + row.idx);
+      return {idx: row.idx, vialMg: vEl ? vEl.value : null, totalMg: tEl ? tEl.value : null};
+    });
+    var res = pepStockTakeApply(payload);
+    var err = document.getElementById("pep-stk-err");
+    if(!res.ok){
+      if(err) err.innerHTML = "Nothing saved — fix these first:<br>" +
+        res.blocked.map(function(b){ return "<b>" + _esc(b.name) + "</b> — " + _esc(b.why); }).join("<br>");
+      var panel = document.getElementById("pep-stk-panel");
+      if(panel) panel.scrollTop = 0;
+      return;
+    }
+    ov.remove();
+    pepRenderScreen();
+    if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  });
 }
 
 function pepConfirmHistory(){
@@ -36238,7 +36407,7 @@ function openTodaySession(){
     var _sameSession = _sessKey && window._phxActiveSessionKey === _sessKey && currentSupabaseSessionId;
     if(!_sameSession){
       window._phxActiveSessionKey = _sessKey;
-      // v4.9.267: persisted so an iOS reload mid-session still recognises this as the
+      // v4.9.268: persisted so an iOS reload mid-session still recognises this as the
       // same session and reuses its row, rather than starting an empty one over the top.
       if(typeof _phxSaveActiveSessionIdentity === 'function') _phxSaveActiveSessionIdentity(_sessKey);
       supabaseStartSession(aiSessionType,sess.session_type||'Training','ai-'+(sess.session_type||'training').toLowerCase());
@@ -37864,7 +38033,7 @@ window.fqNoInjuriesToggle = function(cb){
 
 // ---------- 2. BUG 1: ACTIVE SESSION PERSIST + NAV GUARD + RESTORE ----------
 var PHX_ACTIVE_SESSION_KEY = 'phoenix_active_session_id';
-// v4.9.267: the session's IDENTITY, persisted beside its id. See the recovery block
+// v4.9.268: the session's IDENTITY, persisted beside its id. See the recovery block
 // below — the id survived a reload and the identity did not, which was worse than
 // neither surviving.
 var PHX_ACTIVE_SESSION_IDENTITY = 'phoenix_active_session_key';
@@ -37906,7 +38075,7 @@ if(typeof supabaseCompleteSession==='function'){
 }
 
 // On page load, recover the persisted id back into the in-memory variable
-// v4.9.267: extracted from an IIFE so it can be driven by a test. The recovery is the
+// v4.9.268: extracted from an IIFE so it can be driven by a test. The recovery is the
 // load-bearing half of the mid-session reload fix and nothing could reach it while it ran
 // only at script-eval. Extracting to make something testable moves the untested part to
 // the CALL SITE, so the call below is pinned structurally in harness.mjs.
@@ -37917,7 +38086,7 @@ window._phxRecoverActiveSession = function(){
       window.currentSupabaseSessionId = stored;
       console.log('[PHX] recovered active session id from localStorage:', stored);
     }
-    // v4.9.267 — RECOVER THE IDENTITY TOO. Jon: "i got flicked off the training screen
+    // v4.9.268 — RECOVER THE IDENTITY TOO. Jon: "i got flicked off the training screen
     // to the today page part way through the session then went back in it had cleared
     // where i had got to."
     //

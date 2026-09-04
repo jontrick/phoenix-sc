@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.267'", 'version is 4.9.267');
+has("var APP_VERSION='4.9.268'", 'version is 4.9.268');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1475,9 +1475,11 @@ function phxFnSpan(src, name) {
   // enumeration guard below would have demanded the arming anyway; this one
   // makes adding it a conscious edit rather than a silent drift.
   // v4.9.256 raised this to 5 for pepOpenMakeUp, which has two typed fields.
-  kb === 7
-    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 7 creation sites')
-    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 7 (pepOpenEditStack, pepOpenCustomVial, pepOpenBloodPanel, pepOpenImport, pepOpenMakeUp, pepOpenSavePhase, pepOpenAddDose); the helper is NOT idempotent`);
+  // v4.9.268 raised this to 8 for pepOpenStockTake — the widest form in the
+  // domain, two number fields per compound down a scrolling panel.
+  kb === 8
+    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 8 creation sites')
+    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 8 (pepOpenEditStack, pepOpenCustomVial, pepOpenBloodPanel, pepOpenImport, pepOpenMakeUp, pepOpenSavePhase, pepOpenAddDose, pepOpenStockTake); the helper is NOT idempotent`);
   // v4.9.224: was 2, and the 2 came from a miscount I made and everyone
   // downstream inherited. The count pin is only as good as the enumeration
   // behind it, so the enumeration is now mechanical: every peptide overlay that
@@ -2507,7 +2509,7 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
 // That is how a missing column hid for twelve versions on the peptide side.
 hasCode('if(r && !r.ok', 'FLUSH: the keepalive path checks res.ok, because fetch resolves on a 4xx');
 
-// ── MID-SESSION RELOAD (v4.9.267) ───────────────────────────────────────────
+// ── MID-SESSION RELOAD (v4.9.268) ───────────────────────────────────────────
 // iOS reloads the PWA on screen lock. The session id was persisted and recovered; the
 // IDENTITY the re-entry guard compares was not — so re-entry minted a new row OVER the
 // recovered id and Jon's completed sets were orphaned under a key nothing looks up again.

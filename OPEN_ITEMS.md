@@ -20,14 +20,35 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.
-- [ ] JON — Peptide stock: RE-CHECK the counts on STOCK after updating to v4.9.266.
-      NOT an export request — that was the wrong ask and PEPTIDES has withdrawn it. He
-      has done a full stock take; the problem was that the app was throwing it away.
-      `pepApplyPhase` replaced ps.stacks wholesale, so applying a phase overwrote counted
-      stock with the phase's plan-time figures — and he was told to apply Phase 2 twice.
-      Fixed v4.9.266: a compound with `stockCounted === true` keeps sealedVials, the open
-      vial and its mix date across a phase change. The PLAN still comes from the phase.
-      Closes when he confirms the STOCK numbers read what he counted.
+- [ ] JON — Peptide stock: enter his stock take via STOCK → "Count stock by total mg"
+      (v4.9.268). He reports stock as TOTAL MG, not vial counts, so the sheet takes mg
+      and does the division. Fixes for context: `pepApplyPhase` used to replace ps.stacks
+      wholesale, so applying a phase overwrote counted stock (fixed v4.9.266).
+      HIS FIGURES, given 2026-09-04 — recorded here because they exist nowhere else:
+        Tesamorelin 50mg · Epitalon 100mg · NAD+ 5000mg · GHK-Cu 450mg · TA-1 60mg
+        MOTS-c 60mg · 5-AMQ 15mg · DSIP "have, use when required" (no figure)
+        Semax NOT ORDERED · SLU NOT ORDERED (neither is in Phase 2)
+      Five of these match the Phase 2 figures EXACTLY (tesa 5x10, epi 10x10, nad 10x500,
+      mots 6x10, 5amq 3x5). That confirms the TOTALS. It does NOT confirm the VIAL SIZES
+      — both numbers trace back to his own ordering document, so they are one measurement
+      with two signatures. The vial size sets the CONCENTRATION and therefore the units
+      he draws; see the reconstitution item below.
+      Closes when the STOCK screen reads what he counted.
+- [ ] JON — Peptide stock, the part he did NOT answer. His list covers 8 of the 13 Phase 2
+      compounds. NO figure was given for Retatrutide, Ipamorelin, BPC-157, TB-500 or
+      CJC-1295 — all five are ACTIVE and running. Unknown, not zero and not fine: the
+      stock-take sheet leaves a blank row untouched rather than zeroing it, so nothing
+      has been assumed. Closes when he gives totals for those five, or says they are
+      deliberately untracked.
+- [ ] JON — Peptide vial sizes for GHK-Cu and TA-1 specifically. These are the two NEW
+      figures in his stock take — Phase 2 carried no stock for either — and both rest on
+      a LIBRARY-ASSUMED vial size (GHK-Cu 50mg, TA-1 10mg). 450 ÷ 50 = 9 and 60 ÷ 10 = 6
+      both divide cleanly, which is weak supporting evidence and not proof: 450mg is also
+      9x50 or 4.5x100, and 60mg is 6x10 or 12x5. If TA-1 vials are 5mg rather than 10mg
+      the concentration halves and his 1.6mg dose becomes 64u instead of 32u — the exact
+      shape of the BPC-157 half-dose that shipped for 14 versions. Closes when he reads
+      the two labels. The stock-take sheet marks an assumed size in gold and refuses any
+      total that does not divide cleanly, so a wrong size cannot be entered silently.
 - [ ] JON — Reconstitution: only `bpc157` is marked CONFIRMED BY JON. The other 16 entries
       in `_PEP_RECON` are transcribed from Peptide_Protocol_2026_27.pdf and unconfirmed
       against a real vial. Two have already been wrong in opposite directions. Closes

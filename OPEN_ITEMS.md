@@ -17,6 +17,23 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## WAITING ON JON
 
+- [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together
+      and NONE has been used by him yet. All are verified by gates only, and three fixes
+      this week passed clean gates while still being broken for him — each time the tests
+      covered the piece just written rather than the route he takes. So this session is
+      the only real check. Live on v4.9.276, confirmed serving.
+      **What to watch, in the order he will hit it:**
+      · PULL-UPS — count-in before the clock; the clock is now 42px, not an 11px line;
+        each set is a chip with an "x" to delete; the input says "Reps in THIS set only".
+        His 4+3-typed-as-7 case is the one to retry deliberately.
+      · Last time's REPS AND TIME should show on the pull-up card before he starts.
+      · A green COMPLETED badge under the exercise name after finishing any run/complex.
+      · SUPERSET history should show BOTH sets from last week, not one.
+      · Leaving the session and returning should keep his progress and NOT re-show today's
+        partial as last week's numbers.
+      Closes when he reports. **A silent pass is not a pass** — ask him per item, because
+      "seems fine" has twice meant "did not reach that screen".
+
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.

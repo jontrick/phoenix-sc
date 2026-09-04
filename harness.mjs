@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.282'", 'version is 4.9.282');
+has("var APP_VERSION='4.9.283'", 'version is 4.9.283');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2957,6 +2957,16 @@ hasCode("body.querySelectorAll('[data-prog-tick]')",
 
 // ── Shopping list and prep plan ─────────────────────────────────────────────
 hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
+// EXISTING IS NOT REACHED. Both of these were built, tested and called by nothing
+// — the list existed only as a function, and Jon opened the app to find prose
+// where his shopping list should be. Guard the CALL, not the definition.
+hasCode('_nutProgWeekAheadCard(wk) + _nutProgListCard(wk)',
+        'SHOP: the review card actually RENDERS the list and prep plan');
+hasCode('function _nutProgListCard(',  'SHOP: the list has a renderer at all');
+hasCode('function nutProgListText(',   'SHOP: and a plain-text export for the phone');
+hasCode('data-prog-copy',              'SHOP: with a copy button');
+hasCode("body.querySelector('[data-prog-copy]')",
+        'SHOP: which is WIRED — a drawn button nothing listens to is inert');
 
 // ── The Wednesday review ────────────────────────────────────────────────────
 hasCode('function nutProgReviewFor(',    'REVIEW: the weekly proposal exists');

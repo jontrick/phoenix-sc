@@ -1700,6 +1700,76 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgAdjustBlocks(5), 1, 'and the accept path stores a real change');
   });
 
+  // ── the list must be ON A SCREEN, not merely computed ────────────────────
+  // v4.9.283. nutProgShoppingFor and nutProgPrepFor were built, tested and
+  // reached by nothing. Every SHOP/PREP case above drives the FUNCTIONS; none
+  // drove a screen, so all four gates passed on a feature Jon could not open.
+  // These drive _nutTabToday and assert the list is visible to a human.
+
+  test('LIST setup day shows the actual shopping list, not a description of one', () => {
+    setUp(110);
+    const html = onDay('2026-09-05', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Shopping list') >= 0, 'the list has a heading');
+    assert.ok(html.indexOf('Chicken breast') >= 0, 'and real items on it');
+    assert.ok(/1260/.test(html), 'with the RAW weight to buy');
+    assert.ok(/945 g cooked/.test(html), 'and the cooked yield beside it, so the two are never confused');
+  });
+
+  test('LIST setup day shows the prep plan with its batch weights', () => {
+    setUp(110);
+    const html = onDay('2026-09-05', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Prep plan') >= 0, 'the prep plan is on screen');
+    assert.ok(/Lunch . 7/.test(html), 'with the batch and how many portions');
+    assert.ok(html.indexOf('No prep needed') >= 0, 'and the meals that need none');
+  });
+
+  test('LIST setup day answers "what am I eating this week"', () => {
+    setUp(110);
+    const html = onDay('2026-09-05', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('The week ahead') >= 0,
+      'on setup day there is no plan to EAT yet, so the week has to be visible somewhere');
+    assert.ok(/Mon/.test(html) && /Sun/.test(html), 'day by day');
+    assert.ok(/lift/.test(html), 'showing which days lift, since those eat a block less');
+  });
+
+  test('LIST the Wednesday review carries the list too', () => {
+    setUp(110);
+    const html = onDay('2026-10-07', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Week 5 review') >= 0, 'the review is there');
+    assert.ok(html.indexOf('Shopping list') >= 0,
+      'and so is the list — you review, then you shop, so keeping them apart is ' +
+      'what made the list invisible in the first place');
+    assert.ok(html.indexOf('Prep plan') >= 0, 'and the prep plan');
+  });
+
+  test('LIST an ordinary day is not buried under a shopping list', () => {
+    setUp(110);
+    // NB every Wednesday IS a review day — 16 Sept reviews week 2 — so an
+    // "ordinary day" has to be a day that is not a Wednesday.
+    const html = onDay('2026-09-17', () => app._nutTabToday(app.nutGetState()));
+    assert.equal(html.indexOf('Shopping list'), -1, 'no list on a Thursday');
+    assert.equal(html.indexOf('The week ahead'), -1, 'nor the week summary');
+    assert.ok(html.indexOf('data-prog-tick') >= 0, 'just the food to eat');
+  });
+
+  test('LIST the copy button produces text a supermarket can be read from', () => {
+    setUp(110);
+    const txt = app.nutProgListText(0);
+    assert.ok(txt.indexOf('SHOPPING LIST') >= 0, 'headed');
+    assert.ok(txt.indexOf('2026-09-07') >= 0, 'dated for the trial week');
+    assert.ok(txt.indexOf('Chicken breast') >= 0, 'with the items');
+    assert.ok(txt.indexOf('PREP') >= 0, 'and the prep steps');
+    assert.ok(txt.split('\n').length > 15, 'as real lines, not one blob: ' + txt.split('\n').length);
+  });
+
+  test('LIST week 0 is the trial week, not week 1', () => {
+    setUp(110);
+    const txt = app.nutProgListText(0);
+    assert.ok(txt.indexOf('2026-09-07') >= 0 && txt.indexOf('2026-09-13') >= 0,
+      'the rehearsal list covers Mon 7 to Sun 13 September');
+    assert.equal(txt.indexOf('2026-09-14'), -1, 'and not week 1');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

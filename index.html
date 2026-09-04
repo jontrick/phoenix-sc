@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.282';
+var APP_VERSION='4.9.283';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19258,6 +19258,14 @@ function nutRenderScreen(){
       nutRenderScreen();
     });
   });
+  var progCopy = body.querySelector('[data-prog-copy]');
+  if(progCopy) progCopy.addEventListener('click', function(){
+    var txt = nutProgListText(parseInt(progCopy.getAttribute('data-prog-copy'), 10));
+    try {
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt);
+    } catch(_e){}
+    if(typeof _phxNotice === 'function') _phxNotice('Shopping list copied');
+  });
   var progAccept = body.querySelector('[data-prog-accept]');
   if(progAccept) progAccept.addEventListener('click', function(){
     nutProgSetAdjust(parseInt(progAccept.getAttribute('data-prog-accept'), 10),
@@ -21451,6 +21459,120 @@ function nutProgReviewFor(week, asOfKey){
   return out;
 }
 
+// ── the shopping list and prep plan, ON SCREEN ─────────────────────────────
+// v4.9.283. nutProgShoppingFor and nutProgPrepFor were written, tested and
+// reachable by NOTHING. The shopping list existed only as a function; Jon opened
+// the app on setup day and found a paragraph of prose where his list should be.
+//
+// This is the orphan class this domain keeps meeting, and I walked into it with
+// my own feature. Every test I wrote drove the FUNCTIONS. Not one drove a SCREEN,
+// so all four gates stayed green while the feature was unreachable — the exact
+// distinction I had made for the Today card a version earlier and then failed to
+// apply here.
+
+// Plain text — the format that survives being pasted into notes or a message,
+// which is how a list actually reaches a supermarket.
+function nutProgListText(week){
+  var shop = nutProgShoppingFor(week);
+  if(!shop) return '';
+  var out = ['SHOPPING LIST  ' + shop.from + ' to ' + shop.to, ''];
+  shop.groups.forEach(function(g){
+    out.push(g.name.toUpperCase());
+    g.items.forEach(function(it){
+      out.push('  ' + it.qty + (it.unit || '') + '  ' + it.n + (it.note ? '  (' + it.note + ')' : ''));
+    });
+    out.push('');
+  });
+  if(shop.formulas.length){
+    out.push('FORMULAS');
+    shop.formulas.forEach(function(f){ out.push('  ' + f.serves + ' x  ' + f.n); });
+    out.push('');
+  }
+  var prep = nutProgPrepFor(week);
+  if(prep && prep.batches.length){
+    out.push('PREP  ' + prep.window.from + ' to ' + prep.window.to);
+    prep.batches.forEach(function(b){
+      out.push('  ' + b.name);
+      b.steps.forEach(function(st){ out.push('    - ' + st); });
+    });
+  }
+  return out.join('\n');
+}
+
+function _nutProgListCard(week){
+  var shop = nutProgShoppingFor(week);
+  if(!shop) return '';
+  var prep = nutProgPrepFor(week);
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
+      '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Shopping list</div>' +
+      '<div style="font-size:10px;color:var(--text3);">' + shop.from + ' &rarr; ' + shop.to + '</div>' +
+    '</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Raw weights &mdash; what you buy, not what you eat</div>';
+  shop.groups.forEach(function(g){
+    h += '<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:11px 0 4px;font-weight:700;">' + g.name + '</div>';
+    g.items.forEach(function(it){
+      h += '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+        '<div style="min-width:0;"><div>' + it.n + '</div>' +
+        (it.note ? '<div style="font-size:10px;color:var(--text3);">' + it.note + '</div>' : '') + '</div>' +
+        '<div style="color:var(--gold);font-weight:700;white-space:nowrap;">' + it.qty + (it.unit || '') + '</div></div>';
+    });
+  });
+  if(shop.formulas.length){
+    h += '<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:11px 0 4px;font-weight:700;">Formulas</div>';
+    shop.formulas.forEach(function(f){
+      h += '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+        '<span>' + f.n + '</span><span style="color:var(--gold);font-weight:700;">' + f.serves + ' serves</span></div>';
+    });
+  }
+  h += '<button data-prog-copy="' + week + '" style="width:100%;margin-top:12px;padding:11px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Copy list</button></div>';
+
+  if(prep && prep.batches.length){
+    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
+        '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Prep plan</div>' +
+        '<div style="font-size:10px;color:var(--text3);">' + prep.window.from + ' &rarr; ' + prep.window.to + '</div></div>';
+    prep.batches.forEach(function(b){
+      h += '<div style="margin-top:11px;padding:10px 11px;background:var(--bg3);border-radius:8px;">' +
+        '<div style="font-size:13px;font-weight:600;">' + b.name + '</div>';
+      b.steps.forEach(function(st){
+        h += '<div style="font-size:11px;color:var(--text2);margin-top:5px;line-height:1.5;">&bull; ' + st + '</div>';
+      });
+      if(b.note) h += '<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">' + b.note + '</div>';
+      h += '</div>';
+    });
+    h += '<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:12px 0 4px;font-weight:700;">No prep needed</div>';
+    prep.fresh.forEach(function(f){
+      h += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>' + f.n + '</span><span style="color:var(--text3);">' + f.why + '</span></div>';
+    });
+    h += '</div>';
+  }
+  return h;
+}
+
+// The week ahead, day by day. On setup day there is no plan to EAT yet, so
+// "what am I eating this week" has to be answerable somewhere other than Today.
+function _nutProgWeekAheadCard(week){
+  var days = _nutProgWeekDates(week);
+  if(!days) return '';
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">The week ahead</div>';
+  days.forEach(function(d){
+    var t = nutProgTargetsOn(d);
+    if(!t) return;
+    var dt = _nutProgDate(d);
+    var nm = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+    h += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+      '<div style="min-width:0;"><span style="font-weight:700;">' + nm + '</span>' +
+        '<span style="color:var(--text3);"> ' + d.slice(8) + '/' + d.slice(5,7) + '</span>' +
+        '<span style="font-size:10px;color:var(--text3);"> &middot; ' + (t.sessions.length ? t.sessions.join(' + ') : 'rest') + '</span></div>' +
+      '<div style="white-space:nowrap;color:var(--text3);font-size:11px;">' +
+        t.total.kcal + ' kcal &middot; <span style="color:var(--gold);">' + t.blocks + ' blk</span></div></div>';
+  });
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Lift days eat one block less &mdash; the intra drink carries it.</div></div>';
+  return h;
+}
+
 // Which week is being reviewed today, if any. Returns 0 for the rehearsal's
 // Saturday setup and null on every other day.
 function nutProgReviewWeekOn(dateKey){
@@ -21476,8 +21598,8 @@ function _nutProgReviewCard(dateKey){
 
   if(wk === 0){
     h += '<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.5;">' +
-         'A dress rehearsal on week 1&rsquo;s macros. Nothing here is measured &mdash; run the ' +
-         'whole loop once and tell me what breaks.</div>';
+         'A dress rehearsal on week 1&rsquo;s macros, Mon 7 to Sun 13 September. Nothing here ' +
+         'is measured &mdash; run the whole loop once and tell me what breaks.</div>';
   } else {
     var r = nutProgReviewFor(wk, dateKey);
     var tr = r.trend;
@@ -21505,6 +21627,7 @@ function _nutProgReviewCard(dateKey){
     }
   }
   h += '</div>';
+  h += _nutProgWeekAheadCard(wk) + _nutProgListCard(wk);
   return h;
 }
 

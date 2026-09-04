@@ -68,6 +68,29 @@ And note what does **not** count as the record:
   they do not know exists.
 - **A scratchpad path.** It reads like a real path in prose and is gone within the hour.
 
+## When you supersede a claim, DELETE it
+
+`CLAUDE.md` once asserted **both** "one more manual reinstall is still required" and
+"auto-update is confirmed working" — adjacent lines, stale one first. A domain handoff took
+the first half and caveated three open bug reports on it; a relayed summary carried it as a
+BLOCKING instruction that would have sent Jon to delete his PWA for no reason.
+
+> **A contradiction in a source document does not produce one confused reader. It produces
+> several confident ones, disagreeing.**
+
+Leaving the old claim standing above the correction is not a correction — it is a coin flip
+that resolves independently for every reader. Delete it, and say what replaced it.
+
+**And your handoff belongs IN THE REPO.** A summary kept in a scratchpad diverged from the
+canonical `HANDOFF_NUTRITION.md` and only the repo one was right. Same rule as ONE LIST: a
+document that exists in two places goes stale in one, and nothing announces it.
+
+## Read the actual error, not the previous explanation for it
+
+A push failed with a DNS error. It was retried later and failed again — and the second
+failure was a plain non-fast-forward, origin having moved. Two different causes wearing one
+symptom, and the first diagnosis got carried onto the second.
+
 ## What each file is for — one job, one place
 
 | file | job |

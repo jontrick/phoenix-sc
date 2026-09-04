@@ -2407,9 +2407,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     try {
       app._blabMarkBlockDone(1, '42 reps');
       const wrap = app._blabBuildTotalRepBlock({ name: 'Chin-ups', _blabTarget: 40 }, 1);
-      const btn = (wrap.children || []).find((c) => typeof c.textContent === 'string' && /Done/.test(c.textContent));
-      assert.ok(btn, 'the button says Done rather than Start');
-      assert.ok(/42 reps/.test(btn.textContent), 'and shows what he did');
+      // v4.9.272: the done state moved from the button label to a badge — "visible
+      // completed". Updated rather than deleted: the property is still "a finished block
+      // is obvious on the card", only its rendering changed.
+      const html = (wrap.children || []).map((c) => c.innerHTML || '').join(' ');
+      assert.ok(/Completed/.test(html), 'a Completed badge is on the card');
+      assert.ok(/42 reps/.test(html), 'and shows what he did');
+      const btn = (wrap.children || []).find((c) => /Do it again/.test(c.textContent || ''));
+      assert.ok(btn, 'and the button no longer invites him to Start it fresh');
       assert.equal(wrap.id, 'blab-ex-1', 'and the id _blabWoDone looks for finally exists');
     } finally { dom.restore(); app._blabCurrentSession = null; }
   });
@@ -3068,5 +3073,114 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const sameSession = !!(tomorrowKey && app._phxActiveSessionKey === tomorrowKey && 'sess-abc');
     assert.equal(sameSession, false, 'a new day starts a new session row');
     app._phxActiveSessionKey = null;
+  });
+
+  // ── VISIBLE COMPLETED + THE PULL-UP PAIR (v4.9.272) ──────────────────────
+  // Jon: "visible completed", then "just need a countdown and clearer clock for the pull
+  // ups - with the total time being the logged against number of reps and this to be
+  // shown in the next week too".
+  //
+  // The completed state was never recorded AT ALL. _blabWoDone reads
+  // window._blabCurrentExIdx to know which block finished, and NOTHING SET IT — read in
+  // one place, written in none, the third variable in this file with that shape. So
+  // _blabMarkBlockDone(undefined) hit my own .251 guard and returned false silently.
+  //
+  // My .251 cases called _blabMarkBlockDone(0, ...) with an explicit index, so they
+  // proved the helper and never the path. These drive the runner.
+
+  test('DONE: opening the runner sets the index _blabWoDone depends on', () => {
+    reset(); signIn(UID);
+    app._blabCurrentExIdx = undefined;
+    const realGet = app.document.getElementById;
+    app.document.getElementById = () => null;   // no overlay: blabRunWorkout bails early
+    try {
+      app.blabRunWorkout({ name: 'Chin-ups', format: 'total_rep_goal', _blabTarget: 40 }, 2);
+      assert.equal(app._blabCurrentExIdx, 2, 'the runner records which block it opened');
+    } finally { app.document.getElementById = realGet; app._blabCurrentExIdx = undefined; }
+  });
+
+  test('DONE: an undefined index records nothing — the silent discard, pinned', () => {
+    // Why the symptom was "no completed anywhere" rather than "completed on the wrong
+    // block". The guard is correct; being handed undefined was the bug.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    app._blabCurrentSession = { week: 3, day: 3 };
+    try {
+      assert.equal(app._blabMarkBlockDone(undefined, '40 reps'), false, 'refuses an undefined index');
+      assert.equal(Object.keys(app._blabGetBlockProgress()).length, 0, 'and stores nothing');
+    } finally { app._blabCurrentSession = null; }
+  });
+
+  test('DONE: the completed state is a BADGE, not a button label', () => {
+    // "visible completed". A tick inside the button reads as neither Start nor Done at
+    // 4:30am — same size, same position.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    app._blabCurrentSession = { week: 3, day: 3 };
+    const dom = recordingDom();
+    try {
+      app._blabMarkBlockDone(1, '42 reps in 12:30');
+      const wrap = app._blabBuildTotalRepBlock({ name: 'Chin-ups', _blabTarget: 40 }, 1);
+      const html = (wrap.children || []).map((c) => c.innerHTML || '').join(' ');
+      assert.ok(/COMPLETED|Completed/.test(html), 'a Completed badge is on the card');
+      assert.ok(/42 reps in 12:30/.test(html), 'showing what he actually did');
+      const btn = (wrap.children || []).find((c) => /Do it again/.test(c.textContent || ''));
+      assert.ok(btn, 'and the button no longer says Start');
+    } finally { dom.restore(); app._blabCurrentSession = null; }
+  });
+
+  test('PULLUP: finishing records reps AND time as one record', () => {
+    // "the total time being the logged against number of reps". Reps alone cannot say
+    // whether 40 pull-ups took eleven minutes or twenty-five.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    app._blabCurrentSession = { week: 3, day: 3 };
+    // _blabWoDone stops the clock first, and _blabPauseClock recomputes elapsed from
+    // _elapsedBase/_segStart — so a bare `elapsed` is not the state the runner actually
+    // holds. Seeded as a paused clock, which is what a finished block looks like.
+    app._blabWoState = { ex: { name: 'Chin-ups', format: 'total_rep_goal' },
+                         trTotal: 42, trSets: [12, 10, 10, 10],
+                         elapsed: 750, _elapsedBase: 750, _segStart: 0, _finished: false };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = () => null;
+    try {
+      app._blabWoDone();
+      const rec = read(KEY).records['Chin-ups_trlog'];
+      assert.ok(rec, 'a record was written');
+      assert.equal(rec.reps, 42, 'the reps');
+      assert.equal(rec.secs, 750, 'and the time, in the same record so they cannot separate');
+      assert.equal(rec.sets.length, 4, 'with the set breakdown');
+    } finally { app.document.getElementById = realGet; app._blabWoState = null; app._blabCurrentSession = null; }
+  });
+
+  test('PULLUP: next week shows last time\'s reps AND time', () => {
+    reset(); signIn(UID);
+    const rec = { 'Chin-ups_trlog': { date: '2026-08-28', reps: 42, secs: 750, sets: [12, 10, 10, 10] } };
+    seed(KEY, { active: true, week: 3, last_completed_day: 2, chin_max: 12,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: rec, _ts: NEWER });
+    const sess = app.blabGetSessionData(3, 3);
+    const chin = sess.exercises.find((e) => e.format === 'total_rep_goal');
+    assert.ok(chin.prev_tr, 'last time is attached to the block');
+    assert.equal(chin.prev_tr.reps, 42, 'reps carried');
+    assert.equal(chin.prev_tr.secs, 750, 'time carried with them');
+  });
+
+  test('PULLUP: today\'s attempt is not shown as "last time"', () => {
+    // Same rule as the superset history. Re-entering mid-block must not present his own
+    // partial as the thing he is chasing.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    const rec = {
+      'Chin-ups_trlog': { date: today, reps: 18, secs: 300, sets: [18] },
+      'Chin-ups_trlog_prev': { date: '2026-08-28', reps: 42, secs: 750, sets: [12, 10, 10, 10] },
+    };
+    seed(KEY, { active: true, week: 3, last_completed_day: 2, chin_max: 12,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: rec, _ts: NEWER });
+    const chin = app.blabGetSessionData(3, 3).exercises.find((e) => e.format === 'total_rep_goal');
+    assert.equal(chin.prev_tr.reps, 42, 'last week, not today');
+    assert.equal(chin.prev_tr.secs, 750, 'with last week\'s time');
   });
 }

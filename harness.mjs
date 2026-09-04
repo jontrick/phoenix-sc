@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.271'", 'version is 4.9.271');
+has("var APP_VERSION='4.9.272'", 'version is 4.9.272');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2508,6 +2508,20 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
 // fetch RESOLVES on a 4xx, so a handler watching only for rejection sees a 400 as success.
 // That is how a missing column hid for twelve versions on the peptide side.
 hasCode('if(r && !r.ok', 'FLUSH: the keepalive path checks res.ok, because fetch resolves on a 4xx');
+
+// ── VISIBLE COMPLETED + THE PULL-UP PAIR (v4.9.272) ─────────────────────────
+// The completed state was never recorded at all: _blabWoDone reads
+// window._blabCurrentExIdx and NOTHING SET IT. Read in one place, written in none — the
+// third variable in this file with that shape, after _blabCalEntryView and blab-ex-N.
+has('window._blabCurrentExIdx = idx;', 'DONE: the runner records which block it opened (without this every completion is silently discarded)');
+// total_rep_goal joins the count-in list — the elapsed time is now his SCORE, so the
+// clock must not run while he walks to the bar.
+has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the pull-up block gets the 5-4-3-2-1 count-in');
+// Reps and time in ONE record, dated and rotated, so they cannot separate and today
+// cannot present itself as last week.
+has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
+has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
+has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
 
 // ── MID-SESSION RELOAD (v4.9.268) ───────────────────────────────────────────
 // iOS reloads the PWA on screen lock. The session id was persisted and recovered; the

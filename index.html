@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.271';
+var APP_VERSION='4.9.272';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5462,10 +5462,28 @@ function _blabApplyBlockDone(wrap, startBtn, idx){
     var prog = (typeof window._blabGetBlockProgress === 'function') ? window._blabGetBlockProgress() : {};
     var mine = prog && prog[String(idx)];
     if(!mine || !mine.done) return false;
-    startBtn.textContent = '\u2713 Done' + (mine.summary ? ' \u00b7 ' + mine.summary : '');
-    startBtn.style.background = 'rgba(58,125,68,0.1)';
-    startBtn.style.border = '1px solid #3a7d44';
-    startBtn.style.color = '#3a7d44';
+    // v4.9.272 — Jon: "visible completed". The .251 version changed the button text to
+    // a tick, which is the same size and position as "Start" and reads as neither at
+    // 4:30am in a garage. A finished block should be obvious from across the room and
+    // from the top of the card, not from reading a button.
+    var badge = document.createElement('div');
+    badge.className = 'blab-done-badge';
+    badge.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0 16px 12px;padding:12px 14px;' +
+      'background:rgba(58,125,68,0.14);border:1px solid #3a7d44;border-radius:var(--radius);';
+    badge.innerHTML =
+      '<div style="width:22px;height:22px;border-radius:50%;background:#3a7d44;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#3a7d44;">Completed</div>' +
+        (mine.summary ? '<div style="font-size:13px;color:var(--text2);margin-top:2px;">' + mine.summary + '</div>' : '') +
+      '</div>';
+    wrap.appendChild(badge);
+    // The button stays, so he can redo a block — but it must not still say "Start" as
+    // though nothing had happened.
+    startBtn.textContent = 'Do it again';
+    startBtn.style.background = 'transparent';
+    startBtn.style.border = '1px solid var(--border2)';
+    startBtn.style.color = 'var(--text3)';
     wrap.style.borderLeft = '3px solid #3a7d44';
     return true;
   } catch(_e){ return false; }
@@ -5516,8 +5534,8 @@ window._blabBuildComplexBlock = function(ex, idx){
     window.blabRunWorkout(ex2, idx);
   };
 
-  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(header);
+  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(loadDiv);
   wrap.appendChild(startBtn);
   return wrap;
@@ -5536,6 +5554,9 @@ window._blabBuildTotalRepBlock = function(ex, idx){
     (isChinTest
       ? '<div style="font-size:12px;color:var(--text2);">Establish your max today — 1 all-out set. App calculates all future targets from this result.</div>'
       : '<div style="display:flex;gap:8px;margin-bottom:8px;"><div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-family:var(--font-d);font-size:14px;font-weight:700;">'+target+' total reps</div></div>')+
+    // v4.9.272: last session's reps AND time, on the card, before he starts.
+    (ex.prev_tr && ex.prev_tr.reps
+      ? '<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Last time: '+ex.prev_tr.reps+' reps in '+blabFmt(ex.prev_tr.secs||0)+'</div>' : '')+
     (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);font-style:italic;margin-top:4px;">'+ex.coaching_note+'</div>':'');
   var startBtn = document.createElement('button');
   startBtn.style.cssText = 'display:block;margin:0 16px 16px;width:calc(100% - 32px);padding:16px;background:var(--gold);border:none;border-radius:12px;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;';
@@ -5544,8 +5565,8 @@ window._blabBuildTotalRepBlock = function(ex, idx){
     var exArr = window._blabPhxExercises || [];
     window.blabRunWorkout(exArr[idx]||ex, idx);
   };
-  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(header);
+  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(startBtn);
   return wrap;
 };
@@ -5578,8 +5599,8 @@ window._blabBuildRunBlock = function(ex, idx){
     var exArr = window._blabPhxExercises || [];
     window.blabRunWorkout(exArr[idx]||ex, idx);
   };
-  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(header);
+  _blabApplyBlockDone(wrap, startBtn, idx);
   wrap.appendChild(startBtn);
   return wrap;
 };
@@ -5712,6 +5733,9 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.format = 'total_rep_goal';
       phxEx._blabTarget = ex.target || 0;
       phxEx._blabChinTest = ex.chin_test || false;
+      // Carried under the plain name too — blabRunWorkout aliases _blab* onto the names
+      // the renderers read, but prev_tr has no _blab twin, so it must ride directly.
+      phxEx.prev_tr = ex.prev_tr || null;
 
     } else if(fmt === 'afap'){
       phxEx.sets = ex.sets || 1;
@@ -5890,6 +5914,20 @@ function _blabStartClock(){
 }
 
 window.blabRunWorkout = function(ex, idx){
+  // v4.9.272 — SET THE INDEX. _blabWoDone reads window._blabCurrentExIdx to know which
+  // block was just finished, and NOTHING IN THE APP EVER SET IT. Read in one place,
+  // written in none — the third variable in this file with that shape, after
+  // _blabCalEntryView and blab-ex-N.
+  //
+  // Consequence: _blabWoDone called _blabMarkBlockDone(undefined), which my own .251
+  // guard (`if(idx == null) return false`) then discarded silently. So the completed
+  // state Jon is asking for was never recorded at all — the storage worked, the render
+  // worked, and the index connecting them was undefined.
+  //
+  // My .251 tests called _blabMarkBlockDone(0, ...) directly with an explicit index, so
+  // they exercised the helper and never this path. Same mistake as the reader-only
+  // superset cases and the within-one-page-life re-entry cases.
+  window._blabCurrentExIdx = idx;
   // Prevent screen timeout during workout (v4.9.118 FIX 2: shared lock helper, so the
   // visibilitychange hook can re-acquire it after an iOS screen lock).
   requestWakeLock();
@@ -5948,7 +5986,11 @@ window.blabRunWorkout = function(ex, idx){
   // The count-in is opened BEFORE the first render so _blabWoRender's self-heal (below) can
   // tell "count-in pending" apart from "clock failed to start".
   var _fmt = String(ex.format||'');
-  if(['afap','interval','steady_state','tabata'].indexOf(_fmt) >= 0){
+  // v4.9.272: total_rep_goal joins the count-in list. Jon asked for a countdown on the
+  // pull-ups, and the reason it was excluded no longer holds — the elapsed time is now
+  // his SCORE for the block, not decoration, so the clock must not start while he is
+  // still walking to the bar.
+  if(['afap','interval','steady_state','tabata','total_rep_goal'].indexOf(_fmt) >= 0){
     showCountIn(function(){
       // The user may have backed out of the runner during the count-in.
       if(overlay.style.display==='none' || !window._blabWoState) return;
@@ -6192,6 +6234,30 @@ window._blabWoDone=function(){
       window._blabNotice(st.ex.name, lines);
     }
   }
+  // v4.9.272 — "the total time being the logged against number of reps and this to be
+  // shown in the next week too". Reps alone could not tell him whether 40 pull-ups took
+  // eleven minutes or twenty-five. Stored as ONE record so the pair cannot separate.
+  //
+  // Dated blob with rotation, same as the superset history in .265 and recSets since
+  // .179 — today's attempt must not become "last time" while he is still doing it, and
+  // re-entering the block must not overwrite last week.
+  try {
+    if(st && st.ex && (st.ex._blabFmt==='total_rep_goal' || st.ex.format==='total_rep_goal') && st.trTotal > 0){
+      var _bs = window.blabGetState();
+      if(_bs){
+        if(!_bs.records) _bs.records = {};
+        var _trKey = (st.ex.name || 'total_rep') + '_trlog';
+        var _trToday = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+        var _trCur = _bs.records[_trKey];
+        if(_trCur && typeof _trCur === 'object' && _trCur.date && _trCur.date !== _trToday){
+          _bs.records[_trKey + '_prev'] = _trCur;
+        }
+        _bs.records[_trKey] = {date: _trToday, reps: st.trTotal, secs: st.elapsed || 0,
+                               sets: (st.trSets || []).slice()};
+        window.blabSaveState(_bs);
+      }
+    }
+  } catch(_tre){ console.warn('[PHX] total-rep log save failed:', _tre); }
   var overlay=document.getElementById('blab-workout-overlay');
   if(overlay) overlay.style.display='none';
   var idx=window._blabCurrentExIdx;
@@ -6247,7 +6313,17 @@ function blabRenderTR(ex,st,body){
       '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:12px;">Rest as needed between sets.</div>'
       :'<div style="background:rgba(200,150,62,0.1);border:1px solid var(--gold);border-radius:var(--radius);padding:14px;text-align:center;margin-bottom:16px;"><div style="font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;color:var(--gold);">Target reached!</div></div>'
     )+
-    blabElapsed(st)+
+    // v4.9.272 — Jon: "just need a countdown and clearer clock for the pull ups".
+    // blabElapsed renders an 11px grey "Time: 0:00" line, which is the same size as the
+    // hint text above it. The time is now the SCORE alongside the reps, so it gets the
+    // same weight as the rep counter.
+    '<div style="text-align:center;margin:4px 0 16px;">'+
+      '<div style="font-family:var(--font-d);font-size:42px;font-weight:900;color:var(--text);line-height:1;" id="blab-elapsed">'+blabFmt(st.elapsed)+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Elapsed</div>'+
+    '</div>'+
+    // Last week's pair, so he knows what he is chasing while he is doing it.
+    (ex.prev_tr && ex.prev_tr.reps ?
+      '<div style="text-align:center;font-size:12px;font-weight:700;color:var(--gold);margin-bottom:12px;">Last time: '+ex.prev_tr.reps+' reps in '+blabFmt(ex.prev_tr.secs||0)+'</div>' : '')+
     '<button onclick="window._blabWoDone()" style="width:100%;padding:18px;background:'+(done?'var(--gold)':'var(--bg2)')+';border:1px solid '+(done?'var(--gold)':'var(--border)')+';border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:'+(done?'#000':'var(--text2)')+';cursor:pointer;">'+(done?'Complete \u2713':'Finish Early')+'</button>';
 }
 // v4.9.251 — running rep tally for a single-movement AFAP (100 Push-ups).
@@ -6518,6 +6594,17 @@ window.blabGetSessionData = function(week, day){
     var pick = (last && typeof last === 'object' && last.date === today) ? prev : last;
     return (pick && Array.isArray(pick.sets) && pick.sets.length) ? pick.sets : null;
   }
+  // v4.9.272 — last session's REPS AND TIME as one pair, for total_rep_goal blocks.
+  // Same date rule as recSets: while today's attempt is on file it is not "last time",
+  // so re-entering the block mid-session cannot present his own partial as history.
+  function recTR(name){
+    if(!s.records) return null;
+    var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    var cur = s.records[name+'_trlog'];
+    var prv = s.records[name+'_trlog_prev'];
+    var pick = (cur && typeof cur === 'object' && cur.date === today) ? prv : cur;
+    return (pick && pick.reps) ? {reps: pick.reps, secs: pick.secs || 0, sets: pick.sets || []} : null;
+  }
 
   // ── Main-lift % schemes — faithful to the "Built Like A Badass" PDF ──────────
   var benchSchemes = {
@@ -6768,15 +6855,15 @@ window.blabGetSessionData = function(week, day){
 
     // Chin-ups (deload = 50% OF max; build = max + pct%; W12 = fresh max test)
     if(w === 12){
-      exs3.push({name:'Chin-Up Max Test', format:'total_rep_goal', target:0, chin_test:true, note:'Fresh max retest — 1 all-out set. This updates your chin-up max and every future target.'});
+      exs3.push({name:'Chin-Up Max Test', format:'total_rep_goal', target:0, chin_test:true, prev_tr:recTR('Chin-Up Max Test'), note:'Fresh max retest — 1 all-out set. This updates your chin-up max and every future target.'});
     } else if(isDeload){
       var dTgt = C > 0 ? Math.round(C * 0.5) : 0;
-      exs3.push({name:'Chin-ups', format:'total_rep_goal', target:dTgt, chin_test:(C === 0),
+      exs3.push({name:'Chin-ups', format:'total_rep_goal', target:dTgt, chin_test:(C === 0), prev_tr:recTR('Chin-ups'),
         note:C === 0 ? 'Establish your max first — 1 all-out set.' : 'Deload — '+dTgt+' total reps (50% of your '+C+'-rep max). Break into easy sets.'});
     } else {
       var cPct = ({1:50,2:50,3:60,4:70,6:60,7:60,8:70,9:70,11:80})[w] || 50;
       var bTgt = chinTarget(cPct);
-      exs3.push({name:'Chin-ups', format:'total_rep_goal', target:bTgt, chin_test:(C === 0),
+      exs3.push({name:'Chin-ups', format:'total_rep_goal', target:bTgt, chin_test:(C === 0), prev_tr:recTR('Chin-ups'),
         note:C === 0 ? 'Establish your max today — 1 all-out set. The app calculates all future targets from this.' : 'Target: '+bTgt+' total reps (max '+C+' + '+cPct+'%). Break into sets, rest as needed.'});
     }
 
@@ -22326,7 +22413,7 @@ var _PEP_RECON = {
   // BPC-157 was the worst: 4x. Do not "tidy" these back toward a house default.
   // They are transcribed from his document and tests/peptides.mjs pins every
   // one against the unit counts printed there.
-  retatrutide:{vialMg:30,  waterMl:1.8},  // v4.9.269: CONFIRMED BY JON. Was 10mg/0.5mL from the PDF -> 50u for a 10mg dose; his real vial draws 60u.
+  retatrutide:{vialMg:30,  waterMl:1.8},  // v4.9.272: CONFIRMED BY JON. Was 10mg/0.5mL from the PDF -> 50u for a 10mg dose; his real vial draws 60u.
   ipamorelin: {vialMg:10,  waterMl:2},
   cjc1295:    {vialMg:10,  waterMl:2},
   bpc157:     {vialMg:10,  waterMl:2},   // v4.9.250: CONFIRMED BY JON. Was 1mL from the PDF -> 5u, a HALF dose.
@@ -22510,7 +22597,7 @@ function _pepDrawText(draw){
 // "5mg in 2mL = 2.5mg/mL"
 function _pepReconText(recon){
   if(!recon) return "";
-  // v4.9.269: was its own `source === "default"` test. That is the same rule
+  // v4.9.272: was its own `source === "default"` test. That is the same rule
   // written twice, and the second copy is the one that gets forgotten — this
   // domain has shipped "fixed the second, left the first" four times. One
   // helper decides what counts as an assumption.
@@ -22534,7 +22621,7 @@ function _pepReconText(recon){
 // It marks rather than hides. Refusing to show a draw would push him to
 // calculate it himself, which is worse. The unit count still appears; it just
 // stops claiming a confidence it does not have.
-// WHAT JON HAS ACTUALLY CONFIRMED, FIELD BY FIELD (v4.9.269).
+// WHAT JON HAS ACTUALLY CONFIRMED, FIELD BY FIELD (v4.9.272).
 //
 // "Confirmed" was a source comment. A comment cannot be queried, so seven
 // values he had personally confirmed still displayed in gold as "a library

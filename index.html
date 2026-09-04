@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.262';
+var APP_VERSION='4.9.263';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23510,7 +23510,7 @@ function pepRenderScreen(){
   // worse than a label you have to scroll two centimetres to reach.
   // The active tab is scrolled into view after paint, so a tab off the right
   // edge is never silently the selected one.
-  var tabs = [{key:"today",label:"TODAY"},{key:"overview",label:"PROTOCOL"},{key:"stock",label:"STOCK"},{key:"adjust",label:"ADJUST"},{key:"order",label:"ORDER"},{key:"bloods",label:"BLOODS"}];
+  var tabs = [{key:"today",label:"TODAY"},{key:"overview",label:"SCHEDULE"},{key:"stock",label:"STOCK"},{key:"adjust",label:"ADJUST"},{key:"order",label:"ORDER"},{key:"bloods",label:"BLOODS"}];
   var tabBar = "<div id=\"pep-tabbar\" style=\"display:flex;border-bottom:1px solid var(--border);background:var(--bg);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;\">" +
     tabs.map(function(t){
       var act = _pepTab === t.key;
@@ -23677,6 +23677,26 @@ function pepRenderScreen(){
         btn.setAttribute("data-confirm", "1"); btn.textContent = "Tap again"; return;
       }
       if(pepDeletePhase(btn.getAttribute("data-pep-delphase"))) pepRenderScreen();
+    });
+  });
+  body.querySelectorAll("[data-pep-comp]").forEach(function(el){
+    el.addEventListener("click", function(){
+      var id = el.getAttribute("data-pep-comp");
+      // Tapping the open one closes it — a panel you cannot shut turns a list
+      // of twelve compounds into a page you have to scroll past.
+      _pepCompOpen = (_pepCompOpen === id) ? null : id;
+      pepRenderScreen();
+    });
+  });
+  body.querySelectorAll("[data-pep-csave]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var id = btn.getAttribute("data-pep-csave");
+      var v = body.querySelector("[data-pep-cv=\"" + id + "\"]");
+      var w = body.querySelector("[data-pep-cw=\"" + id + "\"]");
+      var r = pepSetCompoundRecon(id, v ? v.value : null, w ? w.value : null);
+      if(r.ok){ pepRenderScreen(); return; }
+      var msg = body.querySelector("[data-pep-cmsg=\"" + id + "\"]");
+      if(msg) msg.textContent = r.problem;
     });
   });
   var phSave = body.querySelector("#pep-phase-save");
@@ -24539,12 +24559,145 @@ function _pepMd(text){
   return out;
 }
 
+var _pepCompOpen = null;   // which compound panel is expanded
+
+// ── Per-compound panel (v4.9.263) ────────────────────────────────────────────
+// Jon: "I want to be able to click on each compound to get the make-up in the
+// vial — a panel for each compound with the make-up, dose in mg and units in
+// syringe, with the vial size adjustable, and that maps through the full
+// protocol for that compound."
+//
+// The last clause is the important one and it falls out of the data model
+// rather than needing plumbing: one compound is one stack, so editing its vial
+// here changes the single place every screen reads. The calendar, the Today
+// tile, the forecast and the order list all recompute from it. There is no
+// second copy to drift.
+//
+// Shows the MIXED vial when one is open and the plan when there is not, and
+// says which it is — because a number he can act on and a number he intends are
+// different things, and the .245 marking exists for exactly this.
+// ── The readiness gate, now on ADJUST (v4.9.263) ─────────────────────────────
+// It moved with the forecast it protects. SCHEDULE is the plan and is never
+// gated; this screen carries the audit, the phase library and the compound
+// detail, all of which make claims that depend on the stock count being real.
+function _pepGateCard(ps){
+  var r = _pepReadiness(ps);
+  if(r.ready) return "";
+  var h = "";
+  h += "<div style=\"background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:14px;\">";
+  h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;\">Two things first</div>";
+  h += "<div style=\"font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;\">The schedule above is your plan and is always shown. What stays hidden is the <strong>forecast</strong> &mdash; supply, reorder dates and the order list &mdash; because built on unknown stock it would tell you to inject what you do not have.</div>";
+
+  h += "<div style=\"display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;\">";
+  h += "<div style=\"flex-shrink:0;width:20px;height:20px;border-radius:50%;border:2px solid " + (r.stockDone?"#4CAF50":"var(--border2)") + ";background:" + (r.stockDone?"#4CAF50":"transparent") + ";display:flex;align-items:center;justify-content:center;\">";
+  if(r.stockDone) h += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='11' height='11'><polyline points='20 6 9 17 4 12'/></svg>";
+  h += "</div><div style=\"flex:1;\"><div style=\"font-size:13px;font-weight:700;color:var(--text);\">Count your stock</div>";
+  h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + r.counted + " of " + r.countable + " compounds confirmed. Do it on the STOCK tab.</div></div></div>";
+
+  h += "<div style=\"display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;\">";
+  h += "<div style=\"flex-shrink:0;width:20px;height:20px;border-radius:50%;border:2px solid " + (r.historyDone?"#4CAF50":"var(--border2)") + ";background:" + (r.historyDone?"#4CAF50":"transparent") + ";display:flex;align-items:center;justify-content:center;\">";
+  if(r.historyDone) h += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='11' height='11'><polyline points='20 6 9 17 4 12'/></svg>";
+  h += "</div><div style=\"flex:1;\"><div style=\"font-size:13px;font-weight:700;color:var(--text);\">Confirm what you have already run</div>";
+  h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">Which courses are done, part-done, or not started.</div></div></div>";
+
+  if(!r.historyDone){
+    h += "<textarea id=\"pep-hist-note\" rows=\"3\" placeholder=\"e.g. MOTS-c course 1 finished June. Epitalon never started. Reta running since July.\" style=\"width:100%;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:none;margin-bottom:8px;\">" + _esc(r.historyNote) + "</textarea>";
+    h += "<button id=\"pep-hist-confirm\" style=\"width:100%;padding:12px;background:none;border:1px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Confirm history</button>";
+    }
+  h += "</div>";
+  h += "</div>";
+  return h;
+}
+
+function _pepCompoundPanels(ps){
+  var stacks = (ps.stacks || []);
+  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin:20px 0 8px;\">Compounds</div>";
+  if(!stacks.length) return h + "<div style=\"font-size:12px;color:var(--text3);margin-bottom:14px;\">No compounds in the protocol.</div>";
+  h += "<div style=\"font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;\">Tap a compound for its make-up. Changing the vial or the water here flows through the whole protocol for that compound.</div>";
+
+  stacks.forEach(function(st, idx){
+    var c = _pepCompound(st.compoundId);
+    if(!c) return;
+    var open  = _pepCompOpen === st.compoundId;
+    var recon = _pepLiveRecon(st, c);
+    var plan  = _pepRecon(st, c);
+    var dose  = _pepDoseSize(st, c);
+    var draw  = _pepDraw(dose, c.doseUnit, recon);
+    var mixed = !!(st.openedDate && st.openVialMg > 0 && st.openWaterMl > 0);
+    var perVial = _pepDosesPerVial(st, c);
+
+    h += "<div style=\"background:var(--bg2);border:1px solid " + (open ? "#7B68EE" : "var(--border)") + ";border-radius:var(--radius);margin-bottom:8px;overflow:hidden;\">";
+    h += "<div data-pep-comp=\"" + _esc(st.compoundId) + "\" style=\"display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;touch-action:manipulation;\">";
+    h += "<div style=\"font-weight:700;font-size:14px;color:var(--text);min-width:0;\">" + _esc(c.name) + "</div>";
+    h += "<div style=\"text-align:right;flex-shrink:0;\">";
+    h += "<span style=\"font-size:12px;color:var(--text2);\">" + _pepFmtDose(dose, c.doseUnit) + "</span>";
+    if(draw) h += "<span style=\"font-family:var(--font-d);font-size:13px;font-weight:900;color:#7B68EE;margin-left:8px;\">" + _pepNum(draw.units) + "u</span>";
+    h += "</div></div>";
+
+    if(open){
+      h += "<div style=\"padding:0 14px 14px;\">";
+      h += "<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;\">";
+      h += "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">Vial (mg)</label><br>" +
+           "<input data-pep-cv=\"" + _esc(st.compoundId) + "\" type=\"number\" step=\"0.1\" min=\"0\" value=\"" + (plan && plan.vialMg != null ? plan.vialMg : "") + "\" style=\"width:100%;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;box-sizing:border-box;margin-top:4px;\"></div>";
+      h += "<div><label style=\"font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);\">BAC water (mL)</label><br>" +
+           "<input data-pep-cw=\"" + _esc(st.compoundId) + "\" type=\"number\" step=\"0.1\" min=\"0\" value=\"" + (plan && plan.waterMl != null ? plan.waterMl : "") + "\" style=\"width:100%;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;box-sizing:border-box;margin-top:4px;\"></div>";
+      h += "</div>";
+
+      // The three numbers he asked for, spelled out rather than left to be derived.
+      h += "<div style=\"background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;\">";
+      h += "<div style=\"display:flex;justify-content:space-between;padding:3px 0;\"><span style=\"font-size:12px;color:var(--text3);\">Make-up</span><span style=\"font-size:12px;color:var(--text2);\">" + (recon ? _esc(_pepReconText(recon)) : "not set") + "</span></div>";
+      h += "<div style=\"display:flex;justify-content:space-between;padding:3px 0;\"><span style=\"font-size:12px;color:var(--text3);\">Dose</span><span style=\"font-size:12px;color:var(--text2);\">" + _pepFmtDose(dose, c.doseUnit) + "</span></div>";
+      h += "<div style=\"display:flex;justify-content:space-between;padding:3px 0;\"><span style=\"font-size:12px;color:var(--text3);\">Draw</span><span style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;\">" + (draw ? _esc(_pepDrawText(draw)) : "&mdash;") + "</span></div>";
+      h += "<div style=\"display:flex;justify-content:space-between;padding:3px 0;\"><span style=\"font-size:12px;color:var(--text3);\">Doses per vial</span><span style=\"font-size:12px;color:var(--text2);\">" + (perVial || "&mdash;") + "</span></div>";
+      h += "<div style=\"font-size:11px;color:" + (mixed ? "#4CAF50" : (_pepReconAssumed(recon) ? "var(--gold)" : "var(--text3)")) + ";margin-top:8px;line-height:1.5;\">" +
+           (mixed ? "These are the numbers for the vial you have OPEN, mixed " + _esc(st.openedDate) + ". Editing above changes the NEXT vial."
+                  : (_pepReconAssumed(recon) ? "Vial size is a library assumption, not something you have confirmed. Check the label."
+                                             : "From your protocol. No vial is currently open.")) + "</div>";
+      h += "</div>";
+
+      h += "<button data-pep-csave=\"" + _esc(st.compoundId) + "\" style=\"width:100%;padding:11px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">Save make-up</button>";
+      h += "<div data-pep-cmsg=\"" + _esc(st.compoundId) + "\" style=\"font-size:11px;color:var(--gold);min-height:14px;margin-top:6px;\"></div>";
+      h += "</div>";
+    }
+    h += "</div>";
+  });
+  return h;
+}
+
+// Writes the vial and water back to the stack. One stack per compound, so this
+// is the single place every screen reads — nothing else needs updating.
+function pepSetCompoundRecon(compoundId, vialMg, waterMl){
+  var vm = parseFloat(vialMg), wm = parseFloat(waterMl);
+  if(!(vm > 0)) return {ok:false, problem:"Vial size must be more than zero."};
+  if(!(wm > 0)) return {ok:false, problem:"Water volume must be more than zero."};
+  var ps = pepGetState();
+  var found = false;
+  (ps.stacks || []).forEach(function(st){
+    if(st.compoundId !== compoundId) return;
+    st.vialMg = vm; st.waterMl = wm; found = true;
+  });
+  if(!found) return {ok:false, problem:"That compound is not in your protocol."};
+  pepSaveState(ps);
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true};
+}
+
 function _pepTabAdjust(ps){
   var stacks = ps.stacks || [];
   var notes  = ps.notes  || [];
   var adv    = ps.advice || null;
 
-  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Smart Protocol Review</div>";
+  // v4.9.263: everything that describes the protocol lives here now, under
+  // Protocol info. SCHEDULE answers "what do I do"; this answers "what is my
+  // protocol and is it sound", which is a different question asked at a
+  // different time.
+  var h = "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:10px;\">Protocol info</div>";
+  h += _pepAuditCard(ps);
+  h += _pepGateCard(ps);
+  h += _pepPanelProtocolPhases(ps);
+  h += _pepCompoundPanels(ps);
+  h += "<div style=\"height:1px;background:var(--border);margin:22px 0 18px;\"></div>";
+  h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px;\">Smart Protocol Review</div>";
   h += "<div style=\"font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:14px;\">Reads your live protocol, the last 14 days of adherence, your latest blood panel and every response note below, then returns specific dose, timing and cycle changes. Research tracking only — not medical advice.</div>";
   var _bl = _pepLatestBloods(ps);
   if(_bl){
@@ -25607,66 +25760,16 @@ var _pepCalWeeks = 6;       // how far the calendar is scrolled forward
 // Read-only reference: every compound, every week, dose and timing. Gated.
 function _pepTabOverview(ps){
   var r = _pepReadiness(ps);
-  var h = _pepAuditCard(ps);
-
-  // v4.9.262: the phase list and the calendar render BEFORE the gate, always.
+  // v4.9.263: SCHEDULE is the calendar, full stop. Jon: "for the protocol
+  // screen I just want the calendar view, the rest can be part of the adjust
+  // menu." The audit card, the phase list and the compound detail all moved to
+  // ADJUST under "Protocol info" — they answer questions ABOUT the protocol,
+  // where this screen answers what to do today and next.
   //
-  // The gate was hiding both, and applying a phase clears historyConfirmed — so
-  // the moment he applied Phase 2 the protocol page became the gate message and
-  // the calendar he had just asked for was unreachable. Worse, the Apply
-  // buttons went with it, so he could not switch protocol at all without first
-  // satisfying a gate about the protocol he was trying to leave.
-  //
-  // The line is what a thing CLAIMS. The gate exists because a forecast built
-  // on unknown stock would tell him to inject what he does not have — that is a
-  // claim about the world and it needs the stock counted. A calendar is a
-  // statement of the PLAN: it is true whether or not he has counted anything,
-  // and it is what he reads to know what to count. Gating it inverted the
-  // dependency.
-  h += _pepPanelProtocolPhases(ps);
-  h += _pepPanelCalendar(ps);
-
-  if(!r.ready){
-    h += "<div style=\"background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:16px;margin-bottom:14px;\">";
-    h += "<div style=\"font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;\">Two things first</div>";
-    h += "<div style=\"font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px;\">The schedule above is your plan and is always shown. What stays hidden is the <strong>forecast</strong> &mdash; supply, reorder dates and the order list &mdash; because built on unknown stock it would tell you to inject what you do not have.</div>";
-
-    h += "<div style=\"display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;\">";
-    h += "<div style=\"flex-shrink:0;width:20px;height:20px;border-radius:50%;border:2px solid " + (r.stockDone?"#4CAF50":"var(--border2)") + ";background:" + (r.stockDone?"#4CAF50":"transparent") + ";display:flex;align-items:center;justify-content:center;\">";
-    if(r.stockDone) h += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='11' height='11'><polyline points='20 6 9 17 4 12'/></svg>";
-    h += "</div><div style=\"flex:1;\"><div style=\"font-size:13px;font-weight:700;color:var(--text);\">Count your stock</div>";
-    h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + r.counted + " of " + r.countable + " compounds confirmed. Do it on the STOCK tab.</div></div></div>";
-
-    h += "<div style=\"display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;\">";
-    h += "<div style=\"flex-shrink:0;width:20px;height:20px;border-radius:50%;border:2px solid " + (r.historyDone?"#4CAF50":"var(--border2)") + ";background:" + (r.historyDone?"#4CAF50":"transparent") + ";display:flex;align-items:center;justify-content:center;\">";
-    if(r.historyDone) h += "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='11' height='11'><polyline points='20 6 9 17 4 12'/></svg>";
-    h += "</div><div style=\"flex:1;\"><div style=\"font-size:13px;font-weight:700;color:var(--text);\">Confirm what you have already run</div>";
-    h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">Which courses are done, part-done, or not started.</div></div></div>";
-
-    if(!r.historyDone){
-      h += "<textarea id=\"pep-hist-note\" rows=\"3\" placeholder=\"e.g. MOTS-c course 1 finished June. Epitalon never started. Reta running since July.\" style=\"width:100%;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:none;margin-bottom:8px;\">" + _esc(r.historyNote) + "</textarea>";
-      h += "<button id=\"pep-hist-confirm\" style=\"width:100%;padding:12px;background:none;border:1px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:2px;cursor:pointer;touch-action:manipulation;\">Confirm history</button>";
-    }
-    h += "</div>";
-    return h;
-  }
-
-  // ═══ Ready — the three panels ═══════════════════════════════════════════
-  // Jon asked for them "left to right". On a 390px phone that is three stacked
-  // sections, not three columns; columns would give each about 120px, which is
-  // narrower than a single dose line. Phase selection is the thing that ties
-  // them together — picking a phase filters the calendar and the detail below.
-  var phases = _pepPhases(ps);
-  if(!phases.length) return h + "<div style=\"text-align:center;padding:32px 0;color:var(--text3);font-size:13px;\">No compounds in the forward plan.</div>";
-
-  var sel = null;
-  phases.forEach(function(p){ if(p.key === _pepPhaseSel) sel = p; });
-  if(!sel){ phases.forEach(function(p){ if(!sel && p.running) sel = p; }); }
-  if(!sel) sel = phases[0];
-
-  // Compound detail stays BEHIND the gate, deliberately: it reports doses per
-  // vial and vials held, which are exactly the stock claims the gate protects.
-  h += _pepPanelCompounds(ps, sel);
+  // The readiness gate goes with them. It guards the forecast, and the forecast
+  // now lives over there too, so gating this screen would once again be hiding
+  // the plan behind a claim about stock.
+  var h = _pepPanelCalendar(ps);
   return h;
 }
 

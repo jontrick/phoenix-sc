@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.262'", 'version is 4.9.262');
+has("var APP_VERSION='4.9.263'", 'version is 4.9.263');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1641,7 +1641,11 @@ has('createSignedUrl',                         'PEP: private bucket read via sig
 // proves it is still reachable, so this pins only the bar itself. The 'overview'
 // key carries the PROTOCOL label, hence the pair rather than a derived string.
 // v4.9.205 — six tabs at Jon's request; the bar scrolls to fit them.
-[['today','TODAY'],['overview','PROTOCOL'],['stock','STOCK'],['adjust','ADJUST'],['order','ORDER'],['bloods','BLOODS']].forEach(([k,lab]) => {
+// v4.9.263 — the 'overview' key now carries the label SCHEDULE. Jon asked for
+// that screen to be the calendar and nothing else, with everything describing
+// the protocol moved into ADJUST under "Protocol info". The KEY is unchanged so
+// his persisted tab and every restore path still resolve.
+[['today','TODAY'],['overview','SCHEDULE'],['stock','STOCK'],['adjust','ADJUST'],['order','ORDER'],['bloods','BLOODS']].forEach(([k,lab]) => {
   const t = lab;
   html.includes('{key:"' + k + '",label:"' + lab + '"}')
     ? ok('PEP: ' + t.toUpperCase() + ' tab registered')

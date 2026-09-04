@@ -742,7 +742,7 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     // shrinking the text.
     test('RENDER the portal paints all SIX of Jon\'s tabs', () => {
       const h = render('today');
-      ['TODAY','PROTOCOL','STOCK','ADJUST','ORDER','BLOODS'].forEach(t =>
+      ['TODAY','SCHEDULE','STOCK','ADJUST','ORDER','BLOODS'].forEach(t =>
         assert.ok(h.includes('>' + t + '<'), t + ' tab painted'));
     });
 
@@ -768,8 +768,10 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(h.includes('On order'), 'on-order toggle');
     });
 
-    test('RENDER the PROTOCOL tab is GATED until stock and history are confirmed', () => {
-      const h = render('overview');
+    // v4.9.263: the gate moved to ADJUST with the forecast it protects. SCHEDULE
+    // is the calendar and is never gated — that was Jon's ask and the .262 fix.
+    test('RENDER the ADJUST tab is GATED until stock and history are confirmed', () => {
+      const h = render('adjust');
       assert.ok(h.includes('Two things first'), 'gate shown');
       assert.ok(h.includes('Count your stock'), 'names the stock step');
       assert.ok(h.includes('already run'), 'names the history step');
@@ -1667,7 +1669,7 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'SLU-PP-322 has no catalogue match — source manually or drop');
     });
 
-    test('AUDIT the card renders on PROTOCOL OVERVIEW before the gate opens', () => {
+    test('AUDIT the card renders on ADJUST above the gate', () => {
       seedAudit();
       const nodes = {};
       const mk = id => ({ id, innerHTML:'', style:{}, classList:{add(){},remove(){},contains(){return false;}},
@@ -1675,7 +1677,7 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         querySelector(){return null;}, querySelectorAll(){return [];} });
       const real = app.document.getElementById;
       app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
-      app._pepTab = 'overview';
+      app._pepTab = 'adjust';
       nodes['pep-screen-body'] = mk('pep-screen-body');
       app.pepRenderScreen();
       const h = nodes['pep-screen-body'].innerHTML;
@@ -1717,14 +1719,19 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       return app.pepGetState();
     };
 
-    const renderOverview = () => {
+    // v4.9.263: takes the tab. It used to hard-code 'overview', so a caller
+    // setting _pepTab beforehand was silently overridden — which is how three
+    // of these cases "failed" against correct code after the SCHEDULE/ADJUST
+    // split. A helper that ignores its caller's setup is a fixture bug that
+    // reads exactly like a product bug.
+    const renderOverview = (tab) => {
       const nodes = {};
       const mk = id => ({ id, innerHTML:'', style:{}, classList:{add(){},remove(){},contains(){return false;}},
         appendChild(){}, setAttribute(){}, getAttribute(){return null;}, addEventListener(){},
         querySelector(){return null;}, querySelectorAll(){return [];} });
       const real = app.document.getElementById;
       app.document.getElementById = id => (nodes[id] = nodes[id] || mk(id));
-      app._pepTab = 'overview';
+      app._pepTab = tab || 'overview';
       nodes['pep-screen-body'] = mk('pep-screen-body');
       app.pepRenderScreen();
       const h = nodes['pep-screen-body'].innerHTML;
@@ -1756,12 +1763,14 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     // Updated rather than deleted: these cases were the only thing asserting the
     // gate opens onto a working page at all, and dropping them with the panels
     // would have quietly removed that check too.
-    test('PANELS the gate opens onto the calendar and the compound detail', () => {
+    test('PANELS a ready protocol shows the calendar on SCHEDULE and detail on ADJUST', () => {
       seedReady();
-      const h = renderOverview();
-      assert.notIncludes(h, 'Two things first', 'gate is satisfied');
-      assert.ok(h.includes('>Schedule<'), 'the calendar is the body of the page');
-      assert.ok(h.includes('compounds<'), 'and compound detail survives below it');
+      const sched = renderOverview();
+      assert.ok(sched.includes('>Schedule<'), 'the calendar is the whole of SCHEDULE');
+      assert.notIncludes(sched, 'Two things first', 'and nothing gates it');
+      const adj = renderOverview('adjust');
+      assert.ok(adj.includes('Compounds'), 'the compound panels are on ADJUST');
+      assert.ok(adj.includes('Protocol info'), 'under the heading Jon named');
     });
 
     test('PANELS the calendar maps the protocol onto real dates', () => {
@@ -1773,20 +1782,30 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(/\d+u/.test(h), 'and the units to draw are on the page, not behind a tap');
     });
 
-    test('PANELS a selected day shows dose and units to draw', () => {
+    // v4.9.263: there is no tap-a-day breakdown any more — every day's doses and
+    // units are printed in the agenda, which is what "just the calendar view"
+    // asked for. The property survives; the interaction it needed does not.
+    test('PANELS every day prints its dose and units without a tap', () => {
       seedReady();
-      app._pepDaySel = pIso(new Date());
       const h = renderOverview();
-      app._pepDaySel = null;
-      assert.ok(h.includes('u / '), 'units to draw in the day breakdown');
+      // The agenda prints "12u" per dose rather than the old "12u / 0.48mL"
+      // breakdown behind a tap. Same property, shown rather than hidden.
+      assert.ok(/>\d+(\.\d+)?u</.test(h),
+        'units printed against the dose on the day itself, with no tap needed');
     });
 
-    test('PANELS compound detail carries dose, timing, recon and vials for the phase', () => {
+    test('PANELS compound detail carries dose, timing, recon and vials on ADJUST', () => {
       seedReady();
-      const h = renderOverview();
-      assert.ok(h.includes('per injection'), 'dose per injection');
+      // Panels are COLLAPSED by default — twelve expanded compounds is a page
+      // you scroll past, not a page you read. Open one, as a tap would.
+      app._pepCompOpen = app.pepGetState().stacks[0].compoundId;
+      const h = renderOverview('adjust');
+      app._pepCompOpen = null;
+      // v4.9.263: the compound PANELS replaced the old phase-scoped detail list.
+      // Same three facts, per compound, expandable — and now editable.
+      assert.ok(h.includes('Doses per vial'), 'doses per vial');
       assert.ok(h.includes('mg/mL'), 'reconstitution');
-      assert.ok(h.includes('for this phase'), 'vials needed for the phase');
+      assert.ok(h.includes('Make-up'), 'and the make-up he can adjust');
     });
 
     // Phase FILTERING of the calendar is gone with the grid — the agenda shows
@@ -1797,7 +1816,7 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       const phases = app._pepPhases(ps);
       const future = phases.find(p => p.future);
       app._pepPhaseSel = future.key;
-      const h = renderOverview();
+      const h = renderOverview('adjust');
       app._pepPhaseSel = null;
       assert.ok(h.includes('Epitalon'),
         'the compound panel follows the selected phase — the calendar deliberately ' +
@@ -1819,15 +1838,22 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       reset(); signIn(UID);
       seed(KEY, { stacks: [], checked:{}, cart:[] });
       app.pepApplyPhase('phase2');
-      app._pepTab = 'overview';
-      let out = '';
-      const realGet = app.document.getElementById;
-      const body = { get innerHTML(){ return out; }, set innerHTML(v){ out = v; },
-                     querySelectorAll: () => [], querySelector: () => null,
-                     addEventListener(){}, style:{} };
-      app.document.getElementById = (id) => (id === 'pep-screen-body' ? body : realGet.call(app.document, id));
-      try { app.pepRenderScreen(); } finally { app.document.getElementById = realGet; }
-      return out;
+      // v4.9.263: renders BOTH screens. SCHEDULE is the calendar; the gate,
+      // the phase list and the compound detail moved to ADJUST under Protocol
+      // info. These cases are about where each thing ended up, so they have to
+      // look at both rather than assume one page still holds everything.
+      const draw = (tab) => {
+        app._pepTab = tab;
+        let out = '';
+        const realGet = app.document.getElementById;
+        const body = { get innerHTML(){ return out; }, set innerHTML(v){ out = v; },
+                       querySelectorAll: () => [], querySelector: () => null,
+                       addEventListener(){}, style:{} };
+        app.document.getElementById = (id) => (id === 'pep-screen-body' ? body : realGet.call(app.document, id));
+        try { app.pepRenderScreen(); } finally { app.document.getElementById = realGet; }
+        return out;
+      };
+      return { schedule: draw('overview'), adjust: draw('adjust') };
     };
 
     test('GATE applying a phase leaves the gate CLOSED', () => {
@@ -1840,34 +1866,37 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     });
 
     test('GATE the calendar renders anyway, with compounds and units', () => {
-      const h = afterApply();
-      assert.ok(h.includes('Two things first'), 'the gate is on the page');
-      assert.ok(h.includes('Retatrutide') && h.includes('BPC-157'),
-        'AND the compounds are shown — this is the exact state he reported as broken');
-      assert.ok(/60u/.test(h), 'with the units to draw: Retatrutide 10mg at 16.67mg/mL is 60u');
-      assert.ok(h.includes('Today'), 'and today is marked');
+      const { schedule } = afterApply();
+      assert.ok(schedule.includes('Retatrutide') && schedule.includes('BPC-157'),
+        'the compounds are shown — the state he reported as broken');
+      assert.ok(/60u/.test(schedule), 'with the units to draw: Retatrutide 10mg at 16.67mg/mL is 60u');
+      assert.ok(schedule.includes('Today'), 'and today is marked');
+      assert.notIncludes(schedule, 'Two things first',
+        'and the gate is not on this screen at all now — it guards the forecast, ' +
+        'which lives on ADJUST with everything else that describes the protocol');
     });
 
     test('GATE the phase buttons stay reachable when the gate is shut', () => {
-      const h = afterApply();
-      assert.ok(h.includes('data-pep-applyphase'),
+      const { adjust } = afterApply();
+      assert.ok(adjust.includes('data-pep-applyphase'),
         'or applying a phase would lock him out of changing phase — the gate would ' +
         'be about the protocol he is trying to leave');
-      assert.ok(h.includes('pep-phase-save'), 'and building the next one stays available');
+      assert.ok(adjust.includes('pep-phase-save'), 'and building the next one stays available');
     });
 
-    test('GATE stock-dependent detail is still withheld', () => {
-      const h = afterApply();
-      assert.notIncludes(h, 'doses per vial',
-        'the compound panel reports vials held and doses per vial — those ARE the ' +
-        'claims the gate protects, and they stay behind it');
+    test('GATE the compound panels are on ADJUST, not on the schedule', () => {
+      const { schedule, adjust } = afterApply();
+      assert.ok(adjust.includes('Compounds'), 'the per-compound panels live there');
+      assert.ok(adjust.includes('Protocol info'), 'under the heading he named');
+      assert.notIncludes(schedule, 'Doses per vial',
+        'and the schedule stays the calendar — "just the calendar view" was the ask');
     });
 
     test('GATE the copy says what is actually hidden', () => {
-      const h = afterApply();
-      assert.ok(h.includes('forecast'),
+      const { adjust } = afterApply();
+      assert.ok(adjust.includes('forecast'),
         'it used to say "the forward protocol stays hidden", which was both wrong ' +
-        'now and the reason the old behaviour looked deliberate');
+        'once the calendar moved and the reason the old behaviour read as deliberate');
     });
 
     // v4.9.262: this used to assert the gate hid EVERYTHING, including the
@@ -1884,12 +1913,12 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       ps.settings = {};
       ps.stacks = [{ compoundId:'bpc157', dose:0.5, startDate: pAgo(40), vialMg:5, waterMl:2, sealedVials:4, status:'instock' }];
       app.pepSaveState(ps);
-      const h = renderOverview();
-      assert.ok(h.includes('Two things first'), 'gate shown');
-      assert.notIncludes(h, 'doses per vial',
-        'the stock-dependent detail is withheld — that is what the gate is for');
-      assert.ok(h.includes('BPC-157'),
-        'but the plan is visible, because it is what he reads to know what to count');
+      // v4.9.263: the gate moved to ADJUST with the rest of the protocol info.
+      const sched = renderOverview();
+      assert.ok(sched.includes('BPC-157'),
+        'the schedule shows the plan, ungated — it is what he reads to know what to count');
+      const adj = renderOverview('adjust');
+      assert.ok(adj.includes('Two things first'), 'and the gate guards the forecast on ADJUST');
     });
   }
 
@@ -2377,6 +2406,103 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.equal(r.scheduled, 2,
         'weekly over a fortnight is two, not fourteen — the denominator the .219 ' +
         'audit fix depends on being right');
+    });
+  }
+
+  // ── COMPPANEL — tap a compound, see and change its make-up ─────────────────
+  // Jon: "I want to be able to click on each compound to get the make-up in the
+  // vial — a panel for each compound with the make-up, dose in mg and units in
+  // syringe, with the vial size adjustable, and that maps through the full
+  // protocol for that compound."
+  //
+  // The mapping-through falls out of the data model rather than needing
+  // plumbing: one compound is one stack, so editing its vial here changes the
+  // single place every screen reads. What needed care was making sure that is
+  // actually true — hence the case below that changes the vial and then checks
+  // the CALENDAR, not the panel that changed it.
+  {
+    const withStack = () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2,
+        startDate: daysAgo(10), freq:'daily', continuous:true, status:'instock',
+        stockCounted:true, sealedVials:2 }], checked:{}, cart:[], historyConfirmed:true });
+      return app.pepGetState();
+    };
+    const panel = (openId) => {
+      app._pepCompOpen = openId || null;
+      const h = app._pepCompoundPanels(app.pepGetState());
+      app._pepCompOpen = null;
+      return h;
+    };
+
+    test('COMPPANEL collapsed shows the compound, its dose and its units', () => {
+      withStack();
+      const h = panel(null);
+      assert.ok(h.includes('BPC-157'), 'named');
+      assert.ok(h.includes('500mcg'), 'dose in mcg');
+      assert.ok(/10u/.test(h), 'and the units, without needing to open it');
+    });
+
+    test('COMPPANEL expanded gives make-up, dose, draw and doses per vial', () => {
+      withStack();
+      const h = panel('bpc157');
+      assert.ok(h.includes('Make-up'), 'make-up row');
+      assert.ok(h.includes('10mg in 2mL = 5mg/mL'), 'the actual mix');
+      assert.ok(h.includes('Doses per vial'), 'and how many doses are in it');
+      assert.ok(h.includes('data-pep-cv'), 'with the vial size editable');
+      assert.ok(h.includes('data-pep-cw'), 'and the water');
+    });
+
+    test('COMPPANEL only the tapped compound expands', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [
+        { compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2, startDate: daysAgo(10), freq:'daily', status:'instock' },
+        { compoundId:'ta1', dose:1.6, vialMg:10, waterMl:2, startDate: daysAgo(10), freq:'wed/sat', status:'instock' },
+      ], checked:{}, cart:[] });
+      const h = panel('bpc157');
+      assert.equal((h.match(/Doses per vial/g) || []).length, 1,
+        'one open panel — twelve expanded compounds is a page you scroll past');
+    });
+
+    // THE ASK: changing it here must move everything.
+    test('COMPPANEL changing the vial maps through the whole protocol', () => {
+      withStack();
+      const before = app._pepGetDoses(app.pepGetState(), app._pepToday());
+      assert.equal([...before.anytime, ...before.morning, ...before.evening]
+        .find(x => x.id === 'bpc157').draw.units, 10, '10u at 10mg/2mL');
+
+      const r = app.pepSetCompoundRecon('bpc157', 10, 1);
+      assert.equal(r.ok, true, 'saved');
+
+      const after = app._pepGetDoses(app.pepGetState(), app._pepToday());
+      assert.equal([...after.anytime, ...after.morning, ...after.evening]
+        .find(x => x.id === 'bpc157').draw.units, 5,
+        'the CALENDAR now says 5u — asserted on the schedule, not on the panel ' +
+        'that changed it, because "maps through" is a claim about everything else');
+      assert.equal(app._pepDosesPerVial(app.pepGetState().stacks[0], app._pepCompound('bpc157')), 20,
+        'and the forecast recomputed from the same single value');
+    });
+
+    test('COMPPANEL a nonsense make-up is refused rather than stored', () => {
+      withStack();
+      assert.equal(app.pepSetCompoundRecon('bpc157', 10, 0).ok, false, 'zero water');
+      assert.equal(app.pepSetCompoundRecon('bpc157', 0, 2).ok, false, 'zero vial');
+      assert.equal(app.pepSetCompoundRecon('nad', 500, 2).ok, false,
+        'and a compound not in his protocol — there is nothing to map it through');
+      assert.equal(app.pepGetState().stacks[0].waterMl, 2, 'nothing changed');
+    });
+
+    test('COMPPANEL an OPEN vial is reported as what he mixed, not the plan', () => {
+      reset(); signIn(UID);
+      seed(KEY, { stacks: [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:4,
+        startDate: daysAgo(10), freq:'daily', status:'instock',
+        openedDate: daysAgo(2), openVialMg:10, openWaterMl:2, openUsedAmt:0 }],
+        checked:{}, cart:[] });
+      const h = panel('bpc157');
+      assert.ok(h.includes('10mg in 2mL'),
+        'the vial in the fridge, not the 4mL plan');
+      assert.ok(h.includes('Editing above changes the NEXT vial'),
+        'and it says so, or he would think his edit had not taken');
     });
   }
 

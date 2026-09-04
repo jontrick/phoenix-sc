@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.266'", 'version is 4.9.266');
+has("var APP_VERSION='4.9.267'", 'version is 4.9.267');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2506,6 +2506,17 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
 // fetch RESOLVES on a 4xx, so a handler watching only for rejection sees a 400 as success.
 // That is how a missing column hid for twelve versions on the peptide side.
 hasCode('if(r && !r.ok', 'FLUSH: the keepalive path checks res.ok, because fetch resolves on a 4xx');
+
+// ── MID-SESSION RELOAD (v4.9.267) ───────────────────────────────────────────
+// iOS reloads the PWA on screen lock. The session id was persisted and recovered; the
+// IDENTITY the re-entry guard compares was not — so re-entry minted a new row OVER the
+// recovered id and Jon's completed sets were orphaned under a key nothing looks up again.
+//
+// The recovery was extracted from an IIFE so a test could drive it. Extraction moves the
+// untested part to the CALL SITE, so the call is pinned here.
+has('_phxRecoverActiveSession();', 'RELOAD: the recovery is still CALLED at load (extracted for testing — this is the call site the extraction created)');
+has("localStorage.setItem(PHX_ACTIVE_SESSION_IDENTITY, key)", 'RELOAD: STRUCTURAL the session identity is persisted (behaviour: tests/training.mjs RELOAD:)');
+has("localStorage.removeItem(PHX_ACTIVE_SESSION_IDENTITY)", 'RELOAD: STRUCTURAL and cleared with the id, so a finished row is not re-entered');
 
 // ── FAILED WRITES MUST BE VISIBLE (v4.9.238) ────────────────────────────────
 // Rule 8. These reported to console.error and NOWHERE else, and console is invisible

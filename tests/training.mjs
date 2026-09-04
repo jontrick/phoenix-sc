@@ -2964,4 +2964,109 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     seed(KEY, ssState({}));
     assert.equal(prevSetsFor().a.length, 0, 'empty, not a fabricated set');
   });
+
+  // ── FLICKED OFF MID-SESSION (v4.9.267) ───────────────────────────────────
+  // Jon: "i got flicked off the training screen to the today page part way through the
+  // session then went back in it had cleared where i had got to."
+  //
+  // iOS kills the PWA context on screen lock, so the app RELOADS on wake and routes to
+  // Today — that is the "flicked off". Everything needed to restore his sets was already
+  // on disk: phoenix_active_session_id, the phoenix_completed_sets_<id> shadow store, and
+  // set_logs in Supabase.
+  //
+  // What did not survive was window._phxActiveSessionKey — the IDENTITY the re-entry
+  // guard compares. Undefined after a reload, so re-entering took the !_sameSession
+  // branch, minted a new session row, and _phxSaveActiveSessionId overwrote the id that
+  // had just been recovered. The restore then queried an empty session.
+  //
+  // The .179 guard was tested WITHIN one page life, where the in-memory key is obviously
+  // present. No case ever crossed a reload — which is the only situation the guard exists
+  // for. These do.
+
+  test('RELOAD: the session identity is persisted, not just the id', () => {
+    reset(); signIn(UID);
+    app._phxSaveActiveSessionIdentity('blab:3:3:2026-09-04');
+    assert.equal(read('phoenix_active_session_key'), 'blab:3:3:2026-09-04',
+      'the identity is on disk where a reload can find it');
+  });
+
+  test('RELOAD: the recovery actually restores the identity from disk', () => {
+    // THE ONE THAT COVERS THE FIX. The five cases around it reconstruct the guard's
+    // boolean from state set by hand — I removed the recovery entirely and all of them
+    // stayed green, which is the "tested the helpers, not the path" trap again. This
+    // drives the real recovery.
+    reset(); signIn(UID);
+    seed('phoenix_active_session_id', 'sess-abc');
+    seed('phoenix_active_session_key', 'blab:3:3:2026-09-04');
+    app.currentSupabaseSessionId = null;
+    app._phxActiveSessionKey = null;
+    try {
+      app._phxRecoverActiveSession();
+      assert.equal(app.currentSupabaseSessionId, 'sess-abc', 'the id comes back');
+      assert.equal(app._phxActiveSessionKey, 'blab:3:3:2026-09-04',
+        'and so does the identity — without this the guard mints a new row over the top');
+    } finally { app.currentSupabaseSessionId = null; app._phxActiveSessionKey = null; }
+  });
+
+  test('RELOAD: recovery never overwrites a live in-memory session', () => {
+    // It runs at load, but must be harmless if anything is already in flight.
+    reset(); signIn(UID);
+    seed('phoenix_active_session_id', 'sess-old');
+    seed('phoenix_active_session_key', 'blab:1:1:2026-01-01');
+    app.currentSupabaseSessionId = 'sess-live';
+    app._phxActiveSessionKey = 'blab:3:3:2026-09-04';
+    try {
+      app._phxRecoverActiveSession();
+      assert.equal(app.currentSupabaseSessionId, 'sess-live', 'the live id is untouched');
+      assert.equal(app._phxActiveSessionKey, 'blab:3:3:2026-09-04', 'and the live identity');
+    } finally { app.currentSupabaseSessionId = null; app._phxActiveSessionKey = null; }
+  });
+
+  test('RELOAD: an id that survives WITHOUT its identity is worse than nothing', () => {
+    // The exact pre-fix state, spelled out: id recovered, identity gone. The guard then
+    // compares undefined against the session key, decides this is a different session,
+    // and starts a new one OVER the recovered id.
+    reset(); signIn(UID);
+    seed('phoenix_active_session_id', 'sess-abc');
+    app.currentSupabaseSessionId = 'sess-abc';
+    app._phxActiveSessionKey = undefined;
+    const sameSession = !!('blab:3:3:2026-09-04' &&
+      app._phxActiveSessionKey === 'blab:3:3:2026-09-04' && app.currentSupabaseSessionId);
+    assert.equal(sameSession, false,
+      'without the identity the guard cannot recognise its own session — this is the bug');
+    app.currentSupabaseSessionId = null;
+  });
+
+  test('RELOAD: with both recovered, the guard recognises the same session', () => {
+    reset(); signIn(UID);
+    app.currentSupabaseSessionId = 'sess-abc';
+    app._phxActiveSessionKey = 'blab:3:3:2026-09-04';
+    const sameSession = !!('blab:3:3:2026-09-04' &&
+      app._phxActiveSessionKey === 'blab:3:3:2026-09-04' && app.currentSupabaseSessionId);
+    assert.equal(sameSession, true, 'the row is reused rather than replaced');
+    app.currentSupabaseSessionId = null; app._phxActiveSessionKey = null;
+  });
+
+  test('RELOAD: completing a session clears the identity as well as the id', () => {
+    // Left behind, it would make the NEXT session of the same week/day/date look like a
+    // re-entry and append to a finished row.
+    reset(); signIn(UID);
+    app._phxSaveActiveSessionIdentity('blab:3:3:2026-09-04');
+    seed('phoenix_active_session_id', 'sess-abc');
+    app._phxSaveActiveSessionId(null);
+    assert.equal(read('phoenix_active_session_id'), null, 'id cleared');
+    assert.equal(read('phoenix_active_session_key'), null,
+      'and the identity with it — they have to travel together in both directions');
+  });
+
+  test('RELOAD: a different day is NOT treated as a re-entry', () => {
+    // The identity carries the local date, so tomorrow's Upper 2 is correctly a new row
+    // even though the week and day match.
+    reset(); signIn(UID);
+    app._phxActiveSessionKey = 'blab:3:3:2026-09-04';
+    const tomorrowKey = 'blab:3:3:2026-09-05';
+    const sameSession = !!(tomorrowKey && app._phxActiveSessionKey === tomorrowKey && 'sess-abc');
+    assert.equal(sameSession, false, 'a new day starts a new session row');
+    app._phxActiveSessionKey = null;
+  });
 }

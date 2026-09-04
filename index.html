@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.266';
+var APP_VERSION='4.9.267';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8463,6 +8463,9 @@ async function supabaseCompleteSession(updates){
   // v4.9.179: release the re-entry key with the row it belongs to, so a later session
   // with the same identity opens a fresh row rather than reusing a completed one.
   try { window._phxActiveSessionKey = null; } catch(_ak){}
+  // Clear the persisted identity with the in-memory one, or the next session of the same
+  // week/day/date would be treated as a re-entry into this finished row.
+  try { if(typeof _phxSaveActiveSessionIdentity === 'function') _phxSaveActiveSessionIdentity(null); } catch(_ak2){}
   // v4.7.29 FIX 3: session done — clear the per-session completed-sets shadow.
   try { localStorage.removeItem('phoenix_completed_sets_' + sessionId); } catch(_e){}
   try{
@@ -36235,6 +36238,9 @@ function openTodaySession(){
     var _sameSession = _sessKey && window._phxActiveSessionKey === _sessKey && currentSupabaseSessionId;
     if(!_sameSession){
       window._phxActiveSessionKey = _sessKey;
+      // v4.9.267: persisted so an iOS reload mid-session still recognises this as the
+      // same session and reuses its row, rather than starting an empty one over the top.
+      if(typeof _phxSaveActiveSessionIdentity === 'function') _phxSaveActiveSessionIdentity(_sessKey);
       supabaseStartSession(aiSessionType,sess.session_type||'Training','ai-'+(sess.session_type||'training').toLowerCase());
     } else {
       console.log('[PHX] re-entering session', _sessKey, '— keeping row', currentSupabaseSessionId);
@@ -37858,10 +37864,26 @@ window.fqNoInjuriesToggle = function(cb){
 
 // ---------- 2. BUG 1: ACTIVE SESSION PERSIST + NAV GUARD + RESTORE ----------
 var PHX_ACTIVE_SESSION_KEY = 'phoenix_active_session_id';
+// v4.9.267: the session's IDENTITY, persisted beside its id. See the recovery block
+// below — the id survived a reload and the identity did not, which was worse than
+// neither surviving.
+var PHX_ACTIVE_SESSION_IDENTITY = 'phoenix_active_session_key';
 
 function _phxSaveActiveSessionId(id){
   if(id) localStorage.setItem(PHX_ACTIVE_SESSION_KEY, id);
-  else localStorage.removeItem(PHX_ACTIVE_SESSION_KEY);
+  else {
+    localStorage.removeItem(PHX_ACTIVE_SESSION_KEY);
+    // Cleared together. An identity left behind after a session completes would make the
+    // NEXT session of the same week/day/date look like a re-entry and append to a
+    // finished row.
+    try { localStorage.removeItem(PHX_ACTIVE_SESSION_IDENTITY); } catch(_e){}
+  }
+}
+function _phxSaveActiveSessionIdentity(key){
+  try {
+    if(key) localStorage.setItem(PHX_ACTIVE_SESSION_IDENTITY, key);
+    else localStorage.removeItem(PHX_ACTIVE_SESSION_IDENTITY);
+  } catch(_e){}
 }
 
 // Wrap the existing supabaseStartSession to persist the id once it's set
@@ -37884,15 +37906,42 @@ if(typeof supabaseCompleteSession==='function'){
 }
 
 // On page load, recover the persisted id back into the in-memory variable
-(function recoverActiveSessionId(){
+// v4.9.267: extracted from an IIFE so it can be driven by a test. The recovery is the
+// load-bearing half of the mid-session reload fix and nothing could reach it while it ran
+// only at script-eval. Extracting to make something testable moves the untested part to
+// the CALL SITE, so the call below is pinned structurally in harness.mjs.
+window._phxRecoverActiveSession = function(){
   try {
     var stored = localStorage.getItem(PHX_ACTIVE_SESSION_KEY);
     if(stored && typeof currentSupabaseSessionId !== 'undefined' && !currentSupabaseSessionId){
       window.currentSupabaseSessionId = stored;
       console.log('[PHX] recovered active session id from localStorage:', stored);
     }
+    // v4.9.267 — RECOVER THE IDENTITY TOO. Jon: "i got flicked off the training screen
+    // to the today page part way through the session then went back in it had cleared
+    // where i had got to."
+    //
+    // iOS kills the PWA context on screen lock, so the app RELOADS on wake and routes to
+    // Today — that is the "flicked off". Everything needed to restore his sets was still
+    // on disk: the id above, the phoenix_completed_sets_<id> shadow store, and set_logs.
+    //
+    // What did NOT survive was window._phxActiveSessionKey, which is the identity the
+    // re-entry guard compares. With it undefined, re-entering the session took the
+    // !_sameSession branch, minted a BRAND NEW session row, and _phxSaveActiveSessionId
+    // overwrote the id that had just been recovered. _phxRestoreSessionVisualState then
+    // queried an empty new session and found nothing.
+    //
+    // So the id surviving alone was worse than nothing surviving: it recovered, then got
+    // clobbered, and his completed sets were left orphaned under a key no code would look
+    // up again. Both halves of the identity have to travel together.
+    var storedKey = localStorage.getItem(PHX_ACTIVE_SESSION_IDENTITY);
+    if(storedKey && !window._phxActiveSessionKey){
+      window._phxActiveSessionKey = storedKey;
+      console.log('[PHX] recovered active session identity:', storedKey);
+    }
   } catch(e){}
-})();
+};
+_phxRecoverActiveSession();
 
 // v4.7.20: walk-session recovery — runs after the user is signed in and the athlete profile is loaded.
 // Reads phoenix_active_walk_id from localStorage. If the corresponding sessions row is still status='active',

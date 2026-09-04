@@ -26,8 +26,22 @@ Then tell me what you found before proposing what to build.
 If you are not the PM: EnterWorktree {name:"<domain>"} before touching any file.
 Never edit ~/Desktop/phoenix-sc/index.html directly unless you are the PM.
 
+PULL BEFORE YOU BUILD, and check the board's CHECKOUTS block says your worktree is
+clean and not BEHIND. Building on a stale checkout is how one chat ships another's
+old code over new. Three domains push to one file.
+
 RE-RUN board_check.mjs ON EVERY WAKE, not just at startup. A resumed chat is
 answering from a photograph — this repo has moved ten versions inside one idle gap.
+
+IF YOU CANNOT MESSAGE THE OTHER CHATS, THAT IS NORMAL AND NOT A BLOCKER. Peer names
+rotate constantly and SendMessage has vanished mid-session for two chats. Write the
+finding to OPEN_ITEMS.md or KNOWN_ISSUES.md, commit it, and tell Jon it is there —
+he relays. Never hold a finding hostage to a channel.
+
+NEVER LEAVE WORK UNPUSHED WHEN YOU STOP. A finished fix sat mid-rebase and unpushed
+through a third report of the same bug, because the session ended before it landed.
+If you cannot finish, commit anyway and say so in OPEN_ITEMS.md with the exact
+command to complete it.
 
 Nothing ships without all four gates green, chained with && so a red one blocks:
   node runtime_check.mjs && node harness.mjs && node functional_check.mjs && node version_check.mjs

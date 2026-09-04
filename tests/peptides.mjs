@@ -913,6 +913,94 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(h.includes('1/2 done'), 'and it counts as done');
     });
 
+    // ── THE SKIP CONTROL ON THE TILE (v4.9.271) ────────────────────────────
+    // Jon: "yes add the skip button to the tile too."
+    //
+    // The tag IS the button — one thing that reports the state and changes it.
+    // These do not stop at "the markup contains a button": a button present and
+    // unwired looks identical to a working one in a source assertion, and the
+    // tile has already shipped a handler that was a SECOND implementation of
+    // ticking a dose and quietly did not decrement stock (.261). So this binds
+    // the real _pepBindTile and fires the handler it registered.
+    const clickTileSkip = (compoundId) => {
+      const html = tileHTML();
+      const ids = [...html.matchAll(/data-pep-tile-skip="([^"]+)"/g)].map(m => m[1]);
+      const handlers = [];
+      const fakeBtn = attr => ({
+        getAttribute: n => (n === 'data-pep-tile-skip' ? attr : null),
+        addEventListener: (ev, fn) => handlers.push(fn),
+      });
+      app._pepBindTile({
+        querySelectorAll: sel => (sel === '[data-pep-tile-skip]' ? ids.map(fakeBtn) : []),
+      });
+      const i = ids.indexOf(compoundId);
+      assert.ok(i >= 0, `${compoundId} has a skip control on the tile`);
+      // A button that renders and does nothing looks identical to a working one
+      // in any source assertion. Say so by name rather than letting the call
+      // below die as "handlers[i] is not a function".
+      assert.equal(typeof handlers[i], 'function',
+        `the ${compoundId} skip control is WIRED — _pepBindTile registered a handler for it`);
+      let stopped = false;
+      handlers[i]({ stopPropagation(){ stopped = true; } });
+      return stopped;
+    };
+
+    test('SKIPBTN a pending dose offers Skip on the tile', () => {
+      const h = withStubbedDom(() => { seedTwoDaily(); return tileHTML(); });
+      assert.ok(h.includes('data-pep-tile-skip="bpc157"'), 'the control is there');
+      assert.ok(h.includes('>Skip<'), 'reading Skip, not Skipped, before he taps it');
+    });
+
+    test('SKIPBTN tapping it actually skips — the control is WIRED', () => {
+      withStubbedDom(() => {
+        seedTwoDaily();
+        const stopped = clickTileSkip('bpc157');
+        assert.ok(stopped,
+          'and it stops the event — the whole tile navigates to the portal, which ' +
+          'is the trap the + Add button hit in .261');
+      });
+      assert.ok(app._pepIsSkipped(app.pepGetState(), app._pepToday(), 'bpc157'),
+        'the skip is RECORDED, not merely rendered');
+      const h = withStubbedDom(() => tileHTML());
+      assert.ok(h.includes('>Skipped<'), 'and the control now reads Skipped');
+      assert.ok(h.includes('>1</div>'), 'with one dose left outstanding, not two');
+    });
+
+    test('SKIPBTN tapping Skipped un-skips it', () => {
+      withStubbedDom(() => {
+        seedTwoDaily();
+        clickTileSkip('bpc157');
+        clickTileSkip('bpc157');
+      });
+      assert.ok(!app._pepIsSkipped(app.pepGetState(), app._pepToday(), 'bpc157'),
+        'the same control toggles back — a skip made by accident is one tap to undo');
+    });
+
+    test('SKIPBTN a dose already TAKEN is not offered skip', () => {
+      const h = withStubbedDom(() => {
+        seedTwoDaily();
+        app.pepToggleDose('bpc157');
+        return tileHTML();
+      });
+      assert.ok(!h.includes('data-pep-tile-skip="bpc157"'),
+        'the portal only offers skip on an unticked dose and the tile must agree — ' +
+        'two surfaces disagreeing about what a row can do is the thing to avoid');
+      assert.ok(h.includes('data-pep-tile-skip="ipamorelin"'),
+        'while the untaken one still has it');
+    });
+
+    test('SKIPBTN an ad-hoc EXTRA dose is not offered skip either', () => {
+      const h = withStubbedDom(() => {
+        seedTwoDaily();
+        app.pepAddExtraDose('tb500', 2);
+        return tileHTML();
+      });
+      assert.ok(h.includes('TB-500') || h.includes('tb500'), 'the added dose is on the tile');
+      assert.ok(!h.includes('data-pep-tile-skip="tb500"'),
+        'the portal offers an extra dose UNDO rather than skip, so the tile must ' +
+        'not offer skip on it — skipping something he added by hand is incoherent');
+    });
+
     test('RENDER the tile stays empty when there is no protocol', () => {
       const h = withStubbedDom(() => {
         reset(); signIn('jon');

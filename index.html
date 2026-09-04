@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.270';
+var APP_VERSION='4.9.271';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -24075,8 +24075,19 @@ function pepRenderTodayTile(){
     r += "</button>";
     r += "<div style=\"flex:1;min-width:0;\">";
     r += "<div style=\"display:flex;align-items:center;gap:6px;\">";
-    r += "<div style=\"font-size:13px;font-weight:700;color:var(--text);" + (isSkip ? "text-decoration:line-through;" : "") + "\">" + _esc(item.name) + "</div>";
-    if(isSkip) r += "<span style=\"flex-shrink:0;border:1px solid var(--border2);border-radius:10px;color:var(--text3);font-family:var(--font-d);font-size:8px;font-weight:900;padding:2px 6px;text-transform:uppercase;letter-spacing:1px;\">Skipped</span>";
+    r += "<div style=\"font-size:13px;font-weight:700;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" + (isSkip ? "text-decoration:line-through;" : "") + "\">" + _esc(item.name) + "</div>";
+    // v4.9.271: was a static SKIPPED tag. Jon asked for the control here too,
+    // so the tag IS the button — one thing that both reports the state and
+    // changes it, rather than a label beside a separate switch.
+    //
+    // Mirrors the portal's rule exactly: skip only offers itself on a dose that
+    // is NOT already ticked, and an ad-hoc "extra" dose is offered undo there
+    // instead, so it is not offered skip here either. Two surfaces disagreeing
+    // about what a row can do is the thing to avoid — the tile shipping its own
+    // second implementation of ticking is what cost him stock in .261.
+    if(!isDone && !item.extra){
+      r += "<button data-pep-tile-skip=\"" + item.id + "\" style=\"flex-shrink:0;background:none;border:1px solid " + (isSkip ? "var(--text3)" : "var(--border2)") + ";border-radius:10px;color:var(--text3);font-family:var(--font-d);font-size:8px;font-weight:900;padding:2px 7px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">" + (isSkip ? "Skipped" : "Skip") + "</button>";
+    }
     r += "</div>";
     r += "<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">" + _esc(item.timing || "") + "</div>";
     r += "</div>";
@@ -24128,6 +24139,17 @@ function _pepBindTile(tile){
       // pepToggleDose and were all silently missing here.
       pepToggleDose(btn.getAttribute("data-pep-tile-check"));
       pepRenderTodayTile();
+    });
+  });
+  tile.querySelectorAll("[data-pep-tile-skip]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      // stopPropagation because the whole tile navigates to the portal — the
+      // same trap the + Add button hit in .261.
+      e.stopPropagation();
+      // Straight to pepSkipDose, which toggles, un-ticks and returns stock if
+      // it was already taken, saves, and re-renders both surfaces. No second
+      // implementation of skipping lives here.
+      pepSkipDose(btn.getAttribute("data-pep-tile-skip"));
     });
   });
   tile.querySelectorAll("[data-pep-tile-add]").forEach(function(btn){

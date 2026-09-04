@@ -243,32 +243,100 @@ Read this at the start of every session. It contains:
 
 ---
 
-## STARTING A NEW SESSION
+## STARTING A SESSION — AND ON EVERY WAKE
 
-Run this at the start of every Claude Code session:
+**The board first. Always. Before reading anything, before proposing anything.**
 
 ```bash
-# 1. Confirm you're in the right directory
-pwd
-# Should show: /Users/jontrickey/Desktop/phoenix-sc
-
-# 2. Pull latest
-git pull origin main
-
-# 3. Confirm current version
-grep "APP_VERSION" index.html | head -1
-
-# 4. Check repo is clean
-git status
-
-# 5. Read the handoff doc
-cat HANDOFF_5.md
+node board_check.mjs
 ```
 
-Then report back:
-- Current version confirmed
-- Any uncommitted changes
-- Ready for first task
+Then read, in this order:
+1. **`CLAUDE.md`** (this file) — the rules
+2. **`KNOWN_ISSUES.md`** — the traps, and what hid each one
+3. **`OPEN_ITEMS.md`** — the single list of open threads
+4. **`COMMS_PROTOCOL.md`** — how the chats work together (binding on every session)
+5. Your domain's `HANDOFF_*.md` — **read last, and treat it as possibly behind the board**
+
+Then say what you found before proposing what to build.
+
+**RE-RUN THE BOARD ON WAKE, not just at startup.** A resumed chat is answering from a
+photograph. This repo has moved ten versions inside a single idle gap. Peer names rotate
+constantly — six rotations in one day — so a chat that was authoritative an hour ago may
+not exist.
+
+**COORDINATION HERE IS A DURABILITY PROBLEM, NOT A COMMUNICATION PROBLEM.** Sessions end
+without warning, sockets rotate, `SendMessage` has been unavailable mid-session. Every time,
+the thing that survived was a file on disk.
+
+### R-REC1 — WRITE IT TO THE RECORD FIRST, THEN MESSAGE
+
+A finding goes into `KNOWN_ISSUES.md` or `OPEN_ITEMS.md` **first**. The peer message then
+says where it is.
+
+**Messaging is for "you are unblocked, go" and for claiming a shared file. It is not where
+findings live.** A message is a notification; the record is the artefact. *If you would be
+annoyed to lose it, it does not belong only in a message.*
+
+- **A source-code comment is NOT the record.** Comment for the next editor of that file;
+  record for the next person with the question.
+- **A commit message is NOT the record either.** It is durable but undiscoverable — nobody
+  greps 260 commits for a trap they do not know exists.
+- **A scratchpad path is NOT durable.** It reads like a real path in prose and is gone
+  within the hour. Evidence cited for a decision must live in the repo.
+
+### FILE BUDGETS — archive, do not accumulate
+
+`OPEN_ITEMS.md` 300 lines · `KNOWN_ISSUES.md` 250 lines. `board_check.mjs` warns past them.
+A control document nobody finishes reading is one that lies about being read. **Ceremony
+that will not be sustained is worse than nothing.**
+
+---
+
+## NUMBERS AND CLAIMS
+
+- **NEVER PUBLISH A FIGURE WITHOUT THE POPULATION IT WAS CUT FROM.** "24 write paths" was
+  really 41 — one search covered `console.warn` and not `console.error`. Publish the cut:
+  *"41 sites matching write-or-upload within 14 lines of a console call, comments stripped"*
+  survives; *"41 sites"* does not.
+- **NEVER INVENT AN OWNER, A DATE OR A FIGURE.** Unknowns are written `???`. A marked gap
+  is more useful than a confident guess.
+- **RE-DERIVE COUNTS, NEVER REMEMBER THEM** — and never read a gate's output through a
+  truncating pipe and then trust the visible rows.
+- **A WRONG TOTAL IS CONSERVATIVE; A WRONG WORK QUEUE FAILS AT THE POINT OF ACTION.** Jon
+  opens the thing and there is no control there, and nothing announces it.
+- **OVER-CAUTION IS NOT FREE.** An over-hedged report invites him to discount the whole
+  thing, and the part that genuinely is unproven gets discounted with it. State the
+  narrowest true caveat.
+
+## VERIFYING
+
+- **VERIFY AGAINST THE SOURCE, NOT A SECOND DERIVATION.** *If the thing I am testing is
+  wrong, would this check be wrong in the same direction?* If yes it is the same claim twice.
+- **AGREEMENT MEASURES WHETHER YOU ASKED THE SAME QUESTION**, never whether it was the right
+  one. Two chats calling one endpoint are ONE measurement with two signatures.
+- **A CHECK THAT HAS NEVER FIRED IS UNTESTED, NOT CLEAN.** Break it, watch it go red, prove
+  it can go green — and confirm the inversion actually changed the file, because a no-op
+  inversion is indistinguishable from a passing guard.
+- **AN INSTRUMENT REPORTS ON ITS PROXY, NOT ITS SUBJECT.** Present is not enforcing (`sw.js`
+  existed and was zero bytes for 135 versions). A version agreeing is not a record agreeing.
+- **MATCH THE INSTRUMENT TO THE TENSE.** Did it ship → the merged diff on origin. Is it
+  dirty → the working tree. Does it work → Jon's phone.
+- **UNKNOWN MUST NOT RESOLVE TO "FINE."** Unreadable state falls to the cautious branch.
+
+## SCOPE — NOT OVERSTEPPING
+
+- **Do what was asked, then stop.** If you find something else worth doing, put it in
+  `OPEN_ITEMS.md` and say so — do not fold it into the current change.
+- **One logical change per commit** (rule 3 below). A fix for silent data loss and a
+  refactor do not travel together.
+- **Do not edit another domain's code without saying so at the call site and in the record.**
+  If you must — origin is red and nobody owns it — flag it, invite revert, and lead with the
+  diagnosis rather than the patch.
+- **Confirm before anything hard to reverse**: force-push, history rewrite, deleting a
+  worktree, schema changes, or any write to Supabase that is not the app's own code path.
+- **Never delete or reset another session's uncommitted work**, even to fix a red gate.
+  Copy it aside first and say where you put it.
 
 ---
 

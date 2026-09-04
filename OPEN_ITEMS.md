@@ -34,21 +34,6 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — REPO / TOOLING
 
-- [ ] **URGENT — v4.9.265 IS COMMITTED AND UNPUSHED. GitHub was unreachable (DNS) at the
-      moment of pushing.** Training's superset-history fix — Jon's THIRD report of the same
-      bug. Rebase resolved by the PM, all four gates green (runtime 6/6 100%, harness 748/0,
-      functional 750/750, version clean). Commit `3ddc2f2` in `.claude/worktrees/training`,
-      HEAD of that worktree, working tree clean. **Nothing is lost; it just is not on
-      origin.** To finish when the network is back:
-      `cd ~/Desktop/phoenix-sc/.claude/worktrees/training && git push origin HEAD:main`
-      Pre-resolution copies of all four files are in the PM session scratchpad — treat those
-      as gone; the commit is the artefact.
-
-- [ ] ??? — The `training` worktree has UNRESOLVED MERGE CONFLICTS (`UU` on harness.mjs,
-      index.html, sw.js), found by board_check on 2026-09-04. Either a live TRAINING
-      session is mid-rebase, or one died in one. NOT touched — it may be live work.
-      Whoever owns that session: finish or abort the rebase. Closes when the worktree is
-      clean.
 - [ ] ??? — `peptides` worktree was on 4.9.263 while origin was 4.9.264. Stale checkouts
       are how one chat ships another's old code. Closes when it pulls.
       (`nutrition` was on 4.9.254; it pulled and is on 4.9.264 as of 2026-09-04.)
@@ -107,5 +92,13 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 - [x] Auto-update after the zero-byte `sw.js` — **CONFIRMED WORKING**, v4.9.252. Jon
       answered directly that the version at the bottom of Today moves on its own after a
       normal open. Closed a claim that sat UNVERIFIED from v4.9.208.
+- [x] **v4.9.265 SHIPPED** — `9ef505b`, 2026-09-04. Training's superset-history fix, Jon's
+      THIRD report of that bug. Training left it mid-rebase and could not be messaged; the
+      PM finished it using their own documented resolution, rebased onto current origin
+      twice as it moved, and pushed. All four gates green each time.
+      **A correction on my own report of it:** I recorded the first push failure as "GitHub
+      unreachable (DNS)". The DNS failures were real, but the LATER failures were a plain
+      non-fast-forward — origin had moved under it. Two different causes wearing one
+      symptom, and I named the first one for both. Check the actual error text.
 - [x] Coach-worker vision passthrough — **VERIFIED**, 2026-08-22, by posting a synthetic
       report with unguessable values and getting all four back exactly.

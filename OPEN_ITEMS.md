@@ -39,14 +39,38 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       session is mid-rebase, or one died in one. NOT touched — it may be live work.
       Whoever owns that session: finish or abort the rebase. Closes when the worktree is
       clean.
-- [ ] ??? — `nutrition` worktree is on 4.9.254 and `peptides` on 4.9.263 while origin is
-      4.9.264. Stale checkouts are how one chat ships another's old code. Each domain
-      pulls before its next build.
+- [ ] ??? — `peptides` worktree was on 4.9.263 while origin was 4.9.264. Stale checkouts
+      are how one chat ships another's old code. Closes when it pulls.
+      (`nutrition` was on 4.9.254; it pulled and is on 4.9.264 as of 2026-09-04.)
 - [ ] PM — `.git` was deleted from the main checkout on 2026-09-04, orphaning all three
       worktrees. Restored from a fresh clone and worktrees re-registered; nothing was
       lost (verified byte-for-byte against origin). CAUSE UNKNOWN — `???`. Reopen with
       evidence if it recurs. Worktrees are now on detached HEADs because the branch
       bindings lived in the deleted directory.
+
+## OPEN — NUTRITION
+
+- [ ] NUTRITION — Servings at add-to-meal. A scanned per-serving food stores `serving_g`
+      and currently goes in at exactly one serving. Jon's ruling was that the serving
+      COUNT is an input at the point of adding to a meal. Closes when the picker asks
+      "how many servings?" for a food with `serving_g > 0` and multiplies into `qty_g`.
+      `qty_g` must stay GRAMS — the shopping list sums it as grams.
+- [ ] NUTRITION — Label extraction is UNBLOCKED and not built. Vision passthrough was
+      verified 2026-08-22; the scanner is manual-first and works without it. The design
+      decision is already recorded in HANDOFF_NUTRITION: the call sends THE IMAGE AND
+      NOTHING ELSE, and extraction fills fields in rather than bypassing the basis rule
+      or the confirm step. `harness.mjs` `LABEL/EXIT` FAILS the moment a network call is
+      added, so whoever builds it must declare the payload there. Closes when built, or
+      when Jon says he does not want it.
+
+## OPEN — CROSS-DOMAIN
+
+- [ ] TRAINING — `submitWeightCheckin` (index.html ~:27665) is an ORPHAN: defined once,
+      called nowhere, and its `#weight-checkin-banner` is a force-hidden no-op div. Three
+      comments in nutrition code describe working around it. Not removed by Nutrition
+      because it is Training's. Closes when Training either wires it or archives it under
+      CLAUDE.md rule 9. Nothing is broken by it today — it is dead weight plus three
+      misleading comments.
 
 ## ??? — GAPS. Things nobody currently knows.
 

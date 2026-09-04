@@ -35,7 +35,16 @@ Five distinct instances, all green, all worthless:
   a fresh truthy element for ANY id, so it passed for an element never created.
 - **A case whose subject left the scope of what it asserted.** "A future day" was computed
   as index 6 of a Monday-start week — which IS today, on a Sunday. One sibling went red;
-  the other passed while asserting nothing at all.
+  the other passed. **Correction (NUTRITION, on review of its own file): the passing one
+  was not asserting nothing — it had become an exact DUPLICATE of a test three cases
+  below it**, which does the same write on today and asserts the same absence of a tick.
+  So the file held one assertion under two names, and the name that claimed to cover
+  future days no longer did. **That shape is more dangerous than vacuity:** a vacuous test
+  can look odd — no real assertion, an empty fixture — whereas a duplicate exercises real
+  code, writes real state, asserts a real property, and never moves the suite count.
+  Nothing about the run looks wrong; a guarantee you believe is covered twice is covered
+  once. Ask of a decayed case *what is it asserting NOW*, not merely whether it still
+  passes.
 - **An inversion that never applied.** The fixture's own assertion failed before the edit
   landed, the gate ran against the good file, and printed a tick. **A no-op inversion is
   indistinguishable from a passing guard.** Confirm the file actually changed —

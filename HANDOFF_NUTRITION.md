@@ -173,40 +173,100 @@ typed input has this bug.
 
 ---
 
-### Blocked, spec ready: nutrition-label scanner
+### SHIPPED: food label scanner (v4.9.229, extended v4.9.247)
 
-**Not started. Blocked on Jon: the photo probe and the blood_panels SQL.** Nutrition owns
-the **food label** scanner; Peptides owns the **blood panel** scanner. Same Cloudflare
-Worker / Claude vision path, different domains — a food label has nothing to do with
-pathology and must not be routed here as one.
+**Status: BUILT AND LIVE.** This section previously read "Not started. Blocked on Jon"
+and carried engineering advice that the shipped design DELIBERATELY DID NOT FOLLOW. Both
+are corrected below — a stale handoff is worse than no handoff, because it is followed.
 
-**Jon's ruling, 22 Aug 2026 — capture PER SERVING, do NOT convert to per-100g.**
+Nutrition owns the **food label** scanner. Peptides owns the **blood panel** scanner. A
+food label has nothing to do with pathology and must not be routed here as one.
 
-This resolves rather than inherits the conversion trap. Labels routinely print a serving
-with no gram weight ("per serving (2 biscuits)", "per slice"), which makes a per-100g
-conversion *impossible* rather than merely hard. Capturing what the label actually prints
-sidesteps it entirely.
+**Entry points (three, all wired):**
+- `nutOpenFoodPicker` — the day view, populated list and empty list
+- `_nutOpenPickerForRecipe` — the recipe builder's OWN picker (added v4.9.247; missed in
+  .229 because it is a separate sheet from the day view's, which is why "wired everywhere
+  I tested" was not the same as "wired everywhere")
 
-**The serving count is an input at the point of ADDING TO A MEAL, not at the point of
-scanning.** Scan once, capture per-serving macros as printed. Then each time that food goes
-into a day or week slot, Jon enters how many servings, and the day/week views show macros
-× servings.
+**`nutOpenLabelScanner(slot, dateKey, onSaved)`**
 
-**The engineering consequence, which is where this can still go silently wrong.**
-`_NUT_FOODS` is per-100g throughout and `nutAddComponent` computes `value × qty_g / 100`.
-A per-serving food **cannot flow through that path unchanged** — it would be wrong by the
-serving ratio, invisibly, and permanently once saved as a custom food. There is no point
-downstream where a wrong basis becomes visible.
+| Argument | Meaning |
+|---|---|
+| `slot`, `dateKey` | The day path. Saves the food AND logs it to that meal. |
+| `onSaved(food, qty)` | The RECIPE path. Hands the food back; logs NOTHING. |
 
-So a scanned food needs its basis carried explicitly (e.g. `basis: 'serving'` with
-`serving_label`) and a separate multiply path — servings × per-serving macros — rather than
-being coerced into the per-100g field and multiplied by grams. **Do not reuse `qty_g` to
-mean servings.** That is the same shape as every silent-wrong-value bug this domain has
-shipped: a field that looks right, means something else, and cannot be told apart downstream.
+Passing a callback rather than a mode flag keeps the meal write on exactly one path. An
+ingredient of a recipe being written is not something Jon has eaten today — the day path
+is right from the day view and wrong from the recipe builder.
 
-Recipes already carry per-serve macros and a serving count, so the existing per-serve
-machinery (`nutRecipeMacros`, `nutAssignRecipe`'s `serves`) is the closer model to follow
-than the per-100g food path.
+#### The basis rule — `_nutLabelToPer100(vals, basis, servingG)`
+
+**THIS IS THE FEATURE. The camera is not.** Kept pure so it is testable without a device.
+
+| Input | Outcome |
+|---|---|
+| `basis: 'per100'` | Use as printed. |
+| `basis: 'serving'` **with** grams | **Convert to per-100g**, and KEEP `serving_g`. |
+| `basis: 'serving'` **without** grams | **REFUSE** — `reason: 'serving_size_missing'`. |
+| basis absent or unrecognised | **REFUSE** — `reason: 'basis_unknown'`. Never defaults. |
+
+**Why a wrong basis is the worst class of bug here.** 250 kcal per serving and 250 kcal
+per 100g are the same shape. The numbers are plausible, they save, and they stay wrong for
+months in a custom food Jon reuses. **Nothing downstream can detect it.** Hence: no default
+on the toggle (a preselected "per 100g" would make the commonest label type save silently
+wrong for anyone who did not notice), and a refusal rather than a guess.
+
+#### CORRECTION to this document's earlier advice — read before "fixing" the design
+
+This file previously instructed the implementer to carry `basis: 'serving'` through storage
+and add a **separate multiply path** (servings × per-serving macros), on the reasoning that
+Jon ruled "capture per serving, do not convert".
+
+**That conflated CAPTURE with STORAGE, and following it would have been a mistake.** Jon's
+ruling governs what the scanner shows and asks for. It does not govern the storage basis.
+Six consumers compute `value × qty_g / 100` — day totals, slot cards, recipe builder,
+shopping list, prep card, week view — and the shopping list sums `qty_g` **as grams**. A
+second storage basis would need all six to branch correctly, forever, with a wrong branch
+being invisible.
+
+**What shipped instead:** store per-100g, keep `serving_g` alongside. The label's printed
+per-serving figures are what Jon sees and confirms; the conversion is shown to him before
+saving so it is something he can check rather than something that happens to him. `qty_g`
+is **never** reused to mean servings — that warning in the original advice was correct and
+still stands.
+
+This is also why the third outcome must refuse: without a gram weight there is no route to
+`qty_g` at all. The refusal is not caution, it is arithmetic.
+
+#### Saved food shape
+
+```js
+{ id:'cf_…', n, cat, k, p, c, f,   // k/p/c/f are ALWAYS per 100g
+  defaultQty,                       // serving_g if known, else 100
+  serving_g,                        // 0 means "no serving concept — weigh it"
+  from_label:true, custom:true }
+```
+
+#### The photo: ZERO exits, and not persisted
+
+Read by `FileReader`, downscaled in-browser via `_phxDownscaleImage` (Peptides' shared
+helper, 1600px, never throws), drawn into an `<img>`, dropped on close.
+
+- **It never leaves the device.** Asserted in `harness.mjs` (`LABEL/EXIT`), so switching
+  extraction on FAILS the gate until whoever does it declares the payload there.
+- **It is never persisted.** A downscaled JPEG is 200–400KB against a ~5MB localStorage
+  budget shared with every recipe and day log. Half a dozen would evict all of it, and Jon
+  would experience that as *"my recipes vanished"*, not as a storage bug.
+
+#### Extraction is now UNBLOCKED — decision already taken
+
+The coach-worker vision passthrough was **VERIFIED on 2026-08-22** (see OPEN_ITEMS
+ARCHIVE). This section's old "blocked on the photo probe" line is dead.
+
+**When extraction is switched on, the call sends THE IMAGE AND NOTHING ELSE** — no targets,
+no weight, no meal history, no recipes. Reading a printed label needs the label. Recorded
+now so it is not re-litigated later under time pressure. Extraction fills the fields in;
+**it must not bypass the basis rule or the confirm step.**
 
 ---
 
@@ -275,10 +335,51 @@ Also read `COMMS_PROTOCOL.md` and load the comms tools (ToolSearch select above)
 
 Then report: current version, recent commits from other domains, ready for task.
 
-## CONTEXT: WHERE THINGS STAND (August 2026)
+## STATE AS OF v4.9.264 — continuity block
 
-- Tabs restructured to TODAY | RECIPES | WEEK (v4.9.137)
-- Raw/cooked filter + recipe cooked-weight mode just shipped (v4.9.140)
-- Recipe flow: build from raw ingredients → enter cooked dish weight + serve size → per-serve macros auto-calculated (the lasagne problem, solved)
-- Shopping list aggregates the week's ingredients
-- Known gaps: editing qty of an already-logged component, editing saved recipes, barcode/API food search — all candidates for future tasks
+**Re-derive, do not trust these figures.** They were true when written. `board_check.mjs`
+and the gates are authoritative; this is orientation, not a source.
+
+### Shipped this cycle (Nutrition)
+
+| Version | What |
+|---|---|
+| .211 | Tab router had no `meals` branch — the day card rendered today. View state now persists (`_nutSaveView`/`_nutRestoreView`, key `phx_nut_view_v1`) so the screen survives a lock. |
+| .213 | Targets read the LIVE morning weigh-in, not just `athlete.bw`. |
+| .216/.217 | `_phxKeyboardSafe` — bottom sheets clear the keyboard. Promoted to shared; Training arms it at its sheet factory, Peptides on two sheets. |
+| .218 | Stacked overlays verified independent — each `fit()` closes over its own element. |
+| .222 | Check-in tab archived (unreachable, no router branch) with its transitive closure. Sidebar no longer advertises a screen that cannot open. |
+| .225 | **The keyboard fix was half a fix.** A panel capped in `vh` does not shrink with the overlay; the excess overflows off the TOP. Eleven sheets converted to `%`. Found by Peptides. |
+| .227 | Keyboard safety guarded as a **conditional pair**, enumerated mechanically. |
+| .229 | Food label scanner — manual-first, basis rule, zero exits. |
+| .247 | Scan/custom-food from the recipe builder's own picker; hands the food back. |
+
+### Guard inventory (what fails if someone breaks it)
+
+- `harness.mjs` — `KEYBOARD:` enumerates every `nut`/`_nut` function that appends an
+  overlay and asserts **typed field ⇒ armed** and **armed ⇒ not `vh`**. Mechanical, so a
+  sheet added tomorrow is covered without anyone editing a list. Has a floor.
+- `harness.mjs` — `LABEL:` / `LABEL/EXIT:` / `RECIPE:` as described above. Both `LABEL`
+  guards anchor on a string in the LAST block of the scanner, not on a length.
+- `tests/nutrition.mjs` — the `CHOKE POINT` cases drive the **save button**, not the rule.
+  Proven necessary: making the save bypass `_nutLabelToPer100` leaves all five rule tests
+  GREEN while both refusal tests go red.
+
+### Known gaps — NOT tracked here
+
+Per `OPEN_ITEMS.md`: **one list.** A thread recorded both here and there goes stale here
+and nothing announces it. Open Nutrition threads live in `OPEN_ITEMS.md` only.
+
+Long-standing unbuilt items, recorded as scope rather than as open threads: editing the
+quantity of an already-logged component, editing saved recipes, barcode/API food search.
+
+### Traps this domain has actually hit
+
+In `KNOWN_ISSUES.md` (cross-domain). The two most expensive here:
+
+1. **An upstream value that is valid, well-named, and answers a slightly different
+   question.** `last_completed_day + 1` answers "what is next", not "what is today".
+   `blabCalSessionsOn` answers "what is outstanding", not "what happened". No gate catches
+   this class — only reading the code and documenting what data *means*.
+2. **A guard that looks like coverage.** A hand-written list of entry points; an inversion
+   that changes no behaviour; a test that decays into a duplicate of its neighbour.

@@ -3183,4 +3183,110 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(chin.prev_tr.reps, 42, 'last week, not today');
     assert.equal(chin.prev_tr.secs, 750, 'with last week\'s time');
   });
+
+  // ── FIXING A MISTYPED SET (v4.9.275) ─────────────────────────────────────
+  // Jon: "i mistakenly type 7 after the second block pull ups but this was the 4 plus 3,
+  // the app made it 11 and couldnt adjust - need the rep count to be clearer on what just
+  // completed ant total so dont keep count as such and add that by mistake".
+  //
+  // He had logged 4, done 3 more, and typed 7 — the RUNNING TOTAL — because the big
+  // number on screen is the total and the input just said "Reps". 4 + 7 = 11, and sets
+  // could only ever be added, so one mistype corrupted the block permanently.
+
+  const trState = (sets) => ({ ex: { name: 'Chin-ups', format: 'total_rep_goal', target: 40 },
+                               trSets: sets.slice(), trTotal: sets.reduce((a, b) => a + b, 0),
+                               elapsed: 0, _elapsedBase: 0, _segStart: 0 });
+
+  test('EDIT: his exact sequence — 4, then a mistyped 7, then fixed back to 7', () => {
+    reset(); signIn(UID);
+    const realRender = app._blabWoRender;
+    const realGet = app.document.getElementById;
+    app._blabWoRender = () => {};
+    let field = { value: '4' };
+    app.document.getElementById = (id) => (id === 'tr-in' ? field : null);
+    app._blabWoState = trState([]);
+    try {
+      app._blabTrLog();                       // 4
+      field = { value: '7' };                 // meant 3; typed the running total
+      app._blabTrLog();
+      assert.equal(app._blabWoState.trTotal, 11, 'reproduces the 11 he was stuck with');
+      app._blabTrRemove(1);                   // the fix that did not exist
+      assert.equal(app._blabWoState.trTotal, 4, 'the bad set is gone');
+      field = { value: '3' };
+      app._blabTrLog();
+      assert.equal(app._blabWoState.trTotal, 7, 'and 4 + 3 = 7, which is what he actually did');
+      assert.deepEqual(app._blabWoState.trSets, [4, 3], 'with the real set breakdown');
+    } finally { app._blabWoRender = realRender; app.document.getElementById = realGet; app._blabWoState = null; }
+  });
+
+  test('EDIT: the total is DERIVED, so it cannot drift from the sets', () => {
+    // It used to be accumulated alongside trSets. Two numbers that must agree eventually
+    // disagree — and a total that cannot be recomputed is why a wrong entry was stuck.
+    reset(); signIn(UID);
+    const realRender = app._blabWoRender;
+    app._blabWoRender = () => {};
+    app._blabWoState = trState([10, 8, 6]);
+    app._blabWoState.trTotal = 999;           // deliberately wrong
+    try {
+      app._blabTrRemove(0);
+      assert.equal(app._blabWoState.trTotal, 14, 'recomputed from what is actually there, not adjusted');
+    } finally { app._blabWoRender = realRender; app._blabWoState = null; }
+  });
+
+  test('EDIT: removing a set that is not there changes nothing', () => {
+    reset(); signIn(UID);
+    const realRender = app._blabWoRender;
+    app._blabWoRender = () => {};
+    app._blabWoState = trState([10, 8]);
+    try {
+      app._blabTrRemove(5);
+      app._blabTrRemove(-1);
+      app._blabTrRemove('x');
+      assert.equal(app._blabWoState.trTotal, 18, 'the real sets are untouched');
+      assert.equal(app._blabWoState.trSets.length, 2, 'and none were dropped');
+    } finally { app._blabWoRender = realRender; app._blabWoState = null; }
+  });
+
+  test('EDIT: every logged set is individually removable on screen', () => {
+    // Drives the renderer. Storing the ability to remove and not offering it is the
+    // _blabCalEntryView shape.
+    reset(); signIn(UID);
+    const body = { innerHTML: '' };
+    app.blabRenderTR({ name: 'Chin-ups', target: 40 }, trState([4, 3]), body);
+    assert.ok(/_blabTrRemove\(0\)/.test(body.innerHTML), 'set 1 has a remove control');
+    assert.ok(/_blabTrRemove\(1\)/.test(body.innerHTML), 'and so does set 2');
+    assert.ok(/THIS set only/i.test(body.innerHTML), 'and the input says which number it wants');
+  });
+
+  test('EDIT: the push-up tally has the same escape', () => {
+    // Identical shape — an unlabelled box beside a big total, no way back. Fixed here too
+    // rather than waiting for him to hit it a second time.
+    reset(); signIn(UID);
+    const realRender = app._blabWoRender;
+    const realGet = app.document.getElementById;
+    app._blabWoRender = () => {};
+    app.document.getElementById = () => null;
+    app._blabWoState = { ex: { name: '100 Push-ups', format: 'afap' },
+                         afapReps: [25, 40], afapRepTotal: 65, elapsed: 0 };
+    try {
+      app._blabAfapRepRemove(1);
+      assert.equal(app._blabWoState.afapRepTotal, 25, 'the mistyped sub-set is gone');
+      assert.deepEqual(app._blabWoState.afapReps, [25], 'and the count matches what is left');
+    } finally { app._blabWoRender = realRender; app.document.getElementById = realGet; app._blabWoState = null; }
+  });
+
+  test('EDIT: removing a later set does NOT move the chin-up max', () => {
+    // The max is established from the first all-out set and every future target is built
+    // from it. Undoing a typo three sets later must not silently rewrite that.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 1, last_completed_day: 0, chin_max: 12,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    const realRender = app._blabWoRender;
+    app._blabWoRender = () => {};
+    app._blabWoState = trState([12, 8, 7]);
+    try {
+      app._blabTrRemove(2);
+      assert.equal(read(KEY).chin_max, 12, 'his max is untouched by an edit further down');
+    } finally { app._blabWoRender = realRender; app._blabWoState = null; }
+  });
 }

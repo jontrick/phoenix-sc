@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.274';
+var APP_VERSION='4.9.275';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6304,13 +6304,33 @@ function blabRenderTR(ex,st,body){
       '<div style="font-family:var(--font-d);font-size:14px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:4px;">of '+(target||'?')+' total reps</div>'+
     '</div>'+
     '<div style="background:var(--bg3);border-radius:4px;height:8px;margin:0 0 16px;overflow:hidden;"><div style="background:var(--gold);height:8px;width:'+pct+'%;border-radius:4px;transition:width 0.4s;"></div></div>'+
-    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;min-height:44px;text-align:center;font-family:var(--font-d);font-size:14px;color:var(--text2);margin-bottom:16px;">'+log+'</div>'+
+    // v4.9.275: every logged set as its own removable chip. The old line read
+    // "4 + 3 = 7" as plain text — it showed the arithmetic and offered no way to touch it,
+    // so a mistyped set was permanent. Each chip is now Set N, its reps, and a tap target
+    // to delete it.
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:44px;margin-bottom:8px;">'+
+      (st.trSets.length
+        ? '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">'+
+            st.trSets.map(function(n,i){
+              return '<div style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:6px 6px 6px 12px;">'+
+                '<span style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Set '+(i+1)+'</span>'+
+                '<span style="font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text);">'+n+'</span>'+
+                '<button onclick="window._blabTrRemove('+i+')" aria-label="Remove set '+(i+1)+'" style="width:24px;height:24px;border-radius:50%;background:var(--bg2);border:1px solid var(--border2);color:var(--text3);font-size:14px;line-height:1;cursor:pointer;padding:0;">&times;</button>'+
+              '</div>';
+            }).join('')+
+          '</div>'
+        : '<div style="text-align:center;font-family:var(--font-d);font-size:14px;color:var(--text3);">No sets logged yet</div>')+
+    '</div>'+
+    (st.trSets.length ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:16px;">Tap &times; to remove a set you typed wrong.</div>' : '<div style="margin-bottom:16px;"></div>')+
     (!done?
-      '<div style="display:flex;gap:10px;margin-bottom:12px;">'+
-        '<input type="number" inputmode="numeric" id="tr-in" style="flex:1;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:22px;font-weight:700;text-align:center;outline:none;" placeholder="Reps">'+
-        '<button onclick="window._blabTrLog()" style="flex:0 0 80px;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Log</button>'+
+      // The input asks for ONE set, and says so — the whole cause of the 4+7=11. The big
+      // number above is the TOTAL, so an unlabelled box beside it invites the total.
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:6px;">Reps in THIS set only</div>'+
+      '<div style="display:flex;gap:10px;margin-bottom:8px;">'+
+        '<input type="number" inputmode="numeric" id="tr-in" style="flex:1;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:22px;font-weight:700;text-align:center;outline:none;" placeholder="This set">'+
+        '<button onclick="window._blabTrLog()" style="flex:0 0 80px;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Add</button>'+
       '</div>'+
-      '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:12px;">Rest as needed between sets.</div>'
+      '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:12px;">Adds to your total &mdash; not the total itself. Rest as needed.</div>'
       :'<div style="background:rgba(200,150,62,0.1);border:1px solid var(--gold);border-radius:var(--radius);padding:14px;text-align:center;margin-bottom:16px;"><div style="font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;color:var(--gold);">Target reached!</div></div>'
     )+
     // v4.9.272 — Jon: "just need a countdown and clearer clock for the pull ups".
@@ -6330,25 +6350,76 @@ function blabRenderTR(ex,st,body){
 // Time is still the score; this only tracks progress toward the rep total so Jon can
 // see where he is. Deliberately NOT wired into scoring: changing what 100 Push-ups
 // scores on would break comparability with every previous attempt.
+// v4.9.275: the push-up tally had the identical shape to the pull-up one Jon mistyped
+// into — an unlabelled box beside a big total, an accumulated running count, and no way
+// to remove a set. Fixed here too rather than waiting for him to hit it a second time.
+function _blabAfapRecount(st){
+  if(!st) return 0;
+  if(!Array.isArray(st.afapReps)) st.afapReps = [];
+  st.afapRepTotal = st.afapReps.reduce(function(a, b){ return a + (parseInt(b, 10) || 0); }, 0);
+  return st.afapRepTotal;
+}
 window._blabAfapRepLog=function(){
   var st=window._blabWoState; if(!st) return;
   var inp=document.getElementById('afap-rep-in');
   var r=parseInt(inp&&inp.value)||0; if(r<=0) return;
   if(!st.afapReps) st.afapReps=[];
   st.afapReps.push(r);
-  st.afapRepTotal=(st.afapRepTotal||0)+r;
+  _blabAfapRecount(st);
   if(inp) inp.value='';
   window._blabWoRender();
 };
+window._blabAfapRepRemove=function(i){
+  var st=window._blabWoState; if(!st || !Array.isArray(st.afapReps)) return;
+  i = parseInt(i, 10);
+  if(!(i >= 0) || i >= st.afapReps.length) return;
+  st.afapReps.splice(i, 1);
+  _blabAfapRecount(st);
+  window._blabWoRender();
+};
 
+// v4.9.275 — Jon: "i mistakenly type 7 after the second block pull ups but this was the
+// 4 plus 3, the app made it 11 and couldnt adjust".
+//
+// He had logged 4, done 3 more, and typed 7 — the RUNNING TOTAL, because the big number
+// on screen is the total and the small box just said "Reps". The box wanted the new set.
+// 4 + 7 = 11, and there was no way back: sets could only ever be added.
+//
+// Two separate faults, and fixing either alone leaves the other:
+//   1. The input never said WHICH number it wanted, next to a display dominated by the
+//      total. Ambiguous at rest; at 4:30am between sets it is a coin flip.
+//   2. Nothing could be removed. A single mistype corrupted the block for good, and the
+//      only escape was to abandon the exercise.
+//
+// trTotal is now DERIVED from trSets on every change rather than accumulated alongside
+// it. Two numbers that must agree will eventually disagree — and a running total that
+// cannot be recomputed is exactly why a wrong entry was unfixable.
+function _blabTrRecount(st){
+  if(!st) return 0;
+  if(!Array.isArray(st.trSets)) st.trSets = [];
+  st.trTotal = st.trSets.reduce(function(a, b){ return a + (parseInt(b, 10) || 0); }, 0);
+  return st.trTotal;
+}
 window._blabTrLog=function(){
   var st=window._blabWoState; if(!st) return;
   var inp=document.getElementById('tr-in');
   var r=parseInt(inp&&inp.value)||0; if(r<=0) return;
   if(!st.trSets) st.trSets=[];
-  st.trSets.push(r); st.trTotal=(st.trTotal||0)+r;
+  st.trSets.push(r);
+  _blabTrRecount(st);
   if(inp) inp.value='';
   if(st.ex.chin_test&&st.trSets.length===1){var bs=window.blabGetState();if(bs){bs.chin_max=r;bs.chin_established=true;window.blabSaveState(bs);window._blabNotice('Chin-Up Max Set', [r+' reps', 'All future targets now calculated from this']);}}
+  window._blabWoRender();
+};
+// Remove one logged set. The chin-up max is deliberately NOT recalculated here: it is
+// established from the first all-out set and written to state at that moment, so undoing
+// a later typo must not silently move a number every future target is built from.
+window._blabTrRemove=function(i){
+  var st=window._blabWoState; if(!st || !Array.isArray(st.trSets)) return;
+  i = parseInt(i, 10);
+  if(!(i >= 0) || i >= st.trSets.length) return;
+  st.trSets.splice(i, 1);
+  _blabTrRecount(st);
   window._blabWoRender();
 };
 
@@ -6427,12 +6498,22 @@ function blabRenderAfap(ex,st,body){
         '<span style="font-size:15px;color:var(--text3);font-weight:700;"> / '+_repGoal+'</span></div>'+
       '<div style="text-align:center;font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin:4px 0 10px;">Reps done</div>'+
       '<div style="background:var(--bg3);border-radius:4px;height:6px;margin-bottom:10px;overflow:hidden;"><div style="background:var(--gold);height:6px;width:'+_rpct+'%;border-radius:4px;transition:width 0.3s;"></div></div>'+
-      '<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:10px;">'+_rlog+'</div>'+
+      (st.afapReps && st.afapReps.length
+        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:10px;">'+
+            st.afapReps.map(function(n,i){
+              return '<div style="display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:4px 4px 4px 10px;">'+
+                '<span style="font-family:var(--font-d);font-size:14px;font-weight:900;color:var(--text);">'+n+'</span>'+
+                '<button onclick="window._blabAfapRepRemove('+i+')" aria-label="Remove sub-set '+(i+1)+'" style="width:20px;height:20px;border-radius:50%;background:var(--bg2);border:1px solid var(--border2);color:var(--text3);font-size:12px;line-height:1;cursor:pointer;padding:0;">&times;</button>'+
+              '</div>';
+            }).join('')+
+          '</div>'
+        : '<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:10px;">'+_rlog+'</div>')+
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:5px;">Reps in THIS sub-set only</div>'+
       '<div style="display:flex;gap:8px;">'+
-        '<input type="number" inputmode="numeric" id="afap-rep-in" placeholder="Reps" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;">'+
-        '<button onclick="window._blabAfapRepLog()" style="flex:0 0 76px;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Log</button>'+
+        '<input type="number" inputmode="numeric" id="afap-rep-in" placeholder="This set" style="flex:1;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;">'+
+        '<button onclick="window._blabAfapRepLog()" style="flex:0 0 76px;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Add</button>'+
       '</div>'+
-      '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:8px;">The clock keeps running — this is just your count.</div>'+
+      '<div style="text-align:center;font-size:10px;color:var(--text3);margin-top:8px;">Adds to your count. Tap &times; to remove one. The clock keeps running.</div>'+
     '</div>';
   }
 
@@ -20379,7 +20460,7 @@ function nutOpenLabelScanner(slot, dateKey, onSaved){
 }
 
 // ══ CUT PROGRAMME ENGINE ═══════════════════════════════════════════════════
-// v4.9.273. Pure data and arithmetic — no DOM, no storage, no side effects, so
+// v4.9.275. Pure data and arithmetic — no DOM, no storage, no side effects, so
 // every rule below is testable without a screen existing.
 //
 // THE ONE IDEA: a CARB BLOCK is 25 g of carbohydrate. Meals are allotted blocks

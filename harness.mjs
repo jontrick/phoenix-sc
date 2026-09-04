@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.274'", 'version is 4.9.274');
+has("var APP_VERSION='4.9.275'", 'version is 4.9.275');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2508,6 +2508,19 @@ has("cat: 'REST'",                                  'CONTRACT: REST is the marke
 // fetch RESOLVES on a 4xx, so a handler watching only for rejection sees a 400 as success.
 // That is how a missing column hid for twelve versions on the peptide side.
 hasCode('if(r && !r.ok', 'FLUSH: the keepalive path checks res.ok, because fetch resolves on a 4xx');
+
+// ── FIXING A MISTYPED SET (v4.9.275) ────────────────────────────────────────
+// Jon logged 4, meant to add 3, typed 7 — the running total — and got 11 with no way
+// back. Two faults: an input that never said which number it wanted, and sets that could
+// only be added. Both had to go.
+has('window._blabTrRemove=function(i)', 'EDIT: a logged pull-up set can be removed');
+has('window._blabAfapRepRemove=function(i)', 'EDIT: and a push-up sub-set too — identical shape, fixed at the same time');
+// DERIVED, never accumulated. Two numbers that must agree eventually disagree, and a
+// total that cannot be recomputed is why a wrong entry was permanent.
+has('st.trTotal = st.trSets.reduce', 'EDIT: the pull-up total is derived from the sets, not tracked beside them');
+has('st.afapRepTotal = st.afapReps.reduce', 'EDIT: same for the push-up count');
+// The label is the half that prevents the mistype rather than repairing it.
+has('Reps in THIS set only', 'EDIT: the input names what it wants, beside a display dominated by the total');
 
 // ── VISIBLE COMPLETED + THE PULL-UP PAIR (v4.9.272) ─────────────────────────
 // The completed state was never recorded at all: _blabWoDone reads

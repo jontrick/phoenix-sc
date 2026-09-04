@@ -1882,14 +1882,25 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(oils.prawns > 25, 'to about 30 ml, which is worth seeing before pouring it');
   });
 
-  test('NIGHT the green side can be swapped too', () => {
+  // v4.9.289. The swap is the GREENS — "greens or greens shake", which is what
+  // the base plan offers — not a menu of fresh vegetables. The sweet potato side
+  // is fixed and must stay so.
+  test('NIGHT the greens can be taken as a shake instead', () => {
     setUp(110);
     const d = '2026-09-16';
-    app.nutProgSetNightly(d, 'dinner_veg', 'asparagus');
-    assert.ok(partOf(dinnerOn(d), /Asparagus/), 'asparagus is on the plate');
-    app.nutProgSetNightly(d, 'dinner_veg', 'zucchini');
-    assert.ok(partOf(dinnerOn(d), /Zucchini/), 'and swaps again');
-    assert.equal(partOf(dinnerOn(d), /^Greens$/), undefined, 'replacing the default greens');
+    assert.ok(partOf(dinnerOn(d), /^Greens$/), 'fresh greens by default');
+    app.nutProgSetNightly(d, 'dinner_veg', 'shake');
+    assert.ok(partOf(dinnerOn(d), /Greens powder/), 'the shake replaces them');
+    assert.equal(partOf(dinnerOn(d), /^Greens$/), undefined, 'and the fresh greens are gone');
+    assert.ok(partOf(dinnerOn(d), /Sweet potato/),
+      'while the fresh veg side stays put — it is not a swap slot');
+  });
+
+  test('NIGHT the fresh veg side is NOT swappable', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetNightly('2026-09-16', 'dinner_veg', 'broccoli'), false,
+      'swapping in other vegetables was the wrong reading of the request');
+    assert.ok(partOf(dinnerOn('2026-09-16'), /Sweet potato/), 'the potato is always there');
   });
 
   test('NIGHT it is per NIGHT — tomorrow is untouched', () => {
@@ -1936,7 +1947,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const html = d.lastCreatedHtml();
     assert.ok(html.indexOf('data-nut-night') >= 0, 'tonight\'s rows are tappable');
     assert.ok(/Tonight/.test(html), 'and labelled as tonight, not this week');
-    ['Sirloin steak','Basa fillet','Prawns','Asparagus','Zucchini','Spinach'].forEach((n) => {
+    ['Sirloin steak','Basa fillet','Prawns','Greens powder'].forEach((n) => {
       assert.ok(html.indexOf(n) >= 0, n + ' is offered');
     });
     assert.ok(/200 g/.test(html), 'with the serve size shown, since it changes with the choice');
@@ -1951,6 +1962,110 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(html.indexOf('Mackerel'), -1,
       'the old week-long dinner list is gone from the sheet; two sets of dinner ' +
       'proteins on one screen is worse than one');
+  });
+
+  // ── the week's evenings, chosen before the shop ──────────────────────────
+  // v4.9.289. Jon sets Mon-Sun in advance and the list follows. The arithmetic
+  // was already there — the list always walked the real seven days — so what was
+  // missing was a way to decide before the week rather than at 19:00 on the night.
+
+  const shopNames = (week) => {
+    const out = [];
+    const shop = app.nutProgShoppingFor(week, 'basmati');
+    shop.groups.forEach((g) => g.items.forEach((it) => out.push(it)));
+    return out;
+  };
+  const shopFind = (week, name) => shopNames(week).filter((it) => it.n === name)[0];
+
+  test('WEEKPICK the picker is on screen for week 0, right now', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Evening meals') >= 0,
+      'Jon asked for this on week 0 so he can test it before the real thing');
+    assert.ok(html.indexOf('data-prog-night-day="2026-09-07"') >= 0, 'Monday is settable');
+    assert.ok(html.indexOf('data-prog-night-day="2026-09-13"') >= 0, 'through to Sunday');
+  });
+
+  test('WEEKPICK it offers all seven evenings, not just tonight', () => {
+    setUp(110);
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    const rows = (html.match(/data-prog-night-day=/g) || []).length;
+    assert.equal(rows, 7, 'one row per evening — got ' + rows);
+  });
+
+  test('WEEKPICK each row shows what is currently chosen for that night', () => {
+    setUp(110);
+    app.nutProgSetNightly('2026-09-09', 'dinner_protein', 'prawns');
+    const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Prawns 125 g') >= 0,
+      'the picked night shows its protein AND its serve size, which changes with the choice');
+    assert.ok(html.indexOf('Salmon fillet 135 g') >= 0, 'and the untouched nights show the default');
+  });
+
+  test('WEEKPICK the sheet can be opened FOR a night that is not tonight', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-06', () => app.nutOpenSwapSheet('2026-09-10'));
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-night') >= 0, 'the options are offered');
+    assert.ok(/Thu/.test(html), 'and the sheet says which evening it is setting');
+  });
+
+  test('WEEKPICK choosing for a future night does not change tonight', () => {
+    setUp(110);
+    app.nutProgSetNightly('2026-09-10', 'dinner_protein', 'basa');
+    assert.equal(app.nutProgNightlyOn('2026-09-10').dinner_protein, 'basa', 'Thursday is basa');
+    assert.equal(app.nutProgNightlyOn('2026-09-07').dinner_protein, 'salmon', 'Monday is untouched');
+  });
+
+  // ── the list must follow the picks, at the RIGHT weights ──
+  test('WEEKPICK the shopping list recalculates from the week\'s picks', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(0);
+    app.nutProgSetNightly(days[0], 'dinner_protein', 'steak');
+    app.nutProgSetNightly(days[1], 'dinner_protein', 'steak');
+    app.nutProgSetNightly(days[2], 'dinner_protein', 'prawns');
+    assert.equal(shopFind(0, 'Sirloin steak').qty, 210, 'two steak nights at 105 g');
+    assert.equal(shopFind(0, 'Prawns').qty, 125, 'one prawn night at 125 g');
+    assert.equal(shopFind(0, 'Salmon fillet').qty, 540, 'and four salmon nights at 135 g');
+  });
+
+  test('WEEKPICK a swapped protein is NOT converted as though it were rice', () => {
+    setUp(110);
+    // The shopping list looked up each name's plate row to know how to convert it,
+    // and fell back to the RICE row for anything unknown — so a 105 g steak was
+    // shopped for as 35 g. Jon would have bought a third of the meat he needed.
+    const days = app._nutProgWeekDates(0);
+    app.nutProgSetNightly(days[0], 'dinner_protein', 'steak');
+    const steak = shopFind(0, 'Sirloin steak');
+    assert.equal(steak.qty, 105, 'the serve is the serve — got ' + steak.qty);
+    assert.equal(steak.note, '', 'and it carries no cooked-yield note, because it is not rice');
+    assert.equal(shopFind(0, 'Basmati, white').qty, 537, 'while real rice still converts from dry');
+  });
+
+  test('WEEKPICK swapped proteins are shelved with the protein, not the produce', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(0);
+    app.nutProgSetNightly(days[0], 'dinner_protein', 'prawns');
+    const shop = app.nutProgShoppingFor(0, 'basmati');
+    const grp = shop.groups.filter((g) => g.items.some((it) => it.n === 'Prawns'))[0];
+    assert.equal(grp.name, 'Protein', 'prawns are not produce');
+  });
+
+  test('WEEKPICK the greens shake shows on the list when chosen', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(0);
+    days.forEach((d) => app.nutProgSetNightly(d, 'dinner_veg', 'shake'));
+    assert.ok(shopFind(0, 'Greens powder'), 'the powder is bought');
+    assert.equal(shopFind(0, 'Greens'), undefined, 'and the fresh greens are not');
+  });
+
+  test('WEEKPICK the same flow exists for a real programme week', () => {
+    setUp(110);
+    const html = onDay('2026-10-07', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Evening meals') >= 0, 'week 5 review carries it too');
+    assert.ok(html.indexOf('data-prog-night-day="2026-10-12"') >= 0,
+      'set against the week being reviewed, not the week being eaten');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

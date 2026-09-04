@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.288'", 'version is 4.9.288');
+has("var APP_VERSION='4.9.289'", 'version is 4.9.289');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2974,8 +2974,9 @@ hasCode('function _nutProgUpcomingWeekDates(',
 // EXISTING IS NOT REACHED. Both of these were built, tested and called by nothing
 // — the list existed only as a function, and Jon opened the app to find prose
 // where his shopping list should be. Guard the CALL, not the definition.
-hasCode('_nutProgWeekAheadCard(wk) + _nutProgListCard(wk)',
-        'SHOP: the review card actually RENDERS the list and prep plan');
+hasCode('_nutProgWeekAheadCard(wk) + _nutProgWeekPickerCard(wk) + _nutProgListCard(wk)',
+        'SHOP: the review card RENDERS the week ahead, the evening picker and the list — ' +
+        'and in that order, because you choose the evenings before you read the list they produce');
 hasCode('function _nutProgListCard(',  'SHOP: the list has a renderer at all');
 hasCode('function nutProgListText(',   'SHOP: and a plain-text export for the phone');
 hasCode('data-prog-copy',              'SHOP: with a copy button');
@@ -3006,6 +3007,24 @@ hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored')
 
 // ── Tonight's dinner ────────────────────────────────────────────────────────
 hasCode('_NUT_PROG_DINNER_PROTEIN', 'NIGHT: four evening proteins exist');
+hasCode('function _nutProgWeekPickerCard(', 'WEEKPICK: the week\'s evenings can be set in advance');
+hasCode('_nutProgWeekPickerCard(wk)',       'WEEKPICK: and the review card RENDERS it');
+hasCode('data-prog-night-day',              'WEEKPICK: each evening is its own row');
+hasCode("body.querySelectorAll('[data-prog-night-day]')",
+        'WEEKPICK: the rows are WIRED — a drawn row nothing listens to is inert');
+hasCode('function nutOpenSwapSheet(forDate)',
+        'WEEKPICK: the sheet can set a night that is not tonight');
+
+// A 105 g steak was being shopped for as 35 g: the list fell back to the RICE row
+// for any name it did not recognise, and divided by rice's 3x expansion.
+hasCode("_nutRiceByName(k) ? _nutProgPlateRow('Rice') : null",
+        'WEEKPICK: only a real grain borrows the rice conversion');
+hasCode('function _nutRiceByName(', 'WEEKPICK: grains are recognised by name, not by fallback');
+
+// The greens row is "greens or greens shake" per the base plan. The fresh veg
+// side is fixed and must not become a swap slot.
+hasCode("{ id:'shake',  n:'Greens powder'", 'GREENS: the shake is the alternative to fresh greens');
+hasNotCode("id:'asparagus'", 'GREENS: the fresh veg side is NOT a menu of vegetables');
 hasCode('_NUT_PROG_DINNER_VEG',     'NIGHT: and the green sides');
 hasCode('function nutProgSetNightly(',        'NIGHT: a choice can be made for tonight');
 hasCode('function nutProgSetDinnerDefault(',  'NIGHT: and a default for the week he shops');

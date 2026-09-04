@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.288';
+var APP_VERSION='4.9.289';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19264,6 +19264,11 @@ function nutRenderScreen(){
     e.stopPropagation();
     nutOpenSwapSheet();
   });
+  body.querySelectorAll('[data-prog-night-day]').forEach(function(row){
+    row.addEventListener('click', function(){
+      nutOpenSwapSheet(row.getAttribute('data-prog-night-day'));
+    });
+  });
   var progCopy = body.querySelector('[data-prog-copy]');
   if(progCopy) progCopy.addEventListener('click', function(){
     var txt = nutProgListText(parseInt(progCopy.getAttribute('data-prog-copy'), 10));
@@ -20729,6 +20734,12 @@ function nutProgTargetsOn(dateKey, taken){
 }
 
 // ── rice ───────────────────────────────────────────────────────────────────
+// The chosen grain appears under its own display name, so the shopping list has
+// to be able to recognise one by name as well as by id.
+function _nutRiceByName(name){
+  for(var i = 0; i < _NUT_RICE.length; i++) if(_NUT_RICE[i].name === name) return _NUT_RICE[i];
+  return null;
+}
 function _nutRiceById(id){
   for(var i = 0; i < _NUT_RICE.length; i++) if(_NUT_RICE[i].id === id) return _NUT_RICE[i];
   return null;
@@ -20783,6 +20794,7 @@ var _NUT_PROG_PLATE = [
   { m:'arvo',   n:'Peanut butter', grp:'fat',     g:[15,15,8,0,0],                     u:'',        k:588, p:25,  c:20,  f:50 },
 
   { m:'dinner', n:'Salmon fillet', grp:'protein',     g:[135,135,140,150,160],             u:'',        k:208, p:22,  c:0,   f:13 },
+  // FIXED. The fresh veg side is not a swap slot — see _NUT_PROG_DINNER_VEG.
   { m:'dinner', n:'Sweet potato', grp:'produce',      g:[260,144,115,75,35],   carb:true,  u:'',        k:86,  p:1.6, c:20,  f:0.1 },
   { m:'dinner', n:'Greens', grp:'produce',            g:[200,200,200,200,200], carb:true,  u:'',        k:35,  p:2.8, c:4,   f:0.4 },
   { m:'dinner', n:'Olive oil', grp:'fat',         g:[13,12,12,11,10],                  u:' ml',     k:884, p:0,   c:0,   f:100 }
@@ -21230,8 +21242,11 @@ function nutProgShoppingFor(week, riceId){
   var groups = {};
   Object.keys(tally).forEach(function(k){
     var t = tally[k];
-    var row = _nutProgPlateRow(k) || _nutProgPlateRow('Rice');   // the rice is renamed by grain
-    var grp = (row && row.grp) || 'produce';
+    // Only a real grain may borrow the Rice row's conversion. Anything else with
+    // no row of its own is bought exactly as the plate lists it.
+    var row = _nutProgPlateRow(k) || (_nutRiceByName(k) ? _nutProgPlateRow('Rice') : null);
+    var grp = (row && row.grp) ||
+              (_nutProgNightlyOpt('dinner_protein', _nutNightlyIdByName(k)) ? 'protein' : 'produce');
     var qty = t.cooked, unit = 'g', note = '';
 
     if(row && row.rice){
@@ -21381,14 +21396,16 @@ var _NUT_PROG_DINNER_PROTEIN = [
 // gardening project, not a side. The spread across these is about five grams of
 // carbohydrate, a fifth of a block, and the day absorbs it.
 var _NUT_PROG_DINNER_VEG = [
-  { id:'greens',    n:'Greens',      g:200, k:35, p:2.8, c:4.0, f:0.4, base:true },
-  { id:'broccoli',  n:'Broccoli',    g:200, k:34, p:2.8, c:4.0, f:0.4 },
-  { id:'greenbean', n:'Green beans', g:180, k:31, p:1.8, c:5.0, f:0.2 },
-  { id:'asparagus', n:'Asparagus',   g:200, k:20, p:2.2, c:2.0, f:0.1 },
-  { id:'zucchini',  n:'Zucchini',    g:220, k:17, p:1.2, c:2.1, f:0.3 },
-  { id:'spinach',   n:'Spinach',     g:200, k:23, p:2.9, c:1.4, f:0.4 }
+  { id:'greens', n:'Greens',        g:200, k:35,  p:2.8, c:4.0, f:0.4, base:true },
+  { id:'shake',  n:'Greens powder', g:10,  k:350, p:20,  c:50,  f:5 }
 ];
 
+// Reverse lookup: the shopping list only ever sees display names.
+function _nutNightlyIdByName(name){
+  var all = _NUT_PROG_DINNER_PROTEIN.concat(_NUT_PROG_DINNER_VEG);
+  for(var i = 0; i < all.length; i++) if(all[i].n === name) return all[i].id;
+  return null;
+}
 function _nutProgNightlyOpt(slot, id){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
            : (slot === 'dinner_veg')     ? _NUT_PROG_DINNER_VEG : null;
@@ -21486,11 +21503,11 @@ function nutProgSwaps(){
 // defect is not broken code, it is finished code with no door.
 //
 // HANDOFF_5 specifies it: "Tap meal to: adjust quantities, swap a component, add notes".
-function nutOpenSwapSheet(){
+function nutOpenSwapSheet(forDate){
   var old = document.getElementById('nut-swap-sheet');
   if(old) old.remove();
   var cur = nutProgSwaps();
-  var today = _nutToday();
+  var today = forDate || _nutToday();
   var night = nutProgNightlyOn(today);
   var h = '';
   Object.keys(_NUT_PROG_SWAPS).forEach(function(slot){
@@ -21515,7 +21532,7 @@ function nutOpenSwapSheet(){
   // Wednesday. The serve size MOVES with the choice — each is sized to land the
   // same protein, which gram-for-gram swapping would not do.
   [['dinner_protein', 'Tonight&rsquo;s protein', _NUT_PROG_DINNER_PROTEIN],
-   ['dinner_veg',     'Tonight&rsquo;s greens',  _NUT_PROG_DINNER_VEG]].forEach(function(sec){
+   ['dinner_veg',     'Tonight&rsquo;s greens &mdash; fresh or shake', _NUT_PROG_DINNER_VEG]].forEach(function(sec){
     var slot = sec[0], label = sec[1], opts = sec[2];
     h += '<div style="margin-bottom:16px;">';
     h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + label + '</div>';
@@ -21549,7 +21566,8 @@ function nutOpenSwapSheet(){
   ov.innerHTML =
     '<div style="width:100%;background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;display:flex;flex-direction:column;max-height:88%;">' +
     '<div style="padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
-      '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Substitutions</div>' +
+      '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;">Substitutions' +
+        (forDate ? ' &middot; ' + ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][_nutProgDate(forDate).getDay()] : '') + '</div>' +
       '<button id="nut-swap-close" style="width:32px;height:32px;background:var(--bg2);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:18px;cursor:pointer;touch-action:manipulation;">&times;</button>' +
     '</div>' +
     '<div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 20px 20px;">' + h + '</div>' +
@@ -21561,7 +21579,7 @@ function nutOpenSwapSheet(){
   ov.querySelectorAll('[data-nut-night]').forEach(function(row){
     row.addEventListener('click', function(){
       var parts = String(row.getAttribute('data-nut-night')).split('|');
-      if(nutProgSetNightly(_nutToday(), parts[0], parts[1])){
+      if(nutProgSetNightly(today, parts[0], parts[1])){
         ov.remove();
         if(typeof nutRenderScreen === 'function') nutRenderScreen();
       }
@@ -21912,6 +21930,39 @@ function _nutProgUpcomingWeekDates(fromKey){
   return null;
 }
 
+// ── the week's evenings, set in advance ────────────────────────────────────
+// v4.9.289. Jon picks each evening's protein and greens at the START of the week,
+// Monday through Sunday, and the shopping list recalculates from those choices.
+//
+// The list already walked the real seven days, so this needed no new arithmetic —
+// only a way to make the choices before the week begins rather than at 19:00 on
+// the night. That is the difference between a plan and a diary.
+function _nutProgWeekPickerCard(week){
+  var days = _nutProgWeekDates(week);
+  if(!days) return '';
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Evening meals</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Set each night before you shop &mdash; the list follows these</div>';
+  days.forEach(function(d){
+    var t = nutProgTargetsOn(d);
+    if(!t) return;
+    var pick = nutProgNightlyOn(d);
+    var pr = _nutProgNightlyOpt('dinner_protein', pick.dinner_protein) || _nutProgNightlyBase('dinner_protein');
+    var vg = _nutProgNightlyOpt('dinner_veg', pick.dinner_veg) || _nutProgNightlyBase('dinner_veg');
+    var dt = _nutProgDate(d);
+    var nm = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+    h += '<div data-prog-night-day="' + d + '" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;">' +
+      '<div style="min-width:0;">' +
+        '<div style="font-size:12px;font-weight:700;">' + nm + ' <span style="color:var(--text3);font-weight:400;">' + d.slice(8) + '/' + d.slice(5,7) + '</span></div>' +
+        '<div style="font-size:11px;color:var(--gold);margin-top:1px;">' + pr.n + ' ' + pr.g + ' g' +
+          '<span style="color:var(--text3);"> &middot; ' + vg.n + '</span></div>' +
+      '</div>' +
+      '<div style="font-size:16px;color:var(--text3);flex-shrink:0;">&rsaquo;</div></div>';
+  });
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:9px;line-height:1.5;">Each serve is sized to land the same protein, so the weight changes with the choice. The oil moves to hold the fat.</div></div>';
+  return h;
+}
+
 // Which week is being reviewed today, if any. Returns 0 for the rehearsal's
 // Saturday setup and null on every other day.
 function nutProgReviewWeekOn(dateKey){
@@ -21967,7 +22018,8 @@ function _nutProgReviewCard(dateKey){
     }
   }
   h += '</div>';
-  h += _nutProgWeekAheadCard(wk) + _nutProgListCard(wk);
+  // Order matters: choose the evenings, THEN read the list they produce.
+  h += _nutProgWeekAheadCard(wk) + _nutProgWeekPickerCard(wk) + _nutProgListCard(wk);
   return h;
 }
 

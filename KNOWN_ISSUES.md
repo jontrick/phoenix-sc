@@ -209,6 +209,33 @@ take another session's entry.
 
 **Copy the file aside and restore by copy.** Or make a WIP commit.
 
+### …and its CHECKOUTS half can be wrong too, which breaks the mitigation above
+
+The entry above concludes: *only CHECKOUTS is meaningful before pulling*. **It is not
+always meaningful either.** `board_check.mjs` decides BEHIND by comparing APP_VERSION
+strings:
+
+`const behind = v !== originVer`, where `v` is the APP_VERSION read out of that
+worktree's `index.html`.
+
+So a checkout behind only by commits that never touch `index.html` — every `docs`, `tests`
+and `tooling` commit — reports **clean, no marker**.
+
+**2026-09-04, TRAINING, the same hour.** The worktree was 3 commits behind (`ada47d5`,
+`cb13c91`, `ea97c43`) — none touching `index.html`, between them changing `OPEN_ITEMS.md`
+and `SESSION_START.md`. Both APP_VERSIONs read `4.9.265`, so the board printed
+`training  detached  clean`.
+
+**The two compose into something worse than either.** Nutrition was told it was BEHIND
+and read the stale list anyway; Training was **not told**, because the only commits it was
+missing were the ones that change the record and the rules — precisely the commits whose
+staleness matters and the only ones this check cannot see. Two closed items were reported
+as live, and `SESSION_START.md` was silently withheld.
+
+**So: fetch before running the board at all** — not "read CHECKOUTS first", since that
+half is silently wrong in exactly the case where the content half is stale. Fix logged in
+OPEN_ITEMS: count commits behind, rather than compare a version string.
+
 ## The main `.git` can vanish and take every worktree with it
 
 2026-09-04: `.git` disappeared from the main checkout. Working files were untouched, but

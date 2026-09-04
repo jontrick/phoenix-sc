@@ -57,6 +57,33 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — CROSS-DOMAIN
 
+- [ ] PM — `tests/pm.mjs` "CONTRACT _phxRecordWriteError: holds for a CARELESS caller" is
+      FLAKY at ~0.17% and fails as **"medical/personal value leaked: 24.8"**. Nothing leaks.
+      The helper stamps `ts: new Date().toISOString()`, the assertion scans the WHOLE blob,
+      and an ISO timestamp contains the literal `24.8` whenever seconds are 24 and
+      milliseconds are 800-899 — 100ms in every 60,000. Measured by enumerating a full
+      minute: exactly 100 of 60,000 timestamps match, e.g. `2026-09-04T19:33:24.800Z`.
+      Observed once here, then 6 clean runs.
+      **Why it is worth fixing rather than tolerating:** it cries wolf on a medical-data
+      leak specifically. The first response to seeing it red is to hunt a leak that is not
+      there; the second time, to dismiss it as flaky — which is how a real one gets waved
+      through. Fix: scan `snap.payload_shape` and `snap.message`, i.e. the fields that
+      carry CALLER data, not the metadata the helper adds itself. Or exclude `ts`.
+      **The generalisable half:** a negative assertion over a whole serialised object also
+      scans every field the code under test legitimately adds, so it can collide with
+      metadata that has nothing to do with the property. Not mine to edit — PM's test.
+
+- [ ] PM — `board_check.mjs` decides BEHIND by comparing APP_VERSION strings, so a checkout
+      behind only by `docs`/`tests`/`tooling` commits reports **clean**. Measured 2026-09-04:
+      the training worktree was 3 commits behind (`ada47d5`, `cb13c91`, `ea97c43`), none of
+      which touched `index.html`, and the board showed no BEHIND marker. The three commits
+      changed `OPEN_ITEMS.md` and `SESSION_START.md` — the record and the session rules.
+      Consequence: that session read a stale OPEN_ITEMS and reported two already-closed
+      items as live. Suggested fix: `git -C <path> rev-list --count HEAD..origin/main`
+      instead of the version string. Written up in KNOWN_ISSUES. It is PM tooling so I have
+      not changed it. **Until then the mitigation is `git fetch` BEFORE `board_check.mjs`**,
+      which is the opposite of the current session-start order.
+
 - [ ] TRAINING — `submitWeightCheckin` (index.html ~:27665) is an ORPHAN: defined once,
       called nowhere, and its `#weight-checkin-banner` is a force-hidden no-op div. Three
       comments in nutrition code describe working around it. Not removed by Nutrition

@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.280';
+var APP_VERSION='4.9.281';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20783,6 +20783,7 @@ function nutProgMealsOn(dateKey, riceId){
   if(!t) return null;
   var ix = t.phase_n - 1;
   var lift = t.lift;
+  var greens = (typeof nutProgGreensOn === 'function') ? nutProgGreensOn(dateKey) : {};
   var out = [];
   for(var mi = 0; mi < _NUT_PROG_MEALS.length; mi++){
     var M = _NUT_PROG_MEALS[mi];
@@ -20813,6 +20814,22 @@ function nutProgMealsOn(dateKey, riceId){
       var g = it.g[ix];
       if(!(g > 0)) continue;
       var name = it.n, grams = g, unit = it.u, mac = null;
+      // Week-long protein swap: same portion, different animal.
+      var swSlot = (it.n === _NUT_PROG_SWAPS.lunch_protein.item) ? 'lunch_protein'
+                 : (it.n === _NUT_PROG_SWAPS.dinner_protein.item) ? 'dinner_protein' : null;
+      if(swSlot){
+        var pick = _nutProgSwapOpt(swSlot, nutProgSwaps()[swSlot]);
+        if(pick && !pick.base){
+          name = pick.n;
+          mac = { k: pick.k * g / 100, p: pick.p * g / 100, c: pick.c * g / 100, f: pick.f * g / 100 };
+        }
+      }
+      // Per-meal greens powder, decided on the day.
+      if(_NUT_GREENS_SWAPPABLE[M.id] === it.n && greens[M.id]){
+        var gp = _NUT_GREENS_POWDER;
+        name = gp.n; grams = gp.g; unit = '';
+        mac = { k: gp.k * gp.g / 100, p: gp.p * gp.g / 100, c: gp.c * gp.g / 100, f: gp.f * gp.g / 100 };
+      }
       // Rice is the one item whose weight depends on a choice rather than the phase.
       // Its macros MUST come from the chosen grain, not from the plate row — brown
       // is 23 g carbs per 100 g against basmati's 28, so reusing the row's figure
@@ -20823,6 +20840,12 @@ function nutProgMealsOn(dateKey, riceId){
         if(r){
           name = r.name; grams = r.cooked_g;
           mac = { k: r.carbs_g * 4 + r.p * 4 + r.f * 9, p: r.p, c: r.carbs_g, f: r.f };
+        }
+      }
+      if(it.n === 'Olive oil'){
+        var comp = (typeof nutProgSwapCompensation === 'function') ? nutProgSwapCompensation(ix) : null;
+        if(comp && comp.oil_ml_delta){
+          grams = Math.max(0, Math.round((g + comp.oil_ml_delta) * 10) / 10);
         }
       }
       if(!mac) mac = _nutProgItemMacros(it, grams);
@@ -21181,6 +21204,120 @@ function nutProgPrepFor(week, riceId){
     { n:'Afternoon',     why:'a tin, cakes and a jar' }
   ];
   return out;
+}
+
+// ── swaps ──────────────────────────────────────────────────────────────────
+// v4.9.281. TWO DIFFERENT MECHANISMS, because Jon asked for two different things
+// and conflating them would make both worse.
+//
+// WEEK-LONG (protein, rice): chosen on the Wednesday, locked for seven days, so
+// one thing gets bought rather than four. Portion stays a round number you can
+// cook to and THE DAY ABSORBS THE DIFFERENCE — Jon's ruling. Sirloin carries less
+// fat than salmon, so the evening oil moves to make up the gap rather than the
+// steak being weighed to three decimal places.
+//
+// PER-MEAL (greens powder): decided in the moment, one meal at a time. You cannot
+// rebalance a day at half past twelve when dinner is already portioned in the
+// fridge, so this one does not compensate — it swaps, and the day's totals move
+// by the small amount it actually moves them. Showing that is more honest than
+// pretending a scoop is a bowl of broccoli.
+var _NUT_PROG_SWAPS = {
+  lunch_protein: {
+    item: 'Chicken breast',
+    opts: [
+      { id:'chicken',   n:'Chicken breast',   k:165, p:30, c:0, f:3.6, base:true },
+      { id:'turkey',    n:'Turkey breast',    k:157, p:29, c:0, f:3.2 },
+      { id:'whitefish', n:'White fish',       k:105, p:23, c:0, f:1.5 },
+      { id:'beef5',     n:'Beef mince, 5%',   k:176, p:26, c:0, f:8.0 }
+    ]
+  },
+  dinner_protein: {
+    item: 'Salmon fillet',
+    opts: [
+      { id:'salmon',   n:'Salmon fillet',  k:208, p:22, c:0, f:13.0, base:true },
+      { id:'sirloin',  n:'Sirloin steak',  k:201, p:29, c:0, f:9.0 },
+      { id:'mackerel', n:'Mackerel',       k:262, p:19, c:0, f:21.0 },
+      { id:'cod',      n:'Cod loin',       k:90,  p:20, c:0, f:0.7 }
+    ]
+  }
+};
+
+// A scoop of greens. Values are a typical powder — Jon can scan his own tub and
+// the scanner's basis rule will store it properly.
+var _NUT_GREENS_POWDER = { n:'Greens powder', g:10, k:350, p:20, c:50, f:5 };
+var _NUT_GREENS_SWAPPABLE = { lunch:'Mixed vegetables', dinner:'Greens' };
+
+function _nutProgSwapOpt(slot, id){
+  var def = _NUT_PROG_SWAPS[slot];
+  if(!def) return null;
+  for(var i = 0; i < def.opts.length; i++) if(def.opts[i].id === id) return def.opts[i];
+  return null;
+}
+function _nutProgSwapBase(slot){
+  var def = _NUT_PROG_SWAPS[slot];
+  if(!def) return null;
+  for(var i = 0; i < def.opts.length; i++) if(def.opts[i].base) return def.opts[i];
+  return def.opts[0];
+}
+
+function nutProgSwaps(){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  return (ns && ns.prog_swaps) ? ns.prog_swaps : {};
+}
+function nutProgSetSwap(slot, id){
+  if(!_nutProgSwapOpt(slot, id)) return false;
+  var ns = nutGetState();
+  if(!ns.prog_swaps) ns.prog_swaps = {};
+  ns.prog_swaps[slot] = id;
+  nutSaveState(ns);
+  return true;
+}
+
+// Per-meal, per-day. Nothing is locked; this is a tap on the day.
+function nutProgGreensOn(dateKey){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  return (day && day.prog_greens) ? day.prog_greens : {};
+}
+function nutProgToggleGreens(dateKey, mealId){
+  if(!_NUT_GREENS_SWAPPABLE[mealId]) return false;
+  var ns = nutGetState();
+  var day = _nutProgDay(ns, dateKey);
+  if(!day) return false;
+  if(!day.prog_greens) day.prog_greens = {};
+  if(day.prog_greens[mealId]) delete day.prog_greens[mealId];
+  else day.prog_greens[mealId] = true;
+  nutSaveState(ns);
+  return !!day.prog_greens[mealId];
+}
+
+// What the week's protein swaps do to the day, and what moves to absorb it.
+// Fat is the only macro that shifts meaningfully between these cuts, so the
+// evening olive oil carries the correction — it is already on the plate, it is
+// pure fat, and a millilitre either way is a pour rather than a weighing.
+function nutProgSwapCompensation(phaseIx){
+  var sw = nutProgSwaps();
+  // Portions grow as protein rises across the phases, so the fat difference a
+  // swap creates grows with them. Taking phase 1 always would under-correct by
+  // about a millilitre of oil by phase 5 — small, but a known approximation left
+  // in the code is a thing nobody re-derives later.
+  var ix = (phaseIx >= 0 && phaseIx < 5) ? phaseIx : 0;
+  var dFat = 0, dP = 0;
+  ['lunch_protein','dinner_protein'].forEach(function(slot){
+    var chosen = _nutProgSwapOpt(slot, sw[slot]);
+    var base = _nutProgSwapBase(slot);
+    if(!chosen || !base || chosen.id === base.id) return;
+    var row = _nutProgPlateRow(_NUT_PROG_SWAPS[slot].item);
+    var g = row ? row.g[ix] : 150;
+    dFat += (chosen.f - base.f) * g / 100;
+    dP   += (chosen.p - base.p) * g / 100;
+  });
+  return {
+    fat_delta:     Math.round(dFat * 10) / 10,
+    protein_delta: Math.round(dP * 10) / 10,
+    // Negative fat delta means the swap is leaner, so MORE oil goes in.
+    oil_ml_delta:  Math.round(-dFat / 1.0 * 10) / 10
+  };
 }
 
 // ── projection ─────────────────────────────────────────────────────────────

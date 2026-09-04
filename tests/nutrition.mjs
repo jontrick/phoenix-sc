@@ -1437,6 +1437,108 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(r.dry_g > bas.dry_g, 'but it absorbs less water, so more dry weight for the same cooked carbs');
   });
 
+  // ── swaps: two mechanisms, deliberately not one ──────────────────────────
+  // Week-long swaps are bought; per-meal swaps are decided in the moment. The
+  // first compensates, the second cannot — you can't rebalance a day at half
+  // twelve when dinner is already portioned in the fridge.
+
+  const meal = (d, id, rice) => (app.nutProgMealsOn(d, rice) || []).filter((m) => m.id === id)[0];
+  const item = (m, re) => m.items.filter((it) => re.test(it.n))[0];
+
+  test('SWAP a week-long protein swap keeps the portion and changes the animal', () => {
+    setUp(110);
+    const before = item(meal('2026-09-16','dinner'), /Salmon/);
+    app.nutProgSetSwap('dinner_protein', 'sirloin');
+    const after = item(meal('2026-09-16','dinner'), /Sirloin/);
+    assert.ok(after, 'the plate now names sirloin');
+    assert.equal(after.g, before.g,
+      'and the PORTION is unchanged — a round number you can cook to, which is ' +
+      'the whole reason the day absorbs the difference instead of the steak');
+    assert.ok(after.f < before.f, 'sirloin is leaner than salmon');
+  });
+
+  test('SWAP the day absorbs the difference — the oil moves, not the meat', () => {
+    setUp(110);
+    const oilBefore = item(meal('2026-09-16','dinner'), /Olive oil/).g;
+    app.nutProgSetSwap('dinner_protein', 'sirloin');
+    const oilAfter = item(meal('2026-09-16','dinner'), /Olive oil/).g;
+    assert.ok(oilAfter > oilBefore,
+      'a leaner cut means MORE oil, so the day still hits its fat: ' +
+      oilBefore + ' -> ' + oilAfter + ' ml');
+    const comp = app.nutProgSwapCompensation(0);
+    assert.ok(comp.fat_delta < 0, 'the swap is leaner');
+    assert.ok(comp.oil_ml_delta > 0, 'so the correction is positive');
+  });
+
+  test('SWAP the compensation follows the phase, not just phase 1', () => {
+    setUp(110);
+    app.nutProgSetSwap('dinner_protein', 'sirloin');
+    const early = app.nutProgSwapCompensation(0);
+    const late  = app.nutProgSwapCompensation(4);
+    assert.ok(Math.abs(late.fat_delta) > Math.abs(early.fat_delta),
+      'portions grow as protein rises, so the gap a swap creates grows with them');
+  });
+
+  test('SWAP choosing the base option is not a swap at all', () => {
+    setUp(110);
+    const plain = item(meal('2026-09-16','dinner'), /Salmon/).g;
+    app.nutProgSetSwap('dinner_protein', 'salmon');
+    assert.equal(item(meal('2026-09-16','dinner'), /Salmon/).g, plain, 'nothing moves');
+    assert.equal(app.nutProgSwapCompensation(0).oil_ml_delta, 0, 'and nothing is compensated');
+  });
+
+  test('SWAP a nonsense option is refused rather than silently applied', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetSwap('dinner_protein', 'unicorn'), false, 'unknown food');
+    assert.equal(app.nutProgSetSwap('elevenses', 'salmon'), false, 'unknown meal slot');
+    assert.deepEqual(app.nutProgSwaps(), {}, 'and nothing was stored');
+  });
+
+  test('SWAP the shopping list buys what was actually chosen', () => {
+    setUp(110);
+    app.nutProgSetSwap('dinner_protein', 'sirloin');
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const names = [];
+    shop.groups.forEach((g) => g.items.forEach((it) => names.push(it.n)));
+    assert.ok(names.indexOf('Sirloin steak') >= 0, 'sirloin is on the list');
+    assert.equal(names.indexOf('Salmon fillet'), -1,
+      'and salmon is not — buying both is what a week-long swap exists to prevent');
+  });
+
+  // ── per-meal greens ──
+  test('GREENS the powder swaps ONE meal, not the week', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgToggleGreens(d, 'lunch');
+    assert.ok(item(meal(d,'lunch'), /Greens powder/), 'lunch takes the scoop');
+    assert.ok(item(meal(d,'dinner'), /^Greens$/), 'dinner keeps its actual greens');
+    assert.ok(!item(meal(d,'lunch'), /Mixed vegetables/), 'and the veg it replaced is gone');
+  });
+
+  test('GREENS it is per DAY as well as per meal', () => {
+    setUp(110);
+    app.nutProgToggleGreens('2026-09-16', 'lunch');
+    assert.ok(item(meal('2026-09-16','lunch'), /Greens powder/), 'Wednesday has it');
+    assert.ok(item(meal('2026-09-17','lunch'), /Mixed vegetables/),
+      'Thursday does not — this is a decision in the moment, not a locked choice');
+  });
+
+  test('GREENS tapping again puts the vegetables back', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgToggleGreens(d, 'lunch');
+    app.nutProgToggleGreens(d, 'lunch');
+    assert.ok(item(meal(d,'lunch'), /Mixed vegetables/), 'back to the veg');
+  });
+
+  test('GREENS only the vegetable slots can be swapped', () => {
+    setUp(110);
+    assert.equal(app.nutProgToggleGreens('2026-09-16', 'bfast'), false,
+      'there is no vegetable in breakfast to replace');
+    assert.equal(app.nutProgToggleGreens('2026-09-16', 'lunch'), true, 'lunch has one');
+    assert.equal(app.nutProgToggleGreens('2026-09-16', 'dinner'), true, 'and so does dinner');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

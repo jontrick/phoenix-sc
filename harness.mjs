@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.280'", 'version is 4.9.280');
+has("var APP_VERSION='4.9.281'", 'version is 4.9.281');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2957,6 +2957,13 @@ hasCode("body.querySelectorAll('[data-prog-tick]')",
 
 // ── Shopping list and prep plan ─────────────────────────────────────────────
 hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
+// Two swap mechanisms, deliberately separate. Merging them would either lock a
+// per-meal decision for a week or try to rebalance a day already in the fridge.
+hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored');
+hasCode('function nutProgToggleGreens(',     'SWAP: greens powder is per meal, per day');
+hasCode('function nutProgSwapCompensation(', 'SWAP: and the day absorbs the difference');
+hasCode('comp.oil_ml_delta',                 'SWAP: the compensation is APPLIED, not merely calculated');
+hasCode('row.g[ix]',                         'SWAP: compensation follows the phase, not always phase 1');
 hasCode('function nutProgIsTrial(',    'W0: the rehearsal week exists');
 hasCode("trial_start: '2026-09-07'",  'W0: it runs Mon 7 Sept');
 hasCode("trial_setup: '2026-09-05'",  'W0: set up on the Saturday, not a Wednesday');

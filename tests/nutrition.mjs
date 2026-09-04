@@ -1258,6 +1258,89 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgRiceChoice(), 'brown', 'a bad id does not silently reset it');
   });
 
+  // ── shopping and prep ────────────────────────────────────────────────────
+  // The list aggregates seven REAL days rather than multiplying one by seven.
+  // That is the whole feature, and both bugs found here were failures of it.
+
+  const shopItem = (shop, name) => {
+    for (const g of shop.groups) for (const it of g.items) if (it.n === name) return it;
+    return null;
+  };
+
+  test('SHOP the week is the right seven days', () => {
+    setUp(110);
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    assert.equal(shop.from, '2026-09-14', 'week 1 opens Monday 14 Sept');
+    assert.equal(shop.to,   '2026-09-20', 'and closes Sunday 20 Sept');
+    assert.equal(app.nutProgShoppingFor(16, 'basmati'), null, 'there is no week 16');
+  });
+
+  test('SHOP bananas are counted for the days they are actually eaten', () => {
+    setUp(110);
+    const b = shopItem(app.nutProgShoppingFor(1, 'basmati'), 'Banana');
+    assert.equal(b.qty, 3,
+      'THREE — one for each non-lifting day. The four lift days drink the intra ' +
+      'instead, so multiplying one day by seven would buy more than twice what ' +
+      'the week eats');
+    assert.equal(b.unit, '', 'and bananas are bought by the piece, not the gram');
+  });
+
+  test('SHOP Saturday orders BOTH its formulas', () => {
+    setUp(110);
+    const f = {};
+    app.nutProgShoppingFor(1, 'basmati').formulas.forEach((x) => { f[x.n] = x.serves; });
+    assert.equal(f['Pre-training coffee shot'], 7, 'coffee every day');
+    assert.equal(f['Post-workout recovery'],    7, 'and the post-workout drink, rest days included');
+    assert.equal(f['Beet lift intra'],          4, 'four lifting days');
+    assert.equal(f['Beet HIIT shot'],           3,
+      'THREE — Wed, Fri and Saturday MORNING. Saturday takes the shot before the ' +
+      'AM session and the intra through the PM lift; counting one per day ordered two');
+  });
+
+  test('SHOP chicken and rice are listed as you BUY them, not as you eat them', () => {
+    setUp(110);
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const ch = shopItem(shop, 'Chicken breast');
+    assert.equal(ch.qty, 1260, 'chicken RAW — it loses about a quarter roasting');
+    assert.ok(/945 g cooked/.test(ch.note), 'with the cooked yield beside it: ' + ch.note);
+    const rice = shopItem(shop, 'Basmati, white');
+    assert.equal(rice.qty, 537, 'rice DRY');
+    assert.ok(/1610 g cooked/.test(rice.note), 'with what it becomes: ' + rice.note);
+    assert.ok(rice.qty < 1610, 'dry weight is always the smaller number — the two must never be confused');
+  });
+
+  test('SHOP the rice choice changes what you buy', () => {
+    setUp(110);
+    const bas = shopItem(app.nutProgShoppingFor(1, 'basmati'), 'Basmati, white');
+    const brn = shopItem(app.nutProgShoppingFor(1, 'brown'), 'Brown, long grain');
+    assert.ok(brn, 'the list names the grain actually chosen');
+    assert.ok(brn.qty > bas.qty, 'brown needs more dry weight for the same carbs');
+  });
+
+  test('PREP batches only what is worth batching', () => {
+    setUp(110);
+    const prep = app.nutProgPrepFor(1, 'basmati');
+    assert.equal(prep.window.from, '2026-09-10', 'prep opens Thursday 10 Sept');
+    assert.equal(prep.window.to,   '2026-09-13', 'and closes Sunday');
+    assert.equal(prep.batches.length, 2, 'lunch and dinner only — not all six meals');
+    assert.ok(/Lunch . 7/.test(prep.batches[0].name), 'seven lunches: ' + prep.batches[0].name);
+    assert.ok(/1260 g raw chicken/.test(prep.batches[0].steps[0]),
+      'and it says how much RAW meat to put in the oven: ' + prep.batches[0].steps[0]);
+    assert.ok(prep.fresh.length >= 4, 'the meals needing no prep are named, so nothing is cooked twice');
+  });
+
+  test('PREP the numbers on the prep plan match the shopping list exactly', () => {
+    setUp(110);
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const prep = app.nutProgPrepFor(1, 'basmati');
+    const ch = shopItem(shop, 'Chicken breast');
+    assert.ok(prep.batches[0].steps[0].indexOf(String(ch.qty)) >= 0,
+      'the weight you buy is the weight you cook — they read the same function, ' +
+      'so a drift between them would mean two sources of truth');
+    const spud = shopItem(shop, 'Sweet potato');
+    assert.ok(prep.batches[1].steps[0].indexOf(String(spud.qty)) >= 0, 'and the same for sweet potato');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

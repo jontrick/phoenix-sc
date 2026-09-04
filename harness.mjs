@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.278'", 'version is 4.9.278');
+has("var APP_VERSION='4.9.279'", 'version is 4.9.279');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2954,6 +2954,28 @@ hasCode('data-prog-add',  'TODAY: and anything off plan can be logged from the s
 hasCode('function nutProgToggleMeal(', 'TODAY: the tick is persisted, not just drawn');
 hasCode("body.querySelectorAll('[data-prog-tick]')",
         'TODAY: the ticks are WIRED — a drawn control nothing listens to is inert');
+
+// ── Shopping list and prep plan ─────────────────────────────────────────────
+hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
+hasCode('function nutProgPrepFor(',     'SHOP: and the prep plan');
+
+// It must aggregate seven REAL days. Multiplying one day by seven buys seven
+// bananas for a week that eats three, because the four lift days drink the intra
+// instead — the error is invisible on the list and obvious in the fridge.
+hasCode('_nutProgWeekDates(week)', 'SHOP: the list walks the actual seven dates');
+// NOT guarded by a hasNotCode on "* 7": that matches the legitimate week
+// arithmetic in nutProgReviewDate and _nutProgWeekDates, so it fires on correct
+// code. The real protection is behavioural — tests/nutrition.mjs asserts the week
+// buys THREE bananas, which only holds if seven real days were walked.
+
+// Saturday takes the HIIT shot in the morning AND the lift intra in the
+// afternoon. First-match-wins ordered two shots for a three-shot week.
+hasCode('if(M.alt && t.sessions.indexOf(M.alt) >= 0) want.push(M.alt);',
+        'SHOP: every formula due on a day is listed, not the first that matches');
+
+// Cooked and raw must never be confused — it is a 25% error on the meat.
+hasCode('row.yld', 'SHOP: cooked weights are converted back to what you buy');
+hasCode("' g cooked'", 'SHOP: and the cooked figure is shown beside the raw one');
 
 // ── Label scanner: HOW MANY EXITS does the photo have? ──────────────────────
 // Peptides' question, answered while the feature is being designed rather than

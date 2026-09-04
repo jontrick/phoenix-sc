@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.278';
+var APP_VERSION='4.9.279';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19812,7 +19812,7 @@ var _NUT_FOODS = [
   {id:'s13', cat:'sauce', state:'raw', n:'Lemon juice fresh',                 k:22,  p:0,  c:8,  f:0},
   {id:'s14', cat:'sauce', state:'raw', n:'Honey',                             k:304, p:0,  c:82, f:0},
   // EXTRAS
-  {id:'e1',  cat:'extras', state:'raw', n:'Avocado',                          k:160, p:2,  c:9,  f:15},
+  {id:'e1',  cat:'extras', state:'raw', n:'Avocado', grp:'fat',                          k:160, p:2,  c:9,  f:15},
   {id:'e2',  cat:'extras', state:'raw', n:'Sesame seeds raw',                 k:573, p:18, c:23, f:50},
   {id:'e3',  cat:'extras', state:'raw', n:'Cheddar cheese',                   k:403, p:25, c:1,  f:34},
   {id:'e4',  cat:'extras', state:'raw', n:'Feta cheese',                      k:264, p:14, c:4,  f:21},
@@ -20706,29 +20706,29 @@ function nutProgRiceFor(riceId, blocks){
 // `carb:true` marks an item the ladder acts on. Everything else is an anchor.
 var _NUT_PROG_PLATE = [
   // meal    name                     per-phase grams          macros per 100 g
-  { m:'pre',    n:'Banana',            g:[120,120,120,120,85],  carb:true,  u:'',        k:89,  p:1.1, c:21,  f:0.3 },
+  { m:'pre',    n:'Banana', grp:'produce', piece:120,  g:[120,120,120,120,85],  carb:true,  u:'',        k:89,  p:1.1, c:21,  f:0.3 },
 
-  { m:'bfast',  n:'Oats',              g:[60,60,52,45,43],      carb:true,  u:' dry',    k:389, p:13,  c:67,  f:7 },
-  { m:'bfast',  n:'Whey protein',      g:[38,46,50,56,58],                  u:'',        k:400, p:82,  c:5,   f:5 },
-  { m:'bfast',  n:'Blueberries',       g:[80,80,80,80,80],      carb:true,  u:'',        k:57,  p:0.7, c:10,  f:0.3 },
-  { m:'bfast',  n:'Semi-skimmed milk', g:[80,80,50,35,20],      carb:true,  u:' ml',     k:50,  p:3.5, c:5,   f:1.8 },
+  { m:'bfast',  n:'Oats', grp:'carb',              g:[60,60,52,45,43],      carb:true,  u:' dry',    k:389, p:13,  c:67,  f:7 },
+  { m:'bfast',  n:'Whey protein', grp:'protein',      g:[38,46,50,56,58],                  u:'',        k:400, p:82,  c:5,   f:5 },
+  { m:'bfast',  n:'Blueberries', grp:'produce',       g:[80,80,80,80,80],      carb:true,  u:'',        k:57,  p:0.7, c:10,  f:0.3 },
+  { m:'bfast',  n:'Semi-skimmed milk', grp:'dairy', g:[80,80,50,35,20],      carb:true,  u:' ml',     k:50,  p:3.5, c:5,   f:1.8 },
 
-  { m:'midam',  n:'Greek yoghurt, 0%', g:[200,200,200,200,200],             u:'',        k:57,  p:10,  c:4,   f:0.2 },
-  { m:'midam',  n:'Almonds',           g:[30,30,28,26,24],                  u:'',        k:579,p:21,c:9,f:50 },
+  { m:'midam',  n:'Greek yoghurt, 0%', grp:'dairy', g:[200,200,200,200,200],             u:'',        k:57,  p:10,  c:4,   f:0.2 },
+  { m:'midam',  n:'Almonds', grp:'fat',           g:[30,30,28,26,24],                  u:'',        k:579,p:21,c:9,f:50 },
 
-  { m:'lunch',  n:'Chicken breast',    g:[135,135,154,165,172],             u:' cooked', k:165, p:30,  c:0,   f:3.6 },
-  { m:'lunch',  n:'Rice',              g:[230,179,143,79,61],   carb:true,  u:' cooked', k:130, p:2.7, c:28,  f:0.3 },
+  { m:'lunch',  n:'Chicken breast', grp:'protein', yld:0.75,    g:[135,135,154,165,172],             u:' cooked', k:165, p:30,  c:0,   f:3.6 },
+  { m:'lunch',  n:'Rice', grp:'carb', rice:true,              g:[230,179,143,79,61],   carb:true,  u:' cooked', k:130, p:2.7, c:28,  f:0.3 },
   { m:'lunch',  n:'Avocado',           g:[80,80,75,70,60],                  u:'',        k:160, p:2,   c:1,   f:15 },
-  { m:'lunch',  n:'Mixed vegetables',  g:[150,150,150,150,150], carb:true,  u:'',        k:35,  p:2,   c:5.3, f:0.3 },
+  { m:'lunch',  n:'Mixed vegetables', grp:'produce',  g:[150,150,150,150,150], carb:true,  u:'',        k:35,  p:2,   c:5.3, f:0.3 },
 
-  { m:'arvo',   n:'Tuna, springwater', g:[100,100,100,100,100],             u:'',        k:109, p:25,  c:0,   f:0.8 },
-  { m:'arvo',   n:'Rice cakes',        g:[2,1,0,0,0],           carb:true,  u:'',        k:387, p:8,   c:81,  f:3, each:9.5 },
-  { m:'arvo',   n:'Peanut butter',     g:[15,15,8,0,0],                     u:'',        k:588, p:25,  c:20,  f:50 },
+  { m:'arvo',   n:'Tuna, springwater', grp:'protein', tin:145, g:[100,100,100,100,100],             u:'',        k:109, p:25,  c:0,   f:0.8 },
+  { m:'arvo',   n:'Rice cakes', grp:'carb', count:true,        g:[2,1,0,0,0],           carb:true,  u:'',        k:387, p:8,   c:81,  f:3, each:9.5 },
+  { m:'arvo',   n:'Peanut butter', grp:'fat',     g:[15,15,8,0,0],                     u:'',        k:588, p:25,  c:20,  f:50 },
 
-  { m:'dinner', n:'Salmon fillet',     g:[135,135,140,150,160],             u:'',        k:208, p:22,  c:0,   f:13 },
-  { m:'dinner', n:'Sweet potato',      g:[260,144,115,75,35],   carb:true,  u:'',        k:86,  p:1.6, c:20,  f:0.1 },
-  { m:'dinner', n:'Greens',            g:[200,200,200,200,200], carb:true,  u:'',        k:35,  p:2.8, c:4,   f:0.4 },
-  { m:'dinner', n:'Olive oil',         g:[13,12,12,11,10],                  u:' ml',     k:884, p:0,   c:0,   f:100 }
+  { m:'dinner', n:'Salmon fillet', grp:'protein',     g:[135,135,140,150,160],             u:'',        k:208, p:22,  c:0,   f:13 },
+  { m:'dinner', n:'Sweet potato', grp:'produce',      g:[260,144,115,75,35],   carb:true,  u:'',        k:86,  p:1.6, c:20,  f:0.1 },
+  { m:'dinner', n:'Greens', grp:'produce',            g:[200,200,200,200,200], carb:true,  u:'',        k:35,  p:2.8, c:4,   f:0.4 },
+  { m:'dinner', n:'Olive oil', grp:'fat',         g:[13,12,12,11,10],                  u:' ml',     k:884, p:0,   c:0,   f:100 }
 ];
 
 // Meal order, times and how each one behaves. `skipOnLift` is the whole
@@ -20764,15 +20764,22 @@ function nutProgMealsOn(dateKey, riceId){
     var M = _NUT_PROG_MEALS[mi];
     if(M.skipOnLift && lift) continue;
     if(M.supp){
-      var due = (M.supp === 'coffee' || M.supp === 'post') ||
-                (t.sessions.indexOf(M.supp) >= 0) || (M.alt && t.sessions.indexOf(M.alt) >= 0);
-      if(!due) continue;
-      var which = (t.sessions.indexOf(M.supp) >= 0) ? M.supp : (M.alt || M.supp);
-      var sup = null;
-      for(var si = 0; si < _NUT_SUPPS.length; si++) if(_NUT_SUPPS[si].id === which) sup = _NUT_SUPPS[si];
-      if(!sup) continue;
-      out.push({ id:M.id, time:M.t, name:sup.name, supp:true, code:sup.code,
-                 items:[], k:sup.kcal, p:sup.p, c:sup.c, f:sup.f });
+      // EVERY formula due today, not the first that matches. Saturday takes the
+      // HIIT shot before the morning session AND the lift intra through the
+      // afternoon one — picking one silently under-orders the other all cut.
+      var want = [];
+      if(M.supp === 'coffee' || M.supp === 'post') want.push(M.supp);
+      else {
+        if(t.sessions.indexOf(M.supp) >= 0) want.push(M.supp);
+        if(M.alt && t.sessions.indexOf(M.alt) >= 0) want.push(M.alt);
+      }
+      for(var wi = 0; wi < want.length; wi++){
+        var sup = null;
+        for(var si = 0; si < _NUT_SUPPS.length; si++) if(_NUT_SUPPS[si].id === want[wi]) sup = _NUT_SUPPS[si];
+        if(!sup) continue;
+        out.push({ id: (want.length > 1 ? M.id + '-' + sup.id : M.id), time:M.t, name:sup.name,
+                   supp:true, code:sup.code, items:[], k:sup.kcal, p:sup.p, c:sup.c, f:sup.f });
+      }
       continue;
     }
     var items = [], K = 0, P = 0, C = 0, F = 0;
@@ -21003,6 +21010,146 @@ function _nutProgTodayCard(){
     h += '</div>';
   }
   return h;
+}
+
+// ── shopping and prep ──────────────────────────────────────────────────────
+// v4.9.279. Aggregates seven real days of the plate — it does not multiply one
+// day by seven. That distinction is the whole feature: the pre-training banana
+// is skipped on the four lifting days, so a naive x7 buys seven bananas for a
+// week that eats three.
+//
+// EVERYTHING IS CONVERTED TO WHAT YOU ACTUALLY BUY. The plate holds chicken and
+// rice as COOKED weights, because that is what you eat and what the macros are
+// keyed to. Neither is sold that way.
+var _NUT_PROG_GROUPS = [
+  { id:'protein', name:'Protein' },
+  { id:'carb',    name:'Carbs' },
+  { id:'fat',     name:'Fats' },
+  { id:'produce', name:'Produce' },
+  { id:'dairy',   name:'Dairy' }
+];
+
+function _nutProgWeekDates(week){
+  if(!(week >= 1 && week <= _NUT_PROG.weeks)) return null;
+  var out = [], first = _nutProgShift(_NUT_PROG.start, (week - 1) * 7);
+  for(var i = 0; i < 7; i++) out.push(_nutProgShift(first, i));
+  return out;
+}
+
+function _nutProgPlateRow(name){
+  for(var i = 0; i < _NUT_PROG_PLATE.length; i++) if(_NUT_PROG_PLATE[i].n === name) return _NUT_PROG_PLATE[i];
+  return null;
+}
+
+// One week's shopping, in raw weights, grouped by shelf.
+function nutProgShoppingFor(week, riceId){
+  var days = _nutProgWeekDates(week);
+  if(!days) return null;
+  var rice = _nutRiceById(riceId) ? riceId : nutProgRiceChoice();
+  var tally = {}, formulas = {};
+
+  days.forEach(function(d){
+    var meals = nutProgMealsOn(d, rice);
+    if(!meals) return;
+    meals.forEach(function(m){
+      if(m.supp){ formulas[m.name] = (formulas[m.name] || 0) + 1; return; }
+      m.items.forEach(function(it){
+        var key = it.n;
+        if(!tally[key]) tally[key] = { n:key, cooked:0, u:it.u };
+        tally[key].cooked += it.g;
+      });
+    });
+  });
+
+  var groups = {};
+  Object.keys(tally).forEach(function(k){
+    var t = tally[k];
+    var row = _nutProgPlateRow(k) || _nutProgPlateRow('Rice');   // the rice is renamed by grain
+    var grp = (row && row.grp) || 'produce';
+    var qty = t.cooked, unit = 'g', note = '';
+
+    if(row && row.rice){
+      var r = _nutRiceById(rice);
+      if(r){
+        qty = Math.round(t.cooked / r.expand);
+        note = Math.round(t.cooked) + ' g cooked';
+      }
+    } else if(row && row.yld){
+      qty = Math.round(t.cooked / row.yld);
+      note = Math.round(t.cooked) + ' g cooked';
+    } else if(row && row.count){
+      qty = Math.round(t.cooked); unit = '';
+    } else if(row && row.piece){
+      note = Math.round(t.cooked) + ' g';
+      qty = Math.ceil(t.cooked / row.piece); unit = '';
+    } else if(row && row.tin){
+      note = Math.ceil(t.cooked / 100) + ' tins at 100 g drained';
+      qty = Math.round(t.cooked);
+    } else {
+      qty = Math.round(t.cooked);
+      if(t.u === ' ml') unit = 'ml';
+    }
+
+    if(!groups[grp]) groups[grp] = [];
+    groups[grp].push({ n:k, qty:qty, unit:unit, note:note });
+  });
+
+  var out = { week: week, rice: rice, from: days[0], to: days[6], groups: [], formulas: [] };
+  _NUT_PROG_GROUPS.forEach(function(g){
+    if(!groups[g.id] || !groups[g.id].length) return;
+    groups[g.id].sort(function(a, b){ return b.qty - a.qty; });
+    out.groups.push({ id:g.id, name:g.name, items:groups[g.id] });
+  });
+  Object.keys(formulas).forEach(function(n){ out.formulas.push({ n:n, serves:formulas[n] }); });
+  return out;
+}
+
+// The prep plan. Only two meals are worth batching, and the plan says so rather
+// than pretending all six need cooking.
+function nutProgPrepFor(week, riceId){
+  var shop = nutProgShoppingFor(week, riceId);
+  if(!shop) return null;
+  var find = function(name){
+    for(var i = 0; i < shop.groups.length; i++)
+      for(var j = 0; j < shop.groups[i].items.length; j++)
+        if(shop.groups[i].items[j].n === name) return shop.groups[i].items[j];
+    return null;
+  };
+  var r = _nutRiceById(shop.rice);
+  var chicken = find('Chicken breast');
+  var riceRow = r ? find(r.name) : null;
+  var spud    = find('Sweet potato');
+  var days    = _nutProgWeekDates(week);
+  var lunches = 0, dinners = 0;
+  days.forEach(function(d){
+    var ms = nutProgMealsOn(d, shop.rice) || [];
+    ms.forEach(function(m){ if(m.id === 'lunch') lunches++; if(m.id === 'dinner') dinners++; });
+  });
+  var out = { week: week, window: nutProgPrepWindow(week), batches: [], fresh: [] };
+  if(chicken && riceRow){
+    out.batches.push({
+      name: 'Lunch × ' + lunches, portions: lunches,
+      steps: [
+        'Roast ' + chicken.qty + ' g raw chicken — yields about ' + (chicken.note || '') ,
+        'Cook ' + riceRow.qty + ' g dry ' + r.name.toLowerCase() + ' — ' + (riceRow.note || '')
+      ],
+      note: 'Avocado and vegetables go in fresh each day — avocado browns.'
+    });
+  }
+  if(spud){
+    out.batches.push({
+      name: 'Dinner × ' + dinners, portions: dinners,
+      steps: [ 'Bake ' + spud.qty + ' g sweet potato, portion into ' + dinners ],
+      note: 'Salmon cooked fresh. Freeze the later portions; greens fresh.'
+    });
+  }
+  out.fresh = [
+    { n:'Pre-training',  why:'a banana' },
+    { n:'Post-training', why:'made fresh, three minutes' },
+    { n:'Mid-morning',   why:'yoghurt and almonds, weighed' },
+    { n:'Afternoon',     why:'a tin, cakes and a jar' }
+  ];
+  return out;
 }
 
 // ── projection ─────────────────────────────────────────────────────────────

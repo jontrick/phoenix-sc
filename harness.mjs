@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.281'", 'version is 4.9.281');
+has("var APP_VERSION='4.9.282'", 'version is 4.9.282');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2957,6 +2957,25 @@ hasCode("body.querySelectorAll('[data-prog-tick]')",
 
 // ── Shopping list and prep plan ─────────────────────────────────────────────
 hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
+
+// ── The Wednesday review ────────────────────────────────────────────────────
+hasCode('function nutProgReviewFor(',    'REVIEW: the weekly proposal exists');
+hasCode('function nutProgWeightTrend(',  'REVIEW: and reads a trend, not a spot weight');
+hasCode('function _nutProgReviewCard(',  'REVIEW: the card exists');
+hasCode('_nutProgReviewCard(today)',     'REVIEW: and Today actually ROUTES to it');
+hasCode('data-prog-accept',              'REVIEW: a proposal can be accepted');
+hasCode('data-prog-decline',             'REVIEW: and declined — nothing moves on its own');
+hasCode("body.querySelector('[data-prog-accept]')",
+        'REVIEW: accept is WIRED, not merely drawn');
+
+// The approval must reach the food. A stored adjustment nothing applies is a
+// review that looks like it works and changes nothing.
+hasCode('var adjC = adjBlocks * _NUT_BLOCK_G;',
+        'REVIEW: an approved adjustment is APPLIED to the targets');
+
+// Unknown must not resolve to fine.
+hasCode("out.verdict = 'no-data'",
+        'REVIEW: too few weigh-ins is its own answer, never "on track"');
 // Two swap mechanisms, deliberately separate. Merging them would either lock a
 // per-meal decision for a week or try to rebalance a day already in the fridge.
 hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored');

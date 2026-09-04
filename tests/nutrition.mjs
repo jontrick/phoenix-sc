@@ -1539,6 +1539,167 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgToggleGreens('2026-09-16', 'dinner'), true, 'and so does dinner');
   });
 
+  // ── the Wednesday review ─────────────────────────────────────────────────
+  // It reads the trend, proposes a change to NEXT week, and never touches the
+  // week already bought and cooked. Nothing moves without Jon approving it.
+
+  // Two seven-day averages a week apart. Week 5 is reviewed on Wed 7 Oct, so the
+  // recent window is 1-7 Oct and the prior window 24-30 Sept.
+  const seedWeights = (priorKg, recentKg) => {
+    ['2026-09-25','2026-09-27','2026-09-29'].forEach((d) => app.nutRecordWeight(priorKg, d));
+    ['2026-10-02','2026-10-04','2026-10-06'].forEach((d) => app.nutRecordWeight(recentKg, d));
+  };
+
+  test('REVIEW proposes nothing inside the settle period, whatever the scale says', () => {
+    setUp(110);
+    ['2026-09-11','2026-09-13','2026-09-15'].forEach((d) => app.nutRecordWeight(110, d));
+    ['2026-09-18','2026-09-20','2026-09-22'].forEach((d) => app.nutRecordWeight(105, d));
+    const r = app.nutProgReviewFor(3);
+    assert.equal(r.verdict, 'settling', 'week 3 is still settling');
+    assert.equal(r.delta, 0, 'and a 5 kg swing changes nothing — that is the point of the period');
+    assert.ok(/settle period/.test(r.reason), 'and it says why');
+  });
+
+  test('REVIEW an unknown trend is NOT a green light', () => {
+    setUp(110);
+    const r = app.nutProgReviewFor(5);       // no weigh-ins at all
+    assert.equal(r.verdict, 'no-data',
+      'unreadable state falls to the cautious branch — it must never resolve to "on track"');
+    assert.equal(r.delta, 0, 'and proposes nothing');
+    assert.equal(r.trend.rate, null, 'because there is no rate to read');
+  });
+
+  test('REVIEW two weigh-ins are not a trend', () => {
+    setUp(110);
+    app.nutRecordWeight(108, '2026-09-27');
+    app.nutRecordWeight(106, '2026-10-05');
+    const r = app.nutProgReviewFor(5);
+    assert.equal(r.verdict, 'no-data',
+      'one reading each side is two spot weights, and a spot weight is mostly water');
+  });
+
+  test('REVIEW losing too fast ADDS food back', () => {
+    setUp(110);
+    seedWeights(108, 106.5);                 // 1.5 kg/week
+    const r = app.nutProgReviewFor(5);
+    assert.equal(r.trend.rate, 1.5, 'the rate is read from two weekly averages');
+    assert.equal(r.verdict, 'add', 'faster than 1.2 kg means muscle, not fat');
+    assert.equal(r.delta, 1, 'so a block goes BACK — the counter-intuitive direction');
+    assert.ok(/muscle/.test(r.reason), 'and the reason says why more food is the answer');
+  });
+
+  test('REVIEW stalling takes a block off, but checks the logging first', () => {
+    setUp(110);
+    seedWeights(108, 107.7);                 // 0.3 kg/week
+    const r = app.nutProgReviewFor(5);
+    assert.equal(r.verdict, 'remove', 'slower than 0.7 kg is a stall');
+    assert.equal(r.delta, -1, 'one block off');
+    assert.ok(/logging/.test(r.reason),
+      'and it says to audit the tracking first — an untracked handful of nuts is ' +
+      '200 calories a day, and cutting food to cover it makes the week worse');
+  });
+
+  test('REVIEW on track changes nothing', () => {
+    setUp(110);
+    seedWeights(108, 107);                   // 1.0 kg/week, exactly the target
+    const r = app.nutProgReviewFor(5);
+    assert.equal(r.verdict, 'hold', 'this is what success looks like');
+    assert.equal(r.delta, 0, 'and success needs no intervention');
+  });
+
+  // ── the proposal must actually DO something once approved ──
+  test('REVIEW an approved adjustment reaches the plate', () => {
+    setUp(110);
+    const before = app.nutProgTargetsOn('2026-10-14');    // week 5
+    app.nutProgSetAdjust(5, 1);
+    const after = app.nutProgTargetsOn('2026-10-14');
+    assert.equal(after.total.c - before.total.c, 25,
+      'a block is 25 g of carbs and it lands on the target, not just in a record');
+    assert.equal(after.total.kcal - before.total.kcal, 100, 'with the calories to match');
+    assert.ok(after.blocks > before.blocks, 'and it reaches the food, not only the header');
+  });
+
+  test('REVIEW adjustments accumulate and apply from their week onward', () => {
+    setUp(110);
+    app.nutProgSetAdjust(5, 1);
+    app.nutProgSetAdjust(8, -1);
+    assert.equal(app.nutProgAdjustBlocks(4), 0,  'nothing before the first adjustment');
+    assert.equal(app.nutProgAdjustBlocks(5), 1,  'the week it takes effect');
+    assert.equal(app.nutProgAdjustBlocks(7), 1,  'and it persists — a correction, not a blip');
+    assert.equal(app.nutProgAdjustBlocks(8), 0,  'until the next one cancels it');
+  });
+
+  test('REVIEW nothing from a real week bleeds into the rehearsal', () => {
+    setUp(110);
+    const trialBefore = app.nutProgTargetsOn('2026-09-08');
+    app.nutProgSetAdjust(1, 2);
+    const trialAfter = app.nutProgTargetsOn('2026-09-08');
+    assert.deepEqual(trialAfter.total, trialBefore.total,
+      'week 0 runs on week 1 macros as WRITTEN — it is a rehearsal, not a live week');
+  });
+
+  test('REVIEW a bad adjustment is refused rather than stored', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetAdjust(0, 1), false, 'week 0 cannot be adjusted');
+    assert.equal(app.nutProgSetAdjust(16, 1), false, 'nor a week that does not exist');
+    assert.equal(app.nutProgSetAdjust(5, 'lots'), false, 'nor by an amount that is not a number');
+    assert.equal(app.nutProgAdjustBlocks(15), 0, 'and none of it was stored');
+  });
+
+  // ── the review card on screen ────────────────────────────────────────────
+  // Driven through _nutTabToday. Jon opens the app on the Wednesday and it is
+  // simply there — a review he has to remember to go and find is a review that
+  // does not happen.
+
+  test('CARD the review appears on its Wednesday and not on other days', () => {
+    setUp(110);
+    const wed = onDay('2026-10-07', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(wed.indexOf('Week 5 review') >= 0, 'the review is on the screen');
+    assert.ok(wed.indexOf('Shop and prep') >= 0, 'with the prep window');
+    const thu = onDay('2026-10-08', () => app._nutTabToday(app.nutGetState()));
+    assert.equal(thu.indexOf('review') >= 0 && thu.indexOf('Week 5 review') >= 0, false,
+      'and it is gone the next day');
+  });
+
+  test('CARD the day still shows the food underneath the review', () => {
+    setUp(110);
+    const html = onDay('2026-10-07', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Week 5 review') >= 0, 'review at the top');
+    assert.ok(html.indexOf('data-prog-tick') >= 0,
+      'and the day\'s meals below it — Wednesday is still a day he has to eat');
+  });
+
+  test('CARD the setup card sits ABOVE the normal screen, not instead of it', () => {
+    setUp(110);
+    const html = onDay('2026-09-05', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(html.indexOf('Trial week') >= 0, 'the setup card is there');
+    assert.ok(html.indexOf('kcal') >= 0,
+      'AND the ordinary nutrition screen still renders — on setup day there is no ' +
+      'programme plan to eat yet, so replacing it hid the whole screen on the one ' +
+      'day it is most needed');
+  });
+
+  test('CARD a proposal offers both answers; the settle period offers neither', () => {
+    setUp(110);
+    ['2026-09-25','2026-09-27','2026-09-29'].forEach((d) => app.nutRecordWeight(108, d));
+    ['2026-10-02','2026-10-04','2026-10-06'].forEach((d) => app.nutRecordWeight(106.5, d));
+    const wed = onDay('2026-10-07', () => app._nutTabToday(app.nutGetState()));
+    assert.ok(wed.indexOf('data-prog-accept') >= 0, 'accept is offered');
+    assert.ok(wed.indexOf('data-prog-decline') >= 0, 'so is declining — nothing moves on its own');
+    assert.ok(/this week&rsquo;s food does not change/i.test(wed),
+      'and it says the week already bought is untouchable');
+    const early = onDay('2026-09-23', () => app._nutTabToday(app.nutGetState()));
+    assert.equal(early.indexOf('data-prog-accept'), -1,
+      'week 3 is settling, so there is nothing to accept');
+  });
+
+  test('CARD accepting a proposal is wired, not just drawn', () => {
+    setUp(110);
+    assert.equal(app.nutProgAdjustBlocks(5), 0, 'nothing adjusted yet');
+    app.nutProgSetAdjust(5, 1);
+    assert.equal(app.nutProgAdjustBlocks(5), 1, 'and the accept path stores a real change');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

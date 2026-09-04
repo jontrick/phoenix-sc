@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.281';
+var APP_VERSION='4.9.282';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19258,6 +19258,14 @@ function nutRenderScreen(){
       nutRenderScreen();
     });
   });
+  var progAccept = body.querySelector('[data-prog-accept]');
+  if(progAccept) progAccept.addEventListener('click', function(){
+    nutProgSetAdjust(parseInt(progAccept.getAttribute('data-prog-accept'), 10),
+                     parseFloat(progAccept.getAttribute('data-prog-delta')));
+    nutRenderScreen();
+  });
+  var progDecline = body.querySelector('[data-prog-decline]');
+  if(progDecline) progDecline.addEventListener('click', function(){ nutRenderScreen(); });
   var progAdd = body.querySelector('[data-prog-add]');
   if(progAdd) progAdd.addEventListener('click', function(){
     nutOpenFoodPicker(_NUT_PROG_EXTRA_SLOT, _nutToday(), 'log');
@@ -19398,7 +19406,11 @@ function _nutTabToday(ns){
   var _progStatus = (typeof nutProgStatusOn === 'function') ? nutProgStatusOn(today) : '';
   if(_progStatus === 'running' || _progStatus === 'trial'){
     var progCard = _nutProgTodayCard();
-    if(progCard) return progCard;
+    if(progCard) return _nutProgReviewCard(today) + progCard;
+  }
+  var _setupCard = '';
+  if(_progStatus === 'trial-setup' || _progStatus === 'baseline'){
+    _setupCard = _nutProgReviewCard(today);
   }
   var targets = nutAdjustForToday(ns.targets);
   var dayData = (ns.daily && ns.daily[today]) || {};
@@ -19409,7 +19421,7 @@ function _nutTabToday(ns){
   var pPct = Math.min(100, targets.protein_g ? Math.round(logged.protein_g / targets.protein_g * 100) : 0);
   var cPct = Math.min(100, targets.carbs_g   ? Math.round(logged.carbs_g   / targets.carbs_g   * 100) : 0);
   var fPct = Math.min(100, targets.fat_g     ? Math.round(logged.fat_g     / targets.fat_g     * 100) : 0);
-  var h = _nutDriftBanner();
+  var h = (typeof _setupCard === 'string' ? _setupCard : '') + _nutDriftBanner();
   h += '<div style="text-align:center;margin-bottom:16px;">' +
     '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;line-height:1;color:'+remColor+';">' + (remKcal < 0 ? '+'+Math.abs(remKcal) : remKcal) + '</div>' +
     '<div style="font-size:12px;color:var(--text3);margin-top:4px;">kcal ' + (remKcal < 0 ? 'over target' : 'remaining') + ' &middot; ' + targets.kcal + ' daily target</div>' +
@@ -20681,6 +20693,12 @@ function nutProgTargetsOn(dateKey, taken){
   if(!ph) return null;
   if(trial) week = 0;
   var sup = nutProgSuppsOn(dateKey, taken);
+  // An approved adjustment is a real change to the plan from its week onward.
+  var adjBlocks = trial ? 0 : ((typeof nutProgAdjustBlocks === 'function') ? nutProgAdjustBlocks(week) : 0);
+  var adjC = adjBlocks * _NUT_BLOCK_G;
+  ph = { n:ph.n, name:ph.name, from:ph.from, to:ph.to, p:ph.p, f:ph.f,
+         c: Math.round((ph.c + adjC) * 10) / 10,
+         kcal: Math.round(ph.kcal + adjC * 4) };
   var foodC = Math.round((ph.c - sup.c) * 10) / 10;
   var foodK = Math.round(ph.kcal - sup.kcal);
   var foodP = Math.round((ph.p - sup.p) * 10) / 10;
@@ -21318,6 +21336,176 @@ function nutProgSwapCompensation(phaseIx){
     // Negative fat delta means the swap is leaner, so MORE oil goes in.
     oil_ml_delta:  Math.round(-dFat / 1.0 * 10) / 10
   };
+}
+
+// ── the Wednesday review ───────────────────────────────────────────────────
+// v4.9.282. Runs every Wednesday, the day before shopping. It reads the trend,
+// proposes a change to NEXT week, and never touches the week already bought and
+// cooked. Jon approves or declines; nothing moves on its own.
+//
+// THE RATE IS TWO SEVEN-DAY AVERAGES A WEEK APART, not two spot readings. A
+// single morning weight is mostly water, salt and what time he stood on the
+// scale — reacting to one is reacting to noise, and the whole reason the review
+// is weekly rather than daily.
+
+function _nutProgWeightsBetween(fromKey, toKey){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var out = [];
+  if(!ns || !ns.daily) return out;
+  Object.keys(ns.daily).forEach(function(d){
+    if(d < fromKey || d > toKey) return;
+    var w = parseFloat(ns.daily[d].weight_kg);
+    if(w > 0) out.push({ d:d, kg:w });
+  });
+  out.sort(function(a,b){ return a.d < b.d ? -1 : 1; });
+  return out;
+}
+function _nutProgMean(rows){
+  if(!rows.length) return null;
+  var t = 0;
+  rows.forEach(function(r){ t += r.kg; });
+  return Math.round((t / rows.length) * 100) / 100;
+}
+
+// Returns null when there is not enough to say anything. An unknown trend must
+// never resolve to "fine" — it resolves to "no proposal".
+function nutProgWeightTrend(asOfKey){
+  var recentFrom = _nutProgShift(asOfKey, -6);
+  var priorFrom  = _nutProgShift(asOfKey, -13);
+  var priorTo    = _nutProgShift(asOfKey, -7);
+  var recent = _nutProgWeightsBetween(recentFrom, asOfKey);
+  var prior  = _nutProgWeightsBetween(priorFrom, priorTo);
+  var rAvg = _nutProgMean(recent), pAvg = _nutProgMean(prior);
+  var out = { recent_n: recent.length, prior_n: prior.length,
+              recent_avg: rAvg, prior_avg: pAvg, rate: null, latest: recent.length ? recent[recent.length-1].kg : null };
+  if(recent.length >= 3 && prior.length >= 3 && rAvg !== null && pAvg !== null){
+    out.rate = Math.round((pAvg - rAvg) * 100) / 100;   // kg lost per week, positive = losing
+  }
+  return out;
+}
+
+// Block adjustments, keyed by the week they take effect. They ACCUMULATE — an
+// adjustment is a correction to the plan from that point on, not a one-week blip.
+function nutProgAdjustBlocks(week){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var adj = (ns && ns.prog_adjust) ? ns.prog_adjust : {};
+  var total = 0;
+  Object.keys(adj).forEach(function(w){
+    if(parseInt(w, 10) <= week) total += (parseFloat(adj[w]) || 0);
+  });
+  return total;
+}
+function nutProgSetAdjust(week, deltaBlocks){
+  if(!(week >= 1 && week <= _NUT_PROG.weeks)) return false;
+  var d = parseFloat(deltaBlocks);
+  if(!isFinite(d)) return false;
+  var ns = nutGetState();
+  if(!ns.prog_adjust) ns.prog_adjust = {};
+  ns.prog_adjust[String(week)] = d;
+  nutSaveState(ns);
+  return true;
+}
+
+// The proposal itself. `verdict` is one of:
+//   'settling'    — inside the first three weeks, nothing is proposed
+//   'no-data'     — not enough weigh-ins to say anything
+//   'hold'        — on track
+//   'add'         — losing too fast, put a block back
+//   'remove'      — stalled two weeks running, take one off
+function nutProgReviewFor(week, asOfKey){
+  if(!(week >= 1 && week <= _NUT_PROG.weeks)) return null;
+  var asOf = asOfKey || nutProgReviewDate(week);
+  var tr = nutProgWeightTrend(asOf);
+  var out = { week: week, as_of: asOf, trend: tr, verdict: 'hold', delta: 0,
+              can_propose: nutProgCanPropose(week), reason: '' };
+
+  if(!out.can_propose){
+    out.verdict = 'settling';
+    out.reason = 'Week ' + week + ' is inside the settle period. Water, glycogen and ' +
+                 'creatine loading all resolve in the first three weeks, and reacting ' +
+                 'to them is reacting to noise. The first review that can change ' +
+                 'anything is ' + nutProgReviewDate(_NUT_PROG.settle_weeks + 1) + '.';
+    return out;
+  }
+  if(tr.rate === null){
+    out.verdict = 'no-data';
+    out.reason = 'Not enough weigh-ins to read a trend — ' + tr.recent_n + ' this week and ' +
+                 tr.prior_n + ' the week before, and it takes three of each. ' +
+                 'No change proposed; an unknown trend is not a green light.';
+    return out;
+  }
+  if(tr.rate > _NUT_PROG.rate_fast_kg){
+    out.verdict = 'add'; out.delta = 1;
+    out.reason = 'Losing ' + tr.rate + ' kg a week against a target of ' + _NUT_PROG.rate_target_kg +
+                 '. Past ' + _NUT_PROG.rate_fast_kg + ' the loss starts coming out of muscle rather ' +
+                 'than fat. Adding a carb block back slows it and protects the lean budget.';
+  } else if(tr.rate < _NUT_PROG.rate_slow_kg){
+    out.verdict = 'remove'; out.delta = -1;
+    out.reason = 'Losing ' + tr.rate + ' kg a week against a target of ' + _NUT_PROG.rate_target_kg +
+                 '. Before cutting food, check the logging honestly — an untracked ' +
+                 'handful of nuts is 200 calories a day. If it is accurate, take a block off.';
+  } else {
+    out.reason = 'Losing ' + tr.rate + ' kg a week against a target of ' + _NUT_PROG.rate_target_kg +
+                 '. On track — nothing to change.';
+  }
+  return out;
+}
+
+// Which week is being reviewed today, if any. Returns 0 for the rehearsal's
+// Saturday setup and null on every other day.
+function nutProgReviewWeekOn(dateKey){
+  if(dateKey === _NUT_PROG.trial_setup) return 0;
+  for(var w = 1; w <= _NUT_PROG.weeks; w++) if(nutProgReviewDate(w) === dateKey) return w;
+  return null;
+}
+
+// The review card. Shown at the top of Today on a review day — Jon opens the app
+// on the Wednesday and it is simply there, rather than being somewhere he has to
+// remember to go.
+function _nutProgReviewCard(dateKey){
+  var wk = nutProgReviewWeekOn(dateKey);
+  if(wk === null) return '';
+  var prep = nutProgPrepWindow(wk);
+  var head = (wk === 0)
+    ? 'Trial week &mdash; set up'
+    : 'Week ' + wk + ' review';
+  var h = '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:10px;padding:15px 16px;margin-bottom:16px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">' + head + '</div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:3px;">Shop and prep ' +
+      (prep ? prep.from + ' to ' + prep.to : '') + '</div>';
+
+  if(wk === 0){
+    h += '<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.5;">' +
+         'A dress rehearsal on week 1&rsquo;s macros. Nothing here is measured &mdash; run the ' +
+         'whole loop once and tell me what breaks.</div>';
+  } else {
+    var r = nutProgReviewFor(wk, dateKey);
+    var tr = r.trend;
+    if(tr && tr.rate !== null){
+      h += '<div style="display:flex;gap:10px;margin-top:11px;">' +
+        '<div style="flex:1;background:var(--bg3);border-radius:7px;padding:8px 10px;">' +
+          '<div style="font-family:var(--font-d);font-size:19px;font-weight:700;color:var(--gold);">' + tr.rate + '</div>' +
+          '<div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">kg / week</div></div>' +
+        '<div style="flex:1;background:var(--bg3);border-radius:7px;padding:8px 10px;">' +
+          '<div style="font-family:var(--font-d);font-size:19px;font-weight:700;">' + _NUT_PROG.rate_target_kg + '</div>' +
+          '<div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">target</div></div>' +
+        '<div style="flex:1;background:var(--bg3);border-radius:7px;padding:8px 10px;">' +
+          '<div style="font-family:var(--font-d);font-size:19px;font-weight:700;">' + (tr.recent_avg || '&mdash;') + '</div>' +
+          '<div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);">7-day avg</div></div>' +
+        '</div>';
+    }
+    h += '<div style="font-size:12px;color:var(--text2);margin-top:11px;line-height:1.55;">' + r.reason + '</div>';
+    if(r.delta !== 0){
+      h += '<div style="display:flex;gap:8px;margin-top:12px;">' +
+        '<button data-prog-accept="' + wk + '" data-prog-delta="' + r.delta + '" style="flex:1;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);color:#000;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">' +
+          (r.delta > 0 ? 'Add a block' : 'Take one off') + '</button>' +
+        '<button data-prog-decline style="flex:1;padding:11px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Keep as is</button>' +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text3);text-align:center;margin-top:7px;">Either way, this week&rsquo;s food does not change.</div>';
+    }
+  }
+  h += '</div>';
+  return h;
 }
 
 // ── projection ─────────────────────────────────────────────────────────────

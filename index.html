@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.277';
+var APP_VERSION='4.9.278';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23776,9 +23776,15 @@ function _pepGetDoses(ps, dateStr){
     var step = _pepDoseStepToday(stack, c, dayNum);
     // v4.9.256: the LIVE recon — what is in the vial he will draw from today.
     var recon = _pepLiveRecon(stack, c);
+    // v4.9.278: the draw is withheld until the make-up of the vial is known.
+    // Done HERE, at the one place a dose item is built, so every surface that
+    // reads _pepGetDoses degrades together — the alternative is the same rule
+    // written into five renderers, four of which eventually drift.
+    var known = _pepMakeUpKnown(stack, c, recon);
     var item = {id:stack.compoundId, name:c.name, cat:c.cat, dose:dose, doseUnit:c.doseUnit,
                 timing:c.timing, notes:c.notes, dayNum:dayNum, doseStep:step,
-                recon:recon, draw:_pepDraw(dose, c.doseUnit, recon)};
+                recon:recon, needsMakeUp: !known, canLogMakeUp: true,
+                draw: known ? _pepDraw(dose, c.doseUnit, recon) : null};
 
     if(timing.indexOf("fasted am") >= 0 || timing.indexOf("morning") >= 0) morning.push(item);
     else if(timing.indexOf("bed") >= 0 || timing.indexOf("evening") >= 0) evening.push(item);
@@ -23800,9 +23806,11 @@ function _pepGetDoses(ps, dateStr){
     (ps.stacks || []).forEach(function(st){ if(st.compoundId === x.compoundId && !xs) xs = st; });
     var xdose = (x.dose != null) ? parseFloat(x.dose) : (xs && xs.dose != null ? xs.dose : xc.dose);
     var xrecon = _pepLiveRecon(xs || {}, xc);
+    var xknown = _pepMakeUpKnown(xs, xc, xrecon);
     var xitem = {id:xc.id, name:xc.name, cat:xc.cat, dose:xdose, doseUnit:xc.doseUnit,
                  timing:xc.timing, notes:xc.notes, dayNum:null, doseStep:null, extra:true,
-                 recon:xrecon, draw:_pepDraw(xdose, xc.doseUnit, xrecon)};
+                 recon:xrecon, needsMakeUp: !xknown, canLogMakeUp: !!xs,
+                 draw: xknown ? _pepDraw(xdose, xc.doseUnit, xrecon) : null};
     var xt = (xc.timing || "").toLowerCase();
     if(xt.indexOf("fasted am") >= 0 || xt.indexOf("morning") >= 0) morning.push(xitem);
     else if(xt.indexOf("bed") >= 0 || xt.indexOf("evening") >= 0) evening.push(xitem);
@@ -23982,6 +23990,55 @@ function _pepLiveRecon(stack, c){
             plannedMg: (stack.vialMg != null ? parseFloat(stack.vialMg) : null)};
   }
   return _pepRecon(stack, c);
+}
+
+// ── IS THE MAKE-UP OF THIS VIAL ACTUALLY KNOWN? (v4.9.278) ─────────────────
+// Jon: "keep blank with make up required note to complete the daily dose."
+//
+// A unit count is dose / concentration, and concentration needs the BAC volume.
+// For most compounds that volume was transcribed from Peptide_Protocol_2026_27
+// .pdf, a document that has been WRONG TWICE — the RT30 "+5mL" the vial cannot
+// hold, and BPC-157 at 1mL when he uses 2mL, which shipped a HALF DOSE for
+// fourteen versions. So the app was printing a confident number to two decimal
+// places off a volume nobody had checked.
+//
+// He chose blank over a marked guess. A gold "assumed" caption still puts a
+// number in front of him at 4:30am, and the number is what he acts on.
+//
+// THREE THINGS COUNT:
+//   1. A LOGGED MAKE-UP — recon.source === "mixed". He recorded what he put in
+//      THIS vial. An act about a physical object, not a form default.
+//   2. THE COMPOUND PANEL — ADJUST, tap a compound, set vial and water, Save.
+//      That panel exists for exactly one purpose, stating the make-up, so
+//      saving it is an assertion and not an incidental write. Jon: "i want to
+//      edit in app not from this note" — he intends to put Epitalon in 0.5mL
+//      rather than 1mL, because 5mg at 10mg/mL is 50 units and that is a lot to
+//      push. At 0.5mL it is 25u. That change is HIS to make in the app, and the
+//      note has to clear when he makes it or the control does nothing visible.
+//   3. A VOLUME HE STATED DIRECTLY to me, in _PEP_CONFIRMED[id].waterMl.
+//
+// Deliberately NOT counted: saving the EDIT SHEET. Water is one of twelve
+// fields there, prefilled from the library, and it is written on every save —
+// so correcting a typo in the notes would bless a volume nobody checked. That
+// is the shape of the phase figures that were silently marking his stock as
+// counted before v4.9.266. The compound panel is one field with one meaning;
+// the edit sheet is a form where water is a passenger.
+function _pepMakeUpKnown(stack, c, recon){
+  if(recon && recon.source === "mixed") return true;
+  if(stack && stack.waterConfirmedAt) return true;
+  var e = c && _PEP_CONFIRMED[c.id];
+  return !!(e && e.waterMl);
+}
+
+// Open the make-up sheet from a surface that only knows the compound, not its
+// index — the Today tile builds render items, not stack positions.
+function pepOpenMakeUpFor(compoundId){
+  var ps = pepGetState();
+  var idx = -1;
+  (ps.stacks || []).forEach(function(st, i){ if(idx < 0 && st && st.compoundId === compoundId) idx = i; });
+  if(idx < 0) return false;
+  pepOpenMakeUp(idx);
+  return true;
 }
 
 // Record a make-up. Opens a vial at the volume he actually used, stamps the
@@ -24386,6 +24443,9 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-skip]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepSkipDose(btn.getAttribute("data-pep-skip")); });
   });
+  document.querySelectorAll("[data-pep-makeup]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepOpenMakeUpFor(btn.getAttribute("data-pep-makeup")); });
+  });
   body.querySelectorAll("[data-pep-rm]").forEach(function(btn){
     var idx = parseInt(btn.getAttribute("data-pep-rm"));
     btn.addEventListener("click", function(){ pepRemoveStack(idx); });
@@ -24616,8 +24676,18 @@ function _pepTabToday(ps){
       s += "</div>";
       s += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;margin-top:2px;\">" + _pepFmtDose(item.dose, item.doseUnit) +
            (item.draw ? "<span style=\"color:var(--text2);font-weight:700;\"> &middot; " + _pepDrawText(item.draw) + "</span>" : "") + "</div>";
-      if(item.recon) s += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + _pepReconText(item.recon) + "</div>";
-      else s += "<div style=\"font-size:10px;color:var(--gold);margin-top:2px;\">Set vial size + BAC water to see units</div>";
+      if(item.needsMakeUp){
+        // v4.9.278: no units and no concentration until he logs what went into
+        // the vial. The button is the exit — a note with nothing to press is
+        // just a nag.
+        s += item.canLogMakeUp
+          ? "<button data-pep-makeup=\"" + item.id + "\" style=\"margin-top:6px;background:none;border:1px solid var(--gold);border-radius:12px;color:var(--gold);font-family:var(--font-d);font-size:9px;font-weight:900;padding:4px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Make-up required &middot; log the mix</button>"
+          : "<div style=\"font-size:10px;color:var(--gold);margin-top:2px;\">Make-up required &mdash; this compound is not in your protocol, so there is no vial to log against.</div>";
+      } else if(item.recon){
+        s += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + _pepReconText(item.recon) + "</div>";
+      } else {
+        s += "<div style=\"font-size:10px;color:var(--gold);margin-top:2px;\">Set vial size + BAC water to see units</div>";
+      }
       s += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + item.timing + "</div>";
       if(item.notes) s += "<div style=\"font-size:10px;color:var(--text3);margin-top:4px;font-style:italic;\">" + item.notes + "</div>";
       s += "</div></div>";
@@ -24816,12 +24886,31 @@ function pepRenderTodayTile(){
     r += "<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">" + _esc(item.timing || "") + "</div>";
     r += "</div>";
     r += "<div style=\"text-align:right;flex-shrink:0;\">";
-    r += "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;line-height:1.1;\">" + (item.draw ? _pepDrawText(item.draw) : "—") + "</div>";
+    if(item.needsMakeUp){
+      if(item.canLogMakeUp){
+        r += "<button data-pep-tile-makeup=\"" + item.id + "\" style=\"background:none;border:1px solid var(--gold);border-radius:10px;color:var(--gold);font-family:var(--font-d);font-size:9px;font-weight:900;padding:3px 8px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Make-up required</button>";
+        r += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">Tap to log the mix</div>";
+      } else {
+        // Nothing in his protocol to log against, so a button here would open
+        // nothing. A dead control is worse than a plain statement.
+        r += "<div style=\"font-family:var(--font-d);font-size:9px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:1px;\">Make-up required</div>";
+        r += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">Not in your protocol</div>";
+      }
+    } else {
+      r += "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;line-height:1.1;\">" + (item.draw ? _pepDrawText(item.draw) : "—") + "</div>";
+    }
     if(item.doseStep){
       r += "<div style=\"font-size:10px;color:var(--gold);font-weight:700;margin-top:1px;\">Dose changes today &middot; " +
            _pepFmtDose(item.doseStep.from, item.doseUnit) + " &rarr; " + _pepFmtDose(item.doseStep.to, item.doseUnit) + "</div>";
     }
-    r += "<div style=\"font-size:10px;color:" + (_pepReconAssumed(item.recon) ? "var(--gold)" : "var(--text3)") + ";margin-top:1px;\">" + _pepFmtDose(item.dose, item.doseUnit) + (item.recon ? " &middot; " + _pepNum(item.recon.conc) + "mg/mL" + (_pepReconAssumed(item.recon) ? " &middot; assumed" : "") : " &middot; set recon") + "</div>";
+    if(item.needsMakeUp){
+      // The dose still shows — that is his protocol and it is not in doubt.
+      // The CONCENTRATION does not, because printing it is printing the guess
+      // in a different unit.
+      r += "<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">" + _pepFmtDose(item.dose, item.doseUnit) + "</div>";
+    } else {
+      r += "<div style=\"font-size:10px;color:" + (_pepReconAssumed(item.recon) ? "var(--gold)" : "var(--text3)") + ";margin-top:1px;\">" + _pepFmtDose(item.dose, item.doseUnit) + (item.recon ? " &middot; " + _pepNum(item.recon.conc) + "mg/mL" + (_pepReconAssumed(item.recon) ? " &middot; assumed" : "") : " &middot; set recon") + "</div>";
+    }
     r += "</div></div>";
     return r;
   }
@@ -24863,6 +24952,12 @@ function _pepBindTile(tile){
       // pepToggleDose and were all silently missing here.
       pepToggleDose(btn.getAttribute("data-pep-tile-check"));
       pepRenderTodayTile();
+    });
+  });
+  tile.querySelectorAll("[data-pep-tile-makeup]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      pepOpenMakeUpFor(btn.getAttribute("data-pep-tile-makeup"));
     });
   });
   tile.querySelectorAll("[data-pep-tile-skip]").forEach(function(btn){
@@ -25551,7 +25646,12 @@ function pepSetCompoundRecon(compoundId, vialMg, waterMl){
   var found = false;
   (ps.stacks || []).forEach(function(st){
     if(st.compoundId !== compoundId) return;
-    st.vialMg = vm; st.waterMl = wm; found = true;
+    // v4.9.278: stamping the water as CONFIRMED. This panel is the one control
+    // whose only job is stating the make-up, so saving it is an assertion about
+    // the vial rather than an incidental write, and _pepMakeUpKnown honours it.
+    // Without this the "make-up required" note would survive him editing the
+    // very thing it is asking for.
+    st.vialMg = vm; st.waterMl = wm; st.waterConfirmedAt = _pepToday(); found = true;
   });
   if(!found) return {ok:false, problem:"That compound is not in your protocol."};
   pepSaveState(ps);

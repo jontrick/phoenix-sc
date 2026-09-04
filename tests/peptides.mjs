@@ -1001,6 +1001,115 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'not offer skip on it — skipping something he added by hand is incoherent');
     });
 
+    // ── MAKE-UP REQUIRED (v4.9.278) ────────────────────────────────────────
+    // Jon: "keep blank with make up required note to complete the daily dose."
+    //
+    // A unit count needs the BAC volume, and for most compounds that volume was
+    // transcribed from a document that has been wrong twice. He chose BLANK over
+    // a marked guess — a gold "assumed" caption still puts a number in front of
+    // him at 4:30am, and the number is what he acts on.
+    //
+    // And: "i want to edit in app not from this note" — he intends Epitalon in
+    // 0.5mL rather than 1mL, because 5mg at 10mg/mL is 50 units. So the note has
+    // to CLEAR when he sets it in the app, or the control does nothing visible.
+    const mkSeed = (over) => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [Object.assign({
+        compoundId:'epitalon', dose:5, startDate: daysAgo(2), freq:'daily',
+        vialMg:10, waterMl:1, sealedVials:4, status:'instock',
+      }, over || {})];
+      app.pepSaveState(st);
+    };
+    const epiItem = () => {
+      const d = app._pepGetDoses(app.pepGetState());
+      return d.morning.concat(d.anytime, d.evening).find(x => x.id === 'epitalon');
+    };
+
+    test('MAKEUP an unconfirmed volume withholds the draw', () => {
+      mkSeed();
+      const it = epiItem();
+      assert.ok(it, 'the dose is still scheduled — it is the NUMBER that is withheld');
+      assert.equal(it.needsMakeUp, true, 'flagged');
+      assert.equal(it.draw, null,
+        'no unit count off a BAC volume nobody has checked — the PDF has been ' +
+        'wrong twice and one of them shipped a half dose for 14 versions');
+      assert.equal(it.dose, 5, 'the DOSE still stands; that is his protocol, not a guess');
+    });
+
+    test('MAKEUP a LOGGED mix restores the number', () => {
+      mkSeed();
+      assert.equal(app.pepLogMakeUp(0, 10, 0.5), true, 'he logs what he actually mixed');
+      const it = epiItem();
+      assert.ok(!it.needsMakeUp, 'the vial is now a known quantity');
+      assert.ok(it.draw, 'and the draw comes back');
+      assert.equal(Math.round(it.draw.units), 25,
+        '10mg in 0.5mL is 20mg/mL, so 5mg is 25u — half the 50u he objected to');
+    });
+
+    test('MAKEUP editing it in the COMPOUND PANEL clears the note', () => {
+      mkSeed();
+      assert.equal(epiItem().needsMakeUp, true, 'flagged to start with');
+      const r = app.pepSetCompoundRecon('epitalon', 10, 0.5);
+      assert.equal(r.ok, true, 'the panel save succeeds');
+      const it = epiItem();
+      assert.ok(!it.needsMakeUp,
+        'Jon: "i want to edit in app not from this note" — a control that does ' +
+        'not clear the thing asking for it is a control that appears broken');
+      assert.equal(Math.round(it.draw.units), 25, 'and Epitalon is 25u, not 50u');
+    });
+
+    test('MAKEUP a volume he stated directly never asks', () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [{ compoundId:'bpc157', dose:0.5, startDate: daysAgo(2), freq:'daily',
+                     vialMg:10, waterMl:2, sealedVials:2, status:'instock' }];
+      app.pepSaveState(st);
+      const d = app._pepGetDoses(app.pepGetState());
+      const it = d.morning.concat(d.anytime, d.evening).find(x => x.id === 'bpc157');
+      assert.ok(!it.needsMakeUp,
+        'he said "bpc is 10mg in 2ml" himself — _PEP_CONFIRMED carries it, so the ' +
+        'app must not ask him again');
+      assert.equal(Math.round(it.draw.units), 10, 'and it draws 10u');
+    });
+
+    test('MAKEUP the Today tile shows the note and a way to act on it', () => {
+      const h = withStubbedDom(() => {
+        mkSeed();
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.ok(h.includes('Make-up required'), 'the note is on the Today screen');
+      assert.ok(h.includes('data-pep-tile-makeup="epitalon"'),
+        'and it is a control — a note with nothing to press is just a nag');
+      assert.ok(!h.includes('mg/mL'),
+        'and the CONCENTRATION is not printed underneath, because printing it is ' +
+        'printing the same guess in a different unit');
+    });
+
+    test('MAKEUP the tile control is WIRED to the make-up sheet', () => {
+      withStubbedDom(() => {
+        mkSeed();
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        const handlers = [];
+        app._pepBindTile({
+          querySelectorAll: sel => (sel === '[data-pep-tile-makeup]'
+            ? [{ getAttribute: () => 'epitalon', addEventListener: (e, fn) => handlers.push(fn) }]
+            : []),
+        });
+        assert.equal(typeof handlers[0], 'function',
+          'the make-up control is WIRED — a button that renders and does nothing ' +
+          'looks identical to a working one in a source assertion');
+      });
+      assert.equal(app.pepOpenMakeUpFor('nad'), false,
+        'and resolving a compound that is not in his protocol fails rather than ' +
+        'opening the sheet on the wrong stack');
+    });
+
     test('RENDER the tile stays empty when there is no protocol', () => {
       const h = withStubbedDom(() => {
         reset(); signIn('jon');
@@ -2851,13 +2960,26 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'and only the extra came back out');
     });
 
-    test('ADDDOSE a compound not in his protocol still logs and draws', () => {
+    // v4.9.278 CHANGED THIS ONE, AND IT IS THE INTERESTING CASE.
+    // It used to assert that an ad-hoc dose of something NOT in his protocol
+    // draws 12u off the library recon. Under "keep blank with make up required"
+    // that is precisely the guessed number he asked to stop seeing — and this
+    // is the RISKIER path, not the safer one: there is no vial being tracked at
+    // all, so the library figure is a pure assumption about a compound he may
+    // never have mixed. The dose still logs; only the unit count is withheld.
+    test('ADDDOSE a compound not in his protocol logs, but draws no guessed units', () => {
       setUpAdd();
       const r = app.pepAddExtraDose('dsip', 0.3);
-      assert.equal(r.ok, true, 'accepted from the library');
+      assert.equal(r.ok, true, 'accepted from the library — the LOG still happens');
       const it = todayItems().find(x => x.id === 'dsip');
-      assert.ok(it && it.draw, 'with a draw-up from the library recon');
-      assert.equal(it.draw.units, 12, '300mcg at 2.5mg/mL is 12u');
+      assert.ok(it, 'and it appears on Today');
+      assert.equal(it.dose, 0.3, 'carrying the dose he asked for');
+      assert.equal(it.draw, null,
+        'but no unit count off a library recon for a vial the app has never seen');
+      assert.equal(it.needsMakeUp, true, 'flagged instead');
+      assert.equal(it.canLogMakeUp, false,
+        'and there is nothing to log against, so the surfaces must state that ' +
+        'rather than offer a button that opens nothing');
     });
 
     test('ADDDOSE nonsense is refused rather than logged', () => {

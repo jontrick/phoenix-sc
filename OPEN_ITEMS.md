@@ -60,14 +60,29 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       the VIAL SIZES — both trace to his own ordering document — but he has now stated
       the sizes directly, which is, and they are recorded in `_PEP_CONFIRMED` (v4.9.269).
       Closes when the STOCK screen reads what he counted.
-- [ ] JON — Reconstitution: WATER volumes, not vial sizes. As of 2026-09-04 he has
-      confirmed EIGHT vial sizes directly (retatrutide 30mg, bpc157, tb500, ipamorelin,
-      cjc1295, ta1 10mg, ghkcu 50mg, nad 500mg) and they are recorded per-field in
-      `_PEP_CONFIRMED` with the date he said it. What is still PDF-derived is the BAC
-      VOLUME for all but retatrutide and bpc157 — and a concentration needs both, so an
-      unconfirmed waterMl is an unconfirmed draw. Closes compound-by-compound as he
-      states the volume he actually mixes; add it to `_PEP_CONFIRMED`, never from the
+- [ ] JON — Reconstitution: WATER volumes. He has confirmed EIGHT vial sizes directly
+      (retatrutide 30mg, bpc157, tb500, ipamorelin, cjc1295, ta1 10mg, ghkcu 50mg,
+      nad 500mg), recorded per-field in `_PEP_CONFIRMED` with the date he said it. The
+      BAC VOLUME is still PDF-derived for everything except retatrutide and bpc157, and
+      a concentration needs both numbers.
+      HIS RULING (2026-09-04): "keep blank with make up required note to complete the
+      daily dose." So as of v4.9.278 the app WITHHOLDS the unit count rather than
+      printing a marked guess — a gold "assumed" caption still puts a number in front of
+      him at 4:30am, and the number is what he acts on. Most of his protocol now reads
+      MAKE-UP REQUIRED until he logs each vial.
+      He CLOSES IT PER COMPOUND, in the app, three ways: log the actual mix; or set the
+      volume in ADJUST -> tap the compound -> Save (which stamps `waterConfirmedAt`); or
+      tell PM/PEPTIDES the volume so it goes in `_PEP_CONFIRMED` — never from the
       document, which is the thing that table exists to outrank.
+      FIRST ONE HE NAMED: Epitalon in 0.5mL rather than 1mL, because 5mg at 10mg/mL is
+      50 units and that is a lot to push. At 0.5mL it is 25u. Deliberately NOT hard-coded
+      — "i want to edit in app not from this note".
+- [ ] PEPTIDES — The EDIT SHEET's water field does not clear "make-up required", only the
+      compound panel and a logged make-up do. Deliberate: water is one of twelve fields
+      there and is written on every save, so correcting a typo in the notes would bless a
+      volume nobody checked — the shape of the phase figures that were silently marking
+      stock as counted before v4.9.266. Recorded because the asymmetry is not obvious at
+      the call site. Revisit if Jon edits water there and reports the note persisting.
 - [ ] JON — Should a live WALK and the WEEKLY CHECK-IN be restored after a screen lock?
       Both are deliberately in `_neverRestoreTabs` (v4.9.264) — a walk would imply one is
       running, and the check-in form reloads EMPTY so returning to it invites a second

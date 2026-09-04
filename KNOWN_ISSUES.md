@@ -249,3 +249,22 @@ with `gitdir` (bare path to the worktree's `.git` FILE), `commondir` (`../..`) a
 
 **This is survivable only because everything is pushed.** That is the whole reason for the
 push-after-every-clean-build rule.
+
+## A BLANKET VERSION-LABEL `sed` REWRITES OTHER DOMAINS' HISTORY (2026-09-04)
+
+`harness.mjs` fails a push whose APP_VERSION is not mentioned by any comment. The quick
+way to satisfy it is `sed 's/v4.9.OLD/v4.9.NEW/g' index.html` — and that rewrites EVERY
+comment carrying the old number, including other domains' and your own from earlier
+versions. PEPTIDES did it at v4.9.275 and moved **7 Training comments** off v4.9.272.
+Caught by reading `git diff` before committing, not by any gate: the labels stay
+syntactically valid, so all four gates pass on a file whose history now lies.
+
+Evidence it is not a one-off: peptide comments written at v4.9.269 were already reading
+v4.9.272 before that sed ran — an earlier release did the same thing in the other
+direction.
+
+**Do this instead:** relabel only the comment blocks the change actually adds, by their
+own text. If a blanket replace is unavoidable, invert it afterwards and re-apply to your
+own blocks individually — and check `git diff -U0 index.html | grep '^[-+].*v4\.9\.'`
+before staging. A version label is a claim about WHEN something was decided; a gate that
+only checks a number is present cannot tell a true one from a laundered one.

@@ -2389,6 +2389,107 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgBatchRecipes(16), null, 'and no week 16');
   });
 
+  // ── the programme calendar ───────────────────────────────────────────────
+  // v4.9.296. One case per requirement Jon listed, so a single fix cannot turn
+  // them all green at once. Driven through the TAB ROUTER, because a tab the
+  // router does not reach is this domain's most-repeated defect.
+
+  const progTab = (dateKey) => onDay(dateKey, () => {
+    app._nutTab = 'programme';
+    const d = dom();
+    app.nutRenderScreen();
+    return d.html('nut-screen-body');
+  });
+
+  test('CAL the router reaches the PROGRAMME tab', () => {
+    setUp(110);
+    const html = progTab('2026-09-06');
+    assert.ok(html.indexOf('data-nut-tab="programme"') >= 0, 'the tab exists in the bar');
+    assert.ok(html.indexOf('data-prog-cal-day') >= 0,
+      'and the router actually renders the calendar into it');
+  });
+
+  test('CAL it shows Monday to Sunday, seven tiles', () => {
+    setUp(110);
+    const html = progTab('2026-09-06');
+    const tiles = (html.match(/data-prog-cal-day="/g) || []).length;
+    assert.equal(tiles, 7, 'seven days — got ' + tiles);
+    assert.ok(html.indexOf('data-prog-cal-day="2026-09-07"') >= 0, 'starting Monday 7 Sept');
+    assert.ok(html.indexOf('data-prog-cal-day="2026-09-13"') >= 0, 'ending Sunday 13 Sept');
+  });
+
+  test('CAL week 0 is populated with the real meals', () => {
+    setUp(110);
+    const html = progTab('2026-09-06');
+    assert.ok(html.indexOf('Trial week') >= 0, 'labelled as the rehearsal');
+    assert.ok(/06:15/.test(html) && /12:30/.test(html) && /19:00/.test(html),
+      'with meal times on the tiles');
+    assert.ok(html.indexOf('Chicken breast') >= 0, 'and the food that identifies a day');
+  });
+
+  test('CAL a tile is a glance, not the full plate', () => {
+    setUp(110);
+    const html = progTab('2026-09-06');
+    assert.equal(html.indexOf('Olive oil'), -1,
+      'the calendar is for recognising a day, not cooking from it — oil and ' +
+      'seasoning belong on the day view');
+  });
+
+  test('CAL today is marked, and only today', () => {
+    setUp(110);
+    const html = progTab('2026-09-09');           // a Wednesday inside week 0
+    const marks = (html.match(/&middot; today/g) || []).length;
+    assert.equal(marks, 1, 'exactly one day is today — got ' + marks);
+  });
+
+  test('CAL tapping a day opens that day, not today', () => {
+    setUp(110);
+    app._nutProgSelDay = '2026-09-10';            // Thursday — a lift day
+    const html = onDay('2026-09-07', () => app._nutTabProgramme(app.nutGetState()));
+    assert.ok(html.indexOf('data-prog-tick') >= 0, 'the full day view, with meals to tick');
+    assert.ok(html.indexOf('Thursday') >= 0, 'and it says which day you are looking at');
+    assert.ok(html.indexOf('data-prog-cal-back') >= 0, 'with a way back to the week');
+    app._nutProgSelDay = null;
+  });
+
+  test('CAL the day it opens really is that day, not a copy of today', () => {
+    setUp(110);
+    // Monday 7th is a REST day and keeps the banana; Thursday 10th lifts and drops it.
+    app._nutProgSelDay = '2026-09-10';
+    const thu = onDay('2026-09-07', () => app._nutTabProgramme(app.nutGetState()));
+    assert.equal(thu.indexOf('data-prog-tick="pre"'), -1,
+      'Thursday lifts, so no pre-training banana — if this showed today\'s plate ' +
+      'instead, the banana would be here');
+    app._nutProgSelDay = null;
+  });
+
+  test('CAL it follows the week without anyone advancing it', () => {
+    setUp(110);
+    assert.equal(onDay('2026-09-06', () => app._nutProgCalendarWeek()), 0, 'before the start: the trial week');
+    assert.equal(onDay('2026-09-09', () => app._nutProgCalendarWeek()), 0, 'inside it: still the trial week');
+    assert.equal(onDay('2026-09-14', () => app._nutProgCalendarWeek()), 1, 'first Monday rolls to week 1');
+    assert.equal(onDay('2026-09-20', () => app._nutProgCalendarWeek()), 1, 'and holds until Sunday');
+    assert.equal(onDay('2026-09-21', () => app._nutProgCalendarWeek()), 2, 'next Monday rolls again');
+    assert.equal(onDay('2026-12-28', () => app._nutProgCalendarWeek()), null, 'and stops when it is over');
+  });
+
+  test('CAL it reflects swaps already made', () => {
+    setUp(110);
+    app.nutProgSetRice('brown');
+    app.nutProgSetNightly('2026-09-09', 'dinner_protein', 'prawns');
+    const html = progTab('2026-09-06');
+    assert.ok(html.indexOf('Prawns') >= 0, 'the swapped evening shows on its tile');
+    assert.ok(html.indexOf('Brown') >= 0, 'and the chosen grain');
+    assert.ok(html.indexOf('Salmon') >= 0, 'while the untouched evenings keep the default');
+  });
+
+  test('CAL nothing is shown once the programme is over', () => {
+    setUp(110);
+    const html = onDay('2027-01-05', () => app._nutTabProgramme(app.nutGetState()));
+    assert.ok(/finished/.test(html), 'it says so rather than rendering an empty week');
+    assert.equal(html.indexOf('data-prog-cal-day'), -1, 'and offers no days');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

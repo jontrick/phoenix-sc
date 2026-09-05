@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.295';
+var APP_VERSION='4.9.296';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19451,11 +19451,12 @@ function nutRenderScreen(){
   if(!body) return;
   var ns = nutGetState();
   if(!ns || !ns.setup_done){ body.innerHTML = '<div style="padding:24px;text-align:center;"><div style="color:var(--text2);margin-bottom:16px;">Set up your nutrition targets to get started.</div><button onclick="nutOpenSetup()" class="btn-primary" style="width:100%;">Set Up Nutrition</button></div>'; return; }
-  var tabs = [{key:'today',label:'TODAY'},{key:'recipes',label:'RECIPES'},{key:'week',label:'WEEK'}];
+  var tabs = [{key:'today',label:'TODAY'},{key:'programme',label:'PROGRAMME'},{key:'recipes',label:'RECIPES'},{key:'week',label:'WEEK'}];
   var tabBar = '<div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg);">' +
     tabs.map(function(t){ var act = (_nutTab === t.key) || (_nutTab === 'meals' && t.key === 'week'); return '<button data-nut-tab="'+t.key+'" style="flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid '+(act?'var(--gold)':'transparent')+';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(act?'var(--gold)':'var(--text3)')+';cursor:pointer;touch-action:manipulation;">'+t.label+'</button>'; }).join('') + '</div>';
   var content = '';
   if(_nutTab === 'today')          content = _nutTabToday(ns);
+  else if(_nutTab === 'programme') content = _nutTabProgramme(ns);
   else if(_nutTab === 'recipes')   content = _nutTabRecipes(ns);
   else if(_nutTab === 'week')      content = _nutTabWeek(ns);
   else if(_nutTab === 'meals')     content = _nutTabMeals(ns);
@@ -19549,6 +19550,14 @@ function nutRenderScreen(){
     e.stopPropagation();
     nutOpenSwapSheet();
   });
+  body.querySelectorAll('[data-prog-cal-day]').forEach(function(row){
+    row.addEventListener('click', function(){
+      _nutProgSelDay = row.getAttribute('data-prog-cal-day');
+      nutRenderScreen();
+    });
+  });
+  var calBack = body.querySelector('[data-prog-cal-back]');
+  if(calBack) calBack.addEventListener('click', function(){ _nutProgSelDay = null; nutRenderScreen(); });
   body.querySelectorAll('[data-prog-carb]').forEach(function(row){
     row.addEventListener('click', function(){
       if(nutProgSetRice(row.getAttribute('data-prog-carb'))) nutRenderScreen();
@@ -21406,8 +21415,8 @@ function nutProgSetRice(riceId){
 // v4.9.277. Renders the programme day. Drawn from nutProgMealsOn, so it can
 // never disagree with the shopping list or the prep plan — they read the same
 // function.
-function _nutProgTodayCard(){
-  var today = _nutToday();
+function _nutProgTodayCard(forDate){
+  var today = forDate || _nutToday();
   var t = nutProgTargetsOn(today);
   if(!t) return '';
   var rice  = nutProgRiceChoice();
@@ -22387,6 +22396,103 @@ function _nutProgBatchCard(week){
   });
   h += '</div>';
   return h;
+}
+
+// ── the programme calendar ─────────────────────────────────────────────────
+// v4.9.296. Mon-Sun for the week Jon is living in, or the one he is about to
+// start. It switches on its own each Monday because it asks the programme which
+// week TODAY falls in, rather than storing a week number that would need
+// advancing by someone remembering to advance it.
+//
+// Every tile is drawn from nutProgMealsOn, so a swap made anywhere — evening
+// protein, grain, mid-morning dairy — is already on it. There is no second copy
+// of the plan to fall out of step.
+var _nutProgSelDay = null;      // a day tapped in the calendar, else today
+
+function _nutProgCalendarWeek(){
+  var today = _nutToday();
+  var wk = nutProgWeekFor(today);
+  if(wk >= 1) return wk;                       // living in it
+  if(nutProgIsTrial(today)) return 0;          // living in the rehearsal
+  var pre = _nutProgDaysBetween(today, _NUT_PROG.trial_start);
+  if(pre !== null && pre > 0) return 0;        // about to start it
+  return null;                                 // finished
+}
+
+// The one or two items that identify a meal at a glance. Not the full plate —
+// the calendar is for recognising a day, not cooking from it.
+function _nutProgTileLine(m){
+  if(m.supp) return m.name;
+  var keys = m.items.filter(function(it){ return !/vegetable|greens|oil|milk|berr/i.test(it.n); });
+  if(!keys.length) keys = m.items;
+  return keys.slice(0, 2).map(function(it){ return it.n.split(',')[0]; }).join(' + ');
+}
+
+function _nutProgCalendarCard(week){
+  var days = _nutProgWeekDates(week);
+  if(!days) return '';
+  var today = _nutToday();
+  var rice = nutProgRiceChoice();
+  var label = (week === 0) ? 'Trial week' : ('Week ' + week + ' of 15');
+  var h = '<div style="margin-bottom:14px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">' +
+      '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">' + label + '</div>' +
+      '<div style="font-size:10px;color:var(--text3);">' + days[0].slice(8) + '/' + days[0].slice(5,7) + ' &ndash; ' + days[6].slice(8) + '/' + days[6].slice(5,7) + '</div>' +
+    '</div>';
+
+  days.forEach(function(d){
+    var t = nutProgTargetsOn(d);
+    var dt = _nutProgDate(d);
+    var nm = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()];
+    var isToday = (d === today);
+    var meals = t ? (nutProgMealsOn(d, rice) || []) : [];
+    var food = meals.filter(function(m){ return !m.supp; });
+    var done = t ? nutProgTicked(d) : {};
+    var ticked = meals.filter(function(m){ return !!done[m.id]; }).length;
+
+    h += '<div data-prog-cal-day="' + d + '" style="background:var(--bg2);border:1px solid ' +
+      (isToday ? 'var(--gold)' : 'var(--border)') + ';border-radius:10px;padding:11px 12px;margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
+        '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:' + (isToday ? 'var(--gold)' : 'var(--text)') + ';">' +
+          nm + (isToday ? ' &middot; today' : '') + '</div>' +
+        '<div style="font-size:10px;color:var(--text3);white-space:nowrap;">' + d.slice(8) + '/' + d.slice(5,7) +
+          (t ? (' &middot; ' + t.total.kcal + ' kcal') : '') + '</div>' +
+      '</div>';
+
+    if(!t){
+      h += '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Not on the programme this day.</div>';
+    } else {
+      h += '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' +
+           (t.sessions.length ? t.sessions.join(' + ') : 'rest') +
+           (ticked ? (' &middot; ' + ticked + ' of ' + meals.length + ' logged') : '') + '</div>';
+      food.forEach(function(m){
+        h += '<div style="display:flex;gap:8px;font-size:11px;margin-top:4px;">' +
+          '<span style="color:var(--gold);font-weight:700;flex-shrink:0;">' + m.time + '</span>' +
+          '<span style="color:var(--text2);min-width:0;">' + _nutProgTileLine(m) + '</span></div>';
+      });
+    }
+    h += '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// The tab. Shows the calendar, or one day in full once a day is tapped.
+function _nutTabProgramme(ns){
+  var week = _nutProgCalendarWeek();
+  if(week === null){
+    return '<div style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px;line-height:1.6;">' +
+      'The programme has finished.<br>Fifteen weeks, 7 September to 27 December.</div>';
+  }
+  if(_nutProgSelDay){
+    var card = _nutProgTodayCard(_nutProgSelDay);
+    if(card){
+      var dt = _nutProgDate(_nutProgSelDay);
+      var nm = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()];
+      return '<button data-prog-cal-back style="width:100%;padding:11px;margin-bottom:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;text-align:left;">&lsaquo; ' + nm + ' ' + _nutProgSelDay.slice(8) + '/' + _nutProgSelDay.slice(5,7) + '</button>' + card;
+    }
+  }
+  return _nutProgCalendarCard(week);
 }
 
 // ── the carb base ──────────────────────────────────────────────────────────

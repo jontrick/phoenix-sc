@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.295'", 'version is 4.9.295');
+has("var APP_VERSION='4.9.296'", 'version is 4.9.296');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3054,6 +3054,22 @@ hasCode('return _batch + (h);',          'BATCH: and in the populated one');
 hasCode('nutProgShoppingFor(week)',      'BATCH: quantities come from the live shopping list');
 hasCode('grain.qty * r.water',           'BATCH: water is derived per grain, not one ratio for all of them');
 hasCode('function _nutProgWeekPickerCard(', 'WEEKPICK: the week\'s evenings can be set in advance');
+
+// ── The programme calendar ──────────────────────────────────────────────────
+hasCode('function _nutTabProgramme(',        'PROGCAL: the programme tab exists');
+hasCode("{key:'programme',label:'PROGRAMME'}", 'PROGCAL: it is in the tab bar');
+hasCode("_nutTab === 'programme'",           'PROGCAL: and the ROUTER reaches it');
+hasCode('function _nutProgCalendarCard(',    'PROGCAL: the week grid exists');
+hasCode('data-prog-cal-day',                 'PROGCAL: each day is tappable');
+hasCode("body.querySelectorAll('[data-prog-cal-day]')",
+        'PROGCAL: the days are WIRED — a tile nothing listens to is a picture');
+hasCode('data-prog-cal-back',                'PROGCAL: and there is a way back to the week');
+
+// The week is DERIVED from today, never stored. A stored week number needs
+// someone to advance it every Monday, and nobody will.
+hasCode('function _nutProgCalendarWeek(',    'PROGCAL: the week is worked out from today');
+hasCode('function _nutProgTodayCard(forDate)',
+        'PROGCAL: the day card takes a DATE, so tapping Thursday shows Thursday');
 // nutProgSetRice shipped in .273 and was called by NOTHING until .290 — the fifth
 // finished function in this domain with no door on it.
 hasCode('function _nutProgCarbPickerCard(', 'CARB: the grain can be chosen');

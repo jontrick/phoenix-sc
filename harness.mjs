@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.309'", 'version is 4.9.309');
+has("var APP_VERSION='4.9.311'", 'version is 4.9.311');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -782,7 +782,9 @@ hasNotCode('data-nut-plan-food', 'DAY: planner-only food control folded into the
 
 // -- Week/day mismatch + view persistence (v4.9.211) --
 hasCode("else if(_nutTab === 'meals')     content = _nutTabMeals(ns);", 'BUG1: the day card is reachable from the week view');
-hasCode("_nutTab === 'meals' && t.key === 'week'", 'BUG1: WEEK stays lit on the day drill-down');
+hasCode("(_nutTab === 'meals' || _nutTab === 'recipes') && t.key === 'week'",
+        'BUG1: WEEK stays lit on the day drill-down, and on the recipe library ' +
+        'it now leads to — a view with no lit tab reads as a screen you fell into');
 hasCode('function _nutSaveView(', 'BUG2: the view inside the screen is persisted');
 hasCode('function _nutRestoreView(', 'BUG2: and restored');
 hasCode("if(typeof _nutRestoreView==='function') _nutRestoreView();", 'BUG2: navTo restores it instead of forcing today');
@@ -3037,11 +3039,14 @@ hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
 // back to the generic food logger, and the list, week ahead and Substitutions
 // button all vanished with it. TWO functions carried the same assumption.
 hasCode('function _nutProgStartsCard(', 'PRESTART: the screen says when the programme begins');
-hasCode('if(startCard) return startCard;',
-        'OWNS: the run-up RETURNS the programme card — it does not sit on top of the logger');
+hasCode('return _rev + _wait;',
+        'OWNS: the run-up RETURNS its own card — it does not fall through to the ' +
+        'generic Breakfast/Lunch/Dinner logger underneath, which was the report');
 hasCode('+ Log what you ate today',
         'OWNS: and logging is still possible before the programme opens');
-hasCode('_nutProgStartsCard(today)',    'PRESTART: and Today actually RENDERS it');
+hasCode('_nutProgStartsCard(_nutToday())',
+        'PRESTART: and PROGRAMME actually RENDERS it — Today is the tick-off since ' +
+        'v4.9.310, so the announcement lives on the planning tab');
 hasNotCode("if(dateKey === _NUT_PROG.trial_setup) return 'trial-setup';",
         'PRESTART: the status covers the whole run-up, not a single date');
 hasNotCode('if(dateKey === _NUT_PROG.trial_setup) return 0;',
@@ -3051,8 +3056,8 @@ hasCode('function _nutProgUpcomingWeekDates(',
 // EXISTING IS NOT REACHED. Both of these were built, tested and called by nothing
 // — the list existed only as a function, and Jon opened the app to find prose
 // where his shopping list should be. Guard the CALL, not the definition.
-hasCode('_nutProgWeekAheadCard(wk) + _nutProgCarbPickerCard(wk) +',
-        'SHOP: the review card RENDERS the week ahead, the evening picker and the list — ' +
+hasCode('_nutProgDayPlanCard(wk) + _nutProgListCard(wk)',
+        'SHOP: the WEEK tab RENDERS the day plan and the list — ' +
         'and in that order, because you choose the evenings before you read the list they produce');
 hasCode('function _nutProgListCard(',  'SHOP: the list has a renderer at all');
 hasCode('function nutProgListText(',   'SHOP: and a plain-text export for the phone');
@@ -3123,7 +3128,9 @@ hasCode('return _batch + h;',            'BATCH: rendered in the EMPTY recipes s
 hasCode('return _batch + (h);',          'BATCH: and in the populated one');
 hasCode('nutProgShoppingFor(week)',      'BATCH: quantities come from the live shopping list');
 hasCode('g.dry_g * g.water',             'BATCH: water is derived per grain, not one ratio for all of them');
-hasCode('function _nutProgWeekPickerCard(', 'WEEKPICK: the week\'s evenings can be set in advance');
+hasCode('function _nutProgDayPlanCard(',
+        'WEEKPICK: the week can be set in advance — every MEAL of every day since ' +
+        'v4.9.310, not just the evening');
 
 // ── The programme calendar ──────────────────────────────────────────────────
 hasCode('function _nutTabProgramme(',        'PROGCAL: the programme tab exists');
@@ -3148,7 +3155,9 @@ hasCode('function _nutProgTodayCard(forDate)',
 // nutProgSetRice shipped in .273 and was called by NOTHING until .290 — the fifth
 // finished function in this domain with no door on it.
 hasCode('function _nutProgCarbPickerCard(', 'CARB: the grain can be chosen');
-hasCode('_nutProgCarbPickerCard(wk)',       'CARB: and the review card RENDERS it');
+hasCode('_nutProgCarbPickerCard(wk === null ? 0 : wk)',
+        'CARB: and the grain SHEET renders it — reached from the day plan since ' +
+        'v4.9.310, because the review scroll that used to hold it is gone');
 hasCode('data-prog-carb',                   'CARB: each grain is a row');
 hasCode("body.querySelectorAll('[data-prog-carb]')",
         'CARB: the rows are WIRED — nutProgSetRice had no caller for 17 versions');
@@ -3164,7 +3173,9 @@ hasNotCode('WEEK AVERAGE (',
         'PERDAY: no figure sits under a heading that reads as a week of protein');
 hasCode("'post_workout','extra']",
         'PERDAY: off-plan food counts in the day totals — it was silently omitted');
-hasCode('_nutProgWeekPickerCard(wk)',       'WEEKPICK: and the review card RENDERS it');
+hasCode('data-prog-night-day="\' + d + \'"',
+        'WEEKPICK: and the DAY PLAN renders a row per day, each opening the sheet ' +
+        'for that day — the week-level evening picker it replaced is archived');
 hasCode('data-prog-night-day',              'WEEKPICK: each evening is its own row');
 hasCode("body.querySelectorAll('[data-prog-night-day]')",
         'WEEKPICK: the rows are WIRED — a drawn row nothing listens to is inert');
@@ -3200,6 +3211,68 @@ hasCode('name = _pick.n; grams = _pick.g;',
 // said steak, and a default set in one could not be read by the other.
 hasNotCode("{ id:'sirloin',  n:'Sirloin steak',  k:201",
         'NIGHT: dinner has ONE list of proteins, not two disagreeing ones');
+// ── breakfast eggs (v4.9.307) ──────────────────────────────────────────────
+// NB these guards were WRITTEN for .307 and never landed: the shell step that
+// added them sat behind `grep -c "INVERSION" index.html && python3 ...`, the
+// grep correctly found zero, zero matches is exit status 1, and the chain
+// stopped. Three versions of egg work shipped with no harness cover because I
+// read the gate's output instead of the step's own confirmation.
+hasCode('_NUT_PROG_BFAST_PROTEIN', 'EGGS: the breakfast protein pick exists');
+hasCode('_NUT_EGG_WHITE',          'EGGS: with the whites');
+hasCode('_NUT_EGG_WHOLE',          'EGGS: and two whole eggs');
+hasCode('function _nutProgPartsMacros(',
+        'EGGS: an option can put SEVERAL foods on the plate — whites and eggs are ' +
+        'different products on different shelves, and one line would shop as an ' +
+        'item he cannot buy');
+hasCode('function _nutPartG(',
+        'EGGS: and a part can carry a per-phase weight, like a plate row');
+hasCode('g:[245,297,322,361,374]',
+        'EGGS: the whites FOLLOW THE PHASE. Fixed at 245 ml the option ran 7.2 g of ' +
+        'protein SHORT at phase 5, because the whey it replaces grows 38 g to 58 g');
+hasCode('function _nutProgPlateRowIn(',
+        'EGGS: a plate row is looked up per MEAL — two meals can carry one food at ' +
+        'different weights, and the first match would size one from the other');
+hasCode('d += _bpM.f - (_wRow.f * _wRow.g[_ft.phase_n - 1] / 100)',
+        'EGGS: the evening oil takes the extra egg fat, which is what Jon asked for');
+hasCode('data-nut-night="bfast_protein|',
+        'EGGS: the sheet OFFERS it — the engine existing has never been the feature');
+hasCode('function _nutProgSwapRow(',
+        'EGGS: the shopping list knows HOW a swapped-in food is bought, not just ' +
+        'its shelf — 700 g of egg is not a thing to put on a list');
+hasNotCode('function _nutProgSwapShelf(',
+        'EGGS: and the shelf-only lookup it replaced is gone, not left beside it');
+hasCode("drops:['Semi-skimmed milk']",
+        'EGGS: the swap takes the MILK with it — "swaps out whey protein + milk" ' +
+        'were Jon\'s words (v4.9.311)');
+hasCode('_shortC + (_bfOld - _bfNew)',
+        'EGGS: and the whole option\'s carbohydrate delta joins the ladder, so ' +
+        'dropping the milk does not quietly cost the day 4 g');
+
+// ── the three tabs (v4.9.310) ──────────────────────────────────────────────
+hasCode("var tabs = [{key:'today',label:'TODAY'},{key:'programme',label:'PROGRAMME'},{key:'week',label:'WEEK'}]",
+        'TABS: three tabs, and RECIPES is not one of them');
+hasCode('function _nutProgDayPlanCard(', 'TABS: WEEK carries an editable day-by-day plan');
+hasCode('function _nutProgPlanTab(',
+        'TABS: day plan, then shopping, then prep — the order Jon asked for');
+hasCode('_nutProgDayPlanCard(wk) + _nutProgListCard(wk) + _nutProgBatchCard(wk)',
+        'TABS: and the batch recipes live INSIDE the prep section');
+hasCode('function _nutProgPlanWeek(',
+        'TABS: one place decides WHICH week the plan tab is planning — a review ' +
+        'Wednesday plans the week being shopped for, not the one being eaten');
+hasCode('data-nut-tab="recipes"',
+        'TABS: the recipe library keeps a DOOR after losing its tab — removing one ' +
+        'without the other would have orphaned the whole library');
+hasCode('data-prog-grain-default',
+        'TABS: and so does the week\'s default grain — nutProgSetRice had no caller ' +
+        'for 17 versions and the card that finally gave it one was removed here');
+hasCode('function nutOpenCarbSheet(',
+        'TABS: which is a sheet now, not a card in a scroll that no longer exists');
+hasNotCode('_nutProgWeekPickerCard',
+        'TABS: the week-level EVENING picker is gone (archived), not left beside ' +
+        'the per-day editor — two controls for one setting drift apart');
+hasNotCode('_nutProgWeekAheadCard',
+        'TABS: and so is the week table the day plan replaced');
+
 // ── egg whites at 09:30 (v4.9.309) ─────────────────────────────────────────
 hasCode("{ id:'whites',  n:'Egg whites', grp:'protein', g:184",
         'WHITES: offered at 09:30, sized to the yoghurt\'s 20 g of protein');

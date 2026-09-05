@@ -699,3 +699,79 @@ function _nutWeeklyAssessment(ns){
   return h;
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ARCHIVED v4.9.310 — the two week-level nutrition cards the restructure retired
+//
+// Jon: "Remove 'Evening Meals' as a week-level picker (the per-day dinner
+// selector is redundant now that he's editing at day/meal level)" and "Remove
+// everything else that isn't those three sections."
+//
+// _nutProgWeekPickerCard was a WEEK-level control for ONE meal, built when
+// dinner was the only choosable thing. Every meal is now editable per day from
+// _nutProgDayPlanCard, so keeping it would have been a second control for one
+// setting — which is how two controls drift apart.
+//
+// _nutProgWeekAheadCard was the seven-row kcal/blocks table at the top of the
+// review scroll. The day plan shows the same figures per day, on the rows he
+// taps to edit, so the table repeated them a screen earlier.
+//
+// Kept here rather than deleted because both are complete, working renderers: if
+// the day plan turns out to be worse for planning a week at a glance, the week
+// table is a paste away.
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+// The week ahead, day by day. On setup day there is no plan to EAT yet, so
+// "what am I eating this week" has to be answerable somewhere other than Today.
+function _nutProgWeekAheadCard(week){
+  var days = _nutProgWeekDates(week);
+  if(!days) return '';
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">The week ahead</div>';
+  days.forEach(function(d){
+    var t = nutProgTargetsOn(d);
+    if(!t) return;
+    var dt = _nutProgDate(d);
+    var nm = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+    h += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+      '<div style="min-width:0;"><span style="font-weight:700;">' + nm + '</span>' +
+        '<span style="color:var(--text3);"> ' + d.slice(8) + '/' + d.slice(5,7) + '</span>' +
+        '<span style="font-size:10px;color:var(--text3);"> &middot; ' + (t.sessions.length ? t.sessions.join(' + ') : 'rest') + '</span></div>' +
+      '<div style="white-space:nowrap;color:var(--text3);font-size:11px;">' +
+        t.total.kcal + ' kcal &middot; <span style="color:var(--gold);">' + t.blocks + ' blk</span></div></div>';
+  });
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Lift days eat one block less &mdash; the intra drink carries it.</div></div>';
+  return h;
+}
+
+
+
+function _nutProgWeekPickerCard(week){
+  var days = _nutProgWeekDates(week);
+  if(!days) return '';
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Evening meals</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Set each night before you shop &mdash; the list follows these</div>';
+  days.forEach(function(d){
+    var t = nutProgTargetsOn(d);
+    if(!t) return;
+    var pick = nutProgNightlyOn(d);
+    var pr = _nutProgNightlyOpt('dinner_protein', pick.dinner_protein) || _nutProgNightlyBase('dinner_protein');
+    var vg = _nutProgNightlyOpt('dinner_veg', pick.dinner_veg) || _nutProgNightlyBase('dinner_veg');
+    var dt = _nutProgDate(d);
+    var nm = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+    h += '<div data-prog-night-day="' + d + '" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;touch-action:manipulation;">' +
+      '<div style="min-width:0;">' +
+        '<div style="font-size:12px;font-weight:700;">' + nm + ' <span style="color:var(--text3);font-weight:400;">' + d.slice(8) + '/' + d.slice(5,7) + '</span></div>' +
+        '<div style="font-size:11px;color:var(--gold);margin-top:1px;">' + pr.n + ' ' + pr.g + ' g' +
+          '<span style="color:var(--text3);"> &middot; ' + vg.n + '</span></div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' + _nutProgGrainLine(d) + '</div>' +
+      '</div>' +
+      '<div style="font-size:16px;color:var(--text3);flex-shrink:0;">&rsaquo;</div></div>';
+  });
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:9px;line-height:1.5;">Each serve is sized to land the same protein, so the weight changes with the choice. The oil moves to hold the fat.</div></div>';
+  return h;
+}
+

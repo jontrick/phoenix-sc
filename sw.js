@@ -16,7 +16,7 @@
 // SW_VERSION must match APP_VERSION in index.html. A harness assertion enforces
 // it, because a service worker pinned to a stale version is exactly the kind of
 // silent drift that would make this whole mechanism lie.
-const SW_VERSION = '4.9.309';
+const SW_VERSION = '4.9.311';
 const CACHE = 'phoenix-v' + SW_VERSION;
 
 // Only same-origin static assets are cached. Supabase, the coach worker, tiles

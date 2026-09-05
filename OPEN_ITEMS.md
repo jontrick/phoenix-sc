@@ -68,30 +68,32 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       and so never reach the branch that was broken. One screen-level test now drives
       `renderTodayScreen()`; that is the only automated cover for the actual fault.
 
-- [ ] JON — **Nutrition swaps: three decisions were made FOR him and all need his eyes.**
-      Everything else in v4.9.299 / .303 / .305 he asked for; these he did not.
-      · **04:15 (.299)** — a lifting day now offers intra / banana / nothing, and **every
-        non-lifting day LOST the banana it had.** He described the old behaviour the other
-        way round; a probe showed the inverse, and this is built to what the app actually
-        did (KNOWN_ISSUES, "What something CURRENTLY does is a claim to check"). A banana
-        back on rest days is a one-line default change if he wants it.
-      · **Cashews (.303) and grains (.305)** — both hold one macro and let others move
-        UNCOMPENSATED, and both say so on the row: cashews ~6 g carbs over; quinoa at
-        lunch +5.4 g protein and +4.9 g fat against basmati. **Nothing compensated before
-        .305 either** — the same choice just ran a whole week — so it is a property, not a
-        regression. The alternative is the evening oil. **His call; until then,
-        visible-but-uncompensated stands.**
-      · **Eggs (.307-.309)** — Meal 7 is OFF by default; turning it on **trims chicken,
-        salmon, tuna and whey by about a fifth** so the target does not move. My reading
-        of "the daily macro target and other meals adjust"; the alternative is the day
-        running ~215 kcal over. It changes the Sunday batch, so it is a WEEK decision. He
-        estimated Meal 7 at ~350 kcal; the foods he named come to 216.
-      On the phone: pick "nothing" at 04:15 and confirm the day still hits its carbs; pick
-      three grains and confirm three pots on the prep plan; turn Meal 7 on and check the
-      smaller lunch portion is one he will actually eat. Nut butter's selector goes at
-      week 10 by design; sushi and arborio were ALREADY selectable — .305 built their
-      missing prep, .306 rebatched risotto per him.
-
+- [ ] JON — **Four nutrition decisions were made FOR him; each needs his eyes.** The
+      rest of v4.9.299–.312 he asked for. Detail is in the commit for each version; the
+      part he has to rule on is here.
+      · **04:15 (.299)** — a lifting day offers intra / banana / nothing, and **every
+        non-lifting day LOST its banana**. He described the old behaviour the other way
+        round and a probe showed the inverse. A banana back on rest days is one line.
+      · **Cashews (.303), grains (.305), dinner-heavy (.312)** — each holds ONE macro and
+        lets the others move, uncompensated, and each says so on its row: cashews ~6 g
+        carbs over; quinoa +5.4 g protein and +4.9 g fat at lunch. **Nothing compensated
+        before .305 either.** The alternative is routing fat through the evening oil.
+      · **Dinner-heavy also reverses a skew he did not know was there** — he said protein
+        was "roughly evenly spread"; measured, LUNCH is 28% and dinner 21%. So the move is
+        bigger than he may expect: chicken 135→101 g, yoghurt 200→150 g, +15 g at 19:00,
+        daily total unchanged.
+      · **Meal 7 (.308)** — OFF by default; turning it on **trims chicken, salmon, tuna
+        and whey by about a fifth** so the target does not move. My reading of "the daily
+        macro target and other meals adjust"; the alternative is the day running ~215 kcal
+        over. It changes the Sunday batch, so it is a WEEK decision. He put Meal 7 at
+        ~350 kcal; the foods he named come to 216.
+      **A ceiling now exists and is declared:** stack dinner-heavy + Meal 7 + eggs + egg
+      whites at phase 5 and the evening oil floors at zero with 5.8 g of fat
+      uncompensated. The sheet says so and names the fix. First time this plan has
+      admitted a limit rather than absorbing one.
+      On the phone: pick "nothing" at 04:15 and check the day still hits its carbs; pick
+      three grains and check the prep plan lists three pots; turn Meal 7 on and see
+      whether the smaller lunch is one he will actually eat.
 - [ ] JON — **Two week badges, top right of Today (v4.9.301).** Was one pill reading
       "WEEK 1" under a Week 3 session. **What to watch:** it should now read `TRAIN W3`,
       matching the session card. **The nutrition pill is EXPECTED TO BE ABSENT until

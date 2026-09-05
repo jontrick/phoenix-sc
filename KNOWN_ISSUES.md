@@ -75,6 +75,25 @@ Worse than an inert check. A count reads as coverage, so a number that silently 
 blind spot does not merely fail to inform, it argues against looking further. The guard
 above said "all 80 distinct" while two sites were unlisted.
 
+## A `var` read above its own assignment is undefined, not an error (2026-09-05)
+
+Three times in one day inside `nutProgMealsOn`, which is now long enough that declaration
+order is a live hazard:
+
+- `_bfastDrops` — the milk-drop carb routing read it ten lines early. Threw only when
+  driven, because `undefined.length` does throw.
+- `_splitTake` — the distribution's carb routing read it above its `var`. Did NOT throw:
+  `if(undefined)` is simply false, so the routing silently did nothing and the day sat
+  1.4 g off target. **Nearly shipped.**
+- `_bedM` and friends, caught while writing them.
+
+`runtime_check.mjs` is clean every time — an undefined `var` is not a ReferenceError, and
+the top level executes fine. The harness cannot see it. Only MEASURING the output finds it,
+and only if the effect is big enough to notice: 1.4 g of carbohydrate is not.
+
+> **In a long function, declare every day-level figure in one block above the first use,
+> and when a routing step "does nothing", suspect its inputs before its arithmetic.**
+
 ## Three green gates prove parse and top level, never behaviour
 
 `runtime_check.mjs` executes every script block's TOP LEVEL. It does not execute function

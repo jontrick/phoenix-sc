@@ -156,6 +156,18 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 
 
+- [ ] TRAINING + NUTRITION — **Nutrition decides "is today a lifting day" from its OWN
+      static map**, `_NUT_PROG_SESSIONS` in index.html, not from training state. As of
+      v4.9.299 that map gates the 04:15 intra drink: the drink is only offered on a day
+      the map calls a lift. If Jon's real training days ever stop matching it, the
+      nutrition plan will quietly disagree with the session card rather than error —
+      **the failure mode is a wrong plan that looks right**, which is the worst kind here
+      because he prepares food to it a week ahead. Closes when either (a) Training names
+      a function that answers "does this date contain a lift" from real programme state
+      and Nutrition calls it, or (b) both sides agree the map is authoritative and a gate
+      asserts the two agree. I could not message Training (peer messaging unavailable
+      again this session), so this line IS the handoff.
+
 - [ ] PM — `tests/pm.mjs` "CONTRACT _phxRecordWriteError: holds for a CARELESS caller" is
       FLAKY at ~0.17% and fails as **"medical/personal value leaked: 24.8"**. Nothing leaks.
       The helper stamps `ts: new Date().toISOString()`, the assertion scans the WHOLE blob,

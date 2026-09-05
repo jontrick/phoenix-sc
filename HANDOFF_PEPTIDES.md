@@ -87,7 +87,7 @@ status          instock | pipeline | onorder | complete
 
 ---
 
-## 3. THREE INVARIANTS THAT COST REAL DOSES WHEN BROKEN
+## 3. FOUR INVARIANTS THAT COST REAL DOSES WHEN BROKEN
 
 Each of these was a shipped bug. They are not style preferences.
 
@@ -104,6 +104,26 @@ restate the strength of a vial already dissolved. Fixed v4.9.256.
 returns `source`; `_pepReconAssumed` flags a library default; every display
 marks it. Six wrong defaults were dangerous rather than merely wrong because
 nothing said the number rested on an assumption. Fixed v4.9.245 / .250.
+
+**4. STOCK MOVES ON A MAKE-UP AND AT NO OTHER TIME.** Jon's ruling, 2026-09-05:
+"vials are considered full until he explicitly marks one as made up. Don't
+auto-deduct stock based on protocol doses." `pepLogMakeUp` is the ONLY thing
+that changes `sealedVials`. Ticking a dose still advances `openUsedAmt` inside a
+vial he has actually mixed — that is the v4.9.249 invariant and it is not
+"stock" — but it must never open a vial, close one, or touch the count.
+
+> **IF YOU SEE THAT TICKING A DOSE DOES NOT DECREMENT STOCK, THAT IS THE
+> FEATURE.** It looks exactly like a bug and it is the thing a future session is
+> most likely to "fix". Before .300 the app opened a sealed vial the moment a
+> dose was ticked with none open, stamping the mix from the PLAN — inventing a
+> reconstitution he had never performed, at the unchecked library volume that
+> v4.9.278 exists to withhold.
+
+`pepLogMakeUp` deducts on any make-up dated a NEW day, and not on a same-day
+re-save. The day is the only evidence available to tell "I mixed the next vial"
+from "I am correcting what I just recorded"; deducting unconditionally eats a
+vial every time he fixes a typo, and the old `!openedDate` guard meant stock
+moved once and then never again.
 
 ---
 
@@ -124,6 +144,16 @@ nothing said the number rested on an assumption. Fixed v4.9.245 / .250.
   vial, editable vial and water. Editing maps through everything because one
   compound is one stack.
 - **Calendar** — SCHEDULE, day by day, compounds with dose AND units.
+- **Make-up required** (v4.9.278) — no unit count off a BAC volume nobody has
+  checked. Cleared by a logged make-up, by the compound panel (which stamps
+  `waterConfirmedAt`), or by `_PEP_CONFIRMED`. NOT by the edit sheet.
+- **Not now** (v4.9.300) — dismisses the note without claiming a vial was mixed.
+  `needsMakeUp` stays true, so the units stay withheld; a later make-up clears
+  the dismissal so the next vial asks again.
+- **Made up today** (v4.9.300/.302) — on each TODAY row, and on "+ Made up a
+  vial" for ANY compound in the protocol, including ones with nothing due that
+  day. One tap where the volume is known; the sheet where it is not. It must
+  never mix silently at the library figure.
 
 ---
 

@@ -130,6 +130,15 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       FIRST ONE HE NAMED: Epitalon in 0.5mL rather than 1mL, because 5mg at 10mg/mL is
       50 units and that is a lot to push. At 0.5mL it is 25u. Deliberately NOT hard-coded
       — "i want to edit in app not from this note".
+      A note he does not want to act on now can be silenced with "Not now" (v4.9.300)
+      without claiming a vial was mixed — the units stay withheld either way.
+- [ ] JON — **Peptide stock now moves ONLY when he logs a make-up** (v4.9.300, his
+      ruling). Ticking a dose no longer opens a vial or decrements the sealed count.
+      So the count is only as right as his make-up logging: **every vial he mixes has
+      to be tapped in**, via "Made up" on a TODAY row or "+ Made up a vial" for any
+      compound (v4.9.302). Closes when he has used it for a cycle and the STOCK numbers
+      still match the fridge. The invariant and the trap it creates — it looks exactly
+      like a bug — are written up in HANDOFF_PEPTIDES section 3, invariant 4.
 - [ ] PEPTIDES — The EDIT SHEET's water field does not clear "make-up required", only the
       compound panel and a logged make-up do. Deliberate: water is one of twelve fields
       there and is written on every save, so correcting a typo in the notes would bless a

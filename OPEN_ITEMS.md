@@ -71,25 +71,27 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 - [ ] JON — **Nutrition swaps: three decisions were made FOR him and all need his eyes.**
       Everything else in v4.9.299 / .303 / .305 he asked for; these he did not.
       · **04:15 (.299)** — a lifting day now offers intra / banana / nothing, and **every
-        non-lifting day LOST the banana it used to have.** He described the old behaviour
-        the other way round; a probe showed the inverse, and this is built to what the
-        app actually did (KNOWN_ISSUES, "What something CURRENTLY does is a claim to
-        check"). A banana back on rest days is a one-line default change if he wants it.
-      · **Cashews (.303)** — the day lands ~6 g of carbohydrate OVER target, deliberately.
-        The serve holds the FAT and cashews carry three times the carbs of almonds; rather
-        than shrink his rice to hide it, the sheet shows carbs per serve. Absorbing it
-        silently is a real alternative — his call.
-      · **Grains (.305)** — a grain swap holds CARBOHYDRATE and lets protein and fat move,
-        uncompensated: at lunch against basmati, quinoa is +5.4 g protein and +4.9 g fat
-        for the same carbs, wild +4.2 g protein, sushi −2.8 g. **Nothing compensated before
-        .305 either** — the same choice just ran for a whole week — so it is a property of
-        holding carbs, not a regression. Each row states the cost and says it is not made
-        up. The alternative is routing the fat through the evening oil, the channel every
-        other swap uses. **His call; until he makes it, visible-but-uncompensated stands.**
+        non-lifting day LOST the banana it had.** He described the old behaviour the other
+        way round; a probe showed the inverse, and this is built to what the app actually
+        did (KNOWN_ISSUES, "What something CURRENTLY does is a claim to check"). A banana
+        back on rest days is a one-line default change if he wants it.
+      · **Cashews (.303) and grains (.305)** — both hold one macro and let others move
+        UNCOMPENSATED, and both say so on the row: cashews ~6 g of carbs over; quinoa at
+        lunch +5.4 g protein and +4.9 g fat against basmati, wild +4.2 g, sushi −2.8 g.
+        **Nothing compensated before .305 either** — the same choice just ran for a whole
+        week — so it is a property of holding a macro constant, not a regression. The
+        alternative is routing the fat through the evening oil. **His call; until he makes
+        it, visible-but-uncompensated stands.**
+      · **Eggs (.307-.309)** — Meal 7 is OFF by default; turning it on **trims chicken,
+        salmon, tuna and whey by about a fifth** so the target does not move. My reading
+        of "the daily macro target and other meals adjust"; the alternative is the day
+        running ~215 kcal over. It changes the Sunday batch, so it is a WEEK decision. He
+        estimated Meal 7 at ~350 kcal; the foods he named come to 216.
       On the phone: pick "nothing" at 04:15 and confirm the day still hits its carbs; pick
-      three grains and confirm the prep plan lists three pots and the list buys each
-      separately. Nut butter's selector goes at week 10 by design; sushi and arborio were
-      ALREADY selectable, .305 built their missing prep, .306 rebatched risotto per him.
+      three grains and confirm three pots on the prep plan; turn Meal 7 on and check the
+      smaller lunch portion is one he will actually eat. Nut butter's selector goes at
+      week 10 by design; sushi and arborio were ALREADY selectable — .305 built their
+      missing prep, .306 rebatched risotto per him.
 
 - [ ] JON — **Two week badges, top right of Today (v4.9.301).** Was one pill reading
       "WEEK 1" under a Week 3 session. **What to watch:** it should now read `TRAIN W3`,
@@ -178,27 +180,25 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       "how many servings?" for a food with `serving_g > 0` and multiplies into `qty_g`.
       `qty_g` must stay GRAMS — the shopping list sums it as grams.
 - [ ] NUTRITION — Label extraction is UNBLOCKED and not built. Vision passthrough was
-      verified 2026-08-22; the scanner is manual-first and works without it. The design
-      decision is already recorded in HANDOFF_NUTRITION: the call sends THE IMAGE AND
-      NOTHING ELSE, and extraction fills fields in rather than bypassing the basis rule
-      or the confirm step. `harness.mjs` `LABEL/EXIT` FAILS the moment a network call is
-      added, so whoever builds it must declare the payload there. Closes when built, or
-      when Jon says he does not want it.
+      verified 2026-08-22; the scanner is manual-first and works without it. Design
+      already recorded in HANDOFF_NUTRITION: the call sends THE IMAGE AND NOTHING ELSE,
+      and extraction fills fields rather than bypassing the basis rule or the confirm
+      step. `harness.mjs` `LABEL/EXIT` FAILS the moment a network call is added, so
+      whoever builds it must declare the payload there. Closes when built, or when Jon
+      says he does not want it.
 
 - [ ] NUTRITION — **A swapped lunch protein is bought at its COOKED weight.** Chicken
-      carries `yld:0.75`, so 135 g cooked is shopped as 180 g raw; turkey, white fish and
-      5% beef have no row, so a swapped week buys **945 g instead of 1260 g — 25% short**
-      (measured 2026-09-05). Found while fixing the shelf lookup in v4.9.303 and left
-      alone there: different defect. Shelf is now right, weight is not. Closes when a
-      swapped-in protein carries a yield — note they genuinely differ, so borrowing 0.75
-      for all three is a decision, not a default.
-- [ ] NUTRITION — `nutProgSetDinnerDefault` is an ORPHAN (index.html:21889): harness
-      guard, one functional test, and **called from nowhere in index.html** (grep,
-      2026-09-05). It is the "what I shopped for" default every per-meal pick falls back
-      to, so it can only be set by a test. Nothing is broken — the per-day picks are
-      reachable from Today and from any calendar day — but the weekly default has no
-      control. **Eighth instance of finished code with no door.** Closes when the weekly
-      setup offers it, or when it is archived as unwanted.
+      carries `yld:0.75` so 135 g cooked shops as 180 g raw; turkey, white fish and 5%
+      beef have no row, so a swapped week buys **945 g instead of 1260 — 25% short**
+      (measured 2026-09-05). Shelf is right, weight is not. Closes when a swapped-in
+      protein carries a yield — they genuinely differ, so borrowing 0.75 for all three
+      is a decision, not a default.
+- [ ] NUTRITION — `nutProgSetDinnerDefault` is an ORPHAN (index.html:21889): guarded,
+      tested, and **called from nowhere in index.html** (grep, 2026-09-05). It is the
+      "what I shopped for" default every per-meal pick falls back to, so only a test can
+      set it. Nothing is broken — per-day picks are reachable from Today and the calendar
+      — but the weekly default has no control. **Eighth instance of finished code with no
+      door.** Closes when the weekly setup offers it, or it is archived as unwanted.
 
 ## OPEN — CROSS-DOMAIN
 

@@ -445,6 +445,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .today-dayname{font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:2px;color:var(--text);text-transform:uppercase;line-height:1;}
 .today-datestr{font-size:11px;color:var(--text2);margin-top:0;letter-spacing:1px;}
 .today-week-badge{display:inline-block;background:var(--gold-dim);border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:2px 8px;border-radius:2px;margin-top:0;flex-shrink:0;}
+/* v4.9.301 — two week pills, one per domain. Nutrition's is deliberately neutral
+   rather than green: green means COMPLETED on the session cards directly below,
+   and the prefix (TRAIN / CUT) is what carries the meaning anyway. Nutrition can
+   claim a colour here whenever they want one. */
+.today-week-badges{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.today-week-badge.nut{background:transparent;border-color:var(--border2);color:var(--text2);}
 .session-tiles{padding:16px 20px;display:flex;flex-direction:column;gap:12px;margin-top:16px;}
 .session-tile{background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:space-between;}
 .session-tile:active{opacity:0.8;}
@@ -1710,7 +1716,10 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
     <div class="today-tag" id="today-greeting-tag">Today</div>
     <div class="today-dayname" id="t-dayname">Monday</div>
     <div class="today-datestr" id="t-datestr"></div>
-    <div class="today-week-badge" id="t-weekbadge">Week 1</div>
+    <div class="today-week-badges" id="t-weekbadges">
+      <span class="today-week-badge" id="t-weekbadge"></span>
+      <span class="today-week-badge nut" id="t-nutweekbadge" style="display:none;"></span>
+    </div>
   </div>
   <div id="ad-today" class="ad-slot tall" style="display:none;margin:0 0 4px;">
     <div><div class="ad-slot-label">Advertisement</div></div>
@@ -3536,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.300';
+var APP_VERSION='4.9.301';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3615,6 +3624,62 @@ window.blabGetState = function(){
     if(raw) return JSON.parse(raw);
   } catch(_){}
   return null;
+};
+
+// ── the training week, as a label ────────────────────────────
+// v4.9.301. Jon: "WEEK 1 top right against Week 3 on the session card."
+//
+// THE BADGE WAS NOT A STALE TRAINING WEEK. IT WAS A DIFFERENT PROGRAMME'S WEEK.
+// There are three week counters in this file and they answer three questions:
+//
+//   blabGetState().week   BLAB — the programme Jon is actually running.
+//   athlete.currentWeek   the AI programme's counter. It is bumped ONLY by the
+//                         coach weekly-regen flow (search `currentWeek: nextWeekN`).
+//                         Nothing in BLAB advances it, so on a BLAB account it sits
+//                         at 1 forever while BLAB climbs. This is what the badge read.
+//   progWeek()            calendar weeks since athlete.startDate, clamped 1..15.
+//                         Elapsed time, not programme position — a third answer again.
+//
+// So the two numbers on his screen were never two derivations of one week. They
+// were two different programmes, one of which he is not running.
+//
+// CALL THIS. Do not read a counter directly and do not derive one from a start
+// date: WHICH counter is correct depends on which programme is active, and that
+// decision belongs in one place rather than at every render site.
+//
+// Returns NULL when there is no training week to show — an account with neither
+// programme set up. Null means OMIT the label, not "Week 0". Nutrition reached the
+// same rule from the other side in .297; see nutProgWeekLabel.
+window.blabTrainingWeek = function(){
+  try {
+    var s = window.blabGetState && window.blabGetState();
+    // Paused counts. `paused` lives INSIDE `active` — a paused programme still has
+    // a position, and blanking the badge would read as "no programme".
+    if(s && s.active) return s.week || 1;
+  } catch(_tw){}
+  var a = (typeof athlete !== 'undefined') ? athlete : null;
+  if(a && a.aiProgramme){
+    return a.currentWeek
+        || (a.aiProgramme.week && a.aiProgramme.week.week_number)
+        || 1;
+  }
+  return null;
+};
+
+// THE PREFIX IS LOAD-BEARING, same as Nutrition's. A bare "Week 3" beside a bare
+// "Week 1" is the collision Jon reported; "TRAIN W3" beside "CUT W1" is not.
+window.blabTrainingWeekLabel = function(){
+  var w = window.blabTrainingWeek();
+  return (w == null) ? null : ('TRAIN W' + w);
+};
+// Long form for screens with room. The denominator is BLAB's 12 — it is NOT added
+// on the AI-programme branch, which has no fixed length to divide by.
+window.blabTrainingWeekLabelLong = function(){
+  var w = window.blabTrainingWeek();
+  if(w == null) return null;
+  var s = null;
+  try { s = window.blabGetState && window.blabGetState(); } catch(_tl){}
+  return (s && s.active) ? ('Week ' + w + ' of 12') : ('Week ' + w);
 };
 
 window.blabSaveState = function(state){
@@ -18765,16 +18830,30 @@ function renderTodayScreen(){
   var dateEl=document.getElementById('t-datestr');
   if(dateEl) dateEl.textContent=now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear();
 
-  // Week badge — v4.7.39 hotfix FIX 4: prefer aiProgramme.week.week_number when present
-  // (that's the live, coach-generated week number). Falls back to athlete.currentWeek
-  // then to 1 for brand-new accounts.
+  // Week badges — v4.9.301. WAS one gold "Week N" pill fed by athlete.currentWeek,
+  // which is the AI PROGRAMME's counter and nothing in BLAB advances it. That is the
+  // whole of Jon's "WEEK 1 vs Week 3": not a stale number, a different programme's.
+  // See window.blabTrainingWeek for the three counters and which answers what.
+  //
+  // Now one pill per domain, each asking its own owner. Neither is derived here.
   var weekBadge=document.getElementById('t-weekbadge');
   if(weekBadge){
-    // Use currentWeek as primary (set by weekly regen), fall back to week.week_number
-    var wkNum = (athlete && athlete.currentWeek)
-             || (athlete && athlete.aiProgramme && athlete.aiProgramme.week && athlete.aiProgramme.week.week_number)
-             || 1;
-    weekBadge.textContent = 'Week '+wkNum;
+    var _twk = (typeof window.blabTrainingWeekLabel === 'function')
+             ? window.blabTrainingWeekLabel() : null;
+    // NO FALLBACK TO THE OLD COUNTER. Reinstating it on a missing function would put
+    // the reported bug back silently, which is worse than an empty pill.
+    weekBadge.textContent = _twk || '';
+    weekBadge.style.display = _twk ? '' : 'none';
+  }
+  var nutBadge=document.getElementById('t-nutweekbadge');
+  if(nutBadge){
+    // Nutrition's, by their published contract (HANDOFF_NUTRITION, "API other domains
+    // may call"): 'CUT · TRIAL' | 'CUT W1'..'CUT W15' | null. NULL MEANS OMIT, not
+    // "Week 0" — the rehearsal sits outside the count of fifteen, so any week number
+    // computed here would be plausibly wrong. Do not derive this; call it.
+    var _nwk = (typeof nutProgWeekLabel === 'function') ? nutProgWeekLabel() : null;
+    nutBadge.textContent = _nwk || '';
+    nutBadge.style.display = _nwk ? '' : 'none';
   }
 
   // Safety net: force-render today sessions if card still shows placeholder

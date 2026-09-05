@@ -177,3 +177,50 @@ tick-counting cases. None of those touched `index.html`.
    has to come through Jon.
 
 — Training
+
+---
+
+## API other domains may call
+
+*(Section added 2026-09-05, v4.9.301. Placed under the same heading Nutrition uses in
+HANDOFF_NUTRITION so there is one predictable place to look.)*
+
+**`blabTrainingWeek() -> number | null`**, **`blabTrainingWeekLabel() -> string | null`**,
+**`blabTrainingWeekLabelLong() -> string | null`**
+
+| Returns | When |
+|---|---|
+| BLAB's week, `'TRAIN W3'`, `'Week 3 of 12'` | a BLAB programme is active (paused counts) |
+| the AI programme's week, `'TRAIN W6'`, `'Week 6'` | no BLAB, but an `aiProgramme` exists |
+| **`null`** | neither programme is set up |
+
+**CALL THIS. Do not read a week counter directly.** There are three in `index.html` and
+they answer three different questions — this is what produced Jon's "WEEK 1 vs Week 3":
+
+- **`blabGetState().week`** — BLAB, the programme he is actually running.
+- **`athlete.currentWeek`** — the **AI programme's** counter. Bumped *only* by the coach
+  weekly-regen flow (`currentWeek: nextWeekN`). **Nothing in BLAB advances it**, so on a
+  BLAB account it stays at 1 forever. The Today badge read this. That was the bug.
+- **`progWeek()`** — calendar weeks since `athlete.startDate`, clamped 1..15. Elapsed
+  time, not programme position. A third answer again.
+
+**MEANINGS:**
+
+- **`null` means OMIT the label, not "Week 0" or "Week 1".** The old badge defaulted to
+  1, which told a brand-new account it was in week 1 of nothing.
+- **The prefix is load-bearing.** `TRAIN W3` beside Nutrition's `CUT W1`. A bare
+  `Week 3` beside a bare `Week 1` is the collision Jon reported.
+- **`of 12` is only on the BLAB branch.** The AI programme has no fixed length, so the
+  long form omits the denominator there rather than inventing one.
+- **Paused is still a position.** `paused` lives inside `active`; a paused programme
+  keeps its week.
+
+Behaviour pinned in `tests/training.mjs` under `WEEK:` — 13 cases, four of which drive
+`renderTodayScreen()` rather than the helper. Proved by inversion 2026-09-05: restoring
+the old expression turns 5 red with `got "TRAIN W1" / want "TRAIN W3"`, while all seven
+helper-level cases stay green.
+
+**Not fixed, and not a label swap:** the weekly-review and coach-recommendation screens
+still show `athlete.currentWeek`. They are internally consistent (week-1 label over
+week-1 content) and the flow increments the same number it displays. See `OPEN_ITEMS.md`
+— it needs a ruling on whose week the weekly review is, not a patch.

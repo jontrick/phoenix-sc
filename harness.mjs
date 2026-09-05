@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.300'", 'version is 4.9.300');
+has("var APP_VERSION='4.9.301'", 'version is 4.9.301');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2547,6 +2547,36 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── TWO WEEK BADGES, ONE PER DOMAIN (v4.9.301) ──────────────────────────────
+// Jon: "WEEK 1" top right against "Week 3" on the session card. The badge read
+// athlete.currentWeek — the AI PROGRAMME's counter, which nothing in BLAB advances.
+//
+// THE REGRESSION PIN. This exact expression at the badge site is the bug; it is
+// cheap to reintroduce by copy-paste from the eight other currentWeek sites, and it
+// fails in a way that looks like a stale number rather than a wrong system.
+hasNotCode("weekBadge.textContent = 'Week '+wkNum;",
+  'WEEK: the badge no longer prints the AI programme counter as the training week');
+
+// STRUCTURAL — behaviour is in tests/training.mjs under WEEK:, including four cases
+// that drive renderTodayScreen itself. Proved by inversion 2026-09-05: restoring the
+// old expression turns 5 of them red with got "TRAIN W1" / want "TRAIN W3", while all
+// seven helper-level cases stay green. Presence here is not the claim; the tests are.
+hasCode('window.blabTrainingWeek = function()', 'WEEK: STRUCTURAL one place decides which counter is the training week');
+hasCode('window.blabTrainingWeekLabel = function()', 'WEEK: STRUCTURAL the published label other domains may call');
+has('id="t-weekbadge"', 'WEEK: STRUCTURAL the training pill exists in the hero');
+has('id="t-nutweekbadge"', 'WEEK: STRUCTURAL the nutrition pill exists beside it');
+
+// CROSS-DOMAIN CONSUMER PIN. Nutrition published nutProgWeekLabel() in .297 with a
+// contract that says plainly: call it, do not compute a nutrition week. This asserts
+// Training actually calls it — a second implementation here would be the same defect
+// Jon reported, one week rendered as two numbers.
+hasCode('nutProgWeekLabel()', 'WEEK: the nutrition week is ASKED FOR, not derived in Training');
+// A negative pin here CANNOT distinguish domains — codeSrc() is the whole file, and
+// Nutrition's own provider legitimately contains "'CUT W' + wk". Tried it; it went red
+// against correct code. That Training passes the label through rather than rebuilding it
+// is asserted where it can be: tests/training.mjs, "the rehearsal label is passed
+// through, not rewritten".
 
 // ── TODAY CARDS, ONE PER SESSION (v4.9.298) ─────────────────────────────────
 // The in-progress takeover ran BEFORE the calendar renderer and returned, replacing both

@@ -15,6 +15,22 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ---
 
+- [ ] TRAINING/PM — **The weekly-review and coach cluster still shows the AI programme's
+      week to a BLAB user.** Same root cause as the badge fixed in v4.9.301, NOT fixed
+      with it, and deliberately so. Sites: the Sunday "Week N Complete" card on Today
+      (`mark`, ~L30601), the "Week N Review" title (`openWeeklyCheckin`, ~L30841), and
+      "Coach Recommendation — Week N" / "Week N — Step 1 of 2" (~L31206, ~L31871).
+      **WHY A LABEL SWAP IS THE WRONG FIX.** Those screens are internally CONSISTENT
+      today: a week-1 label over week-1 content. Relabelling them `TRAIN W3` while the
+      content still comes from `aiProgramme.week` would trade a visible disagreement for
+      a label that lies about what is under it. Worse, the flow computes `nextN = weekN+1`
+      and writes it back (`currentWeek: nextWeekN`, ~L14852) — display and increment are
+      the same number, so changing the display forks the counter.
+      **The real question is whose week the weekly review is**, and that is a decision,
+      not a patch. Owner **???** — PM ruling wanted. Jon has not reported these; found
+      while fixing the badge, so it is not urgent, but it is the same complaint waiting
+      to happen on a Sunday.
+
 ## WAITING ON JON
 
 - [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together
@@ -62,6 +78,14 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       Also worth his check: pick "nothing" and confirm the day still hits its carb
       target — the missing 25g is redistributed into rice/sweet potato, so those
       portions grow, and the shopping list grows with them.
+
+- [ ] JON — **Two week badges, top right of Today (v4.9.301).** Was one pill reading
+      "WEEK 1" under a Week 3 session. **What to watch:** it should now read `TRAIN W3`,
+      matching the session card. **The nutrition pill is EXPECTED TO BE ABSENT until
+      7 Sept** — the cut opens then, and Nutrition's contract says an unopened programme
+      has no week and the label must be omitted rather than shown as "Week 0". So one
+      pill before the 7th and two from the 7th is correct behaviour, not a half-built
+      feature. Closes when he confirms the training number matches the session card.
 
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
@@ -142,17 +166,18 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — CROSS-DOMAIN
 
-- [ ] TRAINING — Today header shows two week numbers that disagree ("WEEK 1" top right
-      vs "Week 3" on the session card), and Jon wants the NUTRITION week shown beside
-      the training one. The header is Training's; the nutrition half is ready to use.
-      **Call `nutProgWeekLabel()`** &mdash; do NOT derive a week from the start date.
-      Returns `'CUT · TRIAL'`, `'CUT W1'`&hellip;`'CUT W15'`, or **`null` meaning omit**.
-      Week 0 is the rehearsal and sits outside the count of fifteen, so any independent
-      formula gets it wrong plausibly. Contract and meanings in HANDOFF_NUTRITION under
-      "API other domains may call"; pinned in tests/nutrition.mjs under
-      `CONTRACT nutProgWeekLabel`. Nutrition could not message Training this session
-      (no peer messaging available) &mdash; Jon is relaying. Closes when the header shows
-      both weeks distinguishably.
+- [x] TRAINING — Today header showed two disagreeing week numbers; nutrition week wanted
+      beside the training one. **DONE v4.9.301.** Two pills: `TRAIN W3` from
+      `blabTrainingWeek()`, `CUT W1` from Nutrition's `nutProgWeekLabel()` — called, not
+      derived, and `null` omits the pill rather than rendering "Week 0". Their contract
+      is honoured including the `CUT · TRIAL` passthrough (tests/training.mjs, `WEEK:`).
+      **THE DIAGNOSIS WAS NOT WHAT THE SYMPTOM SUGGESTED**, and it is worth keeping:
+      those were never two derivations of one week. `athlete.currentWeek` is the AI
+      PROGRAMME's counter, bumped only by the coach weekly-regen flow; nothing in BLAB
+      advances it, so it sits at 1 forever on a BLAB account. A third counter,
+      `progWeek()`, returns calendar weeks since `athlete.startDate` clamped 1..15.
+      Three counters, three questions. `window.blabTrainingWeek()` now decides which one
+      applies, in one place.
 
 
 

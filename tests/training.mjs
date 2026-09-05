@@ -3781,4 +3781,179 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._blabRenderTodayFromCalendar(card, inner, 5);
     assert.equal(card._attrs.onclick, undefined, 'no whole-card tap on a finished day');
   });
+
+  // ── TWO WEEKS, NAMED (v4.9.301) ───────────────────────────────────────────
+  // Jon: "WEEK 1 top right but the session card says IN PROGRESS · WEEK 3".
+  //
+  // The badge was reading athlete.currentWeek — the AI PROGRAMME's counter, which
+  // only the coach weekly-regen flow bumps. Nothing in BLAB touches it, so on his
+  // account it is pinned at 1 while BLAB climbs. Two programmes, not two derivations.
+  //
+  // DATE LITERALS: none of these depend on today's position. The nutrition side is
+  // driven by stubbing nutProgWeekLabel to each of its three contract values, so
+  // these do not decay when the cut opens on 7 Sept or closes in December — which a
+  // test asserting the real label WOULD do, silently, per the rule at the top.
+
+  // A hero stub that captures both pills while the real renderTodayScreen runs.
+  const withHero = (fn) => {
+    const train = stubEl(), nut = stubEl();
+    const inner = { innerHTML: '', style: {}, querySelector: () => null };
+    const card = { style: {}, querySelector: () => inner, removeAttribute: () => {},
+                   setAttribute: () => {}, classList: { contains: () => false } };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) =>
+      id === 't-weekbadge' ? train :
+      id === 't-nutweekbadge' ? nut :
+      id === 'card-today-session' ? card : null;
+    try { fn(); } finally { app.document.getElementById = real; }
+    return { train, nut, inner };
+  };
+
+  const onBlabWeek = (w) => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: w, last_completed_day: 1,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: NEWER });
+  };
+
+  test('WEEK: the training week is BLAB\'s, not the AI programme counter', () => {
+    // THE REPORTED BUG, at the smallest scale it can be reproduced. Both numbers are
+    // present and they disagree; the badge must take the programme he is running.
+    onBlabWeek(3);
+    app.athlete = { id: UID, currentWeek: 1, aiProgramme: { week: { week_number: 1 } } };
+    assert.equal(app.blabTrainingWeek(), 3, 'BLAB is the live programme — its week wins');
+    assert.equal(app.blabTrainingWeekLabel(), 'TRAIN W3');
+  });
+
+  test('WEEK: with no BLAB programme it falls back to the AI programme', () => {
+    // Not everyone is on BLAB. The old number was not wrong everywhere, only here.
+    reset(); signIn(UID);
+    app.athlete = { id: UID, currentWeek: 6, aiProgramme: { week: { week_number: 6 } } };
+    assert.equal(app.blabTrainingWeek(), 6, 'the AI programme owns its own week');
+    assert.equal(app.blabTrainingWeekLabel(), 'TRAIN W6');
+  });
+
+  test('WEEK: an inactive BLAB stub does not shadow the AI programme', () => {
+    // v4.9.100's rule, reapplied: `active:false` is not a programme.
+    reset(); signIn(UID);
+    seed(KEY, { active: false, week: 9, _ts: NEWER });
+    app.athlete = { id: UID, currentWeek: 2, aiProgramme: { week: { week_number: 2 } } };
+    assert.equal(app.blabTrainingWeek(), 2, 'a dead local stub must not win');
+  });
+
+  test('WEEK: NULL when there is no programme at all — never "Week 1"', () => {
+    // The old code defaulted to 1, so a brand-new account was told it was in week 1
+    // of something it had not started. Null means omit, the rule Nutrition reached
+    // from the other side in .297.
+    reset(); signIn(UID);
+    app.athlete = { id: UID };
+    assert.equal(app.blabTrainingWeek(), null, 'no programme, no week');
+    assert.equal(app.blabTrainingWeekLabel(), null, 'and no label to render');
+  });
+
+  test('WEEK: a PAUSED programme still has a position', () => {
+    // `paused` lives inside `active`. Blanking the badge would read as "no programme"
+    // when he has simply stopped for a week.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, paused: true, week: 7,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: NEWER });
+    assert.equal(app.blabTrainingWeekLabel(), 'TRAIN W7');
+  });
+
+  test('WEEK: the prefixes make the two weeks unmistakable', () => {
+    // Nutrition: "a bare Week 1 next to Training's Week 1 is exactly the collision".
+    // Both sides of that agreement asserted here, from the consumer end.
+    onBlabWeek(3);
+    app.athlete = { id: UID, currentWeek: 1 };
+    const t = app.blabTrainingWeekLabel();
+    assert.ok(/^TRAIN W/.test(t), 'training carries its own prefix, got ' + t);
+    assert.ok(!/^Week /.test(t), 'and is never a bare "Week N"');
+    ['CUT · TRIAL', 'CUT W1', 'CUT W15'].forEach((n) => {
+      assert.ok(!/^Week /.test(n) && n !== t, n + ' cannot be confused with ' + t);
+    });
+  });
+
+  test('WEEK: the long form names its denominator only when it has one', () => {
+    onBlabWeek(3);
+    assert.equal(app.blabTrainingWeekLabelLong(), 'Week 3 of 12', 'BLAB is 12 weeks');
+    reset(); signIn(UID);
+    app.athlete = { id: UID, currentWeek: 6, aiProgramme: { week: { week_number: 6 } } };
+    assert.equal(app.blabTrainingWeekLabelLong(), 'Week 6',
+      'the AI programme has no fixed length, so inventing "of 12" here would be a claim');
+  });
+
+  // ── THE SCREEN, NOT THE HELPER ────────────────────────────────────────────
+  // Every WEEK case above passes if the badge render site is never reached or still
+  // reads the old counter. These drive renderTodayScreen, which is the route Jon takes.
+
+  test('WEEK: the Today SCREEN paints the training week from BLAB', () => {
+    onBlabWeek(3);
+    app.athlete = { id: UID, currentWeek: 1, aiProgramme: { week: { week_number: 1 } } };
+    const { train } = withHero(() => app.renderTodayScreen());
+    assert.equal(train.textContent, 'TRAIN W3',
+      'the badge he is looking at — it used to say "Week 1" here');
+    assert.ok(train.style.display !== 'none', 'and it is visible');
+  });
+
+  test('WEEK: the Today SCREEN paints the nutrition week beside it', () => {
+    onBlabWeek(3);
+    app.athlete = { id: UID, currentWeek: 1 };
+    const realNut = app.nutProgWeekLabel;
+    app.nutProgWeekLabel = () => 'CUT W1';
+    try {
+      const { train, nut } = withHero(() => app.renderTodayScreen());
+      assert.equal(train.textContent, 'TRAIN W3');
+      assert.equal(nut.textContent, 'CUT W1', 'both weeks, separately labelled');
+      assert.ok(nut.style.display !== 'none', 'nutrition pill visible');
+    } finally { app.nutProgWeekLabel = realNut; }
+  });
+
+  test('WEEK: the rehearsal label is passed through, not rewritten', () => {
+    // 'CUT · TRIAL' is Nutrition's wording for week 0 precisely so nobody renders
+    // "Week 0". Training must not helpfully turn it into a number.
+    onBlabWeek(3);
+    app.athlete = { id: UID };
+    const realNut = app.nutProgWeekLabel;
+    app.nutProgWeekLabel = () => 'CUT · TRIAL';
+    try {
+      const { nut } = withHero(() => app.renderTodayScreen());
+      assert.equal(nut.textContent, 'CUT · TRIAL', 'shown exactly as published');
+      assert.ok(!/Week 0|W0/.test(nut.textContent), 'and never as a zero');
+    } finally { app.nutProgWeekLabel = realNut; }
+  });
+
+  test('WEEK: NULL from nutrition hides the pill — it does not render "Week 0"', () => {
+    // The contract's sharpest clause. Before the cut opens and after it closes there
+    // is no nutrition week, and an empty gold pill would look like a bug.
+    onBlabWeek(3);
+    app.athlete = { id: UID };
+    const realNut = app.nutProgWeekLabel;
+    app.nutProgWeekLabel = () => null;
+    try {
+      const { train, nut } = withHero(() => app.renderTodayScreen());
+      assert.equal(nut.style.display, 'none', 'omitted, per the contract');
+      assert.equal(nut.textContent, '', 'and carrying no stale text');
+      assert.equal(train.textContent, 'TRAIN W3', 'training is unaffected by nutrition');
+    } finally { app.nutProgWeekLabel = realNut; }
+  });
+
+  test('WEEK: a missing nutrition provider is survivable, not fatal', () => {
+    // Cross-domain call. If Nutrition renames it, Today must still paint.
+    onBlabWeek(3);
+    app.athlete = { id: UID };
+    const realNut = app.nutProgWeekLabel;
+    app.nutProgWeekLabel = undefined;
+    try {
+      const { train, nut } = withHero(() => app.renderTodayScreen());
+      assert.equal(train.textContent, 'TRAIN W3', 'the training week still renders');
+      assert.equal(nut.style.display, 'none', 'and the absent one is simply omitted');
+    } finally { app.nutProgWeekLabel = realNut; }
+  });
+
+  test('WEEK: with no training programme the pill is hidden, not left stale', () => {
+    reset(); signIn(UID);
+    app.athlete = { id: UID };
+    const { train } = withHero(() => app.renderTodayScreen());
+    assert.equal(train.style.display, 'none', 'nothing to show');
+    assert.equal(train.textContent, '', 'and the placeholder "Week 1" is gone');
+  });
 }

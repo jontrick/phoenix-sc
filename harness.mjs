@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.308'", 'version is 4.9.308');
+has("var APP_VERSION='4.9.309'", 'version is 4.9.309');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3084,7 +3084,7 @@ hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored')
 
 // ── Tonight's dinner ────────────────────────────────────────────────────────
 hasCode('_NUT_PROG_DINNER_PROTEIN', 'NIGHT: four evening proteins exist');
-hasCode('_NUT_PROG_MIDAM_DAIRY', 'DAIRY: the mid-morning dairy can be swapped');
+hasCode('_NUT_PROG_MIDAM_PROTEIN', 'DAIRY: the mid-morning protein can be swapped');
 
 // ── The 04:15 slot ──────────────────────────────────────────────────────────
 hasCode('_NUT_PROG_PRE_OPTIONS',      'PRE: intra, banana or nothing');
@@ -3200,6 +3200,25 @@ hasCode('name = _pick.n; grams = _pick.g;',
 // said steak, and a default set in one could not be read by the other.
 hasNotCode("{ id:'sirloin',  n:'Sirloin steak',  k:201",
         'NIGHT: dinner has ONE list of proteins, not two disagreeing ones');
+// ── egg whites at 09:30 (v4.9.309) ─────────────────────────────────────────
+hasCode("{ id:'whites',  n:'Egg whites', grp:'protein', g:184",
+        'WHITES: offered at 09:30, sized to the yoghurt\'s 20 g of protein');
+hasNotCode('_NUT_PROG_MIDAM_DAIRY',
+        'WHITES: and the list is no longer CALLED a dairy list, because egg whites ' +
+        'are in it — the name is how the next reader sizes a non-dairy from a ' +
+        'dairy assumption. The slot ID stays midam_dairy: that key is in Jon\'s ' +
+        'stored picks and renaming it would silently drop every choice he has made');
+hasCode("if(typeof _dp.u === 'string') unit = _dp.u;",
+        'WHITES: an option carries its own UNIT — they rendered as 184 g and ' +
+        'shopped as 1288 g, a weight for a food sold by volume');
+hasCode('_mdPick.id !== _mdBase.id',
+        'WHITES: the carbohydrate they do NOT carry rejoins the ladder — 200 g of ' +
+        'yoghurt is 8 g of carbs and 184 ml of whites is 1.3, and the day landed ' +
+        '6.1 g under before this');
+hasCode('piece:50, fixed:true',
+        'WHITES: two whole eggs are TWO EGGS — the protein trim scaled them to ' +
+        '1.55, which is 11 a week and not a thing anyone can eat');
+
 // ── Meal 7, before bed (v4.9.308) ──────────────────────────────────────────
 hasCode("{ id:'bed',    t:'21:00'", 'BED: the 21:00 meal exists');
 hasCode('function nutProgBedOn(',      'BED: it can be asked whether it is on');
@@ -3216,9 +3235,10 @@ hasCode('function _nutProgTrimmable(',
 hasCode('_nutProgTrimmable(_bix2, dateKey)',
         'BED: the oil gets back the fat the trim removed — trimming chicken and ' +
         'salmon took 6.05 g of fat with it and the day came in 5.8 g UNDER');
-hasCode("if(_pCut && _pt.grp === 'protein')",
+hasCode("if(_pCut && _pt.grp === 'protein' && !_pt.fixed)",
         'BED: a swapped multi-part breakfast does not escape the trim — it did, ' +
-        'and eggs plus Meal 7 ran +19.8 g of protein');
+        'and eggs plus Meal 7 ran +19.8 g of protein (the `fixed` exclusion came ' +
+        'in .309, so counted foods like two eggs are not scaled to 1.55)');
 hasCode('_nutIsPureProtein(it) && ',
         'BED: the room comes proportionally out of the protein rows');
 

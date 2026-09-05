@@ -2322,7 +2322,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const d = dom();
     onDay('2026-09-16', () => app.nutOpenSwapSheet());
     const html = d.lastCreatedHtml();
-    assert.ok(html.indexOf('Mid-morning dairy') >= 0, 'the section is there');
+    assert.ok(html.indexOf('Mid-morning protein') >= 0,
+      'the section is there — renamed from "dairy" in .309, because egg whites are ' +
+      'in that list now and a name that lies is how the next reader sizes a ' +
+      'non-dairy from a dairy assumption');
     assert.ok(html.indexOf('Cottage cheese') >= 0, 'with cottage cheese');
     assert.ok(html.indexOf('180 g') >= 0, 'and its matched serve size');
   });
@@ -3567,6 +3570,110 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(row, 'the row exists to be tapped');
     d.fire(row, 'click');
     assert.ok(bedOf('2026-09-16'), 'and the tap reached the plate');
+  });
+
+  // ── egg whites at 09:30 ──────────────────────────────────────────────────
+  // v4.9.309. Jon: "for days when he wants more whole food protein and less
+  // dairy". Sized to the protein, like every other option in that list.
+
+  const midamOf = (d) => (app.nutProgMealsOn(d, 'basmati') || [])
+    .filter((m) => m.id === 'midam')[0].items[0];
+
+  test('WHITES the 09:30 slot offers egg whites beside the dairy', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    assert.equal(midamOf(d).n, 'Greek yoghurt, 0%', 'yoghurt is still the default');
+    app.nutProgSetNightly(d, 'midam_dairy', 'whites');
+    assert.equal(midamOf(d).n, 'Egg whites', 'and the whites can be chosen');
+  });
+
+  test('WHITES are sized to land the same protein as the yoghurt', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const yog = midamOf(d).p;
+    app.nutProgSetNightly(d, 'midam_dairy', 'whites');
+    const w = midamOf(d);
+    assert.equal(w.g, 184, '184 ml, not 200 — sized to the macro, not swapped by weight');
+    assert.ok(Math.abs(w.p - yog) <= 0.5,
+      'landing the same 20 g of protein: ' + w.p + ' against the yoghurt\'s ' + yog);
+  });
+
+  test('WHITES are POURED, not weighed', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetNightly(d, 'midam_dairy', 'whites');
+    assert.equal(midamOf(d).u, ' ml',
+      'they rendered as "184 g" and shopped as 1288 g before an option could carry ' +
+      'its own unit — a weight for a food sold by volume');
+    const days = app._nutProgWeekDates(1);
+    days.forEach((dd) => app.nutProgSetNightly(dd, 'midam_dairy', 'whites'));
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    assert.equal(shopItem(shop, 'Egg whites').unit, 'ml', 'and the list agrees');
+    assert.equal(shopItem(shop, 'Egg whites').qty, 1288, 'seven days at 184 ml');
+  });
+
+  test('WHITES land on the PROTEIN shelf, not with the yoghurt', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    days.forEach((dd) => app.nutProgSetNightly(dd, 'midam_dairy', 'whites'));
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    let shelf = null;
+    shop.groups.forEach((g) => g.items.forEach((it) => { if (it.n === 'Egg whites') shelf = g.id; }));
+    assert.equal(shelf, 'protein',
+      'an option declares its own shelf — this one sits in a list the shopping ' +
+      'table maps to DAIRY, and egg whites are not a dairy');
+    assert.equal(!!shopItem(shop, 'Greek yoghurt, 0%'), false, 'and no yoghurt for a week that eats none');
+  });
+
+  test('WHITES the day still lands — the carbohydrate they do not carry is replaced', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const t = app.nutProgTargetsOn(d);
+    // MEASURED: 200 g of yoghurt carries 8 g of carbohydrate and 184 ml of whites
+    // carries 1.3, so the day came in 6.1 g UNDER before this delta joined the
+    // ladder. Cottage cheese and skyr are within 0.3 g of the yoghurt, which is
+    // why nothing here needed balancing until now.
+    ['yoghurt', 'cottage', 'skyr', 'whites'].forEach((id) => {
+      app.nutProgSetNightly(d, 'midam_dairy', id);
+      const got = app.nutProgDayTotals(d, 'basmati');
+      assert.ok(Math.abs(got.c - t.total.c) <= 2,
+        id + ' leaves the day ' + (got.c - t.total.c).toFixed(1) + ' g off on carbs');
+      assert.ok(Math.abs(got.f - t.total.f) <= 1.5,
+        id + ' leaves the day ' + (got.f - t.total.f).toFixed(1) + ' g off on fat');
+    });
+  });
+
+  test('WHITES all three egg slots at once still land the day', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    days.forEach((dd) => {
+      app.nutProgSetNightly(dd, 'midam_dairy', 'whites');
+      app.nutProgSetNightly(dd, 'bfast_protein', 'eggs');
+      app.nutProgSetBed(dd, true);
+    });
+    const d = days[2];
+    const t = app.nutProgTargetsOn(d), got = app.nutProgDayTotals(d, 'basmati');
+    assert.ok(Math.abs(got.c - t.total.c) <= 2, 'carbs: ' + (got.c - t.total.c).toFixed(1));
+    assert.ok(Math.abs(got.f - t.total.f) <= 2, 'fat: ' + (got.f - t.total.f).toFixed(1));
+    assert.ok((got.p - t.total.p) <= 15,
+      'and protein runs ' + (got.p - t.total.p).toFixed(1) + ' g over — the breakfast ' +
+      'egg option\'s own declared surplus, not three slots stacking');
+    // Two eggs are TWO EGGS. The protein trim scaled them to 1.55 before `fixed`,
+    // which is 11 a week and not a thing anyone can eat.
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    assert.equal(shopItem(shop, 'Eggs, whole').qty, 14, 'two a day, seven days');
+    assert.ok(shopItem(shop, 'Egg whites').qty > 4000,
+      'and the whites absorb the whole trim instead: ' + shopItem(shop, 'Egg whites').qty + ' ml');
+  });
+
+  test('WHITES the sheet offers them, and the section is not called dairy', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-night="midam_dairy|whites"') >= 0, 'the row is there');
+    assert.ok(html.indexOf('Mid-morning protein') >= 0, 'under an honest heading');
+    assert.equal(html.indexOf('Mid-morning dairy'), -1, 'and not the old one');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

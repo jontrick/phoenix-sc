@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.308';
+var APP_VERSION='4.9.309';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21344,6 +21344,15 @@ function nutProgMealsOn(dateKey, riceId){
   var bedOn = (typeof nutProgBedOn === 'function') && nutProgBedOn(dateKey);
   var _bedM = bedOn ? nutProgBedMacros(dateKey, ix) : null;
   if(_bedM) _shortC = Math.round((_shortC - _bedM.c) * 10) / 10;
+  // The 09:30 pick can move carbohydrate as well as protein. Egg whites carry
+  // 6.7 g less than the yoghurt they replace; cottage cheese and skyr are within
+  // 0.3 g, so before there was nothing here worth balancing.
+  var _mdPick = _nutProgNightlyOpt('midam_dairy', nutProgNightlyOn(dateKey).midam_dairy);
+  var _mdBase = _nutProgNightlyBase('midam_dairy');
+  if(_mdPick && _mdBase && _mdPick.id !== _mdBase.id){
+    _shortC = Math.round((_shortC +
+      ((_mdBase.c * _mdBase.g / 100) - (_mdPick.c * _mdPick.g / 100))) * 10) / 10;
+  }
   var _trim = (typeof _nutProgTrimmable === 'function') ? _nutProgTrimmable(ix, dateKey) : { p:0, f:0 };
   var _dayProtBase = _trim.p;
   var _shortP = _bedM ? _bedM.p : 0;
@@ -21392,7 +21401,9 @@ function nutProgMealsOn(dateKey, riceId){
             var _pt = _bp.parts[_pi], _pg = _nutPartG(_pt, ix);
             // Meal 7 makes room in the protein parts too — the vegetables are
             // not a protein source and are left alone.
-            if(_pCut && _pt.grp === 'protein') _pg = Math.round(_pg * (1 - _pCut) * 10) / 10;
+            // `fixed` parts are counted, not weighed — two eggs are two eggs.
+            if(_pCut && _pt.grp === 'protein' && !_pt.fixed)
+              _pg = Math.round(_pg * (1 - _pCut) * 10) / 10;
             var _pm = { k:_pt.k * _pg / 100, p:_pt.p * _pg / 100,
                         c:_pt.c * _pg / 100, f:_pt.f * _pg / 100 };
             items.push({ n:_pt.n, g:_pg, u:_pt.u || '', carb:!!_pt.carb, count:!!_pt.count,
@@ -21412,12 +21423,14 @@ function nutProgMealsOn(dateKey, riceId){
           mac = { k: pick.k * g / 100, p: pick.p * g / 100, c: pick.c * g / 100, f: pick.f * g / 100 };
         }
       }
-      // Mid-morning dairy, chosen per meal. Sized to hold the protein.
+      // Mid-morning protein, chosen per meal. Sized to hold the protein — the
+      // 184 ml of egg whites and the 200 g of yoghurt both land 20 g.
       if(M.id === 'midam' && it.n === _NUT_MIDAM_DAIRY_ITEM){
         var _md = nutProgNightlyOn(dateKey);
         var _dp = _nutProgNightlyOpt('midam_dairy', _md.midam_dairy);
         if(_dp && !_dp.base){
           name = _dp.n; grams = _dp.g;
+          if(typeof _dp.u === 'string') unit = _dp.u;
           mac = { k:_dp.k * _dp.g / 100, p:_dp.p * _dp.g / 100,
                   c:_dp.c * _dp.g / 100, f:_dp.f * _dp.g / 100 };
         }
@@ -21757,7 +21770,7 @@ function _nutProgTrimmable(ix, dateKey){
       if(bp && !bp.base && bp.parts){
         for(var q = 0; q < bp.parts.length; q++){
           var pt = bp.parts[q];
-          if(pt.grp !== 'protein') continue;
+          if(pt.grp !== 'protein' || pt.fixed) continue;
           var pg = _nutPartG(pt, ix);
           p += pt.p * pg / 100; f += pt.f * pg / 100;
         }
@@ -22184,7 +22197,7 @@ var _NUT_PROG_SWAPS = {
 
 // A scoop of greens. Values are a typical powder — Jon can scan his own tub and
 // the scanner's basis rule will store it properly.
-var _NUT_MIDAM_DAIRY_ITEM = 'Greek yoghurt, 0%';  // the plate row the dairy pick replaces
+var _NUT_MIDAM_DAIRY_ITEM = 'Greek yoghurt, 0%';  // the plate row the 09:30 pick replaces
 var _NUT_DINNER_PROTEIN_ITEM = 'Salmon fillet';   // the plate row the nightly pick replaces
 var _NUT_GREENS_POWDER = { n:'Greens powder', g:10, k:350, p:20, c:50, f:5 };
 var _NUT_GREENS_SWAPPABLE = { lunch:'Mixed vegetables', dinner:'Greens' };
@@ -22234,7 +22247,7 @@ var _NUT_PROG_DINNER_PROTEIN = [
 // therefore states. Same rule as the grains: visible beats silently rebalanced.
 var _NUT_BFAST_PROTEIN_ITEM = 'Whey protein';   // the plate row the pick replaces
 var _NUT_EGG_WHITE = { n:'Egg whites',  grp:'protein', g:[245,297,322,361,374], u:' ml', k:52,  p:10.9, c:0.7, f:0.17 };
-var _NUT_EGG_WHOLE = { n:'Eggs, whole', grp:'protein', g:100, u:'',    k:143, p:12.6, c:0.7, f:9.5, piece:50 };
+var _NUT_EGG_WHOLE = { n:'Eggs, whole', grp:'protein', g:100, u:'',    k:143, p:12.6, c:0.7, f:9.5, piece:50, fixed:true };
 var _NUT_EGG_VEG = [
   { n:'Spinach',   grp:'produce', g:50, u:'', k:23, p:2.9, c:1.4, f:0.4, carb:true },
   { n:'Mushrooms', grp:'produce', g:30, u:'', k:22, p:3.1, c:3.3, f:0.3, carb:true },
@@ -22279,10 +22292,31 @@ function _nutProgPlateRowIn(mealId, name){
   return null;
 }
 
-var _NUT_PROG_MIDAM_DAIRY = [
+// ── the 09:30 protein ──────────────────────────────────────────────────────
+// v4.9.309. Jon asked for egg whites here "for days when he wants more whole
+// food protein and less dairy".
+//
+// THE LIST STOPPED BEING A DAIRY LIST, so it stopped being called one. A list
+// named MIDAM_DAIRY with egg whites in it is the two-vocabularies trap in
+// miniature — the next person to read it sizes a non-dairy from a dairy
+// assumption. The SLOT ID stays `midam_dairy`, because that key is in Jon's
+// stored picks on his phone and renaming it would silently drop every choice he
+// has already made.
+//
+// Sized to the macro, like everything else here: 184 ml lands the same 20 g of
+// protein as 200 g of yoghurt. What it does NOT bring is the yoghurt's 8 g of
+// carbohydrate, and that gap joins the same ladder that balances 04:15 and
+// Meal 7 — measured at 6.1 g under the day's target before it did.
+var _NUT_PROG_MIDAM_PROTEIN = [
   { id:'yoghurt', n:'Greek yoghurt, 0%', g:200, k:57, p:10,   c:4.0, f:0.2, base:true },
   { id:'cottage', n:'Cottage cheese',    g:180, k:81, p:11,   c:4.3, f:2.3 },
-  { id:'skyr',    n:'Skyr, natural',     g:190, k:63, p:10.6, c:4.0, f:0.2 }
+  { id:'skyr',    n:'Skyr, natural',     g:190, k:63, p:10.6, c:4.0, f:0.2 },
+  // Not a dairy, and it declares its own shelf so the shopping list does not
+  // file it with the yoghurt. 184 ml is the volume that lands the same 20 g of
+  // protein the 200 g of yoghurt does — sized to the macro, like every other
+  // option in this file, rather than swapped by weight.
+  { id:'whites',  n:'Egg whites', grp:'protein', g:184, u:' ml',
+    k:52, p:10.9, c:0.7, f:0.17 }
 ];
 
 var _NUT_PROG_DINNER_VEG = [
@@ -22418,7 +22452,7 @@ function _nutNightlyIdByName(name){
 function _nutProgSwapRow(name){
   var sets = [['protein', _NUT_PROG_DINNER_PROTEIN],
               ['produce', _NUT_PROG_DINNER_VEG],
-              ['dairy',   _NUT_PROG_MIDAM_DAIRY],
+              ['dairy',   _NUT_PROG_MIDAM_PROTEIN],
               ['fat',     _NUT_PROG_NUTS],
               ['fat',     _NUT_PROG_NUT_BUTTER],
               ['protein', _NUT_PROG_BFAST_PROTEIN],
@@ -22441,7 +22475,7 @@ function _nutProgSwapRow(name){
 function _nutProgNightlyOpt(slot, id){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
            : (slot === 'dinner_veg')     ? _NUT_PROG_DINNER_VEG
-           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY
+           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_PROTEIN
            : (slot === 'bfast_protein')  ? _NUT_PROG_BFAST_PROTEIN
            : (_NUT_PROG_FAT_SLOTS[slot]  ? _NUT_PROG_FAT_SLOTS[slot].opts : null);
   if(!list) return null;
@@ -22450,7 +22484,7 @@ function _nutProgNightlyOpt(slot, id){
 }
 function _nutProgNightlyBase(slot){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
-           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY
+           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_PROTEIN
            : (slot === 'bfast_protein')  ? _NUT_PROG_BFAST_PROTEIN
            : (_NUT_PROG_FAT_SLOTS[slot]  ? _NUT_PROG_FAT_SLOTS[slot].opts : _NUT_PROG_DINNER_VEG);
   for(var i = 0; i < list.length; i++) if(list[i].base) return list[i];
@@ -22622,7 +22656,7 @@ function nutOpenSwapSheet(forDate){
   });
   [['dinner_protein', 'Tonight&rsquo;s protein', _NUT_PROG_DINNER_PROTEIN],
    ['dinner_veg',     'Tonight&rsquo;s greens &mdash; fresh or shake', _NUT_PROG_DINNER_VEG],
-   ['midam_dairy',    'Mid-morning dairy',                            _NUT_PROG_MIDAM_DAIRY]
+   ['midam_dairy',    'Mid-morning protein',                          _NUT_PROG_MIDAM_PROTEIN]
   ].concat(fatSecs).forEach(function(sec){
     var slot = sec[0], label = sec[1], opts = sec[2], note = sec[3] || '';
     h += '<div style="margin-bottom:16px;">';

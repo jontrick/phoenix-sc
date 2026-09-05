@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.312'", 'version is 4.9.312');
+has("var APP_VERSION='4.9.313'", 'version is 4.9.313');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -782,9 +782,9 @@ hasNotCode('data-nut-plan-food', 'DAY: planner-only food control folded into the
 
 // -- Week/day mismatch + view persistence (v4.9.211) --
 hasCode("else if(_nutTab === 'meals')     content = _nutTabMeals(ns);", 'BUG1: the day card is reachable from the week view');
-hasCode("(_nutTab === 'meals' || _nutTab === 'recipes') && t.key === 'week'",
-        'BUG1: WEEK stays lit on the day drill-down, and on the recipe library ' +
-        'it now leads to — a view with no lit tab reads as a screen you fell into');
+hasCode("['meals','recipes','programme'].indexOf(_nutTab) >= 0 && t.key === 'week'",
+        'BUG1: PLAN stays lit on the day drill-down, and on the two views it now ' +
+        'leads to — a view with no lit tab reads as a screen you fell into');
 hasCode('function _nutSaveView(', 'BUG2: the view inside the screen is persisted');
 hasCode('function _nutRestoreView(', 'BUG2: and restored');
 hasCode("if(typeof _nutRestoreView==='function') _nutRestoreView();", 'BUG2: navTo restores it instead of forcing today');
@@ -3056,8 +3056,8 @@ hasCode('function _nutProgUpcomingWeekDates(',
 // EXISTING IS NOT REACHED. Both of these were built, tested and called by nothing
 // — the list existed only as a function, and Jon opened the app to find prose
 // where his shopping list should be. Guard the CALL, not the definition.
-hasCode('_nutProgDayPlanCard(wk) + _nutProgListCard(wk)',
-        'SHOP: the WEEK tab RENDERS the day plan and the list — ' +
+hasCode('function _nutProgShopTab(',
+        'SHOP: the list has a TAB that renders it — ' +
         'and in that order, because you choose the evenings before you read the list they produce');
 hasCode('function _nutProgListCard(',  'SHOP: the list has a renderer at all');
 hasCode('function nutProgListText(',   'SHOP: and a plain-text export for the phone');
@@ -3139,7 +3139,10 @@ hasCode('function _nutTabProgramme(',        'PROGCAL: the programme tab exists'
 hasCode('function nutProgWeekLabel(',       'WEEKLBL: the nutrition week is published as a label');
 hasCode("'CUT W' + wk",                     'WEEKLBL: prefixed, so it cannot be read as the training week');
 hasNotCode("return 'Week 0'",               'WEEKLBL: the rehearsal is never shown as week zero');
-hasCode("{key:'programme',label:'PROGRAMME'}", 'PROGCAL: it is in the tab bar');
+hasCode("_nutTab === 'programme') content = _nutTabProgramme(ns)",
+        'PROGCAL: the ROUTER still reaches it. It lost its tab in the v4.9.313 ' +
+        'collapse and is reached from the plan instead — the guard follows the ' +
+        'door, because "no tab" and "no way in" are different things');
 hasCode("_nutTab === 'programme'",           'PROGCAL: and the ROUTER reaches it');
 hasCode('function _nutProgCalendarCard(',    'PROGCAL: the week grid exists');
 hasCode('data-prog-cal-day',                 'PROGCAL: each day is tappable');
@@ -3179,8 +3182,9 @@ hasCode('data-prog-night-day="\' + d + \'"',
 hasCode('data-prog-night-day',              'WEEKPICK: each evening is its own row');
 hasCode("body.querySelectorAll('[data-prog-night-day]')",
         'WEEKPICK: the rows are WIRED — a drawn row nothing listens to is inert');
-hasCode('function nutOpenSwapSheet(forDate)',
-        'WEEKPICK: the sheet can set a night that is not tonight');
+hasCode('function nutOpenSwapSheet(forDate, only)',
+        'WEEKPICK: the sheet can set a night that is not tonight, and since ' +
+        'v4.9.313 one component of it rather than all of them');
 
 // A 105 g steak was being shopped for as 35 g: the list fell back to the RICE row
 // for any name it did not recognise, and divided by rice's 3x expansion.
@@ -3249,13 +3253,13 @@ hasCode('_shortC + (_bfOld - _bfNew)',
         'dropping the milk does not quietly cost the day 4 g');
 
 // ── the three tabs (v4.9.310) ──────────────────────────────────────────────
-hasCode("var tabs = [{key:'today',label:'TODAY'},{key:'programme',label:'PROGRAMME'},{key:'week',label:'WEEK'}]",
-        'TABS: three tabs, and RECIPES is not one of them');
+hasNotCode("label:'TODAY'}",
+        'TABS: the three-tab bar is gone — four now, DAILY/PLAN/PREP/SHOPPING');
 hasCode('function _nutProgDayPlanCard(', 'TABS: WEEK carries an editable day-by-day plan');
 hasCode('function _nutProgPlanTab(',
-        'TABS: day plan, then shopping, then prep — the order Jon asked for');
-hasCode('_nutProgDayPlanCard(wk) + _nutProgListCard(wk) + _nutProgBatchCard(wk)',
-        'TABS: and the batch recipes live INSIDE the prep section');
+        'TABS: the plan is the week, day by day; shopping and prep have tabs');
+hasCode('_nutProgPrepCard(wk) + _nutProgBatchCard(wk)',
+        'TABS: and the batch recipes live INSIDE the prep tab');
 hasCode('function _nutProgPlanWeek(',
         'TABS: one place decides WHICH week the plan tab is planning — a review ' +
         'Wednesday plans the week being shopped for, not the one being eaten');
@@ -3272,6 +3276,45 @@ hasNotCode('_nutProgWeekPickerCard',
         'the per-day editor — two controls for one setting drift apart');
 hasNotCode('_nutProgWeekAheadCard',
         'TABS: and so is the week table the day plan replaced');
+
+// ── four tabs, and swaps at the component (v4.9.313) ───────────────────────
+hasCode("{key:'today',label:'DAILY'}", 'TAB4: DAILY');
+hasCode("{key:'week',label:'PLAN'}",   'TAB4: PLAN');
+hasCode("{key:'prep',label:'PREP'}",   'TAB4: PREP');
+hasCode("{key:'shopping',label:'SHOPPING'}", 'TAB4: SHOPPING');
+hasCode('function _nutTabPrep(',     'TAB4: prep has its own renderer');
+hasCode('function _nutTabShopping(', 'TAB4: and so does shopping');
+hasCode('function _nutProgPrepCard(',
+        'TAB4: the prep half split out of the list card — they are read at ' +
+        'different times, one on the Wednesday and one in a supermarket');
+
+// SWAPS AT THE COMPONENT. Jon: "This REPLACES the Substitutions banner/sheet."
+hasCode('slot:_slot,',
+        'TAB4: the ENGINE tags each component with the slot that changes it — a ' +
+        'renderer cannot derive it, since "Egg whites" is three slots depending ' +
+        'on the meal');
+hasCode('data-nut-item="',        'TAB4: and the plan renders each component as a tappable line');
+hasCode("body.querySelectorAll('[data-nut-item]')",
+        'TAB4: which is WIRED — the whole feature is the tap');
+hasCode('function nutOpenSwapSheet(forDate, only)',
+        'TAB4: the sheet can be opened for ONE slot');
+hasCode('var _show = function(slot){ return !only || only === slot; };',
+        'TAB4: and every section honours the filter — without it, one tap reopens ' +
+        'the whole Substitutions flow wearing a new trigger');
+hasCode('Nothing to change here',
+        'TAB4: a component with no options says so, rather than opening an empty ' +
+        'sheet that reads as a broken control');
+hasNotCode('data-nut-swap-open',
+        'TAB4: the Substitutions banner is GONE from DAILY — deleted, not left ' +
+        'behind a flag, and its handler and lookups went with it');
+
+// Two views were collapsed INTO other tabs. Both keep doors, or the collapse
+// would have orphaned them — the twelfth instance in this domain.
+hasCode('data-nut-tab="programme"', 'TAB4: the calendar keeps a door on PLAN');
+hasCode('data-nut-tab="recipes"',   'TAB4: and the recipe library on PREP');
+hasCode("'prep','shopping','programme'",
+        'TAB4: and the view-state restore accepts the new keys, so a screen lock ' +
+        'does not drop him back to DAILY');
 
 // ── protein distribution (v4.9.312) ────────────────────────────────────────
 hasCode('_NUT_PROG_SPLITS',            'SPLIT: Standard and Dinner-heavy exist');

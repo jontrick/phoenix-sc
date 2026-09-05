@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.312';
+var APP_VERSION='4.9.313';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19586,7 +19586,7 @@ function _nutRestoreView(){
   // 'meals' is only meaningful with a date to show; without one it would render
   // an empty day rather than the tab he left.
   if(tab === 'meals' && !v.mealDate) tab = 'week';
-  _nutTab       = (['today','recipes','week','meals'].indexOf(tab) >= 0) ? tab : 'today';
+  _nutTab       = (['today','recipes','week','meals','prep','shopping','programme'].indexOf(tab) >= 0) ? tab : 'today';
   _nutWeekOffset = parseInt(v.weekOffset, 10) || 0;
   _nutWeekMode   = (v.weekMode === 'plan') ? 'plan' : 'overview';
   _nutMealDate   = v.mealDate || null;
@@ -19597,14 +19597,20 @@ function nutRenderScreen(){
   if(!body) return;
   var ns = nutGetState();
   if(!ns || !ns.setup_done){ body.innerHTML = '<div style="padding:24px;text-align:center;"><div style="color:var(--text2);margin-bottom:16px;">Set up your nutrition targets to get started.</div><button onclick="nutOpenSetup()" class="btn-primary" style="width:100%;">Set Up Nutrition</button></div>'; return; }
-  var tabs = [{key:'today',label:'TODAY'},{key:'programme',label:'PROGRAMME'},{key:'week',label:'WEEK'}];
+  // v4.9.313. DAILY / PLAN / PREP / SHOPPING. The keys keep their old names
+  // because they are in Jon's saved view state on his phone — renaming them
+  // would drop him back to the first tab after every screen lock.
+  var tabs = [{key:'today',label:'DAILY'},{key:'week',label:'PLAN'},
+              {key:'prep',label:'PREP'},{key:'shopping',label:'SHOPPING'}];
   var tabBar = '<div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg);">' +
-    tabs.map(function(t){ var act = (_nutTab === t.key) || ((_nutTab === 'meals' || _nutTab === 'recipes') && t.key === 'week'); return '<button data-nut-tab="'+t.key+'" style="flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid '+(act?'var(--gold)':'transparent')+';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(act?'var(--gold)':'var(--text3)')+';cursor:pointer;touch-action:manipulation;">'+t.label+'</button>'; }).join('') + '</div>';
+    tabs.map(function(t){ var act = (_nutTab === t.key) || (['meals','recipes','programme'].indexOf(_nutTab) >= 0 && t.key === 'week'); return '<button data-nut-tab="'+t.key+'" style="flex:1;padding:12px 4px;background:none;border:none;border-bottom:2px solid '+(act?'var(--gold)':'transparent')+';font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(act?'var(--gold)':'var(--text3)')+';cursor:pointer;touch-action:manipulation;">'+t.label+'</button>'; }).join('') + '</div>';
   var content = '';
   if(_nutTab === 'today')          content = _nutTabToday(ns);
   else if(_nutTab === 'programme') content = _nutTabProgramme(ns);
   else if(_nutTab === 'recipes')   content = _nutTabRecipes(ns);
   else if(_nutTab === 'week')      content = _nutTabWeek(ns);
+  else if(_nutTab === 'prep')      content = _nutTabPrep(ns);
+  else if(_nutTab === 'shopping')  content = _nutTabShopping(ns);
   else if(_nutTab === 'meals')     content = _nutTabMeals(ns);
   else                             content = _nutTabToday(ns);
   body.innerHTML = tabBar + '<div style="padding:16px;">' + content + '</div>';
@@ -19690,12 +19696,6 @@ function nutRenderScreen(){
       nutRenderScreen();
     });
   });
-  var swapOpen = body.querySelector('[data-nut-swap-open]');
-  if(swapOpen) swapOpen.addEventListener('click', function(e){
-    // Stop it reaching the meal-tick handler on the row behind.
-    e.stopPropagation();
-    nutOpenSwapSheet();
-  });
   body.querySelectorAll('[data-prog-cal-day]').forEach(function(row){
     row.addEventListener('click', function(){
       _nutProgSelDay = row.getAttribute('data-prog-cal-day');
@@ -19709,6 +19709,15 @@ function nutRenderScreen(){
   body.querySelectorAll('[data-prog-carb]').forEach(function(row){
     row.addEventListener('click', function(){
       if(nutProgSetRice(row.getAttribute('data-prog-carb'))) nutRenderScreen();
+    });
+  });
+  // Tapping a food opens ONLY that food's options — Jon's ruling, and the reason
+  // the Substitutions banner is gone.
+  body.querySelectorAll('[data-nut-item]').forEach(function(row){
+    row.addEventListener('click', function(e){
+      if(e && e.stopPropagation) e.stopPropagation();
+      var parts = String(row.getAttribute('data-nut-item')).split('|');
+      nutOpenSwapSheet(parts[0], parts[1]);
     });
   });
   body.querySelectorAll('[data-prog-night-day]').forEach(function(row){
@@ -20636,6 +20645,19 @@ function _nutWeekStart(dateKey){
 }
 
 // ── WEEK tab ─────────────────────────────────────────────────────────────────
+// PREP and SHOPPING exist only while the programme owns the screen. Outside it
+// there is no week to prep for, and saying so beats an empty card.
+function _nutTabPrep(ns){
+  var h = (typeof _nutProgPrepTab === 'function') ? _nutProgPrepTab() : '';
+  return h || '<div style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px;line-height:1.6;">' +
+    'No week to prep for.<br>The prep plan appears once the programme is running.</div>';
+}
+function _nutTabShopping(ns){
+  var h = (typeof _nutProgShopTab === 'function') ? _nutProgShopTab() : '';
+  return h || '<div style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px;line-height:1.6;">' +
+    'No week to shop for.<br>The list appears once the programme is running.</div>';
+}
+
 function _nutTabWeek(ns){
   var today   = _nutToday();
   // While the cut is running or about to, WEEK is the plan: days, list, prep.
@@ -21468,6 +21490,7 @@ function nutProgMealsOn(dateKey, riceId){
             var _pm = { k:_pt.k * _pg / 100, p:_pt.p * _pg / 100,
                         c:_pt.c * _pg / 100, f:_pt.f * _pg / 100 };
             items.push({ n:_pt.n, g:_pg, u:_pt.u || '', carb:!!_pt.carb, count:!!_pt.count,
+                         slot:(_pt.grp === 'protein' ? 'bfast_protein' : null),
                          k:Math.round(_pm.k), p:Math.round(_pm.p * 10) / 10,
                          c:Math.round(_pm.c * 10) / 10, f:Math.round(_pm.f * 10) / 10 });
             K += _pm.k; P += _pm.p; C += _pm.c; F += _pm.f;
@@ -21533,7 +21556,8 @@ function nutProgMealsOn(dateKey, riceId){
         }
       }
       // Per-meal greens powder, decided on the day.
-      if(_NUT_GREENS_SWAPPABLE[M.id] === it.n && greens[M.id]){
+      var _wasGreens = (_NUT_GREENS_SWAPPABLE[M.id] === it.n);
+      if(_wasGreens && greens[M.id]){
         var gp = _NUT_GREENS_POWDER;
         name = gp.n; grams = gp.g; unit = '';
         mac = { k: gp.k * gp.g / 100, p: gp.p * gp.g / 100, c: gp.c * gp.g / 100, f: gp.f * gp.g / 100 };
@@ -21616,7 +21640,16 @@ function nutProgMealsOn(dateKey, riceId){
         grams = _newG;
       }
       if(!mac) mac = _nutProgItemMacros(it, grams);
-      items.push({ n:name, g:grams, u:unit, carb:!!it.carb, count:!!it.count,
+      var _slot = null;
+      if(swSlot) _slot = swSlot;
+      else if(_fatSlot) _slot = _fatSlot;
+      else if(M.id === 'midam' && it.n === _NUT_MIDAM_DAIRY_ITEM) _slot = 'midam_dairy';
+      else if(M.id === 'dinner' && it.n === _NUT_DINNER_PROTEIN_ITEM) _slot = 'dinner_protein';
+      else if(_gSlot && it.n === _gSlot.item) _slot = 'grain_' + M.id;
+      else if(_wasGreens) _slot = 'greens_' + M.id;
+      else if(M.id === 'dinner' && it.n === 'Greens') _slot = 'dinner_veg';
+      else if(M.id === 'bfast' && it.n === _NUT_BFAST_PROTEIN_ITEM) _slot = 'bfast_protein';
+      items.push({ n:name, g:grams, u:unit, carb:!!it.carb, count:!!it.count, slot:_slot,
                    k:Math.round(mac.k), p:Math.round(mac.p*10)/10,
                    c:Math.round(mac.c*10)/10, f:Math.round(mac.f*10)/10 });
       K += mac.k; P += mac.p; C += mac.c; F += mac.f;
@@ -22099,17 +22132,6 @@ function _nutProgTodayCard(forDate){
   h += '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
        mac('protein', con.total.p, t.total.p) + mac('carbs', con.total.c, t.total.c) + mac('fat', con.total.f, t.total.f) +
        '</div>';
-
-  // The door. Shows the current choice so he can see at a glance what he is eating
-  // without opening it.
-  var _swNow = nutProgSwaps();
-  var _swL = _nutProgSwapOpt('lunch_protein', _swNow.lunch_protein);
-  var _swD = _nutProgSwapOpt('dinner_protein', _swNow.dinner_protein);
-  h += '<button data-nut-swap-open style="width:100%;padding:11px;margin-bottom:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;color:var(--text2);font-size:12px;cursor:pointer;touch-action:manipulation;text-align:left;">' +
-       '<span style="font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Substitutions</span>' +
-       '<span style="display:block;font-size:11px;color:var(--text3);margin-top:2px;">' +
-         (_swL ? _swL.n : 'Chicken breast') + ' &middot; ' + (_swD ? _swD.n : 'Salmon fillet') + ' &mdash; tap to swap' +
-       '</span></button>';
 
   // v4.9.285 — Jon's ruling: KEEP the stated label calories, and say why the two numbers
   // do not reconcile, rather than making them agree.
@@ -22855,14 +22877,18 @@ function nutProgSwaps(){
 // defect is not broken code, it is finished code with no door.
 //
 // HANDOFF_5 specifies it: "Tap meal to: adjust quantities, swap a component, add notes".
-function nutOpenSwapSheet(forDate){
+function nutOpenSwapSheet(forDate, only){
   var old = document.getElementById('nut-swap-sheet');
   if(old) old.remove();
   var cur = nutProgSwaps();
   var today = forDate || _nutToday();
   var night = nutProgNightlyOn(today);
+  // `only` is the slot tapped on the plan. Null means every section — which is
+  // how the day header opens it.
+  var _show = function(slot){ return !only || only === slot; };
   var h = '';
   Object.keys(_NUT_PROG_SWAPS).forEach(function(slot){
+    if(!_show(slot)) return;
     if(!_NUT_PROG_SWAPS[slot] || !_NUT_PROG_SWAPS[slot].opts.length) return;
     var def = _NUT_PROG_SWAPS[slot];
     var chosenId = cur[slot];
@@ -22888,6 +22914,7 @@ function nutOpenSwapSheet(forDate){
   // plate entirely from week 10 — an empty list means no section at all.
   var fatSecs = [];
   ['midam_nuts', 'arvo_butter', 'bed_butter'].forEach(function(slot){
+    if(!_show(slot)) return;
     if(slot === 'bed_butter' && !(typeof nutProgBedOn === 'function' && nutProgBedOn(today))) return;
     var opts = (typeof nutProgFatSlotOpts === 'function') ? nutProgFatSlotOpts(slot, today) : [];
     if(!opts.length) return;
@@ -22900,6 +22927,7 @@ function nutOpenSwapSheet(forDate){
    ['midam_dairy',    'Mid-morning protein',                          _NUT_PROG_MIDAM_PROTEIN]
   ].concat(fatSecs).forEach(function(sec){
     var slot = sec[0], label = sec[1], opts = sec[2], note = sec[3] || '';
+    if(!_show(slot)) return;
     h += '<div style="margin-bottom:16px;">';
     h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + label + '</div>';
     opts.forEach(function(o){
@@ -22920,7 +22948,25 @@ function nutOpenSwapSheet(forDate){
     h += '</div>';
   });
 
-  if(typeof _NUT_PROG_SPLITS !== 'undefined'){
+  if(only && /^greens_/.test(only) && typeof nutProgToggleGreens === 'function'){
+    var _gm = only.slice(7);
+    var _gOn = (typeof nutProgGreensOn === 'function') ? !!nutProgGreensOn(today)[_gm] : false;
+    var _gRow = _nutProgPlateRowIn(_gm, _NUT_GREENS_SWAPPABLE[_gm]);
+    h += '<div style="margin-bottom:16px;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' +
+         (_gm === 'lunch' ? 'Lunch vegetables' : 'Evening greens') + '</div>';
+    [[false, _NUT_GREENS_SWAPPABLE[_gm], (_gRow ? _gRow.g[nutProgTargetsOn(today).phase_n - 1] : 0) + ' g, fresh'],
+     [true,  _NUT_GREENS_POWDER.n,       _NUT_GREENS_POWDER.g + ' g, a scoop in water']].forEach(function(o){
+      var on = (_gOn === o[0]);
+      h += '<div data-nut-greens="' + _gm + '|' + (o[0] ? '1' : '0') + '" style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+        '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;">' + o[1] + '</div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + o[2] + '</div></div></div>';
+    });
+    h += '</div>';
+  }
+
+  if(_show('day_split') && typeof _NUT_PROG_SPLITS !== 'undefined'){
     var _spT   = nutProgTargetsOn(today);
     var _spIx  = _spT ? (_spT.phase_n - 1) : 0;
     var _spCur = nutProgSplitOn(today);
@@ -22975,7 +23021,7 @@ function nutOpenSwapSheet(forDate){
     h += '</div>';
   }
 
-  if(typeof nutProgBedOn === 'function'){
+  if(_show('day_bed') && typeof nutProgBedOn === 'function'){
     var _bedT   = nutProgTargetsOn(today);
     var _bedIx  = _bedT ? (_bedT.phase_n - 1) : 0;
     var _bedNow = nutProgBedOn(today);
@@ -22997,7 +23043,7 @@ function nutOpenSwapSheet(forDate){
     h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">Turning this on makes ROOM for it &mdash; the day\'s target does not move, so the chicken, salmon, tuna and whey all come down about a fifth and the oil rebalances. Set it before you shop: it changes what you batch on Sunday.</div></div>';
   }
 
-  if(typeof _NUT_PROG_BFAST_PROTEIN !== 'undefined'){
+  if(_show('bfast_protein') && typeof _NUT_PROG_BFAST_PROTEIN !== 'undefined'){
     var _bt  = nutProgTargetsOn(today);
     var _bix = _bt ? (_bt.phase_n - 1) : 0;
     var _wr  = _nutProgPlateRowIn('bfast', _NUT_BFAST_PROTEIN_ITEM);
@@ -23041,6 +23087,7 @@ function nutOpenSwapSheet(forDate){
     var _gt = nutProgTargetsOn(today);
     var _gix = _gt ? (_gt.phase_n - 1) : 0;
     Object.keys(_NUT_PROG_GRAIN_SLOTS).forEach(function(mealId){
+      if(!_show('grain_' + mealId)) return;
       var slot = _NUT_PROG_GRAIN_SLOTS[mealId];
       var prow = _nutProgPlateRow(slot.item);
       if(!prow || !(prow.g[_gix] > 0)) return;     // not on the plate this phase
@@ -23090,7 +23137,7 @@ function nutOpenSwapSheet(forDate){
     });
   }
 
-  if(typeof nutProgPreOn === 'function' && nutProgIsLiftDay(today)){
+  if(_show('day_pre') && typeof nutProgPreOn === 'function' && nutProgIsLiftDay(today)){
     var curPre = nutProgPreOn(today);
     h += '<div style="margin-bottom:16px;">';
     h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">04:15 &mdash; before the session</div>';
@@ -23110,10 +23157,18 @@ function nutOpenSwapSheet(forDate){
   // The portion is held constant for the WEEK-long swaps and sized to the protein
   // for the nightly ones. Either way the fat is rebalanced, so a swap never
   // quietly moves his macros. Saying so stops the swap looking risky.
-  h += '<div style="font-size:10px;line-height:1.5;color:var(--text3);text-align:center;padding:0 4px;">' +
-       'Each evening serve is sized to land the same protein. The oil moves to hold the fat &mdash; ' +
-       'prawns are lean enough to take it from 13 ml to about 30.' +
-       '</div>';
+  if(!only){
+    h += '<div style="font-size:10px;line-height:1.5;color:var(--text3);text-align:center;padding:0 4px;">' +
+         'Each evening serve is sized to land the same protein. The oil moves to hold the fat &mdash; ' +
+         'prawns are lean enough to take it from 13 ml to about 30.' +
+         '</div>';
+  }
+  // A tap that opens an EMPTY sheet is worse than one that does nothing — it
+  // reads as a broken control rather than a fixed portion.
+  if(only && !h){
+    h = '<div style="font-size:12px;color:var(--text3);line-height:1.6;padding:6px 2px;">' +
+        'Nothing to change here &mdash; this one is fixed by the plan.</div>';
+  }
 
   var ov = document.createElement('div');
   ov.id = 'nut-swap-sheet';
@@ -23137,6 +23192,15 @@ function nutOpenSwapSheet(forDate){
         ov.remove();
         if(typeof nutRenderScreen === 'function') nutRenderScreen();
       }
+    });
+  });
+  ov.querySelectorAll('[data-nut-greens]').forEach(function(row){
+    row.addEventListener('click', function(){
+      var parts = String(row.getAttribute('data-nut-greens')).split('|');
+      var want = (parts[1] === '1');
+      if(!!nutProgGreensOn(today)[parts[0]] !== want) nutProgToggleGreens(today, parts[0]);
+      ov.remove();
+      if(typeof nutRenderScreen === 'function') nutRenderScreen();
     });
   });
   ov.querySelectorAll('[data-nut-split]').forEach(function(row){
@@ -23396,7 +23460,6 @@ function nutProgListText(week){
 function _nutProgListCard(week){
   var shop = nutProgShoppingFor(week);
   if(!shop) return '';
-  var prep = nutProgPrepFor(week);
   var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
       '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Shopping list</div>' +
@@ -23420,27 +23483,31 @@ function _nutProgListCard(week){
     });
   }
   h += '<button data-prog-copy="' + week + '" style="width:100%;margin-top:12px;padding:11px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Copy list</button></div>';
+  return h;
+}
 
-  if(prep && prep.batches.length){
-    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
-        '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Prep plan</div>' +
-        '<div style="font-size:10px;color:var(--text3);">' + prep.window.from + ' &rarr; ' + prep.window.to + '</div></div>';
-    prep.batches.forEach(function(b){
-      h += '<div style="margin-top:11px;padding:10px 11px;background:var(--bg3);border-radius:8px;">' +
-        '<div style="font-size:13px;font-weight:600;">' + b.name + '</div>';
-      b.steps.forEach(function(st){
-        h += '<div style="font-size:11px;color:var(--text2);margin-top:5px;line-height:1.5;">&bull; ' + st + '</div>';
-      });
-      if(b.note) h += '<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">' + b.note + '</div>';
-      h += '</div>';
+function _nutProgPrepCard(week){
+  var prep = nutProgPrepFor(week);
+  if(!prep || !prep.batches.length) return '';
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
+      '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Prep plan</div>' +
+      '<div style="font-size:10px;color:var(--text3);">' + prep.window.from + ' &rarr; ' + prep.window.to + '</div></div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Raw weights, with what each yields cooked</div>';
+  prep.batches.forEach(function(b){
+    h += '<div style="margin-top:11px;padding:10px 11px;background:var(--bg3);border-radius:8px;">' +
+      '<div style="font-size:13px;font-weight:600;">' + b.name + '</div>';
+    b.steps.forEach(function(st){
+      h += '<div style="font-size:11px;color:var(--text2);margin-top:5px;line-height:1.5;">&bull; ' + st + '</div>';
     });
-    h += '<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:12px 0 4px;font-weight:700;">No prep needed</div>';
-    prep.fresh.forEach(function(f){
-      h += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>' + f.n + '</span><span style="color:var(--text3);">' + f.why + '</span></div>';
-    });
+    if(b.note) h += '<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">' + b.note + '</div>';
     h += '</div>';
-  }
+  });
+  h += '<div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:12px 0 4px;font-weight:700;">No prep needed</div>';
+  prep.fresh.forEach(function(f){
+    h += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>' + f.n + '</span><span style="color:var(--text3);">' + f.why + '</span></div>';
+  });
+  h += '</div>';
   return h;
 }
 // v4.9.287. Before the programme opens there is no day to tick, and the screen
@@ -23472,10 +23539,9 @@ function _nutProgStartsCard(dateKey){
         '<div style="color:var(--text3);margin-top:1px;">' + line + '</div></div>';
     });
   }
-  // Swaps are chosen BEFORE the shop, so the door has to be open before the
-  // programme is. Putting it only on the running day made it unreachable on
-  // every day he would actually use it.
-  h += '<button data-nut-swap-open style="width:100%;margin-top:12px;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Substitutions</button>';
+  // The Substitutions button was here so swaps could be made BEFORE the shop.
+  // That still matters, and it is still true: this card sits on PLAN, directly
+  // above the day rows where every food is now tapped to change it.
   // The programme has not started, so there is nothing to tick — but he still
   // eats today. Removing the logger without this would remove the only way to
   // record a meal before Monday.
@@ -23815,7 +23881,10 @@ function _nutTabProgramme(ns){
   // v4.9.310. Jon: "the week overview / planning view (the 'Programme begins
   // Monday' card, Monday's plate preview etc.). This is planning, not daily use."
   // The start card lived on TODAY; it belongs here.
-  var _pre = (typeof _nutProgStartsCard === 'function') ? _nutProgStartsCard(_nutToday()) : '';
+  // The "programme begins" card lives on PLAN since v4.9.313; this view is the
+  // week-at-a-glance calendar reached from it, and showing the countdown twice
+  // one tap apart reads as a bug.
+  var _pre = '';
   var week = _nutProgCalendarWeek();
   if(week === null){
     return _pre + '<div style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px;line-height:1.6;">' +
@@ -23911,9 +23980,13 @@ function _nutProgGrainLine(dateKey){
     var sp = _nutProgSplitOpt(nutProgSplitOn(dateKey));
     if(sp && !sp.base) bits.push(sp.n);
   }
+  var dflt = nutProgRiceChoice();
   Object.keys(_NUT_PROG_GRAIN_SLOTS).forEach(function(mealId){
-    var gid = nutProgGrainOn(dateKey, mealId, nutProgRiceChoice());
+    var gid = nutProgGrainOn(dateKey, mealId, dflt);
     if(gid === _NUT_GRAIN_KEEP) return;             // the plate as written
+    // Only what the meals below do not already say. The grain is a line item on
+    // its own meal now; repeating the DEFAULT here seven times is noise.
+    if(gid === dflt && mealId === 'lunch') return;
     var g = _nutRiceById(gid);
     if(g) bits.push(mealId.charAt(0).toUpperCase() + mealId.slice(1) + ': ' + g.name);
   });
@@ -23998,23 +24071,18 @@ function _nutProgDayPlanCard(week){
   var days = _nutProgWeekDates(week);
   if(!days) return '';
   var rice = nutProgRiceChoice();
-  // WHICH WEEK, SAID OUT LOUD. On a Wednesday this tab plans the week being
-  // SHOPPED for, not the one being eaten — that is the review flow working, but
-  // it is a surprise if the screen does not say so.
   var _lbl = (week === 0) ? 'Trial week' : ('Week ' + week + ' of ' + _NUT_PROG.weeks);
-  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
+  var h = '<div style="margin-bottom:6px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
       '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">The week, day by day</div>' +
       '<div style="font-size:10px;color:var(--text3);white-space:nowrap;">' + _lbl + ' &middot; ' +
         days[0].slice(8) + '/' + days[0].slice(5,7) + '&ndash;' + days[6].slice(8) + '/' + days[6].slice(5,7) + '</div>' +
     '</div>' +
-    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Tap any day to change its meals &mdash; protein, grain, dairy, nuts, the 04:15 slot and Meal 7</div>';
-
-  // The week's default grain, as a row rather than a card of its own.
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;margin-top:8px;border-bottom:1px solid var(--border);">' +
-    '<div style="font-size:11px;color:var(--text3);">Default grain, every lunch</div>' +
-    '<button data-prog-grain-default style="background:var(--bg3);border:1px solid var(--border2);border-radius:16px;color:var(--gold);font-size:11px;font-weight:700;padding:5px 12px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">' +
-      ((_nutRiceById(rice) || {}).name || rice) + ' &rsaquo;</button></div>';
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Tap any food to change it. Tap the day for how the day is shaped.</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;">' +
+      '<div style="font-size:11px;color:var(--text3);">Default grain, every lunch</div>' +
+      '<button data-prog-grain-default style="background:var(--bg3);border:1px solid var(--border2);border-radius:16px;color:var(--gold);font-size:11px;font-weight:700;padding:5px 12px;cursor:pointer;touch-action:manipulation;white-space:nowrap;">' +
+        ((_nutRiceById(rice) || {}).name || rice) + ' &rsaquo;</button></div></div>';
 
   days.forEach(function(d){
     var t = nutProgTargetsOn(d);
@@ -24023,40 +24091,75 @@ function _nutProgDayPlanCard(week){
     var nm = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()];
     var isToday = (d === _nutToday());
     var meals = nutProgMealsOn(d, rice) || [];
-    h += '<div data-prog-night-day="' + d + '" style="margin-top:10px;padding:11px 12px;background:var(--bg3);border:1px solid ' +
-      (isToday ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
-        '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:' +
+    h += '<div style="background:var(--bg2);border:1px solid ' + (isToday ? 'var(--gold)' : 'var(--border)') +
+      ';border-radius:10px;padding:12px 13px;margin-bottom:10px;">';
+    // Day header — the day-level choices live behind it: the distribution, the
+    // 04:15 slot and Meal 7 are not components, so they cannot be tapped as one.
+    h += '<div data-prog-night-day="' + d + '" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;cursor:pointer;touch-action:manipulation;">' +
+        '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:' +
           (isToday ? 'var(--gold)' : 'var(--text)') + ';">' + nm +
           '<span style="color:var(--text3);font-weight:400;letter-spacing:0;text-transform:none;"> ' + d.slice(8) + '/' + d.slice(5,7) + '</span></div>' +
-        '<div style="font-size:10px;color:var(--text3);white-space:nowrap;">' + t.total.kcal + ' kcal &middot; ' +
-          (t.sessions.length ? t.sessions.join(' + ') : 'rest') + ' <span style="color:var(--gold);">&rsaquo;</span></div>' +
+        '<div style="font-size:10px;color:var(--text3);white-space:nowrap;">' +
+          (t.sessions.length ? t.sessions.join(' + ') : 'rest') + ' &middot; ' + t.total.kcal +
+          ' kcal <span style="color:var(--gold);">&rsaquo;</span></div>' +
       '</div>';
-    // A one-line summary of what is CHOSEN, above the meals themselves — a week
-    // running three grains and a week running one look the same without it.
     var _gl = (typeof _nutProgGrainLine === 'function') ? _nutProgGrainLine(d) : '';
-    if(_gl) h += '<div style="font-size:10px;color:var(--gold);margin-top:3px;">' + _gl + '</div>';
-    // EVERY meal, not just the evening one.
+    if(_gl) h += '<div style="font-size:10px;color:var(--gold);margin-top:2px;">' + _gl + '</div>';
+
     meals.forEach(function(m){
-      var line = m.supp ? (m.code || m.name)
-        : m.items.map(function(it){ return _nutProgItemLabel(it); }).join(' &middot; ');
-      h += '<div style="display:flex;gap:7px;padding:4px 0;font-size:11px;border-top:1px solid var(--border);margin-top:5px;">' +
-        '<span style="color:var(--gold);font-weight:700;flex-shrink:0;">' + m.time + '</span>' +
-        '<span style="color:var(--text3);min-width:0;">' + line + '</span></div>';
+      h += '<div style="margin-top:9px;padding-top:8px;border-top:1px solid var(--border);">' +
+        '<div style="display:flex;gap:7px;align-items:baseline;">' +
+          '<span style="font-size:10px;font-weight:700;color:var(--gold);flex-shrink:0;">' + m.time + '</span>' +
+          '<span style="font-size:11px;font-weight:600;color:var(--text2);">' + m.name + '</span>' +
+        '</div>';
+      if(m.supp){
+        h += '<div style="font-size:11px;color:var(--text3);padding:3px 0 0 34px;">' + (m.code || '') + '</div>';
+      } else {
+        // ONE LINE PER COMPONENT, and a tappable one wherever the engine tagged
+        // a slot. Jon: "not inline prose run together".
+        m.items.forEach(function(it){
+          var tappable = !!it.slot;
+          h += '<div' + (tappable ? (' data-nut-item="' + d + '|' + it.slot + '"') : '') +
+            ' style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:4px 0 4px 34px;' +
+            (tappable ? 'cursor:pointer;touch-action:manipulation;' : '') + '">' +
+            '<span style="font-size:12px;color:' + (tappable ? 'var(--text)' : 'var(--text2)') + ';min-width:0;">' +
+              _nutProgItemLabel(it) + (tappable ? ' <span style="color:var(--gold);font-size:10px;">&rsaquo;</span>' : '') + '</span>' +
+            '</div>';
+        });
+      }
+      h += '<div style="font-size:10px;color:var(--text3);padding:3px 0 0 34px;">' +
+        m.k + ' kcal &middot; P' + m.p + ' &middot; C' + m.c + ' &middot; F' + m.f + '</div>';
+      h += '</div>';
     });
     h += '</div>';
   });
-  h += '</div>';
   return h;
 }
 
 // The three sections Jon asked for, in the order he asked for them. The batch
 // recipes sit inside the prep section rather than in a tab of their own.
+// v4.9.313. Four tabs, one job each. The plan is the week; prep and shopping got
+// their own tabs because they are read at different times — one on the Wednesday
+// with a pen, one in a supermarket.
 function _nutProgPlanTab(){
   var wk = (typeof _nutProgPlanWeek === 'function') ? _nutProgPlanWeek() : null;
   if(wk === null) return '';
-  return _nutProgDayPlanCard(wk) + _nutProgListCard(wk) + _nutProgBatchCard(wk) +
+  var pre = (typeof _nutProgStartsCard === 'function') ? _nutProgStartsCard(_nutToday()) : '';
+  // PROGRAMME lost its tab in the collapse. The calendar is a real week-at-a-
+  // glance view and would have been orphaned, so the plan keeps a door to it.
+  return pre + _nutProgDayPlanCard(wk) +
+    '<button data-nut-tab="programme" style="width:100%;padding:11px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Week at a glance</button>';
+}
+function _nutProgPrepTab(){
+  var wk = (typeof _nutProgPlanWeek === 'function') ? _nutProgPlanWeek() : null;
+  if(wk === null) return '';
+  return _nutProgPrepCard(wk) + _nutProgBatchCard(wk) +
     '<button data-nut-tab="recipes" style="width:100%;padding:11px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">Recipe library</button>';
+}
+function _nutProgShopTab(){
+  var wk = (typeof _nutProgPlanWeek === 'function') ? _nutProgPlanWeek() : null;
+  if(wk === null) return '';
+  return _nutProgListCard(wk);
 }
 
 // WHICH week this tab is planning. The review day looks at the week it is

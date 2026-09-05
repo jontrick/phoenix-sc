@@ -1774,7 +1774,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('LIST setup day shows the actual shopping list, not a description of one', () => {
     setUp(110);
-    const html = onDay('2026-09-05', () => app._nutTabWeek(app.nutGetState()));
+    const html = onDay('2026-09-05', () => app._nutTabShopping(app.nutGetState()));
     assert.ok(html.indexOf('Shopping list') >= 0, 'the list has a heading');
     assert.ok(html.indexOf('Chicken breast') >= 0, 'and real items on it');
     assert.ok(/1260/.test(html), 'with the RAW weight to buy');
@@ -1783,7 +1783,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('LIST setup day shows the prep plan with its batch weights', () => {
     setUp(110);
-    const html = onDay('2026-09-05', () => app._nutTabWeek(app.nutGetState()));
+    const html = onDay('2026-09-05', () => app._nutTabPrep(app.nutGetState()));
     assert.ok(html.indexOf('Prep plan') >= 0, 'the prep plan is on screen');
     assert.ok(/Lunch . 7/.test(html), 'with the batch and how many portions');
     assert.ok(html.indexOf('No prep needed') >= 0, 'and the meals that need none');
@@ -1809,14 +1809,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(today.indexOf('Week 5 review') >= 0,
       'the review banner stays on Today — the whole reason it is there is that Jon ' +
       'opens the app on the Wednesday and it is simply in front of him');
-    const week = onDay('2026-10-07', () => app._nutTabWeek(app.nutGetState()));
-    assert.ok(week.indexOf('Shopping list') >= 0,
-      'and the list is one tap away on WEEK. The original lesson was that the list ' +
-      'was COMPUTED AND RENDERED NOWHERE; a tab is a screen, a scroll under the ' +
-      'review is not the only way to be visible');
-    assert.ok(week.indexOf('Prep plan') >= 0, 'and the prep plan with it');
+    assert.ok(onDay('2026-10-07', () => app._nutTabShopping(app.nutGetState()))
+      .indexOf('Shopping list') >= 0,
+      'and the list has a TAB of its own since v4.9.313. The original lesson was ' +
+      'that it was COMPUTED AND RENDERED NOWHERE; a tab is a screen');
+    assert.ok(onDay('2026-10-07', () => app._nutTabPrep(app.nutGetState()))
+      .indexOf('Prep plan') >= 0, 'and so does the prep plan');
     assert.equal(today.indexOf('Shopping list'), -1,
-      'and Today is not carrying it any more — that scroll made the eating screen ' +
+      'and DAILY is not carrying either — that scroll made the eating screen ' +
       '37,000 characters long');
   });
 
@@ -1866,7 +1866,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('PRESTART the day before the start does NOT fall through to the food logger', () => {
     setUp(110);
-    const prog = onDay('2026-09-06', () => app._nutTabProgramme(app.nutGetState()));
+    const prog = onDay('2026-09-06', () => app._nutTabWeek(app.nutGetState()));
     assert.ok(prog.indexOf('Programme begins') >= 0,
       'the screen says what is happening instead of going silent');
     assert.ok(/Monday/.test(prog), 'and which day it begins');
@@ -1881,26 +1881,33 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('PRESTART it shows the first day\'s plate before the week opens', () => {
     setUp(110);
-    const html = onDay('2026-09-06', () => app._nutTabProgramme(app.nutGetState()));
+    const html = onDay('2026-09-06', () => app._nutTabWeek(app.nutGetState()));
     // Monday is a rest day and now has NOTHING at 04:15 — Jon's ruling.
     assert.equal(html.indexOf('Banana'), -1, 'no banana on a rest day any more');
     assert.ok(html.indexOf('Chicken breast') >= 0, 'but the food he is prepping is still shown');
   });
 
-  test('PRESTART the Substitutions door is open BEFORE the shop, not after', () => {
+  test('PRESTART swaps can be made BEFORE the shop, not after', () => {
     setUp(110);
-    const html = onDay('2026-09-06', () => app._nutTabProgramme(app.nutGetState()));
-    assert.ok(html.indexOf('data-nut-swap-open') >= 0,
-      'swaps are chosen before shopping, so a button that only exists on a ' +
-      'running day is unreachable on every day he would actually use it');
+    // v4.9.313: there is no Substitutions button any more — Jon replaced it with
+    // tapping the food itself on the plan. The LESSON is unchanged and is what is
+    // checked: a swap has to be reachable on a run-up day, because that is when
+    // the choices that drive the shopping list are made.
+    const html = onDay('2026-09-06', () => app._nutTabWeek(app.nutGetState()));
+    assert.ok((html.match(/data-nut-item=/g) || []).length > 20,
+      'every food on every day of the coming week is tappable before the shop');
+    assert.ok(html.indexOf('data-nut-item="2026-09-07|lunch_protein"') >= 0,
+      'including Monday\'s lunch protein specifically');
   });
 
   test('PRESTART the shopping list and prep plan are still reachable', () => {
     setUp(110);
-    const html = onDay('2026-09-06', () => app._nutTabWeek(app.nutGetState()));
-    assert.ok(html.indexOf('Shopping list') >= 0, 'the list is there on the 6th');
-    assert.ok(html.indexOf('Prep plan') >= 0, 'and the prep plan');
-    assert.ok(html.indexOf('The week, day by day') >= 0, 'and the week, day by day');
+    assert.ok(onDay('2026-09-06', () => app._nutTabShopping(app.nutGetState()))
+      .indexOf('Shopping list') >= 0, 'the list is there on the 6th');
+    assert.ok(onDay('2026-09-06', () => app._nutTabPrep(app.nutGetState()))
+      .indexOf('Prep plan') >= 0, 'and the prep plan');
+    assert.ok(onDay('2026-09-06', () => app._nutTabWeek(app.nutGetState()))
+      .indexOf('The week, day by day') >= 0, 'and the week, day by day');
   });
 
   test('PRESTART every day of the run-up behaves the same way', () => {
@@ -1910,11 +1917,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // single status answer and vanishing together, which splitting them across
     // tabs does not fix by itself.
     ['2026-09-03','2026-09-04','2026-09-05','2026-09-06'].forEach((d) => {
-      const prog = onDay(d, () => app._nutTabProgramme(app.nutGetState()));
-      assert.ok(prog.indexOf('Programme begins') >= 0, d + ' announces the start');
-      const week = onDay(d, () => app._nutTabWeek(app.nutGetState()));
-      assert.ok(week.indexOf('Shopping list') >= 0, d + ' can still reach the list');
-      assert.ok(week.indexOf('The week, day by day') >= 0, d + ' can still plan the days');
+      const plan = onDay(d, () => app._nutTabWeek(app.nutGetState()));
+      assert.ok(plan.indexOf('Programme begins') >= 0, d + ' announces the start');
+      assert.ok(plan.indexOf('The week, day by day') >= 0, d + ' can still plan the days');
+      assert.ok(onDay(d, () => app._nutTabShopping(app.nutGetState()))
+        .indexOf('Shopping list') >= 0, d + ' can still reach the list');
     });
   });
 
@@ -1922,10 +1929,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     const mon = onDay('2026-09-07', () => app._nutTabToday(app.nutGetState()));
     assert.equal(mon.indexOf('Programme begins'), -1, 'no longer counting down');
-    assert.equal(onDay('2026-09-07', () => app._nutTabProgramme(app.nutGetState()))
-      .indexOf('Programme begins'), -1, 'and PROGRAMME stops counting down too');
+    assert.equal(onDay('2026-09-07', () => app._nutTabWeek(app.nutGetState()))
+      .indexOf('Programme begins'), -1, 'and PLAN stops counting down too');
     assert.ok(mon.indexOf('data-prog-tick') >= 0, 'now there is food to tick');
-    assert.ok(mon.indexOf('data-nut-swap-open') >= 0, 'and Substitutions stays reachable');
+    assert.ok(onDay('2026-09-07', () => app._nutTabWeek(app.nutGetState()))
+      .indexOf('data-nut-item=') >= 0, 'and swaps stay reachable, on the plan');
   });
 
   // ── tonight's dinner ─────────────────────────────────────────────────────
@@ -2329,8 +2337,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'in the first place');
     // v4.9.310: the announcement moved to PROGRAMME. Still checked, because
     // "it moved" and "it vanished" look identical from a deleted assertion.
-    assert.ok(onDay('2026-09-06', () => app._nutTabProgramme(app.nutGetState()))
-      .indexOf('Programme begins') >= 0, 'and the programme card is on PROGRAMME');
+    assert.ok(onDay('2026-09-06', () => app._nutTabWeek(app.nutGetState()))
+      .indexOf('Programme begins') >= 0, 'and the programme card is on PLAN');
   });
 
   test('OWNS a running day behaves the same way', () => {
@@ -2544,12 +2552,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     return d.html('nut-screen-body');
   });
 
-  test('CAL the router reaches the PROGRAMME tab', () => {
+  test('CAL the router reaches the calendar, which no longer has a tab', () => {
     setUp(110);
+    // v4.9.313 collapsed PROGRAMME into PLAN. The calendar is still a real view
+    // and would have been ORPHANED by that, so the plan carries a door to it and
+    // the router still resolves the key.
+    const plan = onDay('2026-09-06', () => app._nutTabWeek(app.nutGetState()));
+    assert.ok(plan.indexOf('data-nut-tab="programme"') >= 0,
+      'the plan carries the way in');
     const html = progTab('2026-09-06');
-    assert.ok(html.indexOf('data-nut-tab="programme"') >= 0, 'the tab exists in the bar');
     assert.ok(html.indexOf('data-prog-cal-day') >= 0,
-      'and the router actually renders the calendar into it');
+      'and the router actually renders the calendar');
+    assert.ok(html.indexOf('data-nut-tab="week"') >= 0,
+      'with the bar still on screen to get back');
   });
 
   test('CAL it shows Monday to Sunday, seven tiles', () => {
@@ -3841,91 +3856,126 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   const tabOf = (fn, d) => onDay(d, () => fn(app.nutGetState())) || '';
 
-  test('TABS today is the tick-off, and stops there', () => {
+  test('TABS daily is the tick-off, and stops there', () => {
     setUp(110);
     const h = tabOf(app._nutTabToday, '2026-09-16');
     assert.ok(h.indexOf('data-prog-tick') >= 0, 'the meals to tick');
-    assert.ok(h.indexOf('data-nut-swap-open') >= 0, 'the Substitutions banner');
     assert.ok(/kcal/.test(h), 'and the day\'s numbers');
-    ['Shopping list', 'Prep plan', 'Carb base', 'The week ahead', 'Evening meals']
-      .forEach((n) => assert.equal(h.indexOf(n), -1,
-        '"' + n + '" is NOT on the eating screen any more'));
-    assert.ok(h.length < 20000,
-      'and the screen is a fraction of what it was — 37,150 characters to answer ' +
-      '"what do I eat now", measured before the change. Got ' + h.length);
+    ['Shopping list', 'Prep plan', 'Carb base', 'The week ahead', 'Evening meals',
+     'The week, day by day'].forEach((n) => assert.equal(h.indexOf(n), -1,
+        '"' + n + '" is NOT on the eating screen'));
+    // v4.9.313, Jon: "Remove the Substitutions banner from DAILY — swaps are
+    // made in PLAN, not in the tick-off daily view."
+    assert.equal(h.indexOf('data-nut-swap-open'), -1, 'and neither is Substitutions');
+    assert.equal(h.indexOf('Substitutions'), -1, 'not even as a label');
+    assert.ok(h.length < 20000, 'a fraction of the 37,150 it was. Got ' + h.length);
   });
 
-  test('TABS programme is the week overview', () => {
+  test('TABS plan is the week, day by day, with every food tappable', () => {
     setUp(110);
-    const h = tabOf(app._nutTabProgramme, '2026-09-05');
-    assert.ok(h.indexOf('Programme begins') >= 0, 'the start card Jon named');
-    assert.ok(/Monday&rsquo;s plate/.test(h), 'with Monday\'s plate preview, as he named');
-    assert.ok(h.indexOf('data-prog-cal-day') >= 0, 'and the week calendar under it');
-    assert.equal(h.indexOf('data-prog-tick'), -1,
-      'and nothing to tick — this is planning, not daily use');
-  });
-
-  test('TABS week is the day plan, the list and the prep — in that order', () => {
-    setUp(110);
-    const h = tabOf(app._nutTabWeek, '2026-09-16');
-    const iDay = h.indexOf('The week, day by day');
-    const iShop = h.indexOf('Shopping list');
-    const iPrep = h.indexOf('Prep plan');
-    assert.ok(iDay >= 0 && iShop > iDay && iPrep > iShop,
-      'day plan, then shopping, then prep — the order Jon asked for. Got ' +
-      iDay + ' / ' + iShop + ' / ' + iPrep);
-    assert.ok(h.indexOf('Batch cook') >= 0,
-      'with the batch recipes inside the prep section rather than a tab of their own');
-    ['Evening meals', 'The week ahead'].forEach((n) =>
-      assert.equal(h.indexOf(n), -1, '"' + n + '" is gone'));
-  });
-
-  test('TABS every day on the plan is editable, and every MEAL is listed', () => {
-    setUp(110);
-    // A THURSDAY. On a Wednesday this tab plans the week being SHOPPED for, not
-    // the one being eaten — the review flow working as designed — so a case that
-    // asserted "this week" on a Wednesday would have been testing the wrong week
-    // and calling it a bug.
     const h = tabOf(app._nutTabWeek, '2026-09-17');
+    assert.ok(h.indexOf('The week, day by day') >= 0, 'the day plan');
     const days = app._nutProgWeekDates(1);
     days.forEach((d) => assert.ok(h.indexOf('data-prog-night-day="' + d + '"') >= 0,
-      d + ' opens for editing'));
-    // Not just dinner. That is the change — a day row naming only the evening
-    // would look identical to the week picker it replaced.
-    ['06:15', '09:30', '12:30', '15:30', '19:00'].forEach((t) =>
-      assert.ok(h.indexOf(t) >= 0, t + ' is on the day rows'));
-    assert.ok(/Week 1 of 15/.test(h), 'and the card says WHICH week it is planning');
-    const wed = tabOf(app._nutTabWeek, '2026-09-16');
-    assert.ok(/Week 2 of 15/.test(wed),
-      'which on a review Wednesday is NEXT week — the one he is about to shop ' +
-      'for. Saying so is the difference between the review flow and a bug report');
+      d + ' opens for the day-level choices'));
+    // Jon: "Each component is directly tappable to swap."
+    assert.ok(h.indexOf('data-nut-item="' + days[0] + '|lunch_protein"') >= 0,
+      'the lunch protein is tappable, by name and by day');
+    assert.ok(h.indexOf('data-nut-item="' + days[0] + '|grain_lunch"') >= 0,
+      'and so is the grain, to its own options');
+    assert.ok((h.match(/data-nut-item=/g) || []).length > 40,
+      'across the whole week, not one day: ' + (h.match(/data-nut-item=/g) || []).length);
+    ['Shopping list', 'Prep plan'].forEach((n) =>
+      assert.equal(h.indexOf(n), -1, '"' + n + '" has its own tab now'));
   });
 
-  test('TABS the bar has three tabs and RECIPES is not one of them', () => {
+  test('TABS each meal lists its components on SEPARATE lines, with its macros', () => {
+    setUp(110);
+    const h = onDay('2026-09-17', () => app._nutProgDayPlanCard(1));
+    const mon = h.slice(h.indexOf('data-prog-night-day="2026-09-14"'),
+                        h.indexOf('data-prog-night-day="2026-09-15"'));
+    // Jon: "one per line ... not inline prose run together". Each component is
+    // its own element, so the count of item divs is the count of foods.
+    ['135 g cooked Chicken breast', '80 g Avocado', '150 g Mixed vegetables']
+      .forEach((n) => assert.ok(mon.indexOf(n) >= 0, n + ' is on its own line'));
+    assert.equal(/Chicken breast &middot; /.test(mon), false,
+      'and NOT run together with a separator, which is what it did before');
+    // Jon: "Keep the meal macro summary per meal at the bottom of each meal card"
+    assert.ok(/755 kcal &middot; P54\.7 &middot; C84\.8 &middot; F18\.4/.test(mon),
+      'with the meal total under it');
+    assert.ok(/12:30/.test(mon) && /Lunch/.test(mon), 'under the time and the meal name');
+    assert.ok(/rest/.test(mon), 'and the day says its session type');
+  });
+
+  test('TABS prep and shopping are their own tabs', () => {
+    setUp(110);
+    const prep = tabOf(app._nutTabPrep, '2026-09-17');
+    assert.ok(prep.indexOf('Prep plan') >= 0, 'prep is on PREP');
+    assert.ok(prep.indexOf('Batch cook') >= 0, 'with the batch recipes inside it');
+    assert.ok(/Raw weights, with what each yields cooked/.test(prep),
+      'and it says the weights are RAW with yields, which Jon confirmed explicitly');
+    assert.equal(prep.indexOf('Shopping list'), -1, 'and no shopping list on it');
+    const shop = tabOf(app._nutTabShopping, '2026-09-17');
+    assert.ok(shop.indexOf('Shopping list') >= 0, 'the list is on SHOPPING');
+    assert.ok(/Raw weights &mdash; what you buy/.test(shop), 'raw, as he confirmed');
+    assert.equal(shop.indexOf('Prep plan'), -1, 'and no prep plan on it');
+  });
+
+  test('TABS the bar has four tabs, and the collapsed ones keep doors', () => {
     setUp(110);
     const d = dom();
     onDay('2026-09-16', () => { app._nutTab = 'today'; app.nutRenderScreen(); });
     const h = d.html('nut-screen-body');
-    ['today', 'programme', 'week'].forEach((k) =>
-      assert.ok(h.indexOf('data-nut-tab="' + k + '"') >= 0, k + ' is in the bar'));
-    const bar = h.slice(0, h.indexOf('</div>', h.indexOf('data-nut-tab="week"')));
-    assert.equal(bar.indexOf('RECIPES'), -1, 'RECIPES has no tab of its own');
+    ['DAILY', 'PLAN', 'PREP', 'SHOPPING'].forEach((l) =>
+      assert.ok(h.indexOf('>' + l + '<') >= 0, l + ' is in the bar'));
+    assert.equal(h.indexOf('>RECIPES<'), -1, 'RECIPES has no tab');
+    assert.equal(h.indexOf('>PROGRAMME<'), -1, 'and neither does PROGRAMME');
+    // Both were collapsed INTO other tabs, not deleted. Eleven orphans in this
+    // domain; a layout change is the easiest way to create the twelfth.
+    const plan = tabOf(app._nutTabWeek, '2026-09-16');
+    assert.ok(plan.indexOf('data-nut-tab="programme"') >= 0, 'the calendar keeps a door');
+    const prep = tabOf(app._nutTabPrep, '2026-09-16');
+    assert.ok(prep.indexOf('data-nut-tab="recipes"') >= 0, 'and so does the recipe library');
   });
 
-  test('TABS the recipe library is still REACHABLE, from the prep section', () => {
+  test('TABS tapping a component opens ONLY that component\'s options', () => {
     setUp(110);
-    // Removing a tab must not orphan what was behind it. Ten instances of
-    // finished-code-with-no-door in this domain; this is the guard against an
-    // eleventh being created by a layout change.
-    const h = tabOf(app._nutTabWeek, '2026-09-16');
-    assert.ok(h.indexOf('data-nut-tab="recipes"') >= 0,
-      'the prep section carries a way into the recipe library');
     const d = dom();
-    onDay('2026-09-16', () => { app._nutTab = 'recipes'; app.nutRenderScreen(); });
-    const rec = d.html('nut-screen-body');
-    assert.ok(rec.indexOf('New Recipe') >= 0, 'and the router still renders it');
-    assert.ok(rec.indexOf('data-nut-tab="week"') >= 0,
-      'with the bar still on screen to get back');
+    onDay('2026-09-17', () => { app._nutTab = 'week'; app.nutRenderScreen(); });
+    const body = d.node('nut-screen-body');
+    const rows = body.querySelectorAll('[data-nut-item]')
+      .filter((el) => el.getAttribute('data-nut-item') === '2026-09-14|grain_lunch');
+    assert.ok(rows.length, 'the grain line is there to tap');
+    d.fire(rows[0], 'click');
+    const sheet = d.lastCreatedHtml();
+    assert.ok(sheet.indexOf('data-nut-grain="lunch|sushi"') >= 0,
+      'and it opens the GRAIN options');
+    // The whole point of Jon's change: one component, one question. A sheet that
+    // still listed every other slot would be the old Substitutions flow wearing
+    // a new trigger.
+    assert.equal(sheet.indexOf('data-nut-night="dinner_protein'), -1,
+      'and NOT the dinner protein');
+    assert.equal(sheet.indexOf('data-nut-split'), -1, 'nor the distribution');
+  });
+
+  test('TABS tapping the DAY opens the day-level choices', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-17', () => app.nutOpenSwapSheet('2026-09-14'));
+    const sheet = d.lastCreatedHtml();
+    // The distribution, the 04:15 slot and Meal 7 are not components — there is
+    // no line to tap for them — so the day header carries them.
+    assert.ok(sheet.indexOf('data-nut-split') >= 0, 'the distribution');
+    assert.ok(sheet.indexOf('data-nut-bed') >= 0, 'Meal 7');
+    assert.ok(sheet.indexOf('data-nut-night="dinner_protein') >= 0, 'and every other slot');
+  });
+
+  test('TABS a component with nothing to choose says so rather than opening empty', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-17', () => app.nutOpenSwapSheet('2026-09-14', 'no_such_slot'));
+    assert.ok(/Nothing to change here/.test(d.lastCreatedHtml()),
+      'an empty sheet reads as a broken control; a sentence reads as a fixed portion');
   });
 
   test('TABS the run-up leaves him something to do, not just an announcement', () => {
@@ -5364,8 +5414,15 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     try { html = String(app._nutProgTodayCard() || ''); }
     finally { app._nutToday = realToday; }
     assert.ok(html.length > 200, 'the card rendered');
-    assert.ok(html.indexOf('data-nut-swap-open') >= 0, 'a substitutions control is on the meal list');
-    assert.ok(/Substitutions/i.test(html), 'and it is labelled');
+    // v4.9.313: the Substitutions button is gone — Jon replaced it with tapping
+    // the food itself. The LESSON is why this case exists (nutProgSetSwap was
+    // defined and called from nowhere), so it now checks the door that replaced
+    // it, on the screen that owns it.
+    assert.equal(html.indexOf('data-nut-swap-open'), -1,
+      'the banner is gone from the eating screen, as he asked');
+    const plan = onDay('2026-09-14', () => app._nutTabWeek(app.nutGetState()));
+    assert.ok(plan.indexOf('data-nut-item="2026-09-14|lunch_protein"') >= 0,
+      'and the lunch protein is tappable on the plan instead');
     assert.equal(typeof app.nutOpenSwapSheet, 'function', 'and the sheet it opens exists');
   });
 

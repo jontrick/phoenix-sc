@@ -137,15 +137,6 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
         Sunday — worth confirming. Say the word and it goes; it was left because his
         stated condition for removal ("purely the AI programme notification") is false.
 
-- [ ] JON — **The nutrition screen, restructured (v4.9.311).** Three tabs: TODAY is the
-      tick-off only, PROGRAMME the week overview, WEEK the day-plan / shopping / prep.
-      **He asked for TODAY and PROGRAMME to be SWAPPED and that is not what was built** —
-      a probe showed PROGRAMME held only the calendar and TODAY held the tick-off AND
-      everything else, so it follows the descriptions he gave rather than the word
-      "swap". If he expected a literal exchange this will not look like one. Also:
-      RECIPES has no tab (reached from prep), and on a review Wednesday WEEK plans NEXT
-      week — which the card now says out loud.
-
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.

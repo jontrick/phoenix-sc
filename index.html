@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.305';
+var APP_VERSION='4.9.306';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21056,10 +21056,11 @@ var _NUT_RICE = [
   { id:'jasmine',  name:'Jasmine',          c100:29.0, p100:2.7, f100:0.3, expand:3.0 , water:1.5, mins:12, tip:'Rinse first. Rest 10 min covered' },
   { id:'longgrain',name:'Long-grain white', c100:28.5, p100:2.7, f100:0.3, expand:3.0 , water:1.6, mins:15, tip:'Rest 5 min covered' },
   { id:'brown',    name:'Brown, long grain',c100:23.0, p100:2.6, f100:0.9, expand:2.7 , water:2.2, mins:28, tip:'Longer and wetter than white. Rest 10 min' },
-  // COOKED TO ORDER, NOT BATCHED. Risotto is finished by stirring stock in a
-  // ladle at a time; a tub of it reheated on Wednesday is glue. The prep plan
-  // and the recipe cards both say so rather than listing it beside the rice.
-  { id:'arborio',  name:'Arborio (risotto)',c100:28.0, p100:2.4, f100:0.3, expand:3.0 , water:3.0, mins:20, to_order:true, tip:'Stock a ladle at a time, stirring, until it is just short of soft' },
+  // Batched with the rest — Jon's ruling, v4.9.306. It stiffens in the fridge
+  // more than long grain does, which is a reheat instruction rather than a
+  // reason to cook it separately.
+  { id:'arborio',  name:'Arborio (risotto)',c100:28.0, p100:2.4, f100:0.3, expand:3.0 , water:2.0, mins:18, tip:'Rest 5 min covered, then fork through — it sets firmer than long grain as it cools',
+    reheat:'Add a splash of stock or water when reheating and stir to loosen.' },
   // Seasoned, and the seasoning is not free — see `season_c`.
   { id:'sushi',    name:'Sushi, short grain',c100:29.0, p100:2.4, f100:0.2, expand:2.7 , water:1.2, mins:12, tip:'Rinse hard. Rest 10 min covered, then fold through',
     season:'Season while still warm: 5 parts rice vinegar to 2 sugar to 1 salt, about 60 ml per 300 g dry. Fold it through with a cutting motion — stirring turns it to paste.',
@@ -21910,7 +21911,7 @@ function nutProgShoppingFor(week, riceId){
     var gm = grainMeals[g.name] || { total:0, by:{} };
     out.grains.push({ id:g.id, name:g.name, dry_g:Math.round(t2.cooked / g.expand),
                       cooked_g:Math.round(t2.cooked), water:g.water, mins:g.mins,
-                      tip:g.tip, to_order:!!g.to_order, season:g.season || null,
+                      tip:g.tip, reheat:g.reheat || null, season:g.season || null,
                       season_c:g.season_c || 0,
                       meals:gm.total, by_meal:gm.by });
   });
@@ -21935,10 +21936,8 @@ function nutProgPrepFor(week, riceId){
     return null;
   };
   var chicken = find('Chicken breast');
-  // Every grain the week uses. Batched ones get a step each; risotto does not
-  // get a step at all, because it is not batched — see below.
-  var batchGrains = (shop.grains || []).filter(function(g){ return !g.to_order; });
-  var orderGrains = (shop.grains || []).filter(function(g){ return  g.to_order; });
+  // Every grain the week uses gets a step. All of them are batched.
+  var batchGrains = (shop.grains || []);
   var spud    = find('Sweet potato');
   var days    = _nutProgWeekDates(week);
   var lunches = 0, dinners = 0;
@@ -21957,7 +21956,8 @@ function nutProgPrepFor(week, riceId){
       steps.push('Cook ' + g.dry_g + ' g dry ' + g.name.toLowerCase() + ' in ' +
                  Math.round(g.dry_g * g.water) + ' ml water, ' + g.mins +
                  ' min — ' + g.cooked_g + ' g cooked, for ' + _nutProgGrainMealsPhrase(g) +
-                 (g.season ? '. Then season it while warm' : ''));
+                 (g.season ? '. Then season it while warm' : '') +
+                 (g.reheat ? '. ' + g.reheat : ''));
     });
     var _dinnerGrain = batchGrains.some(function(g){ return (g.by_meal || {}).dinner; });
     out.batches.push({
@@ -21984,14 +21984,6 @@ function nutProgPrepFor(week, riceId){
     { n:'Mid-morning',   why:'yoghurt and nuts, weighed' },
     { n:'Afternoon',     why:'a tin, cakes and a jar' }
   ];
-  // NOT BATCHED, AND SAYING SO IS THE POINT. Risotto is finished by stirring
-  // stock in a ladle at a time and goes to paste reheated, so listing it beside
-  // the rice would put a grain in the Sunday batch that cannot survive to
-  // Wednesday. It appears here instead, with the weight for the night it is on.
-  orderGrains.forEach(function(g){
-    out.fresh.push({ n:g.name, why:'cooked to order — ' + g.dry_g +
-      ' g dry across the week, about ' + g.mins + ' min a time. Reheated risotto is paste' });
-  });
   return out;
 }
 
@@ -22413,7 +22405,7 @@ function nutOpenSwapSheet(forDate){
         var sub = o.keep
           ? (Math.round(prow.g[_gix]) + ' g as the plan is written')
           : (q ? (q.cooked_g + ' g cooked &middot; ' + q.dry_g + ' g dry &middot; same ' + q.carbs_g + ' g carbs') : '');
-        if(!o.keep && o.to_order) sub += ' &middot; cooked to order, not batched';
+        if(!o.keep && o.reheat) sub += ' &middot; batched, with a reheat note';
         // What it costs relative to the slot's default. Carbohydrate is held, so
         // this is always protein and fat, and on quinoa it is worth seeing.
         if(q && _gBase){
@@ -22875,28 +22867,6 @@ function nutProgBatchRecipes(week){
   // answering to the same id is how one of them goes missing.
   (shop.grains || []).forEach(function(g){
     var water = Math.round(g.dry_g * g.water);
-    if(g.to_order){
-      // A DIFFERENT CARD, not a variant of the batch one. Nothing here is
-      // portioned into containers, and the quantity is per night rather than
-      // for the week, because that is how it will actually be cooked.
-      out.push({
-        id:'grain_' + g.id, name:g.name, portions:g.meals, to_order:true,
-        headline: g.dry_g + ' g dry across the week — cooked to order',
-        yields: 'about ' + g.cooked_g + ' g cooked in total',
-        steps: [
-          'NOT a Sunday batch. Reheated risotto is paste — cook it on the night.',
-          'For ' + _nutProgGrainMealsPhrase(g) + ' — weigh each night\'s share dry, ' +
-            Math.round(g.dry_g / Math.max(1, g.meals)) + ' g a time. Toast it in the pan for a minute first.',
-          'Have about ' + g.water + ' times its weight in hot stock ready — ' + water +
-            ' ml for the full ' + g.dry_g + ' g.',
-          'Add the stock a ladle at a time, stirring, waiting for each to go before the next.',
-          g.tip + '. About ' + g.mins + ' minutes in total.',
-          'STOCK IS NOT FREE: a cube is roughly 1 g of carbohydrate and a gram of ' +
-            'fat, which the plan does not count. Use a low-salt one and keep it thin.'
-        ]
-      });
-      return;
-    }
     var steps = [
       'Weigh ' + g.dry_g + ' g dry and add ' + water + ' ml water — a ratio of 1 : ' + g.water + ' by weight.',
       'Bring to the boil uncovered, then cover and drop to the lowest simmer.',
@@ -22912,9 +22882,13 @@ function nutProgBatchRecipes(week){
                  Math.round(g.dry_g * g.season_c / 100) + ' g across this ' + g.dry_g +
                  ' g. Use a granulated sweetener instead if you would rather not spend it.');
     }
-    steps.push('Portion into ' + g.meals + ' while warm — it separates better than cold.');
+    steps.push('Portion into ' + g.meals + ' container' + (g.meals === 1 ? '' : 's') +
+               ' while warm — it separates better than cold.');
+    // The reheat note goes LAST, because it is the instruction for a different
+    // day from the rest of the card.
+    if(g.reheat) steps.push('Reheating: ' + g.reheat);
     out.push({
-      id:'grain_' + g.id, name:g.name, portions:g.meals,
+      id:'grain_' + g.id, name:g.name, portions:g.meals, reheat:g.reheat || null,
       headline: g.dry_g + ' g dry : ' + water + ' ml water',
       yields: g.cooked_g + ' g cooked, for ' + _nutProgGrainMealsPhrase(g),
       steps: steps

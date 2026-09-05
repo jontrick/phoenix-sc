@@ -3057,7 +3057,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'and sushi ONE — it was labelled seven portions when the count was assumed ' +
       'rather than counted, which described 97 g of dry rice as a week of lunches');
     assert.deepEqual(by.arborio.by_meal, { dinner: 1 }, 'and which meal it is for');
-    assert.equal(by.arborio.to_order, true, 'risotto is flagged as cooked to order');
+    assert.ok(by.arborio.reheat, 'risotto carries a reheat note rather than a batch exemption');
   });
 
   // ── the prep plan ─────────────────────────────────────────────────────────
@@ -3075,22 +3075,27 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'and each says what it feeds — "97 g dry" means nothing on its own');
   });
 
-  test('PREP risotto is NOT in the batch — it is cooked to order', () => {
+  // v4.9.306. This case asserted the OPPOSITE yesterday, and was right to: I had
+  // ruled risotto out of the batch on cooking grounds. Jon batches it, said so
+  // twice, and it is his kitchen — so the case is rewritten to his rule rather
+  // than the tolerance being widened to let both pass.
+  test('PREP risotto IS in the batch, with a reheat note attached', () => {
     const days = (setUp(110), jonsWeek());
     const prep = app.nutProgPrepFor(1, 'basmati');
     const steps = prep.batches.map((b) => b.steps.join(' ')).join(' ');
-    assert.equal(/[Aa]rborio/.test(steps), false,
-      'a tub of risotto reheated on Wednesday is paste, so it must not be listed ' +
-      'beside the rice as though Sunday could produce it');
-    const fresh = prep.fresh.filter((f) => /Arborio/.test(f.n))[0];
-    assert.ok(fresh, 'it is in the fresh list instead');
-    assert.ok(/cooked to order/.test(fresh.why), 'and says why: ' + fresh.why);
+    assert.ok(/73 g dry arborio \(risotto\) in 146 ml water, 18 min/.test(steps),
+      'cooked on the Sunday with the others, at its own 1:2 ratio and 18 minutes');
+    assert.ok(/splash of stock or water when reheating/.test(steps),
+      'and the prep plan carries the reheat note — this is the sheet he reads on ' +
+      'the day he cooks, so the instruction for the day he eats has to travel with it');
+    assert.equal(prep.fresh.filter((f) => /Arborio/.test(f.n)).length, 0,
+      'and it is NOT held out as a fresh item any more');
   });
 
   test('PREP a multi-grain week warns that it is more than one pot', () => {
     const days = (setUp(110), jonsWeek());
     const note = app.nutProgPrepFor(1, 'basmati').batches[0].note;
-    assert.ok(/3 grains this week, so 3 separate pots/.test(note),
+    assert.ok(/4 grains this week, so 4 separate pots/.test(note),
       'three pots is a thing to know on the Wednesday, not to discover on the ' +
       'Sunday with one pan on the hob: ' + note);
     setUp(110);
@@ -3104,6 +3109,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const ids = app.nutProgBatchRecipes(1).map((r) => r.id).filter((x) => /^grain_/.test(x));
     assert.deepEqual(ids.sort(), ['grain_arborio','grain_basmati','grain_longgrain','grain_sushi'],
       'four grain cards, not one');
+    assert.equal(grainCard(1, 'arborio').portions, 1, 'and risotto is one of them now');
     assert.equal(grainCard(1, 'sushi').headline, '97 g dry : 116 ml water', 'sushi ratio');
     assert.equal(grainCard(1, 'basmati').headline, '397 g dry : 596 ml water', 'basmati ratio');
     assert.equal(grainCard(1, 'sushi').portions, 1,
@@ -3122,14 +3128,31 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'while plain rice is not seasoned');
   });
 
-  test('BATCH risotto gets a DIFFERENT card, not a variant of the batch one', () => {
+  test('BATCH risotto gets the same card as any other grain, plus a reheat step', () => {
     const days = (setUp(110), jonsWeek());
     const r = grainCard(1, 'arborio');
-    assert.equal(r.to_order, true, 'flagged');
-    assert.ok(/NOT a Sunday batch/.test(r.steps.join(' ')), 'and says so first');
-    assert.ok(/ladle at a time/.test(r.steps.join(' ')), 'with the method that makes it risotto');
-    assert.equal(/Portion into/.test(r.steps.join(' ')), false,
-      'and nothing about portioning it into containers, which is the thing that ruins it');
+    assert.equal(r.headline, '73 g dry : 146 ml water', 'its own ratio, 1:2');
+    assert.ok(/Simmer 18 minutes/.test(r.steps.join(' ')), 'and its own time');
+    assert.ok(/Portion into 1 container/.test(r.steps.join(' ')),
+      'portioned like everything else — and reading as English for a single meal, ' +
+      'which "Portion into 1" did not');
+    assert.equal(r.steps[r.steps.length - 1],
+      'Reheating: Add a splash of stock or water when reheating and stir to loosen.',
+      'with the reheat note LAST, because it is the instruction for a different day');
+    assert.equal(/ladle at a time|NOT a Sunday batch/.test(r.steps.join(' ')), false,
+      'and nothing left over from the cook-to-order card that this replaced');
+  });
+
+  test('BATCH no recipe card tells him to stir and not to lift the lid', () => {
+    const days = (setUp(110), jonsWeek());
+    app.nutProgBatchRecipes(1).filter((r) => /^grain_/.test(r.id)).forEach((r) => {
+      const joined = r.steps.join(' ');
+      assert.equal(/Do not lift the lid/.test(joined) && /\bStir\b/.test(joined), false,
+        r.name + ' contradicts itself inside one card — the arborio tip said ' +
+        '"stir once or twice" two steps after "do not lift the lid". A contradiction ' +
+        'in one document produces several confident readers disagreeing, and a ' +
+        'recipe has exactly one reader with his hands full: ' + joined);
+    });
   });
 
   // ── the door ──────────────────────────────────────────────────────────────
@@ -3143,7 +3166,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('data-nut-grain="dinner|keep"') >= 0, 'and a way back to the sweet potato');
     assert.equal(html.indexOf('data-nut-grain="lunch|keep"'), -1, 'which lunch does not offer');
     assert.ok(/Arborio \(risotto\)/.test(html), 'named as Jon names it');
-    assert.ok(/cooked to order, not batched/.test(html), 'and flagged where it is chosen');
+    assert.ok(/batched, with a reheat note/.test(html),
+      'and flagged where it is chosen — it IS batched, so the sheet must not still ' +
+      'say otherwise');
   });
 
   test('GRAIN the sheet shows what a grain COSTS, not only what it weighs', () => {

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.305'", 'version is 4.9.305');
+has("var APP_VERSION='4.9.306'", 'version is 4.9.306');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3226,11 +3226,19 @@ hasCode('var r = _gr || _nutRiceById(rice);',
 hasCode('grainMeals[key].total++',
         'GRAIN: and counts the meals each grain feeds rather than assuming seven');
 
-// RISOTTO IS NOT BATCHED. A tub of it reheated on Wednesday is paste, so it must
-// never appear in the Sunday batch beside the rice.
-hasCode('to_order:true',            'GRAIN: risotto is flagged as cooked to order');
-hasCode('return !g.to_order;',      'GRAIN: and the prep batch EXCLUDES it');
-hasCode('NOT a Sunday batch',       'GRAIN: its recipe card leads with that');
+// RISOTTO IS BATCHED WITH THE REST — Jon's ruling, v4.9.306, overriding mine.
+// It stiffens in the fridge more than long grain, which is a reheat instruction
+// rather than a reason to cook it separately. These guards now hold HIS rule.
+hasCode("reheat:'Add a splash of stock or water when reheating and stir to loosen.'",
+        'GRAIN: risotto carries a reheat note');
+hasCode("(g.reheat ? '. ' + g.reheat : '')",
+        'GRAIN: which reaches the PREP PLAN — the sheet he reads on the day he cooks');
+hasCode("steps.push('Reheating: ' + g.reheat)",
+        'GRAIN: and the recipe card, where he reads it on the day he eats');
+hasNotCode('to_order',
+        'GRAIN: and NOTHING is held out of the batch — the cook-to-order branch is ' +
+        'removed, not left behind a flag no grain sets. A dead branch is the quiet ' +
+        'cousin of this codebase\'s commonest defect');
 hasNotCode("name:'Arborio, plain'",
         'GRAIN: one vocabulary — Jon calls it risotto, so the app does too');
 
@@ -3244,6 +3252,12 @@ hasCode('THE SEASONING IS NOT COUNTED',
 // choice existed too. Shown at the point of choosing rather than rebalanced.
 hasCode('which nothing makes up',
         'GRAIN: the sheet says the protein and fat cost is NOT compensated');
+
+// A card that says "do not lift the lid" and then "stir once or twice" is a
+// contradiction inside one document, read by someone with his hands full. Same
+// trap as the CLAUDE.md reinstall paragraph, one recipe wide.
+hasNotCode("tip:'Stir once or twice so it does not catch'",
+        'GRAIN: no grain tip tells him to stir a pot the card just told him to leave shut');
 
 // ── the nut and nut-butter selectors (v4.9.303) ────────────────────────────
 // Two slots whose serve is DERIVED from the fat rather than stored, so the

@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.306';
+var APP_VERSION='4.9.307';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21359,6 +21359,24 @@ function nutProgMealsOn(dateKey, riceId){
       var g = it.g[ix];
       if(!(g > 0)) continue;
       var name = it.n, grams = g, unit = it.u, mac = null;
+      // A swap that puts SEVERAL foods on the plate. Egg whites and whole eggs
+      // are different products on different shelves, so one row cannot carry
+      // them and one line would shop as an item he cannot buy.
+      if(M.id === 'bfast' && it.n === _NUT_BFAST_PROTEIN_ITEM){
+        var _bp = _nutProgNightlyOpt('bfast_protein', nutProgNightlyOn(dateKey).bfast_protein);
+        if(_bp && !_bp.base && _bp.parts){
+          for(var _pi = 0; _pi < _bp.parts.length; _pi++){
+            var _pt = _bp.parts[_pi], _pg = _nutPartG(_pt, ix);
+            var _pm = { k:_pt.k * _pg / 100, p:_pt.p * _pg / 100,
+                        c:_pt.c * _pg / 100, f:_pt.f * _pg / 100 };
+            items.push({ n:_pt.n, g:_pg, u:_pt.u || '', carb:!!_pt.carb, count:!!_pt.count,
+                         k:Math.round(_pm.k), p:Math.round(_pm.p * 10) / 10,
+                         c:Math.round(_pm.c * 10) / 10, f:Math.round(_pm.f * 10) / 10 });
+            K += _pm.k; P += _pm.p; C += _pm.c; F += _pm.f;
+          }
+          continue;
+        }
+      }
       // Week-long protein swap: same portion, different animal.
       var swSlot = (it.n === _NUT_PROG_SWAPS.lunch_protein.item) ? 'lunch_protein' : null;
       if(swSlot){
@@ -21869,8 +21887,8 @@ function nutProgShoppingFor(week, riceId){
     // Only a real grain may borrow the Rice row's conversion. Anything else with
     // no row of its own is bought exactly as the plate lists it.
     var _gr = _nutRiceByName(k);
-    var row = _nutProgPlateRow(k) || (_gr ? _nutProgPlateRow('Rice') : null);
-    var grp = (row && row.grp) || _nutProgSwapShelf(k) || 'produce';
+    var row = _nutProgPlateRow(k) || _nutProgSwapRow(k) || (_gr ? _nutProgPlateRow('Rice') : null);
+    var grp = (row && row.grp) || 'produce';
     var qty = t.cooked, unit = 'g', note = '';
 
     if(row && row.rice){
@@ -22050,6 +22068,73 @@ var _NUT_PROG_DINNER_PROTEIN = [
 // matching 8 g of carbohydrate would ask for 570 g of spinach, which is a
 // gardening project, not a side. The spread across these is about five grams of
 // carbohydrate, a fifth of a block, and the day absorbs it.
+// ── breakfast protein ──────────────────────────────────────────────────────
+// v4.9.307. Jon's source plan opened with eggs and the app had quietly replaced
+// them with a whey shake. This puts the original back as a CHOICE.
+//
+// THE FIRST SWAP THAT IS MORE THAN ONE FOOD. Every other option in this file
+// replaces one plate row with one food. Breakfast eggs are egg whites AND whole
+// eggs — different products, different shelves, bought separately — so an option
+// can now carry `parts`, and one row can put several foods on the plate.
+// Collapsing them into a single "Eggs 345 g" line would have shopped as one item
+// he cannot buy.
+//
+// MACROS ARE PER 100 g, like every other row here. Standard composition values,
+// same provenance as the rest of the table: egg white 52 kcal / 10.9 p, whole egg
+// 143 / 12.6 / 9.5 f. Jon's own figures for the source plan were ~27 g protein
+// from the whites and 12 g / 10 g from two eggs, which these reproduce.
+//
+// THE EGG VERSION IS FATTIER, and Jon asked for the evening oil to take it —
+// nutProgNightlyFatDelta does, so the day still lands on its fat target. It is
+// also about 8 g higher in PROTEIN, which nothing compensates and which the sheet
+// therefore states. Same rule as the grains: visible beats silently rebalanced.
+var _NUT_BFAST_PROTEIN_ITEM = 'Whey protein';   // the plate row the pick replaces
+var _NUT_EGG_WHITE = { n:'Egg whites',  grp:'protein', g:[245,297,322,361,374], u:' ml', k:52,  p:10.9, c:0.7, f:0.17 };
+var _NUT_EGG_WHOLE = { n:'Eggs, whole', grp:'protein', g:100, u:'',    k:143, p:12.6, c:0.7, f:9.5, piece:50 };
+var _NUT_EGG_VEG = [
+  { n:'Spinach',   grp:'produce', g:50, u:'', k:23, p:2.9, c:1.4, f:0.4, carb:true },
+  { n:'Mushrooms', grp:'produce', g:30, u:'', k:22, p:3.1, c:3.3, f:0.3, carb:true },
+  { n:'Onion',     grp:'produce', g:30, u:'', k:40, p:1.1, c:9.3, f:0.1, carb:true }
+];
+var _NUT_PROG_BFAST_PROTEIN = [
+  { id:'whey', n:'Whey protein', base:true },
+  { id:'eggs', n:'Egg whites and 2 eggs', parts:[_NUT_EGG_WHITE, _NUT_EGG_WHOLE] },
+  { id:'eggsveg', n:'Eggs, scrambled with vegetables',
+    parts:[_NUT_EGG_WHITE, _NUT_EGG_WHOLE].concat(_NUT_EGG_VEG) }
+];
+
+// A part's weight may be a per-phase array, exactly like a plate row's, or a
+// single number where the food does not move across the cut.
+function _nutPartG(pt, phaseIx){
+  var ix = parseInt(phaseIx, 10);
+  if(Object.prototype.toString.call(pt.g) === '[object Array]') return pt.g[ix >= 0 ? ix : 0];
+  return pt.g;
+}
+
+// What a multi-part option puts on the plate, added up. Returns null for a base
+// option, whose macros come from the plate row it does not replace.
+function _nutProgPartsMacros(opt, phaseIx){
+  if(!opt || !opt.parts) return null;
+  var m = { k:0, p:0, c:0, f:0 };
+  for(var i = 0; i < opt.parts.length; i++){
+    var pt = opt.parts[i], g = _nutPartG(pt, phaseIx);
+    m.k += pt.k * g / 100; m.p += pt.p * g / 100;
+    m.c += pt.c * g / 100; m.f += pt.f * g / 100;
+  }
+  return m;
+}
+
+// The plate row for one MEAL's copy of a name. Two meals can carry the same food
+// at different weights, and _nutProgPlateRow returns the first match — which
+// would have sized one from the other's grams.
+function _nutProgPlateRowIn(mealId, name){
+  for(var i = 0; i < _NUT_PROG_PLATE.length; i++){
+    var r = _NUT_PROG_PLATE[i];
+    if(r.m === mealId && r.n === name) return r;
+  }
+  return null;
+}
+
 var _NUT_PROG_MIDAM_DAIRY = [
   { id:'yoghurt', n:'Greek yoghurt, 0%', g:200, k:57, p:10,   c:4.0, f:0.2, base:true },
   { id:'cottage', n:'Cottage cheese',    g:180, k:81, p:11,   c:4.3, f:2.3 },
@@ -22174,25 +22259,42 @@ function _nutNightlyIdByName(name){
   return null;
 }
 
-// Which shelf a SWAPPED-IN food belongs on. One table, every option list, so a
-// list added later cannot be forgotten here — the previous version named only
-// the dinner proteins and sent everything else to Produce.
-function _nutProgSwapShelf(name){
+// Everything a SWAP can put on the plate, by display name, returned as a row the
+// shopping list can read: which shelf, and how it is bought. One table, every
+// option list, so a list added later cannot be forgotten here — an earlier
+// version named only the dinner proteins and sent everything else to Produce.
+//
+// An option may declare its own `grp`, which wins over the list's: egg whites
+// live in the mid-morning DAIRY list because that is the slot they replace, and
+// they are not a dairy.
+function _nutProgSwapRow(name){
   var sets = [['protein', _NUT_PROG_DINNER_PROTEIN],
               ['produce', _NUT_PROG_DINNER_VEG],
               ['dairy',   _NUT_PROG_MIDAM_DAIRY],
               ['fat',     _NUT_PROG_NUTS],
               ['fat',     _NUT_PROG_NUT_BUTTER],
+              ['protein', _NUT_PROG_BFAST_PROTEIN],
               ['protein', _NUT_PROG_SWAPS.lunch_protein.opts]];
-  for(var i = 0; i < sets.length; i++)
-    for(var j = 0; j < sets[i][1].length; j++)
-      if(sets[i][1][j].n === name) return sets[i][0];
+  var hit = function(o, dflt){
+    return { grp: o.grp || dflt, piece:o.piece, yld:o.yld, tin:o.tin,
+             count:!!o.count, rice:false };
+  };
+  for(var i = 0; i < sets.length; i++){
+    var list = sets[i][1];
+    for(var j = 0; j < list.length; j++){
+      if(list[j].n === name) return hit(list[j], sets[i][0]);
+      var parts = list[j].parts || [];
+      for(var q = 0; q < parts.length; q++)
+        if(parts[q].n === name) return hit(parts[q], sets[i][0]);
+    }
+  }
   return null;
 }
 function _nutProgNightlyOpt(slot, id){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
            : (slot === 'dinner_veg')     ? _NUT_PROG_DINNER_VEG
            : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY
+           : (slot === 'bfast_protein')  ? _NUT_PROG_BFAST_PROTEIN
            : (_NUT_PROG_FAT_SLOTS[slot]  ? _NUT_PROG_FAT_SLOTS[slot].opts : null);
   if(!list) return null;
   for(var i = 0; i < list.length; i++) if(list[i].id === id) return list[i];
@@ -22201,6 +22303,7 @@ function _nutProgNightlyOpt(slot, id){
 function _nutProgNightlyBase(slot){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
            : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY
+           : (slot === 'bfast_protein')  ? _NUT_PROG_BFAST_PROTEIN
            : (_NUT_PROG_FAT_SLOTS[slot]  ? _NUT_PROG_FAT_SLOTS[slot].opts : _NUT_PROG_DINNER_VEG);
   for(var i = 0; i < list.length; i++) if(list[i].base) return list[i];
   return list[0];
@@ -22220,7 +22323,8 @@ function nutProgNightlyOn(dateKey){
   };
   return { dinner_protein: pick('dinner_protein'), dinner_veg: pick('dinner_veg'),
            midam_dairy: pick('midam_dairy'),
-           midam_nuts: pick('midam_nuts'), arvo_butter: pick('arvo_butter') };
+           midam_nuts: pick('midam_nuts'), arvo_butter: pick('arvo_butter'),
+           bfast_protein: pick('bfast_protein') };
 }
 
 // What he SHOPPED for. Set on the Wednesday; any night can override it without
@@ -22256,11 +22360,19 @@ function nutProgNightlyFatDelta(dateKey){
     if(!chosen || !base || chosen.id === base.id) return;
     d += (chosen.f * chosen.g / 100) - (base.f * base.g / 100);
   });
+  // Breakfast eggs carry about 8 g more fat than the whey they replace, and Jon
+  // asked for the evening oil to take it. Phase 1 goes 13 ml to 5.
+  var _ft = nutProgTargetsOn(dateKey);
+  var _bpOpt = _nutProgNightlyOpt('bfast_protein', pick.bfast_protein);
+  if(_ft && _bpOpt && !_bpOpt.base){
+    var _bpM = _nutProgPartsMacros(_bpOpt, _ft.phase_n - 1);
+    var _wRow = _nutProgPlateRowIn('bfast', _NUT_BFAST_PROTEIN_ITEM);
+    if(_bpM && _wRow) d += _bpM.f - (_wRow.f * _wRow.g[_ft.phase_n - 1] / 100);
+  }
   // The nut slots are SIZED to the fat, so all that can survive here is the
   // rounding to whole grams — a few tenths. Carried anyway, because a future
   // option with a poorer fit must show up in the oil rather than drift away
   // silently, and tenths are cheaper to route than to argue about.
-  var _ft = nutProgTargetsOn(dateKey);
   if(_ft){
     var _fix = _ft.phase_n - 1;
     Object.keys(_NUT_PROG_FAT_SLOTS).forEach(function(slot){
@@ -22371,6 +22483,43 @@ function nutOpenSwapSheet(forDate){
     if(note) h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">' + note + '</div>';
     h += '</div>';
   });
+
+  if(typeof _NUT_PROG_BFAST_PROTEIN !== 'undefined'){
+    var _bt  = nutProgTargetsOn(today);
+    var _bix = _bt ? (_bt.phase_n - 1) : 0;
+    var _wr  = _nutProgPlateRowIn('bfast', _NUT_BFAST_PROTEIN_ITEM);
+    var _wg  = _wr ? _wr.g[_bix] : 0;
+    var _wm  = _wr ? { k:_wr.k*_wg/100, p:_wr.p*_wg/100, c:_wr.c*_wg/100, f:_wr.f*_wg/100 } : null;
+    var _bcur = nutProgNightlyOn(today).bfast_protein;
+    h += '<div style="margin-bottom:16px;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Breakfast protein</div>';
+    _NUT_PROG_BFAST_PROTEIN.forEach(function(o){
+      var on = (_bcur === o.id);
+      var m  = o.base ? _wm : _nutProgPartsMacros(o, _bix);
+      var line = o.base
+        ? (_wg + ' g')
+        : o.parts.map(function(pt){ return pt.n + ' ' + _nutPartG(pt, _bix) + (pt.u || ' g'); }).join(', ');
+      var cost = '';
+      if(m && _wm && !o.base){
+        var dp = Math.round((m.p - _wm.p) * 10) / 10;
+        var df = Math.round((m.f - _wm.f) * 10) / 10;
+        var bits = [];
+        if(Math.abs(df) >= 1) bits.push((df > 0 ? '+' : '') + df + ' g fat, which the evening oil takes');
+        if(Math.abs(dp) >= 1) bits.push((dp > 0 ? '+' : '') + dp + ' g protein, which nothing makes up');
+        if(bits.length) cost = '<br><span style="color:var(--gold);">' + bits.join(' &middot; ') + '</span>';
+      }
+      h += '<div data-nut-night="bfast_protein|' + o.id + '" style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+        '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;color:var(--text);">' + o.n +
+            (o.base ? ' <span style="font-size:9px;color:var(--text3);font-weight:400;">default</span>' : '') + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + line +
+            (m ? (' &middot; ' + Math.round(m.p) + ' g protein &middot; ' + Math.round(m.k) + ' kcal') : '') +
+            cost + '</div>' +
+        '</div></div>';
+    });
+    h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">The oats, blueberries and milk stay as they are &mdash; this swaps the protein only.</div></div>';
+  }
 
   // The grain, meal by meal. Rendered separately from the option lists above
   // because the useful number here is the WEIGHT each grain lands on the plate

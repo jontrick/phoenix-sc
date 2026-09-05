@@ -3214,6 +3214,169 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'and a dinner left as planned says nothing, rather than adding noise to five rows');
   });
 
+  // ── breakfast eggs ───────────────────────────────────────────────────────
+  // v4.9.307. Jon's source plan opened with egg whites and two whole eggs; the
+  // app had replaced that with a whey shake. Every figure below was measured off
+  // the built engine before it was written down.
+
+  const bfastOf = (d) => (app.nutProgMealsOn(d, 'basmati') || []).filter((m) => m.id === 'bfast')[0];
+  const bfastNames = (d) => bfastOf(d).items.map((it) => it.n);
+  const oilOn = (d) => (app.nutProgMealsOn(d, 'basmati') || [])
+    .filter((m) => m.id === 'dinner')[0].items.filter((it) => /Olive/.test(it.n))[0].g;
+
+  test('EGGS breakfast still defaults to the whey shake', () => {
+    setUp(110);
+    assert.deepEqual(bfastNames('2026-09-16'),
+      ['Oats', 'Whey protein', 'Blueberries', 'Semi-skimmed milk'],
+      'nothing changed for anyone who does not choose eggs');
+  });
+
+  test('EGGS the swap puts TWO foods on the plate, not one combined line', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+    const names = bfastNames(d);
+    assert.equal(names.indexOf('Whey protein'), -1, 'the shake is gone');
+    assert.ok(names.indexOf('Egg whites') >= 0 && names.indexOf('Eggs, whole') >= 0,
+      'and BOTH egg foods are there: ' + names.join(', ') + '. They are different ' +
+      'products on different shelves — one combined line would shop as an item ' +
+      'he cannot buy');
+    assert.deepEqual(bfastNames(d).slice(0, 1), ['Oats'],
+      'and the oats, blueberries and milk are untouched — this swaps protein only');
+  });
+
+  test('EGGS Jon\'s own quantities, at phase 1', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+    const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
+    const whole  = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
+    assert.equal(whites.g, 245, 'one cup of whites, as he specified');
+    assert.equal(whites.u, ' ml', 'measured in ml, because that is how a carton is poured');
+    assert.ok(Math.abs(whites.p - 27) <= 1, 'about 27 g of protein, as he specified: ' + whites.p);
+    assert.equal(whole.g, 100, 'two whole eggs');
+    assert.ok(Math.abs(whole.p - 12.6) <= 1 && Math.abs(whole.f - 9.5) <= 1,
+      'carrying his 12 g protein and 10 g fat: p' + whole.p + ' f' + whole.f);
+  });
+
+  test('EGGS the evening oil takes the extra fat, which is what Jon asked for', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const t = app.nutProgTargetsOn(d);
+    const before = oilOn(d);
+    app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+    const after = oilOn(d);
+    assert.ok(after < before - 5,
+      'the oil drops hard — ' + before + ' ml to ' + after + ' — because two eggs ' +
+      'carry about 8 g of fat the whey did not');
+    const day = app.nutProgDayTotals(d, 'basmati');
+    assert.ok(Math.abs(day.f - t.total.f) <= 1,
+      'and the DAY still lands on its fat target: ' + day.f + ' against ' + t.total.f);
+  });
+
+  test('EGGS the whites follow the PHASE, so the option is never short late in the cut', () => {
+    setUp(110);
+    // Measured: with the whites fixed at 245 ml the option ran +8.2 g of protein
+    // at phase 1 and MINUS 7.2 at phase 5, because the whey it replaces grows
+    // 38 g to 58 g across the cut. Short on protein late is the wrong direction —
+    // that is the macro the plan is protecting, when calories are lowest.
+    const PH = ['2026-09-16', '2026-10-07', '2026-10-28', '2026-11-18', '2026-12-09'];
+    const want = [245, 297, 322, 361, 374];
+    PH.forEach((d, ix) => {
+      app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+      const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
+      assert.equal(whites.g, want[ix], 'phase ' + (ix + 1) + ' whites');
+      assert.equal(bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0].g, 100,
+        'while the two eggs stay two eggs — they are the meal, the whites are the dial');
+      const day = app.nutProgDayTotals(d, 'basmati');
+      const drift = day.p - app.nutProgTargetsOn(d).total.p;
+      assert.ok(drift > 0 && drift <= 16,
+        'phase ' + (ix + 1) + ' protein drift ' + drift.toFixed(1) + ' — protein-FORWARD ' +
+        'at every phase and never behind. Nothing compensates protein, so the sheet ' +
+        'states this rather than the plan hiding it');
+    });
+  });
+
+  test('EGGS the vegetable version adds the three from the source plan', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetNightly(d, 'bfast_protein', 'eggsveg');
+    const items = bfastOf(d).items;
+    [['Spinach', 50], ['Mushrooms', 30], ['Onion', 30]].forEach((pair) => {
+      const it = items.filter((x) => x.n === pair[0])[0];
+      assert.ok(it, pair[0] + ' is on the plate');
+      assert.equal(it.g, pair[1], 'at the source plan\'s weight');
+    });
+    assert.ok(items.filter((x) => x.n === 'Egg whites')[0], 'alongside the eggs, not instead of them');
+  });
+
+  test('EGGS an unknown breakfast pick is refused', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetNightly('2026-09-16', 'bfast_protein', 'omelette'), false, 'not in the table');
+    assert.deepEqual(bfastNames('2026-09-16').indexOf('Whey protein') >= 0, true, 'and the default stands');
+  });
+
+  // ── the shopping list ─────────────────────────────────────────────────────
+  test('SHOP eggs are bought by the PIECE and whites by volume', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    days.forEach((d) => app.nutProgSetNightly(d, 'bfast_protein', 'eggs'));
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const whole = shopItem(shop, 'Eggs, whole');
+    assert.equal(whole.qty, 14, 'fourteen eggs, not 700 g of egg');
+    assert.equal(whole.unit, '', 'counted, not weighed');
+    const whites = shopItem(shop, 'Egg whites');
+    assert.equal(whites.qty, 1715, 'seven cups of whites');
+    assert.equal(whites.unit, 'ml', 'poured, not weighed');
+    assert.equal(!!shopItem(shop, 'Whey protein'), false, 'and no whey for a week that eats none');
+  });
+
+  test('SHOP swapped-in eggs land on the PROTEIN shelf, and the veg on Produce', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    days.forEach((d) => app.nutProgSetNightly(d, 'bfast_protein', 'eggsveg'));
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const shelf = (n) => {
+      let g = null;
+      shop.groups.forEach((grp) => grp.items.forEach((it) => { if (it.n === n) g = grp.id; }));
+      return g;
+    };
+    assert.equal(shelf('Egg whites'), 'protein', 'egg whites are a protein');
+    assert.equal(shelf('Eggs, whole'), 'protein', 'so are eggs');
+    assert.equal(shelf('Spinach'), 'produce', 'and the scramble veg is produce');
+    assert.equal(shopItem(shop, 'Spinach').qty, 350, 'seven days at 50 g');
+  });
+
+  // ── the door ──────────────────────────────────────────────────────────────
+  test('EGGS the sheet OFFERS the breakfast swap, and says what it costs', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-night="bfast_protein|eggs"') >= 0, 'the egg row');
+    assert.ok(html.indexOf('data-nut-night="bfast_protein|eggsveg"') >= 0, 'the veg row');
+    assert.ok(html.indexOf('data-nut-night="bfast_protein|whey"') >= 0, 'and a way back to the shake');
+    assert.ok(/Egg whites 245 ml/.test(html), 'shown at the weight actually eaten');
+    assert.ok(/which the evening oil takes/.test(html),
+      'the fat is declared AND said to be handled');
+    assert.ok(/which nothing makes up/.test(html),
+      'and the protein is declared as NOT handled — the two are different promises ' +
+      'and saying so is the whole point of showing either');
+  });
+
+  test('EGGS tapping the row records it — the swap has a door', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const ov = d.lastCreated();
+    const row = ov.querySelectorAll('[data-nut-night]')
+      .filter((el) => el.getAttribute('data-nut-night') === 'bfast_protein|eggs')[0];
+    assert.ok(row, 'the row exists to be tapped');
+    d.fire(row, 'click');
+    assert.ok(bfastNames('2026-09-16').indexOf('Egg whites') >= 0,
+      'and the tap reached the plate');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

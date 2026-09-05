@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.306'", 'version is 4.9.306');
+has("var APP_VERSION='4.9.307'", 'version is 4.9.307');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3292,8 +3292,9 @@ hasCode("_fatSlot = (M.id === 'midam'",
 // forgotten. Before this, only the dinner proteins were named and everything
 // else fell through to Produce — cottage cheese and turkey breast were filed
 // under vegetables, measured 2026-09-05.
-hasCode('function _nutProgSwapShelf(',
-        'NUTS: swapped-in foods have a shelf lookup of their own');
+hasCode("['fat',     _NUT_PROG_NUTS]",
+        'NUTS: swapped-in nuts declare their own shelf (the lookup widened in .307 ' +
+        'to carry how a food is BOUGHT as well as where it sits)');
 hasNotCode("_nutProgNightlyOpt('dinner_protein', _nutNightlyIdByName(k)) ? 'protein' : 'produce'",
         'NUTS: and the old one-list-only fallback that sent cashew butter to Produce is gone');
 

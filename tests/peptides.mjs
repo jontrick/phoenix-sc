@@ -1110,6 +1110,163 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'opening the sheet on the wrong stack');
     });
 
+    // ── "MADE UP TODAY" AND "NOT NOW" (v4.9.300) ──────────────────────────
+    // Jon has a make-up note on Ipamorelin and does not need to mix it now. He
+    // asked for three things: dismiss the note without claiming a vial was
+    // mixed; mark one made up when he does mix it, which dates it and deducts
+    // stock; and stock that only ever moves on a make-up.
+    const mu = (over) => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [Object.assign({
+        compoundId:'ipamorelin', dose:0.3, startDate: daysAgo(10), freq:'daily',
+        vialMg:10, waterMl:2, sealedVials:8, status:'instock',
+      }, over || {})];
+      app.pepSaveState(st);
+    };
+    const ipa = () => app.pepGetState().stacks[0];
+    const ipaItem = () => {
+      const d = app._pepGetDoses(app.pepGetState());
+      return d.morning.concat(d.anytime, d.evening).find(x => x.id === 'ipamorelin');
+    };
+
+    test('MADEUP dismissing the note does NOT claim a vial was mixed', () => {
+      mu();
+      assert.equal(ipaItem().needsMakeUp, true, 'the note is up to start with');
+      assert.equal(app.pepDismissMakeUpNote('ipamorelin'), true, 'dismissed');
+      const it = ipaItem();
+      assert.equal(it.noteDismissed, true, 'the prompt is silenced');
+      assert.equal(it.needsMakeUp, true,
+        'but the vial is no better known than it was — this is "not now", not "done"');
+      assert.equal(it.draw, null, 'so there is still no unit count');
+      assert.equal(ipa().sealedVials, 8, 'and nothing came off the shelf');
+      assert.ok(!ipa().openedDate, 'nothing was opened');
+    });
+
+    test('MADEUP a dismissed note can be brought back', () => {
+      mu();
+      app.pepDismissMakeUpNote('ipamorelin');
+      assert.equal(app.pepRestoreMakeUpNote('ipamorelin'), true, 'restored');
+      assert.equal(ipaItem().noteDismissed, false, 'the prompt is asking again');
+    });
+
+    test('MADEUP marking it made up needs the volume first', () => {
+      mu();
+      const r = app.pepMarkMadeUpToday('ipamorelin');
+      assert.equal(r.ok, false, 'refused');
+      assert.equal(r.needsVolume, true,
+        'one tap must NOT mix at the library figure — that would hand the app a ' +
+        'confirmation it never earned and put units back on screen off the ' +
+        'unchecked number v4.9.278 exists to withhold');
+      assert.equal(ipa().sealedVials, 8, 'and nothing was deducted on a refusal');
+    });
+
+    test('MADEUP once the volume is known it is one tap, dated, and deducts', () => {
+      mu();
+      app.pepSetCompoundRecon('ipamorelin', 10, 2);   // he states the mix, in the app
+      const r = app.pepMarkMadeUpToday('ipamorelin');
+      assert.equal(r.ok, true, 'accepted');
+      const st = ipa();
+      assert.equal(st.sealedVials, 7, 'eight became seven — the vial left the box');
+      assert.equal(st.openedDate, app._pepToday(), 'dated today, which is what shelf life runs from');
+      assert.equal(st.openUsedAmt, 0, 'and the new vial is assumed FULL');
+      assert.equal(r.sealedLeft, 7, 'it reports what is left, so the surface need not re-read');
+    });
+
+    test('MADEUP a SECOND vial deducts again — the leak the old guard would have caused', () => {
+      mu({ openedDate: daysAgo(30), openVialMg: 10, openWaterMl: 2, waterConfirmedAt: daysAgo(30) });
+      assert.equal(ipa().sealedVials, 8, 'eight on the shelf, one already open');
+      const r = app.pepMarkMadeUpToday('ipamorelin');
+      assert.equal(r.ok, true, 'he mixes the next one');
+      assert.equal(ipa().sealedVials, 7,
+        'and it comes off the count. The old rule only deducted when NOTHING was ' +
+        'open, so from the second vial onward stock would never have moved again');
+    });
+
+    test('MADEUP correcting the numbers on the SAME DAY does not eat a second vial', () => {
+      mu({ waterConfirmedAt: daysAgo(1) });
+      app.pepMarkMadeUpToday('ipamorelin');
+      assert.equal(ipa().sealedVials, 7, 'one deducted');
+      app.pepLogMakeUp(0, 10, 1.5);      // he mistyped the water and fixes it
+      assert.equal(ipa().sealedVials, 7,
+        'still seven — a re-save on the same day is a correction, not a new vial. ' +
+        'The DAY is the only evidence available to tell those apart');
+      assert.equal(parseFloat(ipa().openWaterMl), 1.5, 'and the correction stuck');
+    });
+
+    test('MADEUP mixing a vial clears the dismissal, so the NEXT one asks again', () => {
+      mu();
+      app.pepDismissMakeUpNote('ipamorelin');
+      assert.equal(ipaItem().noteDismissed, true, 'silenced');
+      app.pepLogMakeUp(0, 10, 2);
+      assert.ok(!ipaItem().noteDismissed,
+        'he has answered the question the note was asking, so the dismissal goes ' +
+        'with it — otherwise a compound silenced once is silenced forever');
+    });
+
+    test('MADEUP a make-up with no stock left is still RECORDED', () => {
+      mu({ sealedVials: 0, waterConfirmedAt: daysAgo(2) });
+      const r = app.pepMarkMadeUpToday('ipamorelin');
+      assert.equal(r.ok, true, 'recorded');
+      assert.equal(ipa().sealedVials, 0, 'the count cannot go negative');
+      assert.equal(ipa().openedDate, app._pepToday(),
+        'refusing would leave the DRAW wrong rather than leaving the count wrong, ' +
+        'and he may be mixing something the count never knew about');
+    });
+
+    test('MADEUP the daily-view action opens the sheet when the volume is unknown', () => {
+      mu();
+      const r = app.pepMadeUpTodayAction('ipamorelin');
+      assert.equal(r.opened, true, 'it asks rather than guessing');
+    });
+
+    test('MADEUP the Today tile carries both controls', () => {
+      const h = withStubbedDom(() => {
+        mu();
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.ok(h.includes('data-pep-tile-madeup="ipamorelin"'), 'Made up');
+      assert.ok(h.includes('data-pep-tile-mudismiss="ipamorelin"'), 'and Not now');
+    });
+
+    test('MADEUP a dismissed row drops the gold prompt from the tile', () => {
+      const h = withStubbedDom(() => {
+        mu();
+        app.pepDismissMakeUpNote('ipamorelin');
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.ok(!h.includes('Make-up required'),
+        'the whole point of dismissing is that it stops shouting');
+      assert.ok(h.includes('Not made up'), 'but it still says the vial is not mixed');
+    });
+
+    test('MADEUP the tile controls are WIRED', () => {
+      withStubbedDom(() => {
+        mu();
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        const seen = {};
+        app._pepBindTile({
+          querySelectorAll: sel => {
+            const m = /\[(data-pep-tile-[a-z]+)\]/.exec(sel);
+            if (!m) return [];
+            return [{ getAttribute: () => 'ipamorelin',
+                      addEventListener: (e, fn) => { seen[m[1]] = fn; } }];
+          },
+        });
+        assert.equal(typeof seen['data-pep-tile-madeup'], 'function', 'Made up is wired');
+        assert.equal(typeof seen['data-pep-tile-mudismiss'], 'function', 'Not now is wired');
+        seen['data-pep-tile-mudismiss']({ stopPropagation(){} });
+      });
+      assert.ok(app.pepGetState().stacks[0].makeUpNoteDismissedAt,
+        'and pressing Not now actually records the dismissal');
+    });
+
     test('RENDER the tile stays empty when there is no protocol', () => {
       const h = withStubbedDom(() => {
         reset(); signIn('jon');
@@ -1434,15 +1591,21 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       return app.pepGetState();
     };
 
-    test('STOCK ticking a dose consumes from stock', () => {
+    // v4.9.300 REVERSED THIS ONE. It asserted that ticking a dose opened a
+    // sealed vial and drew from it. Jon: "Don't auto-deduct stock based on
+    // protocol doses — only deduct when he logs a make-up event." The app was
+    // simulating a fridge; it opened vials he had never mixed.
+    test('STOCK ticking a dose does NOT touch stock', () => {
       seedStock();
-      const before = app.pepGetState().stacks[0];
-      assert.equal(before.sealedVials, 2, 'two sealed to start');
+      assert.equal(app.pepGetState().stacks[0].sealedVials, 2, 'two sealed to start');
       app.pepToggleDose('bpc157');
       const after = app.pepGetState().stacks[0];
-      assert.equal(after.sealedVials, 1, 'a vial was opened');
-      assert.equal(after.openDosesUsed, 1, 'one dose drawn from it');
-      assert.ok(after.openedDate, 'and it is marked as mixed today');
+      assert.equal(after.sealedVials, 2,
+        'still two — a vial comes off the shelf when he MIXES it, not when he doses');
+      assert.ok(!after.openedDate,
+        'and no vial was opened on his behalf; he has not mixed one');
+      assert.ok((app.pepGetState().checked[app._pepToday()] || []).indexOf('bpc157') >= 0,
+        'the dose is still RECORDED — ticking feeds adherence, it just does not move stock');
     });
 
     test('STOCK un-ticking gives the dose back — a mis-tap is not a lost vial', () => {
@@ -1454,8 +1617,10 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.equal(st.sealedVials, 2, 'vial returned');
     });
 
-    test('STOCK finishing a vial rolls to the next one', () => {
-      // 5mg/2mL at 500mcg = 10 doses per vial. Tick 10 and the vial is done.
+    // Also reversed. The app no longer decides a vial is finished — Jon does,
+    // by mixing the next one. "Vials are considered full until he explicitly
+    // marks one as made up."
+    test('STOCK a vial is never emptied or rolled by the app', () => {
       seedStock({ sealedVials: 2 });
       for (let i = 0; i < 10; i++) {
         const s = app.pepGetState();
@@ -1464,9 +1629,19 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         app.pepToggleDose('bpc157');
       }
       const st = app.pepGetState().stacks[0];
-      assert.equal(st.openedDate, null, 'vial finished and closed');
-      assert.equal(st.openDosesUsed, 0, 'counter reset for the next vial');
-      assert.equal(st.sealedVials, 1, 'one sealed vial left');
+      assert.equal(st.sealedVials, 2,
+        'ten doses later the box is untouched — the count follows his make-ups, ' +
+        'not a simulation of how fast a vial ought to run down');
+      assert.ok(!st.openedDate, 'and nothing was opened for him');
+    });
+
+    test('STOCK a make-up is what moves the count', () => {
+      seedStock({ sealedVials: 2 });
+      assert.equal(app.pepLogMakeUp(0, 10, 2), true, 'he mixes one');
+      const st = app.pepGetState().stacks[0];
+      assert.equal(st.sealedVials, 1, 'two became one');
+      assert.equal(st.openedDate, app._pepToday(), 'dated today');
+      assert.equal(st.openUsedAmt, 0, 'and the new vial is assumed FULL');
     });
 
     test('STOCK ticking with nothing in stock does not invent a vial', () => {
@@ -2371,12 +2546,20 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'converted once, on load, at the dose those doses were taken at');
     });
 
-    test('TITRATE the vial closes when the next dose will not come out of it', () => {
-      const ps = nad({ dose: 100, vialMg: 500 });
+    // v4.9.300 REVERSED THIS. The app used to close a vial once the remainder
+    // could not cover another dose, and roll to the next. It no longer decides
+    // anything about vials — Jon does, by mixing one. An exhausted vial now
+    // simply reports empty, which is the prompt to mix the next.
+    test('TITRATE an exhausted vial reports empty rather than closing itself', () => {
+      const ps = nad({ dose: 100, openUsedAmt: 0 });
       const c = app._pepCompound('nad');
-      for (let i = 0; i < 5; i++) app._pepConsumeDose(ps, 'nad', 1);
-      assert.equal(ps.stacks[0].openedDate, null, 'five 100mg doses finish a 500mg vial');
-      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 0, 'and the counter resets for the next');
+      for (let k = 0; k < 5; k++) app._pepConsumeDose(ps, 'nad', 1);
+      assert.equal(app._pepOpenUsed(ps.stacks[0], c), 500, 'five 100mg doses drain a 500mg vial');
+      assert.equal(app._pepOpenDosesLeft(ps.stacks[0], c), 0, 'nothing left to draw');
+      assert.ok(ps.stacks[0].openedDate,
+        'and the vial is STILL the open one — the app does not close it, because ' +
+        'closing it implies mixing the next, which only he can do');
+      assert.equal(ps.stacks[0].sealedVials, 9, 'the box never moved');
     });
 
     test('TITRATE an awkward remainder is waste, not a phantom dose', () => {
@@ -2914,13 +3097,17 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         '200mcg at 5mg/mL is 4 units — the draw comes through, which was the ask');
     });
 
-    test('ADDDOSE it ticks as taken and comes out of the vial', () => {
+    test('ADDDOSE it ticks as taken and comes out of the OPEN vial', () => {
       setUpAdd();
+      const sealedBefore = app.pepGetState().stacks[0].sealedVials;
       app.pepAddExtraDose('cjc1295', 0.2);
       const ps = app.pepGetState();
       assert.ok((ps.checked[app._pepToday()] || []).indexOf('cjc1295') >= 0, 'ticked');
       assert.equal(app._pepOpenUsed(ps.stacks[0], app._pepCompound('cjc1295')), 0.2,
-        '0.2mg out of the open vial — he has just injected it');
+        '0.2mg out of the vial he has already mixed — he has just injected it');
+      assert.equal(ps.stacks[0].sealedVials, sealedBefore,
+        'v4.9.300: and the BOX is untouched. Drawing from an open vial is not ' +
+        'the same thing as taking a vial off the shelf');
     });
 
     test('ADDDOSE it uses the vial he actually mixed, not the plan', () => {
@@ -2958,6 +3145,8 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'record of the one he actually took on schedule');
       assert.equal(app._pepOpenUsed(ps.stacks[0], app._pepCompound('bpc157')), 0.5,
         'and only the extra came back out');
+      assert.equal(ps.stacks[0].sealedVials, 2,
+        'v4.9.300: with the sealed count untouched throughout');
     });
 
     // v4.9.278 CHANGED THIS ONE, AND IT IS THE INTERESTING CASE.
@@ -3033,14 +3222,16 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.equal(after, before, 'nothing came out of the vial, because nothing was drawn');
     });
 
-    test('SKIP skipping something already ticked returns the stock', () => {
+    test('SKIP skipping something already ticked returns what was drawn', () => {
       daily();
+      const c = app._pepCompound('bpc157');
       app.pepToggleDose('bpc157');
-      assert.equal(app._pepOpenUsed(app.pepGetState().stacks[0], app._pepCompound('bpc157')), 0.5, 'drawn');
+      assert.equal(app._pepOpenUsed(app.pepGetState().stacks[0], c), 0.5, 'drawn');
       app.pepSkipDose('bpc157');
-      assert.equal(app._pepOpenUsed(app.pepGetState().stacks[0], app._pepCompound('bpc157')), 0,
+      assert.equal(app._pepOpenUsed(app.pepGetState().stacks[0], c), 0,
         'changing his mind puts it back — otherwise the vial reports less than it holds');
-      assert.equal((app.pepGetState().checked[app._pepToday()] || []).indexOf('bpc157'), -1, 'and it is no longer ticked');
+      assert.equal((app.pepGetState().checked[app._pepToday()] || []).indexOf('bpc157'), -1,
+        'and it is no longer ticked');
     });
 
     test('SKIP taking it clears the skip — the two are exclusive', () => {
@@ -3637,13 +3828,19 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'and none of them opened a vial');
     });
 
-    test('MAKEUP consumption stamps the make-up when it opens a vial itself', () => {
-      const ps = mk();
+    // v4.9.300 REVERSED THIS TOO, and it is the sharper half of the change.
+    // Consumption used to OPEN a sealed vial when a dose was ticked with none
+    // open, stamping openVialMg/openWaterMl from the PLAN. That invented a mix
+    // he had never performed — and stamped it with the unchecked library figure
+    // that v4.9.278 exists to withhold, so the app would have started printing
+    // unit counts off a vial that did not exist.
+    test('MAKEUP ticking with no vial open does NOT open one', () => {
+      const ps = mk({ openedDate: null, openUsedAmt: 0, sealedVials: 3 });
       app._pepConsumeDose(ps, 'bpc157', 1);
-      assert.equal(ps.stacks[0].openVialMg, 10, 'stamped from the plan in force');
-      assert.equal(ps.stacks[0].openWaterMl, 2,
-        'so a later plan edit cannot restate this vial either — the ticking path ' +
-        'gets the same protection as the explicit one');
+      assert.equal(ps.stacks[0].sealedVials, 3, 'the box is untouched');
+      assert.ok(!ps.stacks[0].openedDate, 'and no vial was conjured to draw from');
+      assert.ok(ps.stacks[0].openVialMg == null,
+        'nothing was stamped from the plan — a make-up is something he performs');
     });
   }
 

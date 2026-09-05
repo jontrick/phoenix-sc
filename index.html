@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.299';
+var APP_VERSION='4.9.300';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -25713,6 +25713,8 @@ function _pepGetDoses(ps, dateStr){
     var item = {id:stack.compoundId, name:c.name, cat:c.cat, dose:dose, doseUnit:c.doseUnit,
                 timing:c.timing, notes:c.notes, dayNum:dayNum, doseStep:step,
                 recon:recon, needsMakeUp: !known, canLogMakeUp: true,
+                noteDismissed: !!(stack && stack.makeUpNoteDismissedAt),
+                madeUpOn: (stack && stack.openedDate) || null,
                 draw: known ? _pepDraw(dose, c.doseUnit, recon) : null};
 
     if(timing.indexOf("fasted am") >= 0 || timing.indexOf("morning") >= 0) morning.push(item);
@@ -25739,6 +25741,8 @@ function _pepGetDoses(ps, dateStr){
     var xitem = {id:xc.id, name:xc.name, cat:xc.cat, dose:xdose, doseUnit:xc.doseUnit,
                  timing:xc.timing, notes:xc.notes, dayNum:null, doseStep:null, extra:true,
                  recon:xrecon, needsMakeUp: !xknown, canLogMakeUp: !!xs,
+                 noteDismissed: !!(xs && xs.makeUpNoteDismissedAt),
+                 madeUpOn: (xs && xs.openedDate) || null,
                  draw: xknown ? _pepDraw(xdose, xc.doseUnit, xrecon) : null};
     var xt = (xc.timing || "").toLowerCase();
     if(xt.indexOf("fasted am") >= 0 || xt.indexOf("morning") >= 0) morning.push(xitem);
@@ -25769,7 +25773,7 @@ function pepAddExtraDose(compoundId, dose){
   if(!ps.checked) ps.checked = {};
   if(!ps.checked[today]) ps.checked[today] = [];
   if(ps.checked[today].indexOf(c.id) < 0) ps.checked[today].push(c.id);
-  _pepConsumeDose(ps, c.id, 1);
+  _pepConsumeDose(ps, c.id, 1);   // draws from an OPEN vial only; never the box
   pepSaveState(ps);
   if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
   return {ok:true, name:c.name, dose:d, unit:c.doseUnit};
@@ -25963,30 +25967,143 @@ function _pepMakeUpKnown(stack, c, recon){
 // index — the Today tile builds render items, not stack positions.
 function pepOpenMakeUpFor(compoundId){
   var ps = pepGetState();
-  var idx = -1;
-  (ps.stacks || []).forEach(function(st, i){ if(idx < 0 && st && st.compoundId === compoundId) idx = i; });
+  var idx = _pepStackIndex(ps, compoundId);
   if(idx < 0) return false;
   pepOpenMakeUp(idx);
   return true;
 }
 
+// The daily-view action. One tap where the volume is known; the sheet where it
+// is not, so the question gets asked exactly once per compound rather than
+// every time he mixes.
+function pepMadeUpTodayAction(compoundId){
+  var r = pepMarkMadeUpToday(compoundId);
+  if(r.needsVolume){ pepOpenMakeUpFor(compoundId); return {opened:true}; }
+  return r;
+}
+
 // Record a make-up. Opens a vial at the volume he actually used, stamps the
 // date for shelf life, and resets consumption for the new vial.
+// ── STOCK MOVES ON A MAKE-UP, AND ONLY ON A MAKE-UP (v4.9.300) ────────────
+// Jon: "vials are considered full until he explicitly marks one as made up.
+// Don't auto-deduct stock based on protocol doses — only deduct when he logs a
+// make-up event." And: "vial in stock -> assume full -> when he mixes it, he
+// taps Made up -> stock deducts one vial -> protocol continues from that vial."
+//
+// The app used to draw stock down every time he TICKED a dose: _pepConsumeDose
+// advanced openUsedAmt, opened a sealed vial when none was open, and closed the
+// vial when the remainder could not cover another dose. That is a simulation of
+// a fridge, and it was wrong in both directions — it opened vials he had not
+// mixed, and it could not represent a vial he mixed but had not yet dosed from.
+//
+// The new model is smaller and matches what he physically does. Two facts, both
+// of them things he does with his hands:
+//   SEALED COUNT   changes when he mixes a vial. Nothing else moves it.
+//   OPEN VIAL      is whatever he last said he mixed, and is assumed FULL.
+//
+// Ticking a dose still records how much has been drawn from a vial he has
+// actually mixed — that is the v4.9.249 invariant and it is how he knows the
+// open vial is nearly out. What it can no longer do is touch the sealed count,
+// open a vial he never mixed, or close one on his behalf. "Stock" is the box.
+function _pepStackIndex(ps, compoundId){
+  var idx = -1;
+  (ps && ps.stacks || []).forEach(function(st, i){
+    if(idx < 0 && st && st.compoundId === compoundId) idx = i;
+  });
+  return idx;
+}
+
+// "Made up today" in one tap — but ONLY where the volume is already known.
+//
+// If it is not, this must NOT quietly mix at the library figure: that would
+// hand _pepMakeUpKnown a confirmation it never earned and put units back on
+// screen off the unchecked number v4.9.278 exists to withhold. It reports
+// needsVolume instead and the caller opens the sheet to ask.
+function pepMarkMadeUpToday(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return {ok:false, problem:"That compound is not in your protocol."};
+  var st = ps.stacks[idx];
+  var c = _pepCompound(compoundId);
+  var recon = _pepRecon(st, c);
+  if(!recon || !_pepMakeUpKnown(st, c, recon)){
+    return {ok:false, needsVolume:true, idx:idx};
+  }
+  if(!pepLogMakeUp(idx, recon.vialMg, recon.waterMl)){
+    return {ok:false, problem:"Could not record that make-up."};
+  }
+  var after = pepGetState().stacks[idx];
+  return {ok:true, vialMg:recon.vialMg, waterMl:recon.waterMl,
+          sealedLeft: parseInt(after.sealedVials, 10) || 0};
+}
+
+// Clear the "make-up required" note WITHOUT claiming a vial was mixed.
+//
+// Jon has a note on Ipamorelin and does not need to mix it right now. The note
+// is a prompt, not a debt — and a prompt he cannot silence becomes one he stops
+// reading, which is how the gold "assumed" caption failed before it.
+//
+// Dismissing changes nothing about the vial: needsMakeUp stays true, so the
+// unit count stays withheld. It only stops shouting. A later make-up clears the
+// dismissal, so the next vial asks again.
+function pepDismissMakeUpNote(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return false;
+  ps.stacks[idx].makeUpNoteDismissedAt = _pepToday();
+  pepSaveState(ps);
+  pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return true;
+}
+
+function pepRestoreMakeUpNote(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return false;
+  ps.stacks[idx].makeUpNoteDismissedAt = null;
+  pepSaveState(ps);
+  pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return true;
+}
+
 function pepLogMakeUp(idx, vialMg, waterMl){
   var ps = pepGetState();
   var st = ps.stacks && ps.stacks[idx]; if(!st) return false;
   var vm = parseFloat(vialMg), wm = parseFloat(waterMl);
   if(!(vm > 0) || !(wm > 0)) return false;
   var sealed = parseInt(st.sealedVials, 10) || 0;
-  // Opening consumes a sealed vial when there is one. If there is not, the make
-  // -up is still recorded — he may be mixing something the count does not know
-  // about, and refusing to record it would leave the draw-up wrong instead.
-  if(sealed > 0 && !st.openedDate) st.sealedVials = sealed - 1;
+  // v4.9.300: deducts on every make-up on a NEW DAY, not only when nothing is
+  // open — and not on a same-day re-save.
+  //
+  // The old guard was `sealed > 0 && !st.openedDate`. That is right in a model
+  // where the app tracks a vial emptying and opens the next one itself. Under
+  // Jon's model — stock moves ONLY on a make-up — it is a slow leak the other
+  // way: he mixes vial one (deducted), works through it, mixes vial two, and
+  // because openedDate is still set from vial one NOTHING comes off the count.
+  // Stock would move once and then never again.
+  //
+  // But deducting unconditionally breaks the case an existing test was written
+  // to protect: correcting the numbers on a vial he just mixed must not eat a
+  // second vial from the box. Both are real, and the two are told apart by the
+  // only evidence available — the DAY. A new day means a new vial; the same day
+  // means he is fixing what he already recorded. He does not mix two vials of
+  // one compound in a day, and if he ever does the count reads one high and
+  // STOCK can be corrected there.
+  //
+  // If the count is already zero the make-up is still recorded: he may be
+  // mixing something the count does not know about, and refusing to record it
+  // would leave the DRAW wrong instead of leaving the count wrong.
+  var sameDayResave = (st.openedDate === _pepToday());
+  if(sealed > 0 && !sameDayResave) st.sealedVials = sealed - 1;
   st.openedDate  = _pepToday();
   st.openVialMg  = vm;
   st.openWaterMl = wm;
   st.openUsedAmt = 0;
   st.openDosesUsed = 0;
+  // He has just answered the question the note was asking.
+  st.makeUpNoteDismissedAt = null;
   ps.stacks[idx] = st;
   pepSaveState(ps);
   if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
@@ -26372,6 +26489,17 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-skip]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepSkipDose(btn.getAttribute("data-pep-skip")); });
   });
+  document.querySelectorAll("[data-pep-madeup]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      pepMadeUpTodayAction(btn.getAttribute("data-pep-madeup"));
+    });
+  });
+  document.querySelectorAll("[data-pep-mudismiss]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepDismissMakeUpNote(btn.getAttribute("data-pep-mudismiss")); });
+  });
+  document.querySelectorAll("[data-pep-mushow]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepRestoreMakeUpNote(btn.getAttribute("data-pep-mushow")); });
+  });
   document.querySelectorAll("[data-pep-makeup]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepOpenMakeUpFor(btn.getAttribute("data-pep-makeup")); });
   });
@@ -26609,9 +26737,17 @@ function _pepTabToday(ps){
         // v4.9.278: no units and no concentration until he logs what went into
         // the vial. The button is the exit — a note with nothing to press is
         // just a nag.
-        s += item.canLogMakeUp
-          ? "<button data-pep-makeup=\"" + item.id + "\" style=\"margin-top:6px;background:none;border:1px solid var(--gold);border-radius:12px;color:var(--gold);font-family:var(--font-d);font-size:9px;font-weight:900;padding:4px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Make-up required &middot; log the mix</button>"
-          : "<div style=\"font-size:10px;color:var(--gold);margin-top:2px;\">Make-up required &mdash; this compound is not in your protocol, so there is no vial to log against.</div>";
+        if(!item.canLogMakeUp){
+          s += "<div style=\"font-size:10px;color:var(--gold);margin-top:2px;\">Make-up required &mdash; this compound is not in your protocol, so there is no vial to log against.</div>";
+        } else if(item.noteDismissed){
+          s += "<div style=\"font-size:10px;color:var(--text3);margin-top:4px;\">Not made up &mdash; no unit count until you log the mix. " +
+               "<button data-pep-mushow=\"" + item.id + "\" style=\"background:none;border:none;color:#7B68EE;font-size:10px;font-weight:700;padding:0;cursor:pointer;text-decoration:underline;\">Show the prompt</button></div>";
+        } else {
+          s += "<div style=\"display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;\">";
+          s += "<button data-pep-makeup=\"" + item.id + "\" style=\"background:none;border:1px solid var(--gold);border-radius:12px;color:var(--gold);font-family:var(--font-d);font-size:9px;font-weight:900;padding:4px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Make-up required &middot; log the mix</button>";
+          s += "<button data-pep-mudismiss=\"" + item.id + "\" style=\"background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:4px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Not now</button>";
+          s += "</div>";
+        }
       } else if(item.recon){
         s += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" + _pepReconText(item.recon) + "</div>";
       } else {
@@ -26619,6 +26755,16 @@ function _pepTabToday(ps){
       }
       s += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + item.timing + "</div>";
       if(item.notes) s += "<div style=\"font-size:10px;color:var(--text3);margin-top:4px;font-style:italic;\">" + item.notes + "</div>";
+      // v4.9.300: log a reconstitution as it happens, from the daily view, for
+      // ANY compound — not only one currently showing the note. Mixing a fresh
+      // vial is a thing that happens on a normal day, and the stock count now
+      // depends entirely on him recording it.
+      if(item.canLogMakeUp && !item.needsMakeUp){
+        s += "<div style=\"display:flex;align-items:center;gap:8px;margin-top:6px;\">";
+        s += "<button data-pep-madeup=\"" + item.id + "\" style=\"background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:4px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Made up today</button>";
+        if(item.madeUpOn) s += "<span style=\"font-size:10px;color:var(--text3);\">mixed " + _esc(item.madeUpOn) + "</span>";
+        s += "</div>";
+      }
       s += "</div></div>";
     });
     return s;
@@ -26650,38 +26796,34 @@ function _pepConsumeDose(ps, compoundId, direction){
   var used = _pepOpenUsed(stack, c);
   var sealed = parseInt(stack.sealedVials, 10) || 0;
 
+  // ── v4.9.300: THIS TRACKS THE OPEN VIAL. IT NO LONGER TOUCHES THE BOX. ──
+  //
+  // Jon: "Don't auto-deduct stock based on protocol doses — only deduct when he
+  // logs a make-up event." STOCK is the sealed count, and it is now moved by
+  // exactly one thing: pepLogMakeUp. Everything this function used to do to the
+  // box is gone —
+  //   · opening a sealed vial because a dose was ticked. It invented a mix he
+  //     had never performed, and stamped openVialMg/openWaterMl from the PLAN,
+  //     which is the unchecked figure v4.9.278 exists to withhold.
+  //   · closing the vial when the remainder could not cover another dose.
+  //   · handing a vial BACK to the count on an un-tick.
+  //
+  // What it keeps is how much has been drawn from a vial he DID mix, in mg —
+  // the invariant from v4.9.249, that consumption is measured and not counted,
+  // so a titration cannot rewrite what he has already taken out. That is not
+  // "stock"; it is how he knows the open vial is nearly done and it is time to
+  // mix the next one. Losing it would replace a real signal with silence.
+  //
+  // With no vial open there is nothing to draw from, so a tick records only
+  // that he took the dose. The app must not conjure a vial to subtract it from.
+  if(!stack.openedDate) return;
   if(direction > 0){
-    if(!stack.openedDate){
-      // No vial open. Open one if there is a sealed vial to open.
-      if(sealed <= 0) return;             // nothing to consume; leave stock alone
-      sealed--; stack.openedDate = _pepToday(); used = 0;
-      // Stamp what this vial was made up at, from the plan in force right now.
-      // Without it, editing the plan later would silently restate the strength
-      // of a vial already dissolved.
-      var pr = _pepRecon(stack, c);
-      if(pr){ stack.openVialMg = pr.vialMg; stack.openWaterMl = pr.waterMl; }
-    }
-    used += size;
-    // Finished when the next dose could not be drawn from what is left. At a
-    // changed dose the remainder may not divide evenly; the shortfall is real
-    // waste in the vial, not a dose he can take.
-    if(cap - used < size){ used = 0; stack.openedDate = null; }
+    used = Math.min(cap, used + size);
   } else {
-    // Undo. Step back into the previous vial if this un-ticks the first dose of one.
-    if(used > 0){
-      used = Math.max(0, used - size);
-      // Nothing drawn means the vial is effectively unopened — hand it back to
-      // the sealed count. Without this, ticking then un-ticking silently
-      // consumed a whole vial, which is exactly the mis-tap this branch exists
-      // to protect against.
-      if(used <= 0 && stack.openedDate){ used = 0; stack.openedDate = null; sealed++; }
-    }
-    else if(stack.openedDate){ stack.openedDate = null; sealed++; }
-    else { used = Math.max(0, cap - size); stack.openedDate = _pepToday(); }
+    used = Math.max(0, used - size);
   }
   stack.openUsedAmt = used;
   stack.openDosesUsed = size ? Math.round(used / size) : 0;   // kept for the edit sheet
-  stack.sealedVials = sealed;
   ps.stacks[si] = stack;
 }
 
@@ -26816,14 +26958,22 @@ function pepRenderTodayTile(){
     r += "</div>";
     r += "<div style=\"text-align:right;flex-shrink:0;\">";
     if(item.needsMakeUp){
-      if(item.canLogMakeUp){
-        r += "<button data-pep-tile-makeup=\"" + item.id + "\" style=\"background:none;border:1px solid var(--gold);border-radius:10px;color:var(--gold);font-family:var(--font-d);font-size:9px;font-weight:900;padding:3px 8px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Make-up required</button>";
-        r += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">Tap to log the mix</div>";
-      } else {
+      if(!item.canLogMakeUp){
         // Nothing in his protocol to log against, so a button here would open
         // nothing. A dead control is worse than a plain statement.
         r += "<div style=\"font-family:var(--font-d);font-size:9px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:1px;\">Make-up required</div>";
         r += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">Not in your protocol</div>";
+      } else if(item.noteDismissed){
+        // v4.9.300: dismissed. Still no unit count — the vial is no better
+        // known than it was — but the prompt has been answered with "not now",
+        // and a prompt he cannot silence is one he stops reading.
+        r += "<button data-pep-tile-makeup=\"" + item.id + "\" style=\"background:none;border:1px solid var(--border2);border-radius:10px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:3px 8px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Not made up</button>";
+      } else {
+        r += "<button data-pep-tile-makeup=\"" + item.id + "\" style=\"background:none;border:1px solid var(--gold);border-radius:10px;color:var(--gold);font-family:var(--font-d);font-size:9px;font-weight:900;padding:3px 8px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Make-up required</button>";
+        r += "<div style=\"display:flex;gap:6px;justify-content:flex-end;margin-top:4px;\">";
+        r += "<button data-pep-tile-madeup=\"" + item.id + "\" style=\"background:none;border:1px solid #7B68EE;border-radius:10px;color:#7B68EE;font-family:var(--font-d);font-size:8px;font-weight:900;padding:2px 7px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Made up</button>";
+        r += "<button data-pep-tile-mudismiss=\"" + item.id + "\" style=\"background:none;border:1px solid var(--border2);border-radius:10px;color:var(--text3);font-family:var(--font-d);font-size:8px;font-weight:900;padding:2px 7px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Not now</button>";
+        r += "</div>";
       }
     } else {
       r += "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;line-height:1.1;\">" + (item.draw ? _pepDrawText(item.draw) : "—") + "</div>";
@@ -26887,6 +27037,21 @@ function _pepBindTile(tile){
     btn.addEventListener("click", function(e){
       e.stopPropagation();
       pepOpenMakeUpFor(btn.getAttribute("data-pep-tile-makeup"));
+    });
+  });
+  tile.querySelectorAll("[data-pep-tile-madeup]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      // One tap where the volume is known; the sheet where it is not. Never a
+      // silent mix at the library figure.
+      pepMadeUpTodayAction(btn.getAttribute("data-pep-tile-madeup"));
+      pepRenderTodayTile();
+    });
+  });
+  tile.querySelectorAll("[data-pep-tile-mudismiss]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      pepDismissMakeUpNote(btn.getAttribute("data-pep-tile-mudismiss"));
     });
   });
   tile.querySelectorAll("[data-pep-tile-skip]").forEach(function(btn){

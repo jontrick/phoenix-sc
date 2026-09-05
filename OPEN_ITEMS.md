@@ -68,16 +68,20 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       and so never reach the branch that was broken. One screen-level test now drives
       `renderTodayScreen()`; that is the only automated cover for the actual fault.
 
-- [ ] JON — **The 04:15 slot (v4.9.299).** Two things changed, and the second is one he
-      did NOT ask for, so it needs his eyes: a lifting day now offers a CHOICE at 04:15
-      (intra drink / banana / nothing, in the swap sheet), and **every non-lifting day
-      lost the banana it used to have.** He described the old behaviour the other way
-      round; a probe showed the inverse and this is built to what the app actually did
-      (KNOWN_ISSUES, "Jon describing existing behaviour is a REPORT"). If he genuinely
-      wants a banana on rest days, that is a one-line default change, not a rebuild.
-      Also worth his check: pick "nothing" and confirm the day still hits its carb
-      target — the missing 25g is redistributed into rice/sweet potato, so those
-      portions grow, and the shopping list grows with them.
+- [ ] JON — **Nutrition swaps: two decisions were made FOR him and both need his eyes.**
+      Everything else in v4.9.299 and v4.9.303 he asked for; these two he did not.
+      · **04:15 (.299)** — a lifting day now offers intra / banana / nothing, and **every
+        non-lifting day LOST the banana it used to have.** He described the old behaviour
+        the other way round; a probe showed the inverse and this is built to what the app
+        actually did (KNOWN_ISSUES, "Jon describing existing behaviour is a REPORT"). A
+        banana back on rest days is a one-line default change if he wants it.
+      · **Cashews (.303)** — pick them and the day lands ~6 g of carbohydrate OVER target,
+        deliberately. The serve holds the FAT; cashews carry three times the carbs of
+        almonds; rather than shrink his rice to hide that, the sheet shows carbs per
+        serve. Absorbing it silently is a real alternative — his call, not mine.
+      Also worth a check: pick "nothing" at 04:15 and confirm the day still hits its carb
+      target (the 25 g moves into rice and sweet potato, and the shopping list grows with
+      them), and note the nut butter selector disappears from week 10 by design.
 
 - [ ] JON — **Two week badges, top right of Today (v4.9.301).** Was one pill reading
       "WEEK 1" under a Week 3 session. **What to watch:** it should now read `TRAIN W3`,
@@ -173,6 +177,21 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       added, so whoever builds it must declare the payload there. Closes when built, or
       when Jon says he does not want it.
 
+- [ ] NUTRITION — **A swapped lunch protein is bought at its COOKED weight.** Chicken
+      carries `yld:0.75`, so 135 g cooked is shopped as 180 g raw; turkey, white fish and
+      5% beef have no row, so a swapped week buys **945 g instead of 1260 g — 25% short**
+      (measured 2026-09-05). Found while fixing the shelf lookup in v4.9.303 and left
+      alone there: different defect. Shelf is now right, weight is not. Closes when a
+      swapped-in protein carries a yield — note they genuinely differ, so borrowing 0.75
+      for all three is a decision, not a default.
+- [ ] NUTRITION — `nutProgSetDinnerDefault` is an ORPHAN (index.html:21889): harness
+      guard, one functional test, and **called from nowhere in index.html** (grep,
+      2026-09-05). It is the "what I shopped for" default every per-meal pick falls back
+      to, so it can only be set by a test. Nothing is broken — the per-day picks are
+      reachable from Today and from any calendar day — but the weekly default has no
+      control. **Eighth instance of finished code with no door.** Closes when the weekly
+      setup offers it, or when it is archived as unwanted.
+
 ## OPEN — CROSS-DOMAIN
 
 - [x] TRAINING — Today header showed two disagreeing week numbers; nutrition week wanted
@@ -191,16 +210,12 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 
 - [ ] TRAINING + NUTRITION — **Nutrition decides "is today a lifting day" from its OWN
-      static map**, `_NUT_PROG_SESSIONS` in index.html, not from training state. As of
-      v4.9.299 that map gates the 04:15 intra drink: the drink is only offered on a day
-      the map calls a lift. If Jon's real training days ever stop matching it, the
-      nutrition plan will quietly disagree with the session card rather than error —
-      **the failure mode is a wrong plan that looks right**, which is the worst kind here
-      because he prepares food to it a week ahead. Closes when either (a) Training names
-      a function that answers "does this date contain a lift" from real programme state
-      and Nutrition calls it, or (b) both sides agree the map is authoritative and a gate
-      asserts the two agree. I could not message Training (peer messaging unavailable
-      again this session), so this line IS the handoff.
+      static map** (`_NUT_PROG_SESSIONS`), not training state. Since v4.9.299 that map
+      gates the 04:15 intra drink, so a divergence from Jon's real training days gives
+      **a wrong plan that looks right** — the worst kind here, because he preps food to
+      it a week ahead. Closes when Training names a function answering "does this date
+      contain a lift" and Nutrition calls it (as it now does for the week label), or both
+      sides agree the map is authoritative and a gate asserts they match.
 
 - [ ] PM — `tests/pm.mjs` "CONTRACT _phxRecordWriteError: holds for a CARELESS caller" is
       FLAKY at ~0.17% and fails as **"medical/personal value leaked: 24.8"**. Nothing leaks.

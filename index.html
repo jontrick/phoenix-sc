@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.298';
+var APP_VERSION='4.9.299';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21090,6 +21090,12 @@ function nutProgSuppsOn(dateKey, taken){
   for(var i = 0; i < _NUT_SUPPS.length; i++){
     var s = _NUT_SUPPS[i];
     var due = (s.when === 'daily') || (sess.indexOf(s.when) >= 0);
+    // The lift intra is the 04:15 CHOICE, not an automatic consequence of
+    // lifting. If Jon picked the banana or nothing, he is not drinking it.
+    if(s.id === 'lift' && due && typeof nutProgPreOn === 'function'){
+      var _pre = nutProgPreOn(dateKey);
+      if(!_pre || _pre.id !== 'intra') due = false;
+    }
     if(!due) continue;
     if(Array.isArray(taken) && taken.indexOf(s.id) < 0) continue;
     out.items.push(s.id);
@@ -21227,10 +21233,20 @@ function nutProgMealsOn(dateKey, riceId){
   var ix = t.phase_n - 1;
   var lift = t.lift;
   var greens = (typeof nutProgGreensOn === 'function') ? nutProgGreensOn(dateKey) : {};
+  var pre = (typeof nutProgPreOn === 'function') ? nutProgPreOn(dateKey) : null;
+  var preIsFood = !!(pre && pre.id === 'banana');
+  var _preRow = _nutProgPlateRow('Banana');
+  // What the slot is WORTH in the plan: on a lifting day the intra's block, on
+  // any other day the banana the plate was written around.
+  var _baseC  = lift ? 24.4 : (_preRow ? (_preRow.c * _preRow.g[ix] / 100) : 0);
+  var _shortC = Math.round((_baseC - (pre ? pre.c : 0)) * 10) / 10;
+  var _dayCarbBase = (typeof _nutProgDayCarbBase === 'function') ? _nutProgDayCarbBase(ix) : 0;
   var out = [];
   for(var mi = 0; mi < _NUT_PROG_MEALS.length; mi++){
     var M = _NUT_PROG_MEALS[mi];
-    if(M.skipOnLift && lift) continue;
+    // A choice now, not a day-type rule: the slot shows only when the choice is
+    // something eaten. The intra renders in its own 04:30 row either way.
+    if(M.id === 'pre' && !preIsFood) continue;
     if(M.supp){
       // EVERY formula due today, not the first that matches. Saturday takes the
       // HIIT shot before the morning session AND the lift intra through the
@@ -21238,7 +21254,7 @@ function nutProgMealsOn(dateKey, riceId){
       var want = [];
       if(M.supp === 'coffee' || M.supp === 'post') want.push(M.supp);
       else {
-        if(t.sessions.indexOf(M.supp) >= 0) want.push(M.supp);
+        if(t.sessions.indexOf(M.supp) >= 0 && !(M.supp === 'lift' && !(pre && pre.id === 'intra'))) want.push(M.supp);
         if(M.alt && t.sessions.indexOf(M.alt) >= 0) want.push(M.alt);
       }
       for(var wi = 0; wi < want.length; wi++){
@@ -21317,6 +21333,22 @@ function nutProgMealsOn(dateKey, riceId){
         if(oilShift){
           grams = Math.max(0, Math.round((g + oilShift) * 10) / 10);
         }
+      }
+      // Redistribute what 04:15 did not deliver, in proportion to what each
+      // carbohydrate item already carries — so nothing doubles, nothing
+      // disappears, and the day still lands on its target. Applied to grams so a
+      // swapped item (rice under another grain) scales with everything else.
+      if(_shortC && _nutIsPureCarb(it) && M.id !== 'pre' && _dayCarbBase > 0){
+        var _ownC  = mac ? mac.c : (it.c * grams / 100);
+        var _dens  = (mac && grams > 0) ? (mac.c / grams * 100) : it.c;   // per 100 g, as served
+        if(!(_dens > 0)) _dens = it.c;
+        var _addC  = _shortC * (_ownC / _dayCarbBase);
+        var _newG  = Math.round((grams + (_addC * 100 / _dens)) * 10) / 10;
+        if(mac && grams > 0){
+          var _r = _newG / grams;
+          mac = { k:mac.k * _r, p:mac.p * _r, c:mac.c * _r, f:mac.f * _r };
+        }
+        grams = _newG;
       }
       if(!mac) mac = _nutProgItemMacros(it, grams);
       items.push({ n:name, g:grams, u:unit, carb:!!it.carb, count:!!it.count,
@@ -21972,6 +22004,23 @@ function nutOpenSwapSheet(forDate){
     h += '</div>';
   });
 
+  if(typeof nutProgPreOn === 'function' && nutProgIsLiftDay(today)){
+    var curPre = nutProgPreOn(today);
+    h += '<div style="margin-bottom:16px;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">04:15 &mdash; before the session</div>';
+    _NUT_PROG_PRE_OPTIONS.forEach(function(o){
+      var on = (curPre && curPre.id === o.id);
+      h += '<div data-nut-pre="' + o.id + '" style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+        '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;">' + o.n + (o.g ? (' <span style="color:var(--gold);font-weight:700;">' + o.g + ' g</span>') : '') + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' +
+            (o.id === 'none' ? 'Those carbs move into the rest of the day' : (o.c + ' g carbs &middot; ' + o.k + ' kcal')) + '</div>' +
+        '</div></div>';
+    });
+    h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">One or the other, not both &mdash; and whichever you skip, the day still lands on its target.</div></div>';
+  }
+
   // The portion is held constant for the WEEK-long swaps and sized to the protein
   // for the nightly ones. Either way the fat is rebalanced, so a swap never
   // quietly moves his macros. Saying so stops the swap looking risky.
@@ -21996,6 +22045,14 @@ function nutOpenSwapSheet(forDate){
   if(typeof _nutKeyboardSafe === 'function') _nutKeyboardSafe(ov);
   ov.querySelector('#nut-swap-close').addEventListener('click', function(){ ov.remove(); });
   ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  ov.querySelectorAll('[data-nut-pre]').forEach(function(row){
+    row.addEventListener('click', function(){
+      if(nutProgSetPre(today, row.getAttribute('data-nut-pre'))){
+        ov.remove();
+        if(typeof nutRenderScreen === 'function') nutRenderScreen();
+      }
+    });
+  });
   ov.querySelectorAll('[data-nut-night]').forEach(function(row){
     row.addEventListener('click', function(){
       var parts = String(row.getAttribute('data-nut-night')).split('|');
@@ -22463,6 +22520,82 @@ function _nutProgBatchCard(week){
   });
   h += '</div>';
   return h;
+}
+
+// ── the 04:15 slot ─────────────────────────────────────────────────────────
+// v4.9.299. Jon's ruling. The slot was fixed by day type — banana on rest and
+// HIIT days, nothing on lift days because the intra carried the block. It is now
+// a CHOICE on a lifting day and EMPTY on every other.
+//
+// Both defaults changed, which is worth stating plainly rather than discovering:
+//   lift day     was: intra only    now: intra, banana or nothing
+//   rest / HIIT  was: banana        now: NOTHING
+//
+// AND THE BLOCK DOES NOT VANISH WITH IT. Whatever the slot does not deliver is
+// redistributed across the day's remaining carbohydrate, so the daily target
+// still lands. A slot that quietly cost 25 g of carbs would read as the plan
+// being wrong rather than as a choice having a consequence.
+var _NUT_PROG_PRE_OPTIONS = [
+  { id:'intra',  n:'Intra drink', liftOnly:true, c:24.4, k:99,  p:0,   f:0 },
+  { id:'banana', n:'Banana',      g:120,         c:25.2, k:107, p:1.3, f:0.4 },
+  { id:'none',   n:'Nothing',                    c:0,    k:0,   p:0,   f:0 }
+];
+
+function _nutProgPreOpt(id){
+  for(var i = 0; i < _NUT_PROG_PRE_OPTIONS.length; i++)
+    if(_NUT_PROG_PRE_OPTIONS[i].id === id) return _NUT_PROG_PRE_OPTIONS[i];
+  return null;
+}
+
+// A lifting day defaults to the intra because the plan was built around it;
+// every other day defaults to nothing.
+function nutProgPreOn(dateKey){
+  var lift = nutProgIsLiftDay(dateKey);
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  var pick = (day && day.prog_pre) || (ns && ns.prog_pre_default) || (lift ? 'intra' : 'none');
+  var opt = _nutProgPreOpt(pick);
+  // The intra is a lifting drink. Choosing it for a rest day cannot happen, so
+  // it falls back rather than rendering a drink he is not taking.
+  if(!opt || (opt.liftOnly && !lift)) return _nutProgPreOpt(lift ? 'intra' : 'none');
+  return opt;
+}
+function nutProgSetPre(dateKey, id){
+  var opt = _nutProgPreOpt(id);
+  if(!opt || !dateKey) return false;
+  if(opt.liftOnly && !nutProgIsLiftDay(dateKey)) return false;
+  var ns = nutGetState();
+  var day = _nutProgDay(ns, dateKey);
+  if(!day) return false;
+  day.prog_pre = id;
+  nutSaveState(ns);
+  return true;
+}
+function nutProgSetPreDefault(id){
+  if(!_nutProgPreOpt(id)) return false;
+  var ns = nutGetState();
+  ns.prog_pre_default = id;
+  nutSaveState(ns);
+  return true;
+}
+
+// The day's carbohydrate OUTSIDE the 04:15 slot, read from the plate — the
+// redistribution has to be known before the meals are assembled, so it cannot
+// be taken from a built day.
+// A carb item worth redistributing INTO: one whose protein is small beside its
+// carbohydrate. Oats and milk fail this and are left alone.
+function _nutIsPureCarb(it){
+  return !!(it && it.carb && it.c > 0 && (it.p / it.c) < 0.15);
+}
+function _nutProgDayCarbBase(ix){
+  var t = 0;
+  for(var i = 0; i < _NUT_PROG_PLATE.length; i++){
+    var it = _NUT_PROG_PLATE[i];
+    if(!it.carb || it.m === 'pre' || !_nutIsPureCarb(it)) continue;
+    var g = it.g[ix];
+    if(g > 0) t += _nutProgItemMacros(it, g).c;
+  }
+  return t;
 }
 
 // ── the nutrition week, as a label ─────────────────────────────────────────

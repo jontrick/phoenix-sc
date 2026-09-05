@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.298'", 'version is 4.9.298');
+has("var APP_VERSION='4.9.299'", 'version is 4.9.299');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3055,6 +3055,31 @@ hasCode('function nutProgSetSwap(',          'SWAP: week-long swaps are stored')
 // ── Tonight's dinner ────────────────────────────────────────────────────────
 hasCode('_NUT_PROG_DINNER_PROTEIN', 'NIGHT: four evening proteins exist');
 hasCode('_NUT_PROG_MIDAM_DAIRY', 'DAIRY: the mid-morning dairy can be swapped');
+
+// ── The 04:15 slot ──────────────────────────────────────────────────────────
+hasCode('_NUT_PROG_PRE_OPTIONS',      'PRE: intra, banana or nothing');
+hasCode('function nutProgPreOn(',     'PRE: the day knows what is at 04:15');
+hasCode('function nutProgSetPre(',    'PRE: and it can be chosen per day');
+hasCode('function nutProgSetPreDefault(', 'PRE: or set once for the week');
+hasCode('data-nut-pre',               'PRE: the sheet OFFERS it');
+hasCode("ov.querySelectorAll('[data-nut-pre]')",
+        'PRE: and the rows are WIRED');
+
+// The choice must drive the DRINK too. Counting the intra from the session alone
+// put the day 24 g of carbohydrate over when the banana was picked.
+hasCode("if(s.id === 'lift' && due && typeof nutProgPreOn === 'function')",
+        'PRE: the intra follows the CHOICE, not merely the session');
+
+// Whatever 04:15 does not deliver is redistributed, or an empty slot silently
+// costs a carb block and reads as the plan being wrong.
+hasCode('function _nutProgDayCarbBase(', 'PRE: the day knows its own carb base');
+hasCode('function _nutIsPureCarb(',
+        'PRE: redistribution targets the purest carbs, so protein does not ride along');
+hasCode('_shortC * (_ownC / _dayCarbBase)',
+        'PRE: the shortfall is shared in proportion, not dumped on one item');
+hasCode('_nutProgItemMacros(it, g).c',
+        'PRE: the base counts an item the same way the plate does — rice cakes are ' +
+        'counted in CAKES, and scoring them in grams understated the base by 14 g');
 hasCode("_NUT_MIDAM_DAIRY_ITEM = 'Greek yoghurt, 0%'",
         'DAIRY: named once, so removing the slot cannot leave a dangling lookup');
 hasCode("['midam_dairy', pick.midam_dairy]",

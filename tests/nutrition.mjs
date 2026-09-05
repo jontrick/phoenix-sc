@@ -1131,14 +1131,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     });
   });
 
-  test('PLATE a lift day drops the banana and nothing else', () => {
+  test('PLATE the 04:15 slot is empty by default on every day', () => {
     setUp(110);
     const wed = app.nutProgMealsOn('2026-09-16');   // HIIT
     const tue = app.nutProgMealsOn('2026-09-15');   // lift
     const names = (ms) => ms.map((m) => m.id);
-    assert.equal(names(wed).indexOf('pre') >= 0, true, 'the non-lift day has the pre-training banana');
+    assert.equal(names(wed).indexOf('pre'), -1,
+      'a non-lift day has nothing before training — Jon\'s ruling, and a change ' +
+      'from the banana that used to sit here');
     assert.equal(names(tue).indexOf('pre'), -1,
-      'the lift day does not — the intra already delivered that block');
+      'and a lift day defaults to the intra, which renders in its own 04:30 row');
     const foodWed = names(wed).filter((n) => ['bfast','midam','lunch','arvo','dinner'].indexOf(n) >= 0);
     const foodTue = names(tue).filter((n) => ['bfast','midam','lunch','arvo','dinner'].indexOf(n) >= 0);
     assert.deepEqual(foodTue, foodWed, 'every other meal is identical — one change, not a second menu');
@@ -1220,8 +1222,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const tue = onDay('2026-09-15', () => app._nutTabToday(app.nutGetState()));
     // Match the MEAL, not the word: "Pre-training" also appears in the coffee
     // shot's own name, so a text needle here reports a bug that is not there.
-    assert.ok(wed.indexOf('data-prog-tick="pre"') >= 0, 'the HIIT day has the banana meal');
-    assert.equal(tue.indexOf('data-prog-tick="pre"'), -1, 'the lift day does not');
+    assert.equal(wed.indexOf('data-prog-tick="pre"'), -1,
+      'nothing at 04:15 on a HIIT day now — the banana was removed by Jon\'s ruling');
+    assert.equal(tue.indexOf('data-prog-tick="pre"'), -1, 'and none on a lift day either');
     assert.ok(tue.indexOf('Pre-training coffee shot') >= 0,
       'while the coffee shot — which is a different thing wearing a similar name — stays');
     assert.ok(tue.indexOf('lift day') >= 0, 'and the header says why');
@@ -1295,14 +1298,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgShoppingFor(16, 'basmati'), null, 'there is no week 16');
   });
 
-  test('SHOP bananas are counted for the days they are actually eaten', () => {
+  test('SHOP bananas are bought only for the days one is chosen', () => {
     setUp(110);
+    assert.equal(!!shopItem(app.nutProgShoppingFor(1, 'basmati'), 'Banana'), false,
+      'none by default — the slot is empty unless Jon picks a banana for it');
+    const days = app._nutProgWeekDates(1);
+    app.nutProgSetPre(days[1], 'banana');          // Tuesday, a lift day
+    app.nutProgSetPre(days[3], 'banana');          // Thursday, a lift day
     const b = shopItem(app.nutProgShoppingFor(1, 'basmati'), 'Banana');
-    assert.equal(b.qty, 3,
-      'THREE — one for each non-lifting day. The four lift days drink the intra ' +
-      'instead, so multiplying one day by seven would buy more than twice what ' +
-      'the week eats');
-    assert.equal(b.unit, '', 'and bananas are bought by the piece, not the gram');
+    assert.equal(b.qty, 2, 'two chosen, two bought — not seven, and not none');
+    assert.equal(b.unit, '', 'and bought by the piece, not the gram');
   });
 
   test('SHOP Saturday orders BOTH its formulas', () => {
@@ -1324,8 +1329,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(ch.qty, 1260, 'chicken RAW — it loses about a quarter roasting');
     assert.ok(/945 g cooked/.test(ch.note), 'with the cooked yield beside it: ' + ch.note);
     const rice = shopItem(shop, 'Basmati, white');
-    assert.equal(rice.qty, 537, 'rice DRY');
-    assert.ok(/1610 g cooked/.test(rice.note), 'with what it becomes: ' + rice.note);
+    // Larger than the old 537 g, and correctly so: with 04:15 empty by default,
+    // the block it used to carry is redistributed into the day's pure carbs, and
+    // rice takes the biggest share of it.
+    assert.ok(rice.qty > 537, 'more rice now the pre-training block moved into it: ' + rice.qty);
+    assert.ok(/cooked/.test(rice.note), 'still with what it becomes: ' + rice.note);
     assert.ok(rice.qty < 1610, 'dry weight is always the smaller number — the two must never be confused');
   });
 
@@ -1807,8 +1815,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('PRESTART it shows the first day\'s plate before the week opens', () => {
     setUp(110);
     const html = onDay('2026-09-06', () => app._nutTabToday(app.nutGetState()));
-    assert.ok(html.indexOf('Banana') >= 0, 'Monday is a rest day, so the banana is on it');
-    assert.ok(html.indexOf('Chicken breast') >= 0, 'and the food he is prepping');
+    // Monday is a rest day and now has NOTHING at 04:15 — Jon's ruling.
+    assert.equal(html.indexOf('Banana'), -1, 'no banana on a rest day any more');
+    assert.ok(html.indexOf('Chicken breast') >= 0, 'but the food he is prepping is still shown');
   });
 
   test('PRESTART the Substitutions door is open BEFORE the shop, not after', () => {
@@ -2050,7 +2059,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const steak = shopFind(0, 'Sirloin steak');
     assert.equal(steak.qty, 105, 'the serve is the serve — got ' + steak.qty);
     assert.equal(steak.note, '', 'and it carries no cooked-yield note, because it is not rice');
-    assert.equal(shopFind(0, 'Basmati, white').qty, 537, 'while real rice still converts from dry');
+    const riceQty = shopFind(0, 'Basmati, white');
+    assert.ok(/cooked/.test(riceQty.note), 'while real rice still converts from dry: ' + riceQty.note);
+    assert.ok(riceQty.qty > 400 && riceQty.qty < 800, 'a dry weight, not a cooked one: ' + riceQty.qty);
   });
 
   test('WEEKPICK swapped proteins are shelved with the protein, not the produce', () => {
@@ -2336,8 +2347,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     const rc = app.nutProgBatchRecipes(0);
     const grain = rc.filter((r) => r.id === 'grain')[0];
-    assert.equal(grain.headline, '537 g dry : 806 ml water',
-      'the dry weight is the list\'s, and the water is derived from it: ' + grain.headline);
+    const listQty = (() => {
+      const shop = app.nutProgShoppingFor(0, app.nutProgRiceChoice());
+      let q = null;
+      shop.groups.forEach((g) => g.items.forEach((it) => { if(/Basmati/.test(it.n)) q = it.qty; }));
+      return q;
+    })();
+    assert.ok(grain.headline.indexOf(String(listQty) + ' g dry') === 0,
+      'the dry weight is THE LIST\'S, whatever it currently is — pinning a number ' +
+      'here would break every time the plan legitimately moved: ' + grain.headline);
+    assert.ok(/ml water/.test(grain.headline), 'with the water derived from it');
     const chicken = rc.filter((r) => r.id === 'chicken')[0];
     assert.equal(chicken.headline, '1260 g raw', 'raw chicken as bought');
     assert.ok(/945 g cooked/.test(chicken.yields), 'with the cooked yield: ' + chicken.yields);
@@ -2543,6 +2562,141 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/Nutrition/.test(html), 'named as the nutrition week');
     assert.ok(/15-week cut/.test(html), 'and which programme it belongs to');
     assert.ok(html.indexOf('Trial week') >= 0, 'with the week itself');
+  });
+
+  // ── the 04:15 slot ───────────────────────────────────────────────────────
+  // v4.9.298. Jon's ruling changed both halves: a lifting day gained a CHOICE
+  // (intra, banana or nothing) and every other day lost the banana entirely.
+  // Whatever the slot does not deliver is redistributed, so the day still lands.
+
+  const preOf = (d) => (app.nutProgMealsOn(d, 'basmati') || []).filter((m) => m.id === 'pre')[0];
+  const intraOf = (d) => (app.nutProgMealsOn(d, 'basmati') || [])
+    .filter((m) => m.supp && /intra/i.test(m.name))[0];
+  const dayC = (d) => app.nutProgDayTotals(d, 'basmati').c;
+  const targetC = (d) => app.nutProgTargetsOn(d).total.c;
+
+  test('PRE a lifting day defaults to the intra, and nothing is eaten at 04:15', () => {
+    setUp(110);
+    const d = '2026-09-15';                       // Tuesday, lift
+    assert.equal(app.nutProgPreOn(d).id, 'intra', 'the plan was built around the drink');
+    assert.equal(preOf(d), undefined, 'so there is no food at that slot');
+    assert.ok(intraOf(d), 'the drink is on the day');
+  });
+
+  test('PRE every other day has NOTHING at 04:15', () => {
+    setUp(110);
+    ['2026-09-14','2026-09-16','2026-09-18'].forEach((d) => {   // rest, HIIT, HIIT
+      assert.equal(app.nutProgPreOn(d).id, 'none', d + ' defaults to nothing');
+      assert.equal(preOf(d), undefined, d + ' shows no banana — a change from before');
+    });
+  });
+
+  test('PRE a lifting day can take the banana INSTEAD of the drink', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    app.nutProgSetPre(d, 'banana');
+    assert.ok(preOf(d), 'the banana is on the plate');
+    assert.equal(intraOf(d), undefined,
+      'and the intra is NOT — one or the other, which is what Jon asked for');
+  });
+
+  test('PRE a lifting day can take nothing at all', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    app.nutProgSetPre(d, 'none');
+    assert.equal(preOf(d), undefined, 'no food');
+    assert.equal(intraOf(d), undefined, 'and no drink');
+  });
+
+  test('PRE the intra cannot be chosen for a day with no lift in it', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetPre('2026-09-14', 'intra'), false,
+      'it is a lifting-session drink — offering it on a rest day would put a ' +
+      'drink on screen he is not taking');
+    assert.equal(app.nutProgPreOn('2026-09-14').id, 'none', 'and nothing was stored');
+  });
+
+  // ── the redistribution, which is the half that could go wrong quietly ──
+  test('PRE the day still lands on target whatever is chosen', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    ['intra','banana','none'].forEach((pick) => {
+      app.nutProgSetPre(d, pick);
+      const drift = Math.round((dayC(d) - targetC(d)) * 10) / 10;
+      assert.ok(Math.abs(drift) <= 2,
+        'with "' + pick + '" at 04:15 the day is ' + drift + ' g off target — a slot ' +
+        'that quietly cost 25 g would read as the plan being wrong');
+    });
+  });
+
+  test('PRE a rest day lands on target too, with nothing at 04:15', () => {
+    setUp(110);
+    const d = '2026-09-14';
+    const drift = Math.round((dayC(d) - targetC(d)) * 10) / 10;
+    assert.ok(Math.abs(drift) <= 2, 'rest day drift ' + drift + ' g');
+  });
+
+  test('PRE the missing block goes into the PUREST carbs, not the protein-bearing ones', () => {
+    setUp(110);
+    const d = '2026-09-14';                       // rest — nothing at 04:15
+    const items = (app.nutProgMealsOn(d, 'basmati') || [])
+      .reduce((a, m) => a.concat(m.supp ? [] : m.items), []);
+    const oats = items.filter((it) => /Oats/.test(it.n))[0];
+    const spud = items.filter((it) => /Sweet potato/.test(it.n))[0];
+    assert.equal(oats.g, 60, 'oats are untouched — 13 g protein per 67 g carbs is too much to drag along');
+    assert.ok(spud.g > 260, 'the sweet potato takes it instead: ' + spud.g + ' g');
+    const t = app.nutProgTargetsOn(d);
+    const p = app.nutProgDayTotals(d, 'basmati').p;
+    const over = Math.round((p - t.total.p) * 10) / 10;
+    assert.ok(over <= 5,
+      'protein drifts up ' + over + ' g, because even the purest carbs here carry ' +
+      'some — sweet potato 1.6 g per 100 g, rice 2.7. Under 5 g is the mechanism; ' +
+      'over it would mean the shortfall is landing somewhere it should not');
+    assert.ok(over >= 0, 'and it never drifts DOWN — that would mean food went missing');
+  });
+
+  // ── shopping and the door ──
+  test('PRE a chosen banana is a fresh item on the list; the drink is not', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    app.nutProgSetPre(days[1], 'banana');
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const names = [];
+    shop.groups.forEach((g) => g.items.forEach((it) => names.push(it.n)));
+    assert.ok(names.indexOf('Banana') >= 0, 'the banana is bought');
+    const intra = shop.formulas.filter((f) => /intra/i.test(f.n))[0];
+    assert.equal(intra.serves, 3,
+      'and one fewer intra serve is needed — four lift days, one taking a banana');
+  });
+
+  test('PRE the sheet OFFERS the choice on a lifting day', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-15', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-pre') >= 0, 'the rows are there');
+    assert.ok(/04:15/.test(html), 'labelled by the time it happens');
+    ['Intra drink','Banana','Nothing'].forEach((n) => {
+      assert.ok(html.indexOf(n) >= 0, n + ' is offered');
+    });
+  });
+
+  test('PRE the sheet does not offer it on a day with no lift', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    assert.equal(d.lastCreatedHtml().indexOf('data-nut-pre'), -1,
+      'there is nothing to choose between when the slot is empty by rule');
+  });
+
+  test('PRE a weekly default can be set without touching each day', () => {
+    setUp(110);
+    app.nutProgSetPreDefault('banana');
+    assert.equal(app.nutProgPreOn('2026-09-15').id, 'banana', 'Tuesday follows the default');
+    assert.equal(app.nutProgPreOn('2026-09-17').id, 'banana', 'so does Thursday');
+    app.nutProgSetPre('2026-09-17', 'intra');
+    assert.equal(app.nutProgPreOn('2026-09-17').id, 'intra', 'and one day can still override it');
+    assert.equal(app.nutProgPreOn('2026-09-15').id, 'banana', 'without moving the others');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

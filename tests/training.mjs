@@ -591,7 +591,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] });
     const card = stubEl(), inner = stubEl();
     app._blabRenderTodayFromCalendar(card, inner, 5);
-    assert.ok(inner.innerHTML.includes('2 Sessions'), 'card says there are two');
+    // v4.9.298: the header now reports PROGRESS rather than a count — "0 of 2 done"
+    // instead of "2 Sessions". Updated rather than loosened: the property is still that
+    // the card tells him how many sessions today holds.
+    assert.ok(inner.innerHTML.includes('0 of 2 done'), 'card says two are scheduled and none done');
     assert.ok(inner.innerHTML.includes('blabOpenSession(5,3)'), 'BLAB start present');
     assert.ok(inner.innerHTML.includes('_phxStartSession'), 'custom start present');
     assert.equal(card._attrs.onclick, undefined, 'no whole-card tap when it is ambiguous');
@@ -3665,5 +3668,117 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     reset(); signIn(UID);
     for(let i = 1; i <= 520; i++) app._phxOutboxAdd(ROW('Ex' + i, i));
     assert.ok(app._phxOutboxCount() <= 500, 'capped at 500');
+  });
+
+  // ── TODAY CARDS, ONE PER SESSION (v4.9.298) ──────────────────────────────
+  // Jon, from the 10:29 screenshot: the whole top of the screen was one IN PROGRESS /
+  // RESUME / START OVER panel. He wants up to two session cards, each carrying its own
+  // state, and a finished one to read as finished rather than still offering buttons.
+  //
+  // The in-progress takeover ran BEFORE this renderer and returned, so on a calendar day
+  // it replaced both cards. It is now the legacy (no-calendar) path only.
+
+  const doneEntry = (w, d, date) => Object.assign(S(w, d, date), { status: 'completed' });
+
+  test('CARD: a completed session shows COMPLETED and offers nothing', () => {
+    schedule({ sessions: [doneEntry(5, 3, dayFromToday(0))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    const html = inner.innerHTML;
+    assert.ok(/Completed/.test(html), 'the green tag is there');
+    assert.ok(!/Start →/.test(html), 'and no Start button');
+    assert.ok(!/Resume/.test(html), 'and no Resume — it is finished');
+  });
+
+  test('CARD: a not-started session shows START', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.ok(/Start →/.test(inner.innerHTML), 'Start is offered');
+    assert.ok(!/Completed/.test(inner.innerHTML), 'and it is not claimed done');
+  });
+
+  test('CARD: one done and one to do, both visible with different states', () => {
+    // The case the old layout could not express: it showed Start on both.
+    schedule({ sessions: [doneEntry(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    const html = inner.innerHTML;
+    assert.ok(/1 of 2 done/.test(html), 'the header counts what is finished');
+    assert.ok(/Completed/.test(html), 'the finished one is tagged');
+    assert.ok(/_phxStartSession/.test(html), 'and the other still offers its start');
+    assert.ok(!/blabOpenSession\(5,3\)/.test(html), 'the finished one does NOT offer to reopen');
+  });
+
+  test('CARD: an in-progress session gets Resume ON ITS OWN CARD', () => {
+    // Not a full-width panel replacing everything — that is the screenshot.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 5, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                blockProgress: { ['blab:5:3:' + today]: { '0': { done: true, ts: today } } },
+                calendar: { sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] },
+                _ts: NEWER });
+    seed(`blab_calendar_v1_${UID}`, { sessions: [S(5, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    const html = inner.innerHTML;
+    assert.ok(/In progress/i.test(html), 'the in-progress state is shown');
+    assert.ok(/Resume/.test(html), 'with a resume control');
+    assert.ok(/_phxStartSession/.test(html), 'and the OTHER session is still on screen with its own start');
+  });
+
+  test('CARD: with a calendar, the Today SCREEN shows cards — not the full-width takeover', () => {
+    // THE ACTUAL BUG in Jon's 10:29 screenshot. The in-progress takeover ran BEFORE the
+    // calendar renderer and returned, so both session cards were replaced by one
+    // RESUME / START OVER panel.
+    //
+    // My other CARD cases call _blabRenderTodayFromCalendar directly, which bypasses the
+    // takeover entirely — so none of them could see this. Inverting the gate left them all
+    // green. This drives renderTodayScreen, which is the route he actually takes.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    const cal = { sessions: [S(3, 3, dayFromToday(0))], customs: [C('Kronos', dayFromToday(0))] };
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                blockProgress: { ['blab:3:3:' + today]: { '0': { done: true, ts: today } } },
+                calendar: cal, _ts: NEWER });
+    seed(`blab_calendar_v1_${UID}`, cal);
+    const inner = { innerHTML: '', style: {}, querySelector: () => null };
+    const card = { style: {}, querySelector: () => inner, removeAttribute: () => {},
+                   setAttribute: () => {}, classList: { contains: () => false } };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'card-today-session' ? card : null);
+    try {
+      app.renderTodayScreen();
+      const html = inner.innerHTML;
+      assert.ok(/In progress/i.test(html), 'the in-progress session is still identified');
+      assert.ok(/_phxStartSession/.test(html),
+        'and the OTHER session is STILL ON SCREEN — the takeover used to remove it');
+      assert.ok(!/blocks already logged today/.test(html),
+        'the full-width takeover wording is gone on a calendar day');
+    } finally { app.document.getElementById = realGet; }
+  });
+
+  test('CARD: a fully finished day turns the outer card green', () => {
+    // "makes completed ones feel satisfying rather than open-ended".
+    schedule({ sessions: [doneEntry(5, 3, dayFromToday(0))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.ok(/3a7d44/.test(card.style.border || ''), 'green edge when everything is done');
+  });
+
+  test('CARD: a day with work left is not green', () => {
+    schedule({ sessions: [S(5, 3, dayFromToday(0))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.ok(!/3a7d44/.test(card.style.border || ''), 'not claimed finished while a session is outstanding');
+  });
+
+  test('CARD: a completed day is not tappable — it cannot reopen itself', () => {
+    schedule({ sessions: [doneEntry(5, 3, dayFromToday(0))], customs: [] });
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 5);
+    assert.equal(card._attrs.onclick, undefined, 'no whole-card tap on a finished day');
   });
 }

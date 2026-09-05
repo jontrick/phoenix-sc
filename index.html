@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.297';
+var APP_VERSION='4.9.298';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8798,7 +8798,7 @@ async function supabaseCompleteSession(updates){
   }
 }
 
-// v4.9.NEXT — OFFLINE OUTBOX FOR SET LOGS.
+// v4.9.298 — OFFLINE OUTBOX FOR SET LOGS.
 //
 // Jon asked whether the local session state syncs back when signal returns. It did not.
 // supabaseLogSet fired once, and since .238 a failure was RECORDED to the diagnostic —
@@ -8929,7 +8929,7 @@ function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
       // silent failure also degrades the targets for his NEXT session. Same shape as
       // the weigh-in -> macro chain, in the training half.
       if(typeof _phxRecordWriteError==='function') _phxRecordWriteError('supabaseLogSet',res.error,row);
-      // v4.9.NEXT: recorded AND queued. Recording alone told him it broke; it never got
+      // v4.9.298: recorded AND queued. Recording alone told him it broke; it never got
       // the set to Supabase.
       if(typeof window._phxOutboxAdd==='function') window._phxOutboxAdd(row);
     }
@@ -18853,7 +18853,17 @@ function renderTodayScreen(){
         // Sits BELOW paused: if the programme is paused he is not mid-session.
         var _unfin = (!_bs.paused && typeof window._blabUnfinishedToday === 'function')
           ? window._blabUnfinishedToday() : null;
-        if(_unfin){
+        // v4.9.298 — this whole-card takeover is now the LEGACY path only.
+        //
+        // Jon: the in-progress state should sit "on that specific card (not dominating
+        // the whole top of the screen)". It ran BEFORE the calendar renderer and
+        // returned, so on a calendar day it replaced both session cards with one
+        // RESUME/START OVER panel — which is the screenshot he sent.
+        //
+        // With a calendar in use, per-session status is rendered per card below. Without
+        // one there is only ever a single session, so the takeover is still correct.
+        var _calInUse = (typeof window.blabCalHasSchedule === 'function') && window.blabCalHasSchedule();
+        if(_unfin && !_calInUse){
           var _ulabel = _dayLabels[_unfin.day] || ('Day ' + _unfin.day);
           _inner.innerHTML =
             '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">In progress &middot; Week '+_unfin.week+'</div>'+
@@ -19031,9 +19041,39 @@ window._blabRenderTodayError = function(err){
 // v4.9.161 — Today card, driven by the training calendar.
 // Renders every session scheduled for today (one, two, or none) and fills the row
 // beneath with the next few days. Returns true when it has taken over the card.
+// v4.9.298 — the status of ONE scheduled session, for the Today cards.
+//
+// Three states, and the distinction Jon asked for is between the last two: a finished
+// session should read as finished and stop offering anything, rather than sitting there
+// open-ended.
+//
+//   completed    the calendar entry says so
+//   in_progress  blocks logged today against THIS week/day, and it is not yet complete
+//   todo         everything else
+//
+// Only BLAB entries can be in progress: a custom WOD/Core has no per-block progress to
+// read, so it is completed or not. Claiming otherwise would need a mechanism that does
+// not exist, and inventing one to make the UI symmetrical is how a card comes to lie.
+function _blabTodayStatus(e){
+  try {
+    if(!e) return 'todo';
+    if(String(e.status || '') === 'completed') return 'completed';
+    if(e.custom) return 'todo';
+    var unfin = (typeof window._blabUnfinishedToday === 'function') ? window._blabUnfinishedToday() : null;
+    if(unfin && unfin.week === e.blabWeek && unfin.day === e.blabDay) return 'in_progress';
+    return 'todo';
+  } catch(_e){ return 'todo'; }
+}
+
 function _blabRenderTodayFromCalendar(card, inner, weekNum){
   if(typeof window.blabCalTodaySessions !== 'function') return false;
-  var today = window.blabCalTodaySessions();
+  // v4.9.298: the ALL reader, so a finished session stays on screen with its tag
+  // instead of disappearing the moment it is completed. Falls back to the agenda reader
+  // if the newer one is missing, so a partial deploy degrades to the old behaviour
+  // rather than to a blank card.
+  var today = (typeof window.blabCalAllOn === 'function')
+    ? window.blabCalAllOn(_blabCalTodayISO())
+    : window.blabCalTodaySessions();
 
   // Nothing scheduled today. Say so plainly rather than offering a session the
   // athlete did not plan — the calendar is the source of truth once it is in use.
@@ -19075,43 +19115,70 @@ function _blabRenderTodayFromCalendar(card, inner, weekNum){
     return true;
   }
 
-  var multi = today.length > 1;
-  var h = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Today · ' +
-          (multi ? (today.length + ' Sessions') : 'Scheduled') + '</div>';
+  // v4.9.298 — ONE CARD PER SESSION, each carrying its own state.
+  //
+  // Jon: "up to 2 session cards for the day ... Once a session is completed, the card
+  // shows a green COMPLETED tag — not the resume/start over UI ... If a session is in
+  // progress, it shows an in-progress state with a resume button on that specific card".
+  //
+  // Previously every session shared one card separated by a rule, all of them showing
+  // Start regardless of what had been done, and an in-progress session replaced the lot
+  // with a full-width RESUME / START OVER panel before this function even ran.
+  var count = today.length;
+  var doneCount = 0;
+  today.forEach(function(e){ if(_blabTodayStatus(e) === 'completed') doneCount++; });
+  var h = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">Today &middot; ' +
+          (count > 1 ? (doneCount + ' of ' + count + ' done') : 'Scheduled') + '</div>';
 
   today.forEach(function(e, i){
     var v = window.blabCalEntryView(e);
     if(!v) return;
-    var rule = (i === today.length - 1) ? '' : 'border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:14px;';
-    h += '<div style="' + rule + '">';
-    if(multi){
-      h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">' + v.eyebrow + '</div>';
-      h += '<div class="game-card-title" style="font-size:22px;">' + v.title + '</div>';
-    } else {
-      h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">' + v.eyebrow + '</div>';
-      h += '<div class="game-card-title" style="font-size:30px;">' + v.title + '</div>';
-      h += '<div style="font-size:13px;color:var(--text2);margin-top:6px;">' + v.sub + '</div>';
+    var st = _blabTodayStatus(e);
+    var edge = st === 'completed' ? '#3a7d44' : (st === 'in_progress' ? 'var(--gold)' : 'var(--border)');
+    h += '<div style="background:var(--bg2);border:1px solid ' + edge + ';border-left:3px solid ' + edge + ';border-radius:10px;padding:13px 14px;margin-bottom:' + (i === count - 1 ? '0' : '10') + 'px;">';
+
+    // Name and status sit on one line so both are readable at a glance.
+    h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">';
+    h += '<div style="flex:1;min-width:0;">' +
+           '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">' + v.eyebrow + '</div>' +
+           '<div class="game-card-title" style="font-size:' + (count > 1 ? '20' : '24') + 'px;line-height:1.15;">' + v.title + '</div>' +
+         '</div>';
+    if(st === 'completed'){
+      h += '<span style="flex-shrink:0;display:inline-flex;align-items:center;gap:5px;background:rgba(58,125,68,0.16);border:1px solid #3a7d44;border-radius:20px;padding:4px 10px;font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#3a7d44;">' +
+             '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#3a7d44" stroke-width="4"><polyline points="20 6 9 17 4 12"/></svg>Completed</span>';
+    } else if(st === 'in_progress'){
+      h += '<span style="flex-shrink:0;background:rgba(200,150,62,0.16);border:1px solid var(--gold);border-radius:20px;padding:4px 10px;font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);">In progress</span>';
     }
-    if(v.blocked){
+    h += '</div>';
+
+    if(st === 'completed'){
+      // Nothing to press. A finished session that still offers a button is the
+      // open-endedness he asked to be rid of.
+      h += '<div style="font-size:11px;color:var(--text3);margin-top:7px;">Logged today.</div>';
+    } else if(v.blocked){
       h += '<div style="font-size:12px;color:var(--orange);margin-top:8px;line-height:1.5;">' + v.blockNote + '</div>';
+    } else if(st === 'in_progress'){
+      var uf = (typeof window._blabUnfinishedToday === 'function') ? window._blabUnfinishedToday() : null;
+      var nBlocks = uf ? uf.done : 0;
+      h += '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + nBlocks + ' block' + (nBlocks === 1 ? '' : 's') + ' logged &middot; progress saved</div>';
+      h += '<div style="display:flex;gap:8px;margin-top:10px;">' +
+             '<button onclick="event.stopPropagation();' + v.onStart + ';" style="flex:2;padding:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Resume →</button>' +
+             '<button onclick="event.stopPropagation();window._blabDiscardUnfinished(' + e.blabWeek + ',' + e.blabDay + ');" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text3);cursor:pointer;">Start over</button>' +
+           '</div>';
     } else if(v.onStart){
-      h += '<div style="margin-top:' + (multi ? '10' : '16') + 'px;"><button onclick="event.stopPropagation();' + v.onStart + ';" style="width:100%;padding:' + (multi ? '12' : '15') + 'px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:' + (multi ? '13' : '15') + 'px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
+      h += '<div style="margin-top:10px;"><button onclick="event.stopPropagation();' + v.onStart + ';" style="width:100%;padding:13px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
     }
     h += '</div>';
   });
 
   inner.innerHTML = h;
-  card.style.border = '2px solid var(--gold)';
-  // With two sessions there is no single thing a whole-card tap should open.
-  if(multi){
-    card.style.cursor = 'default';
-    card.removeAttribute('onclick');
-  } else {
-    var only = window.blabCalEntryView(today[0]);
-    card.style.cursor = only && !only.blocked ? 'pointer' : 'default';
-    if(only && !only.blocked && only.onStart) card.setAttribute('onclick', only.onStart);
-    else card.removeAttribute('onclick');
-  }
+  // Green once everything scheduled is done, so the day itself reads as finished.
+  var allDone = count > 0 && doneCount === count;
+  card.style.border = allDone ? '2px solid #3a7d44' : '2px solid var(--gold)';
+  // Each card carries its own button now, so a whole-card tap has no single meaning —
+  // and on a completed day it would re-open something already finished.
+  card.style.cursor = 'default';
+  card.removeAttribute('onclick');
   _renderTodayNextDays();
   return true;
 }
@@ -33416,6 +33483,30 @@ window.blabCalSessionsOn = function(dateISO){
   });
   cal.customs.forEach(function(c){
     if(c.scheduledDate === dateISO && c.status !== 'completed' && c.status !== 'skipped'){
+      out.push({custom:true, id:c.id, cat:c.cat, libId:c.libId, label:c.label,
+                scheduledDate:c.scheduledDate, status:c.status});
+    }
+  });
+  return out;
+};
+
+// v4.9.298 — everything scheduled on a date INCLUDING what is already done.
+//
+// blabCalSessionsOn deliberately drops completed entries — "history, not an agenda" —
+// and that contract is right for what it answers and Nutrition reads it. It is the wrong
+// question for the Today card, which now has to SHOW a finished session with a green
+// COMPLETED tag rather than let it vanish the moment it is done.
+//
+// So this is an addition, not a change: same source, skipped still excluded (he chose to
+// drop those), completed kept. Nothing that reads the agenda is touched.
+window.blabCalAllOn = function(dateISO){
+  var cal = window.blabCalGet();
+  var out = [];
+  cal.sessions.forEach(function(s){
+    if(s.scheduledDate === dateISO && s.status !== 'skipped') out.push(s);
+  });
+  cal.customs.forEach(function(c){
+    if(c.scheduledDate === dateISO && c.status !== 'skipped'){
       out.push({custom:true, id:c.id, cat:c.cat, libId:c.libId, label:c.label,
                 scheduledDate:c.scheduledDate, status:c.status});
     }

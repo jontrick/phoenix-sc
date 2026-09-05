@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.297'", 'version is 4.9.297');
+has("var APP_VERSION='4.9.298'", 'version is 4.9.298');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2451,7 +2451,10 @@ has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped s
   // because I injected a bare call. A guard has to bite for the RIGHT reason.
   const code = phxStripComments(html);
   const n = (code.match(/(?:window\.)?blabCalGet\s*\(/g) || []).length;
-  const MINE = 19;
+  // 20 since v4.9.298: blabCalAllOn — Training's own reader, added so the Today card can
+  // show a session that is already finished. blabCalSessionsOn drops completed entries
+  // ("history, not an agenda") and Nutrition depends on that, so it was left alone.
+  const MINE = 20;
   if (n === MINE) ok('CONTRACT: blabCalGet has only its ' + MINE + ' Training call sites');
   else bad(`CONTRACT: blabCalGet is invoked ${n}× in code, expected ${MINE} (all Training's). ` +
            `If you added one, update the count. If a peer added one, that is my internal storage ` +
@@ -2544,6 +2547,18 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── TODAY CARDS, ONE PER SESSION (v4.9.298) ─────────────────────────────────
+// The in-progress takeover ran BEFORE the calendar renderer and returned, replacing both
+// session cards with one full-width RESUME / START OVER panel — Jon's 10:29 screenshot.
+has('if(_unfin && !_calInUse){', 'TODAY: the whole-card takeover is the no-calendar path only');
+has('function _blabTodayStatus(e)', 'TODAY: each scheduled session carries its own status');
+// blabCalSessionsOn deliberately drops completed work ("history, not an agenda") and
+// Nutrition reads it. The Today card needs the opposite, so this is an ADDITION and the
+// agenda reader is left exactly as it was.
+has('window.blabCalAllOn = function(dateISO)', 'TODAY: a reader that keeps completed work, without changing the agenda one');
+has("if(s.scheduledDate === dateISO && s.status !== 'completed' && s.status !== 'skipped') out.push(s);",
+    'TODAY: blabCalSessionsOn still excludes completed — the contract Nutrition depends on is untouched');
 
 // ── OFFLINE OUTBOX (v4.9.293) ───────────────────────────────────────────────
 // A failed set log was recorded and never retried, so the shadow store kept the ticks on

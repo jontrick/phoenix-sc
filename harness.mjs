@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.307'", 'version is 4.9.307');
+has("var APP_VERSION='4.9.308'", 'version is 4.9.308');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3200,6 +3200,36 @@ hasCode('name = _pick.n; grams = _pick.g;',
 // said steak, and a default set in one could not be read by the other.
 hasNotCode("{ id:'sirloin',  n:'Sirloin steak',  k:201",
         'NIGHT: dinner has ONE list of proteins, not two disagreeing ones');
+// ── Meal 7, before bed (v4.9.308) ──────────────────────────────────────────
+hasCode("{ id:'bed',    t:'21:00'", 'BED: the 21:00 meal exists');
+hasCode('function nutProgBedOn(',      'BED: it can be asked whether it is on');
+hasCode('function nutProgSetBed(',     'BED: turned on for a day');
+hasCode('function nutProgSetBedDefault(', 'BED: and defaulted for the week he shops');
+hasCode("if(M.id === 'bed' && !bedOn) continue;",
+        'BED: and it is OFF unless asked for — a meal appearing by default would ' +
+        'resize every portion in the plan without being asked');
+
+// THE TARGET DOES NOT MOVE, THE MEALS DO. Jon asked for the other meals to adjust;
+// the phase target is the cut itself.
+hasCode('function _nutProgTrimmable(',
+        'BED: ONE definition of what can be trimmed, carrying its fat with it');
+hasCode('_nutProgTrimmable(_bix2, dateKey)',
+        'BED: the oil gets back the fat the trim removed — trimming chicken and ' +
+        'salmon took 6.05 g of fat with it and the day came in 5.8 g UNDER');
+hasCode("if(_pCut && _pt.grp === 'protein')",
+        'BED: a swapped multi-part breakfast does not escape the trim — it did, ' +
+        'and eggs plus Meal 7 ran +19.8 g of protein');
+hasCode('_nutIsPureProtein(it) && ',
+        'BED: the room comes proportionally out of the protein rows');
+
+// A hardcoded pair of meals silently ignored Meal 7's nut butter: the choice was
+// stored, the sheet showed it selected, and the plate served peanut regardless.
+hasCode('_NUT_PROG_FAT_SLOTS[_fs2].meal === M.id',
+        'BED: the plate resolves fat slots FROM THE TABLE, so a slot added later ' +
+        'cannot be forgotten in the renderer');
+hasCode('data-nut-bed',                'BED: the sheet OFFERS the toggle');
+hasCode("ov.querySelectorAll('[data-nut-bed]')", 'BED: and the rows are WIRED');
+
 // ── grain, per meal (v4.9.305) ─────────────────────────────────────────────
 hasCode('_NUT_PROG_GRAIN_SLOTS', 'GRAIN: the meals that carry a grain are declared');
 hasCode('function nutProgGrainOn(',   'GRAIN: a meal can be asked which grain it has');
@@ -3285,8 +3315,9 @@ hasCode('nutProgFatSlotOpts(slot, today)',
 hasCode('.concat(fatSecs).forEach',
         'NUTS: and RENDERS them — sections built into a variable nobody reads is ' +
         'exactly how nutProgSetSwap and nutProgSetRice sat dead for 17 versions');
-hasCode("_fatSlot = (M.id === 'midam'",
-        'NUTS: and the plate actually applies the choice');
+hasCode("if(_fatSlot){",
+        'NUTS: and the plate actually applies the choice (resolved from the table ' +
+        'since .308 — the hand-listed pair silently ignored Meal 7\'s butter)');
 
 // The shelf. Every option list is in ONE table, so a list added later cannot be
 // forgotten. Before this, only the dinner proteins were named and everything

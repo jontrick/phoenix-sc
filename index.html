@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.307';
+var APP_VERSION='4.9.308';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21287,7 +21287,14 @@ var _NUT_PROG_PLATE = [
   // FIXED. The fresh veg side is not a swap slot — see _NUT_PROG_DINNER_VEG.
   { m:'dinner', n:'Sweet potato', grp:'produce',      g:[260,144,115,75,35],   carb:true,  u:'',        k:86,  p:1.6, c:20,  f:0.1 },
   { m:'dinner', n:'Greens', grp:'produce',            g:[200,200,200,200,200], carb:true,  u:'',        k:35,  p:2.8, c:4,   f:0.4 },
-  { m:'dinner', n:'Olive oil', grp:'fat',         g:[13,12,12,11,10],                  u:' ml',     k:884, p:0,   c:0,   f:100 }
+  { m:'dinner', n:'Olive oil', grp:'fat',         g:[13,12,12,11,10],                  u:' ml',     k:884, p:0,   c:0,   f:100 },
+
+  // MEAL 7, and it is OFF by default. The source plan's before-bed meal — egg
+  // whites and a spoon of nut butter. Fixed across the phases: it is a whole
+  // meal from the original plan rather than a dial, and the day makes room for
+  // it rather than it shrinking to fit.
+  { m:'bed',    n:'Egg whites', grp:'protein',      g:[245,245,245,245,245], u:' ml',     k:52,  p:10.9, c:0.7, f:0.17 },
+  { m:'bed',    n:'Peanut butter', grp:'fat',       g:[15,15,15,15,15],                  u:'',        k:588, p:25,  c:20,  f:50 }
 ];
 
 // Meal order, times and how each one behaves. `skipOnLift` is the whole
@@ -21302,7 +21309,10 @@ var _NUT_PROG_MEALS = [
   { id:'midam',  t:'09:30', n:'Mid-morning' },
   { id:'lunch',  t:'12:30', n:'Lunch',            prepped:true },
   { id:'arvo',   t:'15:30', n:'Afternoon' },
-  { id:'dinner', t:'19:00', n:'Dinner',           prepped:true }
+  { id:'dinner', t:'19:00', n:'Dinner',           prepped:true },
+  // Off unless Jon turns it on — see nutProgBedOn. A meal that appeared by
+  // default would change every portion in the plan without being asked for.
+  { id:'bed',    t:'21:00', n:'Before bed',        optional:true }
 ];
 
 function _nutProgItemMacros(it, grams){
@@ -21327,12 +21337,25 @@ function nutProgMealsOn(dateKey, riceId){
   var _baseC  = lift ? 24.4 : (_preRow ? (_preRow.c * _preRow.g[ix] / 100) : 0);
   var _shortC = Math.round((_baseC - (pre ? pre.c : 0)) * 10) / 10;
   var _dayCarbBase = (typeof _nutProgDayCarbBase === 'function') ? _nutProgDayCarbBase(ix) : 0;
+  // MEAL 7. Its carbohydrate joins the 04:15 ladder as a SURPLUS — the same
+  // proportional machinery, run in the other direction — and its protein is
+  // taken proportionally out of the day's pure-protein rows, so the day still
+  // lands on a target that has not moved.
+  var bedOn = (typeof nutProgBedOn === 'function') && nutProgBedOn(dateKey);
+  var _bedM = bedOn ? nutProgBedMacros(dateKey, ix) : null;
+  if(_bedM) _shortC = Math.round((_shortC - _bedM.c) * 10) / 10;
+  var _trim = (typeof _nutProgTrimmable === 'function') ? _nutProgTrimmable(ix, dateKey) : { p:0, f:0 };
+  var _dayProtBase = _trim.p;
+  var _shortP = _bedM ? _bedM.p : 0;
+  // The same fraction off every protein source, rows and parts alike.
+  var _pCut = (_shortP && _dayProtBase > 0) ? (_shortP / _dayProtBase) : 0;
   var out = [];
   for(var mi = 0; mi < _NUT_PROG_MEALS.length; mi++){
     var M = _NUT_PROG_MEALS[mi];
     // A choice now, not a day-type rule: the slot shows only when the choice is
     // something eaten. The intra renders in its own 04:30 row either way.
     if(M.id === 'pre' && !preIsFood) continue;
+    if(M.id === 'bed' && !bedOn) continue;
     if(M.supp){
       // EVERY formula due today, not the first that matches. Saturday takes the
       // HIIT shot before the morning session AND the lift intra through the
@@ -21367,6 +21390,9 @@ function nutProgMealsOn(dateKey, riceId){
         if(_bp && !_bp.base && _bp.parts){
           for(var _pi = 0; _pi < _bp.parts.length; _pi++){
             var _pt = _bp.parts[_pi], _pg = _nutPartG(_pt, ix);
+            // Meal 7 makes room in the protein parts too — the vegetables are
+            // not a protein source and are left alone.
+            if(_pCut && _pt.grp === 'protein') _pg = Math.round(_pg * (1 - _pCut) * 10) / 10;
             var _pm = { k:_pt.k * _pg / 100, p:_pt.p * _pg / 100,
                         c:_pt.c * _pg / 100, f:_pt.f * _pg / 100 };
             items.push({ n:_pt.n, g:_pg, u:_pt.u || '', carb:!!_pt.carb, count:!!_pt.count,
@@ -21399,8 +21425,17 @@ function nutProgMealsOn(dateKey, riceId){
       // The 09:30 nuts and the 15:30 nut butter. Sized to hold the FAT, which is
       // what these two slots are on the plate to deliver — so the weight moves
       // and the macro the plan is defending does not.
-      var _fatSlot = (M.id === 'midam' && it.n === _NUT_NUTS_ITEM)   ? 'midam_nuts'
-                   : (M.id === 'arvo'  && it.n === _NUT_BUTTER_ITEM) ? 'arvo_butter' : null;
+      // FROM THE TABLE, not a hardcoded pair. Written as two hand-listed meals
+      // this silently ignored Meal 7's butter — the selector stored the choice,
+      // the sheet showed it selected, and the plate went on serving peanut. A
+      // slot added later must not be able to go missing here.
+      var _fatSlot = null;
+      for(var _fs2 in _NUT_PROG_FAT_SLOTS){
+        if(!Object.prototype.hasOwnProperty.call(_NUT_PROG_FAT_SLOTS, _fs2)) continue;
+        if(_NUT_PROG_FAT_SLOTS[_fs2].meal === M.id && _NUT_PROG_FAT_SLOTS[_fs2].item === it.n){
+          _fatSlot = _fs2; break;
+        }
+      }
       if(_fatSlot){
         var _fs = nutProgFatSlotServe(_fatSlot, nutProgNightlyOn(dateKey)[_fatSlot], ix);
         if(_fs && !_fs.base){
@@ -21460,6 +21495,22 @@ function nutProgMealsOn(dateKey, riceId){
       // carbohydrate item already carries — so nothing doubles, nothing
       // disappears, and the day still lands on its target. Applied to grams so a
       // swapped item (rice under another grain) scales with everything else.
+      // Making room for Meal 7. Proportional across the day's pure-protein rows,
+      // so nothing is singled out: taking it all from the whey would leave
+      // breakfast at 1 g of powder.
+      if(_shortP && _nutIsPureProtein(it) && M.id !== 'bed' && _dayProtBase > 0){
+        var _ownP = mac ? mac.p : (it.p * grams / 100);
+        var _pdns = (mac && grams > 0) ? (mac.p / grams * 100) : it.p;
+        if(!(_pdns > 0)) _pdns = it.p;
+        var _cutP = _shortP * (_ownP / _dayProtBase);
+        var _pNewG = Math.round((grams - (_cutP * 100 / _pdns)) * 10) / 10;
+        if(_pNewG < 0) _pNewG = 0;
+        if(mac && grams > 0){
+          var _pr = _pNewG / grams;
+          mac = { k:mac.k * _pr, p:mac.p * _pr, c:mac.c * _pr, f:mac.f * _pr };
+        }
+        grams = _pNewG;
+      }
       if(_shortC && _nutIsPureCarb(it) && M.id !== 'pre' && _dayCarbBase > 0){
         var _ownC  = mac ? mac.c : (it.c * grams / 100);
         var _dens  = (mac && grams > 0) ? (mac.c / grams * 100) : it.c;   // per 100 g, as served
@@ -21630,6 +21681,99 @@ function nutProgSetRice(riceId){
   ns.prog_rice = riceId;
   nutSaveState(ns);
   return true;
+}
+
+// ── the before-bed meal ────────────────────────────────────────────────────
+// v4.9.308. Jon's source plan had seven meals; Phoenix had six. This is Meal 7.
+//
+// IT IS A WEEK DECISION FIRST. The default is set before the shop, because
+// turning it on RESIZES the rest of the day — including the chicken he batches
+// on Sunday. A day-by-day override exists, but flipping one Wednesday changes
+// that Wednesday's lunch portion away from what is already in the fridge, so the
+// weekly default is the one that should normally move.
+//
+// THE TARGET DOES NOT MOVE, THE MEALS DO. Jon asked for "the daily macro target
+// and other meals" to adjust; the phase target is the cut itself, so what gives
+// is the food. Three channels, each already proven:
+//   protein  a proportional scale-down of the day's pure-protein items (new)
+//   fat      the evening oil, exactly as every other swap uses it
+//   carbs    the existing 04:15 shortfall ladder, run in the other direction
+function nutProgBedOn(dateKey){
+  var ns  = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  if(day && typeof day.prog_bed === 'boolean') return day.prog_bed;
+  return !!(ns && ns.prog_bed_default);
+}
+function nutProgSetBed(dateKey, on){
+  if(!dateKey) return false;
+  var ns = nutGetState();
+  var day = _nutProgDay(ns, dateKey);
+  if(!day) return false;
+  day.prog_bed = !!on;
+  nutSaveState(ns);
+  return true;
+}
+function nutProgSetBedDefault(on){
+  var ns = nutGetState();
+  ns.prog_bed_default = !!on;
+  nutSaveState(ns);
+  return true;
+}
+
+// What Meal 7 delivers on a given day, with whichever nut butter is chosen.
+function nutProgBedMacros(dateKey, phaseIx){
+  var m = { k:0, p:0, c:0, f:0 };
+  for(var i = 0; i < _NUT_PROG_PLATE.length; i++){
+    var it = _NUT_PROG_PLATE[i];
+    if(it.m !== 'bed') continue;
+    var g = it.g[phaseIx];
+    if(!(g > 0)) continue;
+    var srv = null;
+    if(it.n === _NUT_BUTTER_ITEM && typeof nutProgFatSlotServe === 'function')
+      srv = nutProgFatSlotServe('bed_butter', nutProgNightlyOn(dateKey).bed_butter, phaseIx);
+    var mm = srv ? srv : _nutProgItemMacros(it, g);
+    m.k += mm.k; m.p += mm.p; m.c += mm.c; m.f += mm.f;
+  }
+  return m;
+}
+
+// The protein the day can be trimmed FROM. Pure-protein rows only — the yoghurt
+// is a fixed portion with a selector of its own, and dragging a dairy down to
+// make room for eggs would move two things Jon did not ask to move. Meal 7 is
+// excluded: it is what the room is being made for.
+function _nutIsPureProtein(it){
+  return !!(it && it.grp === 'protein' && it.m !== 'bed' && it.p > 0 && (it.c / it.p) < 0.35);
+}
+function _nutProgTrimmable(ix, dateKey){
+  var p = 0, f = 0;
+  for(var i = 0; i < _NUT_PROG_PLATE.length; i++){
+    var it = _NUT_PROG_PLATE[i];
+    // The breakfast protein may have been swapped for several foods. Count what
+    // is ACTUALLY on the plate, not the row it replaced — eggs carry 8 g more
+    // protein than the whey, and trimming against the whey's figure leaves that
+    // 8 g standing.
+    if(it.m === 'bfast' && it.n === _NUT_BFAST_PROTEIN_ITEM && dateKey){
+      var bp = _nutProgNightlyOpt('bfast_protein', nutProgNightlyOn(dateKey).bfast_protein);
+      if(bp && !bp.base && bp.parts){
+        for(var q = 0; q < bp.parts.length; q++){
+          var pt = bp.parts[q];
+          if(pt.grp !== 'protein') continue;
+          var pg = _nutPartG(pt, ix);
+          p += pt.p * pg / 100; f += pt.f * pg / 100;
+        }
+        continue;
+      }
+    }
+    if(!_nutIsPureProtein(it)) continue;
+    var g = it.g[ix];
+    if(!(g > 0)) continue;
+    var m = _nutProgItemMacros(it, g);
+    p += m.p; f += m.f;
+  }
+  return { p:p, f:f };
+}
+function _nutProgDayProteinBase(ix, dateKey){
+  return _nutProgTrimmable(ix, dateKey).p;
 }
 
 // ── grain, PER MEAL ────────────────────────────────────────────────────────
@@ -22204,7 +22348,11 @@ var _NUT_PROG_FAT_SLOTS = {
   midam_nuts:  { item:_NUT_NUTS_ITEM,   opts:_NUT_PROG_NUTS,       meal:'midam',
                  label:'Mid-morning nuts' },
   arvo_butter: { item:_NUT_BUTTER_ITEM, opts:_NUT_PROG_NUT_BUTTER, meal:'arvo',
-                 label:'Afternoon nut butter' }
+                 label:'Afternoon nut butter' },
+  // Meal 7's spoonful. Same three butters, its own row and its own serve — the
+  // afternoon slot tapers to zero by week 10 and this one does not.
+  bed_butter:  { item:_NUT_BUTTER_ITEM, opts:_NUT_PROG_NUT_BUTTER, meal:'bed',
+                 label:'Before bed &mdash; nut butter' }
 };
 
 function _nutProgFatSlotBase(slot){
@@ -22220,7 +22368,7 @@ function _nutProgFatSlotBase(slot){
 function nutProgFatSlotServe(slot, id, phaseIx){
   var def = _NUT_PROG_FAT_SLOTS[slot];
   if(!def) return null;
-  var row = _nutProgPlateRow(def.item);
+  var row = _nutProgPlateRowIn(def.meal, def.item);
   var ix  = parseInt(phaseIx, 10);
   if(!row || !(ix >= 0) || !(row.g[ix] > 0)) return null;
   var opt = null;
@@ -22324,7 +22472,7 @@ function nutProgNightlyOn(dateKey){
   return { dinner_protein: pick('dinner_protein'), dinner_veg: pick('dinner_veg'),
            midam_dairy: pick('midam_dairy'),
            midam_nuts: pick('midam_nuts'), arvo_butter: pick('arvo_butter'),
-           bfast_protein: pick('bfast_protein') };
+           bed_butter: pick('bed_butter'), bfast_protein: pick('bfast_protein') };
 }
 
 // What he SHOPPED for. Set on the Wednesday; any night can override it without
@@ -22368,6 +22516,18 @@ function nutProgNightlyFatDelta(dateKey){
     var _bpM = _nutProgPartsMacros(_bpOpt, _ft.phase_n - 1);
     var _wRow = _nutProgPlateRowIn('bfast', _NUT_BFAST_PROTEIN_ITEM);
     if(_bpM && _wRow) d += _bpM.f - (_wRow.f * _wRow.g[_ft.phase_n - 1] / 100);
+  }
+  // Meal 7 brings about 8 g of fat with its spoon of nut butter. Same channel.
+  // AND the room made for it removes fat as well as protein — salmon is 13 g per
+  // 100 g, so trimming it takes 4 g of fat with it. Measured at 6.05 g across the
+  // day at phase 1, which is why the day came in 5.8 g UNDER before this. The
+  // trimmable set answers both questions, so the two cannot disagree.
+  if(_ft && typeof nutProgBedOn === 'function' && nutProgBedOn(dateKey)){
+    var _bix2 = _ft.phase_n - 1;
+    var _bedFat = nutProgBedMacros(dateKey, _bix2);
+    if(_bedFat) d += _bedFat.f;
+    var _tr = _nutProgTrimmable(_bix2, dateKey);
+    if(_bedFat && _tr.p > 0) d -= _tr.f * (_bedFat.p / _tr.p);
   }
   // The nut slots are SIZED to the fat, so all that can survive here is the
   // rounding to whole grams — a few tenths. Carried anyway, because a future
@@ -22452,7 +22612,8 @@ function nutOpenSwapSheet(forDate){
   // sizes are DERIVED from the phase, and because the nut butter leaves the
   // plate entirely from week 10 — an empty list means no section at all.
   var fatSecs = [];
-  ['midam_nuts', 'arvo_butter'].forEach(function(slot){
+  ['midam_nuts', 'arvo_butter', 'bed_butter'].forEach(function(slot){
+    if(slot === 'bed_butter' && !(typeof nutProgBedOn === 'function' && nutProgBedOn(today))) return;
     var opts = (typeof nutProgFatSlotOpts === 'function') ? nutProgFatSlotOpts(slot, today) : [];
     if(!opts.length) return;
     fatSecs.push([slot, _NUT_PROG_FAT_SLOTS[slot].label, opts,
@@ -22483,6 +22644,28 @@ function nutOpenSwapSheet(forDate){
     if(note) h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">' + note + '</div>';
     h += '</div>';
   });
+
+  if(typeof nutProgBedOn === 'function'){
+    var _bedT   = nutProgTargetsOn(today);
+    var _bedIx  = _bedT ? (_bedT.phase_n - 1) : 0;
+    var _bedNow = nutProgBedOn(today);
+    var _bedMac = nutProgBedMacros(today, _bedIx);
+    h += '<div style="margin-bottom:16px;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">21:00 &mdash; before bed</div>';
+    [[true, 'Egg whites and nut butter', 'Meal 7 from the original plan'],
+     [false, 'Nothing', 'six meals, as the app has been']].forEach(function(o){
+      var on = (_bedNow === o[0]);
+      h += '<div data-nut-bed="' + (o[0] ? '1' : '0') + '" style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+        '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;color:var(--text);">' + o[1] + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + o[2] +
+            (o[0] && _bedMac ? (' &middot; ' + Math.round(_bedMac.k) + ' kcal &middot; ' +
+              Math.round(_bedMac.p) + ' g protein') : '') + '</div>' +
+        '</div></div>';
+    });
+    h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">Turning this on makes ROOM for it &mdash; the day\'s target does not move, so the chicken, salmon, tuna and whey all come down about a fifth and the oil rebalances. Set it before you shop: it changes what you batch on Sunday.</div></div>';
+  }
 
   if(typeof _NUT_PROG_BFAST_PROTEIN !== 'undefined'){
     var _bt  = nutProgTargetsOn(today);
@@ -22621,6 +22804,14 @@ function nutOpenSwapSheet(forDate){
   ov.querySelectorAll('[data-nut-pre]').forEach(function(row){
     row.addEventListener('click', function(){
       if(nutProgSetPre(today, row.getAttribute('data-nut-pre'))){
+        ov.remove();
+        if(typeof nutRenderScreen === 'function') nutRenderScreen();
+      }
+    });
+  });
+  ov.querySelectorAll('[data-nut-bed]').forEach(function(row){
+    row.addEventListener('click', function(){
+      if(nutProgSetBed(today, row.getAttribute('data-nut-bed') === '1')){
         ov.remove();
         if(typeof nutRenderScreen === 'function') nutRenderScreen();
       }

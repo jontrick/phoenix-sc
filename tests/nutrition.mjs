@@ -3377,6 +3377,198 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'and the tap reached the plate');
   });
 
+  // ── Meal 7, before bed ───────────────────────────────────────────────────
+  // v4.9.308. The source plan had seven meals and the app had six. Turning this
+  // on does NOT move the target — it makes room in the other meals, which is what
+  // Jon asked for. Every figure below was measured off the built engine.
+
+  const PH5 = ['2026-09-16','2026-10-07','2026-10-28','2026-11-18','2026-12-09'];
+  const mealsOn = (d) => app.nutProgMealsOn(d, 'basmati') || [];
+  const bedOf = (d) => mealsOn(d).filter((m) => m.id === 'bed')[0];
+  const gramsOf = (d, mealId, re) => {
+    const m = mealsOn(d).filter((x) => x.id === mealId)[0];
+    if (!m) return null;
+    const it = m.items.filter((x) => re.test(x.n))[0];
+    return it ? it.g : null;
+  };
+  const drift = (d) => {
+    const t = app.nutProgTargetsOn(d), got = app.nutProgDayTotals(d, 'basmati');
+    return { k: got.kcal - t.total.kcal, p: got.p - t.total.p,
+             c: got.c - t.total.c, f: got.f - t.total.f };
+  };
+
+  test('BED the meal is OFF by default — nothing changes for anyone who does not ask', () => {
+    setUp(110);
+    assert.equal(bedOf('2026-09-16'), undefined, 'no 21:00 meal');
+    assert.equal(gramsOf('2026-09-16', 'lunch', /Chicken/), 135, 'and the plate is untouched');
+  });
+
+  test('BED turning it on adds the source plan\'s Meal 7', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetBed(d, true);
+    const bed = bedOf(d);
+    assert.ok(bed, 'the meal is there');
+    assert.equal(bed.time, '21:00', 'at 21:00');
+    assert.equal(bed.items.filter((it) => it.n === 'Egg whites')[0].g, 245, 'one cup of whites');
+    assert.equal(bed.items.filter((it) => /butter/i.test(it.n))[0].g, 15, 'and a spoon of nut butter');
+    // Jon estimated ~350 kcal / 28 g protein / 9 g fat. From the quantities he
+    // specified it is 216 / 30.5 / 7.9 — the protein and fat match, the calories
+    // do not, and the foods he named are what the app follows.
+    assert.ok(Math.abs(bed.p - 30.5) <= 1.5, 'about 30 g of protein: ' + bed.p);
+    assert.ok(Math.abs(bed.k - 216) <= 12,
+      'and 216 kcal, not the ~350 he estimated — 245 ml of whites and 15 g of nut ' +
+      'butter do not come to 350 however they are added up: ' + bed.k);
+  });
+
+  test('BED the day still lands on its target — the meals move, not the target', () => {
+    setUp(110);
+    PH5.forEach((d, ix) => {
+      const before = app.nutProgTargetsOn(d).total;
+      app.nutProgSetBed(d, true);
+      const after = app.nutProgTargetsOn(d).total;
+      assert.deepEqual(after, before, 'phase ' + (ix + 1) + ': the TARGET does not move');
+      const dr = drift(d);
+      assert.ok(Math.abs(dr.p) <= 6, 'phase ' + (ix+1) + ' protein off by ' + dr.p.toFixed(1));
+      assert.ok(Math.abs(dr.c) <= 2, 'phase ' + (ix+1) + ' carbs off by ' + dr.c.toFixed(1));
+      assert.ok(Math.abs(dr.f) <= 3.5, 'phase ' + (ix+1) + ' fat off by ' + dr.f.toFixed(1));
+    });
+  });
+
+  test('BED the room comes proportionally out of the protein, not out of one meal', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const was = { whey: gramsOf(d,'bfast',/Whey/), chicken: gramsOf(d,'lunch',/Chicken/),
+                  tuna: gramsOf(d,'arvo',/Tuna/), salmon: gramsOf(d,'dinner',/Salmon/) };
+    app.nutProgSetBed(d, true);
+    const now = { whey: gramsOf(d,'bfast',/Whey/), chicken: gramsOf(d,'lunch',/Chicken/),
+                  tuna: gramsOf(d,'arvo',/Tuna/), salmon: gramsOf(d,'dinner',/Salmon/) };
+    Object.keys(was).forEach((k) => {
+      const cut = 1 - now[k] / was[k];
+      assert.ok(cut > 0.15 && cut < 0.32,
+        k + ' comes down ' + (cut * 100).toFixed(0) + '% — proportional, so nothing is ' +
+        'singled out. Taking it all from the whey would leave breakfast at 1 g of powder');
+    });
+    assert.equal(gramsOf(d, 'midam', /yogh/i), 200,
+      'and the yoghurt is NOT trimmed — it is a fixed portion with a selector of its ' +
+      'own, and dragging a dairy down to make room for eggs moves two things he ' +
+      'did not ask to move');
+  });
+
+  test('BED the oil gets back the fat the trim removed', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetBed(d, true);
+    // MEASURED: trimming chicken and salmon takes 6.05 g of fat with it at phase 1.
+    // Before this was accounted for, the day came in 5.8 g UNDER its fat target
+    // while every other macro landed — a defect that only a fat check would find.
+    assert.ok(Math.abs(drift(d).f) <= 1.5,
+      'the day lands on fat: ' + drift(d).f.toFixed(1) + ' out. Meal 7 ADDS 7.9 g of ' +
+      'fat and the trim REMOVES 6.05 g, and the oil has to answer for both');
+    assert.ok(gramsOf(d, 'dinner', /Olive/) > 8,
+      'so the oil barely moves rather than collapsing: ' + gramsOf(d, 'dinner', /Olive/) + ' ml');
+  });
+
+  test('BED a swapped breakfast does not escape the trim', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetBed(d, true);
+    app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+    // MEASURED: the parts loop bypassed the row trim entirely, so eggs plus Meal 7
+    // ran +19.8 g of protein. The trimmable set now counts what is ON the plate.
+    const dr = drift(d);
+    assert.ok(dr.p <= 14,
+      'eggs and Meal 7 together run ' + dr.p.toFixed(1) + ' g over. The egg option\'s ' +
+      'own declared +8 g remains — nothing compensates protein — but Meal 7\'s 30 g ' +
+      'does not stack on top of it');
+    assert.ok(Math.abs(dr.f) <= 1.5, 'and fat still lands: ' + dr.f.toFixed(1));
+    const veg = mealsOn(d).filter((m) => m.id === 'bfast')[0].items.filter((it) => it.n === 'Spinach')[0];
+    app.nutProgSetNightly(d, 'bfast_protein', 'eggsveg');
+    assert.equal(mealsOn(d).filter((m) => m.id === 'bfast')[0]
+      .items.filter((it) => it.n === 'Spinach')[0].g, 50,
+      'and the vegetables are NOT trimmed — spinach is not a protein source');
+  });
+
+  test('BED the nut butter selector applies to Meal 7, on its own row', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetBed(d, true);
+    app.nutProgSetNightly(d, 'bed_butter', 'ab');
+    assert.equal(bedOf(d).items.filter((it) => /butter/i.test(it.n))[0].n, 'Almond butter',
+      'the choice reaches Meal 7');
+    assert.equal(gramsOf(d, 'arvo', /butter/i), 15,
+      'and the AFTERNOON butter is untouched — two meals, two rows, two choices');
+    // The afternoon slot tapers to nothing by week 10; Meal 7 does not, and a
+    // shared plate row would have emptied it too.
+    const late = '2026-11-18';
+    app.nutProgSetBed(late, true);
+    assert.equal(gramsOf(late, 'arvo', /butter/i), null, 'afternoon butter is gone by phase 4');
+    assert.ok(gramsOf(late, 'bed', /butter/i) > 0, 'while Meal 7 still has its spoon');
+  });
+
+  test('BED a weekly default can be set before the shop, and one day can differ', () => {
+    setUp(110);
+    app.nutProgSetBedDefault(true);
+    const days = app._nutProgWeekDates(1);
+    assert.ok(bedOf(days[0]), 'Monday has it');
+    assert.ok(bedOf(days[3]), 'so does Thursday');
+    app.nutProgSetBed(days[3], false);
+    assert.equal(bedOf(days[3]), undefined, 'Thursday can opt out');
+    assert.ok(bedOf(days[0]), 'without moving the rest of the week');
+  });
+
+  // ── the shopping list ─────────────────────────────────────────────────────
+  test('SHOP Meal 7 changes what is bought, in both directions', () => {
+    setUp(110);
+    const before = app.nutProgShoppingFor(1, 'basmati');
+    app.nutProgSetBedDefault(true);
+    const after = app.nutProgShoppingFor(1, 'basmati');
+    assert.ok(shopItem(after, 'Egg whites').qty === 1715, 'seven cups of whites appear');
+    assert.ok(shopItem(after, 'Peanut butter').qty > shopItem(before, 'Peanut butter').qty,
+      'and more nut butter');
+    assert.ok(shopItem(after, 'Chicken breast').qty < shopItem(before, 'Chicken breast').qty,
+      'while the chicken comes DOWN — ' + shopItem(before, 'Chicken breast').qty + ' g to ' +
+      shopItem(after, 'Chicken breast').qty + ' g. This is the half that matters: a meal ' +
+      'added without the list following would have him buy for six meals and eat seven');
+  });
+
+  // ── the door ──────────────────────────────────────────────────────────────
+  test('BED the sheet OFFERS it, and says what turning it on does', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-bed="1"') >= 0, 'a way to turn it on');
+    assert.ok(html.indexOf('data-nut-bed="0"') >= 0, 'and off');
+    assert.ok(/makes ROOM for it/.test(html),
+      'and says what it does to the rest of the day, because it changes the chicken ' +
+      'he batches on Sunday');
+    assert.equal(html.indexOf('data-nut-night="bed_butter'), -1,
+      'the Meal 7 butter selector is hidden while the meal is off — a choice for a ' +
+      'meal that is not happening is noise');
+  });
+
+  test('BED turning it on reveals its nut butter selector', () => {
+    setUp(110);
+    app.nutProgSetBed('2026-09-16', true);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    assert.ok(d.lastCreatedHtml().indexOf('data-nut-night="bed_butter|ab"') >= 0,
+      'now the choice matters, so now it is offered');
+  });
+
+  test('BED tapping the row records it — the toggle has a door', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const ov = d.lastCreated();
+    const row = ov.querySelectorAll('[data-nut-bed]')
+      .filter((el) => el.getAttribute('data-nut-bed') === '1')[0];
+    assert.ok(row, 'the row exists to be tapped');
+    d.fire(row, 'click');
+    assert.ok(bedOf('2026-09-16'), 'and the tap reached the plate');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

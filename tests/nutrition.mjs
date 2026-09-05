@@ -2699,6 +2699,216 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgPreOn('2026-09-15').id, 'banana', 'without moving the others');
   });
 
+  // ── the nut and nut-butter selectors ─────────────────────────────────────
+  // v4.9.303. Two slots that exist to deliver FAT, so the serve is sized to hold
+  // the fat and the weight is what moves. Every figure below was MEASURED off
+  // the built engine before it was written down — see the note in index.html.
+
+  const nutOf = (d) => (app.nutProgMealsOn(d, 'basmati') || [])
+    .filter((m) => m.id === 'midam')[0].items.filter((it) => !/yogh|cottage|skyr/i.test(it.n))[0];
+  const butterOf = (d) => {
+    const arvo = (app.nutProgMealsOn(d, 'basmati') || []).filter((m) => m.id === 'arvo')[0];
+    return arvo ? arvo.items.filter((it) => /butter/i.test(it.n))[0] : undefined;
+  };
+  const shelfOf = (shop, name) => {
+    let g = null;
+    shop.groups.forEach((grp) => grp.items.forEach((it) => { if (it.n === name) g = grp; }));
+    return g;
+  };
+
+  test('NUTS the default plate is unchanged — almonds at 30 g, peanut butter at 15', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    assert.equal(nutOf(d).n, 'Almonds', 'the base is still what it was');
+    assert.equal(nutOf(d).g, 30, 'at the weight the plan was written around');
+    assert.equal(butterOf(d).n, 'Peanut butter', 'and the butter likewise');
+    assert.equal(butterOf(d).g, 15, 'at 15 g');
+  });
+
+  test('NUTS the serve MOVES with the choice, and moves the right way', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    app.nutProgSetNightly(d, 'midam_nuts', 'cashews');
+    assert.equal(nutOf(d).n, 'Cashews', 'the choice reaches the plate');
+    assert.equal(nutOf(d).g, 34,
+      'and 34 g, not 30 — cashews carry less fat per gram, so a gram-for-gram ' +
+      'swap would quietly cost 1.8 g of fat every cashew day');
+    app.nutProgSetNightly(d, 'midam_nuts', 'peanuts');
+    assert.equal(nutOf(d).g, 31, 'peanuts sit between the two at 31 g');
+  });
+
+  test('NUTS every nut lands the same FAT, which is what the slot is for', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    ['almonds', 'peanuts', 'cashews'].forEach((id) => {
+      app.nutProgSetNightly(d, 'midam_nuts', id);
+      const f = nutOf(d).f;
+      assert.ok(Math.abs(f - 15) <= 0.3, id + ' delivers ' + f + ' g of fat against 15');
+    });
+    ['pb', 'ab', 'cb'].forEach((id) => {
+      app.nutProgSetNightly(d, 'arvo_butter', id);
+      const f = butterOf(d).f;
+      assert.ok(Math.abs(f - 7.5) <= 0.3, id + ' delivers ' + f + ' g of fat against 7.5');
+    });
+  });
+
+  test('NUTS protein follows closely but is NOT held — the spread is pinned', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    const ps = ['almonds', 'peanuts', 'cashews'].map((id) => {
+      app.nutProgSetNightly(d, 'midam_nuts', id);
+      return nutOf(d).p;
+    });
+    const spread = Math.max.apply(null, ps) - Math.min.apply(null, ps);
+    assert.ok(spread <= 2.5,
+      'measured 2.0 g (6.3 / 8.1 / 6.1). Pinned so an option added later with a ' +
+      'worse protein-to-fat ratio FAILS THE BUILD rather than quietly moving his ' +
+      'protein — the claim in the comment is only true while this holds. Got ' + spread);
+  });
+
+  test('NUTS carbohydrate is the one that moves, and by roughly what Jon expects', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    app.nutProgSetNightly(d, 'midam_nuts', 'almonds');
+    const almondC = nutOf(d).c;
+    app.nutProgSetNightly(d, 'midam_nuts', 'cashews');
+    const cashewC = nutOf(d).c;
+    assert.ok(cashewC > almondC * 2.5,
+      'Jon\'s own example: cashews carry about three times the carbohydrate. ' +
+      almondC + ' g against ' + cashewC + ' g');
+    // And it is NOT swept away behind his back — it shows up in the day.
+    const t = app.nutProgTargetsOn(d);
+    const day = app.nutProgDayTotals(d, 'basmati');
+    assert.ok(day.c - t.total.c > 3,
+      'the day really does come in over on a cashew day (' +
+      (day.c - t.total.c).toFixed(1) + ' g) — the sheet shows the carbs per serve ' +
+      'so the choice is informed rather than silently compensated');
+  });
+
+  test('NUTS the day still holds its fat and protein whatever is picked', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    const t = app.nutProgTargetsOn(d);
+    [['almonds','pb'], ['peanuts','pb'], ['cashews','cb'], ['almonds','ab']].forEach((pair) => {
+      app.nutProgSetNightly(d, 'midam_nuts', pair[0]);
+      app.nutProgSetNightly(d, 'arvo_butter', pair[1]);
+      const day = app.nutProgDayTotals(d, 'basmati');
+      assert.ok(Math.abs(day.f - t.total.f) <= 1,
+        pair.join('+') + ' fat off by ' + (day.f - t.total.f).toFixed(1));
+      assert.ok(Math.abs(day.p - t.total.p) <= 4,
+        pair.join('+') + ' protein off by ' + (day.p - t.total.p).toFixed(1) +
+        ' — worst measured was +3.9 on peanuts, against a 190 g target');
+    });
+  });
+
+  test('NUTS the serve follows the PHASE, so a stored weight cannot go stale', () => {
+    setUp(110);
+    const early = app.nutProgFatSlotServe('midam_nuts', 'cashews', 0);
+    const late  = app.nutProgFatSlotServe('midam_nuts', 'cashews', 4);
+    assert.equal(early.g, 34, 'phase 1');
+    assert.equal(late.g, 27, 'phase 5 — the plate tapers and the swap tapers with it');
+    assert.ok(late.f < early.f, 'less fat late in the cut, which is the plan');
+  });
+
+  test('NUTS the butter slot leaves the plate entirely from phase 4, and so does its selector', () => {
+    setUp(110);
+    assert.equal(app.nutProgFatSlotServe('arvo_butter', 'ab', 3), null,
+      'there is no serve because there is no slot — the plate has it at 0 g');
+    assert.deepEqual(app.nutProgFatSlotOpts('arvo_butter', '2026-12-15'), [],
+      'so the sheet offers nothing rather than a choice with no consequence');
+    assert.ok(app.nutProgFatSlotOpts('midam_nuts', '2026-12-15').length === 3,
+      'while the nuts are still on the plate that week and still choosable');
+  });
+
+  test('NUTS an unknown pick is refused rather than stored', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetNightly('2026-09-15', 'midam_nuts', 'walnuts'), false,
+      'nothing sizes a nut that is not in the table');
+    assert.equal(app.nutProgNightlyOn('2026-09-15').midam_nuts, 'almonds', 'and the base stands');
+  });
+
+  // ── the shopping list ─────────────────────────────────────────────────────
+  test('SHOP the list buys the nut he chose, at the weight he will eat', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    days.forEach((d) => app.nutProgSetNightly(d, 'midam_nuts', 'cashews'));
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const cashews = shopItem(shop, 'Cashews');
+    assert.ok(cashews, 'cashews are on the list');
+    assert.equal(cashews.qty, 238, 'seven days at 34 g — not seven at the almond 30');
+    assert.equal(!!shopItem(shop, 'Almonds'), false, 'and the almonds he is not eating are not bought');
+  });
+
+  test('SHOP a week that changes mid-way buys both, in the right proportions', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    days.slice(0, 3).forEach((d) => app.nutProgSetNightly(d, 'arvo_butter', 'ab'));
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    assert.equal(shopItem(shop, 'Almond butter').qty, 39, 'three days at 13 g');
+    assert.equal(shopItem(shop, 'Peanut butter').qty, 60, 'four days at 15 g');
+  });
+
+  test('SHOP a swapped-in food lands on the right SHELF', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    days.forEach((d) => {
+      app.nutProgSetNightly(d, 'midam_nuts', 'cashews');
+      app.nutProgSetNightly(d, 'arvo_butter', 'cb');
+      app.nutProgSetNightly(d, 'midam_dairy', 'cottage');
+    });
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    assert.equal(shelfOf(shop, 'Cashews').id, 'fat', 'cashews are a fat');
+    assert.equal(shelfOf(shop, 'Cashew butter').id, 'fat', 'so is cashew butter');
+    // Fixed in passing and measured first: cottage cheese was filed under
+    // PRODUCE, because the shelf lookup named only the dinner proteins and sent
+    // everything else to vegetables.
+    assert.equal(shelfOf(shop, 'Cottage cheese').id, 'dairy',
+      'cottage cheese is a dairy, not a vegetable');
+  });
+
+  // ── the door ──────────────────────────────────────────────────────────────
+  test('NUTS the sheet OFFERS both selectors, with the weight that will be eaten', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-15', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-night="midam_nuts|cashews"') >= 0, 'the nut rows are there');
+    assert.ok(html.indexOf('data-nut-night="arvo_butter|ab"') >= 0, 'and the butter rows');
+    ['Almonds', 'Peanuts', 'Cashews', 'Peanut butter', 'Almond butter', 'Cashew butter']
+      .forEach((n) => assert.ok(html.indexOf(n) >= 0, n + ' is offered'));
+    assert.ok(/Cashews[\s\S]{0,200}34 g/.test(html),
+      'shown at the weight that will actually be eaten, not a nominal 30');
+    assert.ok(/g carbs/.test(html),
+      'and with the carbs per serve — the one macro that genuinely moves, so ' +
+      'the choice is informed rather than compensated for behind his back');
+  });
+
+  test('NUTS the sheet hides the butter selector once the slot is gone', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-12-15', () => app.nutOpenSwapSheet());   // week 14, butter at 0 g
+    const html = d.lastCreatedHtml();
+    assert.equal(html.indexOf('data-nut-night="arvo_butter'), -1,
+      'no choice offered for a slot that is not on the plate');
+    assert.ok(html.indexOf('data-nut-night="midam_nuts') >= 0,
+      'while the nuts, which ARE still on the plate, are still choosable');
+  });
+
+  test('NUTS tapping a nut row records it — the selector has a door', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-15', () => app.nutOpenSwapSheet());
+    const ov = d.lastCreated();
+    const row = ov.querySelectorAll('[data-nut-night]')
+      .filter((el) => el.getAttribute('data-nut-night') === 'midam_nuts|peanuts')[0];
+    assert.ok(row, 'the row exists to be tapped');
+    d.fire(row, 'click');
+    assert.equal(app.nutProgNightlyOn('2026-09-15').midam_nuts, 'peanuts',
+      'the pick was stored. This codebase\'s commonest defect is finished code ' +
+      'with no door — seven instances so far — so the click is driven, not the setter');
+    assert.equal(nutOf('2026-09-15').n, 'Peanuts', 'and it reaches the plate');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

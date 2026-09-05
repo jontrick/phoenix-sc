@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.302'", 'version is 4.9.302');
+has("var APP_VERSION='4.9.303'", 'version is 4.9.303');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3198,6 +3198,44 @@ hasCode('name = _pick.n; grams = _pick.g;',
 // said steak, and a default set in one could not be read by the other.
 hasNotCode("{ id:'sirloin',  n:'Sirloin steak',  k:201",
         'NIGHT: dinner has ONE list of proteins, not two disagreeing ones');
+// ── the nut and nut-butter selectors (v4.9.303) ────────────────────────────
+// Two slots whose serve is DERIVED from the fat rather than stored, so the
+// guards here are about the derivation surviving, not about the numbers.
+hasCode('_NUT_PROG_NUTS',        'NUTS: the 09:30 selector has options');
+hasCode('_NUT_PROG_NUT_BUTTER',  'NUTS: so does the 15:30 one');
+hasCode('_NUT_PROG_FAT_SLOTS',   'NUTS: and both are registered as fat slots');
+hasCode('function nutProgFatSlotServe(',
+        'NUTS: the serve is computed, phase by phase');
+hasCode('function nutProgFatSlotOpts(',
+        'NUTS: and the sheet can ask for a day\'s options');
+
+// THE DERIVATION ITSELF. If this line ever becomes `var g = baseG` the feature
+// silently degrades to the gram-for-gram swap Jon asked us not to build — the
+// names still change on screen, so nothing looks wrong. Six functional cases go
+// red on that exact edit (verified by inversion, 2026-09-05); this catches it at
+// the cheapest gate.
+hasCode('Math.round(baseG * row.f / opt.f)',
+        'NUTS: the serve is sized to hold the FAT, not swapped gram for gram');
+
+// The door. Built-and-unreachable is this codebase's commonest defect — seven
+// instances so far — so presence of the engine is not evidence of a feature.
+hasCode('nutProgFatSlotOpts(slot, today)',
+        'NUTS: the sheet BUILDS the sections');
+hasCode('.concat(fatSecs).forEach',
+        'NUTS: and RENDERS them — sections built into a variable nobody reads is ' +
+        'exactly how nutProgSetSwap and nutProgSetRice sat dead for 17 versions');
+hasCode("_fatSlot = (M.id === 'midam'",
+        'NUTS: and the plate actually applies the choice');
+
+// The shelf. Every option list is in ONE table, so a list added later cannot be
+// forgotten. Before this, only the dinner proteins were named and everything
+// else fell through to Produce — cottage cheese and turkey breast were filed
+// under vegetables, measured 2026-09-05.
+hasCode('function _nutProgSwapShelf(',
+        'NUTS: swapped-in foods have a shelf lookup of their own');
+hasNotCode("_nutProgNightlyOpt('dinner_protein', _nutNightlyIdByName(k)) ? 'protein' : 'produce'",
+        'NUTS: and the old one-list-only fallback that sent cashew butter to Produce is gone');
+
 hasCode('function nutProgToggleGreens(',     'SWAP: greens powder is per meal, per day');
 hasCode('function nutProgSwapCompensation(', 'SWAP: and the day absorbs the difference');
 hasCode('comp.oil_ml_delta',                 'SWAP: the compensation is APPLIED, not merely calculated');

@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.302';
+var APP_VERSION='4.9.303';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21371,6 +21371,18 @@ function nutProgMealsOn(dateKey, riceId){
                   c:_dp.c * _dp.g / 100, f:_dp.f * _dp.g / 100 };
         }
       }
+      // The 09:30 nuts and the 15:30 nut butter. Sized to hold the FAT, which is
+      // what these two slots are on the plate to deliver — so the weight moves
+      // and the macro the plan is defending does not.
+      var _fatSlot = (M.id === 'midam' && it.n === _NUT_NUTS_ITEM)   ? 'midam_nuts'
+                   : (M.id === 'arvo'  && it.n === _NUT_BUTTER_ITEM) ? 'arvo_butter' : null;
+      if(_fatSlot){
+        var _fs = nutProgFatSlotServe(_fatSlot, nutProgNightlyOn(dateKey)[_fatSlot], ix);
+        if(_fs && !_fs.base){
+          name = _fs.n; grams = _fs.g;
+          mac = { k:_fs.k, p:_fs.p, c:_fs.c, f:_fs.f };
+        }
+      }
       // Tonight's dinner protein and green side. Sized to hold the protein, so
       // the WEIGHT changes rather than the macro the plan is defending.
       if(M.id === 'dinner'){
@@ -21764,8 +21776,7 @@ function nutProgShoppingFor(week, riceId){
     // Only a real grain may borrow the Rice row's conversion. Anything else with
     // no row of its own is bought exactly as the plate lists it.
     var row = _nutProgPlateRow(k) || (_nutRiceByName(k) ? _nutProgPlateRow('Rice') : null);
-    var grp = (row && row.grp) ||
-              (_nutProgNightlyOpt('dinner_protein', _nutNightlyIdByName(k)) ? 'protein' : 'produce');
+    var grp = (row && row.grp) || _nutProgSwapShelf(k) || 'produce';
     var qty = t.cooked, unit = 'g', note = '';
 
     if(row && row.rice){
@@ -21926,23 +21937,147 @@ var _NUT_PROG_DINNER_VEG = [
   { id:'shake',  n:'Greens powder', g:10,  k:350, p:20,  c:50,  f:5 }
 ];
 
+// ── the two fat slots, sized to the fat ────────────────────────────────────
+// v4.9.303. Jon asked for a selector on the 09:30 nuts and the 15:30 nut butter,
+// with the serve size moving so the macros still land.
+//
+// THESE HOLD FAT, NOT WEIGHT. Both slots are `grp:'fat'` on the plate — that is
+// what they are there to deliver — so the serve is derived as
+//   base grams x base fat per 100 g / this food's fat per 100 g
+// rather than stored. 30 g of almonds is 15 g of fat; peanuts carry slightly
+// less fat per gram so the serve grows to 31 g, cashews less again so 34 g.
+// Swapping gram for gram would quietly cost 1.8 g of fat every cashew day.
+//
+// Deriving it also means the serve follows the PHASE. The nut butter tapers
+// 15 g -> 15 -> 8 -> 0 -> 0 across the fifteen weeks, and a stored serve size
+// would have gone on offering 15 g of almond butter in week 11 when the plan
+// had already removed the slot.
+//
+// PROTEIN COMES ALONG FOR THE RIDE — and lands close enough to leave alone.
+// MEASURED, phase 1: almonds 6.3 g, peanuts 8.1 g, cashews 6.1 g — a spread of
+// 2.0 g, because their protein-to-fat ratios are similar (0.42 / 0.53 / 0.41).
+// The butters spread 1.1 g. At the level of the DAY that is +1.8 g of protein at
+// worst, against a 190 g target. So the honest claim is that the serve is sized
+// to ONE macro and the other happens to follow closely — not that both are held.
+// A test pins the spread, so an option added later with a worse ratio fails the
+// build rather than quietly moving his protein.
+//
+// FAT IS WHAT IS HELD, not protein, and that is deliberate even though every
+// OTHER swap in this file holds protein and lets the evening oil absorb the fat.
+// These two slots exist to deliver fat — 15 g of the day's 82 — and 6 g of
+// protein is incidental to them. Sizing them to the incidental macro would move
+// fat out of a morning snack and into dinner's oil to no purpose.
+//
+// CARBOHYDRATE IS THE ONE THAT MOVES, and it is not hidden. Cashews carry three
+// times the carbohydrate of almonds — Jon's own example — so a cashew day is
+// about 6 g up. The sheet shows the carbs per serve for exactly this reason:
+// the choice should be informed rather than compensated for behind his back.
+//
+// CARB CONVENTION. Each option matches the convention of the plate row it
+// replaces, or the swap lies about the difference. The Almonds row carries 9 g
+// per 100 g, which is NET (22 total less 13 fibre), so the nuts are net too. The
+// Peanut butter row carries 20, which is TOTAL, so the butters are total.
+// Mixing the two would make almond butter look like it saved 10 g of carbs.
+var _NUT_NUTS_ITEM   = 'Almonds';        // the plate row the 09:30 pick replaces
+var _NUT_BUTTER_ITEM = 'Peanut butter';  // the plate row the 15:30 pick replaces
+
+var _NUT_PROG_NUTS = [
+  { id:'almonds', n:'Almonds', k:579, p:21, c:9,    f:50, base:true },
+  { id:'peanuts', n:'Peanuts', k:567, p:26, c:7.6,  f:49 },
+  { id:'cashews', n:'Cashews', k:553, p:18, c:26.9, f:44 }
+];
+var _NUT_PROG_NUT_BUTTER = [
+  { id:'pb', n:'Peanut butter', k:588, p:25, c:20, f:50, base:true },
+  { id:'ab', n:'Almond butter', k:614, p:21, c:19, f:56 },
+  { id:'cb', n:'Cashew butter', k:587, p:18, c:28, f:49 }
+];
+var _NUT_PROG_FAT_SLOTS = {
+  midam_nuts:  { item:_NUT_NUTS_ITEM,   opts:_NUT_PROG_NUTS,       meal:'midam',
+                 label:'Mid-morning nuts' },
+  arvo_butter: { item:_NUT_BUTTER_ITEM, opts:_NUT_PROG_NUT_BUTTER, meal:'arvo',
+                 label:'Afternoon nut butter' }
+};
+
+function _nutProgFatSlotBase(slot){
+  var def = _NUT_PROG_FAT_SLOTS[slot];
+  if(!def) return null;
+  for(var i = 0; i < def.opts.length; i++) if(def.opts[i].base) return def.opts[i];
+  return def.opts[0];
+}
+
+// The serve for one phase, with ABSOLUTE macros — what goes on the plate.
+// Returns null when the slot is empty in that phase, which is the nut butter
+// from week 10 on. Nothing to choose between when there is nothing to eat.
+function nutProgFatSlotServe(slot, id, phaseIx){
+  var def = _NUT_PROG_FAT_SLOTS[slot];
+  if(!def) return null;
+  var row = _nutProgPlateRow(def.item);
+  var ix  = parseInt(phaseIx, 10);
+  if(!row || !(ix >= 0) || !(row.g[ix] > 0)) return null;
+  var opt = null;
+  for(var i = 0; i < def.opts.length; i++) if(def.opts[i].id === id) opt = def.opts[i];
+  if(!opt) return null;
+  var baseG = row.g[ix];
+  // Whole grams, because that is what a kitchen scale reads. The rounding
+  // residual is picked up by the evening oil like every other fat delta.
+  var g = (opt.f > 0) ? Math.round(baseG * row.f / opt.f) : baseG;
+  return { id:opt.id, n:opt.n, g:g, base:!!opt.base,
+           k:opt.k * g / 100, p:opt.p * g / 100, c:opt.c * g / 100, f:opt.f * g / 100 };
+}
+
+// Every option for a slot on a given day, SHAPED LIKE THE OTHER OPTION LISTS —
+// macros per 100 g with the serve weight alongside — so the substitutions sheet
+// renders it with the same code that renders dinner. Empty when the slot is not
+// on the plate this phase, and the sheet then omits the section entirely.
+function nutProgFatSlotOpts(slot, dateKey){
+  var t = nutProgTargetsOn(dateKey);
+  var def = _NUT_PROG_FAT_SLOTS[slot];
+  if(!t || !def) return [];
+  var out = [];
+  for(var i = 0; i < def.opts.length; i++){
+    var o = def.opts[i];
+    var srv = nutProgFatSlotServe(slot, o.id, t.phase_n - 1);
+    if(!srv) continue;
+    out.push({ id:o.id, n:o.n, g:srv.g, base:!!o.base, k:o.k, p:o.p, c:o.c, f:o.f });
+  }
+  return out;
+}
+
 // Reverse lookup: the shopping list only ever sees display names.
 function _nutNightlyIdByName(name){
   var all = _NUT_PROG_DINNER_PROTEIN.concat(_NUT_PROG_DINNER_VEG);
   for(var i = 0; i < all.length; i++) if(all[i].n === name) return all[i].id;
   return null;
 }
+
+// Which shelf a SWAPPED-IN food belongs on. One table, every option list, so a
+// list added later cannot be forgotten here — the previous version named only
+// the dinner proteins and sent everything else to Produce.
+function _nutProgSwapShelf(name){
+  var sets = [['protein', _NUT_PROG_DINNER_PROTEIN],
+              ['produce', _NUT_PROG_DINNER_VEG],
+              ['dairy',   _NUT_PROG_MIDAM_DAIRY],
+              ['fat',     _NUT_PROG_NUTS],
+              ['fat',     _NUT_PROG_NUT_BUTTER],
+              ['protein', _NUT_PROG_SWAPS.lunch_protein.opts]];
+  for(var i = 0; i < sets.length; i++)
+    for(var j = 0; j < sets[i][1].length; j++)
+      if(sets[i][1][j].n === name) return sets[i][0];
+  return null;
+}
 function _nutProgNightlyOpt(slot, id){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
            : (slot === 'dinner_veg')     ? _NUT_PROG_DINNER_VEG
-           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY : null;
+           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY
+           : (_NUT_PROG_FAT_SLOTS[slot]  ? _NUT_PROG_FAT_SLOTS[slot].opts : null);
   if(!list) return null;
   for(var i = 0; i < list.length; i++) if(list[i].id === id) return list[i];
   return null;
 }
 function _nutProgNightlyBase(slot){
   var list = (slot === 'dinner_protein') ? _NUT_PROG_DINNER_PROTEIN
-           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY : _NUT_PROG_DINNER_VEG;
+           : (slot === 'midam_dairy')    ? _NUT_PROG_MIDAM_DAIRY
+           : (_NUT_PROG_FAT_SLOTS[slot]  ? _NUT_PROG_FAT_SLOTS[slot].opts : _NUT_PROG_DINNER_VEG);
   for(var i = 0; i < list.length; i++) if(list[i].base) return list[i];
   return list[0];
 }
@@ -21960,7 +22095,8 @@ function nutProgNightlyOn(dateKey){
            _nutProgNightlyBase(slot).id;
   };
   return { dinner_protein: pick('dinner_protein'), dinner_veg: pick('dinner_veg'),
-           midam_dairy: pick('midam_dairy') };
+           midam_dairy: pick('midam_dairy'),
+           midam_nuts: pick('midam_nuts'), arvo_butter: pick('arvo_butter') };
 }
 
 // What he SHOPPED for. Set on the Wednesday; any night can override it without
@@ -21996,6 +22132,21 @@ function nutProgNightlyFatDelta(dateKey){
     if(!chosen || !base || chosen.id === base.id) return;
     d += (chosen.f * chosen.g / 100) - (base.f * base.g / 100);
   });
+  // The nut slots are SIZED to the fat, so all that can survive here is the
+  // rounding to whole grams — a few tenths. Carried anyway, because a future
+  // option with a poorer fit must show up in the oil rather than drift away
+  // silently, and tenths are cheaper to route than to argue about.
+  var _ft = nutProgTargetsOn(dateKey);
+  if(_ft){
+    var _fix = _ft.phase_n - 1;
+    Object.keys(_NUT_PROG_FAT_SLOTS).forEach(function(slot){
+      var b = _nutProgFatSlotBase(slot);
+      var chosenSrv = nutProgFatSlotServe(slot, pick[slot], _fix);
+      var baseSrv   = b ? nutProgFatSlotServe(slot, b.id, _fix) : null;
+      if(!chosenSrv || !baseSrv || chosenSrv.id === baseSrv.id) return;
+      d += chosenSrv.f - baseSrv.f;
+    });
+  }
   return Math.round(d * 10) / 10;
 }
 
@@ -22061,10 +22212,22 @@ function nutOpenSwapSheet(forDate){
   // Dinner is cooked fresh, so it is chosen on the night rather than locked on
   // Wednesday. The serve size MOVES with the choice — each is sized to land the
   // same protein, which gram-for-gram swapping would not do.
+  // The nut slots are appended rather than listed inline because their serve
+  // sizes are DERIVED from the phase, and because the nut butter leaves the
+  // plate entirely from week 10 — an empty list means no section at all.
+  var fatSecs = [];
+  ['midam_nuts', 'arvo_butter'].forEach(function(slot){
+    var opts = (typeof nutProgFatSlotOpts === 'function') ? nutProgFatSlotOpts(slot, today) : [];
+    if(!opts.length) return;
+    fatSecs.push([slot, _NUT_PROG_FAT_SLOTS[slot].label, opts,
+      'Each serve is sized to land the same fat. Carbs are the one that moves &mdash; ' +
+      'cashews carry about three times what almonds do, so the figure is shown per serve.']);
+  });
   [['dinner_protein', 'Tonight&rsquo;s protein', _NUT_PROG_DINNER_PROTEIN],
    ['dinner_veg',     'Tonight&rsquo;s greens &mdash; fresh or shake', _NUT_PROG_DINNER_VEG],
-   ['midam_dairy',    'Mid-morning dairy',                            _NUT_PROG_MIDAM_DAIRY]].forEach(function(sec){
-    var slot = sec[0], label = sec[1], opts = sec[2];
+   ['midam_dairy',    'Mid-morning dairy',                            _NUT_PROG_MIDAM_DAIRY]
+  ].concat(fatSecs).forEach(function(sec){
+    var slot = sec[0], label = sec[1], opts = sec[2], note = sec[3] || '';
     h += '<div style="margin-bottom:16px;">';
     h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + label + '</div>';
     opts.forEach(function(o){
@@ -22077,9 +22240,11 @@ function nutOpenSwapSheet(forDate){
             (o.base ? ' <span style="font-size:9px;color:var(--text3);font-weight:400;">default</span>' : '') + '</div>' +
           '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' +
             Math.round(o.p * o.g / 100) + ' g protein &middot; ' + Math.round(o.f * o.g / 100) + ' g fat &middot; ' +
+            (note ? (Math.round(o.c * o.g / 100) + ' g carbs &middot; ') : '') +
             Math.round(o.k * o.g / 100) + ' kcal in this serve</div>' +
         '</div></div>';
     });
+    if(note) h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">' + note + '</div>';
     h += '</div>';
   });
 

@@ -3965,6 +3965,188 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.nutProgRiceChoice(), 'quinoa', 'and the tap reaches the setting');
   });
 
+  // ── protein distribution ─────────────────────────────────────────────────
+  // v4.9.312. Jon prefers eating less through the day and more in the evening.
+  //
+  // HIS PREMISE WAS THAT PROTEIN IS "roughly evenly spread". Measured before
+  // building: phase 1 runs breakfast 22%, mid-morning 14%, LUNCH 28%, afternoon
+  // 16%, dinner 21%. Lunch is the biggest meal and dinner is third — so this
+  // reverses a skew rather than flattening one.
+
+  const PHASES = ['2026-09-16', '2026-10-28', '2026-12-09'];
+  const mealP = (d) => {
+    const out = {};
+    (app.nutProgMealsOn(d, 'basmati') || []).forEach((m) => { if (!m.supp) out[m.id] = m.p; });
+    return out;
+  };
+  const itemG = (d, mealId, re) => {
+    const m = (app.nutProgMealsOn(d, 'basmati') || []).filter((x) => x.id === mealId)[0];
+    const it = m ? m.items.filter((x) => re.test(x.n))[0] : null;
+    return it ? it.g : null;
+  };
+
+  test('SPLIT standard is the default and the plate is unchanged', () => {
+    setUp(110);
+    assert.equal(app.nutProgSplitOn('2026-09-16'), 'standard', 'nobody gets this unasked');
+    assert.equal(itemG('2026-09-16', 'lunch', /Chicken/), 135, 'lunch chicken as written');
+    assert.equal(itemG('2026-09-16', 'dinner', /Salmon/), 135, 'and dinner salmon as written');
+  });
+
+  test('SPLIT dinner-heavy makes dinner the biggest meal, at every phase', () => {
+    setUp(110);
+    PHASES.forEach((d, ix) => {
+      const before = mealP(d);
+      app.nutProgSetSplit(d, 'dinner');
+      const after = mealP(d);
+      assert.ok(after.dinner > before.dinner, 'phase ' + (ix ? ix * 2 + 1 : 1) + ' dinner grows');
+      assert.ok(after.lunch < before.lunch, 'lunch shrinks');
+      assert.ok(after.midam < before.midam, 'and so does mid-morning');
+      const food = ['bfast','midam','lunch','arvo','dinner'].map((k) => after[k]);
+      assert.equal(Math.max.apply(null, food), after.dinner,
+        'and dinner is now the LARGEST meal of the day, which it was not before — ' +
+        'lunch was, at 28% against dinner\'s 21%');
+    });
+  });
+
+  test('SPLIT the daily protein total does NOT change — that is the whole point', () => {
+    setUp(110);
+    PHASES.forEach((d) => {
+      const before = app.nutProgDayTotals(d, 'basmati').p;
+      app.nutProgSetSplit(d, 'dinner');
+      const after = app.nutProgDayTotals(d, 'basmati').p;
+      assert.ok(Math.abs(after - before) <= 0.5,
+        d + ': ' + before + ' g became ' + after + ' g. Conserved BY CONSTRUCTION — a ' +
+        'fixed fraction comes off two meals and ALL of it goes to dinner, so this ' +
+        'holds at every phase without anyone re-checking a table of grams');
+    });
+  });
+
+  test('SPLIT breakfast and the afternoon are left alone', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    const before = mealP(d);
+    app.nutProgSetSplit(d, 'dinner');
+    const after = mealP(d);
+    assert.ok(Math.abs(after.bfast - before.bfast) <= 0.5, 'breakfast untouched');
+    assert.equal(itemG(d, 'arvo', /Tuna/), 100,
+      'and the afternoon tin is still a tin — Jon named lunch and mid-morning, and ' +
+      'asking someone to serve 75% of a 100 g tin is not a plan they will follow');
+  });
+
+  test('SPLIT the other three macros still land', () => {
+    setUp(110);
+    PHASES.forEach((d) => {
+      const t = app.nutProgTargetsOn(d);
+      app.nutProgSetSplit(d, 'dinner');
+      const got = app.nutProgDayTotals(d, 'basmati');
+      assert.ok(Math.abs(got.c - t.total.c) <= 2,
+        d + ' carbs ' + (got.c - t.total.c).toFixed(1) + ' out — the yoghurt carries 8 g ' +
+        'per 200, so shrinking it moves carbohydrate as well as protein');
+      assert.ok(Math.abs(got.f - t.total.f) <= 2.5,
+        d + ' fat ' + (got.f - t.total.f).toFixed(1) + ' out — a bigger salmon is a ' +
+        'fattier one, and the evening oil takes the difference');
+    });
+  });
+
+  test('SPLIT it works with a swapped dinner protein, sized to the protein', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetSplit(d, 'dinner');
+    const t = app.nutProgTargetsOn(d);
+    [['salmon', /Salmon/], ['basa', /Basa/], ['prawns', /Prawns/]].forEach((c) => {
+      app.nutProgSetNightly(d, 'dinner_protein', c[0]);
+      const p = mealP(d).dinner;
+      assert.ok(p > 50, c[0] + ' still lands a big evening protein: ' + p);
+      assert.ok(Math.abs(app.nutProgDayTotals(d, 'basmati').p - t.total.p) <= 6,
+        c[0] + ' and the day still holds its total');
+    });
+    assert.ok(itemG(d, 'dinner', /Basa/) === null, 'prawns are what is on the plate now');
+  });
+
+  test('SPLIT a bad id is refused, and the default can be set for the week', () => {
+    setUp(110);
+    assert.equal(app.nutProgSetSplit('2026-09-16', 'breakfast-heavy'), false, 'not an option');
+    assert.equal(app.nutProgSplitOn('2026-09-16'), 'standard', 'and nothing was stored');
+    app.nutProgSetSplitDefault('dinner');
+    assert.equal(app.nutProgSplitOn('2026-09-17'), 'dinner', 'the week follows the default');
+    app.nutProgSetSplit('2026-09-17', 'standard');
+    assert.equal(app.nutProgSplitOn('2026-09-17'), 'standard', 'and one day can differ');
+    assert.equal(app.nutProgSplitOn('2026-09-18'), 'dinner', 'without moving the rest');
+  });
+
+  // ── the shopping list ─────────────────────────────────────────────────────
+  test('SHOP dinner-heavy buys more of the evening protein and less chicken', () => {
+    setUp(110);
+    const before = app.nutProgShoppingFor(1, 'basmati');
+    app.nutProgSetSplitDefault('dinner');
+    const after = app.nutProgShoppingFor(1, 'basmati');
+    assert.ok(shopItem(after, 'Salmon fillet').qty > shopItem(before, 'Salmon fillet').qty,
+      'more salmon: ' + shopItem(before, 'Salmon fillet').qty + ' to ' + shopItem(after, 'Salmon fillet').qty);
+    assert.ok(shopItem(after, 'Chicken breast').qty < shopItem(before, 'Chicken breast').qty,
+      'less chicken: ' + shopItem(before, 'Chicken breast').qty + ' to ' + shopItem(after, 'Chicken breast').qty);
+    assert.ok(/cooked/.test(shopItem(after, 'Chicken breast').note),
+      'and it is still bought RAW with the cooked yield noted');
+  });
+
+  // ── the limit, said out loud ──────────────────────────────────────────────
+  test('SPLIT when the oil runs out, the sheet says so', () => {
+    setUp(110);
+    const late = '2026-12-09';
+    assert.ok(app.nutProgFatHeadroom(late) > 0, 'a standard day has oil in hand');
+    app.nutProgSetSplit(late, 'dinner');
+    app.nutProgSetBed(late, true);
+    app.nutProgSetNightly(late, 'bfast_protein', 'eggs');
+    app.nutProgSetNightly(late, 'midam_dairy', 'whites');
+    // MEASURED: four opt-in choices at the leanest phase ask for 5.8 g more fat
+    // to come off than 10 ml of oil can give. The oil floors at zero and the day
+    // runs over by the difference — a silent drift unless something says so.
+    assert.ok(app.nutProgFatHeadroom(late) < 0,
+      'the compensation channel is exhausted: ' + app.nutProgFatHeadroom(late) + ' ml');
+    const d = dom();
+    onDay(late, () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(/more fat taken off than the evening oil has to give/.test(html),
+      'and the sheet says so, where the choices are made');
+    assert.ok(/basa or prawns/.test(html), 'with the way to buy it back');
+  });
+
+  test('SPLIT the sheet OFFERS it, and shows the serve sizes it changes', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-split="dinner"') >= 0, 'the dinner-heavy row');
+    assert.ok(html.indexOf('data-nut-split="standard"') >= 0, 'and a way back');
+    assert.ok(/Chicken breast 135/.test(html) && /101 g/.test(html),
+      'showing what the lunch serve becomes — the serve sizes ARE the feature');
+    assert.ok(/Greek yoghurt 200/.test(html) && /150 g/.test(html), 'and the mid-morning one');
+    assert.ok(/\+15\.1 g protein at 19:00/.test(html), 'and where it all goes');
+    assert.ok(/DAILY TOTAL does not change/.test(html), 'and that the total holds');
+  });
+
+  test('SPLIT tapping the row records it — the option has a door', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const ov = d.lastCreated();
+    const row = ov.querySelectorAll('[data-nut-split]')
+      .filter((el) => el.getAttribute('data-nut-split') === 'dinner')[0];
+    assert.ok(row, 'the row exists to be tapped');
+    d.fire(row, 'click');
+    assert.equal(app.nutProgSplitOn('2026-09-16'), 'dinner', 'the tap is stored');
+    assert.ok(itemG('2026-09-16', 'dinner', /Salmon/) > 190, 'and it reaches the plate');
+  });
+
+  test('SPLIT a dinner-heavy day says so on the week plan', () => {
+    setUp(110);
+    const days = app._nutProgWeekDates(1);
+    app.nutProgSetSplit(days[2], 'dinner');
+    const html = onDay(days[0], () => app._nutProgDayPlanCard(1));
+    assert.ok(/Dinner-heavy/.test(html),
+      'a day running a different distribution is named on the plan — otherwise a ' +
+      'week of two shapes looks like a week of one');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

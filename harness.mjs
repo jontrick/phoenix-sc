@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.311'", 'version is 4.9.311');
+has("var APP_VERSION='4.9.312'", 'version is 4.9.312');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3272,6 +3272,37 @@ hasNotCode('_nutProgWeekPickerCard',
         'the per-day editor — two controls for one setting drift apart');
 hasNotCode('_nutProgWeekAheadCard',
         'TABS: and so is the week table the day plan replaced');
+
+// ── protein distribution (v4.9.312) ────────────────────────────────────────
+hasCode('_NUT_PROG_SPLITS',            'SPLIT: Standard and Dinner-heavy exist');
+hasCode('_NUT_SPLIT_FROM',             'SPLIT: naming the two meals protein comes OFF');
+hasCode('function nutProgSplitOn(',    'SPLIT: a day can be asked which it is on');
+hasCode('function nutProgSetSplit(',   'SPLIT: and told');
+hasCode('function nutProgSetSplitDefault(', 'SPLIT: with a default for the week he shops');
+hasCode('function nutProgSplitShift(',
+        'SPLIT: the shift is DERIVED from the rows as served, so a swapped lunch ' +
+        'protein or mid-morning dairy moves the right amount');
+
+// CONSERVED BY CONSTRUCTION. A fixed fraction comes off two meals and ALL of it
+// goes to dinner, so the daily total holds at every phase without a table of
+// grams anyone has to re-check. Both halves are guarded: taking without giving
+// loses protein, giving without taking gains it, and each turns 5+ cases red.
+hasCode('var _sr = 1 - _splitTake;',
+        'SPLIT: the two daytime anchors shrink');
+hasCode('var _gr2 = (_ownP + _splitGive) / _ownP;',
+        'SPLIT: and dinner grows by exactly what they gave up, sized to the PROTEIN');
+
+hasCode('data-nut-split',              'SPLIT: the sheet OFFERS it');
+hasCode("ov.querySelectorAll('[data-nut-split]')",
+        'SPLIT: and the rows are WIRED — eleven orphans in this domain');
+
+// The oil balances every fat-moving choice and floors at zero. Four opt-in
+// choices at phase 5 ask for 5.8 g more than 10 ml can give, and the day then
+// runs over with nothing saying why.
+hasCode('function nutProgFatHeadroom(',
+        'SPLIT: the app can tell when the fat channel is EXHAUSTED');
+hasCode('more fat taken off than the evening oil has to give',
+        'SPLIT: and says so on the sheet, where the choices are made');
 
 // ── egg whites at 09:30 (v4.9.309) ─────────────────────────────────────────
 hasCode("{ id:'whites',  n:'Egg whites', grp:'protein', g:184",

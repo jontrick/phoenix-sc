@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.311';
+var APP_VERSION='4.9.312';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21360,6 +21360,15 @@ function nutProgMealsOn(dateKey, riceId){
   var _baseC  = lift ? 24.4 : (_preRow ? (_preRow.c * _preRow.g[ix] / 100) : 0);
   var _shortC = Math.round((_baseC - (pre ? pre.c : 0)) * 10) / 10;
   var _dayCarbBase = (typeof _nutProgDayCarbBase === 'function') ? _nutProgDayCarbBase(ix) : 0;
+  // The distribution. `_splitTake` shrinks the two daytime anchors; `_splitGive`
+  // is the exact total those two gave up, handed to dinner — so the day's
+  // protein is unchanged by construction rather than by arithmetic anyone has to
+  // re-check per phase.
+  var _splitOpt  = (typeof _nutProgSplitOpt === 'function')
+    ? _nutProgSplitOpt(nutProgSplitOn(dateKey)) : null;
+  var _splitTake = (_splitOpt && _splitOpt.take > 0) ? _splitOpt.take : 0;
+  var _splitGive = _splitTake ? nutProgSplitShift(dateKey, ix) : 0;
+
   // MEAL 7. Its carbohydrate joins the 04:15 ladder as a SURPLUS — the same
   // proportional machinery, run in the other direction — and its protein is
   // taken proportionally out of the day's pure-protein rows, so the day still
@@ -21386,6 +21395,17 @@ function nutProgMealsOn(dateKey, riceId){
       if(_dr && _dr.g[ix] > 0) _bfOld += _dr.c * _dr.g[ix] / 100;
     }
     _shortC = Math.round((_shortC + (_bfOld - _bfNew)) * 10) / 10;
+  }
+  if(_splitTake){
+    Object.keys(_NUT_SPLIT_FROM).forEach(function(mealId){
+      var row = _nutProgPlateRowIn(mealId, _NUT_SPLIT_FROM[mealId]);
+      if(row && row.g[ix] > 0) _shortC = Math.round((_shortC + (row.c * row.g[ix] / 100 * _splitTake)) * 10) / 10;
+    });
+    var dR = _nutProgPlateRowIn('dinner', _NUT_DINNER_PROTEIN_ITEM);
+    if(dR && dR.g[ix] > 0 && dR.p > 0){
+      var basP2 = dR.p * dR.g[ix] / 100;
+      if(basP2 > 0) _shortC = Math.round((_shortC - (dR.c * dR.g[ix] / 100 * (_splitGive / basP2))) * 10) / 10;
+    }
   }
   var _mdPick = _nutProgNightlyOpt('midam_dairy', nutProgNightlyOn(dateKey).midam_dairy);
   var _mdBase = _nutProgNightlyBase('midam_dairy');
@@ -21549,6 +21569,24 @@ function nutProgMealsOn(dateKey, riceId){
       // carbohydrate item already carries — so nothing doubles, nothing
       // disappears, and the day still lands on its target. Applied to grams so a
       // swapped item (rice under another grain) scales with everything else.
+      // The distribution option, applied to the SERVED weights — after every swap
+      // has resolved, so it scales whatever food is actually on the plate.
+      if(_splitTake && _NUT_SPLIT_FROM[M.id] === it.n){
+        var _sr = 1 - _splitTake;
+        if(mac) mac = { k:mac.k * _sr, p:mac.p * _sr, c:mac.c * _sr, f:mac.f * _sr };
+        grams = Math.round(grams * _sr * 10) / 10;
+      }
+      // ...and the whole of it arrives at dinner. Sized to the PROTEIN, like
+      // every other serve in this file, so the weight follows the fish rather
+      // than the fish following a weight.
+      if(_splitGive > 0 && M.id === 'dinner' && it.n === _NUT_DINNER_PROTEIN_ITEM){
+        var _ownP = mac ? mac.p : (it.p * grams / 100);
+        if(_ownP > 0 && grams > 0){
+          var _gr2 = (_ownP + _splitGive) / _ownP;
+          if(mac) mac = { k:mac.k * _gr2, p:mac.p * _gr2, c:mac.c * _gr2, f:mac.f * _gr2 };
+          grams = Math.round(grams * _gr2 * 10) / 10;
+        }
+      }
       // Making room for Meal 7. Proportional across the day's pure-protein rows,
       // so nothing is singled out: taking it all from the whey would leave
       // breakfast at 1 g of powder.
@@ -21737,6 +21775,110 @@ function nutProgSetRice(riceId){
   return true;
 }
 
+// ── how the day's protein is distributed ───────────────────────────────────
+// v4.9.312. Jon: "he prefers eating less during the day and having a bigger
+// evening meal ... shift more protein to the 19:00 dinner slot while reducing
+// protein at lunch and/or mid-morning slightly so daily totals still hit 190g."
+//
+// MEASURED FIRST, because his premise was that protein is "roughly evenly
+// spread" and it is not. Phase 1, as a share of the day: breakfast 22%,
+// mid-morning 14%, LUNCH 28%, afternoon 16%, dinner 21%. Lunch is the biggest
+// meal and dinner is third. So the change is not flattening a skew, it is
+// reversing one — worth knowing, because "make it dinner-heavy" from an even
+// split is a smaller move than from a lunch-heavy one.
+//
+// CONSERVED BY CONSTRUCTION, not by a table of grams. A fixed FRACTION comes off
+// the lunch and mid-morning protein anchors and ALL of it goes to dinner. The
+// day's total is then identical at every phase, under every swap, without anyone
+// re-checking a number — which is the property Jon actually asked for. Grams
+// would have been right for phase 1 and wrong for the other four.
+//
+// BREAKFAST AND THE AFTERNOON ARE LEFT ALONE. He named lunch and mid-morning;
+// the afternoon's protein is a 100 g tin, and a tin is a bad thing to ask
+// someone to serve 78% of.
+var _NUT_PROG_SPLITS = [
+  { id:'standard', n:'Standard',     take:0,    base:true,
+    blurb:'The plate as written &mdash; lunch is the biggest meal of the day.' },
+  { id:'dinner',   n:'Dinner-heavy', take:0.25,
+    blurb:'A quarter of the lunch and mid-morning protein moves to 19:00. Same daily total.' }
+];
+
+// The rows a split moves protein OUT of, by meal. Named by the plate row each
+// slot is anchored to, so a swapped-in food is scaled too — the choice of
+// chicken or turkey is a different question from how much of it there is.
+var _NUT_SPLIT_FROM = { lunch:'Chicken breast', midam:'Greek yoghurt, 0%' };
+
+function nutProgSplitOn(dateKey){
+  var ns  = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  var pick = day && day.prog_split;
+  if(_nutProgSplitOpt(pick)) return pick;
+  var dflt = ns && ns.prog_split_default;
+  return _nutProgSplitOpt(dflt) ? dflt : 'standard';
+}
+function _nutProgSplitOpt(id){
+  for(var i = 0; i < _NUT_PROG_SPLITS.length; i++)
+    if(_NUT_PROG_SPLITS[i].id === id) return _NUT_PROG_SPLITS[i];
+  return null;
+}
+function nutProgSetSplit(dateKey, id){
+  if(!dateKey || !_nutProgSplitOpt(id)) return false;
+  var ns = nutGetState();
+  var day = _nutProgDay(ns, dateKey);
+  if(!day) return false;
+  day.prog_split = id;
+  nutSaveState(ns);
+  return true;
+}
+function nutProgSetSplitDefault(id){
+  if(!_nutProgSplitOpt(id)) return false;
+  var ns = nutGetState();
+  ns.prog_split_default = id;
+  nutSaveState(ns);
+  return true;
+}
+
+// How much protein the split moves on a given day, in grams. Read from the rows
+// as they are ACTUALLY served — a swapped lunch protein or a swapped mid-morning
+// dairy carries a different amount, and taking a quarter of the wrong figure
+// would move the wrong amount and break the total it exists to hold.
+function nutProgSplitShift(dateKey, phaseIx){
+  var opt = _nutProgSplitOpt(nutProgSplitOn(dateKey));
+  if(!opt || !(opt.take > 0)) return 0;
+  var ix = parseInt(phaseIx, 10);
+  var moved = 0;
+  // Lunch: the protein anchor, or whatever was swapped in for it.
+  var lRow = _nutProgPlateRowIn('lunch', _NUT_SPLIT_FROM.lunch);
+  if(lRow && lRow.g[ix] > 0){
+    var lp = _nutProgSwapOpt('lunch_protein', nutProgSwaps().lunch_protein);
+    var per100 = (lp && !lp.base) ? lp.p : lRow.p;
+    moved += per100 * lRow.g[ix] / 100 * opt.take;
+  }
+  // Mid-morning: the dairy anchor, or the egg whites that can replace it.
+  var mRow = _nutProgPlateRowIn('midam', _NUT_SPLIT_FROM.midam);
+  if(mRow && mRow.g[ix] > 0){
+    var mp = _nutProgNightlyOpt('midam_dairy', nutProgNightlyOn(dateKey).midam_dairy);
+    var mg = (mp && !mp.base) ? mp.g : mRow.g[ix];
+    var mper = (mp && !mp.base) ? mp.p : mRow.p;
+    moved += mper * mg / 100 * opt.take;
+  }
+  return Math.round(moved * 10) / 10;
+}
+
+// How much room the evening oil still has, in ml. Negative means the day's
+// choices want more fat removed than there is oil to remove — the compensation
+// channel is exhausted and the day WILL run over by that much.
+function nutProgFatHeadroom(dateKey){
+  var t = nutProgTargetsOn(dateKey);
+  if(!t) return null;
+  var ix  = t.phase_n - 1;
+  var row = _nutProgPlateRowIn('dinner', 'Olive oil');
+  if(!row) return null;
+  var comp  = (typeof nutProgSwapCompensation === 'function') ? nutProgSwapCompensation(ix) : null;
+  var delta = (typeof nutProgNightlyFatDelta === 'function') ? nutProgNightlyFatDelta(dateKey) : 0;
+  return Math.round((row.g[ix] + ((comp ? comp.oil_ml_delta : 0) - delta)) * 10) / 10;
+}
+
 // ── the before-bed meal ────────────────────────────────────────────────────
 // v4.9.308. Jon's source plan had seven meals; Phoenix had six. This is Meal 7.
 //
@@ -21823,6 +21965,21 @@ function _nutProgTrimmable(ix, dateKey){
     var g = it.g[ix];
     if(!(g > 0)) continue;
     var m = _nutProgItemMacros(it, g);
+    // The distribution moves protein BETWEEN these rows. Counting the unmoved
+    // figures would make Meal 7's trim disagree with the plate about what is
+    // there — the mid-morning dairy is not in this set, so the two are not even
+    // self-cancelling.
+    if(dateKey && typeof _nutProgSplitOpt === 'function'){
+      var so = _nutProgSplitOpt(nutProgSplitOn(dateKey));
+      if(so && so.take > 0){
+        if(_NUT_SPLIT_FROM[it.m] === it.n){
+          m = { k:m.k*(1-so.take), p:m.p*(1-so.take), c:m.c*(1-so.take), f:m.f*(1-so.take) };
+        } else if(it.m === 'dinner' && it.n === _NUT_DINNER_PROTEIN_ITEM && m.p > 0){
+          var gr = (m.p + nutProgSplitShift(dateKey, ix)) / m.p;
+          m = { k:m.k*gr, p:m.p*gr, c:m.c*gr, f:m.f*gr };
+        }
+      }
+    }
     p += m.p; f += m.f;
   }
   return { p:p, f:f };
@@ -22614,6 +22771,27 @@ function nutProgNightlyFatDelta(dateKey){
       if(row && row.g[_ft.phase_n - 1] > 0) d -= row.f * row.g[_ft.phase_n - 1] / 100;
     });
   }
+  // The distribution moves FAT as well as protein: a bigger salmon is a fattier
+  // one, and a smaller chicken is a leaner day. Net it and give it to the oil,
+  // the channel every other swap already uses.
+  if(_ft && typeof nutProgSplitShift === 'function'){
+    var _six = _ft.phase_n - 1;
+    var _sGive = nutProgSplitShift(dateKey, _six);
+    if(_sGive > 0){
+      var _sOpt = _nutProgSplitOpt(nutProgSplitOn(dateKey));
+      Object.keys(_NUT_SPLIT_FROM).forEach(function(mealId){
+        var row = _nutProgPlateRowIn(mealId, _NUT_SPLIT_FROM[mealId]);
+        if(row && row.g[_six] > 0) d -= row.f * row.g[_six] / 100 * _sOpt.take;
+      });
+      var dRow = _nutProgPlateRowIn('dinner', _NUT_DINNER_PROTEIN_ITEM);
+      var dOpt = _nutProgNightlyOpt('dinner_protein', pick.dinner_protein);
+      var dG   = (dOpt && !dOpt.base) ? dOpt.g : (dRow ? dRow.g[_six] : 0);
+      var dP   = (dOpt && !dOpt.base) ? dOpt.p : (dRow ? dRow.p : 0);
+      var dF   = (dOpt && !dOpt.base) ? dOpt.f : (dRow ? dRow.f : 0);
+      var basP = dP * dG / 100;
+      if(basP > 0) d += (dF * dG / 100) * (_sGive / basP);
+    }
+  }
   // Meal 7 brings about 8 g of fat with its spoon of nut butter. Same channel.
   // AND the room made for it removes fat as well as protein — salmon is 13 g per
   // 100 g, so trimming it takes 4 g of fat with it. Measured at 6.05 g across the
@@ -22741,6 +22919,61 @@ function nutOpenSwapSheet(forDate){
     if(note) h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">' + note + '</div>';
     h += '</div>';
   });
+
+  if(typeof _NUT_PROG_SPLITS !== 'undefined'){
+    var _spT   = nutProgTargetsOn(today);
+    var _spIx  = _spT ? (_spT.phase_n - 1) : 0;
+    var _spCur = nutProgSplitOn(today);
+    h += '<div style="margin-bottom:16px;">';
+    h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Protein through the day</div>';
+    _NUT_PROG_SPLITS.forEach(function(o){
+      var on = (_spCur === o.id);
+      // What this option actually does to the three meals it touches, in grams,
+      // for THIS phase — the whole point is the serve sizes, so show them.
+      var line = '';
+      if(o.take > 0){
+        var moved = 0, bits = [];
+        Object.keys(_NUT_SPLIT_FROM).forEach(function(mealId){
+          var row = _nutProgPlateRowIn(mealId, _NUT_SPLIT_FROM[mealId]);
+          if(!row || !(row.g[_spIx] > 0)) return;
+          var was = row.g[_spIx];
+          bits.push(row.n.split(',')[0] + ' ' + was + '&thinsp;&rarr;&thinsp;' + Math.round(was * (1 - o.take)) + ' g');
+        });
+        moved = nutProgSplitShift(today, _spIx) || 0;
+        // Show what the shift would be, even on a day already set to standard.
+        if(!moved){
+          Object.keys(_NUT_SPLIT_FROM).forEach(function(mealId){
+            var row = _nutProgPlateRowIn(mealId, _NUT_SPLIT_FROM[mealId]);
+            if(row && row.g[_spIx] > 0) moved += row.p * row.g[_spIx] / 100 * o.take;
+          });
+          moved = Math.round(moved * 10) / 10;
+        }
+        line = bits.join(' &middot; ') + '<br><span style="color:var(--gold);">+' +
+               moved + ' g protein at 19:00</span>';
+      } else {
+        line = 'Lunch stays the biggest meal of the day';
+      }
+      h += '<div data-nut-split="' + o.id + '" style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+        '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:600;color:var(--text);">' + o.n +
+            (o.base ? ' <span style="font-size:9px;color:var(--text3);font-weight:400;">default</span>' : '') + '</div>' +
+          '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + line + '</div>' +
+        '</div></div>';
+    });
+    h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">The DAILY TOTAL does not change &mdash; whatever comes off lunch and mid-morning goes on at dinner, at every phase.</div>';
+    // The oil balances every fat-moving choice on this sheet, and it has a floor
+    // of zero. When the choices ask for more than it has, the day runs over by
+    // the difference — and saying so beats a number that is quietly wrong.
+    var _head = (typeof nutProgFatHeadroom === 'function') ? nutProgFatHeadroom(today) : null;
+    if(_head !== null && _head < 0){
+      h += '<div style="margin-top:8px;padding:9px 11px;background:rgba(200,150,62,0.12);border:1px solid var(--gold);border-radius:8px;font-size:10px;color:var(--gold);line-height:1.5;">' +
+        'Together, today&rsquo;s choices want ' + Math.abs(_head) + ' g more fat taken off than the evening oil has to give. ' +
+        'The oil is already at nothing, so the day will run about ' + Math.abs(_head) + ' g of fat over. ' +
+        'A leaner dinner protein &mdash; basa or prawns &mdash; buys it back.</div>';
+    }
+    h += '</div>';
+  }
 
   if(typeof nutProgBedOn === 'function'){
     var _bedT   = nutProgTargetsOn(today);
@@ -22901,6 +23134,14 @@ function nutOpenSwapSheet(forDate){
   ov.querySelectorAll('[data-nut-pre]').forEach(function(row){
     row.addEventListener('click', function(){
       if(nutProgSetPre(today, row.getAttribute('data-nut-pre'))){
+        ov.remove();
+        if(typeof nutRenderScreen === 'function') nutRenderScreen();
+      }
+    });
+  });
+  ov.querySelectorAll('[data-nut-split]').forEach(function(row){
+    row.addEventListener('click', function(){
+      if(nutProgSetSplit(today, row.getAttribute('data-nut-split'))){
         ov.remove();
         if(typeof nutRenderScreen === 'function') nutRenderScreen();
       }
@@ -23666,6 +23907,10 @@ function nutOpenCarbSheet(){
 // is most of why per-meal choice is worth having at all.
 function _nutProgGrainLine(dateKey){
   var bits = [];
+  if(typeof nutProgSplitOn === 'function'){
+    var sp = _nutProgSplitOpt(nutProgSplitOn(dateKey));
+    if(sp && !sp.base) bits.push(sp.n);
+  }
   Object.keys(_NUT_PROG_GRAIN_SLOTS).forEach(function(mealId){
     var gid = nutProgGrainOn(dateKey, mealId, nutProgRiceChoice());
     if(gid === _NUT_GRAIN_KEEP) return;             // the plate as written

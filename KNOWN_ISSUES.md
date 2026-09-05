@@ -192,19 +192,27 @@ harmless until coalescing made it harmful.
 Corollary from that fix: **split error contexts by REMEDY, not by which branch produced
 them.** Two contexts can be unique as strings and identical in meaning.
 
-## Jon describing existing behaviour is a REPORT, not a spec — probe it first (2026-09-05)
+## What something CURRENTLY does is a claim to check, never a premise to build on (2026-09-05)
 
-He asked for the 04:15 slot to become a choice, describing it as "banana on lifting days,
-nothing otherwise". A thirty-second probe found the exact **inverse**: banana on rest and
-HIIT days, nothing on lifting days, because the intra drink already carried that block.
-Both halves of the request would have been built backwards, and the tests written to the
-same premise would all have passed.
+Three times in one day, from three different sources, all in the same shape.
 
-He was not being careless — a drink appears at 04:30 on a lifting day either way, so the
-screen genuinely reads as he described it. **The user reports the SYMPTOM accurately and
-the mechanism from inference.** Where a request restates how something currently works,
-run the function and look before treating that half as given; where it states what he
-WANTS, it is binding and needs no checking.
+- **Jon's own description was inverted.** He asked for the 04:15 slot to become a choice,
+  describing it as "banana on lifting days, nothing otherwise". A thirty-second probe found
+  the exact **inverse** — the intra drink already carried that block. He was not careless:
+  a drink appears at 04:30 either way, so the screen genuinely reads as he said. **The user
+  reports the SYMPTOM accurately and the mechanism from inference.**
+- **He asked for two things that already existed.** "Add sushi rice and arborio" — both had
+  been selectable for twenty versions. What was missing was the *prep* he described in the
+  next clause. Building the stated request would have shipped nothing.
+- **A test was measuring a plate nobody eats.** `nutProgDayTotals(d)` with no grain left a
+  food called "Rice" on it carrying the row's generic macros; every screen passes a real
+  grain and sees 4.7 g more protein. **The test exercised a default no caller uses**, and
+  so reported the phase-1 day as on target for as long as it existed.
+
+Where a request restates how something works, run it and look before treating that half as
+given. Where it states what he WANTS, it is binding and needs no checking. And when a test
+covers a code path, check that a caller actually takes it — **an unused default is not a
+simplification, it is a second implementation with no users and no scrutiny.**
 
 ## A guard can only see the defect it was shaped for
 

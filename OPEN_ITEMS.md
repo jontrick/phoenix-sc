@@ -68,20 +68,28 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       and so never reach the branch that was broken. One screen-level test now drives
       `renderTodayScreen()`; that is the only automated cover for the actual fault.
 
-- [ ] JON — **Nutrition swaps: two decisions were made FOR him and both need his eyes.**
-      Everything else in v4.9.299 and v4.9.303 he asked for; these two he did not.
+- [ ] JON — **Nutrition swaps: three decisions were made FOR him and all need his eyes.**
+      Everything else in v4.9.299 / .303 / .305 he asked for; these he did not.
       · **04:15 (.299)** — a lifting day now offers intra / banana / nothing, and **every
         non-lifting day LOST the banana it used to have.** He described the old behaviour
-        the other way round; a probe showed the inverse and this is built to what the app
-        actually did (KNOWN_ISSUES, "Jon describing existing behaviour is a REPORT"). A
-        banana back on rest days is a one-line default change if he wants it.
-      · **Cashews (.303)** — pick them and the day lands ~6 g of carbohydrate OVER target,
-        deliberately. The serve holds the FAT; cashews carry three times the carbs of
-        almonds; rather than shrink his rice to hide that, the sheet shows carbs per
-        serve. Absorbing it silently is a real alternative — his call, not mine.
-      Also worth a check: pick "nothing" at 04:15 and confirm the day still hits its carb
-      target (the 25 g moves into rice and sweet potato, and the shopping list grows with
-      them), and note the nut butter selector disappears from week 10 by design.
+        the other way round; a probe showed the inverse, and this is built to what the
+        app actually did (KNOWN_ISSUES, "What something CURRENTLY does is a claim to
+        check"). A banana back on rest days is a one-line default change if he wants it.
+      · **Cashews (.303)** — the day lands ~6 g of carbohydrate OVER target, deliberately.
+        The serve holds the FAT and cashews carry three times the carbs of almonds; rather
+        than shrink his rice to hide it, the sheet shows carbs per serve. Absorbing it
+        silently is a real alternative — his call.
+      · **Grains (.305)** — a grain swap holds CARBOHYDRATE and lets protein and fat move,
+        uncompensated: at lunch against basmati, quinoa is +5.4 g protein and +4.9 g fat
+        for the same carbs, wild +4.2 g protein, sushi −2.8 g. **Nothing compensated before
+        .305 either** — the same choice just ran for a whole week — so it is a property of
+        holding carbs, not a regression. Each row states the cost and says it is not made
+        up. The alternative is routing the fat through the evening oil, the channel every
+        other swap uses. **His call; until he makes it, visible-but-uncompensated stands.**
+      On the phone: pick "nothing" at 04:15 and confirm the day still hits its carb target;
+      pick three grains in a week and confirm the prep plan lists three pots and the list
+      buys each separately. The nut butter selector disappears from week 10 by design, and
+      sushi rice and arborio were ALREADY selectable — .305 built their missing prep.
 
 - [ ] JON — **Two week badges, top right of Today (v4.9.301).** Was one pill reading
       "WEEK 1" under a Week 3 session. **What to watch:** it should now read `TRAIN W3`,
@@ -194,21 +202,15 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — CROSS-DOMAIN
 
-- [x] TRAINING — Today header showed two disagreeing week numbers; nutrition week wanted
-      beside the training one. **DONE v4.9.301.** Two pills: `TRAIN W3` from
-      `blabTrainingWeek()`, `CUT W1` from Nutrition's `nutProgWeekLabel()` — called, not
-      derived, and `null` omits the pill rather than rendering "Week 0". Their contract
-      is honoured including the `CUT · TRIAL` passthrough (tests/training.mjs, `WEEK:`).
-      **THE DIAGNOSIS WAS NOT WHAT THE SYMPTOM SUGGESTED**, and it is worth keeping:
-      those were never two derivations of one week. `athlete.currentWeek` is the AI
-      PROGRAMME's counter, bumped only by the coach weekly-regen flow; nothing in BLAB
-      advances it, so it sits at 1 forever on a BLAB account. A third counter,
-      `progWeek()`, returns calendar weeks since `athlete.startDate` clamped 1..15.
-      Three counters, three questions. `window.blabTrainingWeek()` now decides which one
-      applies, in one place.
-
-
-
+- [x] TRAINING — Two disagreeing week numbers on Today. **DONE v4.9.301.** Two pills:
+      `TRAIN W3` from `blabTrainingWeek()`, `CUT W1` from `nutProgWeekLabel()` — called,
+      not derived, `null` omits. **The lesson, which is why this line survives at all:**
+      they were never two derivations of one week. `athlete.currentWeek` counts the AI
+      programme and never moves on a BLAB account; `progWeek()` counts calendar weeks
+      from `startDate`. Three counters, three questions, one place that decides.
+      Compressed from Training's fuller entry to hold the 300-line budget — the original
+      is in the history at fd4517b, and Training should restore it if the detail is
+      still wanted.
 - [ ] TRAINING + NUTRITION — **Nutrition decides "is today a lifting day" from its OWN
       static map** (`_NUT_PROG_SESSIONS`), not training state. Since v4.9.299 that map
       gates the 04:15 intra drink, so a divergence from Jon's real training days gives

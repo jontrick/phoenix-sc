@@ -192,6 +192,20 @@ harmless until coalescing made it harmful.
 Corollary from that fix: **split error contexts by REMEDY, not by which branch produced
 them.** Two contexts can be unique as strings and identical in meaning.
 
+## Jon describing existing behaviour is a REPORT, not a spec — probe it first (2026-09-05)
+
+He asked for the 04:15 slot to become a choice, describing it as "banana on lifting days,
+nothing otherwise". A thirty-second probe found the exact **inverse**: banana on rest and
+HIIT days, nothing on lifting days, because the intra drink already carried that block.
+Both halves of the request would have been built backwards, and the tests written to the
+same premise would all have passed.
+
+He was not being careless — a drink appears at 04:30 on a lifting day either way, so the
+screen genuinely reads as he described it. **The user reports the SYMPTOM accurately and
+the mechanism from inference.** Where a request restates how something currently works,
+run the function and look before treating that half as given; where it states what he
+WANTS, it is binding and needs no checking.
+
 ## A guard can only see the defect it was shaped for
 
 `SAFELIST` checked that every restorable screen resolves to a real navTo target — a

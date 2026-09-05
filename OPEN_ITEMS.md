@@ -52,6 +52,17 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       and so never reach the branch that was broken. One screen-level test now drives
       `renderTodayScreen()`; that is the only automated cover for the actual fault.
 
+- [ ] JON — **The 04:15 slot (v4.9.299).** Two things changed, and the second is one he
+      did NOT ask for, so it needs his eyes: a lifting day now offers a CHOICE at 04:15
+      (intra drink / banana / nothing, in the swap sheet), and **every non-lifting day
+      lost the banana it used to have.** He described the old behaviour the other way
+      round; a probe showed the inverse and this is built to what the app actually did
+      (KNOWN_ISSUES, "Jon describing existing behaviour is a REPORT"). If he genuinely
+      wants a banana on rest days, that is a one-line default change, not a rebuild.
+      Also worth his check: pick "nothing" and confirm the day still hits its carb
+      target — the missing 25g is redistributed into rice/sweet potato, so those
+      portions grow, and the shopping list grows with them.
+
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.

@@ -205,14 +205,22 @@ Three times in one day, from three different sources, all in the same shape.
   been selectable for twenty versions. What was missing was the *prep* he described in the
   next clause. Building the stated request would have shipped nothing.
 - **A test was measuring a plate nobody eats.** `nutProgDayTotals(d)` with no grain left a
-  food called "Rice" on it carrying the row's generic macros; every screen passes a real
-  grain and sees 4.7 g more protein. **The test exercised a default no caller uses**, and
-  so reported the phase-1 day as on target for as long as it existed.
+  food called "Rice" on it carrying generic macros; every screen passes a real grain and
+  sees 4.7 g more protein. It reported the phase-1 day as on target for as long as it
+  existed. **An unused default is not a simplification, it is a second implementation
+  with no users and no scrutiny.**
 
-Where a request restates how something works, run it and look before treating that half as
-given. Where it states what he WANTS, it is binding and needs no checking. And when a test
-covers a code path, check that a caller actually takes it — **an unused default is not a
-simplification, it is a second implementation with no users and no scrutiny.**
+Where a request restates how something works, run it and look. Where it states what he
+WANTS, it is binding and needs no checking.
+
+## Encode your own judgement as a NOTE, not as STRUCTURE (2026-09-05)
+
+Asked for per-meal grains, I decided risotto could not be batch-cooked — a defensible call
+he had not asked for — and built it as structure: a `to_order` flag, a filter, a second
+card shape, a fresh-list branch, three guards and two tests. He batches it. Unwinding took
+a whole version; as one line of text on the card his correction would have been a string
+edit. **The cost of being wrong is proportional to how deeply you encoded it** — when the
+opinion is yours rather than his, take the cheapest representation that still says it.
 
 ## A guard can only see the defect it was shaped for
 

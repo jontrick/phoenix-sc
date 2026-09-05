@@ -86,10 +86,10 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
         holding carbs, not a regression. Each row states the cost and says it is not made
         up. The alternative is routing the fat through the evening oil, the channel every
         other swap uses. **His call; until he makes it, visible-but-uncompensated stands.**
-      On the phone: pick "nothing" at 04:15 and confirm the day still hits its carb target;
-      pick three grains in a week and confirm the prep plan lists three pots and the list
-      buys each separately. The nut butter selector disappears from week 10 by design, and
-      sushi rice and arborio were ALREADY selectable — .305 built their missing prep.
+      On the phone: pick "nothing" at 04:15 and confirm the day still hits its carbs; pick
+      three grains and confirm the prep plan lists three pots and the list buys each
+      separately. Nut butter's selector goes at week 10 by design; sushi and arborio were
+      ALREADY selectable, .305 built their missing prep, .306 rebatched risotto per him.
 
 - [ ] JON — **Two week badges, top right of Today (v4.9.301).** Was one pill reading
       "WEEK 1" under a Week 3 session. **What to watch:** it should now read `TRAIN W3`,

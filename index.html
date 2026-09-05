@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.304';
+var APP_VERSION='4.9.305';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21056,8 +21056,14 @@ var _NUT_RICE = [
   { id:'jasmine',  name:'Jasmine',          c100:29.0, p100:2.7, f100:0.3, expand:3.0 , water:1.5, mins:12, tip:'Rinse first. Rest 10 min covered' },
   { id:'longgrain',name:'Long-grain white', c100:28.5, p100:2.7, f100:0.3, expand:3.0 , water:1.6, mins:15, tip:'Rest 5 min covered' },
   { id:'brown',    name:'Brown, long grain',c100:23.0, p100:2.6, f100:0.9, expand:2.7 , water:2.2, mins:28, tip:'Longer and wetter than white. Rest 10 min' },
-  { id:'arborio',  name:'Arborio, plain',   c100:28.0, p100:2.4, f100:0.3, expand:3.0 , water:2.0, mins:18, tip:'Stir occasionally so it does not catch' },
-  { id:'sushi',    name:'Sushi, short grain',c100:29.0, p100:2.4, f100:0.2, expand:2.7 , water:1.2, mins:12, tip:'Rinse hard. Rest 10 min covered, then fold through' },
+  // COOKED TO ORDER, NOT BATCHED. Risotto is finished by stirring stock in a
+  // ladle at a time; a tub of it reheated on Wednesday is glue. The prep plan
+  // and the recipe cards both say so rather than listing it beside the rice.
+  { id:'arborio',  name:'Arborio (risotto)',c100:28.0, p100:2.4, f100:0.3, expand:3.0 , water:3.0, mins:20, to_order:true, tip:'Stock a ladle at a time, stirring, until it is just short of soft' },
+  // Seasoned, and the seasoning is not free — see `season_c`.
+  { id:'sushi',    name:'Sushi, short grain',c100:29.0, p100:2.4, f100:0.2, expand:2.7 , water:1.2, mins:12, tip:'Rinse hard. Rest 10 min covered, then fold through',
+    season:'Season while still warm: 5 parts rice vinegar to 2 sugar to 1 salt, about 60 ml per 300 g dry. Fold it through with a cutting motion — stirring turns it to paste.',
+    season_c:8 },
   { id:'wild',     name:'Wild rice',        c100:21.0, p100:4.0, f100:0.3, expand:3.2 , water:3.0, mins:45, tip:'Nearly ready when the grains split' },
   { id:'quinoa',   name:'Quinoa',           c100:21.0, p100:4.4, f100:1.9, expand:3.0 , water:2.0, mins:15, tip:'Rinse to take the bitterness off. Rest 5 min, fork through' }
 ];
@@ -21404,16 +21410,22 @@ function nutProgMealsOn(dateKey, riceId){
         name = gp.n; grams = gp.g; unit = '';
         mac = { k: gp.k * gp.g / 100, p: gp.p * gp.g / 100, c: gp.c * gp.g / 100, f: gp.f * gp.g / 100 };
       }
-      // Rice is the one item whose weight depends on a choice rather than the phase.
-      // Its macros MUST come from the chosen grain, not from the plate row — brown
-      // is 23 g carbs per 100 g against basmati's 28, so reusing the row's figure
-      // would count a correctly-resized portion as a third more carbohydrate.
-      if(it.n === 'Rice' && riceId){
-        var carbs = it.c * g / 100;                    // hold the carbohydrate
-        var r = nutProgRiceFor(riceId, carbs / _NUT_BLOCK_G);
-        if(r){
-          name = r.name; grams = r.cooked_g;
-          mac = { k: r.carbs_g * 4 + r.p * 4 + r.f * 9, p: r.p, c: r.carbs_g, f: r.f };
+      // The grain, chosen PER MEAL since v4.9.305. Its macros MUST come from the
+      // chosen grain and not from the plate row — brown is 23 g carbs per 100 g
+      // against basmati's 28, so reusing the row's figure would count a
+      // correctly-resized portion as a third more carbohydrate. `riceId` is now
+      // the FALLBACK rather than the answer: a meal with no pick of its own gets
+      // it, which is why every caller that passed one still behaves as before.
+      var _gSlot = _NUT_PROG_GRAIN_SLOTS[M.id];
+      if(_gSlot && it.n === _gSlot.item){
+        var _gid = nutProgGrainOn(dateKey, M.id, riceId);
+        if(_gid && _gid !== _NUT_GRAIN_KEEP){
+          var carbs = it.c * g / 100;                  // hold the carbohydrate
+          var r = nutProgRiceFor(_gid, carbs / _NUT_BLOCK_G);
+          if(r){
+            name = r.name; grams = r.cooked_g; unit = ' cooked';
+            mac = { k: r.carbs_g * 4 + r.p * 4 + r.f * 9, p: r.p, c: r.carbs_g, f: r.f };
+          }
         }
       }
       if(it.n === 'Olive oil'){
@@ -21601,6 +21613,67 @@ function nutProgSetRice(riceId){
   return true;
 }
 
+// ── grain, PER MEAL ────────────────────────────────────────────────────────
+// v4.9.305. Jon: sushi rice for Monday lunch, risotto for Wednesday dinner,
+// long grain for Friday. One grain a week was a deliberate simplification when
+// the picker was built in .290 — "seven pots is not a plan Jon would follow
+// twice" — and he has now asked for the other thing, so the constraint goes and
+// the PREP PLAN carries the cost instead: it lists every grain the week uses,
+// each with its own water and time, so three pots is three lines rather than a
+// surprise on Sunday afternoon.
+//
+// TWO SLOTS, NOT ONE. Lunch has always been a grain. Dinner's carb is the sweet
+// potato, so the dinner selector's default is KEEPING IT — the grains are
+// alternatives to it, not a replacement for it. Without that option the choice
+// would be seven grains and no way back to the plan as written.
+var _NUT_GRAIN_KEEP = 'keep';                      // dinner: leave the sweet potato
+var _NUT_PROG_GRAIN_SLOTS = {
+  lunch:  { item:'Rice',         label:'Lunch grain',
+            blurb:'Batch-cooked Sunday. The carbohydrate is fixed, so the WEIGHT moves with the grain.' },
+  dinner: { item:'Sweet potato', label:'Dinner carb', keep:true,
+            blurb:'Sweet potato unless you swap it. A grain here holds the same carbohydrate.' }
+};
+
+// The grain for one meal on one day. Falls back to the week's default, so a day
+// never renders without a portion weight and the existing weekly picker keeps
+// working exactly as it did.
+function nutProgGrainOn(dateKey, mealId, fallbackId){
+  var slot = _NUT_PROG_GRAIN_SLOTS[mealId];
+  if(!slot) return null;
+  var ns  = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  var pick = day && day.prog_grain && day.prog_grain[mealId];
+  if(pick === _NUT_GRAIN_KEEP && slot.keep) return _NUT_GRAIN_KEEP;
+  if(_nutRiceById(pick)) return pick;
+  if(slot.keep) return _NUT_GRAIN_KEEP;            // dinner defaults to the plate
+  return _nutRiceById(fallbackId) ? fallbackId : nutProgRiceChoice();
+}
+
+function nutProgSetGrain(dateKey, mealId, grainId){
+  var slot = _NUT_PROG_GRAIN_SLOTS[mealId];
+  if(!dateKey || !slot) return false;
+  if(grainId === _NUT_GRAIN_KEEP){ if(!slot.keep) return false; }
+  else if(!_nutRiceById(grainId)) return false;
+  var ns = nutGetState();
+  var day = _nutProgDay(ns, dateKey);
+  if(!day) return false;
+  if(!day.prog_grain) day.prog_grain = {};
+  day.prog_grain[mealId] = grainId;
+  nutSaveState(ns);
+  return true;
+}
+
+// What a meal's grain choice can be, for the sheet. `keep` first where it
+// applies, because the plate as written is the thing to come back to.
+function nutProgGrainOpts(mealId){
+  var slot = _NUT_PROG_GRAIN_SLOTS[mealId];
+  if(!slot) return [];
+  var out = [];
+  if(slot.keep) out.push({ id:_NUT_GRAIN_KEEP, name:slot.item, keep:true });
+  for(var i = 0; i < _NUT_RICE.length; i++) out.push(_NUT_RICE[i]);
+  return out;
+}
+
 // ── the Today card ─────────────────────────────────────────────────────────
 // v4.9.277. Renders the programme day. Drawn from nutProgMealsOn, so it can
 // never disagree with the shopping list or the prep plan — they read the same
@@ -21750,12 +21823,24 @@ function _nutProgPlateRow(name){
 }
 
 // One week's shopping, in raw weights, grouped by shelf.
+// "2 lunches and 1 dinner" — the grain steps and cards say what a weight is FOR,
+// because "97 g dry" means nothing without knowing it feeds one meal.
+function _nutProgGrainMealsPhrase(g){
+  var by = (g && g.by_meal) || {};
+  var bits = [];
+  ['lunch', 'dinner'].forEach(function(m){
+    if(!by[m]) return;
+    bits.push(by[m] + ' ' + (by[m] === 1 ? m : (m === 'lunch' ? 'lunches' : m + 's')));
+  });
+  return bits.join(' and ') || (g.meals + ' meals');
+}
+
 function nutProgShoppingFor(week, riceId){
   var days = _nutProgWeekDates(week);
   if(week === 0 && !days) return null;
   if(!days) return null;
   var rice = _nutRiceById(riceId) ? riceId : nutProgRiceChoice();
-  var tally = {}, formulas = {};
+  var tally = {}, formulas = {}, grainMeals = {};
 
   days.forEach(function(d){
     var meals = nutProgMealsOn(d, rice);
@@ -21766,6 +21851,13 @@ function nutProgShoppingFor(week, riceId){
         var key = it.n;
         if(!tally[key]) tally[key] = { n:key, cooked:0, u:it.u };
         tally[key].cooked += it.g;
+        // How many MEALS this grain has to feed, and which. A grain chosen for
+        // one Monday lunch is one portion, not seven.
+        if(_nutRiceByName(key)){
+          if(!grainMeals[key]) grainMeals[key] = { total:0, by:{} };
+          grainMeals[key].total++;
+          grainMeals[key].by[m.id] = (grainMeals[key].by[m.id] || 0) + 1;
+        }
       });
     });
   });
@@ -21775,12 +21867,15 @@ function nutProgShoppingFor(week, riceId){
     var t = tally[k];
     // Only a real grain may borrow the Rice row's conversion. Anything else with
     // no row of its own is bought exactly as the plate lists it.
-    var row = _nutProgPlateRow(k) || (_nutRiceByName(k) ? _nutProgPlateRow('Rice') : null);
+    var _gr = _nutRiceByName(k);
+    var row = _nutProgPlateRow(k) || (_gr ? _nutProgPlateRow('Rice') : null);
     var grp = (row && row.grp) || _nutProgSwapShelf(k) || 'produce';
     var qty = t.cooked, unit = 'g', note = '';
 
     if(row && row.rice){
-      var r = _nutRiceById(rice);
+      // ITS OWN expansion, not the week's. Wild swells 3.2x and sushi 2.7x, so
+      // borrowing one figure for both under-buys one and over-buys the other.
+      var r = _gr || _nutRiceById(rice);
       if(r){
         qty = Math.round(t.cooked / r.expand);
         note = Math.round(t.cooked) + ' g cooked';
@@ -21805,7 +21900,20 @@ function nutProgShoppingFor(week, riceId){
     groups[grp].push({ n:k, qty:qty, unit:unit, note:note });
   });
 
-  var out = { week: week, rice: rice, from: days[0], to: days[6], groups: [], formulas: [] };
+  var out = { week: week, rice: rice, from: days[0], to: days[6], groups: [], formulas: [], grains: [] };
+  // Every grain the week actually uses, in the order the table lists them, each
+  // with the DRY weight to buy. One place, so the prep plan and the batch cards
+  // read the same list rather than deriving it twice and drifting apart.
+  _NUT_RICE.forEach(function(g){
+    var t2 = tally[g.name];
+    if(!t2 || !(t2.cooked > 0)) return;
+    var gm = grainMeals[g.name] || { total:0, by:{} };
+    out.grains.push({ id:g.id, name:g.name, dry_g:Math.round(t2.cooked / g.expand),
+                      cooked_g:Math.round(t2.cooked), water:g.water, mins:g.mins,
+                      tip:g.tip, to_order:!!g.to_order, season:g.season || null,
+                      season_c:g.season_c || 0,
+                      meals:gm.total, by_meal:gm.by });
+  });
   _NUT_PROG_GROUPS.forEach(function(g){
     if(!groups[g.id] || !groups[g.id].length) return;
     groups[g.id].sort(function(a, b){ return b.qty - a.qty; });
@@ -21826,9 +21934,11 @@ function nutProgPrepFor(week, riceId){
         if(shop.groups[i].items[j].n === name) return shop.groups[i].items[j];
     return null;
   };
-  var r = _nutRiceById(shop.rice);
   var chicken = find('Chicken breast');
-  var riceRow = r ? find(r.name) : null;
+  // Every grain the week uses. Batched ones get a step each; risotto does not
+  // get a step at all, because it is not batched — see below.
+  var batchGrains = (shop.grains || []).filter(function(g){ return !g.to_order; });
+  var orderGrains = (shop.grains || []).filter(function(g){ return  g.to_order; });
   var spud    = find('Sweet potato');
   var days    = _nutProgWeekDates(week);
   var lunches = 0, dinners = 0;
@@ -21837,14 +21947,28 @@ function nutProgPrepFor(week, riceId){
     ms.forEach(function(m){ if(m.id === 'lunch') lunches++; if(m.id === 'dinner') dinners++; });
   });
   var out = { week: week, window: nutProgPrepWindow(week), batches: [], fresh: [] };
-  if(chicken && riceRow){
+  if(chicken || batchGrains.length){
+    var steps = [];
+    if(chicken) steps.push('Roast ' + chicken.qty + ' g raw chicken — yields about ' + (chicken.note || ''));
+    // A LINE PER GRAIN, each with its own water and time. Three grains in a week
+    // is three pots, and the plan says so on the Wednesday rather than letting
+    // him find out on the Sunday with one pan on the hob.
+    batchGrains.forEach(function(g){
+      steps.push('Cook ' + g.dry_g + ' g dry ' + g.name.toLowerCase() + ' in ' +
+                 Math.round(g.dry_g * g.water) + ' ml water, ' + g.mins +
+                 ' min — ' + g.cooked_g + ' g cooked, for ' + _nutProgGrainMealsPhrase(g) +
+                 (g.season ? '. Then season it while warm' : ''));
+    });
+    var _dinnerGrain = batchGrains.some(function(g){ return (g.by_meal || {}).dinner; });
     out.batches.push({
-      name: 'Lunch × ' + lunches, portions: lunches,
-      steps: [
-        'Roast ' + chicken.qty + ' g raw chicken — yields about ' + (chicken.note || '') ,
-        'Cook ' + riceRow.qty + ' g dry ' + r.name.toLowerCase() + ' — ' + (riceRow.note || '')
-      ],
-      note: 'Avocado and vegetables go in fresh each day — avocado browns.'
+      name: 'Lunch × ' + lunches + (_dinnerGrain ? ', plus a dinner grain' : ''),
+      portions: lunches,
+      steps: steps,
+      note: (batchGrains.length > 1
+              ? batchGrains.length + ' grains this week, so ' + batchGrains.length +
+                ' separate pots — label them. '
+              : '') +
+            'Avocado and vegetables go in fresh each day — avocado browns.'
     });
   }
   if(spud){
@@ -21857,9 +21981,17 @@ function nutProgPrepFor(week, riceId){
   out.fresh = [
     { n:'Pre-training',  why:'a banana' },
     { n:'Post-training', why:'made fresh, three minutes' },
-    { n:'Mid-morning',   why:'yoghurt and almonds, weighed' },
+    { n:'Mid-morning',   why:'yoghurt and nuts, weighed' },
     { n:'Afternoon',     why:'a tin, cakes and a jar' }
   ];
+  // NOT BATCHED, AND SAYING SO IS THE POINT. Risotto is finished by stirring
+  // stock in a ladle at a time and goes to paste reheated, so listing it beside
+  // the rice would put a grain in the Sunday batch that cannot survive to
+  // Wednesday. It appears here instead, with the weight for the night it is on.
+  orderGrains.forEach(function(g){
+    out.fresh.push({ n:g.name, why:'cooked to order — ' + g.dry_g +
+      ' g dry across the week, about ' + g.mins + ' min a time. Reheated risotto is paste' });
+  });
   return out;
 }
 
@@ -22248,6 +22380,62 @@ function nutOpenSwapSheet(forDate){
     h += '</div>';
   });
 
+  // The grain, meal by meal. Rendered separately from the option lists above
+  // because the useful number here is the WEIGHT each grain lands on the plate
+  // for THIS day's phase — the same carbohydrate, a different amount of food.
+  if(typeof nutProgGrainOpts === 'function'){
+    var _gt = nutProgTargetsOn(today);
+    var _gix = _gt ? (_gt.phase_n - 1) : 0;
+    Object.keys(_NUT_PROG_GRAIN_SLOTS).forEach(function(mealId){
+      var slot = _NUT_PROG_GRAIN_SLOTS[mealId];
+      var prow = _nutProgPlateRow(slot.item);
+      if(!prow || !(prow.g[_gix] > 0)) return;     // not on the plate this phase
+      var baseC = prow.c * prow.g[_gix] / 100;
+      var cur = nutProgGrainOn(today, mealId, nutProgRiceChoice());
+      // Dinner's reference is the sweet potato itself; lunch's is the week's
+      // default grain, because that is what the shopping list already has in it.
+      var _gBaseName, _gBase;
+      if(slot.keep){
+        _gBaseName = slot.item;
+        _gBase = { p: prow.p * prow.g[_gix] / 100, f: prow.f * prow.g[_gix] / 100 };
+      } else {
+        var _bid = nutProgRiceChoice();
+        var _bq  = nutProgRiceFor(_bid, baseC / _NUT_BLOCK_G);
+        var _br  = _nutRiceById(_bid);
+        _gBaseName = _br ? _br.name : 'the default';
+        _gBase = _bq ? { p:_bq.p, f:_bq.f } : null;
+      }
+      h += '<div style="margin-bottom:16px;">';
+      h += '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + slot.label + '</div>';
+      nutProgGrainOpts(mealId).forEach(function(o){
+        var on = (cur === o.id);
+        var q  = o.keep ? null : nutProgRiceFor(o.id, baseC / _NUT_BLOCK_G);
+        var sub = o.keep
+          ? (Math.round(prow.g[_gix]) + ' g as the plan is written')
+          : (q ? (q.cooked_g + ' g cooked &middot; ' + q.dry_g + ' g dry &middot; same ' + q.carbs_g + ' g carbs') : '');
+        if(!o.keep && o.to_order) sub += ' &middot; cooked to order, not batched';
+        // What it costs relative to the slot's default. Carbohydrate is held, so
+        // this is always protein and fat, and on quinoa it is worth seeing.
+        if(q && _gBase){
+          var dp = Math.round((q.p - _gBase.p) * 10) / 10;
+          var df = Math.round((q.f - _gBase.f) * 10) / 10;
+          var costs = [];
+          if(Math.abs(dp) >= 1) costs.push((dp > 0 ? '+' : '') + dp + ' g protein');
+          if(Math.abs(df) >= 1) costs.push((df > 0 ? '+' : '') + df + ' g fat');
+          if(costs.length) sub += '<br><span style="color:var(--gold);">' + costs.join(' &middot; ') +
+            ' against ' + _gBaseName + ', which nothing makes up</span>';
+        }
+        h += '<div data-nut-grain="' + mealId + '|' + o.id + '" style="display:flex;align-items:center;gap:10px;padding:11px 12px;margin-bottom:6px;background:' + (on ? 'rgba(200,150,62,0.12)' : 'var(--bg2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';border-radius:9px;cursor:pointer;touch-action:manipulation;">' +
+          '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-size:13px;font-weight:600;color:var(--text);">' + (o.keep ? o.name : o.name) + '</div>' +
+            '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + sub + '</div>' +
+          '</div></div>';
+      });
+      h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">' + slot.blurb + '</div></div>';
+    });
+  }
+
   if(typeof nutProgPreOn === 'function' && nutProgIsLiftDay(today)){
     var curPre = nutProgPreOn(today);
     h += '<div style="margin-bottom:16px;">';
@@ -22292,6 +22480,15 @@ function nutOpenSwapSheet(forDate){
   ov.querySelectorAll('[data-nut-pre]').forEach(function(row){
     row.addEventListener('click', function(){
       if(nutProgSetPre(today, row.getAttribute('data-nut-pre'))){
+        ov.remove();
+        if(typeof nutRenderScreen === 'function') nutRenderScreen();
+      }
+    });
+  });
+  ov.querySelectorAll('[data-nut-grain]').forEach(function(row){
+    row.addEventListener('click', function(){
+      var parts = String(row.getAttribute('data-nut-grain')).split('|');
+      if(nutProgSetGrain(today, parts[0], parts[1])){
         ov.remove();
         if(typeof nutRenderScreen === 'function') nutRenderScreen();
       }
@@ -22671,24 +22868,58 @@ function nutProgBatchRecipes(week){
         if(shop.groups[i].items[j].n === n) return shop.groups[i].items[j];
     return null;
   };
-  var out = [], r = _nutRiceById(shop.rice);
+  var out = [];
 
-  var grain = r ? find(r.name) : null;
-  if(grain && r){
-    var water = Math.round(grain.qty * r.water);
+  // ONE CARD PER GRAIN THE WEEK USES. Ids are grain_<id> rather than a single
+  // 'grain', because a week can now legitimately use three and two cards
+  // answering to the same id is how one of them goes missing.
+  (shop.grains || []).forEach(function(g){
+    var water = Math.round(g.dry_g * g.water);
+    if(g.to_order){
+      // A DIFFERENT CARD, not a variant of the batch one. Nothing here is
+      // portioned into containers, and the quantity is per night rather than
+      // for the week, because that is how it will actually be cooked.
+      out.push({
+        id:'grain_' + g.id, name:g.name, portions:g.meals, to_order:true,
+        headline: g.dry_g + ' g dry across the week — cooked to order',
+        yields: 'about ' + g.cooked_g + ' g cooked in total',
+        steps: [
+          'NOT a Sunday batch. Reheated risotto is paste — cook it on the night.',
+          'For ' + _nutProgGrainMealsPhrase(g) + ' — weigh each night\'s share dry, ' +
+            Math.round(g.dry_g / Math.max(1, g.meals)) + ' g a time. Toast it in the pan for a minute first.',
+          'Have about ' + g.water + ' times its weight in hot stock ready — ' + water +
+            ' ml for the full ' + g.dry_g + ' g.',
+          'Add the stock a ladle at a time, stirring, waiting for each to go before the next.',
+          g.tip + '. About ' + g.mins + ' minutes in total.',
+          'STOCK IS NOT FREE: a cube is roughly 1 g of carbohydrate and a gram of ' +
+            'fat, which the plan does not count. Use a low-salt one and keep it thin.'
+        ]
+      });
+      return;
+    }
+    var steps = [
+      'Weigh ' + g.dry_g + ' g dry and add ' + water + ' ml water — a ratio of 1 : ' + g.water + ' by weight.',
+      'Bring to the boil uncovered, then cover and drop to the lowest simmer.',
+      'Simmer ' + g.mins + ' minutes. Do not lift the lid.',
+      g.tip + '.'
+    ];
+    if(g.season){
+      steps.push(g.season);
+      // The seasoning carries sugar. Saying how much beats pretending it does
+      // not, and beats silently adding it to a plan he weighs everything else in.
+      steps.push('THE SEASONING IS NOT COUNTED in the day\'s macros: about ' +
+                 g.season_c + ' g of carbohydrate per 100 g of dry rice, so roughly ' +
+                 Math.round(g.dry_g * g.season_c / 100) + ' g across this ' + g.dry_g +
+                 ' g. Use a granulated sweetener instead if you would rather not spend it.');
+    }
+    steps.push('Portion into ' + g.meals + ' while warm — it separates better than cold.');
     out.push({
-      id:'grain', name:r.name, portions:7,
-      headline: grain.qty + ' g dry : ' + water + ' ml water',
-      yields: (grain.note || ''),
-      steps: [
-        'Weigh ' + grain.qty + ' g dry and add ' + water + ' ml water — a ratio of 1 : ' + r.water + ' by weight.',
-        'Bring to the boil uncovered, then cover and drop to the lowest simmer.',
-        'Simmer ' + r.mins + ' minutes. Do not lift the lid.',
-        r.tip + '.',
-        'Portion into 7 containers while warm — it separates better than cold.'
-      ]
+      id:'grain_' + g.id, name:g.name, portions:g.meals,
+      headline: g.dry_g + ' g dry : ' + water + ' ml water',
+      yields: g.cooked_g + ' g cooked, for ' + _nutProgGrainMealsPhrase(g),
+      steps: steps
     });
-  }
+  });
 
   var chicken = find('Chicken breast');
   if(chicken){
@@ -22983,7 +23214,7 @@ function _nutProgCarbPickerCard(week){
   var blocks = 2.75;                                  // lunch, phase 1 — a fair comparison
   var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:14px;">' +
     '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Carb base &mdash; this week</div>' +
-    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">One grain for the week &mdash; the Sunday batch is cooked in a single pot</div>';
+    '<div style="font-size:10px;color:var(--text3);margin-top:2px;">The DEFAULT for every lunch this week. Any single meal can be changed from Substitutions &mdash; the prep plan then lists a pot for each grain</div>';
   _NUT_RICE.forEach(function(r){
     var on = (r.id === cur);
     var q = nutProgRiceFor(r.id, blocks);
@@ -23006,6 +23237,20 @@ function _nutProgCarbPickerCard(week){
 // The list already walked the real seven days, so this needed no new arithmetic —
 // only a way to make the choices before the week begins rather than at 19:00 on
 // the night. That is the difference between a plan and a diary.
+// What this day's grains are, in one line. Named rather than implied: a week
+// running three grains and a week running one look the same without it, which
+// is most of why per-meal choice is worth having at all.
+function _nutProgGrainLine(dateKey){
+  var bits = [];
+  Object.keys(_NUT_PROG_GRAIN_SLOTS).forEach(function(mealId){
+    var gid = nutProgGrainOn(dateKey, mealId, nutProgRiceChoice());
+    if(gid === _NUT_GRAIN_KEEP) return;             // the plate as written
+    var g = _nutRiceById(gid);
+    if(g) bits.push(mealId.charAt(0).toUpperCase() + mealId.slice(1) + ': ' + g.name);
+  });
+  return bits.join(' &middot; ');
+}
+
 function _nutProgWeekPickerCard(week){
   var days = _nutProgWeekDates(week);
   if(!days) return '';
@@ -23025,6 +23270,7 @@ function _nutProgWeekPickerCard(week){
         '<div style="font-size:12px;font-weight:700;">' + nm + ' <span style="color:var(--text3);font-weight:400;">' + d.slice(8) + '/' + d.slice(5,7) + '</span></div>' +
         '<div style="font-size:11px;color:var(--gold);margin-top:1px;">' + pr.n + ' ' + pr.g + ' g' +
           '<span style="color:var(--text3);"> &middot; ' + vg.n + '</span></div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' + _nutProgGrainLine(d) + '</div>' +
       '</div>' +
       '<div style="font-size:16px;color:var(--text3);flex-shrink:0;">&rsaquo;</div></div>';
   });

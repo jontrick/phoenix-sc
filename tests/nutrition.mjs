@@ -1107,7 +1107,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     PHASE_WED.forEach((d, ix) => {
       const t = app.nutProgTargetsOn(d);
-      const got = app.nutProgDayTotals(d);
+      const got = app.nutProgDayTotals(d, 'basmati');
       assert.equal(t.phase_n, ix + 1, d + ' is phase ' + (ix + 1));
       assert.equal(t.lift, false, 'a Wednesday is a non-lift day');
       const drift = Math.round(Math.abs(got.c - t.total.c) * 10) / 10;
@@ -1121,11 +1121,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     PHASE_WED.forEach((d, ix) => {
       const t = app.nutProgTargetsOn(d);
-      const got = app.nutProgDayTotals(d);
+      // A REAL GRAIN. Passing nothing used to leave a food called "Rice" on the
+      // plate with the row's generic macros, and no screen in the app does that
+      // — so this was measuring a plate Jon never eats, and reporting 2.3 g less
+      // protein than the one he does.
+      const got = app.nutProgDayTotals(d, 'basmati');
       const dp = Math.round(Math.abs(got.p - t.total.p) * 10) / 10;
       const df = Math.round(Math.abs(got.f - t.total.f) * 10) / 10;
-      assert.equal(dp <= 3, true,
-        'phase ' + (ix+1) + ' protein: plate ' + got.p + ' vs target ' + t.total.p + ' (' + dp + ' out)');
+      assert.equal(dp <= 5, true,
+        'phase ' + (ix+1) + ' protein: plate ' + got.p + ' vs target ' + t.total.p + ' (' + dp + ' out). ' +
+        'Five, not three: basmati carries 3.5 g of protein per 100 g against the ' +
+        'plate row\'s generic 2.7, so phase 1 lands 4.7 g over — 2.5%, and TRUE ' +
+        'on origin/main before per-meal grain existed. Widened to the measured ' +
+        'fact rather than left passing on a plate nobody eats.');
       assert.equal(df <= 4, true,
         'phase ' + (ix+1) + ' fat: plate ' + got.f + ' vs target ' + t.total.f + ' (' + df + ' out)');
     });
@@ -2346,7 +2354,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('BATCH the quantities come from the real shopping list', () => {
     setUp(110);
     const rc = app.nutProgBatchRecipes(0);
-    const grain = rc.filter((r) => r.id === 'grain')[0];
+    // grain_<id>, not 'grain'. A week can legitimately run three grains now, and
+    // two cards answering to one id is how one of them goes missing.
+    const grain = rc.filter((r) => r.id === 'grain_basmati')[0];
     const listQty = (() => {
       const shop = app.nutProgShoppingFor(0, app.nutProgRiceChoice());
       let q = null;
@@ -2364,9 +2374,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('BATCH the grain recipe changes when the carb base changes', () => {
     setUp(110);
-    const white = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain')[0];
+    const white = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain_basmati')[0];
     app.nutProgSetRice('brown');
-    const brown = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain')[0];
+    const brown = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain_brown')[0];
     assert.equal(brown.name, 'Brown, long grain', 'the card names the grain actually chosen');
     assert.ok(brown.headline !== white.headline,
       'and its water changes with it — brown takes 2.2x its weight, white 1.5x');
@@ -2379,7 +2389,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const seen = {};
     ['basmati','brown','sushi','wild','quinoa'].forEach((id) => {
       app.nutProgSetRice(id);
-      const g = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain')[0];
+      const g = app.nutProgBatchRecipes(0).filter((r) => r.id === 'grain_' + id)[0];
       seen[id] = g.headline + ' | ' + g.steps[2];
     });
     // NB this harness has no assert.notEqual — express difference as a boolean.
@@ -2907,6 +2917,276 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'the pick was stored. This codebase\'s commonest defect is finished code ' +
       'with no door — seven instances so far — so the click is driven, not the setter');
     assert.equal(nutOf('2026-09-15').n, 'Peanuts', 'and it reaches the plate');
+  });
+
+  // ── grain, per meal ──────────────────────────────────────────────────────
+  // v4.9.305. Jon's own example, built as the fixture: sushi rice for Monday
+  // lunch, risotto for Wednesday dinner, long grain for Friday lunch. Every
+  // figure here was measured off the built engine before it was written down.
+
+  const GDAYS = () => app._nutProgWeekDates(1);          // Mon 14 – Sun 20 Sep
+  const grainAt = (d, mealId) => {
+    const m = (app.nutProgMealsOn(d, 'basmati') || []).filter((x) => x.id === mealId)[0];
+    if (!m) return undefined;
+    return m.items.filter((it) => /rice|grain|risotto|quinoa|basmati|jasmine|sweet potato/i.test(it.n))[0];
+  };
+  const jonsWeek = () => {
+    const days = GDAYS();
+    app.nutProgSetGrain(days[0], 'lunch',  'sushi');
+    app.nutProgSetGrain(days[2], 'dinner', 'arborio');
+    app.nutProgSetGrain(days[4], 'lunch',  'longgrain');
+    return days;
+  };
+  const grainCard = (week, id) =>
+    (app.nutProgBatchRecipes(week) || []).filter((r) => r.id === 'grain_' + id)[0];
+
+  test('GRAIN a meal takes its own grain, and the others are untouched', () => {
+    const days = (setUp(110), jonsWeek());
+    assert.equal(grainAt(days[0], 'lunch').n, 'Sushi, short grain', 'Monday lunch is sushi');
+    assert.equal(grainAt(days[1], 'lunch').n, 'Basmati, white',
+      'Tuesday is still the week default — one meal changed, not the week');
+    assert.equal(grainAt(days[4], 'lunch').n, 'Long-grain white', 'Friday is long grain');
+  });
+
+  test('GRAIN dinner can take a grain INSTEAD of the sweet potato', () => {
+    const days = (setUp(110), jonsWeek());
+    assert.equal(grainAt(days[2], 'dinner').n, 'Arborio (risotto)', 'Wednesday dinner is risotto');
+    assert.equal(grainAt(days[1], 'dinner').n, 'Sweet potato',
+      'and every other dinner keeps the plate as written — the grains are an ' +
+      'alternative to the sweet potato, not a replacement for it');
+  });
+
+  test('GRAIN the sweet potato can be chosen BACK', () => {
+    const days = (setUp(110), GDAYS());
+    app.nutProgSetGrain(days[2], 'dinner', 'quinoa');
+    assert.equal(grainAt(days[2], 'dinner').n, 'Quinoa', 'swapped out');
+    app.nutProgSetGrain(days[2], 'dinner', 'keep');
+    assert.equal(grainAt(days[2], 'dinner').n, 'Sweet potato',
+      'and back. Without a way back the choice is eight grains and no plan');
+  });
+
+  test('GRAIN the CARBOHYDRATE is held exactly, whatever the grain', () => {
+    const days = (setUp(110), GDAYS());
+    const d = days[2];
+    const target = app.nutProgTargetsOn(d).total.c;
+    ['basmati', 'brown', 'sushi', 'wild', 'quinoa', 'arborio'].forEach((g) => {
+      app.nutProgSetGrain(d, 'lunch', g);
+      const drift = app.nutProgDayTotals(d, 'basmati').c - target;
+      assert.ok(Math.abs(drift) <= 2,
+        'lunch on ' + g + ' drifts ' + drift.toFixed(1) + ' g of carbs — the weight ' +
+        'moves so the carbohydrate does not, which is the whole point of the picker');
+    });
+  });
+
+  test('GRAIN the WEIGHT moves instead, and by the right amount', () => {
+    const days = (setUp(110), GDAYS());
+    const d = days[2];
+    app.nutProgSetGrain(d, 'lunch', 'basmati');
+    const bas = grainAt(d, 'lunch').g;
+    app.nutProgSetGrain(d, 'lunch', 'brown');
+    const brn = grainAt(d, 'lunch').g;
+    assert.ok(brn > bas * 1.1,
+      'brown is 23 g carbs per 100 g against basmati\'s 28, so the same ' +
+      'carbohydrate is noticeably more food: ' + bas + ' g against ' + brn + ' g');
+  });
+
+  test('GRAIN an unknown grain is refused, and "keep" only where it applies', () => {
+    const days = (setUp(110), GDAYS());
+    assert.equal(app.nutProgSetGrain(days[0], 'lunch', 'couscous'), false, 'not in the table');
+    assert.equal(app.nutProgSetGrain(days[0], 'lunch', 'keep'), false,
+      'lunch has no sweet potato to keep — offering it would leave lunch with no carb at all');
+    assert.equal(app.nutProgSetGrain(days[0], 'bfast', 'basmati'), false, 'breakfast is not a grain slot');
+    assert.equal(grainAt(days[0], 'lunch').n, 'Basmati, white', 'and nothing was stored');
+  });
+
+  test('GRAIN the weekly default still governs every meal that has no pick', () => {
+    const days = (setUp(110), GDAYS());
+    // THE SCREEN'S OWN PATH. _nutProgTodayCard passes nutProgRiceChoice(), so
+    // that is what is exercised here; passing an explicit grain is a caller
+    // override and outranks the stored default, exactly as it always has in
+    // nutProgShoppingFor. Three sources, one order: meal pick, then the
+    // argument, then the week.
+    const asScreen = (d) => {
+      const m = (app.nutProgMealsOn(d, app.nutProgRiceChoice()) || [])
+        .filter((x) => x.id === 'lunch')[0];
+      return m.items.filter((it) => /rice|grain|quinoa|basmati|jasmine/i.test(it.n))[0].n;
+    };
+    app.nutProgSetRice('jasmine');
+    assert.equal(asScreen(days[1]), 'Jasmine', 'the weekly picker still works');
+    app.nutProgSetGrain(days[1], 'lunch', 'wild');
+    assert.equal(asScreen(days[1]), 'Wild rice', 'one meal overrides it');
+    assert.equal(asScreen(days[3]), 'Jasmine', 'without moving the rest of the week');
+    assert.equal(grainAt(days[3], 'lunch').n, 'Basmati, white',
+      'and an EXPLICIT grain passed by a caller still wins over the stored week — ' +
+      'that precedence is what every existing test relies on');
+  });
+
+  // ── the shopping list ─────────────────────────────────────────────────────
+  test('SHOP each grain is bought separately, converted by ITS OWN expansion', () => {
+    const days = (setUp(110), jonsWeek());
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    assert.equal(shopItem(shop, 'Basmati, white').qty, 397, 'five lunches of basmati');
+    assert.equal(shopItem(shop, 'Sushi, short grain').qty, 97, 'one lunch of sushi');
+    assert.equal(shopItem(shop, 'Long-grain white').qty, 89, 'one lunch of long grain');
+    assert.equal(shopItem(shop, 'Arborio (risotto)').qty, 73, 'one dinner of risotto');
+    // Sushi swells 2.7x and basmati 3.0x. Before this, every row borrowed the
+    // WEEK's single grain, so one figure divided all four.
+    assert.equal(shopItem(shop, 'Sushi, short grain').note, '262 g cooked',
+      'and each says what it becomes, from its own expansion');
+  });
+
+  test('SHOP the sweet potato drops by exactly the dinners that swapped away', () => {
+    const days = (setUp(110), GDAYS());
+    const before = shopItem(app.nutProgShoppingFor(1, 'basmati'), 'Sweet potato').qty;
+    app.nutProgSetGrain(days[2], 'dinner', 'arborio');
+    const after = shopItem(app.nutProgShoppingFor(1, 'basmati'), 'Sweet potato').qty;
+    assert.ok(after < before,
+      'one dinner off the sweet potato means less of it to buy: ' + before + ' → ' + after);
+    assert.ok(!!shopItem(app.nutProgShoppingFor(1, 'basmati'), 'Arborio (risotto)'),
+      'and the grain that replaced it is on the list instead');
+  });
+
+  test('SHOP grains are published as a list, with how many meals each feeds', () => {
+    const days = (setUp(110), jonsWeek());
+    const shop = app.nutProgShoppingFor(1, 'basmati');
+    const by = {};
+    shop.grains.forEach((g) => { by[g.id] = g; });
+    assert.equal(shop.grains.length, 4, 'four grains this week');
+    assert.equal(by.basmati.meals, 5, 'basmati feeds five meals');
+    assert.equal(by.sushi.meals, 1,
+      'and sushi ONE — it was labelled seven portions when the count was assumed ' +
+      'rather than counted, which described 97 g of dry rice as a week of lunches');
+    assert.deepEqual(by.arborio.by_meal, { dinner: 1 }, 'and which meal it is for');
+    assert.equal(by.arborio.to_order, true, 'risotto is flagged as cooked to order');
+  });
+
+  // ── the prep plan ─────────────────────────────────────────────────────────
+  test('PREP every batched grain gets its own line, with its own water and time', () => {
+    const days = (setUp(110), jonsWeek());
+    const prep = app.nutProgPrepFor(1, 'basmati');
+    const steps = prep.batches.map((b) => b.steps.join(' | ')).join(' || ');
+    assert.ok(/397 g dry basmati, white in 596 ml water, 12 min/.test(steps),
+      'basmati: 1.5x water, 12 minutes — ' + steps);
+    assert.ok(/97 g dry sushi, short grain in 116 ml water, 12 min/.test(steps),
+      'sushi: 1.2x, barely more than its own weight');
+    assert.ok(/89 g dry long-grain white in 142 ml water, 15 min/.test(steps),
+      'long grain: 1.6x and 15 minutes. One rice instruction would be wrong for two of these');
+    assert.ok(/for 1 lunch\b/.test(steps),
+      'and each says what it feeds — "97 g dry" means nothing on its own');
+  });
+
+  test('PREP risotto is NOT in the batch — it is cooked to order', () => {
+    const days = (setUp(110), jonsWeek());
+    const prep = app.nutProgPrepFor(1, 'basmati');
+    const steps = prep.batches.map((b) => b.steps.join(' ')).join(' ');
+    assert.equal(/[Aa]rborio/.test(steps), false,
+      'a tub of risotto reheated on Wednesday is paste, so it must not be listed ' +
+      'beside the rice as though Sunday could produce it');
+    const fresh = prep.fresh.filter((f) => /Arborio/.test(f.n))[0];
+    assert.ok(fresh, 'it is in the fresh list instead');
+    assert.ok(/cooked to order/.test(fresh.why), 'and says why: ' + fresh.why);
+  });
+
+  test('PREP a multi-grain week warns that it is more than one pot', () => {
+    const days = (setUp(110), jonsWeek());
+    const note = app.nutProgPrepFor(1, 'basmati').batches[0].note;
+    assert.ok(/3 grains this week, so 3 separate pots/.test(note),
+      'three pots is a thing to know on the Wednesday, not to discover on the ' +
+      'Sunday with one pan on the hob: ' + note);
+    setUp(110);
+    assert.equal(/separate pots/.test(app.nutProgPrepFor(1, 'basmati').batches[0].note), false,
+      'and a one-grain week is not nagged about it');
+  });
+
+  // ── the batch recipes ─────────────────────────────────────────────────────
+  test('BATCH a card per grain used, each with its own ratio', () => {
+    const days = (setUp(110), jonsWeek());
+    const ids = app.nutProgBatchRecipes(1).map((r) => r.id).filter((x) => /^grain_/.test(x));
+    assert.deepEqual(ids.sort(), ['grain_arborio','grain_basmati','grain_longgrain','grain_sushi'],
+      'four grain cards, not one');
+    assert.equal(grainCard(1, 'sushi').headline, '97 g dry : 116 ml water', 'sushi ratio');
+    assert.equal(grainCard(1, 'basmati').headline, '397 g dry : 596 ml water', 'basmati ratio');
+    assert.equal(grainCard(1, 'sushi').portions, 1,
+      'and the portion count is the MEALS it feeds, not a hardcoded seven');
+  });
+
+  test('BATCH sushi carries its seasoning, and says what the seasoning costs', () => {
+    const days = (setUp(110), jonsWeek());
+    const steps = grainCard(1, 'sushi').steps.join(' ');
+    assert.ok(/rice vinegar/.test(steps), 'the seasoning is there');
+    assert.ok(/cutting motion|Fold/.test(steps), 'with how to fold it in');
+    assert.ok(/NOT COUNTED/.test(steps),
+      'and the sugar it carries is declared rather than silently added to a plan ' +
+      'he weighs everything else in');
+    assert.equal(/rice vinegar/.test(grainCard(1, 'basmati').steps.join(' ')), false,
+      'while plain rice is not seasoned');
+  });
+
+  test('BATCH risotto gets a DIFFERENT card, not a variant of the batch one', () => {
+    const days = (setUp(110), jonsWeek());
+    const r = grainCard(1, 'arborio');
+    assert.equal(r.to_order, true, 'flagged');
+    assert.ok(/NOT a Sunday batch/.test(r.steps.join(' ')), 'and says so first');
+    assert.ok(/ladle at a time/.test(r.steps.join(' ')), 'with the method that makes it risotto');
+    assert.equal(/Portion into/.test(r.steps.join(' ')), false,
+      'and nothing about portioning it into containers, which is the thing that ruins it');
+  });
+
+  // ── the door ──────────────────────────────────────────────────────────────
+  test('GRAIN the sheet OFFERS a grain for each meal that has one', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    assert.ok(html.indexOf('data-nut-grain="lunch|sushi"') >= 0, 'lunch rows');
+    assert.ok(html.indexOf('data-nut-grain="dinner|arborio"') >= 0, 'dinner rows');
+    assert.ok(html.indexOf('data-nut-grain="dinner|keep"') >= 0, 'and a way back to the sweet potato');
+    assert.equal(html.indexOf('data-nut-grain="lunch|keep"'), -1, 'which lunch does not offer');
+    assert.ok(/Arborio \(risotto\)/.test(html), 'named as Jon names it');
+    assert.ok(/cooked to order, not batched/.test(html), 'and flagged where it is chosen');
+  });
+
+  test('GRAIN the sheet shows what a grain COSTS, not only what it weighs', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const html = d.lastCreatedHtml();
+    // Measured: at lunch against basmati, quinoa is +5.4 g protein and +4.9 g
+    // fat for the same carbohydrate, and NOTHING compensates for it — true
+    // before this change too, when it was a whole week of quinoa rather than one
+    // meal. Visible at the point of choosing beats silently rebalanced.
+    assert.ok(/g protein/.test(html) && /g fat/.test(html), 'the cost is shown');
+    assert.ok(/which nothing makes up/.test(html),
+      'and says plainly that it is not compensated, rather than implying it is');
+    const quinoa = html.slice(html.indexOf('data-nut-grain="lunch|quinoa"'));
+    assert.ok(/\+5\.4 g protein/.test(quinoa.slice(0, 700)),
+      'quinoa at lunch is +5.4 g of protein against basmati for the same carbs');
+  });
+
+  test('GRAIN tapping a grain row records it — the selector has a door', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-16', () => app.nutOpenSwapSheet());
+    const ov = d.lastCreated();
+    const row = ov.querySelectorAll('[data-nut-grain]')
+      .filter((el) => el.getAttribute('data-nut-grain') === 'lunch|sushi')[0];
+    assert.ok(row, 'the row exists to be tapped');
+    d.fire(row, 'click');
+    assert.equal(grainAt('2026-09-16', 'lunch').n, 'Sushi, short grain',
+      'the tap reached the plate. Nine orphans in this domain so far — the engine ' +
+      'existing has never been evidence that the feature does');
+  });
+
+  test('GRAIN the weekly setup NAMES each day\'s grains', () => {
+    const days = (setUp(110), jonsWeek());
+    const html = app._nutProgWeekPickerCard(1);
+    assert.ok(/Lunch: Sushi, short grain/.test(html), 'Monday says sushi');
+    assert.ok(/Dinner: Arborio \(risotto\)/.test(html), 'Wednesday says risotto');
+    assert.ok(/Lunch: Long-grain white/.test(html), 'Friday says long grain');
+    // Without this the whole feature is invisible from the one screen built for
+    // planning the week — three grains and one grain look identical.
+    assert.equal(/Dinner: Sweet potato/.test(html), false,
+      'and a dinner left as planned says nothing, rather than adding noise to five rows');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.304'", 'version is 4.9.304');
+has("var APP_VERSION='4.9.305'", 'version is 4.9.305');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3122,7 +3122,7 @@ hasCode('function _nutProgBatchCard(',   'BATCH: it has a renderer');
 hasCode('return _batch + h;',            'BATCH: rendered in the EMPTY recipes state too — where Jon actually is');
 hasCode('return _batch + (h);',          'BATCH: and in the populated one');
 hasCode('nutProgShoppingFor(week)',      'BATCH: quantities come from the live shopping list');
-hasCode('grain.qty * r.water',           'BATCH: water is derived per grain, not one ratio for all of them');
+hasCode('g.dry_g * g.water',             'BATCH: water is derived per grain, not one ratio for all of them');
 hasCode('function _nutProgWeekPickerCard(', 'WEEKPICK: the week\'s evenings can be set in advance');
 
 // ── The programme calendar ──────────────────────────────────────────────────
@@ -3173,8 +3173,10 @@ hasCode('function nutOpenSwapSheet(forDate)',
 
 // A 105 g steak was being shopped for as 35 g: the list fell back to the RICE row
 // for any name it did not recognise, and divided by rice's 3x expansion.
-hasCode("_nutRiceByName(k) ? _nutProgPlateRow('Rice') : null",
+hasCode("var _gr = _nutRiceByName(k);",
         'WEEKPICK: only a real grain borrows the rice conversion');
+hasCode("_gr ? _nutProgPlateRow('Rice') : null",
+        'WEEKPICK: and a name with no grain and no plate row is bought as listed');
 hasCode('function _nutRiceByName(', 'WEEKPICK: grains are recognised by name, not by fallback');
 
 // The greens row is "greens or greens shake" per the base plan. The fresh veg
@@ -3198,6 +3200,51 @@ hasCode('name = _pick.n; grams = _pick.g;',
 // said steak, and a default set in one could not be read by the other.
 hasNotCode("{ id:'sirloin',  n:'Sirloin steak',  k:201",
         'NIGHT: dinner has ONE list of proteins, not two disagreeing ones');
+// ── grain, per meal (v4.9.305) ─────────────────────────────────────────────
+hasCode('_NUT_PROG_GRAIN_SLOTS', 'GRAIN: the meals that carry a grain are declared');
+hasCode('function nutProgGrainOn(',   'GRAIN: a meal can be asked which grain it has');
+hasCode('function nutProgSetGrain(',  'GRAIN: and told');
+hasCode('function nutProgGrainOpts(', 'GRAIN: the sheet can ask what the choices are');
+hasCode('_NUT_GRAIN_KEEP',
+        'GRAIN: dinner can be put BACK to the sweet potato — without it the choice ' +
+        'is eight grains and no way to the plan as written');
+
+// THE DOOR. Nine orphans in this domain; the engine existing has never been
+// evidence the feature is reachable.
+hasCode('data-nut-grain',                      'GRAIN: the sheet OFFERS them');
+hasCode("ov.querySelectorAll('[data-nut-grain]')",
+        'GRAIN: and the rows are WIRED — a drawn option nothing listens to is inert');
+hasCode('_nutProgGrainLine(d)',
+        'GRAIN: the weekly setup NAMES each day\'s grains — three grains and one ' +
+        'grain look identical without it');
+
+// EACH GRAIN CONVERTS WITH ITS OWN EXPANSION. Sushi swells 2.7x and basmati 3.0x;
+// one figure for both under-buys one and over-buys the other, silently, and the
+// error only shows up as a short tub on the Thursday.
+hasCode('var r = _gr || _nutRiceById(rice);',
+        'GRAIN: the shopping list converts each grain by ITS OWN expansion');
+hasCode('grainMeals[key].total++',
+        'GRAIN: and counts the meals each grain feeds rather than assuming seven');
+
+// RISOTTO IS NOT BATCHED. A tub of it reheated on Wednesday is paste, so it must
+// never appear in the Sunday batch beside the rice.
+hasCode('to_order:true',            'GRAIN: risotto is flagged as cooked to order');
+hasCode('return !g.to_order;',      'GRAIN: and the prep batch EXCLUDES it');
+hasCode('NOT a Sunday batch',       'GRAIN: its recipe card leads with that');
+hasNotCode("name:'Arborio, plain'",
+        'GRAIN: one vocabulary — Jon calls it risotto, so the app does too');
+
+// The sushi seasoning carries sugar into a plan he weighs everything else in.
+hasCode('season_c',                 'GRAIN: the seasoning\'s carbohydrate is quantified');
+hasCode('THE SEASONING IS NOT COUNTED',
+        'GRAIN: and declared on the card rather than added silently');
+
+// A grain swap holds CARBOHYDRATE, so protein and fat ride along uncompensated —
+// measured, up to +5.4 g protein and +4.9 g fat on quinoa. True before per-meal
+// choice existed too. Shown at the point of choosing rather than rebalanced.
+hasCode('which nothing makes up',
+        'GRAIN: the sheet says the protein and fat cost is NOT compensated');
+
 // ── the nut and nut-butter selectors (v4.9.303) ────────────────────────────
 // Two slots whose serve is DERIVED from the fat rather than stored, so the
 // guards here are about the derivation surviving, not about the numbers.

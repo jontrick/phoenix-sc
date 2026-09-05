@@ -51,7 +51,7 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       Closes when he reports. **A silent pass is not a pass** — ask him per item, because
       "seems fine" has twice meant "did not reach that screen".
 
-- [ ] JON — **Today screen, two session cards (v4.9.298).** From his 10:29 screenshot: the
+- [ ] JON — **Today, two session cards (v4.9.298).** From his 10:29 screenshot: the
       whole top of Today was one IN PROGRESS / RESUME / START OVER panel, because the
       in-progress takeover ran before the calendar renderer and returned. It is now the
       no-calendar path only. **What to watch:**
@@ -76,12 +76,11 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
         did (KNOWN_ISSUES, "What something CURRENTLY does is a claim to check"). A banana
         back on rest days is a one-line default change if he wants it.
       · **Cashews (.303) and grains (.305)** — both hold one macro and let others move
-        UNCOMPENSATED, and both say so on the row: cashews ~6 g of carbs over; quinoa at
-        lunch +5.4 g protein and +4.9 g fat against basmati, wild +4.2 g, sushi −2.8 g.
-        **Nothing compensated before .305 either** — the same choice just ran for a whole
-        week — so it is a property of holding a macro constant, not a regression. The
-        alternative is routing the fat through the evening oil. **His call; until he makes
-        it, visible-but-uncompensated stands.**
+        UNCOMPENSATED, and both say so on the row: cashews ~6 g carbs over; quinoa at
+        lunch +5.4 g protein and +4.9 g fat against basmati. **Nothing compensated before
+        .305 either** — the same choice just ran a whole week — so it is a property, not a
+        regression. The alternative is the evening oil. **His call; until then,
+        visible-but-uncompensated stands.**
       · **Eggs (.307-.309)** — Meal 7 is OFF by default; turning it on **trims chicken,
         salmon, tuna and whey by about a fifth** so the target does not move. My reading
         of "the daily macro target and other meals adjust"; the alternative is the day
@@ -100,6 +99,15 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       has no week and the label must be omitted rather than shown as "Week 0". So one
       pill before the 7th and two from the 7th is correct behaviour, not a half-built
       feature. Closes when he confirms the training number matches the session card.
+
+- [ ] JON — **The nutrition screen, restructured (v4.9.311).** Three tabs: TODAY is the
+      tick-off only, PROGRAMME the week overview, WEEK the day-plan / shopping / prep.
+      **He asked for TODAY and PROGRAMME to be SWAPPED and that is not what was built** —
+      a probe showed PROGRAMME held only the calendar and TODAY held the tick-off AND
+      everything else, so it follows the descriptions he gave rather than the word
+      "swap". If he expected a literal exchange this will not look like one. Also:
+      RECIPES has no tab (reached from prep), and on a review Wednesday WEEK plans NEXT
+      week — which the card now says out loud.
 
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
@@ -202,15 +210,10 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — CROSS-DOMAIN
 
-- [x] TRAINING — Two disagreeing week numbers on Today. **DONE v4.9.301.** Two pills:
-      `TRAIN W3` from `blabTrainingWeek()`, `CUT W1` from `nutProgWeekLabel()` — called,
-      not derived, `null` omits. **The lesson, which is why this line survives at all:**
-      they were never two derivations of one week. `athlete.currentWeek` counts the AI
-      programme and never moves on a BLAB account; `progWeek()` counts calendar weeks
-      from `startDate`. Three counters, three questions, one place that decides.
-      Compressed from Training's fuller entry to hold the 300-line budget — the original
-      is in the history at fd4517b, and Training should restore it if the detail is
-      still wanted.
+- [x] TRAINING — Two disagreeing week numbers on Today. **DONE v4.9.301** (60deb54).
+      **Lesson:** they were never two derivations of one week — `athlete.currentWeek`
+      counts the AI programme and never moves on a BLAB account, `progWeek()` counts
+      calendar weeks. Three counters, three questions, one place that decides.
 - [ ] TRAINING + NUTRITION — **Nutrition decides "is today a lifting day" from its OWN
       static map** (`_NUT_PROG_SESSIONS`), not training state. Since v4.9.299 that map
       gates the 04:15 intra drink, so a divergence from Jon's real training days gives
@@ -284,16 +287,11 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## ARCHIVE — closed, kept only where the closing evidence matters
 
-- [x] Auto-update after the zero-byte `sw.js` — **CONFIRMED WORKING**, v4.9.252. Jon
-      answered directly that the version at the bottom of Today moves on its own after a
-      normal open. Closed a claim that sat UNVERIFIED from v4.9.208.
-- [x] **v4.9.265 SHIPPED** — `9ef505b`, 2026-09-04. Training's superset-history fix, Jon's
-      THIRD report of that bug. Training left it mid-rebase and could not be messaged; the
-      PM finished it using their own documented resolution, rebased onto current origin
-      twice as it moved, and pushed. All four gates green each time.
-      **A correction on my own report of it:** I recorded the first push failure as "GitHub
-      unreachable (DNS)". The DNS failures were real, but the LATER failures were a plain
-      non-fast-forward — origin had moved under it. Two different causes wearing one
-      symptom, and I named the first one for both. Check the actual error text.
-- [x] Coach-worker vision passthrough — **VERIFIED**, 2026-08-22, by posting a synthetic
-      report with unguessable values and getting all four back exactly.
+- [x] Auto-update after the zero-byte `sw.js` — **CONFIRMED WORKING** v4.9.252. Jon
+      confirmed the version moves on its own; closed a claim unverified since v4.9.208.
+- [x] **v4.9.265 SHIPPED** — `9ef505b`. **Lesson kept:** I reported the push failure as
+      "GitHub unreachable (DNS)". The DNS failures were real, but the LATER ones were a
+      plain non-fast-forward — origin had moved. Two causes wearing one symptom, and I
+      named the first for both. Read the actual error text.
+- [x] Coach-worker vision passthrough — **VERIFIED** 2026-08-22, synthetic report with
+      unguessable values, all four returned exactly.

@@ -49,6 +49,11 @@ Five distinct instances, all green, all worthless:
   landed, the gate ran against the good file, and printed a tick. **A no-op inversion is
   indistinguishable from a passing guard.** Confirm the file actually changed —
   `git diff --stat` between applying and running.
+- **A test helper that could not reach the control.** `dom()` armed the elements a renderer
+  CREATES but not the screen body it writes into, so no case could tap anything wired via
+  `body.querySelector(...)` — where most controls are wired. Deleting one such handler
+  turned nothing red. The markup assertion beside it passed the whole time, which is why
+  it read as covered. **Ask what a passing case would still pass on.**
 
 > **A CHECK THAT HAS NEVER FIRED IS UNTESTED, NOT CLEAN.** Break it, watch it go red, and
 > confirm it can still go green.
@@ -212,6 +217,25 @@ Three times in one day, from three different sources, all in the same shape.
 
 Where a request restates how something works, run it and look. Where it states what he
 WANTS, it is binding and needs no checking.
+
+## A step that did not run looks exactly like a step that did (2026-09-05)
+
+Harness guards for v4.9.307 were written, reported as added, and never landed. The shell
+step was `grep -c "INVERSION" index.html && python3 <<'PY' ... PY`. The grep correctly
+found **zero** matches, zero is exit status **1**, and `&&` stopped the chain. Three
+versions shipped with no harness cover for the feature they added.
+
+Two things let it through. The command's own confirmation (`print('guards added')`) never
+appeared and I did not miss it, because I was reading the *gate's* output further down —
+which was red for unrelated reasons and gave me something else to fix. And `grep -c`
+returning 1 on a legitimate zero is a trap in any `&&` chain.
+
+> **Never chain a mutating step behind a `grep`/`test` whose zero-result is normal.** Run
+> it on its own line, and read the step's OWN output before the gate's.
+
+Related: twice in the same session a version label went into the build script's `#`
+comments instead of the source. The `VERSION` guard failed the build both times — that one
+works.
 
 ## Encode your own judgement as a NOTE, not as STRUCTURE (2026-09-05)
 

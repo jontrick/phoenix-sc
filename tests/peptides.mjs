@@ -1267,6 +1267,153 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'and pressing Not now actually records the dismissal');
     });
 
+    // ── THE MAKE-UP FLOW IS UNIVERSAL (v4.9.304) ──────────────────────────
+    // Jon: "the make-up clear/log flow and vial stock tracking should apply to
+    // ALL compounds in the protocol, not just Ipamorelin. Every compound that
+    // requires reconstitution should have this same logic."
+    //
+    // These walk EVERY compound in Phase 2 rather than spot-checking one. A
+    // hand-picked fixture is how this domain has repeatedly proved a feature
+    // works for the compound it was written against and nothing else.
+    const PHASE2_IDS = () => (app._PEP_PHASES[0].stacks || []).map(x => x.compoundId);
+    const openSheet = (fn) => {
+      const realCreate = app.document.createElement;
+      const made = [];
+      app.document.createElement = function (tag) {
+        const e = realCreate.call(app.document, tag);
+        made.push(e);
+        return e;
+      };
+      try { fn(); } finally { app.document.createElement = realCreate; }
+      return made[0];
+    };
+    const seedOne = (src) => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [Object.assign({}, src, {
+        startDate: daysAgo(30), status: 'instock', sealedVials: 5, freq: 'daily',
+        dates: undefined, night_dates: undefined, injection_dates: undefined,
+        periods: undefined, end_date: undefined, endDate: undefined,
+        intervalDays: undefined, interval_days: undefined,
+        cycleWeeks: undefined, offWeeks: undefined,
+      })];
+      app.pepSaveState(st);
+    };
+
+    test('UNIVERSAL every Phase 2 compound can be marked made up', () => {
+      const ids = PHASE2_IDS();
+      assert.ok(ids.length >= 13, `the phase carries ${ids.length} compounds`);
+      const bad = [];
+      (app._PEP_PHASES[0].stacks || []).forEach(src => {
+        seedOne(src);
+        const r = app.pepMarkMadeUpToday(src.compoundId);
+        // Either it logs in one tap, or it asks for the volume. Both are the
+        // flow working. A `problem` means the compound fell out of it entirely.
+        if (!r.ok && !r.needsVolume) bad.push(src.compoundId + ': ' + r.problem);
+      });
+      assert.deepEqual(bad, [],
+        'every compound reaches the make-up flow — none of them is a special case');
+    });
+
+    test('UNIVERSAL every Phase 2 compound can have its note dismissed', () => {
+      const bad = []; let walked = 0;
+      (app._PEP_PHASES[0].stacks || []).forEach(src => {
+        seedOne(src); walked++;
+        if (app.pepDismissMakeUpNote(src.compoundId) !== true) bad.push(src.compoundId);
+        else if (!app.pepGetState().stacks[0].makeUpNoteDismissedAt) bad.push(src.compoundId + ' (not recorded)');
+      });
+      assert.ok(walked >= 13, `walked ${walked} compounds — an empty loop finds no failures`);
+      assert.deepEqual(bad, [], 'dismissal is per compound and reaches all of them');
+    });
+
+    test('UNIVERSAL a make-up deducts a vial for every compound, none excepted', () => {
+      const bad = []; let walked = 0;
+      (app._PEP_PHASES[0].stacks || []).forEach(src => {
+        seedOne(src); walked++;
+        const before = app.pepGetState().stacks[0].sealedVials;
+        app.pepLogMakeUp(0, 10, 2);
+        const after = app.pepGetState().stacks[0];
+        if (after.sealedVials !== before - 1) bad.push(src.compoundId + ' count ' + before + '->' + after.sealedVials);
+        if (after.openedDate !== app._pepToday()) bad.push(src.compoundId + ' undated');
+      });
+      assert.ok(walked >= 13, `walked ${walked} compounds — an empty loop finds no failures`);
+      assert.deepEqual(bad, [],
+        'one vial off the shelf and a date, for all thirteen — this is the only ' +
+        'thing that moves stock, so a compound it skipped would silently never ' +
+        'draw down');
+    });
+
+    test('UNIVERSAL ticking never moves stock, for any compound', () => {
+      const bad = []; let walked = 0;
+      (app._PEP_PHASES[0].stacks || []).forEach(src => {
+        seedOne(src); walked++;
+        const before = app.pepGetState().stacks[0].sealedVials;
+        app.pepToggleDose(src.compoundId);
+        const after = app.pepGetState().stacks[0];
+        if (after.sealedVials !== before) bad.push(src.compoundId + ' box moved');
+        if (after.openedDate) bad.push(src.compoundId + ' vial opened for him');
+      });
+      assert.ok(walked >= 13, `walked ${walked} compounds — an empty loop finds no failures`);
+      assert.deepEqual(bad, [], 'the box is his to move, for all of them');
+    });
+
+    test('UNIVERSAL the any-compound sheet lists the whole protocol', () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = (app._PEP_PHASES[0].stacks || []).map(x =>
+        Object.assign({}, x, { status: 'instock', sealedVials: 3 }));
+      app.pepSaveState(st);
+      const ov = openSheet(() => app.pepOpenMakeUpAny());
+      assert.ok(PHASE2_IDS().length >= 13, 'there are compounds to look for');
+      const missing = PHASE2_IDS().filter(id => !ov.innerHTML.includes('data-pep-any-madeup="' + id + '"'));
+      assert.deepEqual(missing, [],
+        'including the ones with nothing due today — that is the entire reason ' +
+        'this sheet exists');
+    });
+
+    test('UNIVERSAL the Today tile reaches a compound whose volume is CONFIRMED', () => {
+      // BPC-157 and Retatrutide never show the note, because Jon has stated
+      // their volumes. The per-row control lives inside the needsMakeUp branch,
+      // so before v4.9.304 those two had NO way to log a mix from this screen.
+      // Found by reading the rendered markup, not by reasoning about branches.
+      const h = withStubbedDom(() => {
+        reset(); signIn('jon');
+        const st = app.pepGetState();
+        st.settings = {};
+        st.stacks = [{ compoundId:'bpc157', dose:0.5, startDate: daysAgo(30), freq:'daily',
+                       vialMg:10, waterMl:2, sealedVials:5, status:'instock' }];
+        app.pepSaveState(st);
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.ok(!h.includes('Make-up required'),
+        'no note, correctly — he has stated this volume');
+      assert.ok(h.includes('data-pep-tile-anymu'),
+        'but the way to log a mix is still on the screen');
+    });
+
+    test('UNIVERSAL the rest-day tile carries it too', () => {
+      const h = withStubbedDom(() => {
+        reset(); signIn('jon');
+        const st = app.pepGetState();
+        st.settings = {};
+        st.stacks = [{ compoundId:'motsc', dose:10, startDate: daysAgo(30), freq:'wed',
+                       vialMg:10, waterMl:0.5, sealedVials:5, status:'instock',
+                       dates: [daysAgo(30)] }];
+        app.pepSaveState(st);
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.ok(h.includes('No doses scheduled'), 'nothing due');
+      assert.ok(h.includes('data-pep-tile-anymu'),
+        'a rest day is exactly when he mixes the next vial — the branch with no ' +
+        'doses is not a branch with nothing to do');
+    });
+
     test('RENDER the tile stays empty when there is no protocol', () => {
       const h = withStubbedDom(() => {
         reset(); signIn('jon');

@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.303';
+var APP_VERSION='4.9.304';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -27151,7 +27151,14 @@ function pepRenderTodayTile(){
       "<div style=\"display:flex;align-items:center;justify-content:space-between;\">" +
       "<div style=\"font-size:13px;color:var(--text2);\">No doses scheduled today.</div>" +
       "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:700;color:#7B68EE;letter-spacing:1px;white-space:nowrap;margin-left:12px;\">PORTAL &rsaquo;</div>" +
-      "</div>" + "<button data-pep-tile-add=\"1\" style=\"width:100%;padding:9px;margin-top:10px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>" + "</div>";
+      "</div>" +
+      "<div style=\"display:flex;gap:8px;margin-top:10px;\">" +
+      "<button data-pep-tile-add=\"1\" style=\"flex:1;padding:9px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>" +
+      // A rest day is exactly when he mixes the next vial, so this must be here
+      // too — the branch with no doses scheduled is not a branch with nothing
+      // to do.
+      "<button data-pep-tile-anymu=\"1\" style=\"flex:1;padding:9px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Made up a vial</button>" +
+      "</div></div>";
     _pepBindTile(tile);
     return;
   }
@@ -27257,7 +27264,16 @@ function pepRenderTodayTile(){
   h += block("Evening", doses.evening);
   // v4.9.261: adding a dose from the main screen, without opening the portal.
   // stopPropagation on the handler, because the whole tile navigates.
-  h += "<button data-pep-tile-add=\"1\" style=\"width:100%;padding:9px;margin-top:10px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>";
+  h += "<div style=\"display:flex;gap:8px;margin-top:10px;\">";
+  h += "<button data-pep-tile-add=\"1\" style=\"flex:1;padding:9px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>";
+  // v4.9.304: Jon — the make-up flow applies to ALL compounds, not only ones
+  // showing the note. The per-row control sits inside the needsMakeUp branch,
+  // so a compound whose volume is already CONFIRMED (BPC-157, Retatrutide) had
+  // no way to log a mix from this screen at all — verified by reading the
+  // rendered markup, not by reasoning about the branch. One control reaching
+  // every compound beats thirteen buttons that say the same thing.
+  h += "<button data-pep-tile-anymu=\"1\" style=\"flex:1;padding:9px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Made up a vial</button>";
+  h += "</div>";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:700;color:#7B68EE;letter-spacing:1px;padding-top:10px;\">OPEN PORTAL &rsaquo;</div>";
   h += "</div>";
   tile.innerHTML = h;
@@ -27318,6 +27334,9 @@ function _pepBindTile(tile){
   });
   tile.querySelectorAll("[data-pep-tile-add]").forEach(function(btn){
     btn.addEventListener("click", function(e){ e.stopPropagation(); pepOpenAddDose(); });
+  });
+  tile.querySelectorAll("[data-pep-tile-anymu]").forEach(function(btn){
+    btn.addEventListener("click", function(e){ e.stopPropagation(); pepOpenMakeUpAny(); });
   });
 }
 

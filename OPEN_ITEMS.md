@@ -31,6 +31,15 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       while fixing the badge, so it is not urgent, but it is the same complaint waiting
       to happen on a Sunday.
 
+- [ ] TRAINING/PM — **`#hamburger-dot-records` can never show.** The Records screen has
+      its own hamburger with its own dot element, but `_phxUpdateHamburgerDot()` only
+      ever writes to `#hamburger-dot` (the Today one). So the Records dot is finished
+      code with no door — the same shape as `_blabCalEntryView` and the orphaned `_bak`.
+      NOT fixed with v4.9.314 because the fix is a choice, not a repair: wiring it up
+      ADDS a badge to a screen that has never had one, which is new behaviour nobody
+      asked for. Deleting it is the other option. Owner **???**, needs a one-line
+      decision. Found 2026-09-06 while fixing the menu.
+
 ## WAITING ON JON
 
 - [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together
@@ -110,6 +119,33 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       and PREP respectively. **Superseded the v4.9.311 three-tab layout**, where he had
       asked for TODAY and PROGRAMME to be swapped and a probe showed that was not what
       those screens held.
+
+- [ ] JON — **The hamburger menu (v4.9.314).** He reported the tap going nowhere and
+      asked for it removed if it was only the old AI-programme notifier. **It is not** —
+      it opens 17 navigation items and is the ONLY route to Nutrition, Peptides, Records,
+      the training calendar, Programme/Audit/Adjust and the standalone timer. So it was
+      fixed, not removed. **I COULD NOT REPRODUCE HIS SYMPTOM**, and that matters: the
+      DOM wiring is correct and the tap lands on the button (verified against the live
+      site). What I DID find and fix is one way it can die silently — `openSidebar()`
+      read the walk streak before opening the panel, and a corrupt `phoenix_walk_logs`
+      throws there, killing the tap with no message on iOS. The panel now opens first.
+      **What to watch:** if the menu still goes nowhere on v4.9.314, the cause is
+      something else and the next step is his console, not another guess.
+      · The red dot is the WEEKLY CHECK-IN reminder, not an AI-programme badge. It shows
+        only on `athlete.fqCheckInDay` (default Friday) when that week's check-in has not
+        been submitted. He saw it on a Sunday, which means his check-in day is set to
+        Sunday — worth confirming. Say the word and it goes; it was left because his
+        stated condition for removal ("purely the AI programme notification") is false.
+
+- [ ] JON — **The nutrition screen, restructured (v4.9.311).** Three tabs: TODAY is the
+      tick-off only, PROGRAMME the week overview, WEEK the day-plan / shopping / prep.
+      **He asked for TODAY and PROGRAMME to be SWAPPED and that is not what was built** —
+      a probe showed PROGRAMME held only the calendar and TODAY held the tick-off AND
+      everything else, so it follows the descriptions he gave rather than the word
+      "swap". If he expected a literal exchange this will not look like one. Also:
+      RECIPES has no tab (reached from prep), and on a review Wednesday WEEK plans NEXT
+      week — which the card now says out loud.
+
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.

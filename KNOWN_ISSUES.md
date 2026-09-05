@@ -164,6 +164,22 @@ again, because it gets copied into handoffs and then followed at one remove.
   different.** The blood reader correctly rejecting a non-blood photo looked like proof
   vision worked. It was not: the prompt's rule 6 hands the model that same error string,
   so a model receiving NO image returns it too. Only the positive case settled it.
+- **A HIDDEN BROWSER PANE FREEZES CSS TRANSITIONS, AND A WORKING PANEL LOOKS BROKEN.**
+  Chasing Jon's dead hamburger (2026-09-06) I drove the live site and measured the
+  sidebar's computed transform after `openSidebar()`: stuck at `translateX(-280px)`
+  through a 600ms wait, with `.sidebar.active{transform:translateX(0)}` present, more
+  specific, later in the sheet and confirmed matching. Even an INLINE
+  `transform:translateX(0)` was ignored — while an inline `outline:red` on the same
+  element applied instantly. I was one step from reporting a cascade bug that does not
+  exist. The cause: `document.visibilityState === 'hidden'`, `requestAnimationFrame`
+  never firing, and `getAnimations()` showing a `CSSTransition` on `transform` sitting
+  at `currentTime: 0` in state `running`. A running transition outranks inline styles,
+  so it pinned the start value forever. **The tell was in the same object all along —
+  `innerWidth: 0, innerHeight: 0` on the first reading, which I skimmed past.**
+  Two rules: **check the viewport has a size before believing any layout measurement**,
+  and **anything whose evidence is a transition or animation cannot be tested in a pane
+  that is not painting** — fronting the tab did not fix it. Reachability is testable
+  headlessly; appearance is Jon's to confirm.
 
 ## The board reads the checkout it runs in, so half of it can be stale
 

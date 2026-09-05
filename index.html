@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.313';
+var APP_VERSION='4.9.314';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -15992,15 +15992,40 @@ function renderThemesScreen(){
 
 // ====== SIDEBAR ======
 function openSidebar(){
-  var streak=getWalkStreak();
-  var el=document.getElementById('sidebar-streak');
-  if(el) el.textContent=streak;
-  // v4.7.39 CHANGE 3: The Agoge sidebar entry is always visible. openAgoge() routes
-  // through the intro screen when the athlete hasn't joined yet.
-  var agItem = document.getElementById('sidebar-item-agoge');
-  if(agItem) agItem.style.display = 'flex';
-  document.getElementById('sidebar').classList.add('active');
-  document.getElementById('sidebar-overlay').classList.add('active');
+  // v4.9.314 — OPEN FIRST, DECORATE AFTER.
+  //
+  // Jon: "the hamburger has a red dot but tapping it doesn't go anywhere."
+  //
+  // THIS IS THE APP'S PRIMARY NAVIGATION, not a notification. Thirteen items hang off
+  // it and it is the ONLY route to Nutrition, Peptides, Records, the training calendar,
+  // Programme/Audit/Adjust and the standalone timer. Removing it would strand most of
+  // the app, so this fixes it rather than deleting it.
+  //
+  // THE ORDER WAS THE BUG SHAPE. It read the walk streak, then the Agoge item, and
+  // only THEN opened the panel — three chances to throw before anything appeared. A
+  // throw inside an inline onclick is completely silent on iOS: the tap does nothing
+  // and nothing says why, which is exactly what he described. getWalkStreak() alone
+  // dies on one malformed byte in phoenix_walk_logs, reproduced in a sandbox on
+  // 2026-09-06: the panel element was never even looked up.
+  //
+  // So the panel opens on the first two lines. The decorations can no longer prevent
+  // navigation; the worst they can now do is leave a stale streak number on screen.
+  var sb = document.getElementById('sidebar');
+  var ov = document.getElementById('sidebar-overlay');
+  if(sb) sb.classList.add('active');
+  if(ov) ov.classList.add('active');
+
+  try {
+    var el = document.getElementById('sidebar-streak');
+    if(el) el.textContent = getWalkStreak();
+  } catch(_st){ console.error('[PHX] sidebar streak failed (menu still opened):', _st); }
+
+  try {
+    // v4.7.39 CHANGE 3: The Agoge sidebar entry is always visible. openAgoge() routes
+    // through the intro screen when the athlete hasn't joined yet.
+    var agItem = document.getElementById('sidebar-item-agoge');
+    if(agItem) agItem.style.display = 'flex';
+  } catch(_ag){ console.error('[PHX] sidebar agoge item failed (menu still opened):', _ag); }
 }
 function closeSidebar(){
   document.getElementById('sidebar').classList.remove('active');
@@ -16692,8 +16717,16 @@ function updateWalkStats(){
 }
 
 function getWalkStreak(){
-  var logs=JSON.parse(localStorage.getItem('phoenix_walk_logs')||'[]');
-  if(!logs.length) return 0;
+  // v4.9.314: an unguarded parse here took the whole navigation menu down — this is
+  // called by openSidebar before the panel opens (order now fixed there too, so this
+  // is the second of the two locks). A corrupt or non-array value means "no streak
+  // I can count", not "throw": the streak is a decoration and must never be able to
+  // cost him a screen. Both branches matter — junk that PARSES but is not an array
+  // (an object, a bare string) reaches .some() and dies just as hard.
+  var logs;
+  try { logs = JSON.parse(localStorage.getItem('phoenix_walk_logs')||'[]'); }
+  catch(_wl){ return 0; }
+  if(!Array.isArray(logs) || !logs.length) return 0;
   var today=new Date();today.setHours(0,0,0,0);
   var streak=0,checkDate=new Date(today);
   for(var i=0;i<365;i++){

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.313'", 'version is 4.9.313');
+has("var APP_VERSION='4.9.314'", 'version is 4.9.314');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2549,6 +2549,37 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── THE NAVIGATION MENU (v4.9.314) ──────────────────────────────────────────
+// Jon: "the hamburger has a red dot but tapping it doesn't go anywhere", and asked for
+// it REMOVED if it is only the old AI-programme notifier.
+//
+// IT IS NOT. It is the app's primary navigation and the only route to Nutrition,
+// Peptides, Records, the calendar, Programme/Audit/Adjust and the timer. This pin is
+// here so nobody deletes it on that assumption later — the count is the argument.
+(() => {
+  const items = (html.match(/class="sidebar-item"/g) || []).length;
+  if (items >= 12) ok(`MENU: the hamburger opens ${items} navigation items — not a notification`);
+  else bad(`MENU: expected >=12 sidebar-item entries, found ${items}. If the menu was ` +
+           `deliberately trimmed, update this. If it was removed as "just the AI programme ` +
+           `notifier", that was the mistake this pin exists to stop: it is the only route ` +
+           `to Nutrition, Peptides, Records, the calendar and the timer.`);
+})();
+
+// THE ORDER IS THE FIX. Reading the walk streak before opening the panel is what made a
+// tap do nothing, silently, on iOS. Behaviour — including the reproduced corrupt-log
+// failure and an explicit call-order trace — is in tests/training.mjs under MENU:.
+// Proved by inversion 2026-09-06: restoring the old order turns 4 of them red.
+hasNotCode("function openSidebar(){\n  var streak=getWalkStreak();",
+  'MENU: openSidebar no longer reads the streak before opening the panel');
+hasCode("if(sb) sb.classList.add('active');", 'MENU: STRUCTURAL the panel opens on its own line');
+hasCode("catch(_wl){ return 0; }", 'MENU: STRUCTURAL a corrupt walk log yields no streak, not a throw');
+
+// The dot is the WEEKLY CHECK-IN reminder, conditional on athlete.fqCheckInDay — not
+// an AI-programme badge and not always on. Named here because the whole request was
+// premised on it being the other thing.
+hasCode('var isCheckInDay = b.date.getDay() === _phxCheckInDayIndex();',
+  'MENU: the red dot is the check-in-day reminder, not a permanent badge');
 
 // ── TWO WEEK BADGES, ONE PER DOMAIN (v4.9.301) ──────────────────────────────
 // Jon: "WEEK 1" top right against "Week 3" on the session card. The badge read

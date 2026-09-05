@@ -3956,4 +3956,171 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(train.style.display, 'none', 'nothing to show');
     assert.equal(train.textContent, '', 'and the placeholder "Week 1" is gone');
   });
+
+  // ── THE NAVIGATION MENU MUST OPEN (v4.9.314) ──────────────────────────────
+  // Jon: "the hamburger has a red dot but tapping it doesn't go anywhere."
+  //
+  // The menu is the app's primary navigation — thirteen items, and the only route to
+  // Nutrition, Peptides, Records, the calendar and the timer. openSidebar() used to
+  // read the walk streak and the Agoge item BEFORE opening the panel, so anything
+  // that threw in either left the tap doing nothing, silently, on iOS.
+  //
+  // WHAT THESE CANNOT TELL YOU: they prove the DOM work happens. They cannot prove
+  // the panel is visible on his phone — that is a CSS transition, and it needs a
+  // browser producing frames. I tried the live site and the pane rendered hidden
+  // (visibilityState hidden, no rAF), which froze the transition at currentTime 0 and
+  // made a working sidebar look broken. That measurement was discarded; see
+  // KNOWN_ISSUES. So: reachability is pinned here, appearance is Jon's to confirm.
+
+  const sidebarDom = () => {
+    const els = {};
+    const mk = (id) => {
+      const e = { id, style: {}, textContent: '', _cls: [] };
+      e.classList = { add: (c) => e._cls.push(c), remove: (c) => { e._cls = e._cls.filter(x => x !== c); },
+                      contains: (c) => e._cls.includes(c) };
+      return e;
+    };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) => (els[id] || (els[id] = mk(id)));
+    return { els, restore: () => { app.document.getElementById = real; },
+             isOpen: () => !!(els['sidebar'] && els['sidebar'].classList.contains('active')) };
+  };
+
+  test('MENU: it opens', () => {
+    reset(); signIn(UID);
+    const dom = sidebarDom();
+    try { app.openSidebar(); } finally { dom.restore(); }
+    assert.ok(dom.isOpen(), 'the panel gets its active class');
+    assert.ok(dom.els['sidebar-overlay'].classList.contains('active'), 'and so does the overlay');
+  });
+
+  test('MENU: a corrupt walk log does NOT cost him the menu', () => {
+    // THE REPRODUCED FAILURE. Before v4.9.314 this threw out of openSidebar before the
+    // panel element was even looked up — a tap that does nothing and says nothing.
+    reset(); signIn(UID);
+    seed('phoenix_walk_logs', 'not-json{{');
+    const dom = sidebarDom();
+    let threw = null;
+    try { app.openSidebar(); } catch (e) { threw = e; } finally { dom.restore(); }
+    assert.equal(threw, null, 'openSidebar must not throw on junk in an unrelated key');
+    assert.ok(dom.isOpen(), 'and the menu is open regardless');
+  });
+
+  test('MENU: walk-log junk that PARSES but is not an array also cannot block it', () => {
+    // '{}' survives JSON.parse and has no .length; '"abc"' has one and dies at .some().
+    // Both are the same defect and only one of them is caught by a try/catch alone.
+    ['{}', '"abc"', '42', 'null'].forEach((junk) => {
+      reset(); signIn(UID);
+      seed('phoenix_walk_logs', junk);
+      const dom = sidebarDom();
+      let threw = null;
+      try { app.openSidebar(); } catch (e) { threw = e; } finally { dom.restore(); }
+      assert.equal(threw, null, 'openSidebar survives phoenix_walk_logs = ' + junk);
+      assert.ok(dom.isOpen(), 'menu opens with phoenix_walk_logs = ' + junk);
+    });
+  });
+
+  test('MENU: getWalkStreak returns 0 rather than throwing on a corrupt log', () => {
+    reset(); signIn(UID);
+    seed('phoenix_walk_logs', 'not-json{{');
+    assert.equal(app.getWalkStreak(), 0, 'no streak I can count is not the same as throw');
+    seed('phoenix_walk_logs', '{"a":1}');
+    assert.equal(app.getWalkStreak(), 0, 'an object is not a log');
+  });
+
+  test('MENU: a real streak still counts — the guard did not hollow it out', () => {
+    // A negative-only suite would pass against `return 0`. This is the positive control.
+    reset(); signIn(UID);
+    const iso = (d) => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString(); };
+    seed('phoenix_walk_logs', JSON.stringify([{ date: iso(0) }, { date: iso(1) }, { date: iso(2) }]));
+    assert.equal(app.getWalkStreak(), 3, 'three consecutive days still read as three');
+  });
+
+  test('MENU: the panel opens BEFORE the decorations run', () => {
+    // The ordering IS the fix. If the streak lookup moves back above the classList.add,
+    // this is the case that catches it — the others would still pass, because they only
+    // check the end state after a successful call.
+    reset(); signIn(UID);
+    const order = [];
+    const els = {};
+    const mk = (id) => {
+      const e = { id, style: {}, textContent: '', _cls: [] };
+      e.classList = { add: (c) => { order.push('open:' + id); e._cls.push(c); },
+                      remove: () => {}, contains: (c) => e._cls.includes(c) };
+      return e;
+    };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) => {
+      if (id === 'sidebar-streak' || id === 'sidebar-item-agoge') order.push('decorate:' + id);
+      return els[id] || (els[id] = mk(id));
+    };
+    try { app.openSidebar(); } finally { app.document.getElementById = real; }
+    const firstOpen = order.findIndex((s) => s.startsWith('open:'));
+    const firstDeco = order.findIndex((s) => s.startsWith('decorate:'));
+    assert.ok(firstOpen !== -1, 'the panel was opened at all — order was ' + JSON.stringify(order));
+    assert.ok(firstDeco !== -1, 'the decorations still run — they were not simply deleted');
+    assert.ok(firstOpen < firstDeco,
+      'the panel must open before anything that can throw. order: ' + JSON.stringify(order));
+  });
+
+  test('MENU: it still opens when the decoration targets are missing entirely', () => {
+    // A partial DOM must not cost navigation either.
+    reset(); signIn(UID);
+    const els = {};
+    const mk = (id) => {
+      const e = { id, style: {}, textContent: '', _cls: [] };
+      e.classList = { add: (c) => e._cls.push(c), remove: () => {}, contains: (c) => e._cls.includes(c) };
+      return e;
+    };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) =>
+      (id === 'sidebar' || id === 'sidebar-overlay') ? (els[id] || (els[id] = mk(id))) : null;
+    let threw = null;
+    try { app.openSidebar(); } catch (e) { threw = e; } finally { app.document.getElementById = real; }
+    assert.equal(threw, null, 'missing streak/agoge elements are survivable');
+    assert.ok(els['sidebar'].classList.contains('active'), 'and the menu opened');
+  });
+
+  test('MENU: closeSidebar still closes it', () => {
+    reset(); signIn(UID);
+    const dom = sidebarDom();
+    try { app.openSidebar(); app.closeSidebar(); } finally { dom.restore(); }
+    assert.ok(!dom.isOpen(), 'open then close leaves it closed');
+  });
+
+  // ── THE RED DOT IS THE WEEKLY CHECK-IN, NOT THE AI PROGRAMME ──────────────
+  // Jon believed it was the old AI-programme notifier and asked for it gone if so.
+  // It is not: it is the weekly check-in reminder, and it is conditional on his own
+  // configured check-in day. Pinned so the next person does not delete it on the
+  // same assumption.
+
+  test('DOT: it shows only on his check-in day, and only when the check-in is not done', () => {
+    reset(); signIn(UID);
+    app.athlete = { id: UID, fqCheckInDay: 'friday' };
+    const dot = { id: 'hamburger-dot', style: {} };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'hamburger-dot' ? dot : null);
+    try { app._phxUpdateHamburgerDot(); } finally { app.document.getElementById = real; }
+    // Today is whatever it is; the assertion is that the decision is DERIVED, not pinned on.
+    const isFriday = app._phxBrisbaneNow().date.getDay() === 5;
+    assert.equal(dot.style.display, isFriday ? 'block' : 'none',
+      'the dot tracks the configured check-in day, so it is not an always-on badge');
+  });
+
+  test('DOT: a submitted check-in clears it on the day itself', () => {
+    reset(); signIn(UID);
+    const today = app._phxBrisbaneNow().date.getDay();
+    const dayName = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][today];
+    app.athlete = { id: UID, fqCheckInDay: dayName };          // force today to BE the day
+    const dot = { id: 'hamburger-dot', style: {} };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'hamburger-dot' ? dot : null);
+    try {
+      app._phxUpdateHamburgerDot();
+      assert.equal(dot.style.display, 'block', 'shown when the check-in is outstanding');
+      seed('phoenix_weekly_checkin_done_' + app._phxBrisbaneMondayISO(), '1');
+      app._phxUpdateHamburgerDot();
+      assert.equal(dot.style.display, 'none', 'and cleared once he has done it');
+    } finally { app.document.getElementById = real; }
+  });
 }

@@ -102,15 +102,14 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       pill before the 7th and two from the 7th is correct behaviour, not a half-built
       feature. Closes when he confirms the training number matches the session card.
 
-- [ ] JON — **The nutrition screen, restructured (v4.9.311).** Three tabs: TODAY is the
-      tick-off only, PROGRAMME the week overview, WEEK the day-plan / shopping / prep.
-      **He asked for TODAY and PROGRAMME to be SWAPPED and that is not what was built** —
-      a probe showed PROGRAMME held only the calendar and TODAY held the tick-off AND
-      everything else, so it follows the descriptions he gave rather than the word
-      "swap". If he expected a literal exchange this will not look like one. Also:
-      RECIPES has no tab (reached from prep), and on a review Wednesday WEEK plans NEXT
-      week — which the card now says out loud.
-
+- [ ] JON — **The nutrition screen, four tabs (v4.9.313).** DAILY (tick-off, no
+      Substitutions banner) · PLAN (the week, every food tappable) · PREP · SHOPPING.
+      Two things to check because they were my calls: the day HEADER opens the day-level
+      choices (distribution, 04:15, Meal 7) since those are not components with a line to
+      tap; and the calendar and recipe library lost their tabs but kept doors — from PLAN
+      and PREP respectively. **Superseded the v4.9.311 three-tab layout**, where he had
+      asked for TODAY and PROGRAMME to be swapped and a probe showed that was not what
+      those screens held.
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.

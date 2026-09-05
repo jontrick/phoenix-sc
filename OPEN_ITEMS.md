@@ -21,7 +21,8 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       and NONE has been used by him yet. All are verified by gates only, and three fixes
       this week passed clean gates while still being broken for him — each time the tests
       covered the piece just written rather than the route he takes. So this session is
-      the only real check. Live on v4.9.276, confirmed serving.
+      the only real check. The six shipped by v4.9.276; live is now v4.9.298 (curl-confirmed
+      against projectphoenix-app.com, code present, not just the version string).
       **What to watch, in the order he will hit it:**
       · PULL-UPS — count-in before the clock; the clock is now 42px, not an 11px line;
         each set is a chip with an "x" to delete; the input says "Reps in THIS set only".
@@ -33,6 +34,23 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
         partial as last week's numbers.
       Closes when he reports. **A silent pass is not a pass** — ask him per item, because
       "seems fine" has twice meant "did not reach that screen".
+
+- [ ] JON — **Today screen, two session cards (v4.9.298).** From his 10:29 screenshot: the
+      whole top of Today was one IN PROGRESS / RESUME / START OVER panel, because the
+      in-progress takeover ran before the calendar renderer and returned. It is now the
+      no-calendar path only. **What to watch:**
+      · On a day with a BLAB session AND a WOD/core, BOTH cards are on screen, each with
+        its own name, status and button.
+      · Finish one: it goes green with a COMPLETED tag and offers NO buttons — it must not
+        vanish, and it must not still say Resume.
+      · A part-done session shows In progress + Resume ON ITS OWN CARD, with the other
+        session still visible beside it.
+      · Header reads "1 of 2 done". When both are done the outer card is green and tapping
+        it does nothing.
+      Untested by him. Note the shape of the risk: every direct-renderer test stayed green
+      when I inverted the takeover gate, because they call `_blabRenderTodayFromCalendar`
+      and so never reach the branch that was broken. One screen-level test now drives
+      `renderTodayScreen()`; that is the only automated cover for the actual fault.
 
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he

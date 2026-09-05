@@ -113,6 +113,20 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — CROSS-DOMAIN
 
+- [ ] TRAINING — Today header shows two week numbers that disagree ("WEEK 1" top right
+      vs "Week 3" on the session card), and Jon wants the NUTRITION week shown beside
+      the training one. The header is Training's; the nutrition half is ready to use.
+      **Call `nutProgWeekLabel()`** &mdash; do NOT derive a week from the start date.
+      Returns `'CUT · TRIAL'`, `'CUT W1'`&hellip;`'CUT W15'`, or **`null` meaning omit**.
+      Week 0 is the rehearsal and sits outside the count of fifteen, so any independent
+      formula gets it wrong plausibly. Contract and meanings in HANDOFF_NUTRITION under
+      "API other domains may call"; pinned in tests/nutrition.mjs under
+      `CONTRACT nutProgWeekLabel`. Nutrition could not message Training this session
+      (no peer messaging available) &mdash; Jon is relaying. Closes when the header shows
+      both weeks distinguishably.
+
+
+
 - [ ] PM — `tests/pm.mjs` "CONTRACT _phxRecordWriteError: holds for a CARELESS caller" is
       FLAKY at ~0.17% and fails as **"medical/personal value leaked: 24.8"**. Nothing leaks.
       The helper stamps `ts: new Date().toISOString()`, the assertion scans the WHOLE blob,

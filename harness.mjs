@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.296'", 'version is 4.9.296');
+has("var APP_VERSION='4.9.297'", 'version is 4.9.297');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3057,6 +3057,11 @@ hasCode('function _nutProgWeekPickerCard(', 'WEEKPICK: the week\'s evenings can 
 
 // ── The programme calendar ──────────────────────────────────────────────────
 hasCode('function _nutTabProgramme(',        'PROGCAL: the programme tab exists');
+// Published for Training's Today header. A second derivation of the same dates
+// is how two week numbers end up disagreeing on one screen.
+hasCode('function nutProgWeekLabel(',       'WEEKLBL: the nutrition week is published as a label');
+hasCode("'CUT W' + wk",                     'WEEKLBL: prefixed, so it cannot be read as the training week');
+hasNotCode("return 'Week 0'",               'WEEKLBL: the rehearsal is never shown as week zero');
 hasCode("{key:'programme',label:'PROGRAMME'}", 'PROGCAL: it is in the tab bar');
 hasCode("_nutTab === 'programme'",           'PROGCAL: and the ROUTER reaches it');
 hasCode('function _nutProgCalendarCard(',    'PROGCAL: the week grid exists');

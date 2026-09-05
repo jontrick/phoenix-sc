@@ -3536,7 +3536,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.296';
+var APP_VERSION='4.9.297';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22398,6 +22398,35 @@ function _nutProgBatchCard(week){
   return h;
 }
 
+// ── the nutrition week, as a label ─────────────────────────────────────────
+// v4.9.297. PUBLISHED FOR TRAINING, who own the Today header.
+//
+// Jon has two week numbers on one screen — a training week and a nutrition week —
+// and they are genuinely different numbers counting different things. The header
+// already shows one week disagreeing with another, so the last thing this needs
+// is a THIRD number derived somewhere else from the same dates.
+//
+// CALL THIS. Do not compute a nutrition week from the start date: week 0 is not
+// week 1 minus one, the rehearsal is outside the count entirely, and a reasonable
+// independent implementation would get that wrong in a way nobody would spot.
+//
+// Returns NULL when there is no nutrition week to show — before the rehearsal
+// opens and after the fifteen weeks close. Null means omit the label, not "0".
+function nutProgWeekLabel(){
+  var today = _nutToday();
+  if(nutProgIsTrial(today)) return 'CUT · TRIAL';
+  var wk = nutProgWeekFor(today);
+  if(wk >= 1) return 'CUT W' + wk;
+  return null;
+}
+function nutProgWeekLabelLong(){
+  var today = _nutToday();
+  if(nutProgIsTrial(today)) return 'Trial week';
+  var wk = nutProgWeekFor(today);
+  if(wk >= 1) return 'Week ' + wk + ' of 15';
+  return null;
+}
+
 // ── the programme calendar ─────────────────────────────────────────────────
 // v4.9.296. Mon-Sun for the week Jon is living in, or the one he is about to
 // start. It switches on its own each Monday because it asks the programme which
@@ -22435,6 +22464,7 @@ function _nutProgCalendarCard(week){
   var rice = nutProgRiceChoice();
   var label = (week === 0) ? 'Trial week' : ('Week ' + week + ' of 15');
   var h = '<div style="margin-bottom:14px;">' +
+    '<div style="font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">Nutrition &mdash; 15-week cut</div>' +
     '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">' +
       '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">' + label + '</div>' +
       '<div style="font-size:10px;color:var(--text3);">' + days[0].slice(8) + '/' + days[0].slice(5,7) + ' &ndash; ' + days[6].slice(8) + '/' + days[6].slice(5,7) + '</div>' +

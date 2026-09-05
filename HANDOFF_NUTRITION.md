@@ -83,6 +83,38 @@ You may READ but must NOT restructure (PM coordinates schema changes):
 
 ### API other domains may call
 
+---
+
+**`nutProgWeekLabel() -> string | null`** and **`nutProgWeekLabelLong() -> string | null`**
+(v4.9.297, for TRAINING and the Today header)
+
+Jon has two week numbers on one screen and they count different things. **Call this; do
+not compute a nutrition week from the start date.**
+
+| Returns | When |
+|---|---|
+| `'CUT · TRIAL'` / `'Trial week'` | 7&ndash;13 Sept, the rehearsal |
+| `'CUT W1'` &hellip; `'CUT W15'` / `'Week 1 of 15'` | during the programme |
+| **`null`** | before it opens and after it closes |
+
+**MEANINGS &mdash; the parts a second implementation would get wrong:**
+
+- **`null` means OMIT THE LABEL. It does not mean zero.** Rendering `Week 0` would be
+  wrong twice: the rehearsal is outside the count of fifteen, and "Week 0" reads to a
+  person as a bug rather than as a week.
+- **Week 0 is not week 1 minus one.** The rehearsal week is deliberately outside the
+  count &mdash; it proposes no adjustments and is not measured. Any formula deriving a
+  week number from `trial_start` will produce a plausible wrong answer here.
+- **The prefix is load-bearing.** A bare `Week 1` next to Training's `Week 1` is exactly
+  the collision Jon reported. Keep `CUT`.
+- **The short form is for a cramped header**; the long form carries the denominator and
+  is what the Programme tab shows.
+
+Pinned provider-side in `tests/nutrition.mjs` under `CONTRACT nutProgWeekLabel` &mdash;
+five cases, including one asserting the label can never disagree with `nutProgWeekFor`,
+because two numbers for one week is the defect this exists to prevent.
+
+
 **`nutRecordWeight(kg, dateKey) -> bool`** (v4.9.166)
 
 PM ruling 2026-08-18: the dated nutrition daily weigh-in (`ns.daily[date].weight_kg`)

@@ -2490,6 +2490,61 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(html.indexOf('data-prog-cal-day'), -1, 'and offers no days');
   });
 
+  // ── CONTRACT: nutProgWeekLabel, called by Training ───────────────────────
+  // v4.9.297. Provider-side, because a consumer's screen going red means the
+  // break already shipped past the owner. Jon has two week numbers on one screen
+  // that already disagree; a third, derived independently from the same dates,
+  // is the last thing that header needs.
+
+  test('CONTRACT nutProgWeekLabel: the rehearsal is NOT week zero on screen', () => {
+    setUp(110);
+    assert.equal(onDay('2026-09-09', () => app.nutProgWeekLabel()), 'CUT · TRIAL',
+      'week 0 is an internal index, not something to show a person — "Week 0" ' +
+      'reads as a bug, and it is outside the count of fifteen anyway');
+    assert.equal(onDay('2026-09-09', () => app.nutProgWeekLabelLong()), 'Trial week');
+  });
+
+  test('CONTRACT nutProgWeekLabel: a real week says which cut week it is', () => {
+    setUp(110);
+    assert.equal(onDay('2026-09-14', () => app.nutProgWeekLabel()), 'CUT W1', 'first Monday');
+    assert.equal(onDay('2026-10-14', () => app.nutProgWeekLabel()), 'CUT W5', 'and later weeks');
+    assert.equal(onDay('2026-09-14', () => app.nutProgWeekLabelLong()), 'Week 1 of 15',
+      'the long form carries the denominator, so it cannot be mistaken for a training week');
+  });
+
+  test('CONTRACT nutProgWeekLabel: NULL means omit, never zero', () => {
+    setUp(110);
+    assert.equal(onDay('2026-09-01', () => app.nutProgWeekLabel()), null, 'before the rehearsal');
+    assert.equal(onDay('2026-12-28', () => app.nutProgWeekLabel()), null, 'after the fifteen weeks');
+    assert.equal(onDay('2026-12-28', () => app.nutProgWeekLabelLong()), null, 'both forms agree');
+  });
+
+  test('CONTRACT nutProgWeekLabel: it never disagrees with the week itself', () => {
+    setUp(110);
+    // The whole reason this is a function and not a formula in Training's file.
+    ['2026-09-14','2026-09-21','2026-10-14','2026-12-21'].forEach((d) => {
+      const wk = onDay(d, () => app.nutProgWeekFor(d));
+      assert.equal(onDay(d, () => app.nutProgWeekLabel()), 'CUT W' + wk,
+        d + ' label and week must be one number, not two');
+    });
+  });
+
+  test('CONTRACT nutProgWeekLabel: it carries a prefix, so two weeks cannot be confused', () => {
+    setUp(110);
+    const short = onDay('2026-09-14', () => app.nutProgWeekLabel());
+    assert.ok(/^CUT/.test(short),
+      'a bare "Week 1" beside Training\'s "Week 1" is exactly the collision Jon ' +
+      'is looking at: got ' + short);
+  });
+
+  test('CAL the calendar says WHICH week it is showing', () => {
+    setUp(110);
+    const html = progTab('2026-09-06');
+    assert.ok(/Nutrition/.test(html), 'named as the nutrition week');
+    assert.ok(/15-week cut/.test(html), 'and which programme it belongs to');
+    assert.ok(html.indexOf('Trial week') >= 0, 'with the week itself');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

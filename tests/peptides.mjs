@@ -5168,6 +5168,60 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       kbTearDown();
     });
 
+    // ── MAKE UP ANY COMPOUND, FROM THE DAILY VIEW (v4.9.302) ──────────────
+    // Jon: "add the ability to Make up today as an add-on action for any
+    // compound on a given day (accessible from the daily view)."
+    //
+    // The per-row control only reaches compounds DOSING today, and mixing does
+    // not wait for a dosing day: Epitalon runs 20 nights off a vial every two,
+    // MOTS-c doses five days apart. The vial he mixes on a Tuesday is often for
+    // something with nothing scheduled until Thursday.
+    test('ANYMU the sheet lists a protocol compound with nothing due today', () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [
+        { compoundId:'motsc', dose:10, startDate: daysAgo(60), dates:[daysAgo(60)],
+          vialMg:10, waterMl:0.5, sealedVials:6, status:'instock' },
+      ];
+      app.pepSaveState(st);
+      const due = app._pepGetDoses(app.pepGetState());
+      assert.equal(due.morning.concat(due.anytime, due.evening).length, 0,
+        'nothing is scheduled today — the per-row control cannot reach this');
+      const ov = openSheet(() => app.pepOpenMakeUpAny());
+      assert.ok(ov, 'the sheet opens');
+      assert.ok(ov.innerHTML.includes('data-pep-any-madeup="motsc"'),
+        'and MOTS-c is there anyway, with a control');
+      assert.ok(ov.innerHTML.includes('6 sealed'), 'showing what is on the shelf');
+    });
+
+    test('ANYMU it offers only compounds in his protocol', () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [{ compoundId:'motsc', dose:10, startDate: daysAgo(60),
+                     vialMg:10, waterMl:0.5, sealedVials:6, status:'instock' }];
+      app.pepSaveState(st);
+      const ov = openSheet(() => app.pepOpenMakeUpAny());
+      assert.ok(!ov.innerHTML.includes('data-pep-any-madeup="semax"'),
+        'a make-up needs a stack to record against, so a library-only compound ' +
+        'would be a control that cannot do anything');
+    });
+
+    test('ANYMU a compound whose volume is unknown is marked, not hidden', () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [{ compoundId:'ipamorelin', dose:0.3, startDate: daysAgo(10),
+                     freq:'daily', vialMg:10, waterMl:2, sealedVials:8, status:'instock' }];
+      app.pepSaveState(st);
+      const ov = openSheet(() => app.pepOpenMakeUpAny());
+      assert.ok(ov.innerHTML.includes('volume not set'),
+        'flagged, because tapping it will ask rather than log in one tap');
+      assert.ok(ov.innerHTML.includes('data-pep-any-madeup="ipamorelin"'),
+        'but still offered — asking is a legitimate outcome');
+    });
+
     test('KEYBOARD the tap-only sheets are deliberately not armed', () => {
       const slice = (name, next) => {
         const i = html.indexOf('function ' + name);

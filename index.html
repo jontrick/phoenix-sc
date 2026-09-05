@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.301';
+var APP_VERSION='4.9.302';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -26563,6 +26563,8 @@ function pepRenderScreen(){
       if(pepRemoveExtraDose(btn.getAttribute("data-pep-unextra"))) pepRenderScreen();
     });
   });
+  var anyMu = body.querySelector("#pep-any-makeup");
+  if(anyMu) anyMu.addEventListener("click", pepOpenMakeUpAny);
   var addDose = body.querySelector("#pep-add-dose");
   if(addDose) addDose.addEventListener("click", pepOpenAddDose);
   body.querySelectorAll("[data-pep-skip]").forEach(function(btn){
@@ -26784,7 +26786,12 @@ function _pepTabToday(ps){
   h += "<div style=\"height:4px;flex:1;background:var(--bg3);border-radius:2px;margin:0 12px;overflow:hidden;\"><div style=\"height:4px;width:" + Math.round(doneCount/total*100) + "%;background:#7B68EE;border-radius:2px;\"></div></div>";
   h += "<div style=\"font-size:11px;color:" + (doneCount===total?"#7B68EE":"var(--text3)") + ";\">" + today + "</div>";
   h += "</div>";
-  h += "<button id=\"pep-add-dose\" style=\"width:100%;padding:11px;margin-bottom:14px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose for today</button>";
+  h += "<div style=\"display:flex;gap:8px;margin-bottom:14px;\">";
+  h += "<button id=\"pep-add-dose\" style=\"flex:1;padding:11px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>";
+  // v4.9.302: the daily-view way in for a compound with nothing scheduled
+  // today. Mixing a vial does not wait for a dosing day.
+  h += "<button id=\"pep-any-makeup\" style=\"flex:1;padding:11px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Made up a vial</button>";
+  h += "</div>";
 
   function renderSection(label, items){
     if(!items.length) return "";
@@ -29938,6 +29945,83 @@ function pepOpenImport(){
 // Add a dose for today. His own compounds first — those are what he actually
 // reaches for — then the rest of the library, so an unplanned compound is still
 // one tap away rather than requiring a protocol edit.
+// ── LOG A MAKE-UP FOR ANY COMPOUND (v4.9.302) ─────────────────────────────
+// Jon asked for "Make up today" as an add-on action for any compound on a given
+// day, from the daily view. The per-row control added alongside it only reaches
+// compounds DOSING today, and mixing a vial does not wait for a dosing day —
+// Epitalon runs 20 nights on one vial every two, and MOTS-c doses five days
+// apart. The vial he mixes on a Tuesday is often for a compound with nothing
+// scheduled until Thursday.
+//
+// Only compounds in his protocol are listed. A make-up needs a stack to record
+// against; offering the whole library would produce rows that cannot be logged,
+// which is the dead-control problem the tile already avoids.
+function pepOpenMakeUpAny(){
+  var ps = pepGetState();
+  var rows = [];
+  (ps.stacks || []).forEach(function(st, i){
+    if(!st || st.status === "complete") return;
+    var c = _pepCompound(st.compoundId);
+    if(!c) return;
+    rows.push({idx:i, st:st, c:c});
+  });
+
+  var body = "";
+  rows.forEach(function(row){
+    var st = row.st, c = row.c;
+    var recon = _pepRecon(st, c);
+    var known = _pepMakeUpKnown(st, c, recon);
+    var sealed = parseInt(st.sealedVials, 10) || 0;
+    body +=
+      "<div style=\"display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--border2);\">" +
+      "<div style=\"flex:1;min-width:0;\">" +
+      "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;color:var(--text);\">" + _esc(c.name) + "</div>" +
+      "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">" +
+        (st.openedDate ? "mixed " + _esc(st.openedDate) : "no vial mixed yet") +
+        " &middot; " + sealed + " sealed" +
+        (known ? "" : " &middot; <span style=\"color:var(--gold);\">volume not set</span>") +
+      "</div></div>" +
+      "<button data-pep-any-madeup=\"" + _esc(c.id) + "\" style=\"flex-shrink:0;background:none;border:1px solid #7B68EE;border-radius:12px;color:#7B68EE;font-family:var(--font-d);font-size:9px;font-weight:900;padding:6px 12px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">" +
+        (known ? "Made up" : "Made up&hellip;") + "</button>" +
+      "</div>";
+  });
+
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  ov.innerHTML = "<div id=\"pep-any-panel\" style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:20px;max-height:88%;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Made up a vial today</div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;\">Records the date and takes one vial off the sealed count. This is the only thing that moves your stock &mdash; taking a dose does not. A compound marked &ldquo;volume not set&rdquo; will ask what you mixed it in.</div>" +
+    "<div id=\"pep-any-msg\" style=\"font-size:12px;color:#4CAF50;margin-bottom:8px;line-height:1.6;\"></div>" +
+    (rows.length ? body : "<div style=\"padding:24px 0;color:var(--text3);font-size:13px;text-align:center;\">No compounds in your protocol.</div>") +
+    "<button id=\"pep-any-close\" style=\"width:100%;padding:13px;margin-top:18px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Done</button>" +
+    "</div>";
+  document.body.appendChild(ov);
+  // Deliberately NOT keyboard-armed: this sheet is a list of buttons with no
+  // typed field, so there is no keyboard to sit above, and _phxKeyboardSafe is
+  // not idempotent. The harness pins the arming COUNT for exactly this reason.
+  ov.addEventListener("click", function(e){ if(e.target === ov) ov.remove(); });
+  var close = document.getElementById("pep-any-close");
+  if(close) close.addEventListener("click", function(){ ov.remove(); pepRenderScreen(); });
+  ov.querySelectorAll("[data-pep-any-madeup]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var id = btn.getAttribute("data-pep-any-madeup");
+      var r = pepMadeUpTodayAction(id);
+      if(r.opened){ ov.remove(); return; }   // the sheet is asking for the volume
+      var msg = document.getElementById("pep-any-msg");
+      if(msg && r.ok){
+        var c = _pepCompound(id);
+        msg.innerHTML = _esc(c ? c.name : id) + " mixed today &middot; " + r.sealedLeft + " sealed left.";
+      } else if(msg && r.problem){
+        msg.innerHTML = "<span style=\"color:var(--gold);\">" + _esc(r.problem) + "</span>";
+      }
+      ov.remove();
+      pepOpenMakeUpAny();
+      var m2 = document.getElementById("pep-any-msg");
+      if(m2 && msg) m2.innerHTML = msg.innerHTML;
+    });
+  });
+}
+
 function pepOpenAddDose(){
   var ps = pepGetState();
   var mine = [], rest = [];

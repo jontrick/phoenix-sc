@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.314';
+var APP_VERSION='4.9.315';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19725,7 +19725,11 @@ function nutRenderScreen(){
   // v4.9.277: programme day — tick a meal, or log something off plan.
   body.querySelectorAll('[data-prog-tick]').forEach(function(row){
     row.addEventListener('click', function(){
-      nutProgToggleMeal(_nutToday(), row.getAttribute('data-prog-tick'));
+      // The DAY THE ROW WAS DRAWN FOR, not today. The calendar drill-down and the
+      // run-up preview both render another day's card, and _nutToday() sent every
+      // one of their ticks to the wrong date.
+      nutProgToggleMeal(row.getAttribute('data-prog-day') || _nutToday(),
+                        row.getAttribute('data-prog-tick'));
       nutRenderScreen();
     });
   });
@@ -19912,7 +19916,8 @@ function _nutTabToday(ns){
   // v4.9.277: while the cut programme is running it owns this screen. Recipes,
   // the week planner and the scanner keep working underneath for anything else.
   var _progStatus = (typeof nutProgStatusOn === 'function') ? nutProgStatusOn(today) : '';
-  if(_progStatus === 'running' || _progStatus === 'trial'){
+  var _hasPlan = (typeof nutProgTargetsOn === 'function') && !!nutProgTargetsOn(today);
+  if(_hasPlan){
     // THE TICK-OFF, AND NOTHING ELSE. Jon: "This is what you look at while
     // eating." It used to carry the week-ahead table, the carb picker, the
     // evening picker, the shopping list and the prep plan underneath it — a
@@ -19930,15 +19935,23 @@ function _nutTabToday(ns){
     // PROGRAMME now; what belongs here is the review banner when it is due and a
     // way to log what he actually eats today, which is the whole reason the
     // logger was kept when the start card was built.
+    // v4.9.315. Jon wants to run the whole loop before Monday. So the run-up
+    // shows the FIRST TRIAL DAY's card — real meals, real tick circles that write
+    // to that day — under a banner saying whose day it is. Pretending today were
+    // Monday would have him tick food he has not eaten and put adherence in the
+    // record that never happened.
     var _rev = _nutProgReviewCard(today);
-    var _wait = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:15px 16px;margin-bottom:14px;">' +
-      '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Nothing to tick yet</div>' +
+    var _d0  = _NUT_PROG.trial_start;
+    var _left = _nutProgDaysBetween(today, _d0);
+    var _wait = '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:10px;padding:13px 15px;margin-bottom:12px;">' +
+      '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Preview &mdash; Monday ' + _d0 + '</div>' +
       '<div style="font-size:12px;color:var(--text2);margin-top:5px;line-height:1.5;">' +
-        'The programme opens ' + _NUT_PROG.trial_start + '. The week ahead and Monday&rsquo;s plate are on PROGRAMME; ' +
-        'the shopping list and prep plan are on WEEK.</div>' +
-      '<button data-prog-add style="width:100%;margin-top:10px;padding:11px;background:var(--bg3);border:1px dashed var(--border2);border-radius:9px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Log what you ate today</button>' +
+        'The trial week opens in ' + _left + ' day' + (_left === 1 ? '' : 's') +
+        '. This is that first day, so the whole screen can be tried now. ' +
+        '<b>Anything ticked here is logged against ' + _d0 + '</b>, not today.</div>' +
+      '<button data-prog-add style="width:100%;margin-top:10px;padding:11px;background:var(--bg3);border:1px dashed var(--border2);border-radius:9px;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">+ Log what you ate TODAY</button>' +
       '</div>';
-    return _rev + _wait;
+    return _rev + _wait + (_nutProgTodayCard(_d0) || '');
   }
   var _setupCard = '';
   var targets = nutAdjustForToday(ns.targets);
@@ -21371,7 +21384,7 @@ var _NUT_PROG_PLATE = [
   // whites and a spoon of nut butter. Fixed across the phases: it is a whole
   // meal from the original plan rather than a dial, and the day makes room for
   // it rather than it shrinking to fit.
-  { m:'bed',    n:'Egg whites', grp:'protein',      g:[245,245,245,245,245], u:' ml',     k:52,  p:10.9, c:0.7, f:0.17 },
+  { m:'bed',    n:'Egg whites', grp:'protein', count:true, each:33, each_u:' ml', g:[7.4,7.4,7.4,7.4,7.4], u:'', k:52,  p:10.9, c:0.7, f:0.17 },
   { m:'bed',    n:'Peanut butter', grp:'fat',       g:[15,15,15,15,15],                  u:'',        k:588, p:25,  c:20,  f:50 }
 ];
 
@@ -21393,9 +21406,16 @@ var _NUT_PROG_MEALS = [
   { id:'bed',    t:'21:00', n:'Before bed',        optional:true }
 ];
 
+// Quantity to per-100 multiplier. A COUNT item — rice cakes, egg whites —
+// carries `each`, the grams in one of them; everything else is already grams or
+// millilitres. One definition, because six call sites computing this by hand is
+// five chances for two of them to disagree about what a portion is.
+function _nutUnitMult(o, qty){
+  var q = parseFloat(qty) || 0;
+  return (o && o.each) ? (q * o.each / 100) : (q / 100);
+}
 function _nutProgItemMacros(it, grams){
-  var g = parseFloat(grams) || 0;
-  var mult = it.each ? (g * it.each / 100) : (g / 100);
+  var mult = _nutUnitMult(it, grams);
   return { k: it.k * mult, p: it.p * mult, c: it.c * mult, f: it.f * mult };
 }
 
@@ -21444,10 +21464,10 @@ function nutProgMealsOn(dateKey, riceId){
     var _bfNew = _nutProgPartsMacros(_bfOpt, ix).c;
     var _bfOld = 0;
     var _wr2 = _nutProgPlateRowIn('bfast', _NUT_BFAST_PROTEIN_ITEM);
-    if(_wr2 && _wr2.g[ix] > 0) _bfOld += _wr2.c * _wr2.g[ix] / 100;
+    if(_wr2 && _wr2.g[ix] > 0) _bfOld += _wr2.c * _nutUnitMult(_wr2, _wr2.g[ix]);
     for(var _di = 0; _di < _bfastDrops.length; _di++){
       var _dr = _nutProgPlateRowIn('bfast', _bfastDrops[_di]);
-      if(_dr && _dr.g[ix] > 0) _bfOld += _dr.c * _dr.g[ix] / 100;
+      if(_dr && _dr.g[ix] > 0) _bfOld += _dr.c * _nutUnitMult(_dr, _dr.g[ix]);
     }
     _shortC = Math.round((_shortC + (_bfOld - _bfNew)) * 10) / 10;
   }
@@ -21507,6 +21527,9 @@ function nutProgMealsOn(dateKey, riceId){
       var g = it.g[ix];
       if(!(g > 0)) continue;
       var name = it.n, grams = g, unit = it.u, mac = null;
+      // Units follow the FOOD. A swapped-in option can be counted where the row
+      // it replaces was weighed, and the reverse.
+      var _cnt = !!it.count, _each = it.each || 0, _eachU = it.each_u || '';
       // A swap that puts SEVERAL foods on the plate. Egg whites and whole eggs
       // are different products on different shelves, so one row cannot carry
       // them and one line would shop as an item he cannot buy.
@@ -21520,9 +21543,10 @@ function nutProgMealsOn(dateKey, riceId){
             // `fixed` parts are counted, not weighed — two eggs are two eggs.
             if(_pCut && _pt.grp === 'protein' && !_pt.fixed)
               _pg = Math.round(_pg * (1 - _pCut) * 10) / 10;
-            var _pm = { k:_pt.k * _pg / 100, p:_pt.p * _pg / 100,
-                        c:_pt.c * _pg / 100, f:_pt.f * _pg / 100 };
+            var _pmM = _nutUnitMult(_pt, _pg);
+            var _pm = { k:_pt.k * _pmM, p:_pt.p * _pmM, c:_pt.c * _pmM, f:_pt.f * _pmM };
             items.push({ n:_pt.n, g:_pg, u:_pt.u || '', carb:!!_pt.carb, count:!!_pt.count,
+                         each:_pt.each || 0, each_u:_pt.each_u || '',
                          slot:(_pt.grp === 'protein' ? 'bfast_protein' : null),
                          k:Math.round(_pm.k), p:Math.round(_pm.p * 10) / 10,
                          c:Math.round(_pm.c * 10) / 10, f:Math.round(_pm.f * 10) / 10 });
@@ -21548,8 +21572,9 @@ function nutProgMealsOn(dateKey, riceId){
         if(_dp && !_dp.base){
           name = _dp.n; grams = _dp.g;
           if(typeof _dp.u === 'string') unit = _dp.u;
-          mac = { k:_dp.k * _dp.g / 100, p:_dp.p * _dp.g / 100,
-                  c:_dp.c * _dp.g / 100, f:_dp.f * _dp.g / 100 };
+          _cnt = !!_dp.count; _each = _dp.each || 0; _eachU = _dp.each_u || '';
+          var _dpM = _nutUnitMult(_dp, _dp.g);
+          mac = { k:_dp.k * _dpM, p:_dp.p * _dpM, c:_dp.c * _dpM, f:_dp.f * _dpM };
         }
       }
       // The 09:30 nuts and the 15:30 nut butter. Sized to hold the FAT, which is
@@ -21682,7 +21707,8 @@ function nutProgMealsOn(dateKey, riceId){
       else if(_wasGreens) _slot = 'greens_' + M.id;
       else if(M.id === 'dinner' && it.n === 'Greens') _slot = 'dinner_veg';
       else if(M.id === 'bfast' && it.n === _NUT_BFAST_PROTEIN_ITEM) _slot = 'bfast_protein';
-      items.push({ n:name, g:grams, u:unit, carb:!!it.carb, count:!!it.count, slot:_slot,
+      items.push({ n:name, g:grams, u:unit, carb:!!it.carb, count:_cnt, each:_each,
+                   each_u:_eachU, slot:_slot,
                    k:Math.round(mac.k), p:Math.round(mac.p*10)/10,
                    c:Math.round(mac.c*10)/10, f:Math.round(mac.f*10)/10 });
       K += mac.k; P += mac.p; C += mac.c; F += mac.f;
@@ -21722,6 +21748,12 @@ var _NUT_VOLUME_UNITS = [' ml'];
 function _nutProgItemLabel(it){
   if(!it) return '';
   var qty = it.g;
+  if(it.count && it.each && it.each_u){
+    // "7.4 egg whites (245 ml)" — the count is how Jon thinks about it, the
+    // volume is what the carton is marked in and what he actually pours. Foods
+    // with no sensible second unit (two eggs) get no parenthetical.
+    return qty + ' ' + it.n.toLowerCase() + ' (' + Math.round(qty * it.each) + it.each_u + ')';
+  }
   if(it.count) return qty + ' ' + it.n;                        // 2 Rice cakes
   var u = it.u || '';
   if(_NUT_VOLUME_UNITS.indexOf(u) >= 0) return qty + u + ' ' + it.n;   // 13 ml Olive oil
@@ -21926,7 +21958,7 @@ function nutProgSplitShift(dateKey, phaseIx){
     var mp = _nutProgNightlyOpt('midam_dairy', nutProgNightlyOn(dateKey).midam_dairy);
     var mg = (mp && !mp.base) ? mp.g : mRow.g[ix];
     var mper = (mp && !mp.base) ? mp.p : mRow.p;
-    moved += mper * mg / 100 * opt.take;
+    moved += mper * _nutUnitMult(mp && !mp.base ? mp : mRow, mg) * opt.take;
   }
   return Math.round(moved * 10) / 10;
 }
@@ -22020,8 +22052,8 @@ function _nutProgTrimmable(ix, dateKey){
         for(var q = 0; q < bp.parts.length; q++){
           var pt = bp.parts[q];
           if(pt.grp !== 'protein' || pt.fixed) continue;
-          var pg = _nutPartG(pt, ix);
-          p += pt.p * pg / 100; f += pt.f * pg / 100;
+          var pm = _nutUnitMult(pt, _nutPartG(pt, ix));
+          p += pt.p * pm; f += pt.f * pm;
         }
         continue;
       }
@@ -22189,7 +22221,7 @@ function _nutProgTodayCard(forDate){
     var line = m.supp
       ? (m.code || '')
       : m.items.map(_nutProgItemLabel).join(' &middot; ');
-    h += '<div data-prog-tick="' + m.id + '" style="display:flex;gap:10px;align-items:flex-start;padding:10px 11px;background:var(--bg2);border:1px solid ' + (m.supp ? 'rgba(200,150,62,0.35)' : 'var(--border)') + ';border-radius:9px;margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
+    h += '<div data-prog-tick="' + m.id + '" data-prog-day="' + today + '" style="display:flex;gap:10px;align-items:flex-start;padding:10px 11px;background:var(--bg2);border:1px solid ' + (m.supp ? 'rgba(200,150,62,0.35)' : 'var(--border)') + ';border-radius:9px;margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
       '<div style="width:19px;height:19px;border-radius:50%;flex-shrink:0;margin-top:2px;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;">' + (on ? '&#10003;' : '') + '</div>' +
       '<div style="flex:1;min-width:0;">' +
         '<div style="display:flex;gap:7px;align-items:baseline;flex-wrap:wrap;">' +
@@ -22315,6 +22347,9 @@ function nutProgShoppingFor(week, riceId){
       note = Math.round(t.cooked) + ' g cooked';
     } else if(row && row.count){
       qty = Math.round(t.cooked); unit = '';
+      // 130 whites is a true figure and a useless one at a supermarket. The
+      // carton is marked in millilitres, so say both.
+      if(row.each && row.each_u) note = Math.round(qty * row.each) + row.each_u;
     } else if(row && row.piece){
       note = Math.round(t.cooked) + ' g';
       qty = Math.ceil(t.cooked / row.piece); unit = '';
@@ -22500,8 +22535,29 @@ var _NUT_PROG_DINNER_PROTEIN = [
 // also about 8 g higher in PROTEIN, which nothing compensates and which the sheet
 // therefore states. Same rule as the grains: visible beats silently rebalanced.
 var _NUT_BFAST_PROTEIN_ITEM = 'Whey protein';   // the plate row the pick replaces
-var _NUT_EGG_WHITE = { n:'Egg whites',  grp:'protein', g:[245,297,322,361,374], u:' ml', k:52,  p:10.9, c:0.7, f:0.17 };
-var _NUT_EGG_WHOLE = { n:'Eggs, whole', grp:'protein', g:100, u:'',    k:143, p:12.6, c:0.7, f:9.5, piece:50, fixed:true };
+// ── egg whites, counted ────────────────────────────────────────────────────
+// v4.9.315. Jon: "make the egg whites based on average of whole eggs and how
+// many that would be instead of ml."
+//
+// THE AVERAGE IS THE BASIS OF THE WHOLE CHANGE, so it is written where the
+// number is: a large egg white is 33 g. Same convention as the rice cakes —
+// the quantity is a COUNT and `each` is the grams in one — so every macro
+// follows from one figure and the six places that compute a portion cannot
+// drift apart. `each_u` is the second unit to SHOW: whites are marked in
+// millilitres on the carton, whole eggs are not (700 ml of egg is not a thing).
+//
+// Nothing about the food moved. 7.4 whites at 33 g is the 245 ml it always was,
+// and a test proves that rather than this comment asserting it.
+var _NUT_EGG_WHITE_G = 33;                        // one large egg white, grams
+var _NUT_EGG_WHITE = { n:'Egg whites', grp:'protein', count:true, each:_NUT_EGG_WHITE_G,
+                       each_u:' ml', g:[7.4,9,9.8,10.9,11.3], u:'',
+                       k:52, p:10.9, c:0.7, f:0.17 };
+// Two eggs, counted, because that is how Jon specified the meal and how anyone
+// cooks it. 50 g is one large egg without its shell, so the macros are unchanged
+// — 2 x 50 g is the 100 g this row carried as a weight.
+var _NUT_EGG_WHOLE_G = 50;
+var _NUT_EGG_WHOLE = { n:'Eggs, whole', grp:'protein', count:true, each:_NUT_EGG_WHOLE_G,
+                       g:2, u:'', k:143, p:12.6, c:0.7, f:9.5, fixed:true };
 var _NUT_EGG_VEG = [
   { n:'Spinach',   grp:'produce', g:50, u:'', k:23, p:2.9, c:1.4, f:0.4, carb:true },
   { n:'Mushrooms', grp:'produce', g:30, u:'', k:22, p:3.1, c:3.3, f:0.3, carb:true },
@@ -22544,9 +22600,9 @@ function _nutProgPartsMacros(opt, phaseIx){
   if(!opt || !opt.parts) return null;
   var m = { k:0, p:0, c:0, f:0 };
   for(var i = 0; i < opt.parts.length; i++){
-    var pt = opt.parts[i], g = _nutPartG(pt, phaseIx);
-    m.k += pt.k * g / 100; m.p += pt.p * g / 100;
-    m.c += pt.c * g / 100; m.f += pt.f * g / 100;
+    var pt = opt.parts[i], mult = _nutUnitMult(pt, _nutPartG(pt, phaseIx));
+    m.k += pt.k * mult; m.p += pt.p * mult;
+    m.c += pt.c * mult; m.f += pt.f * mult;
   }
   return m;
 }
@@ -22585,8 +22641,8 @@ var _NUT_PROG_MIDAM_PROTEIN = [
   // file it with the yoghurt. 184 ml is the volume that lands the same 20 g of
   // protein the 200 g of yoghurt does — sized to the macro, like every other
   // option in this file, rather than swapped by weight.
-  { id:'whites',  n:'Egg whites', grp:'protein', g:184, u:' ml',
-    k:52, p:10.9, c:0.7, f:0.17 }
+  { id:'whites',  n:'Egg whites', grp:'protein', count:true, each:_NUT_EGG_WHITE_G,
+    each_u:' ml', g:5.6, u:'', k:52, p:10.9, c:0.7, f:0.17 }
 ];
 
 var _NUT_PROG_DINNER_VEG = [

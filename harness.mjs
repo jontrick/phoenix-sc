@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.314'", 'version is 4.9.314');
+has("var APP_VERSION='4.9.315'", 'version is 4.9.315');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3053,8 +3053,10 @@ hasCode('(week - 1) * 7 - 5',          'PROG: the review is the WEDNESDAY before
 hasCode('function _nutProgTodayCard(', 'TODAY: the programme day card exists');
 // Existing is not reached. The meals tab had no router branch for four versions
 // and every gate stayed green, so the ROUTE is what gets asserted here.
-hasCode("_progStatus === 'running' || _progStatus === 'trial'",
-        'TODAY: _nutTabToday ROUTES to the programme card — in the real weeks AND the rehearsal');
+hasCode('if(_hasPlan){',
+        'TODAY: _nutTabToday ROUTES to the programme card whenever the day HAS A ' +
+        'PLAN — the real weeks, the rehearsal, and the baseline Wednesday the ' +
+        'status string used to shadow');
 hasCode('data-prog-tick', 'TODAY: meals are tickable');
 hasCode('data-prog-add',  'TODAY: and anything off plan can be logged from the same screen');
 hasCode('function nutProgToggleMeal(', 'TODAY: the tick is persisted, not just drawn');
@@ -3070,7 +3072,7 @@ hasCode('function nutProgShoppingFor(', 'SHOP: the weekly list exists');
 // back to the generic food logger, and the list, week ahead and Substitutions
 // button all vanished with it. TWO functions carried the same assumption.
 hasCode('function _nutProgStartsCard(', 'PRESTART: the screen says when the programme begins');
-hasCode('return _rev + _wait;',
+hasCode("return _rev + _wait + (_nutProgTodayCard(_d0) || '');",
         'OWNS: the run-up RETURNS its own card — it does not fall through to the ' +
         'generic Breakfast/Lunch/Dinner logger underneath, which was the report');
 hasCode('+ Log what you ate today',
@@ -3261,9 +3263,10 @@ hasCode('function _nutProgPartsMacros(',
         'item he cannot buy');
 hasCode('function _nutPartG(',
         'EGGS: and a part can carry a per-phase weight, like a plate row');
-hasCode('g:[245,297,322,361,374]',
-        'EGGS: the whites FOLLOW THE PHASE. Fixed at 245 ml the option ran 7.2 g of ' +
-        'protein SHORT at phase 5, because the whey it replaces grows 38 g to 58 g');
+hasCode('g:[7.4,9,9.8,10.9,11.3]',
+        'EGGS: the whites FOLLOW THE PHASE — 7.4 whites to 11.3. Held at the ' +
+        'phase-1 quantity the option ran 7.2 g of protein SHORT at phase 5, ' +
+        'because the whey it replaces grows 38 g to 58 g');
 hasCode('function _nutProgPlateRowIn(',
         'EGGS: a plate row is looked up per MEAL — two meals can carry one food at ' +
         'different weights, and the first match would size one from the other');
@@ -3307,6 +3310,39 @@ hasNotCode('_nutProgWeekPickerCard',
         'the per-day editor — two controls for one setting drift apart');
 hasNotCode('_nutProgWeekAheadCard',
         'TABS: and so is the week table the day plan replaced');
+
+// ── week 0, the tick's day, and egg whites by the white (v4.9.315) ─────────
+hasCode('var _hasPlan = (typeof nutProgTargetsOn === \'function\') && !!nutProgTargetsOn(today);',
+        'W0: DAILY renders when the day HAS A PLAN, not when the status string ' +
+        'says so. Status answers "what stage is the programme in", and the ' +
+        'baseline Wednesday sits inside the trial week — so it shadowed it and ' +
+        'the middle of the rehearsal had no daily screen');
+hasCode('_nutProgTodayCard(_d0)',
+        'W0: and the run-up PREVIEWS the first trial day, so the whole loop can ' +
+        'be tried before Monday');
+
+// A tick has to land on the day it was drawn for. Rendering another day's card
+// is what the calendar has done since v4.9.296, and every tick from it went to
+// _nutToday() — adherence on a day he did not eat, none on the day he did.
+hasCode('data-prog-day="\' + today + \'"', 'W0: every meal row carries its date');
+hasCode("row.getAttribute('data-prog-day') || _nutToday()",
+        'W0: and the handler uses it rather than today');
+
+// Egg whites counted, not poured. Jon: "based on average of whole eggs and how
+// many that would be instead of ml."
+hasCode('_NUT_EGG_WHITE_G = 33',   'EGGW: one large egg white, written down as the basis');
+hasCode('g:[7.4,9,9.8,10.9,11.3]', 'EGGW: the breakfast whites counted, phase by phase');
+hasCode('function _nutUnitMult(',
+        'EGGW: ONE quantity-to-multiplier helper. Counting them meant six call ' +
+        'sites had to agree about what a portion is, which is five too many to ' +
+        'keep in step by hand');
+hasCode('each_u:',
+        'EGGW: the second unit belongs to the FOOD — whites are marked in ml, ' +
+        'and 700 ml of egg is not a thing');
+hasCode("if(row.each && row.each_u) note =",
+        'EGGW: so the list says 52 whites AND the millilitres to buy');
+hasNotCode("u:' ml', k:52,",
+        'EGGW: and no egg-white row is still measured in millilitres');
 
 // ── four tabs, and swaps at the component (v4.9.313) ───────────────────────
 hasCode("{key:'today',label:'DAILY'}", 'TAB4: DAILY');
@@ -3379,7 +3415,7 @@ hasCode('more fat taken off than the evening oil has to give',
         'SPLIT: and says so on the sheet, where the choices are made');
 
 // ── egg whites at 09:30 (v4.9.309) ─────────────────────────────────────────
-hasCode("{ id:'whites',  n:'Egg whites', grp:'protein', g:184",
+hasCode("{ id:'whites',  n:'Egg whites', grp:'protein', count:true",
         'WHITES: offered at 09:30, sized to the yoghurt\'s 20 g of protein');
 hasNotCode('_NUT_PROG_MIDAM_DAIRY',
         'WHITES: and the list is no longer CALLED a dairy list, because egg whites ' +
@@ -3393,9 +3429,10 @@ hasCode('_mdPick.id !== _mdBase.id',
         'WHITES: the carbohydrate they do NOT carry rejoins the ladder — 200 g of ' +
         'yoghurt is 8 g of carbs and 184 ml of whites is 1.3, and the day landed ' +
         '6.1 g under before this');
-hasCode('piece:50, fixed:true',
-        'WHITES: two whole eggs are TWO EGGS — the protein trim scaled them to ' +
-        '1.55, which is 11 a week and not a thing anyone can eat');
+hasCode('g:2, u:\'\', k:143, p:12.6, c:0.7, f:9.5, fixed:true',
+        'WHITES: two whole eggs are TWO EGGS — counted since v4.9.314, and ' +
+        '`fixed` so the protein trim cannot scale them to 1.55, which is 11 a ' +
+        'week and not a thing anyone can eat');
 
 // ── Meal 7, before bed (v4.9.308) ──────────────────────────────────────────
 hasCode("{ id:'bed',    t:'21:00'", 'BED: the 21:00 meal exists');

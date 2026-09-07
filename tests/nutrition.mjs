@@ -365,12 +365,20 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         return out;
       }
       if (attr) {
-        const re = new RegExp(attr[1] + '(?:="([^"]*)")?', 'g');
+        // The WHOLE TAG, so sibling attributes can be read back. Before this an
+        // element knew only the attribute it was selected on, and a handler
+        // reading a second one — the row's DATE, say — saw null. No case could
+        // then tell "ticked the right day" from "ticked today".
+        const re = new RegExp('<[^>]*\\b' + attr[1] + '(?:="([^"]*)")?[^>]*>', 'g');
         let m;
         while ((m = re.exec(html)) !== null) {
+          const tag = m[0];
           const el = arm(origCreate('button'));
-          const val = m[1] === undefined ? '' : m[1];
-          el.getAttribute = (a) => (a === attr[1] ? val : null);
+          el.getAttribute = (a) => {
+            const mm = new RegExp('\\b' + a + '="([^"]*)"').exec(tag);
+            if (mm) return mm[1];
+            return new RegExp('\\b' + a + '(?![\\w-])').test(tag) ? '' : null;
+          };
           out.push(el);
         }
       }
@@ -1740,9 +1748,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('data-prog-add') >= 0,
       'AND he can still log what he eats — on setup day there is no plan to tick ' +
       'yet, and a screen that only announces a future date is one he cannot use');
-    assert.ok(/PROGRAMME/.test(html) && /WEEK/.test(html),
-      'and it names the tabs the week ahead and the list moved to, rather than ' +
-      'leaving him to find them');
+    // v4.9.315: the run-up now PREVIEWS the first trial day rather than pointing
+    // at other tabs, so Jon can run the whole loop before Monday.
+    assert.ok(/Preview/.test(html), 'and it previews the first day');
+    assert.ok(html.indexOf('data-prog-tick') >= 0, 'with real meals to try');
   });
 
   test('CARD a proposal offers both answers; the settle period offers neither', () => {
@@ -3419,10 +3428,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
     const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
     const whole  = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
-    assert.equal(whites.g, 245, 'one cup of whites, as he specified');
-    assert.equal(whites.u, ' ml', 'measured in ml, because that is how a carton is poured');
+    assert.equal(whites.g, 7.4, 'one cup of whites — counted as whites since v4.9.315');
+    assert.equal(whites.each, 33, 'at 33 g each, one large egg white');
+    assert.ok(Math.abs(whites.g * whites.each - 245) <= 2,
+      'which is still Jon\'s 245 ml: ' + Math.round(whites.g * whites.each));
     assert.ok(Math.abs(whites.p - 27) <= 1, 'about 27 g of protein, as he specified: ' + whites.p);
-    assert.equal(whole.g, 100, 'two whole eggs');
+    assert.equal(whole.g, 2, 'TWO whole eggs, counted the way he specified them');
     assert.ok(Math.abs(whole.p - 12.6) <= 1 && Math.abs(whole.f - 9.5) <= 1,
       'carrying his 12 g protein and 10 g fat: p' + whole.p + ' f' + whole.f);
   });
@@ -3449,12 +3460,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // 38 g to 58 g across the cut. Short on protein late is the wrong direction —
     // that is the macro the plan is protecting, when calories are lowest.
     const PH = ['2026-09-16', '2026-10-07', '2026-10-28', '2026-11-18', '2026-12-09'];
-    const want = [245, 297, 322, 361, 374];
+    const want = [7.4, 9, 9.8, 10.9, 11.3];
     PH.forEach((d, ix) => {
       app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
       const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
-      assert.equal(whites.g, want[ix], 'phase ' + (ix + 1) + ' whites');
-      assert.equal(bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0].g, 100,
+      assert.equal(whites.g, want[ix], 'phase ' + (ix + 1) + ' whites, in whites');
+      assert.equal(bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0].g, 2,
         'while the two eggs stay two eggs — they are the meal, the whites are the dial');
       const day = app.nutProgDayTotals(d, 'basmati');
       const drift = day.p - app.nutProgTargetsOn(d).total.p;
@@ -3478,6 +3489,44 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(items.filter((x) => x.n === 'Egg whites')[0], 'alongside the eggs, not instead of them');
   });
 
+  test('EGGS counting the whites did not move a single macro', () => {
+    setUp(110);
+    // v4.9.315 changed the UNIT, not the food. 7.4 whites at 33 g is the 245 ml
+    // it always was, and the day has to prove that rather than the comment
+    // asserting it — a unit change that quietly resizes a portion is the exact
+    // failure this file spends its time preventing.
+    ['2026-09-16', '2026-10-28', '2026-12-09'].forEach((d) => {
+      const t = app.nutProgTargetsOn(d);
+      app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+      const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
+      const whole  = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
+      assert.ok(Math.abs(whites.p - whites.g * whites.each * 10.9 / 100) < 0.2,
+        'the whites\' protein follows count x each, not a stray gram figure');
+      assert.ok(Math.abs(whole.p - 12.6) <= 0.2, 'two eggs are still 12.6 g of protein');
+      assert.ok(Math.abs(whole.f - 9.5) <= 0.2, 'and 9.5 g of fat');
+      const day = app.nutProgDayTotals(d, 'basmati');
+      assert.ok(Math.abs(day.f - t.total.f) <= 2,
+        d + ' fat still lands: ' + (day.f - t.total.f).toFixed(1));
+      assert.ok(Math.abs(day.c - t.total.c) <= 2,
+        d + ' carbs still land: ' + (day.c - t.total.c).toFixed(1));
+    });
+  });
+
+  test('EGGS the label gives the count AND the volume', () => {
+    setUp(110);
+    const d = '2026-09-16';
+    app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+    const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
+    assert.ok(/7\.4 egg whites \(244 ml\)/.test(app._nutProgItemLabel(whites)),
+      'the count is what Jon asked for, the volume is what he pours from a ' +
+      'carton — one without the other is unusable: ' + app._nutProgItemLabel(whites));
+    const whole = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
+    assert.ok(/^2 /.test(app._nutProgItemLabel(whole)), 'two eggs');
+    assert.equal(/ml/.test(app._nutProgItemLabel(whole)), false,
+      'and NO millilitres beside them — a second unit is only shown where one ' +
+      'means something');
+  });
+
   test('EGGS an unknown breakfast pick is refused', () => {
     setUp(110);
     assert.equal(app.nutProgSetNightly('2026-09-16', 'bfast_protein', 'omelette'), false, 'not in the table');
@@ -3493,9 +3542,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const whole = shopItem(shop, 'Eggs, whole');
     assert.equal(whole.qty, 14, 'fourteen eggs, not 700 g of egg');
     assert.equal(whole.unit, '', 'counted, not weighed');
+    assert.ok(!whole.note, 'and no volume beside them — 700 ml of egg is not a thing');
     const whites = shopItem(shop, 'Egg whites');
-    assert.equal(whites.qty, 1715, 'seven cups of whites');
-    assert.equal(whites.unit, 'ml', 'poured, not weighed');
+    assert.equal(whites.qty, 52, 'fifty-two whites across the week');
+    assert.equal(whites.unit, '', 'counted');
+    assert.equal(whites.note, '1716 ml',
+      'WITH the volume, because that is what the carton is marked in and 52 is a ' +
+      'useless number at a supermarket');
     assert.equal(!!shopItem(shop, 'Whey protein'), false, 'and no whey for a week that eats none');
   });
 
@@ -3524,7 +3577,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('data-nut-night="bfast_protein|eggs"') >= 0, 'the egg row');
     assert.ok(html.indexOf('data-nut-night="bfast_protein|eggsveg"') >= 0, 'the veg row');
     assert.ok(html.indexOf('data-nut-night="bfast_protein|whey"') >= 0, 'and a way back to the shake');
-    assert.ok(/Egg whites 245 ml/.test(html), 'shown at the weight actually eaten');
+    assert.ok(/Egg whites 7\.4/.test(html), 'shown at the count actually eaten');
     assert.ok(/which the evening oil takes/.test(html),
       'the fat is declared AND said to be handled');
     assert.ok(/which nothing makes up/.test(html),
@@ -3578,7 +3631,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const bed = bedOf(d);
     assert.ok(bed, 'the meal is there');
     assert.equal(bed.time, '21:00', 'at 21:00');
-    assert.equal(bed.items.filter((it) => it.n === 'Egg whites')[0].g, 245, 'one cup of whites');
+    assert.equal(bed.items.filter((it) => it.n === 'Egg whites')[0].g, 7.4,
+      'one cup of whites, counted as 7.4 of them since v4.9.315');
     assert.equal(bed.items.filter((it) => /butter/i.test(it.n))[0].g, 15, 'and a spoon of nut butter');
     // Jon estimated ~350 kcal / 28 g protein / 9 g fat. From the quantities he
     // specified it is 216 / 30.5 / 7.9 — the protein and fat match, the calories
@@ -3691,7 +3745,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const before = app.nutProgShoppingFor(1, 'basmati');
     app.nutProgSetBedDefault(true);
     const after = app.nutProgShoppingFor(1, 'basmati');
-    assert.ok(shopItem(after, 'Egg whites').qty === 1715, 'seven cups of whites appear');
+    assert.equal(shopItem(after, 'Egg whites').qty, 52, 'seven cups of whites appear, counted');
     assert.ok(shopItem(after, 'Peanut butter').qty > shopItem(before, 'Peanut butter').qty,
       'and more nut butter');
     assert.ok(shopItem(after, 'Chicken breast').qty < shopItem(before, 'Chicken breast').qty,
@@ -3758,23 +3812,29 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const yog = midamOf(d).p;
     app.nutProgSetNightly(d, 'midam_dairy', 'whites');
     const w = midamOf(d);
-    assert.equal(w.g, 184, '184 ml, not 200 — sized to the macro, not swapped by weight');
+    assert.equal(w.g, 5.6, '5.6 whites, not 200 g — sized to the macro, not swapped by weight');
+    assert.ok(Math.abs(w.g * w.each - 184) <= 2, 'which is the 184 ml it always was');
     assert.ok(Math.abs(w.p - yog) <= 0.5,
       'landing the same 20 g of protein: ' + w.p + ' against the yoghurt\'s ' + yog);
   });
 
-  test('WHITES are POURED, not weighed', () => {
+  test('WHITES are COUNTED, not weighed', () => {
     setUp(110);
     const d = '2026-09-16';
     app.nutProgSetNightly(d, 'midam_dairy', 'whites');
-    assert.equal(midamOf(d).u, ' ml',
-      'they rendered as "184 g" and shopped as 1288 g before an option could carry ' +
-      'its own unit — a weight for a food sold by volume');
+    const it = midamOf(d);
+    // They rendered as "184 g" before an option could carry its own unit — a
+    // weight for a food sold by volume — and as ml before Jon asked for the
+    // count. The unit has to follow the FOOD, not the row it replaced.
+    assert.equal(it.count, true, 'counted');
+    assert.equal(it.each, 33, 'at 33 g a white');
+    assert.ok(/5\.6 egg whites \(185 ml\)/.test(app._nutProgItemLabel(it)),
+      'and labelled as both: ' + app._nutProgItemLabel(it));
     const days = app._nutProgWeekDates(1);
     days.forEach((dd) => app.nutProgSetNightly(dd, 'midam_dairy', 'whites'));
     const shop = app.nutProgShoppingFor(1, 'basmati');
-    assert.equal(shopItem(shop, 'Egg whites').unit, 'ml', 'and the list agrees');
-    assert.equal(shopItem(shop, 'Egg whites').qty, 1288, 'seven days at 184 ml');
+    assert.equal(shopItem(shop, 'Egg whites').qty, 39, 'seven days at 5.6 whites');
+    assert.equal(shopItem(shop, 'Egg whites').note, '1287 ml', 'with the volume to buy');
   });
 
   test('WHITES land on the PROTEIN shelf, not with the yoghurt', () => {
@@ -3827,8 +3887,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // which is 11 a week and not a thing anyone can eat.
     const shop = app.nutProgShoppingFor(1, 'basmati');
     assert.equal(shopItem(shop, 'Eggs, whole').qty, 14, 'two a day, seven days');
-    assert.ok(shopItem(shop, 'Egg whites').qty > 4000,
-      'and the whites absorb the whole trim instead: ' + shopItem(shop, 'Egg whites').qty + ' ml');
+    assert.ok(shopItem(shop, 'Egg whites').qty > 120,
+      'and the whites absorb the whole trim instead: ' +
+      shopItem(shop, 'Egg whites').qty + ' whites, ' + shopItem(shop, 'Egg whites').note);
   });
 
   test('WHITES the sheet offers them, and the section is not called dairy', () => {
@@ -4195,6 +4256,97 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/Dinner-heavy/.test(html),
       'a day running a different distribution is named on the plan — otherwise a ' +
       'week of two shapes looks like a week of one');
+  });
+
+  // ── week 0, and the day a tick lands on ──────────────────────────────────
+  // v4.9.315. Jon asked for the daily screen on week 0 "to test fully
+  // functional". Measured first: six of the seven days already worked.
+
+  test('W0 every day of the trial week has a daily screen', () => {
+    setUp(110);
+    app._nutProgWeekDates(0).forEach((d) => {
+      const h = onDay(d, () => app._nutTabToday(app.nutGetState())) || '';
+      const ticks = (h.match(/data-prog-tick/g) || []).length;
+      assert.ok(ticks >= 7, d + ' has meals to tick — got ' + ticks);
+      assert.ok(h.indexOf('data-prog-day="' + d + '"') >= 0,
+        d + ' shows ITS OWN meals, not another day\'s that happens to have seven');
+    });
+  });
+
+  test('W0 the BASELINE Wednesday is not a hole in the middle of it', () => {
+    setUp(110);
+    // The bug: nutProgStatusOn returns a single value answering "what stage is
+    // the programme in", and 9 September is the baseline weigh-in — so
+    // 'baseline' shadowed 'trial' and the tab refused to draw. Measured at 1,526
+    // characters and zero ticks, while _nutProgTodayCard for the same date gave
+    // 11,327 and eight. The card was never the problem.
+    const d = '2026-09-09';
+    assert.equal(app.nutProgStatusOn(d), 'baseline', 'it is still the weigh-in day');
+    assert.ok(app.nutProgIsTrial(d), 'AND still inside the trial week');
+    const h = onDay(d, () => app._nutTabToday(app.nutGetState())) || '';
+    assert.ok((h.match(/data-prog-tick/g) || []).length >= 7, 'it has a full day to tick');
+    // WHOSE day. Counting ticks is not identifying them: with the status gate
+    // restored this screen still drew eight ticks — Monday's, via the run-up
+    // preview, because 'baseline' falls through to that branch too. A count
+    // cannot tell the right day from a plausible wrong one.
+    assert.ok(h.indexOf('data-prog-day="' + d + '"') >= 0,
+      'and they are THAT DAY\'s meals. Asking the STATUS answered the wrong ' +
+      'question; asking whether the day has a PLAN answers the right one');
+    assert.equal(h.indexOf('data-prog-day="2026-09-07"'), -1,
+      'not Monday\'s, which is what the preview would have shown');
+    assert.equal(/Preview/.test(h), false, 'and it is not labelled as a preview');
+  });
+
+  test('W0 the run-up previews the first day so the loop can be tried early', () => {
+    setUp(110);
+    ['2026-09-03', '2026-09-05', '2026-09-06'].forEach((d) => {
+      const h = onDay(d, () => app._nutTabToday(app.nutGetState())) || '';
+      assert.ok(/Preview/.test(h), d + ' previews');
+      assert.ok(/Monday 2026-09-07/.test(h), 'and says whose day it is');
+      assert.ok((h.match(/data-prog-tick/g) || []).length >= 7, 'with real meals');
+      assert.ok(h.indexOf('data-prog-add') >= 0,
+        'and a way to log what he ate TODAY, which is a different thing');
+    });
+  });
+
+  test('W0 a tick from the preview lands on MONDAY, not on today', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-05', () => { app._nutTab = 'today'; app.nutRenderScreen(); });
+    const body = d.node('nut-screen-body');
+    const row = body.querySelectorAll('[data-prog-tick]')
+      .filter((el) => el.getAttribute('data-prog-tick') === 'lunch')[0];
+    assert.ok(row, 'the lunch row is there');
+    assert.equal(row.getAttribute('data-prog-day'), '2026-09-07',
+      'and it carries the day it was DRAWN FOR');
+    // Fired WHILE it is the 5th. Outside the wrapper the handler's _nutToday()
+    // answers with the sandbox's own date and the "not today" half of this case
+    // asserts nothing — an inversion that deleted the day attribute left it green.
+    onDay('2026-09-05', () => d.fire(row, 'click'));
+    assert.deepEqual(app.nutProgTicked('2026-09-07'), { lunch: true },
+      'so the tick lands on Monday');
+    assert.deepEqual(app.nutProgTicked('2026-09-05'), {},
+      'and NOT on today — the banner promises this, and a promise the code did ' +
+      'not keep would put adherence in the record for a day he did not eat');
+  });
+
+  test('W0 the same is true of the calendar drill-down — a PRE-EXISTING bug', () => {
+    setUp(110);
+    // Rendering another day's card is what the calendar has done since v4.9.296,
+    // and every tick from it went to _nutToday(). Measured: draw 10 September
+    // while today is the 16th, tick lunch, and the 16th gets it.
+    const d = dom();
+    app._nutProgSelDay = '2026-09-10';
+    onDay('2026-09-16', () => { app._nutTab = 'programme'; app.nutRenderScreen(); });
+    const body = d.node('nut-screen-body');
+    const row = body.querySelectorAll('[data-prog-tick]')
+      .filter((el) => el.getAttribute('data-prog-tick') === 'lunch')[0];
+    assert.ok(row, 'the row is there');
+    onDay('2026-09-16', () => d.fire(row, 'click'));
+    app._nutProgSelDay = null;
+    assert.deepEqual(app.nutProgTicked('2026-09-10'), { lunch: true },
+      'the tick lands on the day being looked at');
+    assert.deepEqual(app.nutProgTicked('2026-09-16'), {}, 'and not on today');
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

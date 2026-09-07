@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.315';
+var APP_VERSION='4.9.316';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19741,6 +19741,17 @@ function nutRenderScreen(){
   });
   var calBack = body.querySelector('[data-prog-cal-back]');
   if(calBack) calBack.addEventListener('click', function(){ _nutProgSelDay = null; nutRenderScreen(); });
+  body.querySelectorAll('[data-prog-plan-nav]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      _nutProgPlanOffset += parseInt(btn.getAttribute('data-prog-plan-nav'), 10);
+      nutRenderScreen();
+    });
+  });
+  var planToday = body.querySelector('[data-prog-plan-today]');
+  if(planToday) planToday.addEventListener('click', function(){
+    _nutProgPlanOffset = 0;
+    nutRenderScreen();
+  });
   var grainDflt = body.querySelector('[data-prog-grain-default]');
   if(grainDflt) grainDflt.addEventListener('click', function(){ nutOpenCarbSheet(); });
   body.querySelectorAll('[data-prog-carb]').forEach(function(row){
@@ -24161,12 +24172,22 @@ function _nutProgDayPlanCard(week){
   if(!days) return '';
   var rice = nutProgRiceChoice();
   var _lbl = (week === 0) ? 'Trial week' : ('Week ' + week + ' of ' + _NUT_PROG.weeks);
+  var _base = (typeof _nutProgPlanWeekBase === 'function') ? _nutProgPlanWeekBase() : week;
   var h = '<div style="margin-bottom:6px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
       '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">The week, day by day</div>' +
-      '<div style="font-size:10px;color:var(--text3);white-space:nowrap;">' + _lbl + ' &middot; ' +
-        days[0].slice(8) + '/' + days[0].slice(5,7) + '&ndash;' + days[6].slice(8) + '/' + days[6].slice(5,7) + '</div>' +
+      '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">' +
+        '<button data-prog-plan-nav="-1" style="width:26px;height:26px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:14px;line-height:1;cursor:pointer;touch-action:manipulation;">&#8249;</button>' +
+        '<div style="font-size:10px;color:var(--text3);white-space:nowrap;text-align:center;min-width:92px;">' + _lbl + '<br>' +
+          days[0].slice(8) + '/' + days[0].slice(5,7) + '&ndash;' + days[6].slice(8) + '/' + days[6].slice(5,7) + '</div>' +
+        '<button data-prog-plan-nav="1" style="width:26px;height:26px;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:14px;line-height:1;cursor:pointer;touch-action:manipulation;">&#8250;</button>' +
+      '</div>' +
     '</div>' +
+    // Only when he has moved off it, and it NAMES the week it goes back to —
+    // "this week" is ambiguous on a review Wednesday, which is the whole reason
+    // these arrows exist.
+    (week !== _base ? ('<button data-prog-plan-today style="width:100%;margin-top:6px;padding:7px;background:rgba(200,150,62,0.10);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">&#8617; Back to ' +
+      (_base === 0 ? 'the trial week' : ('week ' + _base)) + '</button>') : '') +
     '<div style="font-size:10px;color:var(--text3);margin-top:2px;">Tap any food to change it. Tap the day for how the day is shaped.</div>' +
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;">' +
       '<div style="font-size:11px;color:var(--text3);">Default grain, every lunch</div>' +
@@ -24251,11 +24272,36 @@ function _nutProgShopTab(){
   return _nutProgListCard(wk);
 }
 
+// ── which week PLAN is showing ─────────────────────────────────────────────
+// v4.9.316. Checked at Jon's request that PLAN renders week 0. It does, on ten
+// of the eleven days around it. On the ELEVENTH — Wednesday 9 September — it
+// shows week 1, and that is the review flow working rather than a fault: the
+// 9th IS week 1's review date, the day he weighs in and shops for the first
+// real week. The card says which week, and the calendar one tap away still
+// shows the trial week he is eating.
+//
+// What he could not do was get BACK. Mid-rehearsal, on the day he is testing
+// the rehearsal, the trial week's plan was unreachable from the tab that plans
+// it. So the week moves — the same control the free-form planner has always
+// had — and PREP and SHOPPING follow it, because a list that did not match the
+// plan on screen is the worse kind of wrong: he would shop for one week while
+// reading another.
+//
+// Zero on every load. The offset is deliberately NOT persisted: coming back to
+// the app should show the week he is in, not the week he was last reading.
+var _nutProgPlanOffset = 0;
+
 // WHICH week this tab is planning. The review day looks at the week it is
 // proposing for; every other day looks at the week he is in, and the run-up at
 // the first week there is. Three questions, one place that answers them — the
 // batch card was already deriving this and would have drifted.
 function _nutProgPlanWeek(){
+  var base = _nutProgPlanWeekBase();
+  if(base === null) return null;
+  var w = base + _nutProgPlanOffset;
+  return (w >= 0 && w <= _NUT_PROG.weeks) ? w : base;
+}
+function _nutProgPlanWeekBase(){
   var today = _nutToday();
   var wk = (typeof nutProgReviewWeekOn === 'function') ? nutProgReviewWeekOn(today) : null;
   if(wk !== null) return wk;

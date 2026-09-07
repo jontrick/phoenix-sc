@@ -4349,6 +4349,132 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(app.nutProgTicked('2026-09-16'), {}, 'and not on today');
   });
 
+  // ── the PLAN tab across week 0 ───────────────────────────────────────────
+  // v4.9.316. Jon asked me to check PLAN renders week 0 properly. It did, on ten
+  // of the eleven days around it. The eleventh was not a fault — see below — but
+  // it left the trial week unreachable from the tab that plans it.
+
+  const planDays = (d) => {
+    const h = onDay(d, () => app._nutTabWeek(app.nutGetState())) || '';
+    // Pull the VALUE out rather than slicing by a character count — the earlier
+    // probe printed "026-09-07" and I carried that off-by-one into the helper.
+    return (h.match(/data-prog-night-day="([^"]+)"/g) || [])
+      .map((x) => (/="([^"]+)"/.exec(x) || [])[1]);
+  };
+  const planLabel = (d) => {
+    const h = onDay(d, () => app._nutTabWeek(app.nutGetState())) || '';
+    return (h.match(/Trial week|Week \d+ of 15/) || ['?'])[0];
+  };
+
+  test('PLAN0 every day of the trial week plans the trial week', () => {
+    setUp(110);
+    app._nutProgPlanOffset = 0;
+    const w0 = app._nutProgWeekDates(0);
+    // The 9th is week 1's REVIEW DATE and is handled by its own case below.
+    w0.filter((d) => d !== '2026-09-09').forEach((d) => {
+      assert.deepEqual(planDays(d), w0, d + ' plans 7 to 13 September');
+      assert.equal(planLabel(d), 'Trial week', d + ' says so');
+    });
+  });
+
+  test('PLAN0 the run-up plans the trial week too, before it starts', () => {
+    setUp(110);
+    app._nutProgPlanOffset = 0;
+    const w0 = app._nutProgWeekDates(0);
+    ['2026-09-03', '2026-09-05', '2026-09-06'].forEach((d) => {
+      assert.deepEqual(planDays(d), w0, d + ' plans the week he is about to shop for');
+      assert.ok((onDay(d, () => app._nutTabWeek(app.nutGetState())) || '')
+        .indexOf('data-nut-item=') >= 0, 'and its foods are tappable');
+    });
+  });
+
+  test('PLAN0 the 9th plans WEEK 1, and that is the review flow, not a fault', () => {
+    setUp(110);
+    app._nutProgPlanOffset = 0;
+    // 9 September IS week 1's review date — the day he weighs in and shops for
+    // the first real week. Checked against the source of that claim rather than
+    // assumed from the symptom.
+    assert.equal(app.nutProgReviewDate(1), '2026-09-09', 'it is week 1\'s review date');
+    assert.ok(app.nutProgIsTrial('2026-09-09'), 'AND it is inside the trial week');
+    assert.equal(planLabel('2026-09-09'), 'Week 1 of 15',
+      'so PLAN shows the week being shopped for, labelled');
+    // And the calendar, one tap away, still shows the week he is eating.
+    const cal = onDay('2026-09-09', () => app._nutTabProgramme(app.nutGetState())) || '';
+    assert.ok(cal.indexOf('data-prog-cal-day="2026-09-10"') >= 0,
+      'while the calendar still shows the trial week he is in');
+  });
+
+  test('PLAN0 any week can be reached from the plan, in both directions', () => {
+    setUp(110);
+    // The gap this closes: mid-rehearsal, on the day he is testing the
+    // rehearsal, the trial week's plan could not be reached from PLAN at all.
+    app._nutProgPlanOffset = 0;
+    assert.equal(planLabel('2026-09-09'), 'Week 1 of 15', 'defaults to the review week');
+    app._nutProgPlanOffset = -1;
+    assert.equal(planLabel('2026-09-09'), 'Trial week', 'one back reaches the trial week');
+    assert.deepEqual(planDays('2026-09-09'), app._nutProgWeekDates(0), 'with its seven days');
+    app._nutProgPlanOffset = 1;
+    assert.equal(planLabel('2026-09-09'), 'Week 2 of 15', 'and one forward the next');
+    app._nutProgPlanOffset = 0;
+  });
+
+  test('PLAN0 the offset cannot leave the programme', () => {
+    setUp(110);
+    [-9, -99, 16, 99].forEach((o) => {
+      app._nutProgPlanOffset = o;
+      assert.equal(planLabel('2026-09-09'), 'Week 1 of 15',
+        'offset ' + o + ' falls back to the week the day is about, rather than ' +
+        'rendering a week that does not exist');
+    });
+    app._nutProgPlanOffset = 0;
+  });
+
+  test('PLAN0 shopping and prep FOLLOW the week on the plan', () => {
+    setUp(110);
+    // A list that did not match the plan on screen is the worse kind of wrong —
+    // he would shop for one week while reading another.
+    app._nutProgPlanOffset = -1;
+    const shop = onDay('2026-09-09', () => app._nutTabShopping(app.nutGetState())) || '';
+    assert.ok(/2026-09-07 &rarr; 2026-09-13/.test(shop),
+      'the list is for the trial week, because that is what the plan is showing');
+    const prep = onDay('2026-09-09', () => app._nutTabPrep(app.nutGetState())) || '';
+    assert.ok(prep.indexOf('Prep plan') >= 0, 'and the prep plan with it');
+    app._nutProgPlanOffset = 0;
+    assert.ok(/2026-09-14 &rarr; 2026-09-20/.test(
+      onDay('2026-09-09', () => app._nutTabShopping(app.nutGetState())) || ''),
+      'and back to week 1 when the plan is');
+  });
+
+  test('PLAN0 the way back names the week it returns to', () => {
+    setUp(110);
+    app._nutProgPlanOffset = 0;
+    assert.equal((onDay('2026-09-09', () => app._nutTabWeek(app.nutGetState())) || '')
+      .indexOf('data-prog-plan-today'), -1, 'no way-back button when he has not moved');
+    app._nutProgPlanOffset = -1;
+    const h = onDay('2026-09-09', () => app._nutTabWeek(app.nutGetState())) || '';
+    assert.ok(h.indexOf('data-prog-plan-today') >= 0, 'and one when he has');
+    assert.ok(/Back to week 1/.test(h),
+      '"this week" is ambiguous on a review Wednesday — which is the whole reason ' +
+      'these arrows exist — so it names the week: ' +
+      (h.match(/Back to [^<]*/) || ['?'])[0]);
+    app._nutProgPlanOffset = 0;
+  });
+
+  test('PLAN0 the arrows are WIRED, not merely drawn', () => {
+    setUp(110);
+    app._nutProgPlanOffset = 0;
+    const d = dom();
+    onDay('2026-09-09', () => { app._nutTab = 'week'; app.nutRenderScreen(); });
+    const body = d.node('nut-screen-body');
+    const back = body.querySelectorAll('[data-prog-plan-nav]')
+      .filter((el) => el.getAttribute('data-prog-plan-nav') === '-1')[0];
+    assert.ok(back, 'the back arrow is there');
+    d.fire(back, 'click');
+    assert.equal(app._nutProgPlanOffset, -1, 'and the tap moves the week');
+    assert.equal(planLabel('2026-09-09'), 'Trial week', 'to the trial week');
+    app._nutProgPlanOffset = 0;
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL

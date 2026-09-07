@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.315'", 'version is 4.9.315');
+has("var APP_VERSION='4.9.316'", 'version is 4.9.316');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3310,6 +3310,24 @@ hasNotCode('_nutProgWeekPickerCard',
         'the per-day editor — two controls for one setting drift apart');
 hasNotCode('_nutProgWeekAheadCard',
         'TABS: and so is the week table the day plan replaced');
+
+// ── the plan's week is navigable (v4.9.316) ────────────────────────────────
+// Checked at Jon's request: PLAN renders week 0 on ten of the eleven days around
+// it. The eleventh, 9 September, shows WEEK 1 — and that is the review flow
+// working, because the 9th IS week 1's review date. What it left was the trial
+// week unreachable from the tab that plans it, mid-rehearsal, on the day he is
+// testing the rehearsal.
+hasCode('var _nutProgPlanOffset = 0;', 'PLAN0: the plan week can be moved');
+hasCode('function _nutProgPlanWeekBase(',
+        'PLAN0: with the DEFAULT week still derived in one place — the review ' +
+        'Wednesday, the week he is in, or the first week there is');
+hasCode('return (w >= 0 && w <= _NUT_PROG.weeks) ? w : base;',
+        'PLAN0: and clamped, so no offset can render a week that does not exist');
+hasCode('data-prog-plan-nav',  'PLAN0: the arrows are drawn');
+hasCode("body.querySelectorAll('[data-prog-plan-nav]')", 'PLAN0: and WIRED');
+hasCode('data-prog-plan-today',
+        'PLAN0: with a way back that NAMES the week it returns to — "this week" ' +
+        'is ambiguous on a review Wednesday, which is why the arrows exist');
 
 // ── week 0, the tick's day, and egg whites by the white (v4.9.315) ─────────
 hasCode('var _hasPlan = (typeof nutProgTargetsOn === \'function\') && !!nutProgTargetsOn(today);',

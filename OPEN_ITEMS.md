@@ -77,32 +77,31 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       and so never reach the branch that was broken. One screen-level test now drives
       `renderTodayScreen()`; that is the only automated cover for the actual fault.
 
-- [ ] JON — **Four nutrition decisions were made FOR him; each needs his eyes.** The
-      rest of v4.9.299–.312 he asked for. Detail is in the commit for each version; the
-      part he has to rule on is here.
-      · **04:15 (.299)** — a lifting day offers intra / banana / nothing, and **every
-        non-lifting day LOST its banana**. He described the old behaviour the other way
-        round and a probe showed the inverse. A banana back on rest days is one line.
+- [ ] JON — **Five nutrition decisions were made FOR him; each needs his eyes.** The
+      rest of v4.9.299–.315 he asked for. Detail is in each version's commit.
+      · **04:15 (.299)** — every non-lifting day LOST its banana. He described the old
+        behaviour the other way round; a probe showed the inverse. One line to reverse.
       · **Cashews (.303), grains (.305), dinner-heavy (.312)** — each holds ONE macro and
-        lets the others move, uncompensated, and each says so on its row: cashews ~6 g
-        carbs over; quinoa +5.4 g protein and +4.9 g fat at lunch. **Nothing compensated
+        lets the others move UNCOMPENSATED, and each says so on its row: cashews ~6 g
+        carbs over, quinoa +5.4 g protein and +4.9 g fat at lunch. **Nothing compensated
         before .305 either.** The alternative is routing fat through the evening oil.
-      · **Dinner-heavy also reverses a skew he did not know was there** — he said protein
-        was "roughly evenly spread"; measured, LUNCH is 28% and dinner 21%. So the move is
-        bigger than he may expect: chicken 135→101 g, yoghurt 200→150 g, +15 g at 19:00,
-        daily total unchanged.
-      · **Meal 7 (.308)** — OFF by default; turning it on **trims chicken, salmon, tuna
-        and whey by about a fifth** so the target does not move. My reading of "the daily
-        macro target and other meals adjust"; the alternative is the day running ~215 kcal
-        over. It changes the Sunday batch, so it is a WEEK decision. He put Meal 7 at
-        ~350 kcal; the foods he named come to 216.
-      **A ceiling now exists and is declared:** stack dinner-heavy + Meal 7 + eggs + egg
-      whites at phase 5 and the evening oil floors at zero with 5.8 g of fat
-      uncompensated. The sheet says so and names the fix. First time this plan has
-      admitted a limit rather than absorbing one.
-      On the phone: pick "nothing" at 04:15 and check the day still hits its carbs; pick
-      three grains and check the prep plan lists three pots; turn Meal 7 on and see
-      whether the smaller lunch is one he will actually eat.
+      · **Dinner-heavy reverses a skew he did not know was there** — he said protein was
+        "roughly evenly spread"; measured, LUNCH is 28% and dinner 21%. Chicken
+        135→101 g, yoghurt 200→150 g, +15 g at 19:00, daily total unchanged.
+      · **Meal 7 (.308)** — OFF by default; on, it **trims chicken, salmon, tuna and whey
+        by about a fifth** so the target does not move. My reading of "the daily macro
+        target and other meals adjust"; the alternative is ~215 kcal over. Changes the
+        Sunday batch, so it is a WEEK decision. He put it at ~350 kcal; it is 216.
+      · **Four tabs (.313-.315)** — the day HEADER opens the day-level choices, since
+        those are not components with a line to tap; the calendar and recipe library kept
+        doors after losing their tabs; and the run-up PREVIEWS Monday, with ticks landing
+        on Monday rather than today.
+      **A ceiling now exists and is declared:** dinner-heavy + Meal 7 + eggs + whites at
+      phase 5 floors the evening oil at zero with 5.8 g of fat uncompensated. The sheet
+      says so and names the fix — the first limit this plan admits rather than absorbs.
+      On the phone: "nothing" at 04:15 and check the carbs still land; three grains and
+      check the prep plan lists three pots; Meal 7 on and see whether the smaller lunch is
+      one he will eat; and tap a food on PLAN to confirm it opens only that food.
 - [ ] JON — **Two week badges, top right of Today (v4.9.301).** Was one pill reading
       "WEEK 1" under a Week 3 session. **What to watch:** it should now read `TRAIN W3`,
       matching the session card. **The nutrition pill is EXPECTED TO BE ABSENT until
@@ -110,15 +109,6 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       has no week and the label must be omitted rather than shown as "Week 0". So one
       pill before the 7th and two from the 7th is correct behaviour, not a half-built
       feature. Closes when he confirms the training number matches the session card.
-
-- [ ] JON — **The nutrition screen, four tabs (v4.9.313).** DAILY (tick-off, no
-      Substitutions banner) · PLAN (the week, every food tappable) · PREP · SHOPPING.
-      Two things to check because they were my calls: the day HEADER opens the day-level
-      choices (distribution, 04:15, Meal 7) since those are not components with a line to
-      tap; and the calendar and recipe library lost their tabs but kept doors — from PLAN
-      and PREP respectively. **Superseded the v4.9.311 three-tab layout**, where he had
-      asked for TODAY and PROGRAMME to be swapped and a probe showed that was not what
-      those screens held.
 
 - [ ] JON — **The hamburger menu (v4.9.314).** He reported the tap going nowhere and
       asked for it removed if it was only the old AI-programme notifier. **It is not** —

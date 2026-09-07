@@ -53,7 +53,17 @@ Five distinct instances, all green, all worthless:
   CREATES but not the screen body it writes into, so no case could tap anything wired via
   `body.querySelector(...)` — where most controls are wired. Deleting one such handler
   turned nothing red. The markup assertion beside it passed the whole time, which is why
-  it read as covered. **Ask what a passing case would still pass on.**
+  it read as covered. **Ask what a passing case would still pass on.** A second gap in the
+  same helper: an element knew only the attribute it was SELECTED on, so a handler reading
+  a sibling attribute got null and no case could tell "acted on the right day" from "acted
+  on today".
+- **Counting is not identifying.** "The baseline Wednesday has a daily screen" counted
+  TICK CIRCLES and passed with the bug put back — because the run-up branch answers that
+  status too and drew a DIFFERENT DAY's card, eight ticks and all. Seven of the right thing
+  and seven of the wrong thing are the same number. Assert *whose*, not *how many*.
+- **A tap fired outside the clock it was testing.** The case set the date, rendered, then
+  fired the tap after restoring the real date — so the handler's `_nutToday()` answered
+  with the sandbox's own date and the "and NOT today" half asserted nothing.
 
 > **A CHECK THAT HAS NEVER FIRED IS UNTESTED, NOT CLEAN.** Break it, watch it go red, and
 > confirm it can still go green.
@@ -75,24 +85,36 @@ Worse than an inert check. A count reads as coverage, so a number that silently 
 blind spot does not merely fail to inform, it argues against looking further. The guard
 above said "all 80 distinct" while two sites were unlisted.
 
+## One value answering two questions will answer the wrong one (2026-09-07)
+
+`nutProgStatusOn` returns one string for "what stage is the programme in". The daily screen
+asked it "is there food to tick today". They agree six days in seven — but the baseline
+weigh-in Wednesday sits INSIDE the rehearsal week, so `'baseline'` shadowed `'trial'` and
+the middle of the week rendered nothing. The card was fine: driven directly, 11,327
+characters and eight ticks.
+
+Same shape, worse, two lines away: a tick handler used `_nutToday()` while the card had
+been drawn for **another day**. The calendar drill-down has rendered other days since
+v4.9.296, so every tick from it landed on today — adherence for a day he did not eat, none
+for the day he did. **A renderer given a date must put that date on what it draws.**
+
+> Before reusing a status or a "current" value, ask what question it was written to answer.
+> If it is not yours, derive yours — `nutProgTargetsOn(d)` answers "does this day have a
+> plan" exactly, and was already there.
+
 ## A `var` read above its own assignment is undefined, not an error (2026-09-05)
 
-Three times in one day inside `nutProgMealsOn`, which is now long enough that declaration
-order is a live hazard:
+Three times in one day inside `nutProgMealsOn`, now long enough that declaration order is a
+live hazard. `_bfastDrops` threw when driven (`undefined.length` does). `_splitTake` did
+NOT: `if(undefined)` is just false, so a carb routing silently did nothing and the day sat
+1.4 g off. **Nearly shipped.**
 
-- `_bfastDrops` — the milk-drop carb routing read it ten lines early. Threw only when
-  driven, because `undefined.length` does throw.
-- `_splitTake` — the distribution's carb routing read it above its `var`. Did NOT throw:
-  `if(undefined)` is simply false, so the routing silently did nothing and the day sat
-  1.4 g off target. **Nearly shipped.**
-- `_bedM` and friends, caught while writing them.
+`runtime_check.mjs` is clean every time — an undefined `var` is not a ReferenceError. Only
+measuring the OUTPUT finds it, and only when the effect is big enough to notice; 1.4 g is
+not.
 
-`runtime_check.mjs` is clean every time — an undefined `var` is not a ReferenceError, and
-the top level executes fine. The harness cannot see it. Only MEASURING the output finds it,
-and only if the effect is big enough to notice: 1.4 g of carbohydrate is not.
-
-> **In a long function, declare every day-level figure in one block above the first use,
-> and when a routing step "does nothing", suspect its inputs before its arithmetic.**
+> **Declare every day-level figure in one block above the first use. When a routing step
+> "does nothing", suspect its inputs before its arithmetic.**
 
 ## Three green gates prove parse and top level, never behaviour
 
@@ -255,22 +277,20 @@ WANTS, it is binding and needs no checking.
 
 ## A step that did not run looks exactly like a step that did (2026-09-05)
 
-Harness guards for v4.9.307 were written, reported as added, and never landed. The shell
-step was `grep -c "INVERSION" index.html && python3 <<'PY' ... PY`. The grep correctly
-found **zero** matches, zero is exit status **1**, and `&&` stopped the chain. Three
-versions shipped with no harness cover for the feature they added.
+Harness guards for v4.9.307 were written, reported as added, and never landed. The step was
+`grep -c "INVERSION" index.html && python3 <<'PY' ... PY`. The grep correctly found
+**zero**, zero is exit status **1**, and `&&` stopped the chain. Three versions shipped with
+no harness cover.
 
-Two things let it through. The command's own confirmation (`print('guards added')`) never
-appeared and I did not miss it, because I was reading the *gate's* output further down —
-which was red for unrelated reasons and gave me something else to fix. And `grep -c`
-returning 1 on a legitimate zero is a trap in any `&&` chain.
+Its own confirmation never printed and I did not miss it, because I was reading the *gate's*
+output further down — red for unrelated reasons, giving me something else to fix.
 
-> **Never chain a mutating step behind a `grep`/`test` whose zero-result is normal.** Run
-> it on its own line, and read the step's OWN output before the gate's.
+> **Never chain a mutating step behind a `grep`/`test` whose zero-result is normal**, and
+> read the step's OWN output before the gate's.
 
-Related: twice in the same session a version label went into the build script's `#`
-comments instead of the source. The `VERSION` guard failed the build both times — that one
-works.
+Related: three times in one session a version label or explanation went into the build
+script's `#` comments instead of the source, reaching nobody. The `VERSION` guard caught two
+of them.
 
 ## Encode your own judgement as a NOTE, not as STRUCTURE (2026-09-05)
 

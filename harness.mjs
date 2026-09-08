@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.323'", 'version is 4.9.323');
+has("var APP_VERSION='4.9.324'", 'version is 4.9.324');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2554,6 +2554,23 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── DRY RUN FOR WOD AND CORE (v4.9.324) ─────────────────────────────────────
+// Jon asked for the BLAB dry run on the library sessions too. BLAB's _blabDryRun does
+// NOT cover them: library scores go through _phxSaveScore to localStorage AND to
+// Supabase wod_scores. Reusing that flag would have shipped a "preview" that silently
+// logged a real score and a real PB — worse than no preview at all.
+hasCode('window._phxDryRun = false;', 'DRY: STRUCTURAL library sessions have their own dry-run flag');
+hasCode('  if(window._phxDryRun){', 'DRY: _phxSaveScore returns before it can write');
+// SET ON EVERY START, not only the dry ones — a preview leaving the flag armed would
+// silently discard his next real score. The default argument is the guard.
+hasCode('window._phxDryRun = !!dryRun;', 'DRY: a normal start disarms the flag');
+// The banner is not decoration: once running, it is the only thing separating a preview
+// from the real session.
+hasCode("b.id = 'phx-dryrun-banner';", 'DRY: a dry run says so on screen while it runs');
+// Behaviour in tests/training.mjs under DRY:, proved by inversion 2026-09-08 — disabling
+// the guard turns 2 red including "not a PB in a preview: got true, want false", the
+// case that would have put a fake star in his records.
 
 // ── SEEING THE NUMBER HE IS CHASING (v4.9.323) ──────────────────────────────
 // Jon, two items: the 1.6km best must be visible UNDER the running clock, and

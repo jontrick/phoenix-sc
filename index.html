@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.323';
+var APP_VERSION='4.9.324';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -38229,7 +38229,32 @@ function _phxBestFor(session){
 function _phxLocalId(){ var n=1; try{ n=parseInt(localStorage.getItem('phoenix_lib_score_seq')||'0',10)+1; localStorage.setItem('phoenix_lib_score_seq',String(n)); }catch(e){} return 'l'+n+'-'+(new Date().getTime()); }
 
 // Save a score → localStorage mirror + Supabase (best-effort). Returns the record.
+// v4.9.324 — DRY RUN FOR WOD AND CORE SESSIONS.
+//
+// Jon: "can i also add the dry run options to the core and wod workouts to check they
+// are working but to also see the format before i choose?"
+//
+// BLAB already had this — blabOpenAudit sets window._blabDryRun, and blabSaveState
+// returns early on it, which neutralises every BLAB write in ONE place. The library
+// sessions had no equivalent, and crucially `_blabDryRun` does NOT cover them: their
+// scores go through _phxSaveScore, a completely separate path to localStorage AND to
+// Supabase wod_scores. Reusing the BLAB flag alone would have produced a "preview" that
+// silently logged a real score and a real PB — worse than having no preview.
+//
+// So this is the same idea with its own flag and its own guard, at the one place every
+// library score is written.
+window._phxDryRun = false;
+
 function _phxSaveScore(session, rawScore, notes, extra){
+  // DRY RUN: build the record so the UI can show him what it WOULD have saved, and
+  // write nothing — not locally, not to wod_scores. Returned early, above the uid
+  // lookup, so there is no path from here to a write.
+  if(window._phxDryRun){
+    return { local_id:'dryrun', user_id:null, wod_id:session.id, wod_name:session.name,
+             cat:session.cat, tier:(session.tier||session.coreType||''), score:String(rawScore),
+             score_type:session.scoreType, date:new Date().toISOString(),
+             notes:(notes||''), is_pb:false, sets:(extra&&extra.sets)||null, dry_run:true };
+  }
   var uid=(typeof currentSession!=='undefined' && currentSession && currentSession.user && currentSession.user.id) || null;
   var hist=_phxHistoryFor(session.id);
   var isPb = (session.scoreType!=='done') && hist.every(function(h){ return phxIsBetter(session.scoreType, rawScore, h.score); });
@@ -38592,6 +38617,10 @@ window._phxOpenSessionDetail = function(id, backCtx, opts){
     '</div>'+
     '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+
       '<button id="phx-lib-start" style="width:100%;padding:15px;background:'+accent+';border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">'+(opts.actionLabel || 'Start Session →')+'</button>'+
+      // v4.9.324: dry run. Offered only on a normal start — when the sheet has been given
+      // a custom action (scheduling it, say) a preview would run the wrong thing.
+      (opts.onAction ? '' :
+        '<button id="phx-lib-dryrun" style="width:100%;margin-top:8px;padding:13px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Dry run &mdash; nothing saved</button>')+
     '</div>';
 
   o.querySelector('.phx-lib-back').onclick=function(){
@@ -38604,8 +38633,10 @@ window._phxOpenSessionDetail = function(id, backCtx, opts){
   document.getElementById('phx-lib-start').onclick=function(){
     o.remove();
     if(typeof opts.onAction === 'function'){ opts.onAction(s); return; }
-    _phxStartSession(id);
+    _phxStartSession(id, false);
   };
+  var _dryBtn = document.getElementById('phx-lib-dryrun');
+  if(_dryBtn) _dryBtn.onclick=function(){ o.remove(); _phxStartSession(id, true); };
 };
 
 // ─────────────────────────── Live session runner ───────────────────────────
@@ -38618,8 +38649,12 @@ function _phxClearTick(){
   if(typeof _phxUnregisterTimer==='function') _phxUnregisterTimer();
   if(typeof releaseWakeLock==='function') releaseWakeLock();
 }
-function _phxStartSession(id){
+function _phxStartSession(id, dryRun){
   var s=phxSessionById(id); if(!s) return;
+  // Set on EVERY start, not only the dry ones — otherwise a preview would leave the flag
+  // armed and the next real session would silently discard his score. The default
+  // argument is the guard: a normal `_phxStartSession(id)` clears it.
+  window._phxDryRun = !!dryRun;
   _phxClearTick();
   var r=s.renderer;
   if(r==='time') _phxRenderTime(s);
@@ -38629,7 +38664,20 @@ function _phxStartSession(id){
   else if(r==='intervals') _phxRenderIntervals(s);
   else _phxRenderCore(s);
 }
-function _phxRunOverlay(s){ return _phxLibOverlay('phx-lib-run',9560); }
+function _phxRunOverlay(s){
+  var o = _phxLibOverlay('phx-lib-run',9560);
+  // A preview that looks identical to the real thing is a trap: he finishes it, sees a
+  // score, and believes it was logged. The banner is not decoration — it is the whole
+  // difference between the two modes once the session is running.
+  if(window._phxDryRun){
+    var b = document.createElement('div');
+    b.id = 'phx-dryrun-banner';
+    b.style.cssText = 'background:var(--orange-dim);border-bottom:1px solid var(--orange);color:var(--orange);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:8px 12px;flex-shrink:0;';
+    b.textContent = 'Dry run \u00b7 nothing will be saved';
+    o.appendChild(b);
+  }
+  return o;
+}
 function _phxClockBox(id, label){
   return '<div style="text-align:center;padding:22px 0 10px;"><div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">'+label+'</div>'+
     '<div id="'+id+'" style="font-family:var(--font-d);font-size:52px;font-weight:900;color:var(--gold);line-height:1;">00:00</div></div>';

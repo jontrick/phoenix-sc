@@ -4522,4 +4522,98 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(sg, 'the suggestion survives the split');
     assert.equal(sg.kg, 22.5, 'hit the target, so up one increment');
   });
+
+  // ── DRY RUN FOR WOD AND CORE (v4.9.324) ───────────────────────────────────
+  // Jon: "can i also add the dry run options to the core and wod workouts to check they
+  // are working but to also see the format before i choose?"
+  //
+  // BLAB already had this via _blabDryRun, which blabSaveState returns early on. That
+  // flag does NOT cover library sessions: their scores go through _phxSaveScore, a
+  // separate path to localStorage AND to Supabase wod_scores. Reusing the BLAB flag
+  // would have produced a "preview" that silently logged a real score and a real PB.
+
+  const someSession = () => {
+    const ids = Object.keys(app.PHX_LIB || {});
+    for (const k of ids) {
+      const v = app.PHX_LIB[k];
+      if (Array.isArray(v) && v.length && v[0] && v[0].id) return v[0];
+    }
+    return null;
+  };
+
+  test('DRY: the BLAB flag never covered library scores — the premise', () => {
+    // If _phxSaveScore ever starts honouring _blabDryRun this test should be revisited,
+    // but until then two flags is correct, not duplication.
+    reset(); signIn(UID);
+    const s = someSession();
+    assert.ok(s, 'PHX_LIB has a session to test with');
+    app._blabDryRun = true;
+    app._phxDryRun = false;
+    try {
+      const before = (app._phxScoresAll() || []).length;
+      app._phxSaveScore(s, '3:21', 'premise check');
+      assert.equal((app._phxScoresAll() || []).length, before + 1,
+        'the BLAB flag does not stop a library write — which is why _phxDryRun exists');
+    } finally { app._blabDryRun = false; }
+  });
+
+  test('DRY: a dry run writes NOTHING to the score store', () => {
+    reset(); signIn(UID);
+    const s = someSession();
+    const before = (app._phxScoresAll() || []).length;
+    app._phxDryRun = true;
+    try {
+      const rec = app._phxSaveScore(s, '3:21', 'dry');
+      assert.ok(rec, 'a record still comes back so the UI can show what it would save');
+      assert.equal(rec.dry_run, true, 'and it says what it is');
+      assert.equal((app._phxScoresAll() || []).length, before, 'but nothing was stored');
+    } finally { app._phxDryRun = false; }
+  });
+
+  test('DRY: a dry run never claims a PB', () => {
+    // is_pb drives the gold star and the records tab. A previewed PB would be a lie
+    // that outlives the preview.
+    reset(); signIn(UID);
+    const s = someSession();
+    app._phxDryRun = true;
+    try {
+      assert.equal(app._phxSaveScore(s, '0:01', 'dry').is_pb, false,
+        'even an absurdly good score is not a PB in a preview');
+    } finally { app._phxDryRun = false; }
+  });
+
+  test('DRY: a real session still saves — the guard did not disable logging', () => {
+    // The positive control. Without it, "never save anything" passes every case above.
+    reset(); signIn(UID);
+    const s = someSession();
+    app._phxDryRun = false;
+    const before = (app._phxScoresAll() || []).length;
+    const rec = app._phxSaveScore(s, '3:21', 'real');
+    assert.equal((app._phxScoresAll() || []).length, before + 1, 'a real score is stored');
+    assert.ok(!rec.dry_run, 'and is not flagged as a preview');
+  });
+
+  test('DRY: starting a session normally CLEARS the flag', () => {
+    // The trap this design exists to avoid: a preview leaving the flag armed so his next
+    // real session is silently discarded. The default argument is the guard.
+    reset(); signIn(UID);
+    const s = someSession();
+    app._phxDryRun = true;
+    const realClear = app._phxClearTick;
+    app._phxClearTick = () => { throw new Error('stop here — the flag is already set'); };
+    try { app._phxStartSession(s.id); } catch (e) { /* expected */ }
+    finally { app._phxClearTick = realClear; }
+    assert.equal(app._phxDryRun, false, 'a normal start disarms it');
+  });
+
+  test('DRY: starting a session as a dry run ARMS the flag', () => {
+    reset(); signIn(UID);
+    const s = someSession();
+    app._phxDryRun = false;
+    const realClear = app._phxClearTick;
+    app._phxClearTick = () => { throw new Error('stop here'); };
+    try { app._phxStartSession(s.id, true); } catch (e) { /* expected */ }
+    finally { app._phxClearTick = realClear; }
+    assert.equal(app._phxDryRun, true, 'and the dry path arms it');
+  });
 }

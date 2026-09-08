@@ -84,7 +84,8 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## JON'S 2026-09-08 SESSION REPORT — 6 OF 7 STILL OPEN
 
-One message, seven items. Shipping one commit each; **#2 done in v4.9.320**. Diagnoses
+One message, seven items. One commit each. **Six done (.320-.324); only #1 Run the
+Rack is left.** Diagnoses
 below are verified against the source, not guessed — build from these, do not re-derive.
 
 - [x] **2. Banded Deadlift showed last week's Rack Pull.** DONE v4.9.320. Day 4 slot 1
@@ -98,27 +99,35 @@ below are verified against the source, not guessed — build from these, do not 
       (kg × reps summed across drops) as the benchmark**, and the per-drop breakdown
       surfaced next week. Nearest precedent is the pull-up chip UI (`_blabTrRemove`,
       `_blabTrRecount`) — add-as-you-go rows already exist there. Biggest of the seven.
-- [ ] **3. Core circuit compares against a different circuit.** `coreCircuit()` (~L6914)
+- [x] **3. Core circuit compared against a different circuit.** DONE v4.9.321. Keyed by
+      the circuit itself (rounds + movements + reps); the old shared record is ignored,
+      not deleted. WAS: `coreCircuit()` (~L6914)
       hardcodes `_timeRecordKey:'Core Circuit_time'` and `prev_best:rec('Core Circuit_time')`
       for EVERY variant, but the movements change by block — W1–2 is Toe Touches/Bicycle/
       Side Plank, W3–4 is Sprinter Sit-ups/V-ups/Toe Touches/Hip-ups. Same PB slot, different
       work. Jon: "not much point — just keep for next weeks redo to check this one", i.e.
       key the record to the CIRCUIT COMPOSITION so a redo of the same circuit compares and a
       different one shows nothing. Same class as #2: a key that does not identify the thing.
-- [ ] **4. Box jumps show no last-week numbers.** They carry `prev_best:rec('Box Jumps_height')`
+- [x] **4. Box jumps showed no last-week numbers.** DONE v4.9.323. The history was never
+      missing — the dropdown was nested inside the weight suggestion, which correctly
+      returns null without a load. Split; fixed for every bodyweight movement. WAS: They carry `prev_best:rec('Box Jumps_height')`
       + `record_key:'Box Jumps_height'` (~L7223/7237/7274) — a HEIGHT record only. Nothing
       surfaces what he actually achieved per set. `records[name+'_wk']` already holds it
       (written for every format since .291); this is a read/render gap, not a storage one.
-- [ ] **5. 1.6km run — best result needs to be big and under the timer.** The previous best
+- [x] **5. 1.6km run best under the timer.** DONE v4.9.323, plus a live ahead/behind gap
+      painted from the existing clock tick. WAS: The previous best
       exists (`_phxCardioBlock`, ~L5757–5768, appends "— beat it.") but is not positioned or
       sized to read mid-run. Rendering change only.
-- [ ] **6. Nordic Planks are actually COPENHAGEN planks — Jon's own correction.** Slot 3 of
+- [x] **6. DONE v4.9.322 — Copenhagen planks,** with a read-fallback so his logged Nordic
+      holds still reach the new name. Nothing migrated. WAS: Nordic Planks are actually COPENHAGEN planks — Jon's own correction.** Slot 3 of
       Day 4, W1–W12, with a `hold_secs` progression 20→45 (~L7291+). **Renaming the display
       is the easy half; the trap is the records.** Keys are `Nordic Planks_*` (incl. `_wk`,
       `_time`), and the harness pins the NP: hold_secs ladder by name. A blind rename orphans
       his history — needs a read-fallback to the old key, and the harness pins updated
       deliberately rather than made to pass.
-- [ ] **7. Dry run for Core and WOD sessions** — "to check they are working but to also see
+- [x] **7. DONE v4.9.324 — dry run for Core and WOD.** Own flag (`_phxDryRun`), because
+      `_blabDryRun` does NOT cover `_phxSaveScore` — reusing it would have logged a real
+      score and a real PB during a "preview". WAS: Dry run for Core and WOD sessions — "to check they are working but to also see
       the format before I choose". **The machinery already exists for BLAB**: `blabOpenAudit`
       / `blabOpenAuditDay` set `_blabDryRun` (blocks every write via the guard in
       `blabSaveState`) and `_blabAuditMode.readOnly`. WOD/Core open via

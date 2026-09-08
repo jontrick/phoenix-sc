@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.321';
+var APP_VERSION='4.9.322';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4302,11 +4302,31 @@ window._blabAwaitRecords = function(){
 // rather than guess a mapping between them.
 var _BLAB_BIG_LIFTS = ['squat', 'deadlift', 'bench', 'hip thrust', 'leg press', 'rack pull'];
 
+// v4.9.322 — RENAMED EXERCISES KEEP THEIR HISTORY.
+//
+// Jon: "nordic planks i got wrong - they are Copenhagen planks please update". He is
+// correcting his own spec, and they are genuinely different exercises — the coach
+// prompt names both, separately.
+//
+// The records are keyed by the exercise NAME as read off the DOM at log time, so a
+// bare rename orphans every hold he has already logged: the weekly-maxes dropdown for
+// Copenhagen Planks would come up empty while his real data sat under the old key.
+// That is the "finished code with no door" shape this codebase keeps producing, and
+// renaming is a cheap way to cause it.
+//
+// READ-FALLBACK, NOT MIGRATION. Nothing is rewritten in his stored state: the new key
+// is preferred, and the old one answers only when the new one has nothing yet. A
+// migration would be tidier and is not worth the risk of mutating his logged history
+// to fix a label — if this is wrong, no data has been touched.
+var _BLAB_RENAMED = { 'Copenhagen Planks': 'Nordic Planks' };
 function blabWeeklyMaxes(name){
   try {
     var s = window.blabGetState();
     if(!s || !s.records) return [];
     var map = s.records[name + '_wk'];
+    if((!map || typeof map !== 'object') && _BLAB_RENAMED[name]){
+      map = s.records[_BLAB_RENAMED[name] + '_wk'];
+    }
     if(!map || typeof map !== 'object') return [];
     return Object.keys(map)
       .map(function(w){ return { week: parseInt(w, 10), wt: map[w].wt || 0, reps: map[w].reps || 0, date: map[w].date || '' }; })
@@ -6035,7 +6055,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'standard_sets';
       // v4.9.131: timed-hold exercises carry hold_secs through so the session renderer
-      // can inject a countdown timer button (e.g. Nordic Planks).
+      // can inject a countdown timer button (e.g. Copenhagen Planks).
       if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs; phxEx.reps = ex.hold_secs+'s'; }
       // v4.9.179: an explicit hold_secs wins, but otherwise read the duration out of
       // the reps text. '45s continuous', '30s', '20 sec/side' all describe a timed
@@ -7343,26 +7363,26 @@ window.blabGetSessionData = function(week, day){
         prev_best:rec('Max Height Box Jumps_height'), record_key:'Max Height Box Jumps_height'});
     }
 
-    // ── SLOT 3: NORDIC PLANKS (timed holds) ──────────────────────────────────────
-    if(w === 1) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:20, rest:120,
+    // ── SLOT 3: COPENHAGEN PLANKS (timed holds) ──────────────────────────────────
+    if(w === 1) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:3, hold_secs:20, rest:120,
       note:'Kneel with feet anchored. Lean forward and hold isometrically. Brace glutes and hamstrings hard. Use the timer.'});
-    else if(w === 2) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:25, rest:120,
+    else if(w === 2) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:3, hold_secs:25, rest:120,
       note:'5 more seconds than W1. Stay rigid — no hip drop. Fight for every second.'});
-    else if(w === 3) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:30, rest:120,
+    else if(w === 3) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:3, hold_secs:30, rest:120,
       note:'30 seconds. Full tension throughout. Brace core, squeeze glutes, fire hamstrings.'});
-    else if(w === 4) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:3, hold_secs:35, rest:120,
+    else if(w === 4) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:3, hold_secs:35, rest:120,
       note:'Block 1 peak hold. 35 seconds — this is where hamstring armour is built.'});
-    else if(w === 6) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:20, rest:120,
+    else if(w === 6) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:4, hold_secs:20, rest:120,
       note:'Block 2 resets duration — but adds a 4th set. Build the base again.'});
-    else if(w === 7) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:25, rest:120,
+    else if(w === 7) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:4, hold_secs:25, rest:120,
       note:'4 sets × 25s. Stay locked — no hip sag, no relaxing between reps.'});
-    else if(w === 8) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:30, rest:120,
+    else if(w === 8) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:4, hold_secs:30, rest:120,
       note:'4 sets × 30s. Matching Block 1 peak but with an extra set. Strong.'});
-    else if(w === 9) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:35, rest:120,
+    else if(w === 9) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:4, hold_secs:35, rest:120,
       note:'Block 2 peak. 4 × 35s. Hold the position like your hamstrings depend on it — they do.'});
-    else if(w === 11) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:40, rest:120,
+    else if(w === 11) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:4, hold_secs:40, rest:120,
       note:'Block 3. 40 seconds. This is the top of the strength curve — full tension, no compromise.'});
-    else if(w === 12) exs4.push({name:'Nordic Planks', format:'standard_sets', sets:4, hold_secs:45, rest:120,
+    else if(w === 12) exs4.push({name:'Copenhagen Planks', format:'standard_sets', sets:4, hold_secs:45, rest:120,
       note:'Final week. 45 seconds. Leave everything in it. This is your benchmark hold.'});
 
     // ── SLOT 4: KB ACCESSORY ──────────────────────────────────────────────────────
@@ -11595,7 +11615,7 @@ function _phxReleaseWakeLockIfIdle(){
   if(!window._phxTimerResync){ releaseWakeLock(); requestWakeLock(); }
 }
 // v4.9.131: hold timer — repurposes the gold rest overlay with "HOLD" label for
-// timed-hold exercises (Nordic Planks etc.). Restores labels on completion/skip.
+// timed-hold exercises (Copenhagen Planks etc.). Restores labels on completion/skip.
 window._phxStartHoldTimer = function(secs){
   var lbl = document.querySelector('#rest-overlay .rest-timer-label');
   var skipBtn = document.getElementById('rt-skip');

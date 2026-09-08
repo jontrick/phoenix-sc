@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.321'", 'version is 4.9.321');
+has("var APP_VERSION='4.9.322'", 'version is 4.9.322');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2554,6 +2554,18 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── COPENHAGEN, NOT NORDIC (v4.9.322) ───────────────────────────────────────
+// Jon corrected his own spec. Different exercises — the coach prompt names both.
+hasNotCode("{name:'Nordic Planks', format:'standard_sets'",
+  'COP: no week of the hold slot still says Nordic Planks');
+// The hold ladder is pinned separately above (NP: hold_secs) and is deliberately
+// UNCHANGED — this was a rename, not a redesign. Those pins match on hold_secs, not
+// on the name, so they kept passing through the rename; that is correct, not luck.
+hasCode("var _BLAB_RENAMED = { 'Copenhagen Planks': 'Nordic Planks' };",
+  'COP: STRUCTURAL renamed exercises keep reading their old records');
+// Behaviour in tests/training.mjs under COP:, proved by inversion 2026-09-08 — removing
+// the fallback loses his logged holds (got 0, want 2) while every other case stays green.
 
 // ── THE CORE CIRCUIT PB IS THIS CIRCUIT'S (v4.9.321) ────────────────────────
 // Jon: the circuit changed but it showed "the result of the previous totally different

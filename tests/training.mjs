@@ -4310,4 +4310,92 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(read(KEY).records['Core Circuit_time'], 240,
       'still there after the session is built');
   });
+
+  // ── COPENHAGEN, NOT NORDIC (v4.9.322) ─────────────────────────────────────
+  // Jon: "nordic planks i got wrong - they are Copenhagen planks please update".
+  // His own spec correction. They are genuinely different exercises — the coach prompt
+  // names both separately — so this is a real misnaming, not a synonym.
+
+  const slot3 = (week) => {
+    const s = app.blabGetSessionData(week, 4);
+    return ((s && s.exercises) || []).filter((e) => e.hold_secs);
+  };
+
+  test('COP: every week of the hold slot is renamed, none left behind', () => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 1, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    const weeks = [1, 2, 3, 4, 6, 7, 8, 9, 11, 12];
+    const found = [];
+    weeks.forEach((w) => slot3(w).forEach((e) => found.push(w + ':' + e.name)));
+    assert.equal(found.length, weeks.length, 'one hold exercise per week: ' + found.join(' '));
+    const stragglers = found.filter((f) => /Nordic/.test(f));
+    assert.equal(stragglers.length, 0, 'no week still says Nordic: ' + stragglers.join(' '));
+    assert.ok(found.every((f) => /Copenhagen Planks$/.test(f)), 'all Copenhagen: ' + found.join(' '));
+  });
+
+  test('COP: the hold progression is unchanged — this was a rename, not a redesign', () => {
+    // The ladder is the exercise. If a rename quietly moved it, that is a different bug
+    // than the one he reported.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 1, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    const want = { 1: [3, 20], 2: [3, 25], 3: [3, 30], 4: [3, 35], 6: [4, 20],
+                   7: [4, 25], 8: [4, 30], 9: [4, 35], 11: [4, 40], 12: [4, 45] };
+    Object.keys(want).forEach((w) => {
+      const ex = slot3(Number(w))[0];
+      assert.ok(ex, 'week ' + w + ' has the hold');
+      assert.equal(ex.sets, want[w][0], 'week ' + w + ' sets');
+      assert.equal(ex.hold_secs, want[w][1], 'week ' + w + ' hold_secs');
+    });
+  });
+
+  test('COP: his already-logged Nordic history still reaches the new name', () => {
+    // THE TRAP. Records are keyed by the name read off the DOM at log time, so a bare
+    // rename orphans everything he has already done.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Nordic Planks_wk': { '1': { wt: 0, reps: 20 }, '3': { wt: 0, reps: 30 } } },
+                _ts: NEWER });
+    const rows = app.blabWeeklyMaxes('Copenhagen Planks');
+    assert.equal(rows.length, 2, 'the old key answers when the new one is empty');
+    assert.equal(rows[0].week, 1);
+    assert.equal(rows[1].reps, 30);
+  });
+
+  test('COP: once logged under the new name, the new name wins', () => {
+    // The fallback must not shadow real data forever.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Nordic Planks_wk': { '1': { wt: 0, reps: 20 } },
+                           'Copenhagen Planks_wk': { '6': { wt: 0, reps: 40 } } },
+                _ts: NEWER });
+    const rows = app.blabWeeklyMaxes('Copenhagen Planks');
+    assert.equal(rows.length, 1, 'the new key is preferred outright');
+    assert.equal(rows[0].week, 6);
+  });
+
+  test('COP: the fallback is not a wildcard — other exercises are unaffected', () => {
+    // A rename table that answered for everything would be worse than the orphaning.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Nordic Planks_wk': { '1': { wt: 0, reps: 20 } } }, _ts: NEWER });
+    assert.equal(app.blabWeeklyMaxes('Box Jumps').length, 0, 'Box Jumps sees nothing of it');
+    assert.equal(app.blabWeeklyMaxes('Bench Press').length, 0, 'nor does Bench Press');
+  });
+
+  test('COP: nothing is rewritten in his stored state', () => {
+    // Read-fallback, not migration. If the call above had migrated, this would fail.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Nordic Planks_wk': { '1': { wt: 0, reps: 20 } } }, _ts: NEWER });
+    app.blabWeeklyMaxes('Copenhagen Planks');
+    const recs = read(KEY).records;
+    assert.ok(recs['Nordic Planks_wk'], 'the old key is still there, untouched');
+    assert.ok(!recs['Copenhagen Planks_wk'], 'and nothing was written on a read');
+  });
 }

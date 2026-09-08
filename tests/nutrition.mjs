@@ -427,6 +427,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   const setUp = (weightKg) => {
     start();
+    // View state, reset HERE rather than at the end of each test. Cleanup that
+    // lives after the assertions does not run when an assertion fails, so one
+    // genuine failure was arriving as several unrelated ones.
+    app._nutProgSelDay = null;
+    app._nutProgDayOffset = 0;
+    app._nutProgPlanOffset = 0;
     app.nutSaveState({
       setup_done: true,
       goal: 'hypertrophy',
@@ -1751,7 +1757,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // v4.9.315: the run-up now PREVIEWS the first trial day rather than pointing
     // at other tabs, so Jon can run the whole loop before Monday.
     assert.ok(/Preview/.test(html), 'and it previews the first day');
-    assert.ok(html.indexOf('data-prog-tick') >= 0, 'with real meals to try');
+    // v4.9.328: the preview shows Monday's plate, and Monday is not today, so it
+    // is READ-ONLY like every other non-today day. It used to carry live ticks
+    // that wrote to the 7th — deliberate at the time, and forbidden by Jon's
+    // ruling. The meals are still all there to look at.
+    assert.ok(html.indexOf('Chicken breast') >= 0, 'with the real meals to look at');
+    assert.equal(html.indexOf('data-prog-tick'), -1, 'but nothing to tick on it');
+    assert.ok(/Viewing only/.test(html), 'and it says so');
   });
 
   test('CARD a proposal offers both answers; the settle period offers neither', () => {
@@ -2618,7 +2630,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     app._nutProgSelDay = '2026-09-10';            // Thursday — a lift day
     const html = onDay('2026-09-07', () => app._nutTabProgramme(app.nutGetState()));
-    assert.ok(html.indexOf('data-prog-tick') >= 0, 'the full day view, with meals to tick');
+    assert.ok(html.indexOf('Chicken breast') >= 0, 'the full day view, with its meals');
+    assert.equal(html.indexOf('data-prog-tick'), -1,
+      'read-only since v4.9.328 — a drilled-into day is not today');
     assert.ok(html.indexOf('Thursday') >= 0, 'and it says which day you are looking at');
     assert.ok(html.indexOf('data-prog-cal-back') >= 0, 'with a way back to the week');
     app._nutProgSelDay = null;
@@ -2626,13 +2640,23 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('CAL the day it opens really is that day, not a copy of today', () => {
     setUp(110);
-    // Monday 7th is a REST day and keeps the banana; Thursday 10th lifts and drops it.
-    app._nutProgSelDay = '2026-09-10';
+    // THIS TEST WAS VACUOUS UNTIL v4.9.328. It asserted that data-prog-tick="pre"
+    // was ABSENT from Thursday, on the stated grounds that Monday keeps a
+    // pre-training banana and Thursday drops it. There is no "pre" slot on ANY
+    // day of this programme — measured — so the assertion passed by describing
+    // something that never existed, on either day, and could not have failed.
+    //
+    // The real discriminator is the intra-workout slot: lift days have it, rest
+    // days do not. Asserted in BOTH directions so it cannot pass by absence again.
+    app._nutProgSelDay = '2026-09-10';                 // Thursday — a lift day
     const thu = onDay('2026-09-07', () => app._nutTabProgramme(app.nutGetState()));
-    assert.equal(thu.indexOf('data-prog-tick="pre"'), -1,
-      'Thursday lifts, so no pre-training banana — if this showed today\'s plate ' +
-      'instead, the banana would be here');
-    app._nutProgSelDay = null;
+    assert.ok(thu.indexOf('Beet lift intra') >= 0,
+      'Thursday lifts, so the intra-workout slot is on it');
+    app._nutProgSelDay = '2026-09-07';                 // Monday — a rest day
+    const mon = onDay('2026-09-07', () => app._nutTabProgramme(app.nutGetState()));
+    assert.equal(mon.indexOf('Beet lift intra'), -1,
+      'Monday rests and has none — so the drill-down really is drawing the day ' +
+      'it was asked for, not today relabelled');
   });
 
   test('CAL it follows the week without anyone advancing it', () => {
@@ -4341,50 +4365,43 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       const h = onDay(d, () => app._nutTabToday(app.nutGetState())) || '';
       assert.ok(/Preview/.test(h), d + ' previews');
       assert.ok(/Monday 2026-09-07/.test(h), 'and says whose day it is');
-      assert.ok((h.match(/data-prog-tick/g) || []).length >= 7, 'with real meals');
+      // v4.9.328: read-only, because Monday is not today. The meals are all
+      // still drawn — he can see the whole loop — but none of them ticks.
+      assert.ok((h.match(/kcal/g) || []).length >= 7, 'with real meals drawn');
+      assert.equal(h.indexOf('data-prog-tick'), -1, 'and none of them tickable');
       assert.ok(h.indexOf('data-prog-add') >= 0,
-        'and a way to log what he ate TODAY, which is a different thing');
+        'while the logger for what he ate TODAY stays — that writes to today, ' +
+        'which is the one day writing is allowed');
     });
   });
 
-  test('W0 a tick from the preview lands on MONDAY, not on today', () => {
+  // SUPERSEDED BY JON'S RULING, v4.9.328. This used to assert that a tick on the
+  // preview landed on Monday rather than on today — the right behaviour while a
+  // non-today day was tickable at all. It is not tickable now, so the case is
+  // inverted: NEITHER day may receive anything.
+  test('W0 the preview cannot be ticked onto EITHER day', () => {
     setUp(110);
     const d = dom();
     onDay('2026-09-05', () => { app._nutTab = 'today'; app.nutRenderScreen(); });
     const body = d.node('nut-screen-body');
-    const row = body.querySelectorAll('[data-prog-tick]')
-      .filter((el) => el.getAttribute('data-prog-tick') === 'lunch')[0];
-    assert.ok(row, 'the lunch row is there');
-    assert.equal(row.getAttribute('data-prog-day'), '2026-09-07',
-      'and it carries the day it was DRAWN FOR');
-    // Fired WHILE it is the 5th. Outside the wrapper the handler's _nutToday()
-    // answers with the sandbox's own date and the "not today" half of this case
-    // asserts nothing — an inversion that deleted the day attribute left it green.
-    onDay('2026-09-05', () => d.fire(row, 'click'));
-    assert.deepEqual(app.nutProgTicked('2026-09-07'), { lunch: true },
-      'so the tick lands on Monday');
-    assert.deepEqual(app.nutProgTicked('2026-09-05'), {},
-      'and NOT on today — the banner promises this, and a promise the code did ' +
-      'not keep would put adherence in the record for a day he did not eat');
+    assert.equal(body.querySelectorAll('[data-prog-tick]').length, 0,
+      'the preview draws no tick control');
+    assert.deepEqual(app.nutProgTicked('2026-09-07'), {}, 'Monday is untouched');
+    assert.deepEqual(app.nutProgTicked('2026-09-05'), {}, 'and so is the 5th');
   });
 
-  test('W0 the same is true of the calendar drill-down — a PRE-EXISTING bug', () => {
+  test('W0 the calendar drill-down cannot be ticked onto either day either', () => {
     setUp(110);
-    // Rendering another day's card is what the calendar has done since v4.9.296,
-    // and every tick from it went to _nutToday(). Measured: draw 10 September
-    // while today is the 16th, tick lunch, and the 16th gets it.
+    // Until v4.9.318 every tick from this surface went to _nutToday() regardless
+    // of the day drawn; .318 sent it to the day drawn; .328 removes it entirely.
     const d = dom();
     app._nutProgSelDay = '2026-09-10';
     onDay('2026-09-16', () => { app._nutTab = 'programme'; app.nutRenderScreen(); });
     const body = d.node('nut-screen-body');
-    const row = body.querySelectorAll('[data-prog-tick]')
-      .filter((el) => el.getAttribute('data-prog-tick') === 'lunch')[0];
-    assert.ok(row, 'the row is there');
-    onDay('2026-09-16', () => d.fire(row, 'click'));
-    app._nutProgSelDay = null;
-    assert.deepEqual(app.nutProgTicked('2026-09-10'), { lunch: true },
-      'the tick lands on the day being looked at');
-    assert.deepEqual(app.nutProgTicked('2026-09-16'), {}, 'and not on today');
+    assert.equal(body.querySelectorAll('[data-prog-tick]').length, 0,
+      'no tick control on a drilled-into day');
+    assert.deepEqual(app.nutProgTicked('2026-09-10'), {}, 'the 10th is untouched');
+    assert.deepEqual(app.nutProgTicked('2026-09-16'), {}, 'and so is today');
   });
 
   // ── the PLAN tab across week 0 ───────────────────────────────────────────
@@ -4566,11 +4583,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     app._nutProgDayOffset = -1;                       // Monday, a rest day
     const h = onDay('2026-09-08', () => app._nutTabToday(app.nutGetState())) || '';
-    assert.ok(h.indexOf('data-prog-day="2026-09-07"') >= 0,
-      'the tick rows belong to the 7th');
-    assert.equal(h.indexOf('data-prog-day="2026-09-08"'), -1, 'and not to today');
-    assert.ok(h.indexOf('data-nut-item="2026-09-07|lunch_protein"') >= 0,
-      'and a swap made from here is made for the 7th');
+    // Identified by CONTENT, not by the day attribute the tick rows used to
+    // carry — those rows are read-only now, so the old assertion would have been
+    // testing the absence of a control rather than whose day is on screen.
+    // The 7th rests and has no intra-workout slot; the 8th lifts and has one.
+    assert.equal(h.indexOf('Beet lift intra'), -1,
+      'the 7th rests, so no intra-workout slot — if this were today relabelled, ' +
+      'the 8th lifts and it would be here');
+    assert.ok(/Viewing only/.test(h), 'and it is marked read-only');
     app._nutProgDayOffset = 0;
   });
 
@@ -4615,6 +4635,137 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     onDay('2026-09-08', () => d.fire(back, 'click'));
     assert.equal(app._nutProgDayOffset, -1, 'and the tap moves the day');
     app._nutProgDayOffset = 0;
+  });
+
+  // ── READ-ONLY on any day that is not today ───────────────────────────────
+  // v4.9.328, Jon's ruling: "ON A DAY THAT IS NOT TODAY, NO WRITE CONTROL IS
+  // REACHABLE." Absent, not inert — a control that is present and does nothing is
+  // the alert() failure again, and he cannot tell a dead button from a slow one.
+  //
+  // Per the ruling, a markup pin is NOT enough on its own: these render a real
+  // non-today date through the REAL entry point, sweep for every write attribute
+  // the nutrition screen knows how to draw, and assert the store is untouched.
+
+  // Every attribute on this screen whose handler writes. Derived by grepping the
+  // wiring block, not remembered — if a new one is added and not added here, the
+  // last test in this group fails on the count.
+  // The full set, derived by sweeping the screen's own source (see the last test
+  // in this group), not remembered. Two of these — data-prog-add and
+  // data-nut-tick-day — were NOT in the hand-written enumeration this started as,
+  // and data-prog-add turned out to be the worst of them: its handler passes
+  // _nutToday() hardcoded, so on a screen showing the 7th it logged against the 8th.
+  const WRITE_ATTRS = ['data-prog-tick', 'data-nut-item', 'data-prog-accept',
+                       'data-prog-delta', 'data-prog-add', 'data-prog-night-day',
+                       'data-nut-night', 'data-nut-tick-day', 'data-nut-add-recipe'];
+
+  const dailyOn = (day, offset) => {
+    app._nutProgDayOffset = offset;
+    const d = dom();
+    onDay('2026-09-08', () => { app._nutTab = 'today'; app.nutRenderScreen(); });
+    const out = { html: d.html('nut-screen-body'), body: d.node('nut-screen-body'), d };
+    app._nutProgDayOffset = 0;
+    return out;
+  };
+
+  test('READONLY a day that is not today draws NO write control at all', () => {
+    setUp(110);
+    const past = dailyOn('2026-09-07', -1);
+    assert.ok(/not today/.test(past.html), 'the screen really is showing another day');
+    WRITE_ATTRS.forEach((a) => {
+      assert.equal(past.html.indexOf(a), -1,
+        a + ' must not be on a non-today day — it is a write control, and the ' +
+        'ruling is that it is ABSENT, not that its handler declines');
+    });
+  });
+
+  test('READONLY and it says WHY, so a bare screen does not read as a broken one', () => {
+    setUp(110);
+    const past = dailyOn('2026-09-07', -1);
+    assert.ok(/Viewing only/.test(past.html),
+      'the reason is on screen — the day strip says "not today" but never said ' +
+      'the ticks were gone on purpose');
+  });
+
+  test('READONLY today keeps every one of them — the guard is dated, not blanket', () => {
+    setUp(110);
+    const now = dailyOn('2026-09-08', 0);
+    assert.ok(now.html.indexOf('data-prog-tick') >= 0, 'today can still be ticked');
+    assert.ok(now.html.indexOf('data-nut-item') >= 0, 'and its components still swap');
+    assert.equal(/Viewing only/.test(now.html), false, 'and it is not labelled read-only');
+  });
+
+  test('READONLY driving the past day writes NOTHING to it', () => {
+    setUp(110);
+    const past = '2026-09-07';
+    const before = JSON.stringify(app.nutProgTicked(past));
+    const view = dailyOn(past, -1);
+    // The ruling asks for the control to be DRIVEN. It is absent, so there is
+    // nothing to drive — assert that, then fire every control the screen DID
+    // draw and confirm none of them lands a tick on that day. This is the half a
+    // markup pin cannot do.
+    const ticks = view.body.querySelectorAll('[data-prog-tick]');
+    assert.equal(ticks.length, 0, 'no tick control exists to drive');
+    view.body.querySelectorAll('[data-prog-day-nav]').forEach((el) => {
+      try { view.d.fire(el, 'click'); } catch (e) { /* unwired is fine here */ }
+    });
+    assert.equal(JSON.stringify(app.nutProgTicked(past)), before,
+      'and after driving what IS on screen, the past day is byte-identical');
+    app._nutProgDayOffset = 0;
+  });
+
+  test('READONLY the calendar drill-down obeys it too, with no day strip to help', () => {
+    setUp(110);
+    // The second caller of the card, and the one a call-site guard would miss.
+    app._nutProgSelDay = '2026-09-07';
+    const d = dom();
+    onDay('2026-09-08', () => { app._nutTab = 'programme'; app.nutRenderScreen(); });
+    const h = d.html('nut-screen-body');
+    app._nutProgSelDay = null;
+    assert.ok(/Viewing only/.test(h), 'the drill-down says it is read-only');
+    WRITE_ATTRS.forEach((a) => assert.equal(h.indexOf(a), -1,
+      a + ' must not appear on a drilled-into day either'));
+  });
+
+  test('READONLY the review card does not follow him onto another day', () => {
+    setUp(110);
+    // WRITTEN BECAUSE AN INVERSION FIRED NOTHING. The gate that hides this card
+    // off today was added with the rest of v4.9.328, and removing it changed no
+    // test at all — every read-only case above runs on the 8th, and the review
+    // card only renders on a review Wednesday (the 9th, 16th, 23rd...), so there
+    // was nothing on screen for the gate to hide. A guard nothing exercises is
+    // untested, not clean.
+    //
+    // It matters because this card is about TODAY and its controls write to
+    // TODAY. Left on screen under Monday's plate it is the invariant's reason 1:
+    // a write that lands on a day that is not the one being looked at.
+    const on16 = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState())) || '';
+    assert.ok(/Week 1/.test(on16) || on16.indexOf('review') >= 0 || on16.length > 0,
+      'the 16th is a review day, so the card is on today');
+    const bare = String(app._nutProgReviewCard('2026-09-16') || '');
+    assert.ok(bare.length > 0, 'and it really does render on that date');
+    assert.ok(on16.indexOf(bare.slice(0, 120)) >= 0, 'and it is on the screen');
+
+    app._nutProgDayOffset = -1;
+    const on15 = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState())) || '';
+    app._nutProgDayOffset = 0;
+    assert.ok(/not today/.test(on15), 'stepped back a day');
+    assert.equal(on15.indexOf(bare.slice(0, 120)), -1,
+      'and the review card is gone with it — it belongs to today, and its ' +
+      'controls write to today');
+  });
+
+  test('READONLY the write-attribute list still covers what the screen wires', () => {
+    setUp(110);
+    // Guards the guard. If someone wires a new write control and does not add it
+    // to WRITE_ATTRS, the tests above would pass while the invariant broke.
+    const src = String(app.nutRenderScreen) + String(app._nutProgTodayCard) +
+                String(app._nutProgReviewCard);
+    const found = (src.match(/data-(?:prog|nut)-[a-z-]+/g) || [])
+      .filter((a, i, arr) => arr.indexOf(a) === i);
+    const writeish = found.filter((a) => /tick|item|accept|delta|add|night|log|save|set/.test(a));
+    writeish.forEach((a) => assert.ok(WRITE_ATTRS.indexOf(a) >= 0,
+      a + ' looks like a write control and is not in WRITE_ATTRS — add it, or the ' +
+      'read-only tests are checking a list that has fallen behind the screen'));
   });
 
   // ── the swap sheet read a COUNT as a WEIGHT ──────────────────────────────

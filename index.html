@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.318';
+var APP_VERSION='4.9.319';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -27165,6 +27165,9 @@ function _pepToday(){
 // Deliberately does NOT check stack.status — callers decide that.
 function _pepStackDueOn(stack, c, d){
   if(!stack || !c || !stack.startDate) return null;
+  // v4.9.319: a planned start date arriving is not evidence that he started.
+  // Nothing is due until he says it has begun.
+  if(stack.awaitingStart) return null;
   var dow = d.getDay(); // 0=Sun,1=Mon,...,6=Sat
   var startD = new Date(stack.startDate + "T12:00:00");
   var dayNum = Math.round((d - startD) / 86400000);
@@ -27643,10 +27646,13 @@ function pepMarkMadeUpToday(compoundId){
 function _pepScheduleState(stack){
   if(!stack) return null;
   var iso = _pepToday();
-  var started = !!(stack.startDate && String(stack.startDate) <= iso);
+  var awaiting = !!stack.awaitingStart;
+  var started = !awaiting && !!(stack.startDate && String(stack.startDate) <= iso);
   var endsOn  = stack.endDate ? String(stack.endDate) : null;
   return {
     started: started,
+    awaiting: awaiting,
+    confirmedOn: stack.startConfirmedAt ? String(stack.startConfirmedAt) : null,
     startsOn: stack.startDate ? String(stack.startDate) : null,
     stopped: !!(endsOn && endsOn < iso),
     endsOn: endsOn,
@@ -27665,18 +27671,79 @@ function _pepScheduleState(stack){
   };
 }
 
+// Move an ISO date by a whole number of days, or leave it alone.
+function _pepShiftISO(iso, days){
+  if(!iso) return iso;
+  var d = new Date(String(iso) + "T12:00:00");
+  if(isNaN(d.getTime())) return iso;
+  return _pepISO(new Date(d.getTime() + days * 86400000));
+}
+
+// ── A LATE START MOVES THE WHOLE COURSE (v4.9.319) ────────────────────────
+// Jon: "i dont want the programme to believe i have started today - needs to
+// only know started when i actually start and adjust the phase dates
+// accordingly."
+//
+// v4.9.317 moved startDate and left everything else where the phase put it.
+// Tesamorelin is a 25-DAY BRIDGE, 8 Sep to 2 Oct. Starting it four days late
+// under that version would have kept the 2 Oct end and silently made it a
+// 21-day course — four doses short, with nothing on screen to say so. A course
+// LENGTH is the protocol; a start DATE is when it happens to begin.
+//
+// So the shift is applied to every date the stack carries: the end, the
+// explicit dose dates (Epitalon's twenty nights, MOTS-c's four injections) and
+// every window boundary. Anything derived from dayNum — titration steps,
+// cycle/off weeks, "20 consecutive nights" — moves with startDate for free,
+// which is why those are not listed here.
 function pepStartToday(compoundId){
   var ps = pepGetState();
   var idx = _pepStackIndex(ps, compoundId);
   if(idx < 0) return {ok:false, problem:"That compound is not in your protocol."};
-  ps.stacks[idx].startDate = _pepToday();
-  // Starting early past a window boundary would begin and immediately stop.
-  var pr = ps.stacks[idx].periods;
-  if(Array.isArray(pr) && pr.length && pr[0] && pr[0].from) pr[0].from = _pepToday();
+  var st = ps.stacks[idx];
+  var today = _pepToday();
+  var was = st.startDate ? String(st.startDate) : null;
+  var delta = 0;
+  if(was){
+    delta = Math.round((new Date(today + "T12:00:00") - new Date(was + "T12:00:00")) / 86400000);
+  }
+  st.startDate = today;
+  if(delta !== 0){
+    if(st.endDate) st.endDate = _pepShiftISO(st.endDate, delta);
+    if(Array.isArray(st.dates)) st.dates = st.dates.map(function(x){ return _pepShiftISO(x, delta); });
+    if(Array.isArray(st.periods)) st.periods = st.periods.map(function(w){
+      if(!w) return w;
+      return {from: _pepShiftISO(w.from, delta), to: _pepShiftISO(w.to, delta)};
+    });
+  }
+  // He has said it began. That is the only thing that counts as started.
+  st.startConfirmedAt = today;
+  st.awaitingStart = false;
   pepSaveState(ps);
   pepRenderScreen();
   if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
-  return {ok:true, startDate:_pepToday()};
+  return {ok:true, startDate:today, shiftedBy:delta, endDate:st.endDate || null};
+}
+
+// ── "NOT STARTED YET" — the app must not assume a start (v4.9.319) ────────
+// A planned start date arriving is not evidence that he started. Tesamorelin's
+// phase date is today; he has not taken it. Without this the app would put it
+// on Today, count it in adherence, and start the 25-day clock on a course that
+// has not begun.
+//
+// This is OPT-IN per compound rather than a rule applied to everything. Making
+// every compound require confirmation would, on the next open, silently stop
+// eleven running compounds he has been dosing for months — a "safety" change
+// that removes doses from his screen is not safe.
+function pepMarkNotStarted(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return {ok:false, problem:"That compound is not in your protocol."};
+  ps.stacks[idx].awaitingStart = true;
+  ps.stacks[idx].startConfirmedAt = null;
+  pepSaveState(ps);
+  pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true};
 }
 
 function pepRunUntilStopped(compoundId){
@@ -28322,7 +28389,8 @@ function pepRenderScreen(){
   [["data-pep-schedstart", pepStartToday],
    ["data-pep-schedrun",   pepRunUntilStopped],
    ["data-pep-schedstop",  pepStopFromToday],
-   ["data-pep-schedresume",pepResumeSchedule]].forEach(function(pair){
+   ["data-pep-schedresume",pepResumeSchedule],
+   ["data-pep-schednotstarted", pepMarkNotStarted]].forEach(function(pair){
     body.querySelectorAll("[" + pair[0] + "]").forEach(function(btn){
       btn.addEventListener("click", function(){ pair[1](btn.getAttribute(pair[0])); });
     });
@@ -29438,7 +29506,8 @@ function _pepCompoundPanels(ps){
       h += "<div style=\"background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;\">";
       h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;\">Schedule</div>";
       h += "<div style=\"font-size:12px;color:var(--text2);line-height:1.6;\">" +
-           (!_sc.started ? "Starts " + _esc(_sc.startsOn || "&mdash;")
+           (_sc.awaiting ? "NOT STARTED &mdash; nothing is due until you say it has begun. Planned " + _esc(_sc.startsOn || "&mdash;") + "; starting later moves the whole course."
+            : !_sc.started ? "Starts " + _esc(_sc.startsOn || "&mdash;")
             : _sc.stopped ? "Stopped " + _esc(_sc.endsOn)
             : "Running" +
               (_sc.endsOn ? " &middot; ends " + _esc(_sc.endsOn) : "") +
@@ -29447,6 +29516,8 @@ function _pepCompoundPanels(ps){
       h += "<div style=\"display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;\">";
       if(!_sc.started){
         h += "<button data-pep-schedstart=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid #7B68EE;border-radius:12px;color:#7B68EE;font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 11px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Started today</button>";
+      } else if(!_sc.awaiting){
+        h += "<button data-pep-schednotstarted=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 11px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Not started yet</button>";
       }
       if(_sc.stopped){
         h += "<button data-pep-schedresume=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid #7B68EE;border-radius:12px;color:#7B68EE;font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 11px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Resume</button>";
@@ -31489,6 +31560,10 @@ function pepApplyPhase(id){
     // a document. Left as-is, applying Phase 2 marked six compounds counted that
     // he had never counted — the readiness gate partly satisfied by my typing.
     st.stockCounted = false;
+    // v4.9.319: a compound the phase starts TODAY OR LATER has not begun. The
+    // date is a plan; he confirms the event. Anything already under way keeps
+    // running, so applying a phase never silently stops a live compound.
+    if(st.startDate && String(st.startDate) >= _pepToday()) st.awaitingStart = true;
   });
 
   ps.stacks = v.entries;

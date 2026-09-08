@@ -1531,6 +1531,116 @@ const settle = () => new Promise(r => setTimeout(r, 0));
         'and not Finished — you cannot finish something that has not begun');
     });
 
+    // ── A LATE START MOVES THE WHOLE COURSE (v4.9.319) ────────────────────
+    // Jon: "i dont want the programme to believe i have started today - needs
+    // to only know started when i actually start and adjust the phase dates
+    // accordingly."
+    //
+    // v4.9.317 moved startDate and left everything else. Tesamorelin is a
+    // 25-DAY BRIDGE. Starting it four days late kept the old end date and made
+    // it a 21-day course — four doses short, silently.
+    const bridge = (over) => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [Object.assign({
+        compoundId:'tesamorelin', dose:2, startDate: daysAgo(4), endDate: inDays(20),
+        freq:'daily', vialMg:10, waterMl:2, sealedVials:5, status:'instock',
+      }, over || {})];
+      app.pepSaveState(st);
+    };
+    const tesa = () => app.pepGetState().stacks[0];
+    const spanDays = (st) =>
+      Math.round((new Date(st.endDate + 'T12:00:00') - new Date(st.startDate + 'T12:00:00')) / 86400000);
+
+    test('LATESTART the COURSE LENGTH survives a late start', () => {
+      bridge();
+      const before = spanDays(tesa());
+      assert.equal(before, 24, 'a 24-day span to begin with');
+      const r = app.pepStartToday('tesamorelin');
+      assert.equal(r.ok, true, 'started');
+      assert.equal(r.shiftedBy, 4, 'four days late');
+      assert.equal(spanDays(tesa()), before,
+        'and it is STILL the same course. A length is the protocol; a start date ' +
+        'is only when it happens to begin');
+      assert.equal(tesa().endDate, inDays(24), 'the end moved with it');
+    });
+
+    test('LATESTART explicit dose dates move too', () => {
+      bridge({ compoundId:'epitalon', dose:5, vialMg:10, waterMl:1,
+               dates: [daysAgo(4), daysAgo(3), daysAgo(2)], endDate: null });
+      app.pepStartToday('epitalon');
+      const d = app.pepGetState().stacks[0].dates;
+      assert.deepEqual(d, [app._pepToday(), inDays(1), inDays(2)],
+        'Epitalon is twenty explicit nights — leaving them behind would drop the ' +
+        'first four of a course that has not started');
+    });
+
+    test('LATESTART window boundaries move too', () => {
+      bridge({ periods: [{ from: daysAgo(4), to: inDays(10) }] });
+      app.pepStartToday('tesamorelin');
+      const w = app.pepGetState().stacks[0].periods[0];
+      assert.equal(w.from, app._pepToday(), 'the window opens today');
+      assert.equal(w.to, inDays(14), 'and stays the same length');
+    });
+
+    test('LATESTART starting ON the planned day changes no other date', () => {
+      bridge({ startDate: app._pepToday(), endDate: inDays(24) });
+      const r = app.pepStartToday('tesamorelin');
+      assert.equal(r.shiftedBy, 0, 'no shift');
+      assert.equal(tesa().endDate, inDays(24),
+        'a zero shift must not nudge anything — the common case has to be inert');
+    });
+
+    // ── "NOT STARTED" — the app must not assume a start ────────────────────
+    test('NOTSTARTED nothing is due until he says it has begun', () => {
+      bridge({ startDate: app._pepToday() });
+      const due = () => {
+        const d = app._pepGetDoses(app.pepGetState());
+        return d.morning.concat(d.anytime, d.evening).map(x => x.id);
+      };
+      assert.ok(due().indexOf('tesamorelin') >= 0, 'the planned start date has arrived');
+      assert.equal(app.pepMarkNotStarted('tesamorelin').ok, true, 'he says he has not started it');
+      assert.ok(due().indexOf('tesamorelin') < 0,
+        'so it is NOT due — a date arriving is not evidence that he took anything');
+      assert.equal(app._pepScheduleState(tesa()).awaiting, true, 'and the panel says so');
+    });
+
+    test('NOTSTARTED confirming the start puts it back, and dates it', () => {
+      bridge({ startDate: daysAgo(4), awaitingStart: true });
+      const r = app.pepStartToday('tesamorelin');
+      assert.equal(r.ok, true, 'started');
+      assert.ok(!tesa().awaitingStart, 'no longer waiting');
+      assert.equal(tesa().startConfirmedAt, app._pepToday(),
+        'and the day he ACTUALLY started is recorded, not the day the phase guessed');
+    });
+
+    test('NOTSTARTED applying a phase marks a future start as not-yet-begun', () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {}; st.stacks = [];
+      app.pepSaveState(st);
+      assert.equal(app.pepApplyPhase('phase2').ok, true, 'applied');
+      const after = app.pepGetState().stacks;
+      const future = after.filter(x => x.startDate >= app._pepToday());
+      assert.ok(future.length >= 1, `${future.length} compounds start today or later`);
+      assert.deepEqual(future.filter(x => !x.awaitingStart).map(x => x.compoundId), [],
+        'every one of them is awaiting HIS confirmation — a phase date is a plan');
+    });
+
+    test('NOTSTARTED applying a phase never stops something already running', () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {}; st.stacks = [];
+      app.pepSaveState(st);
+      app.pepApplyPhase('phase2');
+      const running = app.pepGetState().stacks.filter(x => x.startDate < app._pepToday());
+      assert.ok(running.length >= 1, `${running.length} compounds already under way`);
+      assert.deepEqual(running.filter(x => x.awaitingStart).map(x => x.compoundId), [],
+        'none of them was quietly switched off — a safety change that removes doses ' +
+        'from his screen is not safe');
+    });
+
     test('RENDER the tile stays empty when there is no protocol', () => {
       const h = withStubbedDom(() => {
         reset(); signIn('jon');

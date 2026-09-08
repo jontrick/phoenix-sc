@@ -57,8 +57,15 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 - [ ] **PM — SWIPE FORWARD/BACK BY DAY ON THE MAIN TODAY SCREEN. Jon asked for this
       across PEPTIDES, NUTRITION AND TRAINING, and asked for PM to drive it** (2026-09-08,
-      "i want this for peptides, nutrition and training - pm to push on all"). PEPTIDES
-      raised it and is NOT building it: `renderTodayScreen` is shared, it was rewritten at
+      "i want this for peptides, nutrition and training - pm to push on all").
+      **LIVE — he asked again the same day: "message pm to push the day swipe - its live".**
+      **PEPTIDES COULD NOT DELIVER THAT MESSAGE.** Both cross-chat channels are closed from
+      the peptides session: `SendMessage`/`ListAgents` (Channel 1) do not exist in it at
+      all, and `mcp__ccd_session_mgmt__send_message` (Channel 2) refuses with "unavailable
+      in unattended sessions" even with the PM session listed as running. Verified against
+      a live listing, not assumed. So THIS ENTRY IS THE HANDOFF — Jon has been told it is
+      here and that he may need to point PM at it himself.
+      PEPTIDES raised it and is NOT building it: `renderTodayScreen` is shared, it was rewritten at
       v4.9.298 and is still untested by him, and the hard part is not the swipe.
       **THE HARD PART IS THAT EVERY WRITE ON THAT SCREEN ASSUMES TODAY.** Peptides is the
       worked example, and the other two will have the same shape:

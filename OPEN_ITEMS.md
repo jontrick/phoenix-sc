@@ -27,17 +27,18 @@ design. The three open questions are CLOSED — do not reopen them, build to thi
       peptide tile move together. They do not scroll independently.
 - [ ] **TRAINING — render your Today surfaces for a GIVEN DATE, and make your write
       controls unreachable when that date is not today.**
-- [ ] **NUTRITION — same.** Your day view already takes a date key.
-      **MEASURED, NOT ASSUMED, 2026-09-08: the gap is live on origin now.** Stepping DAILY
-      back one day (`_nutProgDayOffset = -1`) shows 2026-09-07, and `nutProgToggleMeal`
-      then writes `{"lunch":true}` to **2026-09-07** — a write control reachable on a
-      non-today day, which the invariant forbids.
-      **State the failure mode precisely, because it is NOT the one the invariant's
-      reason 1 describes.** Since v4.9.318 the tick carries `data-prog-day`, so it writes
-      to the day ON SCREEN, not silently to today. Nothing is corrupted and nothing is
-      mislabelled. It is simply EDITABLE where Jon ruled READ-ONLY — the "editing a past
-      day later" project arriving early and unasked, not the 4:30am wrong-tick hazard.
-      Closes when the ticks are absent (not inert) on any day that is not today.
+- [x] **NUTRITION — DONE v4.9.328.** No write control is drawn on a day that is not
+      today: no tick, no component swap, no extra-food logger, no review card. The guard
+      is inside `_nutProgTodayCard`, keyed on the date it was asked to draw, so all three
+      callers get it — a call-site guard would have missed the calendar drill-down.
+      The tick CIRCLES stay (whether a meal was eaten is what he came to read) and the card
+      says "Viewing only". PLAN still edits any day — that is its purpose.
+      **A SWEEP FOUND A CONTROL THE ENUMERATION MISSED, AND IT WAS THE WORST ONE.**
+      `data-prog-add` passed `_nutToday()` HARDCODED, so from the calendar drill-down —
+      reachable since v4.9.296 — logging food on a screen showing the 7th wrote it to the
+      8th silently. Proven by 6 functional tests incl. one that derives the write-attribute
+      list from the screen's own source, and 5 inversions.
+
 - [ ] **PEPTIDES — same.** Your read path needs NO new work: `_pepGetDoses(ps, dateStr)`
       has taken a date since v4.9.255 and the calendar already uses it.
 

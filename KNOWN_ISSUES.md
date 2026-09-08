@@ -68,6 +68,31 @@ Five distinct instances, all green, all worthless:
 > **A CHECK THAT HAS NEVER FIRED IS UNTESTED, NOT CLEAN.** Break it, watch it go red, and
 > confirm it can still go green.
 
+## A HANDLER THAT HARDCODES THE DATE IS INVISIBLE UNTIL THE SCREEN CAN SHOW ANOTHER DAY
+
+`data-prog-add` — the "+ Ate or drank something else" button on the nutrition day card —
+wired to `nutOpenFoodPicker(_NUT_PROG_EXTRA_SLOT, _nutToday(), 'log')`. The date is not a
+parameter; it is fetched inside the handler. That was correct for as long as the card only
+ever drew today.
+
+It stopped being correct at **v4.9.296**, when the calendar drill-down began rendering
+another day's card, and again at **v4.9.318** with the day swipe. From either surface,
+logging food on a screen showing the 7th wrote it against the 8th, silently, with nothing
+on screen to say so. Nobody changed that handler; the SCREEN moved underneath it.
+
+- **The markup is where the day is visible; the handler is where it is decided.** A control
+  that reads `_nutToday()` internally looks identical in the markup to one that takes the
+  drawn date. Grepping the render code will not find it.
+- **I MISSED IT BY ENUMERATING.** I read the three card functions, listed the controls I
+  saw, and the list was wrong twice over. What found it was a test sweeping every
+  `data-*` attribute the screen's own source mentions and asserting none survives on a
+  non-today day. **The list must be derived from the code, not from reading the code.**
+- **Fixed v4.9.328**, with a test that re-derives the attribute list from
+  `nutRenderScreen` + the two card functions, so a new write control that is not declared
+  fails the gate rather than shipping unguarded.
+- **The same shape is worth checking anywhere a surface gained a date it did not use to
+  have** — Training and Peptides both have Today surfaces under the same ruling.
+
 ## A TEST CAN ASSERT A NUMBER AND NEVER ASSERT ITS UNITS
 
 `EGGS the sheet OFFERS the breakfast swap` asserted `/Egg whites 7\b/` — that the digit 7

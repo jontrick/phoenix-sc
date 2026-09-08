@@ -4614,6 +4614,69 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nutProgDayOffset = 0;
   });
 
+  // ── the home screen's meals tile ─────────────────────────────────────────
+  // v4.9.319. Jon: "the meal plan for the day says nothing planned on daily
+  // screen." Reproduced: on 7, 8 and 16 September the programme has five meals
+  // and 2,550 kcal, and this tile said "Nothing planned for today" — because it
+  // reads the FREE-FORM planner's structure, which the cut never writes to. It
+  // has said that on every day the programme has governed since v4.9.277.
+
+  const tileOn = (d) => {
+    const dm = dom();
+    onDay(d, () => app.nutRenderMealsTile());
+    return dm.html('today-meals-tile');
+  };
+
+  test('TILE the home screen shows the PROGRAMME\'s day, not "nothing planned"', () => {
+    setUp(110);
+    ['2026-09-07', '2026-09-08', '2026-09-16'].forEach((d) => {
+      const h = tileOn(d);
+      assert.equal(/Nothing planned/.test(h), false,
+        d + ' has five meals and 2,550 kcal — the tile must not say the day is empty');
+      assert.ok(h.indexOf('Chicken breast') >= 0, d + ' names the food');
+      assert.ok(/12:30/.test(h) && /19:00/.test(h), 'at the times he eats it');
+      assert.ok(/kcal remaining of 2550/.test(h), 'with the day\'s target');
+    });
+  });
+
+  test('TILE it ticks the same store the nutrition tab does', () => {
+    setUp(110);
+    const dm = dom();
+    onDay('2026-09-08', () => app.nutRenderMealsTile());
+    const tile = dm.node('today-meals-tile');
+    const btn = tile.querySelectorAll('[data-prog-tile-tick]')
+      .filter((el) => el.getAttribute('data-prog-tile-tick') === 'lunch')[0];
+    assert.ok(btn, 'lunch has a tick button');
+    assert.equal(btn.getAttribute('data-prog-day'), '2026-09-08',
+      'carrying the day it was drawn for');
+    onDay('2026-09-08', () => dm.fire(btn, 'click'));
+    assert.deepEqual(app.nutProgTicked('2026-09-08'), { lunch: true },
+      'and it writes to the programme\'s ticks — the same ones DAILY reads, so ' +
+      'the two screens cannot disagree about what he has eaten');
+  });
+
+  test('TILE a ticked meal reads as eaten, and the count follows', () => {
+    setUp(110);
+    assert.ok(/0 \/ 5 eaten/.test(tileOn('2026-09-08')), 'none eaten to start');
+    app.nutProgToggleMeal('2026-09-08', 'lunch');
+    app.nutProgToggleMeal('2026-09-08', 'dinner');
+    const h = tileOn('2026-09-08');
+    assert.ok(/2 \/ 5 eaten/.test(h), 'two of five: ' + (h.match(/\d \/ \d eaten/) || ['?'])[0]);
+    assert.ok(/kcal remaining/.test(h), 'and the remaining figure moves with them');
+    assert.equal(/kcal remaining of 2550<\/span>/.test(h.replace(/2550<\/span>/, 'X')), false,
+      'not still showing the full target as remaining');
+  });
+
+  test('TILE outside the programme the free-form tile is unchanged', () => {
+    setUp(110);
+    // The cut ends 27 December. After it, this tile is the free-form planner's
+    // again — shadowed, not replaced, exactly as the WEEK tab is.
+    const h = tileOn('2027-01-06');
+    assert.ok(/Nothing planned for today/.test(h),
+      'and its empty state still says so, because there genuinely is no plan');
+    assert.ok(h.indexOf('nut-meals-empty') >= 0, 'with the control that opens the planner');
+  });
+
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────
   // Peptides found this by shipping it. _phxKeyboardSafe shrinks the OVERLAY to
   // the visible area, but a panel capped in `vh` is measured against the FULL
@@ -5036,12 +5099,17 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('kcal') >= 0, 'showing calories');
   });
 
+  // AFTER THE CUT. From v4.9.326 the programme owns this tile on any day it
+  // governs, so the free-form planner's tile is only on screen once the cut ends
+  // — same shadowing the WEEK tab has always used. Testing it on a programme day
+  // would be testing a branch Jon cannot reach until 28 December.
   test('ENTRY the Today meals tile draws the planned slots with their ticks', () => {
     setUp(90);
+    const after = '2027-01-06';
     app.nutSaveRecipes([rec('Bowl')]);
-    app.nutAssignRecipe('r_Bowl', 'lunch', app._nutToday(), 1);
+    app.nutAssignRecipe('r_Bowl', 'lunch', after, 1);
     const d = dom();
-    app.nutRenderMealsTile();
+    onDay(after, () => app.nutRenderMealsTile());
     const html = d.html('today-meals-tile');
     assert.ok(html.indexOf('Lunch') >= 0, 'the planned slot is on screen');
     assert.ok(html.indexOf('data-nut-tick') >= 0, 'with a tick control');

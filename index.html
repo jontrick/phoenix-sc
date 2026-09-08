@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.325';
+var APP_VERSION='4.9.326';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -26473,6 +26473,66 @@ function _nutBindLongPress(el, onTap, onLong){
   el.addEventListener('mouseleave', cancel);
 }
 
+// v4.9.326 — the programme's day, in the home tile's own shape. Deliberately NOT the full
+// card from the nutrition tab: this is a glance on a screen that also carries
+// training, water and peptides, and the tab is one tap away for the detail.
+function _nutProgMealsTileHTML(today, t){
+  var rice  = (typeof nutProgRiceChoice === 'function') ? nutProgRiceChoice() : null;
+  var meals = (nutProgMealsOn(today, rice) || []).filter(function(m){ return !m.supp; });
+  var done  = nutProgTicked(today);
+  var con   = nutProgConsumedOn(today, rice) || { total:{kcal:0} };
+  var doneCount = meals.filter(function(m){ return !!done[m.id]; }).length;
+  var rem = t.total.kcal - con.total.kcal;
+
+  var h = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);">Today&#39;s Meals</div>';
+  h += '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:' + (doneCount === meals.length ? 'var(--gold)' : 'var(--text3)') + ';">' + doneCount + ' / ' + meals.length + ' eaten</div>';
+  h += '</div>';
+  meals.forEach(function(m){
+    var on = !!done[m.id];
+    var names = m.items.map(function(it){ return it.n; }).join(', ');
+    h += '<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--border);">';
+    h += '<button data-prog-tile-tick="' + m.id + '" data-prog-day="' + today + '" aria-pressed="' + (on ? 'true' : 'false') + '" style="width:26px;height:26px;flex-shrink:0;padding:0;border-radius:7px;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;background:' + (on ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';">' +
+      (on ? '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</button>';
+    h += '<div data-prog-tile-open style="flex:1;min-width:0;cursor:pointer;touch-action:manipulation;' + (on ? 'opacity:0.45;' : '') + '">';
+    h += '<div style="font-size:13px;font-weight:700;color:var(--text);' + (on ? 'text-decoration:line-through;' : '') + '"><span style="color:var(--gold);font-size:11px;">' + m.time + '</span> ' + m.name + '</div>';
+    h += '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + names + '</div>';
+    h += '</div>';
+    h += '<div style="flex-shrink:0;text-align:right;' + (on ? 'opacity:0.45;' : '') + '">' +
+      '<div style="font-family:var(--font-d);font-size:13px;font-weight:700;color:' + (on ? 'var(--gold)' : 'var(--text)') + ';">' + m.k + '</div>' +
+      '<div style="font-size:10px;color:var(--text3);">P' + m.p + 'g</div></div>';
+    h += '</div>';
+  });
+  h += '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:11px;">';
+  h += '<div><span style="font-family:var(--font-d);font-size:22px;font-weight:900;color:' + (rem < 0 ? 'var(--gold)' : 'var(--text)') + ';">' + (rem < 0 ? '+' + Math.abs(rem) : rem) + '</span>';
+  h += '<span style="font-size:11px;color:var(--text3);margin-left:6px;">kcal ' + (rem < 0 ? 'over' : 'remaining') + ' of ' + t.total.kcal + '</span></div>';
+  h += '<div style="font-size:10px;color:var(--text3);text-align:right;">' + (t.trial ? 'Trial week' : 'Week ' + t.week) + '</div>';
+  h += '</div>';
+  h += '<div style="font-size:10px;color:var(--text3);margin-top:3px;">P' + con.total.p + ' / ' + t.total.p + 'g &middot; C' + con.total.c + ' / ' + t.total.c + 'g &middot; F' + con.total.f + ' / ' + t.total.f + 'g</div>';
+  h += '</div>';
+  return h;
+}
+
+// The tick writes to the DAY THE ROW WAS DRAWN FOR, same rule as the nutrition
+// tab — and to the same store, so ticking here shows there and the reverse.
+function _nutProgWireMealsTile(tile, today){
+  tile.querySelectorAll('[data-prog-tile-tick]').forEach(function(btn){
+    btn.addEventListener('click', function(ev){
+      if(ev && ev.stopPropagation) ev.stopPropagation();
+      nutProgToggleMeal(btn.getAttribute('data-prog-day') || today,
+                        btn.getAttribute('data-prog-tile-tick'));
+      if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile();
+    });
+  });
+  tile.querySelectorAll('[data-prog-tile-open]').forEach(function(el){
+    el.addEventListener('click', function(){
+      _nutTab = 'today';
+      if(typeof navTo === 'function') navTo('nutrition');
+    });
+  });
+}
+
 // ── Today screen: planned meals with tick-off ─────────────────────────────
 function nutRenderMealsTile(){
   var tile = document.getElementById('today-meals-tile');
@@ -26482,6 +26542,10 @@ function nutRenderMealsTile(){
   var today = _nutToday();
   var day   = (ns.daily && ns.daily[today]) || {};
   var meals = (day.meals && !Array.isArray(day.meals)) ? day.meals : {};
+  // THE PROGRAMME FIRST. It owns the day whenever it governs one.
+  var _pt = (typeof nutProgTargetsOn === 'function') ? nutProgTargetsOn(today) : null;
+  if(_pt){ tile.innerHTML = _nutProgMealsTileHTML(today, _pt); _nutProgWireMealsTile(tile, today); return; }
+
   var planned = _NUT_PLAN_SLOTS.filter(function(s){
     return ((meals[s.k] && meals[s.k].components) || []).length > 0;
   });

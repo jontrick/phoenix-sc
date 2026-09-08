@@ -15,6 +15,64 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ---
 
+## ⭐ ACTIVE BUILD — DAY SWIPE. READ-ONLY. ALL THREE DOMAINS. START HERE.
+
+**RULED BY JON, 2026-09-08: READ-ONLY.** He asked for this across peptides, nutrition and
+training and asked PM to drive it. PEPTIDES raised it and found the part that decides the
+design. The three open questions are CLOSED — do not reopen them, build to this.
+
+- [ ] **PM — the shared day state and the swipe itself.** `renderTodayScreen` is shared PM
+      code. PM adds a single viewed-date, the gesture, and an obvious way back to today.
+      **ONE DATE FOR THE WHOLE SCREEN** — the session card, the nutrition tile and the
+      peptide tile move together. They do not scroll independently.
+- [ ] **TRAINING — render your Today surfaces for a GIVEN DATE, and make your write
+      controls unreachable when that date is not today.**
+- [ ] **NUTRITION — same.** Your day view already takes a date key.
+- [ ] **PEPTIDES — same.** Your read path needs NO new work: `_pepGetDoses(ps, dateStr)`
+      has taken a date since v4.9.255 and the calendar already uses it.
+
+### THE ONE INVARIANT. Everything else is detail.
+
+> **ON A DAY THAT IS NOT TODAY, NO WRITE CONTROL IS REACHABLE.**
+
+Not "the write is ignored", not "the handler checks the date and returns" — **the control
+is not there.** Two reasons, and the second has already cost us:
+
+1. Every write on that screen assumes today. `pepToggleDose` writes
+   `ps.checked[_pepToday()]`; `pepSkipDose` and `pepAddExtraDose` likewise; `pepLogMakeUp`
+   stamps `openedDate = _pepToday()`. Training and Nutrition have the same shape. So on a
+   screen showing Monday, a tick lands on TODAY — **silently**, corrupting adherence and
+   stock with nothing to surface it.
+2. **A control that is present and does nothing is the `alert()` failure again.** Jon taps
+   it, nothing happens, and he cannot tell a dead button from a slow one. Twelve paths
+   failed exactly that way — see `KNOWN_ISSUES.md`. Hide it, or disable it visibly with the
+   reason on screen. Never leave it looking live.
+
+**Prove it, do not assert it.** A functional test per domain that renders a PAST date,
+drives the tick / complete / add control, and asserts **no state was written**. A harness
+pin that the control is absent is NOT enough — presence is not behaviour, and this is the
+`_blabCalEntryView` shape exactly.
+
+### DECIDED — do not re-litigate
+
+| Question | Ruling |
+|---|---|
+| Read-only or editable? | **READ-ONLY.** Jon, 8 Sep. |
+| What does "add a dose" mean on a future day? | **Moot.** Nothing is addable. |
+| Do the surfaces move together? | **TOGETHER, as one day.** |
+| Editing a past day later? | A **separate project** — it threads an explicit date through every write path in three domains. Read-only is a clean first step toward it, not throwaway work. Cost it before promising it. |
+
+**Why read-only first, in Jon's own framing:** he asked to swipe back and forth *to see*. It
+is a fraction of the work and **it cannot produce a wrong tick at 4:30am.**
+
+**PM owns `renderTodayScreen` — domain chats do not edit it.** Send PM the shape your
+surface needs and PM wires it, per the isolation rule. Also note it was rewritten at
+v4.9.298 and **Jon has not used it since**, so it is not a settled base: if the swipe
+surfaces a bug in it, that is a finding, not your build breaking.
+
+---
+
+
 - [ ] TRAINING/PM — **The weekly-review and coach cluster still shows the AI programme's
       week to a BLAB user.** Same root cause as the badge fixed in v4.9.301, NOT fixed
       with it, and deliberately so. Sites: the Sunday "Week N Complete" card on Today
@@ -54,40 +112,6 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       fallback. Not mine to edit — Training's test, Training's feature.
       **Why it matters more than one red row:** a gate that is red three days in seven
       teaches everyone to push through a red gate, and the next red will be a real one.
-
-- [ ] **PM — SWIPE FORWARD/BACK BY DAY ON THE MAIN TODAY SCREEN. Jon asked for this
-      across PEPTIDES, NUTRITION AND TRAINING, and asked for PM to drive it** (2026-09-08,
-      "i want this for peptides, nutrition and training - pm to push on all").
-      **LIVE — he asked again the same day: "message pm to push the day swipe - its live".**
-      **PEPTIDES COULD NOT DELIVER THAT MESSAGE.** Both cross-chat channels are closed from
-      the peptides session: `SendMessage`/`ListAgents` (Channel 1) do not exist in it at
-      all, and `mcp__ccd_session_mgmt__send_message` (Channel 2) refuses with "unavailable
-      in unattended sessions" even with the PM session listed as running. Verified against
-      a live listing, not assumed. So THIS ENTRY IS THE HANDOFF — Jon has been told it is
-      here and that he may need to point PM at it himself.
-      PEPTIDES raised it and is NOT building it: `renderTodayScreen` is shared, it was rewritten at
-      v4.9.298 and is still untested by him, and the hard part is not the swipe.
-      **THE HARD PART IS THAT EVERY WRITE ON THAT SCREEN ASSUMES TODAY.** Peptides is the
-      worked example, and the other two will have the same shape:
-      · `pepToggleDose` writes `ps.checked[_pepToday()]`; `pepSkipDose` and
-        `pepAddExtraDose` likewise; `pepLogMakeUp` stamps `openedDate = _pepToday()`.
-      · So on a screen showing Monday, a tick lands on TODAY. Silent, and it corrupts
-        adherence and stock in a way nothing surfaces.
-      **The reading side is already done in peptides and is not the problem:**
-      `_pepGetDoses(ps, dateStr)` has taken a date since v4.9.255 and the calendar uses it.
-      **Three decisions PM needs to make before anyone writes code, in this order:**
-      1. Is a past/future day READ-ONLY, or can he act on it? Read-only is one day's work
-         and cannot corrupt anything. Editable means every write path in all three domains
-         takes an explicit date, which is the real project.
-      2. If editable, what does "add a dose"/"complete a session" mean on a FUTURE day?
-      3. Which surfaces move together — does swiping the Today screen also move the
-         nutrition day, the session card and the peptide tile as one, or do they scroll
-         independently? Jon's phrasing ("swipe forward and back days to see") reads as
-         READ-ONLY and AS ONE, which is decision 1 = read-only and decision 3 = together.
-      **Recommendation from PEPTIDES:** ship read-only first. It is what he described, it
-      is a fraction of the work, and it cannot produce a wrong tick at 4:30am. Editing a
-      past day can follow once someone has costed date-threading across the three domains.
-      Peptides will do its half on PM's word; the peptide read path needs no new work.
 
 ## JON'S 2026-09-08 SESSION REPORT — 6 OF 7 STILL OPEN
 

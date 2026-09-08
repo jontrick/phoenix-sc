@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.326';
+var APP_VERSION='4.9.327';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23010,6 +23010,31 @@ function _nutProgBfastDrops(dateKey){
   return (opt && !opt.base && opt.drops) ? opt.drops : [];
 }
 
+// v4.9.327 — how an option's serve reads, and what it is worth. The swap sheet
+// inlined this as `o.g + ' g'` and `o.p * o.g / 100`, which is right for a food
+// measured in grams and silently wrong for a COUNTED one: it read the count as
+// a weight, so six egg whites showed as "6 g" worth "1 g protein". _nutUnitMult
+// was written for exactly this and every other caller already used it.
+//
+// A counted food NAMES ITSELF in its serve phrase ("2 whole eggs"); a weighed
+// one does not ("80 g"). The nightly rows print o.n separately, so they take the
+// bare phrase; a parts list has to supply the name itself — hence two helpers.
+function _nutOptServeLabel(o, qty){
+  var q = (qty === undefined) ? o.g : qty;
+  if(!o.count) return q + (o.u || ' g');
+  if(/^Eggs, whole$/.test(o.n)) return q + ' whole egg' + (q === 1 ? '' : 's');
+  if(/^Egg whites$/.test(o.n))  return q + ' egg white' + (q === 1 ? '' : 's');
+  return q + ' \u00d7 ' + o.n;
+}
+function _nutPartLabel(pt, qty){
+  var serve = _nutOptServeLabel(pt, qty);
+  return pt.count ? serve : (pt.n + ' ' + serve);
+}
+function _nutOptMacros(o, qty){
+  var m = _nutUnitMult(o, (qty === undefined) ? o.g : qty);
+  return { k:o.k * m, p:o.p * m, c:o.c * m, f:o.f * m };
+}
+
 // A part's weight may be a per-phase array, exactly like a plate row's, or a
 // single number where the food does not move across the cut.
 function _nutPartG(pt, phaseIx){
@@ -23449,12 +23474,12 @@ function nutOpenSwapSheet(forDate, only){
         '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
         '<div style="flex:1;min-width:0;">' +
           '<div style="font-size:13px;font-weight:600;color:var(--text);">' + o.n +
-            ' <span style="color:var(--gold);font-weight:700;">' + o.g + ' g</span>' +
+            ' <span style="color:var(--gold);font-weight:700;">' + _nutOptServeLabel(o) + '</span>' +
             (o.base ? ' <span style="font-size:9px;color:var(--text3);font-weight:400;">default</span>' : '') + '</div>' +
           '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' +
-            Math.round(o.p * o.g / 100) + ' g protein &middot; ' + Math.round(o.f * o.g / 100) + ' g fat &middot; ' +
-            (note ? (Math.round(o.c * o.g / 100) + ' g carbs &middot; ') : '') +
-            Math.round(o.k * o.g / 100) + ' kcal in this serve</div>' +
+            Math.round(_nutOptMacros(o).p) + ' g protein &middot; ' + Math.round(_nutOptMacros(o).f) + ' g fat &middot; ' +
+            (note ? (Math.round(_nutOptMacros(o).c) + ' g carbs &middot; ') : '') +
+            Math.round(_nutOptMacros(o).k) + ' kcal in this serve</div>' +
         '</div></div>';
     });
     if(note) h += '<div style="font-size:10px;color:var(--text3);line-height:1.5;">' + note + '</div>';
@@ -23570,7 +23595,7 @@ function nutOpenSwapSheet(forDate, only){
       var m  = o.base ? _wm : _nutProgPartsMacros(o, _bix);
       var line = o.base
         ? (_wg + ' g')
-        : o.parts.map(function(pt){ return pt.n + ' ' + _nutPartG(pt, _bix) + (pt.u || ' g'); }).join(', ');
+        : o.parts.map(function(pt){ return _nutPartLabel(pt, _nutPartG(pt, _bix)); }).join(', ');
       var cost = '';
       if(m && _wm && !o.base){
         var dp = Math.round((m.p - _wm.p) * 10) / 10;

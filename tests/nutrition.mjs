@@ -3606,7 +3606,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('data-nut-night="bfast_protein|eggs"') >= 0, 'the egg row');
     assert.ok(html.indexOf('data-nut-night="bfast_protein|eggsveg"') >= 0, 'the veg row');
     assert.ok(html.indexOf('data-nut-night="bfast_protein|whey"') >= 0, 'and a way back to the shake');
-    assert.ok(/Egg whites 7\b/.test(html), 'shown at the count actually eaten');
+    // Was /Egg whites 7\b/ until v4.9.327, which "Egg whites 7 g" satisfied — it
+    // asserted the NUMBER was on screen and never that it read as a count, so it
+    // passed for eight versions on the rendering Jon reported.
+    assert.ok(/7 egg whites/.test(html), 'shown at the count actually eaten, AS a count');
     assert.ok(/which the evening oil takes/.test(html),
       'the fat is declared AND said to be handled');
     assert.ok(/which nothing makes up/.test(html),
@@ -4612,6 +4615,76 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     onDay('2026-09-08', () => d.fire(back, 'click'));
     assert.equal(app._nutProgDayOffset, -1, 'and the tap moves the day');
     app._nutProgDayOffset = 0;
+  });
+
+  // ── the swap sheet read a COUNT as a WEIGHT ──────────────────────────────
+  // v4.9.327. Jon: "6 egg whites dont have 1g protein - what says in weekly plan
+  // and also says 6g not 6 egg whites on the selection". Both true and both the
+  // same fault: the sheet computed o.p * o.g / 100, so the COUNT 6 was read as
+  // 6 GRAMS — 10.9 x 6 / 100 = 0.65, printed as "1 g protein".
+  //
+  // The plate was right the whole time (21.6 g). Only the sheet lied, which is
+  // the worse way round: it is the screen he chooses FROM.
+
+  const sheetText = (day, slot) => {
+    const dm = dom();
+    onDay(day, () => app.nutOpenSwapSheet(day, slot));
+    return dm.lastCreatedHtml().replace(/<br>/g, ' / ').replace(/<[^>]+>/g, '\n')
+      .replace(/&middot;/g, '·').split('\n').map((x) => x.trim()).filter(Boolean);
+  };
+
+  test('SHEET a counted food shows a COUNT, and the protein of that count', () => {
+    setUp(110);
+    const lines = sheetText('2026-09-08', 'midam_dairy');
+    const i = lines.indexOf('Egg whites');
+    assert.ok(i >= 0, 'the egg-white option is offered at 09:30');
+    assert.equal(lines[i + 1], '6 egg whites',
+      'the serve is six EGGS, not six grams — got ' + JSON.stringify(lines[i + 1]));
+    // 33 g per large white x 6 x 10.9 g/100 g = 21.6 g. Never "1 g".
+    assert.equal(lines[i + 2], '22 g protein · 0 g fat · 103 kcal in this serve',
+      'and its macros are the count\'s, not the number-read-as-grams — got ' +
+      JSON.stringify(lines[i + 2]));
+  });
+
+  test('SHEET a weighed food is untouched by that fix', () => {
+    setUp(110);
+    const lines = sheetText('2026-09-08', 'midam_dairy');
+    const i = lines.indexOf('Greek yoghurt, 0%');
+    assert.equal(lines[i + 1], '200 g', 'grams still read as grams');
+    assert.ok(/^20 g protein/.test(lines[i + 3] || lines[i + 2]),
+      'and 200 g of yoghurt is still 20 g of protein');
+  });
+
+  test('SHEET a parts list names its weighed parts and lets counted ones name themselves', () => {
+    setUp(110);
+    const lines = sheetText('2026-09-08', 'bfast_protein');
+    const eggs = lines.filter((l) => /^7 egg whites, 2 whole eggs ·/.test(l))[0];
+    assert.ok(eggs, 'the egg option reads as eggs, not as "Egg whites 7 g, Eggs, whole 2 g" — got ' +
+      JSON.stringify(lines.filter((l) => /egg/i.test(l)).slice(0, 4)));
+    assert.ok(/· 38 g protein · 263 kcal/.test(eggs), 'with the real protein: ' + eggs);
+    // The vegetables are WEIGHED, so the parts list must still supply their names.
+    // The first cut of this fix dropped them and left "50 g, 30 g, 30 g".
+    const veg = lines.filter((l) => /Spinach/.test(l))[0];
+    assert.ok(veg, 'the scrambled option still names its vegetables');
+    assert.ok(/Spinach 50 g, Mushrooms 30 g, Onion 30 g/.test(veg),
+      'each with its own weight — got ' + JSON.stringify(veg));
+  });
+
+  test('SHEET no egg-white serve is rounded DOWN below the protein it replaces', () => {
+    setUp(110);
+    // Jon: "round up where required to get the protein and a whole eggs worth of
+    // whites". A large egg white is 33 g / 3.6 g protein, and every serve is a
+    // WHOLE number of whites. This asserts the direction of every rounding.
+    const midam = app._NUT_PROG_MIDAM_PROTEIN || [];
+    const base = midam.filter((o) => o.base)[0] || midam[0];
+    const whites = midam.filter((o) => /Egg whites/.test(o.n))[0];
+    const prot = (o) => o.p * (o.count ? o.g * o.each / 100 : o.g / 100);
+    assert.ok(Number.isInteger(whites.g), 'a whole number of whites');
+    assert.ok(prot(whites) >= prot(base),
+      '09:30 whites must not undershoot the yoghurt: ' + prot(whites).toFixed(1) +
+      ' vs ' + prot(base).toFixed(1));
+    assert.ok(prot(whites) - 3.6 < prot(base),
+      'and must not overshoot by a whole extra white — it is a round UP, not a pad');
   });
 
   // ── the home screen's meals tile ─────────────────────────────────────────

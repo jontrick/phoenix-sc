@@ -28,6 +28,16 @@ design. The three open questions are CLOSED — do not reopen them, build to thi
 - [ ] **TRAINING — render your Today surfaces for a GIVEN DATE, and make your write
       controls unreachable when that date is not today.**
 - [ ] **NUTRITION — same.** Your day view already takes a date key.
+      **MEASURED, NOT ASSUMED, 2026-09-08: the gap is live on origin now.** Stepping DAILY
+      back one day (`_nutProgDayOffset = -1`) shows 2026-09-07, and `nutProgToggleMeal`
+      then writes `{"lunch":true}` to **2026-09-07** — a write control reachable on a
+      non-today day, which the invariant forbids.
+      **State the failure mode precisely, because it is NOT the one the invariant's
+      reason 1 describes.** Since v4.9.318 the tick carries `data-prog-day`, so it writes
+      to the day ON SCREEN, not silently to today. Nothing is corrupted and nothing is
+      mislabelled. It is simply EDITABLE where Jon ruled READ-ONLY — the "editing a past
+      day later" project arriving early and unasked, not the 4:30am wrong-tick hazard.
+      Closes when the ticks are absent (not inert) on any day that is not today.
 - [ ] **PEPTIDES — same.** Your read path needs NO new work: `_pepGetDoses(ps, dateStr)`
       has taken a date since v4.9.255 and the calendar already uses it.
 
@@ -325,6 +335,16 @@ below are verified against the source, not guessed — build from these, do not 
       bindings lived in the deleted directory.
 
 ## OPEN — NUTRITION
+
+- [ ] NUTRITION — **The free-form planner's meals tile is now shadowed for the whole
+      cut.** v4.9.326 made the home tile render the programme's day (it had said "Nothing
+      planned for today" on every programme day since v4.9.277). Consequence, deliberate
+      and matching what the WEEK tab has always done: a recipe Jon assigns via
+      `nutAssignRecipe` will NOT appear on that tile until the cut ends 27 December.
+      Nothing is lost — it is stored and the planner still shows it — but the tile is not
+      where he will see it. Closes with a ruling: shadow (as now), merge the two, or
+      surface assigned recipes as an extra row. Not urgent; he has not used the planner
+      during the cut.
 
 - [ ] NUTRITION — Servings at add-to-meal. A scanned per-serving food stores `serving_g`
       and currently goes in at exactly one serving. Jon's ruling was that the serving

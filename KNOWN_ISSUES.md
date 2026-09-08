@@ -68,6 +68,27 @@ Five distinct instances, all green, all worthless:
 > **A CHECK THAT HAS NEVER FIRED IS UNTESTED, NOT CLEAN.** Break it, watch it go red, and
 > confirm it can still go green.
 
+## A TEST CAN ASSERT A NUMBER AND NEVER ASSERT ITS UNITS
+
+`EGGS the sheet OFFERS the breakfast swap` asserted `/Egg whites 7\b/` — that the digit 7
+was on screen. `"Egg whites 7 g"` satisfies that. So the test passed for eight versions on
+the exact rendering Jon reported as wrong: a COUNT printed as a WEIGHT, and its macros
+computed as `o.p * o.g / 100` — six egg whites shown as "6 g" worth "1 g protein".
+
+**The test was not weak by accident.** I wrote it to check the serve was "shown at the
+count actually eaten", and `7` IS the count, so the assertion looked like it matched its
+own stated intent. What it never pinned was the thing that makes 7 a count rather than a
+weight — the unit next to it.
+
+- **A number without its unit is half an assertion.** `/7/` and `/7 egg whites/` look
+  equally specific and are not. Anywhere a quantity is rendered, pin the WHOLE phrase.
+- **The wrong number was on the sheet, not the plate.** The plate said 21.6 g throughout.
+  A discrepancy between the screen he CHOOSES from and the screen he EATS from will be
+  read as the app being wrong about food, and he cannot tell which half to trust.
+- **Fixed v4.9.327** by routing every option row through one serve formatter and one macro
+  formatter, both built on `_nutUnitMult`. The sheet was the last caller still doing its
+  own arithmetic — the helper had existed since v4.9.315.
+
 ## A verifier built on the assumption it is testing cannot fail
 
 The PM's uniqueness guard skipped computed contexts and printed a confident count that

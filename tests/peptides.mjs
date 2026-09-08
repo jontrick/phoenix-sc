@@ -689,6 +689,7 @@ const settle = () => new Promise(r => setTimeout(r, 0));
 
     const ISO = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const daysAgo = n => ISO(new Date(Date.now() - n*86400000));
+    const inDays  = n => ISO(new Date(Date.now() + n*86400000));
 
     // A persistent stub per id, so innerHTML written by the renderer can be read back.
     const nodes = {};
@@ -1412,6 +1413,122 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(h.includes('data-pep-tile-anymu'),
         'a rest day is exactly when he mixes the next vial — the branch with no ' +
         'doses is not a branch with nothing to do');
+    });
+
+    // ── THE HANDOVER IS HIS TO DRIVE (v4.9.317) ───────────────────────────
+    // Jon: "tesomorelin has started but still have cjc to use up - i will
+    // notify when change in the app and want app to be able to continue that
+    // once made change."
+    //
+    // Phase 2 encodes the switch as two dates — CJC's window ends, Tesamorelin
+    // starts the next day. Reality did not read the document. These cases are
+    // built from HIS situation rather than a neutral fixture: a compound whose
+    // window is about to close, and one whose start date has not arrived.
+    const handover = () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState();
+      st.settings = {};
+      st.stacks = [
+        { compoundId:'cjc1295', dose:0.2, startDate: daysAgo(90), freq:'daily',
+          vialMg:10, waterMl:2, sealedVials:8, status:'instock',
+          periods:[{from: daysAgo(90), to: inDays(2)}, {from: inDays(28), to: null}] },
+        { compoundId:'tesamorelin', dose:2, startDate: inDays(3), endDate: inDays(27),
+          freq:'daily', vialMg:10, waterMl:2, sealedVials:5, status:'instock' },
+      ];
+      app.pepSaveState(st);
+    };
+    const dueIds = () => {
+      const d = app._pepGetDoses(app.pepGetState());
+      return d.morning.concat(d.anytime, d.evening).map(x => x.id);
+    };
+    const stackOf = id => app.pepGetState().stacks.find(x => x.compoundId === id);
+
+    test('HANDOVER the plan alone runs CJC and not Tesamorelin', () => {
+      handover();
+      assert.ok(dueIds().indexOf('cjc1295') >= 0, 'CJC is inside its window');
+      assert.ok(dueIds().indexOf('tesamorelin') < 0,
+        'and Tesamorelin has not reached its start date — which is the problem, ' +
+        'because he has already started it');
+    });
+
+    test('HANDOVER "Started today" brings a compound forward', () => {
+      handover();
+      const r = app.pepStartToday('tesamorelin');
+      assert.equal(r.ok, true, 'accepted');
+      assert.equal(stackOf('tesamorelin').startDate, app._pepToday(), 'dated today');
+      assert.ok(dueIds().indexOf('tesamorelin') >= 0, 'and it is on Today now');
+      assert.ok(dueIds().indexOf('cjc1295') >= 0,
+        'with CJC still running beside it — BOTH, which is the actual situation');
+    });
+
+    test('HANDOVER "Keep running" removes the window that would stop CJC', () => {
+      handover();
+      const before = app._pepScheduleState(stackOf('cjc1295'));
+      assert.ok(before.windowEndsOn, 'its window has a closing date to start with');
+      assert.equal(app.pepRunUntilStopped('cjc1295').ok, true, 'accepted');
+      const after = app._pepScheduleState(stackOf('cjc1295'));
+      assert.equal(after.windowEndsOn, null, 'no closing date any more');
+      assert.equal(after.endsOn, null, 'and no end date either');
+    });
+
+    test('HANDOVER after "Keep running" CJC is still due past its old window', () => {
+      handover();
+      app.pepRunUntilStopped('cjc1295');
+      const st = stackOf('cjc1295');
+      const c = app._pepCompound('cjc1295');
+      const past = new Date(Date.now() + 10 * 86400000);
+      assert.ok(app._pepStackDueOn(st, c, past) !== null,
+        'ten days out, well past the 2-day window it was carrying — this is the ' +
+        'whole point: the vial lasts as long as it lasts');
+    });
+
+    test('HANDOVER a later planned window survives Keep running', () => {
+      handover();
+      app.pepRunUntilStopped('cjc1295');
+      const pr = stackOf('cjc1295').periods;
+      assert.equal(pr.length, 2,
+        'the October window is plan HE wrote — an open window in front of it makes ' +
+        'it harmless, so there is no reason to delete it');
+    });
+
+    test('HANDOVER "Finished" stops it from today, and is REVERSIBLE', () => {
+      handover();
+      app.pepRunUntilStopped('cjc1295');
+      assert.equal(app.pepStopFromToday('cjc1295').ok, true, 'he says that was the last of it');
+      const st = stackOf('cjc1295');
+      const c = app._pepCompound('cjc1295');
+      const tomorrow = new Date(Date.now() + 86400000);
+      assert.equal(app._pepStackDueOn(st, c, tomorrow), null, 'not due tomorrow');
+      assert.equal(app.pepResumeSchedule('cjc1295').ok, true, 'and it can come back');
+      assert.ok(app._pepStackDueOn(stackOf('cjc1295'), c, tomorrow) !== null,
+        'a one-way door on a schedule is how a mis-tap costs a protocol');
+    });
+
+    test('HANDOVER stopping CJC leaves Tesamorelin running', () => {
+      handover();
+      app.pepStartToday('tesamorelin');
+      app.pepRunUntilStopped('cjc1295');
+      app.pepStopFromToday('cjc1295');
+      const c = app._pepCompound('tesamorelin');
+      const tomorrow = new Date(Date.now() + 86400000);
+      assert.ok(app._pepStackDueOn(stackOf('tesamorelin'), c, tomorrow) !== null,
+        'the takeover continues on its own — that is "the app continues once the ' +
+        'change is made"');
+    });
+
+    test('HANDOVER the panel offers the control that matches the state', () => {
+      handover();
+      app._pepTab = 'adjust';
+      const h = withStubbedDom(() => {
+        nodes['pep-screen-body'] = mk('pep-screen-body');
+        app._pepCompOpen = 'tesamorelin';
+        app.pepRenderScreen('adjust');
+        return nodes['pep-screen-body'].innerHTML;
+      });
+      assert.ok(h.includes('data-pep-schedstart="tesamorelin"'),
+        'a compound that has not started offers Started today');
+      assert.ok(!h.includes('data-pep-schedstop="tesamorelin"'),
+        'and not Finished — you cannot finish something that has not begun');
     });
 
     test('RENDER the tile stays empty when there is no protocol', () => {

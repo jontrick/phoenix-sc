@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.316';
+var APP_VERSION='4.9.317';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -27517,6 +27517,110 @@ function pepMarkMadeUpToday(compoundId){
 // Dismissing changes nothing about the vial: needsMakeUp stays true, so the
 // unit count stays withheld. It only stops shouting. A later make-up clears the
 // dismissal, so the next vial asks again.
+// ── A HANDOVER HE DRIVES, NOT A DATE I HARD-CODED (v4.9.317) ──────────────
+// Jon: "tesomorelin has started but still have cjc to use up - i will notify
+// when change in the app and want app to be able to continue that once made
+// change."
+//
+// Phase 2 encodes the switch as two dates: CJC's active window ends 7 Sep and
+// Tesamorelin starts 8 Sep. Reality did not read the document. He has started
+// Tesamorelin early and has CJC left in the fridge, so for a while BOTH run —
+// and the moment CJC actually runs out is a thing only he can know.
+//
+// A date written into a phase is a PREDICTION. These three make it a decision:
+//
+//   pepStartToday        this one has begun, whatever the plan said
+//   pepRunUntilStopped   stop counting down to an end date; run until I say
+//   pepStopFromToday     that is the last of it — and it is reversible, because
+//                        a one-way door on a schedule is how a mis-tap costs a
+//                        protocol
+//
+// Deliberately NOT hard-coded here. Same reason as Epitalon's 0.5mL: "i want to
+// edit in app not from this note". If I edited his dates from this chat the app
+// would be right once and wrong the next time reality moved.
+function _pepScheduleState(stack){
+  if(!stack) return null;
+  var iso = _pepToday();
+  var started = !!(stack.startDate && String(stack.startDate) <= iso);
+  var endsOn  = stack.endDate ? String(stack.endDate) : null;
+  return {
+    started: started,
+    startsOn: stack.startDate ? String(stack.startDate) : null,
+    stopped: !!(endsOn && endsOn < iso),
+    endsOn: endsOn,
+    // A window boundary stops it just as dead as an endDate, so the UI has to
+    // treat the two the same or "Keep running" would appear to do nothing on a
+    // compound held by a period.
+    windowEndsOn: (function(){
+      if(!Array.isArray(stack.periods) || !stack.periods.length) return null;
+      var live = null;
+      stack.periods.forEach(function(w){
+        if(!w || !w.from) return;
+        if(String(w.from) <= iso && (!w.to || String(w.to) >= iso)) live = w;
+      });
+      return (live && live.to) ? String(live.to) : null;
+    })()
+  };
+}
+
+function pepStartToday(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return {ok:false, problem:"That compound is not in your protocol."};
+  ps.stacks[idx].startDate = _pepToday();
+  // Starting early past a window boundary would begin and immediately stop.
+  var pr = ps.stacks[idx].periods;
+  if(Array.isArray(pr) && pr.length && pr[0] && pr[0].from) pr[0].from = _pepToday();
+  pepSaveState(ps);
+  pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true, startDate:_pepToday()};
+}
+
+function pepRunUntilStopped(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return {ok:false, problem:"That compound is not in your protocol."};
+  var st = ps.stacks[idx];
+  var iso = _pepToday();
+  st.endDate = null;
+  // Open the window he is actually IN, or the most recent one that has begun.
+  // Later windows are left alone rather than deleted: they are plan he wrote,
+  // and an open window in front of them makes them harmless anyway.
+  if(Array.isArray(st.periods) && st.periods.length){
+    var target = -1;
+    st.periods.forEach(function(w, i){ if(w && w.from && String(w.from) <= iso) target = i; });
+    if(target < 0) target = 0;
+    if(st.periods[target]) st.periods[target].to = null;
+  }
+  pepSaveState(ps);
+  pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true};
+}
+
+function pepStopFromToday(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return {ok:false, problem:"That compound is not in your protocol."};
+  ps.stacks[idx].endDate = _pepToday();
+  pepSaveState(ps);
+  pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true, endDate:_pepToday()};
+}
+
+function pepResumeSchedule(compoundId){
+  var ps = pepGetState();
+  var idx = _pepStackIndex(ps, compoundId);
+  if(idx < 0) return {ok:false, problem:"That compound is not in your protocol."};
+  ps.stacks[idx].endDate = null;
+  pepSaveState(ps);
+  pepRenderScreen();
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true};
+}
+
 function pepDismissMakeUpNote(compoundId){
   var ps = pepGetState();
   var idx = _pepStackIndex(ps, compoundId);
@@ -28111,6 +28215,14 @@ function pepRenderScreen(){
       // of twelve compounds into a page you have to scroll past.
       _pepCompOpen = (_pepCompOpen === id) ? null : id;
       pepRenderScreen();
+    });
+  });
+  [["data-pep-schedstart", pepStartToday],
+   ["data-pep-schedrun",   pepRunUntilStopped],
+   ["data-pep-schedstop",  pepStopFromToday],
+   ["data-pep-schedresume",pepResumeSchedule]].forEach(function(pair){
+    body.querySelectorAll("[" + pair[0] + "]").forEach(function(btn){
+      btn.addEventListener("click", function(){ pair[1](btn.getAttribute(pair[0])); });
     });
   });
   body.querySelectorAll("[data-pep-csave]").forEach(function(btn){
@@ -29217,6 +29329,34 @@ function _pepCompoundPanels(ps){
                   : (_pepReconAssumed(recon) ? "Vial size is a library assumption, not something you have confirmed. Check the label."
                                              : "From your protocol. No vial is currently open.")) + "</div>";
       h += "</div>";
+
+      // v4.9.317: the schedule, as something he drives. A phase's dates are a
+      // prediction; these turn each one into a decision he can make on the day.
+      var _sc = _pepScheduleState(st);
+      h += "<div style=\"background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;\">";
+      h += "<div style=\"font-family:var(--font-d);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;\">Schedule</div>";
+      h += "<div style=\"font-size:12px;color:var(--text2);line-height:1.6;\">" +
+           (!_sc.started ? "Starts " + _esc(_sc.startsOn || "&mdash;")
+            : _sc.stopped ? "Stopped " + _esc(_sc.endsOn)
+            : "Running" +
+              (_sc.endsOn ? " &middot; ends " + _esc(_sc.endsOn) : "") +
+              (_sc.windowEndsOn ? " &middot; this window ends " + _esc(_sc.windowEndsOn) : "") +
+              (!_sc.endsOn && !_sc.windowEndsOn ? " &middot; no end date" : "")) + "</div>";
+      h += "<div style=\"display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;\">";
+      if(!_sc.started){
+        h += "<button data-pep-schedstart=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid #7B68EE;border-radius:12px;color:#7B68EE;font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 11px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Started today</button>";
+      }
+      if(_sc.stopped){
+        h += "<button data-pep-schedresume=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid #7B68EE;border-radius:12px;color:#7B68EE;font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 11px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Resume</button>";
+      } else {
+        if(_sc.endsOn || _sc.windowEndsOn){
+          h += "<button data-pep-schedrun=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid var(--gold);border-radius:12px;color:var(--gold);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 11px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Keep running</button>";
+        }
+        if(_sc.started){
+          h += "<button data-pep-schedstop=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:5px 11px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Finished</button>";
+        }
+      }
+      h += "</div></div>";
 
       h += "<button data-pep-csave=\"" + _esc(st.compoundId) + "\" style=\"width:100%;padding:11px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">Save make-up</button>";
       h += "<div data-pep-cmsg=\"" + _esc(st.compoundId) + "\" style=\"font-size:11px;color:var(--gold);min-height:14px;margin-top:6px;\"></div>";

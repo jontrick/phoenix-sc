@@ -40,6 +40,21 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       asked for. Deleting it is the other option. Owner **???**, needs a one-line
       decision. Found 2026-09-06 while fixing the menu.
 
+- [ ] TRAINING — **`tests/training.mjs` "DOT: a submitted check-in clears it on the day
+      itself" is RED on origin/main, and goes green again on Friday.** Reproduced against
+      origin's OWN untouched `index.html` and `tests/training.mjs` in a scratch copy, so
+      it is not caused by any peptide change. **The app is right; the test is wrong.**
+      The test derives today's weekday name and sets `fqCheckInDay` to it. The onboarding
+      picker (index.html ~L2546) offers only Friday / Saturday / Sunday / Monday, and
+      `CHECK_IN_DAYS` (~L33363) maps exactly those four. On a Tuesday it sets `'tuesday'`,
+      `_phxCheckInDayIndex()` falls back to 5 (Friday), so the dot correctly stays hidden
+      and the assertion `want "block"` fails.
+      **So it fails Tue/Wed/Thu and passes Fri/Sat/Sun/Mon.** Found 2026-09-08, a Tuesday.
+      Fix: pick a day the app actually supports rather than today's, or assert the
+      fallback. Not mine to edit — Training's test, Training's feature.
+      **Why it matters more than one red row:** a gate that is red three days in seven
+      teaches everyone to push through a red gate, and the next red will be a real one.
+
 ## WAITING ON JON
 
 - [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together

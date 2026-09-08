@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.322'", 'version is 4.9.322');
+has("var APP_VERSION='4.9.323'", 'version is 4.9.323');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2554,6 +2554,30 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── SEEING THE NUMBER HE IS CHASING (v4.9.323) ──────────────────────────────
+// Jon, two items: the 1.6km best must be visible UNDER the running clock, and
+// "box jumps didnt give last weeks achieved numbers to reference".
+
+// THE RUN. The best existed only on the pre-start card — gone the moment he tapped
+// Start, which is exactly when it is useful.
+hasCode('id="blab-run-gap"', 'RUN: STRUCTURAL the running screen carries a live gap element');
+hasCode("var gp = document.getElementById('blab-run-gap');",
+  'RUN: the gap is painted by the ONE clock tick, not a second timer that would drift');
+
+// THE HISTORY. records[name+'_wk'] has held this for every exercise since .291; the
+// dropdown was nested inside the weight suggestion, and blabSuggestWeight bails without
+// a load. Correct code, no door — this codebase's favourite defect.
+hasCode('window._blabHistorySection = function(ex, i, targetReps)',
+  'HIST: STRUCTURAL the history section is its own function, so it can be driven');
+// THE CALL SITE. A correct function nobody calls is the other half of the same defect,
+// and it is the half harness pins exist for — a functional test cannot see it.
+hasCode('var suggestSection = window._blabHistorySection(ex, i, (perSetTargets[0] || {}).reps);',
+  'HIST: and openTodaySession actually calls it');
+// Behaviour in tests/training.mjs under RUN:/HIST:. Proved by inversion 2026-09-08 —
+// and note WHY the seam exists: with the old gate restored and the section still inline,
+// all 315 cases stayed GREEN. The helper-level tests could not see it. After extraction
+// the same inversion turns "the SECTION renders week rows" red.
 
 // ── COPENHAGEN, NOT NORDIC (v4.9.322) ───────────────────────────────────────
 // Jon corrected his own spec. Different exercises — the coach prompt names both.

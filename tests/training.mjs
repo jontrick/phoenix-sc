@@ -4398,4 +4398,128 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(recs['Nordic Planks_wk'], 'the old key is still there, untouched');
     assert.ok(!recs['Copenhagen Planks_wk'], 'and nothing was written on a read');
   });
+
+  // ── SEEING THE NUMBER HE IS CHASING (v4.9.323) ────────────────────────────
+  // Two of Jon's items, both "the history exists but I cannot see it":
+  //   "the 1.6km run screen needs to have best result larger or present on the screen
+  //    under the timer to see how going"
+  //   "box jumps didnt give last weeks achieved numbers to reference"
+  // They travel together because both are read-only additions to separate renderers —
+  // no shared state, so a break is still attributable to one of them.
+
+  test('RUN: the best time is on the running screen, not just the start card', () => {
+    reset(); signIn(UID);
+    const body = { innerHTML: '' };
+    app.blabRenderRun({ prev_best: 462, note: '' }, { elapsed: 0 }, body);
+    assert.ok(/7:42/.test(body.innerHTML), 'the best is rendered: ' + body.innerHTML.slice(0, 200));
+    assert.ok(/Best/i.test(body.innerHTML), 'and labelled as the best');
+  });
+
+  test('RUN: a first run says so instead of showing a zero', () => {
+    reset(); signIn(UID);
+    const body = { innerHTML: '' };
+    app.blabRenderRun({ prev_best: 0, note: '' }, { elapsed: 0 }, body);
+    assert.ok(/sets the benchmark/i.test(body.innerHTML), 'no PB is stated, not rendered as 0:00');
+    assert.ok(!/0:00.*Best/i.test(body.innerHTML), 'and no empty best line');
+  });
+
+  test('RUN: the live gap says AHEAD while he is under his best', () => {
+    // This is the half that answers "to see how going" — a bare number still needs
+    // mental arithmetic mid-run.
+    reset(); signIn(UID);
+    const gap = { textContent: '', style: {} };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'blab-run-gap' ? gap : null);
+    try {
+      app._blabPaintElapsed({ ex: { prev_best: 462 }, _elapsedBase: 400, _segStart: 0 });
+    } finally { app.document.getElementById = real; }
+    assert.ok(/ahead/.test(gap.textContent), 'got ' + JSON.stringify(gap.textContent));
+    assert.ok(/1:02/.test(gap.textContent), 'and by how much: ' + gap.textContent);
+  });
+
+  test('RUN: the live gap says BEHIND once he is over it', () => {
+    reset(); signIn(UID);
+    const gap = { textContent: '', style: {} };
+    const real = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'blab-run-gap' ? gap : null);
+    try {
+      app._blabPaintElapsed({ ex: { prev_best: 462 }, _elapsedBase: 500, _segStart: 0 });
+    } finally { app.document.getElementById = real; }
+    assert.ok(/behind/.test(gap.textContent), 'got ' + JSON.stringify(gap.textContent));
+    assert.ok(/\+/.test(gap.textContent), 'signed, so the direction is unmistakable');
+  });
+
+  test('RUN: the gap painter is inert on every other format', () => {
+    // It is painted from the ONE clock tick shared by all formats. A second timer would
+    // drift against the first, so this must be a no-op when the element is absent.
+    reset(); signIn(UID);
+    let threw = null;
+    const real = app.document.getElementById;
+    app.document.getElementById = () => null;
+    try { app._blabPaintElapsed({ ex: { prev_best: 462 }, _elapsedBase: 10, _segStart: 0 }); }
+    catch (e) { threw = e; } finally { app.document.getElementById = real; }
+    assert.equal(threw, null, 'no element, no error');
+  });
+
+  test('HIST: an exercise with no load still shows its weekly history', () => {
+    // THE BOX JUMPS BUG. records[name+'_wk'] has held this since .291, but the dropdown
+    // was nested inside the weight suggestion — and blabSuggestWeight returns null
+    // without a weight, taking the history down with it.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Box Jumps_wk': { '1': { wt: 0, reps: 5 }, '3': { wt: 0, reps: 6 } } },
+                _ts: NEWER });
+    assert.equal(app.blabSuggestWeight('Box Jumps', 5), null,
+      'the suggestion is still correctly null — a jump has no load to suggest');
+    const hist = app.blabWeeklyMaxes('Box Jumps');
+    assert.equal(hist.length, 2, 'but the history is there and reachable');
+    assert.equal(hist[1].reps, 6, 'week 3: 6 reps');
+  });
+
+  test('HIST: the SECTION renders week rows for a load-less exercise', () => {
+    // THE CASE THAT ACTUALLY CATCHES IT. The two HIST cases above assert the helpers
+    // work — and they provably cannot see this bug: with the old `history only when
+    // there is a weight suggestion` gate restored, all 315 cases stayed green. That is
+    // why _blabHistorySection was extracted. Drive the thing that draws it.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Box Jumps_wk': { '1': { wt: 0, reps: 5 }, '3': { wt: 0, reps: 6 } } },
+                _ts: NEWER });
+    const html = app._blabHistorySection({ name: 'Box Jumps', reps: 5 }, 0, 5);
+    assert.ok(html, 'a load-less exercise gets a section at all');
+    assert.ok(/Week 3/.test(html), 'its weeks are listed: ' + html.slice(0, 160));
+    assert.ok(/6 reps/.test(html), 'with the reps he actually did');
+    assert.ok(!/0kg/.test(html), 'and never "0kg" — a number that means nothing on a jump');
+  });
+
+  test('HIST: the section is empty when there is genuinely no history', () => {
+    // No invented encouragement. The negative control for the case above.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER });
+    assert.equal(app._blabHistorySection({ name: 'Box Jumps', reps: 5 }, 0, 5), '',
+      'nothing on file, nothing drawn');
+  });
+
+  test('HIST: a loaded exercise still renders its SUGGESTION in the section', () => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Hammer Curls_wk': { '3': { wt: 20, reps: 10 } } }, _ts: NEWER });
+    const html = app._blabHistorySection({ name: 'Hammer Curls', reps: 10 }, 0, 10);
+    assert.ok(/Suggested/.test(html), 'the suggestion survives the split');
+    assert.ok(/22\.5/.test(html), 'and carries the new weight: ' + html.slice(0, 200));
+  });
+
+  test('HIST: a loaded exercise still gets its suggestion — nothing was traded away', () => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 6, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Hammer Curls_wk': { '3': { wt: 20, reps: 10 } } }, _ts: NEWER });
+    const sg = app.blabSuggestWeight('Hammer Curls', 10);
+    assert.ok(sg, 'the suggestion survives the split');
+    assert.equal(sg.kg, 22.5, 'hit the target, so up one increment');
+  });
 }

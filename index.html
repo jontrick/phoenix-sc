@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.322';
+var APP_VERSION='4.9.323';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6099,6 +6099,23 @@ function _blabPaintElapsed(st){
   st.elapsed = _blabElapsedNow(st);
   var et = document.getElementById('blab-elapsed');
   if(et) et.textContent = blabFmt(st.elapsed);
+  // v4.9.323: the 1.6km run's live gap against his best. Painted here because this is
+  // the ONE place the clock ticks — a second timer would drift against the first.
+  // Absent on every other format, so the lookup is the guard.
+  var gp = document.getElementById('blab-run-gap');
+  if(gp){
+    var _pb = (st.ex && st.ex.prev_best) || 0;
+    if(_pb > 0){
+      var _d = st.elapsed - _pb;
+      if(_d <= 0){
+        gp.textContent = '\u2212' + blabFmt(-_d) + ' ahead';
+        gp.style.color = '#3a7d44';
+      } else {
+        gp.textContent = '+' + blabFmt(_d) + ' behind';
+        gp.style.color = 'var(--orange)';
+      }
+    }
+  }
 }
 function _blabPauseClock(){
   var st=window._blabWoState; if(!st) return;
@@ -6804,11 +6821,30 @@ window._blabAfapTick=function(i){
 
 // INTERVAL RUN
 function blabRenderRun(ex,st,body){
+  // v4.9.323 — Jon: "the 1.6km run screen needs to have best result larger or present
+  // on the screen under the timer to see how going".
+  //
+  // The best time existed only on the PRE-START card. Once he tapped Start it was gone,
+  // which is precisely when it is useful — mid-run he cannot tell whether 4:12 is ahead
+  // or behind without remembering the number he is chasing.
+  //
+  // So: the best sits under the clock, and a live gap says which side of it he is on.
+  // The gap is the part that answers "to see how going"; a bare number still needs
+  // mental arithmetic at 4:30am with a heart rate of 170.
+  var _pb = ex.prev_best || 0;
+  var _pbBlock = _pb
+    ? '<div style="margin-top:14px;">'+
+        '<div style="font-family:var(--font-d);font-size:34px;font-weight:900;color:var(--text);line-height:1;">'+blabFmt(_pb)+'</div>'+
+        '<div style="font-family:var(--font-d);font-size:10px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-top:4px;">Best &mdash; beat it</div>'+
+        '<div id="blab-run-gap" style="font-family:var(--font-d);font-size:16px;font-weight:900;margin-top:8px;min-height:20px;"></div>'+
+      '</div>'
+    : '<div style="margin-top:14px;font-family:var(--font-d);font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;">First run &mdash; this one sets the benchmark</div>';
   body.innerHTML=
     '<div style="text-align:center;padding:40px 0;">'+
       '<div style="font-family:var(--font-d);font-size:20px;font-weight:700;color:var(--text);margin-bottom:12px;">1.6km Run</div>'+
       '<div style="font-family:var(--font-d);font-size:72px;font-weight:900;color:var(--gold);line-height:1;" id="blab-elapsed">'+blabFmt(st.elapsed)+'</div>'+
       '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-top:8px;">Time Elapsed</div>'+
+      _pbBlock+
     '</div>'+
     (ex.note?'<div style="background:var(--bg3);border-left:2px solid var(--gold);padding:10px 12px;border-radius:0 4px 4px 0;margin-bottom:20px;font-size:12px;color:var(--text3);line-height:1.6;">'+ex.note+'</div>':'')+
     '<button onclick="window._blabRunDone()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">Finished &mdash; Log Time</button>';
@@ -40896,6 +40932,66 @@ window._phxResetCustomisations = async function(){
   try { openTodaySession(); } finally { window._phxWarmupSkipNext = false; }
 };
 
+// v4.9.323 — THE HISTORY SECTION, AS ITS OWN FUNCTION.
+//
+// Extracted so it can be DRIVEN. The bug this fixes lived in the render gate, not in
+// blabWeeklyMaxes, and a test on the helper alone provably could not see it: restoring
+// the old `history only if there is a weight suggestion` condition left all 315
+// functional cases green. That is this codebase's most common defect shape and I walked
+// straight into it, so the seam is the fix for the test as well as for the code.
+//
+// The call site is pinned in harness.mjs — a correct function nobody calls is the OTHER
+// half of the same defect.
+window._blabHistorySection = function(ex, i, targetReps){
+  var out = '';
+  try {
+
+    var _hist = (typeof blabWeeklyMaxes === 'function') ? blabWeeklyMaxes(ex.name) : [];
+    var _sg = null;
+    if(typeof blabSuggestWeight === 'function'){
+      // targetReps is PASSED IN. The first draft read perSetTargets[0] straight out of
+      // the caller's scope — an undefined reference inside a function body, which
+      // runtime_check.mjs cannot see because it never executes bodies. Exactly the
+      // shape CLAUDE.md documents; caught by calling the function in a test.
+      var _tgtReps = parseInt(String(targetReps || ex.reps || ''), 10) || 0;
+      _sg = blabSuggestWeight(ex.name, _tgtReps);
+    }
+    if(_hist.length){
+      var _last = _hist[_hist.length - 1];
+      // Reps-only exercises get a reps-only line. Printing "0kg" for a box jump would
+      // be a number that means nothing.
+      var _fmtRow = function(r){
+        return (r.wt ? r.wt + 'kg' : '') + (r.wt && r.reps ? ' \u00d7 ' : '') + (r.reps ? r.reps + (r.wt ? '' : ' reps') : '');
+      };
+      var _rows = _hist.slice().reverse().map(function(r){
+        return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+          '<span style="color:var(--text3);">Week ' + r.week + '</span>' +
+          '<span style="font-family:var(--font-d);font-weight:700;color:var(--text);">' + (_fmtRow(r) || '\u2014') + '</span>' +
+        '</div>';
+      }).join('');
+      out =
+        '<div style="margin-top:10px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;">' +
+          (_sg
+            ? '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">' +
+                '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Suggested</div>' +
+                '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">' + _sg.kg + '<span style="font-size:12px;color:var(--text3);">kg</span></div>' +
+              '</div>' +
+              '<div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4;">' + _sg.basis + ' \u00b7 ' + _sg.note + '</div>'
+            : '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">' +
+                '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Last time</div>' +
+                '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">' + (_fmtRow(_last) || '\u2014') + '</div>' +
+              '</div>' +
+              '<div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4;">Week ' + _last.week + ' \u00b7 beat it.</div>') +
+          (_rows
+            ? '<div data-blab-hist="' + i + '" style="font-family:var(--font-d);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-top:7px;cursor:pointer;touch-action:manipulation;">Weekly history \u25be</div>' +
+              '<div id="blab-hist-' + i + '" style="display:none;margin-top:6px;">' + _rows + '</div>'
+            : '') +
+        '</div>';
+    }
+  } catch(_sge){ console.warn('[PHX] weight suggestion failed:', _sge); }
+  return out;
+};
+
 function openTodaySession(){
   console.log('[PHX] openTodaySession: _todaySession='+!!(window._todaySession)+' sessions='+((window._todaySessions||[]).length));
   // Kill any open preview/adjust overlays that would sit on top of the session screen (z-index conflict)
@@ -41165,34 +41261,26 @@ function openTodaySession(){
     //
     // The BASIS is on screen next to the number, deliberately: he can see it came from
     // "45kg x 10 in wk 3" and overrule it, rather than being handed a figure to trust.
-    var suggestSection = '';
-    try {
-      if(typeof blabSuggestWeight === 'function'){
-        var _tgtReps = parseInt(String((perSetTargets[0] || {}).reps || ex.reps || ''), 10) || 0;
-        var _sg = blabSuggestWeight(ex.name, _tgtReps);
-        if(_sg){
-          var _hist = blabWeeklyMaxes(ex.name);
-          var _rows = _hist.slice().reverse().map(function(r){
-            return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
-              '<span style="color:var(--text3);">Week ' + r.week + '</span>' +
-              '<span style="font-family:var(--font-d);font-weight:700;color:var(--text);">' + (r.wt ? r.wt + 'kg' : '\u2014') + (r.reps ? ' \u00d7 ' + r.reps : '') + '</span>' +
-            '</div>';
-          }).join('');
-          suggestSection =
-            '<div style="margin-top:10px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;">' +
-              '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">' +
-                '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Suggested</div>' +
-                '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">' + _sg.kg + '<span style="font-size:12px;color:var(--text3);">kg</span></div>' +
-              '</div>' +
-              '<div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4;">' + _sg.basis + ' \u00b7 ' + _sg.note + '</div>' +
-              (_rows
-                ? '<div data-blab-hist="' + i + '" style="font-family:var(--font-d);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-top:7px;cursor:pointer;touch-action:manipulation;">Weekly maxes \u25be</div>' +
-                  '<div id="blab-hist-' + i + '" style="display:none;margin-top:6px;">' + _rows + '</div>'
-                : '') +
-            '</div>';
-        }
-      }
-    } catch(_sge){ console.warn('[PHX] weight suggestion failed:', _sge); }
+    // v4.9.323 — Jon: "box jumps didnt give last weeks achieved numbers to reference".
+    //
+    // THE HISTORY WAS NOT MISSING, IT WAS BEHIND A LOCKED DOOR. records[name+'_wk'] has
+    // held per-week results for EVERY exercise and every format since .291 — box jumps
+    // included. But the weekly-maxes dropdown was nested inside the weight suggestion,
+    // and blabSuggestWeight() bails with `if(!(last.wt > 0)) return null` because a
+    // suggestion means a LOAD. Box jumps carry no load, so the suggestion was correctly
+    // null and took the history down with it.
+    //
+    // Another instance of this codebase's favourite defect: correct, finished code with
+    // no route to it. Same as _blabCalEntryView and the orphaned _bak.
+    //
+    // Split in two. The suggestion still needs a weight; the HISTORY only needs history,
+    // so it now renders on its own. Fixed at the FORMAT level rather than for box jumps
+    // specifically — every bodyweight movement had the identical hole (the Copenhagen
+    // holds, 100 push-ups, chin-ups), and special-casing one exercise would have left
+    // the others broken in exactly the way he just reported.
+    // v4.9.323: see window._blabHistorySection — extracted so the behaviour can be
+    // driven by a test rather than only reached through openTodaySession.
+    var suggestSection = window._blabHistorySection(ex, i, (perSetTargets[0] || {}).reps);
 
     // v4.7.60: in customise mode, render swap (↔) + add-superset (+) buttons next to the
     // exercise name. The swap targets the ORIGINAL coach-prescribed name (if this row was

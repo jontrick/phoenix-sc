@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.320'", 'version is 4.9.320');
+has("var APP_VERSION='4.9.321'", 'version is 4.9.321');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2554,6 +2554,17 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── THE CORE CIRCUIT PB IS THIS CIRCUIT'S (v4.9.321) ────────────────────────
+// Jon: the circuit changed but it showed "the result of the previous totally different
+// circuit". coreCircuit() hardcoded one PB slot for every variant.
+hasNotCode("prev_best:rec('Core Circuit_time'), _timeRecordKey:'Core Circuit_time'",
+  'CIRCUIT: no single PB slot shared by every core circuit');
+hasCode('function _coreCircuitKey(sets, movs)',
+  'CIRCUIT: STRUCTURAL the key is derived from the circuit, rounds and reps included');
+// Behaviour in tests/training.mjs under CIRCUIT:, proved by inversion 2026-09-08 (4 red,
+// including "both were Core Circuit_time"). Includes the positive control that the SAME
+// circuit still compares — "just keep for next weeks redo to check this one".
 
 // ── THE PREVIOUS RESULT IS THIS EXERCISE'S (v4.9.320) ───────────────────────
 // Jon: "banded deadlifts is showing the result of last weeks rack pull". Day 4 slot 1

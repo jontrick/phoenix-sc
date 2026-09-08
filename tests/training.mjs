@@ -4232,4 +4232,82 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(bp.prev_amrap_reps, 6, 'and still shows last week');
     assert.equal(bp.prev_amrap_week, 2);
   });
+
+  // ── THE CORE CIRCUIT PB IS THIS CIRCUIT'S (v4.9.321) ──────────────────────
+  // Jon: "core circuit is also changed for this week but giving the result of the
+  // previous totally different circuit - not much point - just keep for next weeks
+  // redo to check this one".
+  //
+  // coreCircuit() hardcoded 'Core Circuit_time' for every variant. Same defect shape
+  // as the rotating deadlift slot fixed in .320: a key that does not identify the work.
+
+  const circuitOf = (week) => {
+    const s = app.blabGetSessionData(week, 3);
+    return (((s && s.exercises) || []).find((e) => e.name === 'Core Circuit')) || null;
+  };
+  const seedWk = (week, records) => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: week, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: records || {}, _ts: NEWER });
+  };
+
+  test('CIRCUIT: the premise — the movements really do change between blocks', () => {
+    seedWk(1, {});
+    const w1 = circuitOf(1);
+    seedWk(3, {});
+    const w3 = circuitOf(3);
+    assert.ok(w1 && w3, 'both blocks have a core circuit');
+    const names = (c) => c.movements.map((m) => m.name).join(',');
+    assert.ok(names(w1) !== names(w3),
+      'if these ever become the same circuit this bug is gone: ' + names(w1) + ' vs ' + names(w3));
+  });
+
+  test('CIRCUIT: different circuits do NOT share a PB slot', () => {
+    seedWk(1, {});
+    const k1 = circuitOf(1)._timeRecordKey;
+    seedWk(3, {});
+    const k3 = circuitOf(3)._timeRecordKey;
+    assert.ok(k1 !== k3, 'W1 and W3 circuits must have different keys, both were ' + k1);
+    assert.ok(!/^Core Circuit_time$/.test(k1), 'and neither is the old shared slot');
+  });
+
+  test('CIRCUIT: a time from a different circuit is not offered as a target', () => {
+    // THE REPORTED SYMPTOM. The old shared record is present and must be ignored.
+    seedWk(3, { 'Core Circuit_time': 240 });
+    const c = circuitOf(3);
+    assert.ok(!c.prev_best,
+      'a mixture of every past circuit cannot be attributed to this one — got ' + c.prev_best);
+  });
+
+  test('CIRCUIT: the SAME circuit does compare — "keep for next weeks redo"', () => {
+    // The positive control. Without it, "never show a PB" would pass everything above.
+    seedWk(3, {});
+    const key = circuitOf(3)._timeRecordKey;
+    seedWk(4, {});
+    const w4key = circuitOf(4)._timeRecordKey;
+    // Re-seed with a time banked against W3's exact circuit, then read W3 again.
+    seedWk(3, { [key]: 213 });
+    assert.equal(circuitOf(3).prev_best, 213, 'its own circuit time comes back');
+    assert.ok(w4key !== key, 'W4 changes the Toe Touches reps, so it is a different benchmark');
+  });
+
+  test('CIRCUIT: the key names the rounds and the reps, not just the movements', () => {
+    // W3 and W4 run the same four movements with Toe Touches at 15 vs 20. A time across
+    // those is not a benchmark either, so they must not collide.
+    seedWk(3, {});
+    const k3 = circuitOf(3)._timeRecordKey;
+    seedWk(4, {});
+    const k4 = circuitOf(4)._timeRecordKey;
+    assert.ok(k3 !== k4, 'same movements, different reps, different key');
+    assert.ok(/Toe Touches:/.test(k3), 'the key is readable in the record: ' + k3);
+  });
+
+  test('CIRCUIT: the old shared record is left alone, not deleted', () => {
+    // It is his data. Ignoring it is the call; destroying it is not.
+    seedWk(3, { 'Core Circuit_time': 240 });
+    circuitOf(3);
+    assert.equal(read(KEY).records['Core Circuit_time'], 240,
+      'still there after the session is built');
+  });
 }

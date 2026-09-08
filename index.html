@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.320';
+var APP_VERSION='4.9.321';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6939,9 +6939,35 @@ window.blabGetSessionData = function(week, day){
   function SS(name, sets, rest, an, ar, bn, br){
     return {name:name, format:'superset', sets:sets, rest:rest, movements:[{name:an,reps:ar},{name:bn,reps:br}]};
   }
+  // v4.9.321 — Jon: "core circuit is also changed for this week but giving the result of
+  // the previous totally different circuit - not much point - just keep for next weeks
+  // redo to check this one".
+  //
+  // ONE PB SLOT FOR EVERY CIRCUIT. 'Core Circuit_time' was hardcoded here, but the
+  // movements change by block: W1-2 is Toe Touches / Bicycle / Side Plank, W3-4 is
+  // Sprinter Sit-ups / V-ups / Toe Touches / Hip-ups. A time carried across those is not
+  // a comparison, and he is right that it is worse than nothing — it reads as a target
+  // he failed to beat when it was never the same work.
+  //
+  // Same shape as the Banded Deadlift / Rack Pull bug fixed in .320: a key that does not
+  // identify the thing it is keyed to.
+  //
+  // THE SIGNATURE INCLUDES REPS, NOT JUST MOVEMENT NAMES. W3 and W4 run the same four
+  // movements with Toe Touches at 15 and 20 — a time across those is not a benchmark
+  // either, so they are deliberately different keys.
+  //
+  // THE OLD 'Core Circuit_time' IS NOT READ AS A FALLBACK. It is an unknown mixture of
+  // every circuit he has ever done, so it cannot honestly be attributed to any one of
+  // them. It is left in records rather than deleted — it is his data, and deleting it
+  // would be a worse call than ignoring it.
+  function _coreCircuitKey(sets, movs){
+    return 'Core Circuit [' + sets + 'x' +
+      movs.map(function(m){ return m.name + ':' + m.reps; }).join('+') + ']_time';
+  }
   function coreCircuit(sets, movs){
+    var _k = _coreCircuitKey(sets, movs);
     return {name:'Core Circuit', format:'afap', sets:sets, rest:60, has_load:false, suggested_load:0,
-      prev_best:rec('Core Circuit_time'), _timeRecordKey:'Core Circuit_time', movements:movs,
+      prev_best:rec(_k), _timeRecordKey:_k, movements:movs,
       note:'Move through continuously — the clock keeps running. Rest 60s between rounds.'};
   }
   function pushups100(){

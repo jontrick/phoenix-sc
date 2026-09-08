@@ -4108,19 +4108,128 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   });
 
   test('DOT: a submitted check-in clears it on the day itself', () => {
+    // CLOCK PINNED, and it has to be. The first version of this derived the day name
+    // from the wall clock and set fqCheckInDay to it — which looked robust and was not:
+    // CHECK_IN_DAYS only accepts friday/saturday/sunday/monday, so from Tuesday to
+    // Thursday it silently fell back to Friday and asserted the dot was hidden while
+    // claiming to test that it shows. Written on a Sunday, dead by Tuesday. This is the
+    // decay the header of this file warns about, so: 2026-09-11 is a Friday, pinned.
     reset(); signIn(UID);
-    const today = app._phxBrisbaneNow().date.getDay();
-    const dayName = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][today];
-    app.athlete = { id: UID, fqCheckInDay: dayName };          // force today to BE the day
+    app.athlete = { id: UID, fqCheckInDay: 'friday' };
     const dot = { id: 'hamburger-dot', style: {} };
     const real = app.document.getElementById;
     app.document.getElementById = (id) => (id === 'hamburger-dot' ? dot : null);
     try {
-      app._phxUpdateHamburgerDot();
-      assert.equal(dot.style.display, 'block', 'shown when the check-in is outstanding');
-      seed('phoenix_weekly_checkin_done_' + app._phxBrisbaneMondayISO(), '1');
-      app._phxUpdateHamburgerDot();
-      assert.equal(dot.style.display, 'none', 'and cleared once he has done it');
+      withClock('2026-09-11T02:00:00.000Z', () => {   // 12:00 Friday in Brisbane
+        assert.equal(app._phxBrisbaneNow().date.getDay(), 5, 'the pin really is a Friday');
+        app._phxUpdateHamburgerDot();
+        assert.equal(dot.style.display, 'block', 'shown when the check-in is outstanding');
+        seed('phoenix_weekly_checkin_done_' + app._phxBrisbaneMondayISO(), '1');
+        app._phxUpdateHamburgerDot();
+        assert.equal(dot.style.display, 'none', 'and cleared once he has done it');
+      });
     } finally { app.document.getElementById = real; }
+  });
+
+  // ── THE PREVIOUS RESULT MUST BE THIS EXERCISE'S (v4.9.320) ────────────────
+  // Jon: "banded deadlifts is showing the result of last weeks rack pull".
+  //
+  // Day 4 slot 1 rotates: W1 Banded Deadlift, W2 Rack Pull, W3 Banded Deadlift,
+  // W4 Hang Clean, W6 Banded, W7 Rack Pull... and all of them carry
+  // blab_lift:'deadlift'. The banner read records['deadlift_amrap_w' + (week-1)],
+  // so on a rotating slot it reliably showed the OTHER movement.
+
+  const d4ex = (week, name) => {
+    const s = app.blabGetSessionData(week, 4);
+    const list = (s && s.exercises) || [];
+    return list.find((e) => e.name === name) || null;
+  };
+  const mapD4 = (week, name) => {
+    const s = app.blabGetSessionData(week, 4);
+    const phx = app.blabToPhoenixSession(s, week, 4);
+    return ((phx && phx.exercises) || []).find((e) => e.name === name) || null;
+  };
+  const seedBlab = (extraRecords, week) => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: week, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: extraRecords, _ts: NEWER });
+  };
+
+  test('PREV: the rotating slot really does share one lift key', () => {
+    // The premise, asserted rather than assumed. If the programme changes so these no
+    // longer collide, the bug below is gone and these tests should be revisited.
+    // blabGetSessionData returns null without maxes, so this must seed like the rest.
+    seedBlab({}, 3);
+    const banded = d4ex(3, 'Banded Deadlift');
+    const rack = d4ex(2, 'Rack Pull');
+    assert.ok(banded, 'W3 slot 1 is Banded Deadlift');
+    assert.ok(rack, 'W2 slot 1 is Rack Pull');
+    assert.equal(banded.blab_lift, 'deadlift');
+    assert.equal(rack.blab_lift, 'deadlift', 'same key — which is why week-1 was wrong');
+  });
+
+  test('PREV: week 3 Banded Deadlift does NOT show week 2 Rack Pull', () => {
+    // THE REPORTED BUG. Rack Pull logged a big week-2 number under the shared lift key.
+    seedBlab({
+      'deadlift_amrap_w2': 5,
+      'deadlift_amrap_w2_wt': 150,
+      'Rack Pull_wk': { '2': { wt: 150, reps: 5 } }
+    }, 3);
+    const ex = mapD4(3, 'Banded Deadlift');
+    assert.ok(ex, 'the exercise maps');
+    assert.ok(!ex.prev_amrap_reps,
+      'a Rack Pull result must not appear under Banded Deadlift — got ' +
+      ex.prev_amrap_reps + ' reps @ ' + ex.prev_amrap_wt + 'kg');
+  });
+
+  test('PREV: it DOES show this exercise\'s own last outing, weeks back', () => {
+    // The positive control. Without this the fix could be "show nothing, ever" and
+    // every negative case above would still pass.
+    seedBlab({
+      'Banded Deadlift_wk': { '1': { wt: 102, reps: 4 } },
+      'Rack Pull_wk': { '2': { wt: 150, reps: 5 } }
+    }, 3);
+    const ex = mapD4(3, 'Banded Deadlift');
+    assert.equal(ex.prev_amrap_reps, 4, 'its own week-1 reps');
+    assert.equal(ex.prev_amrap_wt, 102, 'its own week-1 weight');
+    assert.equal(ex.prev_amrap_week, 1, 'and it knows the outing was week 1, not last week');
+  });
+
+  test('PREV: the most recent outing wins when there are several', () => {
+    seedBlab({ 'Banded Deadlift_wk': { '1': { wt: 102, reps: 4 }, '3': { wt: 110, reps: 5 } } }, 6);
+    const ex = mapD4(6, 'Banded Deadlift');
+    assert.equal(ex.prev_amrap_week, 3, 'scans back to the nearest, not the first');
+    assert.equal(ex.prev_amrap_wt, 110);
+  });
+
+  test('PREV: the current week is never read as its own history', () => {
+    // Today's work presenting itself as "last time" is the defect that cost the
+    // superset history in .254. The scan starts at week-1 for exactly this reason.
+    seedBlab({ 'Banded Deadlift_wk': { '3': { wt: 110, reps: 5 } } }, 3);
+    const ex = mapD4(3, 'Banded Deadlift');
+    assert.ok(!ex.prev_amrap_reps, 'week 3 must not quote week 3 back at him');
+  });
+
+  test('PREV: Rack Pull still gets its own history — the fix is not "show nothing"', () => {
+    seedBlab({ 'Rack Pull_wk': { '2': { wt: 150, reps: 5 } } }, 7);
+    const ex = mapD4(7, 'Rack Pull');
+    assert.equal(ex.prev_amrap_reps, 5, 'W7 Rack Pull sees W2 Rack Pull');
+    assert.equal(ex.prev_amrap_week, 2);
+  });
+
+  test('PREV: the main lifts are unaffected — Bench does not rotate', () => {
+    // Day 1 slot 1 is Bench Press every week, so this is the case that must NOT change
+    // behaviour. A fix that broke the non-rotating lifts would be a bad trade.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 0,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'Bench Press_wk': { '2': { wt: 100, reps: 6 } } }, _ts: NEWER });
+    const s = app.blabGetSessionData(3, 1);
+    const phx = app.blabToPhoenixSession(s, 3, 1);
+    const bp = ((phx && phx.exercises) || []).find((e) => e.name === 'Bench Press');
+    assert.ok(bp, 'Bench Press is there');
+    assert.equal(bp.prev_amrap_reps, 6, 'and still shows last week');
+    assert.equal(bp.prev_amrap_week, 2);
   });
 }

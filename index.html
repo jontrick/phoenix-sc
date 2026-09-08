@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.319';
+var APP_VERSION='4.9.320';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5840,10 +5840,39 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.blab_lift = ex.blab_lift || '';
       phxEx._blabWeek = week;
       phxEx._blabAmrapTopIdx = sets.length - 1;
-      if(ex.blab_lift){
-        var _amRec = (bs.records) || {};
-        phxEx.prev_amrap_reps = _amRec[ex.blab_lift+'_amrap_w'+(week-1)] || 0;
-        phxEx.prev_amrap_wt = _amRec[ex.blab_lift+'_amrap_w'+(week-1)+'_wt'] || 0;
+      // v4.9.320 — Jon: "banded deadlifts is showing the result of last weeks rack pull".
+      //
+      // THE KEY WAS THE LIFT, NOT THE EXERCISE. Banded Deadlift, Rack Pull and Hang Clean
+      // all carry blab_lift:'deadlift' and ALTERNATE by week (W1 banded, W2 rack pull,
+      // W3 banded...). So `deadlift_amrap_w<week-1>` is reliably the OTHER exercise's
+      // number. It was never "last time you did this" — it was "whatever went under
+      // deadlift last week", and on a rotating slot those are different movements.
+      //
+      // The write is deliberately left alone: records[lift+'_amrap_wN'] is what the
+      // 12-week per-lift progression chart reads (search `_amrap_w` around L38950), and
+      // that IS a per-lift question. This is a read-side fix only.
+      //
+      // Reads records[name+'_wk'] instead — the per-exercise, per-week store added in
+      // .291, keyed by exercise NAME and written for every format. Scans BACK rather
+      // than assuming week-1, because a rotating slot means this exercise's last outing
+      // may be three weeks ago; the banner names the week so the gap is visible.
+      //
+      // NO FALLBACK TO THE LIFT KEY. Falling back would put the exact reported bug back
+      // for all existing history. Showing nothing is correct here: a wrong number is
+      // worse than no number, which is the whole of what he reported.
+      if(ex.name){
+        var _wkHist = ((bs.records) || {})[ex.name + '_wk'];
+        if(_wkHist && typeof _wkHist === 'object'){
+          for(var _pw = week - 1; _pw >= 1; _pw--){
+            var _hit = _wkHist[String(_pw)];
+            if(_hit && (_hit.reps || _hit.wt)){
+              phxEx.prev_amrap_reps = _hit.reps || 0;
+              phxEx.prev_amrap_wt = _hit.wt || 0;
+              phxEx.prev_amrap_week = _pw;
+              break;
+            }
+          }
+        }
       }
 
     } else if(fmt === 'superset' && ex.movements && ex.movements.length===2){
@@ -41152,7 +41181,11 @@ function openTodaySession(){
     // v4.9.108: percentage_sets surfaces last week's top-set result ("X reps @ Ykg").
     if(ex._blabFmt === 'percentage_sets' && (ex.prev_amrap_reps||0)){
       // v4.9.111: label as "Last week: X reps @ Ykg" (top AMRAP set from the prior week's block).
-      prevBestSection = blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':''), 'Last week');
+      // v4.9.320: name the week. This slot rotates between Banded Deadlift / Rack Pull /
+      // Hang Clean, so the previous outing of THIS exercise is often not last week, and
+      // labelling it "Last week" was a claim the number could not support.
+      prevBestSection = blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':''),
+        ex.prev_amrap_week ? ('Week '+ex.prev_amrap_week) : 'Last week');
     }
     // v4.9.108: W12 bench-test load-choice chips fill the set-1 load input (84kg / 102kg).
     var loadChoiceSection = '';

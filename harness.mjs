@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.319'", 'version is 4.9.319');
+has("var APP_VERSION='4.9.320'", 'version is 4.9.320');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1134,7 +1134,12 @@ has("ex._blabFmt === 'max_reps_sets' && (ex.prev_best||0)", 'max_reps_sets prev-
 has('function blabPrevBestBanner(value, label, suffix)', 'prev-best banner helper present (labelled + suffix variant)');
 
 // ── v4.9.111 Weekly progression wording ──────────────────────────────────────
-has("blabPrevBestBanner(ex.prev_amrap_reps+' reps'+(ex.prev_amrap_wt?' @ '+ex.prev_amrap_wt+'kg':''), 'Last week')", '#1 percentage_sets banner labelled "Last week:"');
+// v4.9.320: the label is now the WEEK NUMBER, falling back to "Last week" only when
+// the history carries no week. Day 4 slot 1 rotates, so this exercise's previous outing
+// is often three weeks back and "Last week" was a claim the number could not support.
+// This pin is UPDATED, not deleted — the .111 wording guard was right to fire on it.
+has("ex.prev_amrap_week ? ('Week '+ex.prev_amrap_week) : 'Last week'",
+    '#1 percentage_sets banner names the week it is quoting');
 has("phxEx.coaching_note = 'Beat last week: '+phxEx.prev_best+' reps'", '#2 max_reps dynamic "Beat last week:" note');
 has('Last session: ', '#3 superset A/B prev banner shows last session data');
 has("(fmt==='interval'?' — beat it.':'')", '#5 interval run appends "— beat it."');
@@ -2549,6 +2554,22 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── THE PREVIOUS RESULT IS THIS EXERCISE'S (v4.9.320) ───────────────────────
+// Jon: "banded deadlifts is showing the result of last weeks rack pull". Day 4 slot 1
+// rotates between Banded Deadlift / Rack Pull / Hang Clean and they all carry
+// blab_lift:"deadlift", so reading week-1 of the LIFT reliably showed the other movement.
+//
+// THE REGRESSION PIN. The old expression is the bug and it is one copy-paste away.
+hasNotCode("phxEx.prev_amrap_reps = _amRec[ex.blab_lift+'_amrap_w'+(week-1)]",
+  "PREV: the banner no longer reads last week of the shared LIFT key");
+// The WRITE stays — records[lift+_amrap_wN] is what the 12-week per-lift chart reads.
+hasCode("_bs.records[_bex.blab_lift+'_amrap_w'+_bex._blabWeek]=_rp;",
+  "PREV: the per-lift store is untouched — the progression chart still has its data");
+// STRUCTURAL; behaviour in tests/training.mjs under PREV:, proved by inversion
+// 2026-09-08 (5 red, including "got 5 reps @ 150kg" under Banded Deadlift).
+hasCode("var _wkHist = ((bs.records) || {})[ex.name + '_wk'];",
+  "PREV: STRUCTURAL the banner reads the per-EXERCISE weekly store");
 
 // ── THE NAVIGATION MENU (v4.9.314) ──────────────────────────────────────────
 // Jon: "the hamburger has a red dot but tapping it doesn't go anywhere", and asked for

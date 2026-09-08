@@ -4616,4 +4616,181 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     finally { app._phxClearTick = realClear; }
     assert.equal(app._phxDryRun, true, 'and the dry path arms it');
   });
+
+  // ── RUN THE RACK (v4.9.325) ───────────────────────────────────────────────
+  // Jon: "the run the rack in the 2nd upper body needs to change when it shows up -
+  // there needs to be additional boxes that are added as complete one set with a tick
+  // and move to next - with a button at the bottom to say run the rack completed - with
+  // total lifted weight (kg x reps) for all the sets as the benchmark to go up against
+  // - but also showing the individual breakdown for next week to reference".
+  //
+  // It was standard_sets with sets:1 and the drops described in a NOTE — the app had
+  // nowhere to put four different weights, so the rack itself was never tracked.
+
+  const rackEx = (week) => {
+    const s = app.blabGetSessionData(week, 3);
+    return ((s && s.exercises) || []).find((e) => e.name === 'Run the Rack DB Curls') || null;
+  };
+  const seedRack = (week, records) => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: week, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: records || {}, _ts: NEWER });
+  };
+
+  test('RACK: it is its own format now, not a single standard set', () => {
+    seedRack(3, {});
+    const ex = rackEx(3);
+    assert.ok(ex, 'the rack is in week 3 upper 2');
+    assert.equal(ex.format, 'run_the_rack', 'not standard_sets');
+    assert.ok(!/e\.g\..*→.*→/.test(ex.note || '') || ex.format === 'run_the_rack',
+      'the drops are no longer only describable in prose');
+  });
+
+  test('RACK: it reaches the overlay runner instead of generic set rows', () => {
+    // The door. Without the card dispatch it falls through to set rows and the whole
+    // runner is unreachable — the defect this file produces more than any other.
+    seedRack(3, {});
+    const phx = app.blabToPhoenixSession(app.blabGetSessionData(3, 3), 3, 3);
+    const ex = ((phx && phx.exercises) || []).find((e) => e.name === 'Run the Rack DB Curls');
+    assert.ok(ex, 'it survives the mapper');
+    assert.equal(ex._blabFmt, 'run_the_rack', 'and carries the format the dispatch keys on');
+    assert.equal(typeof app._blabBuildRackBlock, 'function', 'the card builder exists');
+    assert.equal(typeof app.blabRenderRack, 'function', 'and so does the runner');
+  });
+
+  test('RACK: total volume is kg x reps summed across every drop', () => {
+    // The benchmark itself. 20x8 + 15x8 + 10x8 + 7.5x8 = 420.
+    assert.equal(app._blabRackTotal([{ kg: 20, reps: 8 }, { kg: 15, reps: 8 },
+                                     { kg: 10, reps: 8 }, { kg: 7.5, reps: 8 }]), 420);
+    assert.equal(app._blabRackTotal([]), 0, 'no drops, no volume');
+    assert.equal(app._blabRackTotal([{ kg: 7.5, reps: 7 }]), 52.5, 'halves do not drift');
+  });
+
+  test('RACK: a drop is added on the tick and appears as its own removable chip', () => {
+    reset(); signIn(UID);
+    const inputs = { 'rack-kg': { value: '20' }, 'rack-reps': { value: '8' } };
+    const real = app.document.getElementById;
+    const realRender = app._blabWoRender;
+    app.document.getElementById = (id) => inputs[id] || null;
+    app._blabWoRender = () => {};
+    app._blabWoState = { ex: { _blabFmt: 'run_the_rack' }, elapsed: 0 };
+    try {
+      app._blabRackLog();
+      inputs['rack-kg'].value = '15'; inputs['rack-reps'].value = '8';
+      app._blabRackLog();
+    } finally { app.document.getElementById = real; app._blabWoRender = realRender; }
+    const st = app._blabWoState;
+    assert.equal(st.rackDrops.length, 2, 'two drops logged');
+    assert.deepEqual(st.rackDrops[1], { kg: 15, reps: 8 }, 'the second is its own row');
+    assert.equal(app._blabRackTotal(st.rackDrops), 280);
+  });
+
+  test('RACK: a drop missing its weight or reps is refused, not logged as zero', () => {
+    // A zero in the volume he could neither see nor explain later.
+    reset(); signIn(UID);
+    const inputs = { 'rack-kg': { value: '20' }, 'rack-reps': { value: '' } };
+    const real = app.document.getElementById;
+    const realRender = app._blabWoRender;
+    const realToast = app._blabCalToast;
+    let toasted = null;
+    app.document.getElementById = (id) => inputs[id] || null;
+    app._blabWoRender = () => {};
+    app._blabCalToast = (m) => { toasted = m; };
+    app._blabWoState = { ex: { _blabFmt: 'run_the_rack' }, elapsed: 0 };
+    try { app._blabRackLog(); }
+    finally { app.document.getElementById = real; app._blabWoRender = realRender; app._blabCalToast = realToast; }
+    assert.ok(!app._blabWoState.rackDrops || !app._blabWoState.rackDrops.length, 'nothing logged');
+    assert.ok(toasted && /weight and the reps/i.test(toasted), 'and he is told why: ' + toasted);
+  });
+
+  test('RACK: a mistyped drop can be removed', () => {
+    // He asked for this on the pull-ups and it is the same mistake here.
+    reset(); signIn(UID);
+    const realRender = app._blabWoRender;
+    app._blabWoRender = () => {};
+    app._blabWoState = { ex: { _blabFmt: 'run_the_rack' }, elapsed: 0,
+                         rackDrops: [{ kg: 20, reps: 8 }, { kg: 150, reps: 8 }, { kg: 10, reps: 8 }] };
+    try { app._blabRackRemove(1); } finally { app._blabWoRender = realRender; }
+    assert.equal(app._blabWoState.rackDrops.length, 2);
+    assert.equal(app._blabRackTotal(app._blabWoState.rackDrops), 240, 'the total follows the removal');
+  });
+
+  test('RACK: an out-of-range remove is ignored rather than corrupting the list', () => {
+    reset(); signIn(UID);
+    const realRender = app._blabWoRender;
+    app._blabWoRender = () => {};
+    app._blabWoState = { ex: {}, rackDrops: [{ kg: 20, reps: 8 }] };
+    try { app._blabRackRemove(9); app._blabRackRemove(-1); }
+    finally { app._blabWoRender = realRender; }
+    assert.equal(app._blabWoState.rackDrops.length, 1, 'untouched');
+  });
+
+  test('RACK: last week comes back as the total AND the breakdown', () => {
+    // "showing the individual breakdown for next week to reference" — both halves, from
+    // one record, so they cannot separate.
+    seedRack(4, { 'Run the Rack DB Curls_rack':
+      { date: '2026-09-01', total: 420, secs: 180,
+        drops: [{ kg: 20, reps: 8 }, { kg: 15, reps: 8 }, { kg: 10, reps: 8 }, { kg: 7.5, reps: 8 }] } });
+    const ex = rackEx(4);
+    assert.ok(ex.prev_rack, 'the previous rack is carried onto the exercise');
+    assert.equal(ex.prev_rack.total, 420, 'the benchmark');
+    assert.equal(ex.prev_rack.drops.length, 4, 'and every drop that made it');
+    assert.equal(ex.prev_rack.drops[3].kg, 7.5);
+  });
+
+  test('RACK: today\'s own rack is never handed back as "last time"', () => {
+    // The .254 failure, which cost the superset history: today's data presenting itself
+    // as the thing he is chasing the moment he re-enters the block.
+    seedRack(4, { 'Run the Rack DB Curls_rack':
+      { date: app._phxLocalISO(), total: 999, drops: [{ kg: 50, reps: 20 }] } });
+    assert.equal(rackEx(4).prev_rack, null, 'his own partial is not the benchmark');
+  });
+
+  test('RACK: with today logged, LAST week still shows through', () => {
+    // The other half of the rotation. Without _rack_prev he would lose the benchmark the
+    // moment he started the block.
+    seedRack(4, {
+      'Run the Rack DB Curls_rack': { date: app._phxLocalISO(), total: 999, drops: [{ kg: 50, reps: 20 }] },
+      'Run the Rack DB Curls_rack_prev': { date: '2026-09-01', total: 420, drops: [{ kg: 20, reps: 8 }] }
+    });
+    const ex = rackEx(4);
+    assert.ok(ex.prev_rack, 'last week is still reachable mid-session');
+    assert.equal(ex.prev_rack.total, 420);
+  });
+
+  test('RACK: the card shows the breakdown before he starts', () => {
+    // Drive the builder, not just the data. The benchmark is useless if it never paints.
+    seedRack(4, { 'Run the Rack DB Curls_rack':
+      { date: '2026-09-01', total: 420,
+        drops: [{ kg: 20, reps: 8 }, { kg: 15, reps: 8 }] } });
+    const ex = rackEx(4);
+    const dom = recordingDom();
+    let html = '';
+    try {
+      app._blabBuildRackBlock({ name: 'Run the Rack DB Curls', prev_rack: ex.prev_rack, note: '' }, 0);
+      html = dom.made.map((m) => m.innerHTML || '').join(' ');
+    } finally { dom.restore(); }
+    assert.ok(/420/.test(html), 'the total is on the card');
+    assert.ok(/20kg/.test(html) && /15kg/.test(html), 'and the individual drops: ' + html.slice(0, 300));
+  });
+
+  test('RACK: the runner draws a row per drop and the running total', () => {
+    reset(); signIn(UID);
+    const body = { innerHTML: '' };
+    app.blabRenderRack({ name: 'Run the Rack DB Curls', prev_rack: { total: 420, drops: [] } },
+                       { elapsed: 0, rackDrops: [{ kg: 20, reps: 8 }, { kg: 15, reps: 8 }] }, body);
+    assert.ok(/280/.test(body.innerHTML), 'the running volume');
+    assert.ok(/Drop 1/.test(body.innerHTML) && /Drop 2/.test(body.innerHTML), 'a row per drop');
+    assert.ok(/_blabRackRemove\(1\)/.test(body.innerHTML), 'each removable');
+    assert.ok(/Run the rack completed/i.test(body.innerHTML), 'and the finish button he asked for');
+  });
+
+  test('RACK: the runner shows how far off last week he is', () => {
+    reset(); signIn(UID);
+    const body = { innerHTML: '' };
+    app.blabRenderRack({ name: 'R', prev_rack: { total: 420, drops: [] } },
+                       { elapsed: 0, rackDrops: [{ kg: 20, reps: 8 }] }, body);
+    assert.ok(/260kg to beat 420kg/.test(body.innerHTML), 'the gap: ' + body.innerHTML.slice(0, 400));
+  });
 }

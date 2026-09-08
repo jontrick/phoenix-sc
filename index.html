@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.324';
+var APP_VERSION='4.9.325';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5774,6 +5774,47 @@ window._blabBuildTotalRepBlock = function(ex, idx){
   return wrap;
 };
 
+// v4.9.325 — RUN THE RACK. The pre-start card: what it is, and what he has to beat.
+window._blabBuildRackBlock = function(ex, idx){
+  var wrap = document.createElement('div');
+  wrap.className = 'ex-block';
+  var pr = ex.prev_rack;
+  var header = document.createElement('div');
+  header.style.cssText = 'padding:16px;';
+  header.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Exercise '+(idx+1)+'</div>'+
+    '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:8px;">'+(ex.name||'Run the Rack')+'</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">'+
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-family:var(--font-d);font-size:12px;font-weight:700;">Add a drop at a time</div>'+
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-family:var(--font-d);font-size:12px;font-weight:700;">Total volume scores it</div>'+
+    '</div>'+
+    // "showing the individual breakdown for next week to reference" — the total is the
+    // benchmark, but the drops are how he beats it, so both are on the card before he starts.
+    (pr && pr.total
+      ? '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;">'+
+          '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">'+
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Last rack</div>'+
+            '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">'+pr.total+'<span style="font-size:12px;color:var(--text3);">kg total</span></div>'+
+          '</div>'+
+          '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">'+
+            (pr.drops||[]).map(function(d,i){ return 'Drop '+(i+1)+': '+d.kg+'kg \u00d7 '+d.reps; }).join(' \u00b7 ')+
+          '</div>'+
+        '</div>'
+      : '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">First rack \u2014 this one sets the benchmark.</div>')+
+    (ex.note?'<div style="font-size:11px;color:var(--text3);font-style:italic;">'+ex.note+'</div>':'');
+  var startBtn = document.createElement('button');
+  startBtn.style.cssText = 'display:block;margin:0 16px 16px;width:calc(100% - 32px);padding:16px;background:var(--gold);border:none;border-radius:12px;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;';
+  startBtn.textContent = 'Start Rack \u2192';
+  startBtn.onclick = function(){
+    var exArr = window._blabPhxExercises || [];
+    window.blabRunWorkout(exArr[idx]||ex, idx);
+  };
+  wrap.appendChild(header);
+  _blabApplyBlockDone(wrap, startBtn, idx);
+  wrap.appendChild(startBtn);
+  return wrap;
+};
+
 // v4.9.108: one cardio block for all three cardio formats — interval (1.6km run),
 // steady_state (deload cardio), and tabata (conditioning). Title/chips/button/PB adapt.
 window._blabBuildRunBlock = function(ex, idx){
@@ -6021,6 +6062,16 @@ window.blabToPhoenixSession = function(sess, week, day){
       // v4.9.108: W12 bench test — load choice + dedicated record keys.
       phxEx.bench_test = ex.bench_test || false;
       phxEx.load_choices = ex.load_choices || null;
+
+    } else if(fmt === 'run_the_rack'){
+      // One block, an unknown number of drops. sets:1 keeps the completion bookkeeping
+      // identical to the other overlay formats; the drops live in the runner state.
+      phxEx.sets = 1;
+      phxEx.reps = 'Descending drops';
+      phxEx.load_guidance = '';
+      phxEx._blabFmt = 'run_the_rack';
+      phxEx.format = 'run_the_rack';
+      phxEx.prev_rack = ex.prev_rack || null;
 
     } else if(fmt === 'interval'){
       phxEx.sets = 1;
@@ -6304,7 +6355,8 @@ window._blabWoRender = function(){
   }
   // v4.9.108: dispatch only the overlay-runner formats. percentage_sets / superset /
   // max_reps_sets render inline inside openTodaySession — they never reach the runner.
-  if(fmt==='total_rep_goal') blabRenderTR(ex,st,body);
+  if(fmt==='run_the_rack') blabRenderRack(ex,st,body);
+  else if(fmt==='total_rep_goal') blabRenderTR(ex,st,body);
   else if(fmt==='afap') blabRenderAfap(ex,st,body);
   else if(fmt==='interval') blabRenderRun(ex,st,body);
   else if(fmt==='steady_state') blabRenderSteady(ex,st,body);
@@ -6507,6 +6559,45 @@ window._blabWoDone=function(){
       }
     }
   } catch(_tre){ console.warn('[PHX] total-rep log save failed:', _tre); }
+  // v4.9.325 — the rack: total volume AND the drop breakdown, as one record.
+  //
+  // "total lifted weight (kg x reps) for all the sets as the benchmark to go up against
+  // - but also showing the individual breakdown for next week to reference". One blob,
+  // so the total and the drops that produced it cannot separate.
+  //
+  // Dated with rotation, same rule as _trlog and recSets: today's rack must not become
+  // "last time" while he is still in the block, and re-entering must not overwrite last
+  // week. That exact failure destroyed the superset history in .254.
+  try {
+    if(st && st.ex && (st.ex._blabFmt==='run_the_rack' || st.ex.format==='run_the_rack')
+       && st.rackDrops && st.rackDrops.length){
+      var _rbs = window.blabGetState();
+      if(_rbs){
+        if(!_rbs.records) _rbs.records = {};
+        var _rKey = (st.ex.name || 'run_the_rack') + '_rack';
+        var _rToday = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+        var _rCur = _rbs.records[_rKey];
+        if(_rCur && typeof _rCur === 'object' && _rCur.date && _rCur.date !== _rToday){
+          _rbs.records[_rKey + '_prev'] = _rCur;
+        }
+        var _rTotal = window._blabRackTotal(st.rackDrops);
+        var _rPrev = _rbs.records[_rKey + '_prev'];
+        _rbs.records[_rKey] = {date:_rToday, total:_rTotal, secs:st.elapsed || 0,
+                               drops:st.rackDrops.slice()};
+        window.blabSaveState(_rbs);
+        var _rLines = ['Total volume: '+_rTotal+'kg'];
+        st.rackDrops.forEach(function(d,i){ _rLines.push('Drop '+(i+1)+': '+d.kg+'kg \u00d7 '+d.reps); });
+        if(_rPrev && _rPrev.total){
+          _rLines.push(_rTotal > _rPrev.total
+            ? 'Up on last rack ('+_rPrev.total+'kg).'
+            : 'Last rack: '+_rPrev.total+'kg.');
+        } else {
+          _rLines.push('First rack logged \u2014 this is your benchmark.');
+        }
+        window._blabNotice(st.ex.name || 'Run the Rack', _rLines);
+      }
+    }
+  } catch(_rke){ console.warn('[PHX] rack log save failed:', _rke); }
   var overlay=document.getElementById('blab-workout-overlay');
   if(overlay) overlay.style.display='none';
   var idx=window._blabCurrentExIdx;
@@ -6514,7 +6605,8 @@ window._blabWoDone=function(){
   // and the paint is the part that depends on the DOM still being there.
   var _doneSummary = '';
   try {
-    if(st && st.trTotal) _doneSummary = st.trTotal + ' reps';
+    if(st && st.rackDrops && st.rackDrops.length) _doneSummary = window._blabRackTotal(st.rackDrops) + 'kg volume';
+    else if(st && st.trTotal) _doneSummary = st.trTotal + ' reps';
     else if(st && st.elapsed) _doneSummary = blabFmt(st.elapsed);
   } catch(_se){}
   window._blabMarkBlockDone(idx, _doneSummary);
@@ -6541,6 +6633,90 @@ function blabElapsed(st){ return '<div style="text-align:center;font-family:var(
 function blabFinishBtn(label){ return '<button onclick="window._blabWoDone()" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;margin-top:8px;">'+(label||'Complete \u2713')+'</button>'; }
 
 // TOTAL REP GOAL
+// v4.9.325 — RUN THE RACK RUNNER.
+//
+// Jon: "additional boxes that are added as complete one set with a tick and move to next
+// - with a button at the bottom to say run the rack completed - with total lifted weight
+// (kg x reps) for all the sets as the benchmark".
+//
+// The number of drops is decided AS HE GOES — he strips the rack until he cannot curl it
+// — so this cannot be a fixed set count like every other format. One row at a time,
+// added on a tick, removable if he fats-fingers it.
+//
+// TOTAL VOLUME IS THE SCORE. Not the heaviest drop and not the rep count: 20x8 + 15x8 +
+// 10x8 is one number that goes up when any part of it improves, which is what makes it a
+// benchmark he can chase.
+window._blabRackTotal = function(drops){
+  var t = 0;
+  (drops||[]).forEach(function(d){ t += (Number(d.kg)||0) * (Number(d.reps)||0); });
+  // Volume in kg. Rounded to 0.1 so 7.5kg x 8 does not print a float tail.
+  return Math.round(t * 10) / 10;
+};
+function blabRenderRack(ex,st,body){
+  if(!st.rackDrops) st.rackDrops = [];
+  var drops = st.rackDrops;
+  var total = window._blabRackTotal(drops);
+  var pr = ex.prev_rack;
+  var target = (pr && pr.total) || 0;
+  var ahead = target > 0 && total >= target;
+  body.innerHTML=
+    '<div style="text-align:center;padding:20px 0 8px;">'+
+      '<div style="font-family:var(--font-d);font-size:64px;font-weight:900;color:'+(ahead?'var(--gold)':'var(--text)')+';line-height:1;">'+total+'</div>'+
+      '<div style="font-family:var(--font-d);font-size:13px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:4px;">kg total volume</div>'+
+      (target
+        ? '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;margin-top:6px;color:'+(ahead?'#3a7d44':'var(--text3)')+';">'+
+            (ahead ? 'Past last rack (' + target + 'kg)' : (Math.round((target-total)*10)/10) + 'kg to beat ' + target + 'kg')+
+          '</div>'
+        : '<div style="font-size:11px;color:var(--text3);margin-top:6px;">First rack \u2014 this sets the benchmark.</div>')+
+    '</div>'+
+    // Each completed drop, removable. Same chip pattern as the pull-up sets in .275,
+    // for the same reason: a mistyped number must not be permanent.
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;min-height:44px;margin-bottom:8px;">'+
+      (drops.length
+        ? '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">'+
+            drops.map(function(d,i){
+              return '<div style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:6px 6px 6px 12px;">'+
+                '<span style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;">Drop '+(i+1)+'</span>'+
+                '<span style="font-family:var(--font-d);font-size:15px;font-weight:900;color:var(--text);">'+d.kg+'kg \u00d7 '+d.reps+'</span>'+
+                '<button onclick="window._blabRackRemove('+i+')" aria-label="Remove drop '+(i+1)+'" style="width:24px;height:24px;border-radius:50%;background:var(--bg2);border:1px solid var(--border2);color:var(--text3);font-size:14px;line-height:1;cursor:pointer;padding:0;">&times;</button>'+
+              '</div>';
+            }).join('')+
+          '</div>'
+        : '<div style="text-align:center;font-family:var(--font-d);font-size:14px;color:var(--text3);">No drops logged yet</div>')+
+    '</div>'+
+    (drops.length ? '<div style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:14px;">Tap &times; to remove a drop you typed wrong.</div>' : '<div style="margin-bottom:14px;"></div>')+
+    // THIS DROP ONLY. Labelled, because the big number above is the running total and an
+    // unlabelled pair of boxes beside it invites the total — the 4+3-typed-as-7 mistake.
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:6px;">This drop only</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:8px;">'+
+      '<input type="number" inputmode="decimal" id="rack-kg" style="flex:1;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:20px;font-weight:700;text-align:center;outline:none;" placeholder="kg">'+
+      '<input type="number" inputmode="numeric" id="rack-reps" style="flex:1;padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:20px;font-weight:700;text-align:center;outline:none;" placeholder="reps">'+
+      '<button onclick="window._blabRackLog()" style="flex:0 0 64px;padding:14px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:18px;font-weight:900;color:#000;cursor:pointer;">\u2713</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:14px;">Tick to log the drop and move to the next. Strip the weight, keep going.</div>'+
+    '<div style="text-align:center;margin:4px 0 14px;">'+
+      '<div style="font-family:var(--font-d);font-size:34px;font-weight:900;color:var(--text);line-height:1;" id="blab-elapsed">'+blabFmt(st.elapsed)+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:4px;">Elapsed</div>'+
+    '</div>'+
+    '<button onclick="window._blabWoDone()" style="width:100%;padding:18px;background:'+(drops.length?'var(--gold)':'var(--bg2)')+';border:1px solid '+(drops.length?'var(--gold)':'var(--border)')+';border-radius:var(--radius);font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:'+(drops.length?'#000':'var(--text2)')+';cursor:pointer;">Run the rack completed</button>';
+}
+window._blabRackLog=function(){
+  var st=window._blabWoState; if(!st) return;
+  var kgEl=document.getElementById('rack-kg'), repEl=document.getElementById('rack-reps');
+  var kg=parseFloat(kgEl&&kgEl.value)||0, reps=parseInt(repEl&&repEl.value,10)||0;
+  // Both are required. A drop with no weight is not a drop, and logging it would put a
+  // zero into the volume that he could not see or explain later.
+  if(kg<=0||reps<=0){ window._blabCalToast('Enter both the weight and the reps for this drop','error'); return; }
+  if(!st.rackDrops) st.rackDrops=[];
+  st.rackDrops.push({kg:kg, reps:reps});
+  window._blabWoRender();
+};
+window._blabRackRemove=function(i){
+  var st=window._blabWoState; if(!st||!st.rackDrops) return;
+  if(i<0||i>=st.rackDrops.length) return;
+  st.rackDrops.splice(i,1);
+  window._blabWoRender();
+};
 function blabRenderTR(ex,st,body){
   if(!st.trTotal) st.trTotal=0;
   if(!st.trSets) st.trSets=[];
@@ -6935,6 +7111,18 @@ window.blabGetSessionData = function(week, day){
   // most recently COMPLETED session. While today's session is being logged, _lastsets
   // is today's partial record, so fall back a generation — otherwise the numbers he is
   // trying to beat would be replaced by the ones he just did.
+  // v4.9.325 — last completed rack. Same dated-blob-with-rotation rule as recSets: while
+  // today's rack is on file it is NOT "last time", so re-entering the block mid-session
+  // cannot present his own partial as the benchmark he is chasing. That exact bug cost
+  // the superset history in .254 and the pull-up pair in .272.
+  function recRack(name){
+    if(!s.records) return null;
+    var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    var last = s.records[name+'_rack'];
+    var prev = s.records[name+'_rack_prev'];
+    var pick = (last && typeof last === 'object' && last.date === today) ? prev : last;
+    return (pick && typeof pick === 'object' && pick.total > 0) ? pick : null;
+  }
   function recSets(name){
     if(!s.records) return null;
     var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
@@ -7265,7 +7453,19 @@ window.blabGetSessionData = function(week, day){
     } else if(w <= 4){
       exs3.push(SS('Front Lat Pulldowns (neutral) / DB Military Press (neutral)', 2, 90, 'Front Lat Pulldowns (neutral grip)', 'Max reps', 'Standing DB Military Press (neutral grip)', 'Max reps'));
       exs3.push({name:'1-Arm Cable Rear Delt Flyes', format:'standard_sets', sets:4, reps:'10 each arm'});
-      exs3.push({name:'Run the Rack DB Curls', format:'standard_sets', sets:1, reps:'1 descending set', note:'e.g. 20kg×8 → 15kg×8 → 10kg×8 → 7.5kg×8. No rest between weight drops.'});
+      // v4.9.325 — Jon: "there needs to be additional boxes that are added as complete
+      // one set with a tick and move to next - with a button at the bottom to say run the
+      // rack completed - with total lifted weight (kg x reps) for all the sets as the
+      // benchmark to go up against - but also showing the individual breakdown for next
+      // week to reference".
+      //
+      // It was standard_sets with sets:1 and the drops described in a NOTE — the app had
+      // nowhere to put four different weights, so it asked for one set and left the rack
+      // itself untracked. A run-the-rack has a variable number of drops decided as he
+      // goes, which is a different shape to every other format here.
+      exs3.push({name:'Run the Rack DB Curls', format:'run_the_rack',
+        prev_rack:recRack('Run the Rack DB Curls'),
+        note:'Start heavy, strip the weight, keep going. No rest between drops. e.g. 20kg\u00d78 \u2192 15kg\u00d78 \u2192 10kg\u00d78 \u2192 7.5kg\u00d78.'});
       exs3.push(coreCircuit(2, [{name:'Sprinter Sit-ups',reps:20},{name:'V-ups',reps:15},{name:'Toe Touches',reps:(w === 3 ? 15 : 20)},{name:'Hip-ups',reps:15}]));
       exs3.push(w === 4 ? bwComplex(3) : pushups100());
     } else if(w === 6){
@@ -41170,6 +41370,13 @@ function openTodaySession(){
     if(ex._blabFmt === 'total_rep_goal'){
       var trBlock = window._blabBuildTotalRepBlock(ex, i);
       if(trBlock){ body.appendChild(trBlock); return; }
+    }
+    // v4.9.325: without this the rack falls through to the generic set rows and the
+    // runner is never reached — a finished renderer with no door, which is the defect
+    // this file produces more than any other.
+    if(ex._blabFmt === 'run_the_rack'){
+      var rackBlock = window._blabBuildRackBlock(ex, i);
+      if(rackBlock){ body.appendChild(rackBlock); return; }
     }
     if(ex._blabFmt === 'interval' || ex._blabFmt === 'steady_state' || ex._blabFmt === 'tabata'){
       var runBlock = window._blabBuildRunBlock(ex, i);

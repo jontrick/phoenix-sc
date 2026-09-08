@@ -84,15 +84,17 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## JON'S 2026-09-08 SESSION REPORT — 6 OF 7 STILL OPEN
 
-One message, seven items. One commit each. **Six done (.320-.324); only #1 Run the
-Rack is left.** Diagnoses
+One message, seven items. One commit each. **ALL SEVEN DONE (.320-.325).** None has
+been used by him yet — every one is verified by gates only. Diagnoses
 below are verified against the source, not guessed — build from these, do not re-derive.
 
 - [x] **2. Banded Deadlift showed last week's Rack Pull.** DONE v4.9.320. Day 4 slot 1
       rotates and every movement in it carries `blab_lift:'deadlift'`, so the banner's
       `records['deadlift_amrap_w'+(week-1)]` was reliably the OTHER exercise. Now reads
       `records[name+'_wk']` (per-exercise, added .291) scanning back, and names the week.
-- [ ] **1. Run the Rack — needs its own format.** Currently `{name:'Run the Rack DB
+- [x] **1. DONE v4.9.325 — Run the Rack has its own format.** Drops added one at a time
+      on a tick, each removable, total volume (kg x reps) as the benchmark, breakdown
+      carried to next week via a dated blob with rotation. WAS: Currently `{name:'Run the Rack DB
       Curls', format:'standard_sets', sets:1, reps:'1 descending set'}` at ~L7157, W3–4
       only. Jon wants: a row per drop that he ADDS as he goes, tick to complete each and
       move to the next, a "Run the rack completed" button at the bottom, **total volume
@@ -134,6 +136,29 @@ below are verified against the source, not guessed — build from these, do not 
       `_phxStartSession(libId)` off `PHX_LIB` (~L37623). Extend the same flags rather than
       inventing a second preview path — and note `_blabDryRun` guards BLAB's save, so the
       PHX score/save paths (`_phxSaveScore`) need their own guard or they WILL write.
+
+- [ ] JON — **His seven-item report, all shipped (.320-.325), NONE used by him yet.**
+      Gates only. Three of these were wrong-data bugs he can only confirm by training.
+      **What to watch, in the order he will hit it:**
+      · UPPER 2 — RUN THE RACK is a new screen. Enter each drop's kg and reps, tick to log
+        it, repeat down the rack, then "Run the rack completed". The score is TOTAL VOLUME
+        and the runner shows how far off last week he is. Nothing to compare against the
+        first time — that is correct, not a bug.
+      · UPPER 2 — the CORE CIRCUIT should show NO previous time, because this block's
+        circuit is new. Next time he does this same circuit it will compare.
+      · DAY 4 — BANDED DEADLIFT must no longer quote a Rack Pull number. It will show
+        nothing until he has done Banded Deadlift once more, then "Week N: X reps @ Ykg"
+        with the week named.
+      · DAY 4 — the holds are now COPENHAGEN PLANKS. His logged Nordic history should
+        still appear under Weekly history.
+      · DAY 4 — BOX JUMPS should now carry a "Last time" block and a Weekly history
+        dropdown, with reps and no "0kg".
+      · DAY 2 — the 1.6km run screen shows the best under the clock plus a live
+        ahead/behind gap.
+      · ANY WOD/Core — "Dry run — nothing saved" under Start. Orange banner while it runs,
+        no score kept. **Then start a REAL one and check the score IS kept** — the flag is
+        cleared on a normal start and that is the half worth confirming.
+      **A silent pass is not a pass** — ask per item.
 
 ## WAITING ON JON
 

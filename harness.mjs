@@ -43,7 +43,9 @@ function extract(startMarker, endMarker) {
   if (i < 0 || j < 0) throw new Error(`extract failed for ${startMarker}`);
   return html.slice(i, j);
 }
-const KNOWN_FORMATS = new Set(['percentage_sets','superset','total_rep_goal','afap','max_reps_sets','interval','steady_state','tabata','standard_sets']);
+// v4.9.325: run_the_rack joins the set. Adding a format here is a DELIBERATE act — the
+// guard exists so a typo'd format string cannot ship silently, and it caught this one.
+const KNOWN_FORMATS = new Set(['percentage_sets','superset','total_rep_goal','afap','max_reps_sets','interval','steady_state','tabata','standard_sets','run_the_rack']);
 try {
   const srcGet = extract('window.blabGetSessionData = function(week, day){', '\nwindow.blabCompleteSession = function');
   const srcMap = extract('window.blabToPhoenixSession = function(sess, week, day){', '\nwindow.blabRunWorkout = function');
@@ -84,9 +86,9 @@ try {
   }
   if (errors===0) ok(`${combos} combos executed cleanly (2 fixtures × 48)`);
   else bad(`${errors} execution errors across ${combos} combos`);
-  const want = ['afap','interval','max_reps_sets','percentage_sets','standard_sets','steady_state','superset','tabata','total_rep_goal'];
+  const want = ['afap','interval','max_reps_sets','percentage_sets','run_the_rack','standard_sets','steady_state','superset','tabata','total_rep_goal'];
   const missing = want.filter(f=>!seen.has(f));
-  missing.length ? bad(`formats not exercised: ${missing.join(', ')}`) : ok(`all 9 formats exercised: ${want.join(', ')}`);
+  missing.length ? bad(`formats not exercised: ${missing.join(', ')}`) : ok(`all ${want.length} formats exercised: ${want.join(', ')}`);
 } catch(e) { bad(`pipeline execution setup failed: ${e.message}`); }
 
 // ── 3. Feature assertions — v4.9.108 BLAB rebuild ───────────────────────────
@@ -332,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.324'", 'version is 4.9.324');
+has("var APP_VERSION='4.9.325'", 'version is 4.9.325');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2554,6 +2556,29 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── RUN THE RACK (v4.9.325) ─────────────────────────────────────────────────
+// Jon wanted a drop added at a time with a tick, a "run the rack completed" button,
+// total volume (kg x reps) as the benchmark, and the breakdown carried to next week.
+// It was standard_sets with sets:1 and the drops written in a NOTE.
+hasNotCode("{name:'Run the Rack DB Curls', format:'standard_sets'",
+  'RACK: the rack is no longer a single standard set with the drops in prose');
+hasCode("format:'run_the_rack'", 'RACK: STRUCTURAL it has its own format');
+
+// THE DOOR. Removing this dispatch leaves the rack falling through to generic set rows
+// with the whole runner unreachable — and NO functional test sees it: I removed it and
+// all 337 stayed green except the two rotation cases I had inverted alongside. Call
+// sites are what harness pins are for; this is the third time this repo has shipped a
+// finished renderer nobody could reach (_blabCalEntryView, blab-ex-N, nutProgSetSwap).
+hasCode("if(ex._blabFmt === 'run_the_rack'){", 'RACK: openTodaySession routes it to the rack card');
+hasCode("var rackBlock = window._blabBuildRackBlock(ex, i);", 'RACK: and actually builds it');
+hasCode("if(fmt==='run_the_rack') blabRenderRack(ex,st,body);", 'RACK: the runner is dispatched too');
+
+// The benchmark, and the rotation that stops today becoming "last time" mid-session.
+hasCode('window._blabRackTotal = function(drops)', 'RACK: STRUCTURAL total volume is the score');
+hasCode("_rbs.records[_rKey + '_prev'] = _rCur;", 'RACK: dated blob rotates, so today never overwrites last week');
+// Behaviour in tests/training.mjs under RACK: — 13 cases including the .254 rotation
+// failure, a refused zero-weight drop, and removal of a mistyped drop.
 
 // ── DRY RUN FOR WOD AND CORE (v4.9.324) ─────────────────────────────────────
 // Jon asked for the BLAB dry run on the library sessions too. BLAB's _blabDryRun does

@@ -332,7 +332,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.317'", 'version is 4.9.317');
+has("var APP_VERSION='4.9.318'", 'version is 4.9.318');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3263,10 +3263,10 @@ hasCode('function _nutProgPartsMacros(',
         'item he cannot buy');
 hasCode('function _nutPartG(',
         'EGGS: and a part can carry a per-phase weight, like a plate row');
-hasCode('g:[7.4,9,9.8,10.9,11.3]',
-        'EGGS: the whites FOLLOW THE PHASE — 7.4 whites to 11.3. Held at the ' +
-        'phase-1 quantity the option ran 7.2 g of protein SHORT at phase 5, ' +
-        'because the whey it replaces grows 38 g to 58 g');
+hasCode('g:[7,9,10,11,11]',
+        'EGGS: the whites FOLLOW THE PHASE — 7 whites to 11. Held at the phase-1 ' +
+        'quantity the option ran 7.2 g of protein SHORT at phase 5, because the ' +
+        'whey it replaces grows 38 g to 58 g');
 hasCode('function _nutProgPlateRowIn(',
         'EGGS: a plate row is looked up per MEAL — two meals can carry one food at ' +
         'different weights, and the first match would size one from the other');
@@ -3311,6 +3311,31 @@ hasNotCode('_nutProgWeekPickerCard',
 hasNotCode('_nutProgWeekAheadCard',
         'TABS: and so is the week table the day plan replaced');
 
+// ── DAILY: swaps on the plate, days that move, whole eggs (v4.9.318) ───────
+hasCode("'<div data-nut-item=\"' + today + '|' + it.slot + '\"",
+        'DAY: every food on the EATING screen is tappable, as on the plan — the ' +
+        'engine already tagged them and this screen was throwing the tags away');
+hasCode('function nutProgShownDay(',  'DAY: DAILY can show a day other than today');
+hasCode('function _nutProgDayNavCard(', 'DAY: with a strip saying which');
+hasCode('data-prog-day-nav',          'DAY: arrows to move it');
+hasCode("body.querySelectorAll('[data-prog-day-nav]')", 'DAY: which are WIRED');
+hasCode("e.target.closest('[data-prog-day-strip]')",
+        'DAY: and a swipe, bound to the strip rather than the whole screen — a ' +
+        'swipe across a list of meals is as likely to be a mis-scroll');
+hasCode("(isToday ? '' : ' &middot; not today')",
+        'DAY: a day that is not today SAYS so. Its tick circles are live, so ' +
+        'mistaking it for today would put adherence on the wrong date');
+
+// Whole eggs. Jon: "eg 1 whole egg, 3 egg whites this is easier to buy to".
+hasCode("each_u:' ml', g:[7,9,10,11,11]", 'EGGW: the breakfast whites are whole counts');
+hasCode("_pt.count ? Math.max(1, Math.round(_pScaled))",
+        'EGGW: and STAY whole through Meal 7\'s trim, which had been scaling ' +
+        'seven of them to 5.3');
+hasCode("_cnt ? Math.max(1, Math.round(grams * _sr))",
+        'EGGW: and through the dinner-heavy shrink');
+hasCode("return qty + ' whole egg' + (qty === 1 ? '' : 's')",
+        'EGGW: labelled the way a person says it, not as a plate row name');
+
 // ── the plan's week is navigable (v4.9.316) ────────────────────────────────
 // Checked at Jon's request: PLAN renders week 0 on ten of the eleven days around
 // it. The eleventh, 9 September, shows WEEK 1 — and that is the review flow
@@ -3330,7 +3355,7 @@ hasCode('data-prog-plan-today',
         'is ambiguous on a review Wednesday, which is why the arrows exist');
 
 // ── week 0, the tick's day, and egg whites by the white (v4.9.315) ─────────
-hasCode('var _hasPlan = (typeof nutProgTargetsOn === \'function\') && !!nutProgTargetsOn(today);',
+hasCode('var _hasPlan = (typeof nutProgTargetsOn === \'function\') && !!nutProgTargetsOn(_shown);',
         'W0: DAILY renders when the day HAS A PLAN, not when the status string ' +
         'says so. Status answers "what stage is the programme in", and the ' +
         'baseline Wednesday sits inside the trial week — so it shadowed it and ' +
@@ -3349,7 +3374,7 @@ hasCode("row.getAttribute('data-prog-day') || _nutToday()",
 // Egg whites counted, not poured. Jon: "based on average of whole eggs and how
 // many that would be instead of ml."
 hasCode('_NUT_EGG_WHITE_G = 33',   'EGGW: one large egg white, written down as the basis');
-hasCode('g:[7.4,9,9.8,10.9,11.3]', 'EGGW: the breakfast whites counted, phase by phase');
+hasCode('g:[7,9,10,11,11]', 'EGGW: the breakfast whites counted, phase by phase, in WHOLE whites');
 hasCode('function _nutUnitMult(',
         'EGGW: ONE quantity-to-multiplier helper. Counting them meant six call ' +
         'sites had to agree about what a portion is, which is five too many to ' +

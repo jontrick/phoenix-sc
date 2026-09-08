@@ -243,6 +243,24 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ## OPEN — CROSS-DOMAIN
 
+- [ ] TRAINING — **origin/main is RED on gate 3, and has been since at least v4.9.317.**
+      `tests/training.mjs` › "DOT: a submitted check-in clears it on the day itself":
+      *shown when the check-in is outstanding — got "none", want "block"*.
+      **Proven not to be Nutrition's**: it fails on origin's own index.html with origin's
+      own test file, checked out clean, before any of my changes.
+      **Diagnosis.** `CHECK_IN_DAYS` (index.html ~:33363) maps only
+      `{friday, saturday, sunday, monday}`. The test derives the day from the REAL clock
+      (`_phxBrisbaneNow()`) and forces `fqCheckInDay` to today's name, so on a Tuesday,
+      Wednesday or Thursday the lookup misses, `_phxCheckInDayIndex()` falls back to 5
+      (Friday), and the dot correctly stays hidden. **It is a calendar-dependent test: red
+      three days in seven, green the other four.** Today is Tuesday.
+      **Which is wrong is Training's call, and that is why I have not touched it:** if Jon
+      can only choose those four days, the map is right and the test should not force an
+      arbitrary weekday; if he can choose any day, the map is short three entries and the
+      dot never shows for them. Closes either way, with the test pinned to a FIXED date so
+      it stops depending on when it is run.
+
+
 - [x] TRAINING — Two disagreeing week numbers on Today. **DONE v4.9.301** (60deb54).
       **Lesson:** they were never two derivations of one week — `athlete.currentWeek`
       counts the AI programme and never moves on a BLAB account, `progWeek()` counts

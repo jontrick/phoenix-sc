@@ -3428,11 +3428,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
     const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
     const whole  = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
-    assert.equal(whites.g, 7.4, 'one cup of whites — counted as whites since v4.9.315');
+    assert.equal(whites.g, 7, 'seven whites — a WHOLE number since v4.9.318, ' +
+      'because nobody cracks 0.4 of an egg');
     assert.equal(whites.each, 33, 'at 33 g each, one large egg white');
-    assert.ok(Math.abs(whites.g * whites.each - 245) <= 2,
-      'which is still Jon\'s 245 ml: ' + Math.round(whites.g * whites.each));
-    assert.ok(Math.abs(whites.p - 27) <= 1, 'about 27 g of protein, as he specified: ' + whites.p);
+    assert.ok(Math.abs(whites.g * whites.each - 245) <= 15,
+      'which is Jon\'s cup of whites to within a white: ' + Math.round(whites.g * whites.each) + ' ml');
+    assert.ok(Math.abs(whites.p - 27) <= 2,
+      'about 27 g of protein, as he specified — 25.2 once the count is rounded to ' +
+      'seven whole whites, which is the price of a portion he can actually crack: ' + whites.p);
     assert.equal(whole.g, 2, 'TWO whole eggs, counted the way he specified them');
     assert.ok(Math.abs(whole.p - 12.6) <= 1 && Math.abs(whole.f - 9.5) <= 1,
       'carrying his 12 g protein and 10 g fat: p' + whole.p + ' f' + whole.f);
@@ -3460,7 +3463,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // 38 g to 58 g across the cut. Short on protein late is the wrong direction —
     // that is the macro the plan is protecting, when calories are lowest.
     const PH = ['2026-09-16', '2026-10-07', '2026-10-28', '2026-11-18', '2026-12-09'];
-    const want = [7.4, 9, 9.8, 10.9, 11.3];
+    const want = [7, 9, 10, 11, 11];
     PH.forEach((d, ix) => {
       app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
       const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
@@ -3517,14 +3520,40 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const d = '2026-09-16';
     app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
     const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
-    assert.ok(/7\.4 egg whites \(244 ml\)/.test(app._nutProgItemLabel(whites)),
-      'the count is what Jon asked for, the volume is what he pours from a ' +
-      'carton — one without the other is unusable: ' + app._nutProgItemLabel(whites));
+    // v4.9.318: it reads as speech now — "7 egg whites", "2 whole eggs" — which
+    // is what Jon asked for and what a person says at a fridge. The millilitres
+    // moved to the SHOPPING list, where a carton is actually bought.
+    assert.equal(app._nutProgItemLabel(whites), '7 egg whites',
+      'said the way he says it: ' + app._nutProgItemLabel(whites));
     const whole = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
-    assert.ok(/^2 /.test(app._nutProgItemLabel(whole)), 'two eggs');
-    assert.equal(/ml/.test(app._nutProgItemLabel(whole)), false,
-      'and NO millilitres beside them — a second unit is only shown where one ' +
-      'means something');
+    assert.equal(app._nutProgItemLabel(whole), '2 whole eggs', 'and so are the eggs');
+    assert.equal(/ml|g /.test(app._nutProgItemLabel(whole)), false,
+      'with no weight or volume beside them — the count IS the measure');
+  });
+
+  test('EGGS stay WHOLE after everything that resizes them', () => {
+    setUp(110);
+    // The base counts being whole is not enough: Meal 7's protein trim scaled
+    // seven whites to 5.3, and the distribution would have done the same. A
+    // counted food is counted BECAUSE it cannot be subdivided, so every path
+    // that resizes one has to round. Found by an inversion that left this
+    // uncovered — the base-count cases all stayed green.
+    ['2026-09-16', '2026-12-09'].forEach((d) => {
+      app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
+      app.nutProgSetNightly(d, 'midam_dairy', 'whites');
+      app.nutProgSetBed(d, true);
+      app.nutProgSetSplit(d, 'dinner');
+      (app.nutProgMealsOn(d, 'basmati') || []).forEach((m) => {
+        (m.items || []).forEach((it) => {
+          if (!it.count) return;
+          if (!/Egg/.test(it.n)) return;
+          assert.equal(it.g, Math.round(it.g),
+            d + ' ' + m.id + ': "' + app._nutProgItemLabel(it) + '" — nobody cracks ' +
+            'part of an egg, and the trim had been producing 5.3 of them');
+          assert.ok(it.g >= 1, 'and never nothing at all');
+        });
+      });
+    });
   });
 
   test('EGGS an unknown breakfast pick is refused', () => {
@@ -3544,10 +3573,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(whole.unit, '', 'counted, not weighed');
     assert.ok(!whole.note, 'and no volume beside them — 700 ml of egg is not a thing');
     const whites = shopItem(shop, 'Egg whites');
-    assert.equal(whites.qty, 52, 'fifty-two whites across the week');
+    assert.equal(whites.qty, 49, 'seven days at seven whites');
     assert.equal(whites.unit, '', 'counted');
-    assert.equal(whites.note, '1716 ml',
-      'WITH the volume, because that is what the carton is marked in and 52 is a ' +
+    assert.equal(whites.note, '1617 ml',
+      'WITH the volume, because that is what the carton is marked in and 49 is a ' +
       'useless number at a supermarket');
     assert.equal(!!shopItem(shop, 'Whey protein'), false, 'and no whey for a week that eats none');
   });
@@ -3577,7 +3606,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(html.indexOf('data-nut-night="bfast_protein|eggs"') >= 0, 'the egg row');
     assert.ok(html.indexOf('data-nut-night="bfast_protein|eggsveg"') >= 0, 'the veg row');
     assert.ok(html.indexOf('data-nut-night="bfast_protein|whey"') >= 0, 'and a way back to the shake');
-    assert.ok(/Egg whites 7\.4/.test(html), 'shown at the count actually eaten');
+    assert.ok(/Egg whites 7\b/.test(html), 'shown at the count actually eaten');
     assert.ok(/which the evening oil takes/.test(html),
       'the fat is declared AND said to be handled');
     assert.ok(/which nothing makes up/.test(html),
@@ -3631,13 +3660,15 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const bed = bedOf(d);
     assert.ok(bed, 'the meal is there');
     assert.equal(bed.time, '21:00', 'at 21:00');
-    assert.equal(bed.items.filter((it) => it.n === 'Egg whites')[0].g, 7.4,
-      'one cup of whites, counted as 7.4 of them since v4.9.315');
+    assert.equal(bed.items.filter((it) => it.n === 'Egg whites')[0].g, 7,
+      'seven whites — whole, since v4.9.318');
     assert.equal(bed.items.filter((it) => /butter/i.test(it.n))[0].g, 15, 'and a spoon of nut butter');
     // Jon estimated ~350 kcal / 28 g protein / 9 g fat. From the quantities he
     // specified it is 216 / 30.5 / 7.9 — the protein and fat match, the calories
     // do not, and the foods he named are what the app follows.
-    assert.ok(Math.abs(bed.p - 30.5) <= 1.5, 'about 30 g of protein: ' + bed.p);
+    assert.ok(Math.abs(bed.p - 29) <= 1.5,
+      'about 29 g of protein — Jon estimated 28, and rounding the whites to seven ' +
+      'moved it TOWARDS his figure rather than away: ' + bed.p);
     assert.ok(Math.abs(bed.k - 216) <= 12,
       'and 216 kcal, not the ~350 he estimated — 245 ml of whites and 15 g of nut ' +
       'butter do not come to 350 however they are added up: ' + bed.k);
@@ -3745,7 +3776,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const before = app.nutProgShoppingFor(1, 'basmati');
     app.nutProgSetBedDefault(true);
     const after = app.nutProgShoppingFor(1, 'basmati');
-    assert.equal(shopItem(after, 'Egg whites').qty, 52, 'seven cups of whites appear, counted');
+    assert.equal(shopItem(after, 'Egg whites').qty, 49, 'seven days of whites appear, counted');
     assert.ok(shopItem(after, 'Peanut butter').qty > shopItem(before, 'Peanut butter').qty,
       'and more nut butter');
     assert.ok(shopItem(after, 'Chicken breast').qty < shopItem(before, 'Chicken breast').qty,
@@ -3812,10 +3843,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const yog = midamOf(d).p;
     app.nutProgSetNightly(d, 'midam_dairy', 'whites');
     const w = midamOf(d);
-    assert.equal(w.g, 5.6, '5.6 whites, not 200 g — sized to the macro, not swapped by weight');
-    assert.ok(Math.abs(w.g * w.each - 184) <= 2, 'which is the 184 ml it always was');
-    assert.ok(Math.abs(w.p - yog) <= 0.5,
-      'landing the same 20 g of protein: ' + w.p + ' against the yoghurt\'s ' + yog);
+    assert.equal(w.g, 6, 'SIX whites, not 200 g — sized to the macro and then rounded ' +
+      'to something he can crack');
+    assert.ok(Math.abs(w.p - yog) <= 2,
+      'which lands within 2 g of the yoghurt it replaces: ' + w.p + ' against ' + yog);
+    assert.ok(Math.abs(w.p - yog) <= 2,
+      'landing within 2 g of the yoghurt\'s 20: ' + w.p + ' against ' + yog + '. Six ' +
+      'whites is 21.6 and five is 18.0, so six is the closer whole number — the ' +
+      'exact 5.6 that hit 20 g was not a portion anyone can serve');
   });
 
   test('WHITES are COUNTED, not weighed', () => {
@@ -3828,13 +3863,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // count. The unit has to follow the FOOD, not the row it replaced.
     assert.equal(it.count, true, 'counted');
     assert.equal(it.each, 33, 'at 33 g a white');
-    assert.ok(/5\.6 egg whites \(185 ml\)/.test(app._nutProgItemLabel(it)),
-      'and labelled as both: ' + app._nutProgItemLabel(it));
+    assert.equal(app._nutProgItemLabel(it), '6 egg whites',
+      'and labelled as a count: ' + app._nutProgItemLabel(it));
     const days = app._nutProgWeekDates(1);
     days.forEach((dd) => app.nutProgSetNightly(dd, 'midam_dairy', 'whites'));
     const shop = app.nutProgShoppingFor(1, 'basmati');
-    assert.equal(shopItem(shop, 'Egg whites').qty, 39, 'seven days at 5.6 whites');
-    assert.equal(shopItem(shop, 'Egg whites').note, '1287 ml', 'with the volume to buy');
+    assert.equal(shopItem(shop, 'Egg whites').qty, 42, 'seven days at six whites');
+    assert.equal(shopItem(shop, 'Egg whites').note, '1386 ml', 'with the volume to buy');
   });
 
   test('WHITES land on the PROTEIN shelf, not with the yoghurt', () => {
@@ -4473,6 +4508,110 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._nutProgPlanOffset, -1, 'and the tap moves the week');
     assert.equal(planLabel('2026-09-09'), 'Trial week', 'to the trial week');
     app._nutProgPlanOffset = 0;
+  });
+
+  // ── DAILY: swaps on the eating screen, and moving between days ───────────
+  // v4.9.318. Jon: "same optionality as in the plan page of adjustments add
+  // addition/subs etc" and "want to be able to swipe forward and back days".
+
+  test('DAY every food on the eating screen is tappable, like the plan', () => {
+    setUp(110);
+    app._nutProgDayOffset = 0;
+    const h = onDay('2026-09-08', () => app._nutTabToday(app.nutGetState())) || '';
+    assert.ok(h.indexOf('data-nut-item="2026-09-08|lunch_protein"') >= 0,
+      'the lunch protein opens its own options');
+    assert.ok(h.indexOf('data-nut-item="2026-09-08|grain_lunch"') >= 0, 'and the grain');
+    assert.ok((h.match(/data-nut-item=/g) || []).length >= 8,
+      'across the day, not one meal: ' + (h.match(/data-nut-item=/g) || []).length);
+    // The tick has to survive it. A tap that both swapped the chicken and marked
+    // lunch eaten would be the worst kind of surprise.
+    assert.ok((h.match(/data-prog-tick/g) || []).length >= 7, 'and the meals still tick');
+    assert.ok(h.indexOf('data-prog-add') >= 0, 'and off-plan logging is still there');
+  });
+
+  test('DAY tapping a food opens ONLY that food, and does not tick the meal', () => {
+    setUp(110);
+    app._nutProgDayOffset = 0;
+    const d = dom();
+    onDay('2026-09-08', () => { app._nutTab = 'today'; app.nutRenderScreen(); });
+    const body = d.node('nut-screen-body');
+    const row = body.querySelectorAll('[data-nut-item]')
+      .filter((el) => el.getAttribute('data-nut-item') === '2026-09-08|lunch_protein')[0];
+    assert.ok(row, 'the chicken line is there to tap');
+    d.fire(row, 'click');
+    const sheet = d.lastCreatedHtml();
+    assert.ok(sheet.indexOf('data-nut-swap="lunch_protein|turkey"') >= 0,
+      'it opens the protein options');
+    assert.equal(sheet.indexOf('data-nut-split'), -1, 'and nothing else');
+    assert.deepEqual(app.nutProgTicked('2026-09-08'), {},
+      'and the meal is NOT ticked — one gesture, one outcome');
+  });
+
+  test('DAY the day strip moves forward and back', () => {
+    setUp(110);
+    app._nutProgDayOffset = 0;
+    const today = '2026-09-08';
+    assert.equal(onDay(today, () => app.nutProgShownDay()), today, 'today by default');
+    app._nutProgDayOffset = -1;
+    assert.equal(onDay(today, () => app.nutProgShownDay()), '2026-09-07', 'back a day');
+    app._nutProgDayOffset = 1;
+    assert.equal(onDay(today, () => app.nutProgShownDay()), '2026-09-09', 'forward a day');
+    app._nutProgDayOffset = 0;
+  });
+
+  test('DAY it shows the OTHER day\'s meals, not today\'s relabelled', () => {
+    setUp(110);
+    app._nutProgDayOffset = -1;                       // Monday, a rest day
+    const h = onDay('2026-09-08', () => app._nutTabToday(app.nutGetState())) || '';
+    assert.ok(h.indexOf('data-prog-day="2026-09-07"') >= 0,
+      'the tick rows belong to the 7th');
+    assert.equal(h.indexOf('data-prog-day="2026-09-08"'), -1, 'and not to today');
+    assert.ok(h.indexOf('data-nut-item="2026-09-07|lunch_protein"') >= 0,
+      'and a swap made from here is made for the 7th');
+    app._nutProgDayOffset = 0;
+  });
+
+  test('DAY it cannot be walked off the end of the programme', () => {
+    setUp(110);
+    // 7 September is the first day there is. Stepping back from it has nowhere
+    // to go, and an arrow into a blank screen is worse than an arrow that stops.
+    app._nutProgDayOffset = -1;
+    assert.equal(onDay('2026-09-07', () => app.nutProgShownDay()), '2026-09-07',
+      'the day before the programme opens is not a day it can show');
+    app._nutProgDayOffset = 0;
+    const h = onDay('2026-09-07', () => app._nutTabToday(app.nutGetState())) || '';
+    assert.ok(/data-prog-day-nav="-1" disabled/.test(h),
+      'and the arrow says so rather than looking live: ' +
+      (h.match(/data-prog-day-nav="-1"[^>]{0,12}/) || ['?'])[0]);
+  });
+
+  test('DAY a day that is not today SAYS so, with a way back', () => {
+    setUp(110);
+    app._nutProgDayOffset = 0;
+    const now = onDay('2026-09-08', () => app._nutTabToday(app.nutGetState())) || '';
+    assert.ok(/>Today</.test(now), 'today is called today');
+    assert.equal(now.indexOf('data-prog-day-today'), -1, 'with no way-back button');
+    app._nutProgDayOffset = -1;
+    const back = onDay('2026-09-08', () => app._nutTabToday(app.nutGetState())) || '';
+    assert.ok(/not today/.test(back),
+      'and another day says it is not today — the tick circles are live on it, so ' +
+      'mistaking it for today would put adherence on the wrong date');
+    assert.ok(back.indexOf('data-prog-day-today') >= 0, 'with a way back');
+    app._nutProgDayOffset = 0;
+  });
+
+  test('DAY the arrows are WIRED, not merely drawn', () => {
+    setUp(110);
+    app._nutProgDayOffset = 0;
+    const d = dom();
+    onDay('2026-09-08', () => { app._nutTab = 'today'; app.nutRenderScreen(); });
+    const body = d.node('nut-screen-body');
+    const back = body.querySelectorAll('[data-prog-day-nav]')
+      .filter((el) => el.getAttribute('data-prog-day-nav') === '-1')[0];
+    assert.ok(back, 'the back arrow exists');
+    onDay('2026-09-08', () => d.fire(back, 'click'));
+    assert.equal(app._nutProgDayOffset, -1, 'and the tap moves the day');
+    app._nutProgDayOffset = 0;
   });
 
   // ── Panel caps: the half of the keyboard fix the helper cannot do ─────────

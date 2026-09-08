@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.317';
+var APP_VERSION='4.9.318';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -11672,6 +11672,30 @@ function onSetDone(ex,idx){
 
 // Swipe-to-complete on set rows (both directions)
 (function(){
+  // v4.9.318. DAILY answers a horizontal swipe by moving a day. Bound to the
+  // day strip rather than the whole screen: a swipe anywhere on a list of meals
+  // is as likely to be a mis-scroll as an instruction.
+  var _nutDaySwipeX = null, _nutDaySwipeY = null;
+  document.addEventListener('touchstart',function(e){
+    var strip = e.target.closest && e.target.closest('[data-prog-day-strip]');
+    if(!strip) return;
+    _nutDaySwipeX = e.touches[0].clientX;
+    _nutDaySwipeY = e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(_nutDaySwipeX === null) return;
+    var t0 = e.changedTouches && e.changedTouches[0];
+    var dx = t0 ? (t0.clientX - _nutDaySwipeX) : 0;
+    var dy = t0 ? Math.abs(t0.clientY - _nutDaySwipeY) : 0;
+    _nutDaySwipeX = null; _nutDaySwipeY = null;
+    if(Math.abs(dx) < 45 || dy > Math.abs(dx)) return;   // a scroll, not a swipe
+    var step = (dx < 0) ? 1 : -1;                        // drag left, go forward
+    var probe = _nutProgShift(_nutToday(), _nutProgDayOffset + step);
+    if(!probe || !nutProgTargetsOn(probe)) return;
+    _nutProgDayOffset += step;
+    if(typeof nutRenderScreen === 'function') nutRenderScreen();
+  },{passive:true});
+
   var swipeThreshold=80;
   document.addEventListener('touchstart',function(e){
     var row=e.target.closest('.set-row');
@@ -19723,6 +19747,25 @@ function nutRenderScreen(){
   var recalcBtn = body.querySelector('[data-nut-recalc]');
   if(recalcBtn) recalcBtn.addEventListener('click', function(){ nutRecalcTargets(); });
   // v4.9.277: programme day — tick a meal, or log something off plan.
+  body.querySelectorAll('[data-prog-day-nav]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      _nutProgDayOffset += parseInt(btn.getAttribute('data-prog-day-nav'), 10);
+      // Clamp HERE as well as in nutProgShownDay, or the offset would keep
+      // climbing past the end of the programme and the arrows would need two
+      // taps to come back.
+      if(nutProgShownDay() === _nutToday() && _nutProgDayOffset !== 0){
+        var probe = _nutProgShift(_nutToday(), _nutProgDayOffset);
+        if(!probe || !nutProgTargetsOn(probe))
+          _nutProgDayOffset -= parseInt(btn.getAttribute('data-prog-day-nav'), 10);
+      }
+      nutRenderScreen();
+    });
+  });
+  var dayToday = body.querySelector('[data-prog-day-today]');
+  if(dayToday) dayToday.addEventListener('click', function(){
+    _nutProgDayOffset = 0;
+    nutRenderScreen();
+  });
   body.querySelectorAll('[data-prog-tick]').forEach(function(row){
     row.addEventListener('click', function(){
       // The DAY THE ROW WAS DRAWN FOR, not today. The calendar drill-down and the
@@ -19927,14 +19970,15 @@ function _nutTabToday(ns){
   // v4.9.277: while the cut programme is running it owns this screen. Recipes,
   // the week planner and the scanner keep working underneath for anything else.
   var _progStatus = (typeof nutProgStatusOn === 'function') ? nutProgStatusOn(today) : '';
-  var _hasPlan = (typeof nutProgTargetsOn === 'function') && !!nutProgTargetsOn(today);
+  var _shown = (typeof nutProgShownDay === 'function') ? nutProgShownDay() : today;
+  var _hasPlan = (typeof nutProgTargetsOn === 'function') && !!nutProgTargetsOn(_shown);
   if(_hasPlan){
     // THE TICK-OFF, AND NOTHING ELSE. Jon: "This is what you look at while
     // eating." It used to carry the week-ahead table, the carb picker, the
     // evening picker, the shopping list and the prep plan underneath it — a
     // 37,000-character screen to answer "what do I eat now".
-    var progCard = _nutProgTodayCard();
-    if(progCard) return _nutProgReviewCard(today) + progCard;
+    var progCard = _nutProgTodayCard(_shown);
+    if(progCard) return _nutProgReviewCard(today) + _nutProgDayNavCard(_shown) + progCard;
   }
   // v4.9.293: RETURN, do not prepend. The card was already rendering on the
   // run-up — a probe put it at index 254 with the free-form slots at 1618 — so
@@ -21395,7 +21439,7 @@ var _NUT_PROG_PLATE = [
   // whites and a spoon of nut butter. Fixed across the phases: it is a whole
   // meal from the original plan rather than a dial, and the day makes room for
   // it rather than it shrinking to fit.
-  { m:'bed',    n:'Egg whites', grp:'protein', count:true, each:33, each_u:' ml', g:[7.4,7.4,7.4,7.4,7.4], u:'', k:52,  p:10.9, c:0.7, f:0.17 },
+  { m:'bed',    n:'Egg whites', grp:'protein', count:true, each:33, each_u:' ml', g:[7,7,7,7,7], u:'', k:52,  p:10.9, c:0.7, f:0.17 },
   { m:'bed',    n:'Peanut butter', grp:'fat',       g:[15,15,15,15,15],                  u:'',        k:588, p:25,  c:20,  f:50 }
 ];
 
@@ -21552,8 +21596,12 @@ function nutProgMealsOn(dateKey, riceId){
             // Meal 7 makes room in the protein parts too — the vegetables are
             // not a protein source and are left alone.
             // `fixed` parts are counted, not weighed — two eggs are two eggs.
-            if(_pCut && _pt.grp === 'protein' && !_pt.fixed)
-              _pg = Math.round(_pg * (1 - _pCut) * 10) / 10;
+            if(_pCut && _pt.grp === 'protein' && !_pt.fixed){
+              var _pScaled = _pg * (1 - _pCut);
+              // A COUNTED food stays counted. 5.3 egg whites is not a portion.
+              _pg = _pt.count ? Math.max(1, Math.round(_pScaled))
+                              : Math.round(_pScaled * 10) / 10;
+            }
             var _pmM = _nutUnitMult(_pt, _pg);
             var _pm = { k:_pt.k * _pmM, p:_pt.p * _pmM, c:_pt.c * _pmM, f:_pt.f * _pmM };
             items.push({ n:_pt.n, g:_pg, u:_pt.u || '', carb:!!_pt.carb, count:!!_pt.count,
@@ -21667,7 +21715,8 @@ function nutProgMealsOn(dateKey, riceId){
       if(_splitTake && _NUT_SPLIT_FROM[M.id] === it.n){
         var _sr = 1 - _splitTake;
         if(mac) mac = { k:mac.k * _sr, p:mac.p * _sr, c:mac.c * _sr, f:mac.f * _sr };
-        grams = Math.round(grams * _sr * 10) / 10;
+        grams = _cnt ? Math.max(1, Math.round(grams * _sr))
+                     : Math.round(grams * _sr * 10) / 10;
       }
       // ...and the whole of it arrives at dinner. Sized to the PROTEIN, like
       // every other serve in this file, so the weight follows the fish rather
@@ -21688,7 +21737,9 @@ function nutProgMealsOn(dateKey, riceId){
         var _pdns = (mac && grams > 0) ? (mac.p / grams * 100) : it.p;
         if(!(_pdns > 0)) _pdns = it.p;
         var _cutP = _shortP * (_ownP / _dayProtBase);
-        var _pNewG = Math.round((grams - (_cutP * 100 / _pdns)) * 10) / 10;
+        var _pNewG = grams - (_cutP * 100 / _pdns);
+        // Same rule for a plate row: counted stays counted.
+        _pNewG = _cnt ? Math.max(1, Math.round(_pNewG)) : Math.round(_pNewG * 10) / 10;
         if(_pNewG < 0) _pNewG = 0;
         if(mac && grams > 0){
           var _pr = _pNewG / grams;
@@ -21759,10 +21810,12 @@ var _NUT_VOLUME_UNITS = [' ml'];
 function _nutProgItemLabel(it){
   if(!it) return '';
   var qty = it.g;
+  // Eggs are said, not weighed: "7 egg whites", "2 whole eggs". The plate row
+  // keeps the name the SHOPPING LIST needs ("Eggs, whole" sits under Protein on
+  // a shelf); this is what a person reads on a plate.
+  if(it.count && /^Eggs, whole$/.test(it.n)) return qty + ' whole egg' + (qty === 1 ? '' : 's');
+  if(it.count && /^Egg whites$/.test(it.n)) return qty + ' egg white' + (qty === 1 ? '' : 's');
   if(it.count && it.each && it.each_u){
-    // "7.4 egg whites (245 ml)" — the count is how Jon thinks about it, the
-    // volume is what the carton is marked in and what he actually pours. Foods
-    // with no sensible second unit (two eggs) get no parenthetical.
     return qty + ' ' + it.n.toLowerCase() + ' (' + Math.round(qty * it.each) + it.each_u + ')';
   }
   if(it.count) return qty + ' ' + it.n;                        // 2 Rice cakes
@@ -22158,6 +22211,50 @@ function nutProgGrainOpts(mealId){
   return out;
 }
 
+// How many days DAILY has been moved off today. Zero on every load — reopening
+// the app should show the day he is in, not the day he was last reading. Not
+// persisted, for the same reason the plan's week offset is not.
+var _nutProgDayOffset = 0;
+
+// The day DAILY is showing: today, plus the offset, clamped to days the
+// programme actually governs. Clamping to the PLAN rather than to a count of
+// days means he cannot arrow into a blank screen either side of the fifteen
+// weeks — the offset simply stops.
+function nutProgShownDay(){
+  var base = _nutToday();
+  if(!_nutProgDayOffset) return base;
+  var d = _nutProgShift(base, _nutProgDayOffset);
+  if(d && typeof nutProgTargetsOn === 'function' && nutProgTargetsOn(d)) return d;
+  return base;
+}
+
+// The day strip above DAILY: which day is on screen, and the way to move it.
+// Named rather than numbered — "Tuesday 08/09" says where he is; an offset makes
+// him work it out. TODAY is called today, because that is the common case and
+// the one he must never be confused about.
+function _nutProgDayNavCard(shown){
+  var isToday = (shown === _nutToday());
+  var dt = _nutProgDate(shown);
+  var nm = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()];
+  var prev = _nutProgShift(shown, -1), next = _nutProgShift(shown, 1);
+  var canPrev = !!(prev && nutProgTargetsOn(prev));
+  var canNext = !!(next && nutProgTargetsOn(next));
+  return '<div data-prog-day-strip style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;padding:8px 10px;background:var(--bg2);border:1px solid ' +
+      (isToday ? 'var(--border)' : 'var(--gold)') + ';border-radius:10px;touch-action:pan-y;">' +
+    '<button data-prog-day-nav="-1"' + (canPrev ? '' : ' disabled') +
+      ' style="width:30px;height:30px;flex-shrink:0;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;opacity:' + (canPrev ? '1' : '0.3') + ';">&#8249;</button>' +
+    '<div style="flex:1;min-width:0;text-align:center;">' +
+      '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:' + (isToday ? 'var(--text)' : 'var(--gold)') + ';">' +
+        (isToday ? 'Today' : nm) + '</div>' +
+      '<div style="font-size:10px;color:var(--text3);">' + nm.slice(0,3) + ' ' + shown.slice(8) + '/' + shown.slice(5,7) +
+        (isToday ? '' : ' &middot; not today') + '</div>' +
+    '</div>' +
+    '<button data-prog-day-nav="1"' + (canNext ? '' : ' disabled') +
+      ' style="width:30px;height:30px;flex-shrink:0;background:var(--bg3);border:1px solid var(--border2);border-radius:50%;color:var(--text2);font-size:15px;line-height:1;cursor:pointer;touch-action:manipulation;opacity:' + (canNext ? '1' : '0.3') + ';">&#8250;</button>' +
+    '</div>' +
+    (isToday ? '' : '<button data-prog-day-today style="width:100%;margin:-6px 0 12px;padding:7px;background:rgba(200,150,62,0.10);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;touch-action:manipulation;">&#8617; Back to today</button>');
+}
+
 // ── the Today card ─────────────────────────────────────────────────────────
 // v4.9.277. Renders the programme day. Drawn from nutProgMealsOn, so it can
 // never disagree with the shopping list or the prep plan — they read the same
@@ -22230,8 +22327,13 @@ function _nutProgTodayCard(forDate){
   meals.forEach(function(m){
     var on = !!done[m.id];
     var line = m.supp
-      ? (m.code || '')
-      : m.items.map(_nutProgItemLabel).join(' &middot; ');
+      ? ('<span style="font-size:11px;color:var(--text2);">' + (m.code || '') + '</span>')
+      : m.items.map(function(it){
+          var lbl = _nutProgItemLabel(it);
+          if(!it.slot) return '<div style="font-size:11px;color:var(--text2);padding:2px 0;">' + lbl + '</div>';
+          return '<div data-nut-item="' + today + '|' + it.slot + '" style="font-size:11px;color:var(--text);padding:3px 0;cursor:pointer;touch-action:manipulation;">' +
+            lbl + ' <span style="color:var(--gold);font-size:10px;">&rsaquo;</span></div>';
+        }).join('');
     h += '<div data-prog-tick="' + m.id + '" data-prog-day="' + today + '" style="display:flex;gap:10px;align-items:flex-start;padding:10px 11px;background:var(--bg2);border:1px solid ' + (m.supp ? 'rgba(200,150,62,0.35)' : 'var(--border)') + ';border-radius:9px;margin-bottom:8px;cursor:pointer;touch-action:manipulation;">' +
       '<div style="width:19px;height:19px;border-radius:50%;flex-shrink:0;margin-top:2px;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;">' + (on ? '&#10003;' : '') + '</div>' +
       '<div style="flex:1;min-width:0;">' +
@@ -22240,7 +22342,7 @@ function _nutProgTodayCard(forDate){
           '<span style="font-size:13px;font-weight:600;' + (on ? 'color:var(--text3);text-decoration:line-through;' : '') + '">' + m.name + '</span>' +
           (m.prepped ? '<span style="font-size:8px;letter-spacing:1px;text-transform:uppercase;padding:1px 5px;border-radius:3px;background:rgba(200,150,62,0.16);color:var(--gold);">Prepped</span>' : '') +
         '</div>' +
-        '<div style="font-size:11px;color:var(--text2);margin-top:2px;' + (on ? 'text-decoration:line-through;' : '') + '">' + line + '</div>' +
+        '<div style="margin-top:2px;' + (on ? 'opacity:0.55;' : '') + '">' + line + '</div>' +
         '<div style="font-size:10px;color:var(--text3);margin-top:2px;">' + m.k + ' kcal &middot; P' + m.p + ' &middot; C' + m.c + ' &middot; F' + m.f + '</div>' +
       '</div></div>';
   });
@@ -22561,7 +22663,7 @@ var _NUT_BFAST_PROTEIN_ITEM = 'Whey protein';   // the plate row the pick replac
 // and a test proves that rather than this comment asserting it.
 var _NUT_EGG_WHITE_G = 33;                        // one large egg white, grams
 var _NUT_EGG_WHITE = { n:'Egg whites', grp:'protein', count:true, each:_NUT_EGG_WHITE_G,
-                       each_u:' ml', g:[7.4,9,9.8,10.9,11.3], u:'',
+                       each_u:' ml', g:[7,9,10,11,11], u:'',
                        k:52, p:10.9, c:0.7, f:0.17 };
 // Two eggs, counted, because that is how Jon specified the meal and how anyone
 // cooks it. 50 g is one large egg without its shell, so the macros are unchanged
@@ -22653,7 +22755,7 @@ var _NUT_PROG_MIDAM_PROTEIN = [
   // protein the 200 g of yoghurt does — sized to the macro, like every other
   // option in this file, rather than swapped by weight.
   { id:'whites',  n:'Egg whites', grp:'protein', count:true, each:_NUT_EGG_WHITE_G,
-    each_u:' ml', g:5.6, u:'', k:52, p:10.9, c:0.7, f:0.17 }
+    each_u:' ml', g:6, u:'', k:52, p:10.9, c:0.7, f:0.17 }
 ];
 
 var _NUT_PROG_DINNER_VEG = [

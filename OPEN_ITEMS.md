@@ -55,6 +55,33 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
       **Why it matters more than one red row:** a gate that is red three days in seven
       teaches everyone to push through a red gate, and the next red will be a real one.
 
+- [ ] **PM — SWIPE FORWARD/BACK BY DAY ON THE MAIN TODAY SCREEN. Jon asked for this
+      across PEPTIDES, NUTRITION AND TRAINING, and asked for PM to drive it** (2026-09-08,
+      "i want this for peptides, nutrition and training - pm to push on all"). PEPTIDES
+      raised it and is NOT building it: `renderTodayScreen` is shared, it was rewritten at
+      v4.9.298 and is still untested by him, and the hard part is not the swipe.
+      **THE HARD PART IS THAT EVERY WRITE ON THAT SCREEN ASSUMES TODAY.** Peptides is the
+      worked example, and the other two will have the same shape:
+      · `pepToggleDose` writes `ps.checked[_pepToday()]`; `pepSkipDose` and
+        `pepAddExtraDose` likewise; `pepLogMakeUp` stamps `openedDate = _pepToday()`.
+      · So on a screen showing Monday, a tick lands on TODAY. Silent, and it corrupts
+        adherence and stock in a way nothing surfaces.
+      **The reading side is already done in peptides and is not the problem:**
+      `_pepGetDoses(ps, dateStr)` has taken a date since v4.9.255 and the calendar uses it.
+      **Three decisions PM needs to make before anyone writes code, in this order:**
+      1. Is a past/future day READ-ONLY, or can he act on it? Read-only is one day's work
+         and cannot corrupt anything. Editable means every write path in all three domains
+         takes an explicit date, which is the real project.
+      2. If editable, what does "add a dose"/"complete a session" mean on a FUTURE day?
+      3. Which surfaces move together — does swiping the Today screen also move the
+         nutrition day, the session card and the peptide tile as one, or do they scroll
+         independently? Jon's phrasing ("swipe forward and back days to see") reads as
+         READ-ONLY and AS ONE, which is decision 1 = read-only and decision 3 = together.
+      **Recommendation from PEPTIDES:** ship read-only first. It is what he described, it
+      is a fraction of the work, and it cannot produce a wrong tick at 4:30am. Editing a
+      past day can follow once someone has costed date-threading across the three domains.
+      Peptides will do its half on PM's word; the peptide read path needs no new work.
+
 ## WAITING ON JON
 
 - [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together
@@ -145,61 +172,36 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 - [ ] JON — Wake lock: does the screen still sleep on v4.9.264? Settings → Diagnostic now
       prints `screen wake lock` as `held` / `REFUSED: …` / `UNSUPPORTED`. Closes when he
       reports the line. Note: iOS Low Power Mode disables wake locks outright.
-- [ ] JON — Peptide stock: enter his stock take via STOCK → "Count stock by total mg"
-      (v4.9.268). He reports stock as TOTAL MG, not vial counts, so the sheet takes mg
-      and does the division. Fixes for context: `pepApplyPhase` used to replace ps.stacks
-      wholesale, so applying a phase overwrote counted stock (fixed v4.9.266).
-      HIS FULL STOCK TAKE, given 2026-09-04 — recorded here because it exists nowhere
-      else. 12 of the 13 Phase 2 compounds; only DSIP is outstanding.
+- [ ] JON — Peptide stock take, still to enter: STOCK -> "Count stock by total mg"
+      (v4.9.268 takes TOTAL MG, not vial counts, and shows its division).
+      HIS FIGURES, 2026-09-04 — recorded here because they exist nowhere else. 12 of 13
+      Phase 2 compounds; only DSIP is outstanding.
         Retatrutide  8 x 30mg = 240mg      Tesamorelin  5 x 10mg =   50mg
         Ipamorelin   8 x 10mg =  80mg      Epitalon    10 x 10mg =  100mg
         CJC-1295     8 x 10mg =  80mg      NAD+        10 x 500mg = 5000mg
         BPC-157      7 x 10mg =  70mg      GHK-Cu       9 x 50mg =  450mg
         TB-500       7 x 10mg =  70mg      TA-1         6 x 10mg =   60mg
         MOTS-c       6 x 10mg =  60mg      5-AMQ        3 x  5mg =   15mg
-        DSIP — "have, use when required", NO FIGURE. Still open.
-        Semax and SLU — NOT ORDERED. Neither is in Phase 2.
-      NOTE ON FORMAT: he writes these as two numbers whose ORDER VARIES — "reta 30 x 8"
-      is size-then-count, "BPC 7 X 10" is count-then-size. It is unambiguous only
-      because the vial size is known in each case. Do NOT write a parser that assumes
-      an order; ask.
-      Where Phase 2 already carried a figure his count agrees EXACTLY (tesa, epi, nad,
-      mots, 5amq, cjc). That confirms the TOTALS. It is not independent confirmation of
-      the VIAL SIZES — both trace to his own ordering document — but he has now stated
-      the sizes directly, which is, and they are recorded in `_PEP_CONFIRMED` (v4.9.269).
-      Closes when the STOCK screen reads what he counted.
-- [ ] JON — Reconstitution: WATER volumes. He has confirmed EIGHT vial sizes directly
-      (retatrutide 30mg, bpc157, tb500, ipamorelin, cjc1295, ta1 10mg, ghkcu 50mg,
-      nad 500mg), recorded per-field in `_PEP_CONFIRMED` with the date he said it. The
-      BAC VOLUME is still PDF-derived for everything except retatrutide and bpc157, and
-      a concentration needs both numbers.
-      HIS RULING (2026-09-04): "keep blank with make up required note to complete the
-      daily dose." So as of v4.9.278 the app WITHHOLDS the unit count rather than
-      printing a marked guess — a gold "assumed" caption still puts a number in front of
-      him at 4:30am, and the number is what he acts on. Most of his protocol now reads
-      MAKE-UP REQUIRED until he logs each vial.
-      He CLOSES IT PER COMPOUND, in the app, three ways: log the actual mix; or set the
-      volume in ADJUST -> tap the compound -> Save (which stamps `waterConfirmedAt`); or
-      tell PM/PEPTIDES the volume so it goes in `_PEP_CONFIRMED` — never from the
-      document, which is the thing that table exists to outrank.
-      FIRST ONE HE NAMED: Epitalon in 0.5mL rather than 1mL, because 5mg at 10mg/mL is
-      50 units and that is a lot to push. At 0.5mL it is 25u. Deliberately NOT hard-coded
-      — "i want to edit in app not from this note".
-      A note he does not want to act on now can be silenced with "Not now" (v4.9.300)
-      without claiming a vial was mixed — the units stay withheld either way.
-- [ ] JON — **Peptide stock now moves ONLY when he logs a make-up** (v4.9.300, his
-      ruling). Ticking a dose no longer opens a vial or decrements the sealed count.
-      So the count is only as right as his make-up logging: **every vial he mixes has
-      to be tapped in**, via "Made up" on a TODAY row or "+ Made up a vial" for any
-      compound (v4.9.302). Closes when he has used it for a cycle and the STOCK numbers
-      still match the fridge. The invariant and the trap it creates — it looks exactly
-      like a bug — are written up in HANDOFF_PEPTIDES section 3, invariant 4.
-- [ ] PEPTIDES — The EDIT SHEET's water field does not clear "make-up required", only the
-      compound panel and a logged make-up do. Deliberate: water is one of twelve fields
-      there and is written on every save, so correcting a typo in the notes would bless a
-      volume nobody checked — the shape of the phase figures that were silently marking
-      stock as counted before v4.9.266. Recorded because the asymmetry is not obvious at
-      the call site. Revisit if Jon edits water there and reports the note persisting.
+        DSIP "have, use when required" — NO FIGURE. Semax and SLU NOT ORDERED.
+      He writes these as two numbers whose ORDER VARIES ("reta 30 x 8" is size-first,
+      "BPC 7 X 10" is count-first) — unambiguous only because the vial size is known.
+      Do NOT write a parser that assumes an order; ask. Closes when STOCK matches.
+- [ ] JON — Peptide stock now moves ONLY on a logged make-up (v4.9.300, his ruling), so
+      the count is only as good as his logging: every vial he mixes must be tapped in,
+      via "Made up" on a TODAY row or "+ Made up a vial" for any compound (v4.9.302/.304).
+      Closes when he has run a cycle and STOCK still matches the fridge. The invariant,
+      and the fact that it LOOKS like a bug, are in HANDOFF_PEPTIDES section 3.
+- [ ] JON — Peptide BAC water volumes. Eight vial sizes confirmed and recorded per-field
+      in `_PEP_CONFIRMED`; the water volume is still PDF-derived for everything except
+      retatrutide and bpc157, and a concentration needs both. Per his ruling the app now
+      shows MAKE-UP REQUIRED rather than a marked guess (v4.9.278), dismissable with
+      "Not now" (v4.9.300). Closes per compound as he logs a mix or sets the volume in
+      ADJUST -> tap the compound. First one he named: Epitalon in 0.5mL, not 1mL — 5mg at
+      10mg/mL is 50 units; at 0.5mL it is 25u. Deliberately not hard-coded.
+- [ ] JON — Tesamorelin is marked NOT STARTED (v4.9.319) rather than assumed to have begun
+      on its phase date. When he actually takes the first dose: ADJUST -> Tesamorelin ->
+      "Started today". That records the real start AND shifts the whole 25-day course, so a
+      late start does not silently shorten it. Closes when he has started it.
 - [ ] JON — Should a live WALK and the WEEKLY CHECK-IN be restored after a screen lock?
       Both are deliberately in `_neverRestoreTabs` (v4.9.264) — a walk would imply one is
       running, and the check-in form reloads EMPTY so returning to it invites a second

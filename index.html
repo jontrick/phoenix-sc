@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.330';
+var APP_VERSION='4.9.331';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -44030,9 +44030,33 @@ window._phxShouldReopenSession = function(){
     var day = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
     var parts = String(stored).split(':');
     if(parts[0] !== 'blab' || parts[3] !== day) return null;   // yesterday's session
-    var unfinished = (typeof window._blabUnfinishedToday === 'function') ? window._blabUnfinishedToday() : null;
-    if(!unfinished) return null;                                // finished, or never started
-    return { week: unfinished.week, day: unfinished.day };
+    // v4.9.331 — Jon, 11 Sep: "the screen he's on doesn't hold when he briefly switches
+    // to look at something else".
+    //
+    // THIS GUARD ASKED A DIFFERENT QUESTION FROM THE ONE ABOVE IT. The comment on this
+    // function says the signal is "WAS HE LOOKING AT IT when the app died" — and that is
+    // exactly right, and it is what PHX_SESSION_OPEN_KEY records. Then .291 gated it on
+    // _blabUnfinishedToday(), which returns null unless at least ONE BLOCK IS ALREADY
+    // DONE (`if(!done) return;` in that function).
+    //
+    // So: open the session, switch apps before finishing a block, come back — iOS has
+    // killed the PWA, the reopen refuses because there is no progress yet, and he lands
+    // on Today. The moment of the session where he is MOST likely to glance at another
+    // app is the one moment the restore was guaranteed to refuse. That is the substitution
+    // this codebase keeps making: a nearby, cheaper question standing in for the real one.
+    //
+    // The identity is already in the key, so nothing needs deriving from progress. The
+    // only thing left to check is that the session is not already FINISHED — "unfinished"
+    // meaning not completed, rather than partly done.
+    var w = parseInt(parts[1], 10), d = parseInt(parts[2], 10);
+    if(!(w > 0 && d > 0)) return null;
+    var s = (typeof window.blabGetState === 'function') ? window.blabGetState() : null;
+    if(s){
+      // Completed, or the programme has moved past it. Both mean Today is correct.
+      if(s.week > w) return null;
+      if(s.week === w && (s.last_completed_day || 0) >= d) return null;
+    }
+    return { week: w, day: d };
   } catch(_e){ return null; }
 };
 try {

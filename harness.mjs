@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.330'", 'version is 4.9.330');
+has("var APP_VERSION='4.9.331'", 'version is 4.9.331');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2558,6 +2558,40 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── THE SESSION SCREEN HOLDS (v4.9.331) ─────────────────────────────────────
+// Jon, 11 Sep: "the screen he's on doesn't hold when he briefly switches to look at
+// something else" — still happening after .291.
+//
+// THE REGRESSION PIN. _phxShouldReopenSession gated on _blabUnfinishedToday(), which
+// returns null unless a block is ALREADY FINISHED. So the minutes right after opening a
+// session — exactly when he glances at another app — were the one window the restore was
+// guaranteed to refuse. The function's own comment says the signal is "was he looking at
+// it"; the gate asked "has he made progress". Two different questions.
+hasNotCode("var unfinished = (typeof window._blabUnfinishedToday === 'function') ? window._blabUnfinishedToday() : null;\n    if(!unfinished) return null;",
+  'REOPEN: the reopen is no longer gated on having finished a block');
+hasCode('var w = parseInt(parts[1], 10), d = parseInt(parts[2], 10);',
+  'REOPEN: STRUCTURAL the identity comes from the stored key, not from progress');
+hasCode('if(s.week === w && (s.last_completed_day || 0) >= d) return null;',
+  'REOPEN: a session already completed still does NOT reopen');
+
+// THE OTHER HALF OF JON'S QUESTION, pinned so the answer is not re-derived from scratch:
+// the restore runs at BOOT ONLY, and that is correct. Nothing needs restoring when the
+// app was merely backgrounded — the DOM is untouched — and a foreground restore would
+// actively yank him off the screen he is on. Verified 2026-09-11: none of the five
+// visibilitychange handlers calls navTo or showScreen, and there is no pageshow or focus
+// listener anywhere in the file. A screen revert therefore means the PWA was RELOADED.
+(() => {
+  const code = phxStripComments(html);
+  // The DECLARATION matches `name()` too — the first draft of this guard counted 2 and
+  // read as a second caller. Exclude `function ` explicitly rather than tuning the
+  // constant to fit, which would have frozen the miscount in place.
+  const n = (code.match(/(?<!function\s)_phxBootRestoreBegin\s*\(\s*\)/g) || []).length;
+  if (n === 1) ok('REOPEN: the tab restore has exactly one caller — the boot path');
+  else bad(`REOPEN: _phxBootRestoreBegin is called ${n}× (expected 1). If the restore was ` +
+           `deliberately wired to a foreground event, say why here — it can pull him off ` +
+           `the screen he is looking at, which is the complaint this guard protects.`);
+})();
 
 // ── A FINISHED WOD READS AS FINISHED (v4.9.329) ─────────────────────────────
 // Jon, 11 Sep: Lower Power showed COMPLETED, the two WODs he had done still showed

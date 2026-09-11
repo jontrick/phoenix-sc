@@ -3339,6 +3339,76 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._phxShouldReopenSession(), null, 'day 3 is already completed, so Today is right');
   });
 
+  // ── THE CASE .291 NEVER COVERED (v4.9.331) ───────────────────────────────
+  // Jon, 11 Sep: "the screen he's on doesn't hold when he briefly switches to look at
+  // something else". Still happening after .291/.292.
+  //
+  // EVERY REOPEN CASE ABOVE SEEDS blockProgress WITH A DONE BLOCK. That is why the bug
+  // survived its own test suite: _phxShouldReopenSession gated on _blabUnfinishedToday(),
+  // which returns null unless a block is ALREADY finished, and no case ever asked what
+  // happens before the first one is.
+
+  test('REOPEN: he opened the session and had not finished a block yet', () => {
+    // THE REPORTED BUG. Opening the session sets _phxActiveSessionKey immediately, so the
+    // "was he looking at it" flag is written from the moment he arrives — but the reopen
+    // refused until he had completed a whole block. The minutes right after opening are
+    // exactly when he glances at another app.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:3:3:' + today);
+    const r = app._phxShouldReopenSession();
+    assert.ok(r, 'it must come back with no progress logged at all');
+    assert.equal(r.week, 3);
+    assert.equal(r.day, 3);
+  });
+
+  test('REOPEN: part-way through a block, with nothing completed', () => {
+    // Sets ticked but no block marked done — blockProgress exists and is empty of `done`,
+    // which _blabUnfinishedToday also refuses.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                blockProgress: { ['blab:3:3:' + today]: { '0': { done: false } } }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:3:3:' + today);
+    assert.ok(app._phxShouldReopenSession(), 'still his session, still where he was');
+  });
+
+  test('REOPEN: the identity comes from the KEY, not from progress', () => {
+    // The week/day used to be read off _blabUnfinishedToday's best match. With no progress
+    // there is no match, so the identity has to come from the thing that recorded it.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 5, last_completed_day: 0,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:5:1:' + today);
+    const r = app._phxShouldReopenSession();
+    assert.equal(r && r.week, 5, 'week from the key');
+    assert.equal(r && r.day, 1, 'day from the key');
+  });
+
+  test('REOPEN: a session the programme has moved PAST is not reopened', () => {
+    // "Not finished" must not mean "not finished this week". If he is on week 4 and the
+    // flag names a week-3 session, Today is right.
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 4, last_completed_day: 0,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:3:3:' + today);
+    assert.equal(app._phxShouldReopenSession(), null, 'the programme has moved on');
+  });
+
+  test('REOPEN: a malformed key is refused rather than reopening week NaN', () => {
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    seed(KEY, { active: true, week: 3, last_completed_day: 0,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: NEWER });
+    seed('phoenix_session_screen_open', 'blab:x:y:' + today);
+    assert.equal(app._phxShouldReopenSession(), null, 'unparseable is not a session');
+  });
+
   test('REOPEN: leaving on purpose clears the flag', () => {
     reset(); signIn(UID);
     seed('phoenix_session_screen_open', 'blab:3:3:2026-09-05');

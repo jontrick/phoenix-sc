@@ -138,6 +138,35 @@ record keyed by something that does not identify the thing it belongs to. The li
 than the exercise (#2), one PB slot for every circuit (#3), and the same shape again on
 2026-09-11 in WOD completion. Check what a key actually identifies before trusting it.
 
+- [ ] TRAINING/PM — **A WOD or Core session in progress is lost entirely on an iOS
+      reload, and nothing records that he was in one.** Answering Jon's 11 Sep question
+      about which screens the restore covers: BLAB's plan (`programme`) and
+      `blab-calendar` ARE on `_safeRestoreTabs`, and the harness proves all 18 navTo
+      targets are classified. But a WOD/Core session is not a screen at all — it is a
+      `_phxLibOverlay` fixed-position overlay over whatever screen is underneath. A reload
+      destroys it, and there is no equivalent of `PHX_SESSION_OPEN_KEY` for it, so nothing
+      can even tell it was open. **NOT built with v4.9.330, deliberately**: restoring a
+      live TIMED overlay means deciding what its clock reads on return, and dropping him
+      back into a running WOD he did not choose to resume is the objection that kept
+      `session` off the restore list in the first place. That is a decision, not a patch.
+      Owner **???**. The BLAB side has a working pattern to copy — mark on
+      pagehide/visibilitychange-hidden with an identity carrying the local date, refuse
+      anything not from today.
+
+- [ ] JON — **Screen revert, third attempt (v4.9.330).** .291 recorded the right signal
+      ("was he looking at it") and then gated it on the wrong question ("has he finished a
+      block"), so the restore refused for the whole period right after opening a session —
+      which is exactly when he glances at another app. **What to watch:** open a session,
+      do NOT complete a block, switch to another app and come back. The session screen
+      should return. Then do the same after finishing a block, and after finishing the
+      whole session — the last one should correctly land on Today.
+      · **A WOD/Core session will still be lost** on an app switch. Not fixed, logged
+        above, and it needs a ruling rather than a patch.
+      · Worth knowing: nothing in the app navigates on app-foreground (checked — none of
+        the five visibilitychange handlers routes, and there is no pageshow or focus
+        listener). So if a screen changes on a switch, the PWA was RELOADED, and the only
+        lever is the restore list. That rules out a whole class of guess.
+
 ## WAITING ON JON
 
 - [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together

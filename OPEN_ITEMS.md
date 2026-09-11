@@ -124,83 +124,26 @@ surfaces a bug in it, that is a finding, not your build breaking.
       **Why it matters more than one red row:** a gate that is red three days in seven
       teaches everyone to push through a red gate, and the next red will be a real one.
 
-## JON'S 2026-09-08 SESSION REPORT — 6 OF 7 STILL OPEN
+## JON'S 2026-09-08 SESSION REPORT — ALL SEVEN SHIPPED (v4.9.320-325)
 
-One message, seven items. One commit each. **ALL SEVEN DONE (.320-.325).** None has
-been used by him yet — every one is verified by gates only. Diagnoses
-below are verified against the source, not guessed — build from these, do not re-derive.
+Condensed 2026-09-11; the file was 200 lines past budget and every item below is closed.
+The full diagnosis for each is in its own commit message and in the code comments at each
+site. Kept here only as the index:
 
-- [x] **2. Banded Deadlift showed last week's Rack Pull.** DONE v4.9.320. Day 4 slot 1
-      rotates and every movement in it carries `blab_lift:'deadlift'`, so the banner's
-      `records['deadlift_amrap_w'+(week-1)]` was reliably the OTHER exercise. Now reads
-      `records[name+'_wk']` (per-exercise, added .291) scanning back, and names the week.
-- [x] **1. DONE v4.9.325 — Run the Rack has its own format.** Drops added one at a time
-      on a tick, each removable, total volume (kg x reps) as the benchmark, breakdown
-      carried to next week via a dated blob with rotation. WAS: Currently `{name:'Run the Rack DB
-      Curls', format:'standard_sets', sets:1, reps:'1 descending set'}` at ~L7157, W3–4
-      only. Jon wants: a row per drop that he ADDS as he goes, tick to complete each and
-      move to the next, a "Run the rack completed" button at the bottom, **total volume
-      (kg × reps summed across drops) as the benchmark**, and the per-drop breakdown
-      surfaced next week. Nearest precedent is the pull-up chip UI (`_blabTrRemove`,
-      `_blabTrRecount`) — add-as-you-go rows already exist there. Biggest of the seven.
-- [x] **3. Core circuit compared against a different circuit.** DONE v4.9.321. Keyed by
-      the circuit itself (rounds + movements + reps); the old shared record is ignored,
-      not deleted. WAS: `coreCircuit()` (~L6914)
-      hardcodes `_timeRecordKey:'Core Circuit_time'` and `prev_best:rec('Core Circuit_time')`
-      for EVERY variant, but the movements change by block — W1–2 is Toe Touches/Bicycle/
-      Side Plank, W3–4 is Sprinter Sit-ups/V-ups/Toe Touches/Hip-ups. Same PB slot, different
-      work. Jon: "not much point — just keep for next weeks redo to check this one", i.e.
-      key the record to the CIRCUIT COMPOSITION so a redo of the same circuit compares and a
-      different one shows nothing. Same class as #2: a key that does not identify the thing.
-- [x] **4. Box jumps showed no last-week numbers.** DONE v4.9.323. The history was never
-      missing — the dropdown was nested inside the weight suggestion, which correctly
-      returns null without a load. Split; fixed for every bodyweight movement. WAS: They carry `prev_best:rec('Box Jumps_height')`
-      + `record_key:'Box Jumps_height'` (~L7223/7237/7274) — a HEIGHT record only. Nothing
-      surfaces what he actually achieved per set. `records[name+'_wk']` already holds it
-      (written for every format since .291); this is a read/render gap, not a storage one.
-- [x] **5. 1.6km run best under the timer.** DONE v4.9.323, plus a live ahead/behind gap
-      painted from the existing clock tick. WAS: The previous best
-      exists (`_phxCardioBlock`, ~L5757–5768, appends "— beat it.") but is not positioned or
-      sized to read mid-run. Rendering change only.
-- [x] **6. DONE v4.9.322 — Copenhagen planks,** with a read-fallback so his logged Nordic
-      holds still reach the new name. Nothing migrated. WAS: Nordic Planks are actually COPENHAGEN planks — Jon's own correction.** Slot 3 of
-      Day 4, W1–W12, with a `hold_secs` progression 20→45 (~L7291+). **Renaming the display
-      is the easy half; the trap is the records.** Keys are `Nordic Planks_*` (incl. `_wk`,
-      `_time`), and the harness pins the NP: hold_secs ladder by name. A blind rename orphans
-      his history — needs a read-fallback to the old key, and the harness pins updated
-      deliberately rather than made to pass.
-- [x] **7. DONE v4.9.324 — dry run for Core and WOD.** Own flag (`_phxDryRun`), because
-      `_blabDryRun` does NOT cover `_phxSaveScore` — reusing it would have logged a real
-      score and a real PB during a "preview". WAS: Dry run for Core and WOD sessions — "to check they are working but to also see
-      the format before I choose". **The machinery already exists for BLAB**: `blabOpenAudit`
-      / `blabOpenAuditDay` set `_blabDryRun` (blocks every write via the guard in
-      `blabSaveState`) and `_blabAuditMode.readOnly`. WOD/Core open via
-      `_phxStartSession(libId)` off `PHX_LIB` (~L37623). Extend the same flags rather than
-      inventing a second preview path — and note `_blabDryRun` guards BLAB's save, so the
-      PHX score/save paths (`_phxSaveScore`) need their own guard or they WILL write.
+| # | What it was | Fixed in |
+|---|---|---|
+| 1 | Run the Rack had no format — the drops lived in a note | .325 |
+| 2 | Banded Deadlift showed Rack Pull's number (key was the LIFT, not the exercise) | .320 |
+| 3 | Core circuit compared against a different circuit (one shared PB slot) | .321 |
+| 4 | Box jump history existed but was gated behind a weight suggestion | .323 |
+| 5 | 1.6km best not visible under the running clock | .323 |
+| 6 | Nordic to Copenhagen planks, with a read-fallback so his logged holds survived | .322 |
+| 7 | No dry run for WOD/Core; `_blabDryRun` does NOT cover `_phxSaveScore` | .324 |
 
-- [ ] JON — **His seven-item report, all shipped (.320-.325), NONE used by him yet.**
-      Gates only. Three of these were wrong-data bugs he can only confirm by training.
-      **What to watch, in the order he will hit it:**
-      · UPPER 2 — RUN THE RACK is a new screen. Enter each drop's kg and reps, tick to log
-        it, repeat down the rack, then "Run the rack completed". The score is TOTAL VOLUME
-        and the runner shows how far off last week he is. Nothing to compare against the
-        first time — that is correct, not a bug.
-      · UPPER 2 — the CORE CIRCUIT should show NO previous time, because this block's
-        circuit is new. Next time he does this same circuit it will compare.
-      · DAY 4 — BANDED DEADLIFT must no longer quote a Rack Pull number. It will show
-        nothing until he has done Banded Deadlift once more, then "Week N: X reps @ Ykg"
-        with the week named.
-      · DAY 4 — the holds are now COPENHAGEN PLANKS. His logged Nordic history should
-        still appear under Weekly history.
-      · DAY 4 — BOX JUMPS should now carry a "Last time" block and a Weekly history
-        dropdown, with reps and no "0kg".
-      · DAY 2 — the 1.6km run screen shows the best under the clock plus a live
-        ahead/behind gap.
-      · ANY WOD/Core — "Dry run — nothing saved" under Start. Orange banner while it runs,
-        no score kept. **Then start a REAL one and check the score IS kept** — the flag is
-        cleared on a normal start and that is the half worth confirming.
-      **A silent pass is not a pass** — ask per item.
+**The transferable part, kept because it recurred three times inside one message:** a
+record keyed by something that does not identify the thing it belongs to. The lift rather
+than the exercise (#2), one PB slot for every circuit (#3), and the same shape again on
+2026-09-11 in WOD completion. Check what a key actually identifies before trusting it.
 
 ## WAITING ON JON
 

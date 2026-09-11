@@ -4615,6 +4615,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     try { app._phxStartSession(s.id, true); } catch (e) { /* expected */ }
     finally { app._phxClearTick = realClear; }
     assert.equal(app._phxDryRun, true, 'and the dry path arms it');
+    // DISARM. Written in .324 without this, and it left _phxDryRun ARMED for every test
+    // after it in the file — so those cases ran in a mode they never declared. It only
+    // surfaced when v4.9.329 added a guard that reads the flag: two WODDONE cases failed
+    // while the identical call passed in isolation. A test that leaves global state set
+    // does not fail, it makes LATER tests quietly test something else.
+    app._phxDryRun = false;
   });
 
   // ── RUN THE RACK (v4.9.325) ───────────────────────────────────────────────
@@ -4792,5 +4798,183 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.blabRenderRack({ name: 'R', prev_rack: { total: 420, drops: [] } },
                        { elapsed: 0, rackDrops: [{ kg: 20, reps: 8 }] }, body);
     assert.ok(/260kg to beat 420kg/.test(body.innerHTML), 'the gap: ' + body.innerHTML.slice(0, 400));
+  });
+
+  // ── A FINISHED WOD READS AS FINISHED (v4.9.329) ───────────────────────────
+  // Jon, 11 Sep: Lower Power showed COMPLETED but the two WODs he had done still
+  // showed START, and the counter said "1 of 3 done".
+  //
+  // blabCalMarkCompleted only ever searched cal.sessions. Nothing marked cal.customs,
+  // so a finished WOD wrote a score to phoenix_lib_scores and the Today card read
+  // cal.customs[].status, which stayed 'pending'. Two stores, no bridge — which is
+  // precisely what he asked to be checked.
+
+  const SCORES = 'phoenix_lib_scores';
+  const CUSTOM = (id, libId, date) => ({ id, cat: 'WOD', libId, label: libId,
+                                         scheduledDate: date, status: 'pending' });
+  const calSeed = (cal) => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 3,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: NEWER });
+    seed(`blab_calendar_v1_${UID}`, cal);
+  };
+  const scoreRow = (libId, whenISO) => ({ local_id: 'x', wod_id: libId, wod_name: libId,
+                                          score: '8:00', score_type: 'time', date: whenISO });
+
+  test('WODDONE: the premise — the BLAB stamp never touched customs', () => {
+    // If this ever starts covering customs, the bridge below is redundant and should go.
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    app.blabCalMarkCompleted(3, 4);
+    const cal = read(`blab_calendar_v1_${UID}`);
+    assert.equal(cal.customs[0].status, 'pending', 'the WOD is untouched by the BLAB stamp');
+  });
+
+  test('WODDONE: the new stamp marks the scheduled custom for today', () => {
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    assert.equal(app.blabCalMarkCustomCompleted('titan-kronos'), true, 'it found the entry');
+    assert.equal(read(`blab_calendar_v1_${UID}`).customs[0].status, 'completed');
+  });
+
+  test('WODDONE: it does not reach into another day', () => {
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', dayFromToday(-3))] });
+    assert.equal(app.blabCalMarkCustomCompleted('titan-kronos'), false, 'nothing scheduled today');
+    assert.equal(read(`blab_calendar_v1_${UID}`).customs[0].status, 'pending', 'and nothing changed');
+  });
+
+  test('WODDONE: only ONE entry when the same session is on twice', () => {
+    // Doing it once completes one of them. That is the truth, not a rounding.
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today),
+                                      CUSTOM('c2', 'titan-kronos', today)] });
+    app.blabCalMarkCustomCompleted('titan-kronos');
+    const cs = read(`blab_calendar_v1_${UID}`).customs;
+    assert.equal(cs.filter((c) => c.status === 'completed').length, 1, 'exactly one');
+  });
+
+  test('WODDONE: a dry run NEVER stamps it — both flags', () => {
+    // The seam between two separate dry-run systems: this is a library path writing into
+    // the BLAB store, and blabCalSave only checks _blabDryRun.
+    const today = app._phxLocalISO();
+    [['_blabDryRun'], ['_phxDryRun']].forEach(([flag]) => {
+      calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+      app[flag] = true;
+      try { app.blabCalMarkCustomCompleted('titan-kronos'); } finally { app[flag] = false; }
+      assert.equal(read(`blab_calendar_v1_${UID}`).customs[0].status, 'pending',
+        'a preview must not complete his session (' + flag + ')');
+    });
+  });
+
+  test('WODDONE: saving a score stamps the calendar', () => {
+    // The bridge itself, from the entry point that every library score goes through.
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    app._phxSaveScore({ id: 'titan-kronos', name: 'Kronos', cat: 'WOD', scoreType: 'time' }, '8:00', '');
+    assert.equal(read(`blab_calendar_v1_${UID}`).customs[0].status, 'completed',
+      'finishing a WOD now shows as finished');
+  });
+
+  test('WODDONE: a dry-run score saves nothing AND stamps nothing', () => {
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    app._phxDryRun = true;
+    try { app._phxSaveScore({ id: 'titan-kronos', name: 'K', cat: 'WOD', scoreType: 'time' }, '8:00', ''); }
+    finally { app._phxDryRun = false; }
+    assert.equal(read(`blab_calendar_v1_${UID}`).customs[0].status, 'pending', 'still to do');
+  });
+
+  test('WODDONE: a legacy string session does not throw', () => {
+    // The custom-session builder calls _phxSaveScore(wodId, 0, 'done', name) — a string,
+    // not a session object. Pre-existing and out of scope, but it must not break here.
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    let threw = null;
+    try { app._phxSaveScore('custom-123', 0, 'done', 'My Session'); } catch (e) { threw = e; }
+    assert.equal(threw, null, 'the legacy shape survives the new hook');
+  });
+
+  // ── HIS ALREADY-FINISHED SESSIONS ─────────────────────────────────────────
+  // The stamp fixes everything from now on. It does NOT fix the two WODs he had
+  // already done when he reported this — their scores exist, the flag never will.
+
+  test('WODDONE: a score dated today counts as done even with no flag', () => {
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    seed(SCORES, [scoreRow('titan-kronos', new Date().toISOString())]);
+    assert.equal(app._blabTodayStatus({ custom: true, libId: 'titan-kronos', scheduledDate: today }),
+      'completed', "his already-finished WODs read as done without redoing them");
+  });
+
+  test('WODDONE: the date comparison is LOCAL on both sides', () => {
+    // rec.date is toISOString() — UTC. The calendar is local. At 4:30am in Brisbane the
+    // UTC date is still YESTERDAY, so slicing the ISO string fails on exactly the
+    // sessions he actually does. This is the bug that reset his walk streak until .170.
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    const local430 = new Date();
+    local430.setHours(4, 30, 0, 0);                       // 04:30 local, today
+    assert.equal(app._phxLocalISO(local430), today, 'the fixture really is today, locally');
+    seed(SCORES, [scoreRow('titan-kronos', local430.toISOString())]);
+    assert.equal(app._blabTodayStatus({ custom: true, libId: 'titan-kronos', scheduledDate: today }),
+      'completed', 'a 4:30am session counts for the day he did it');
+  });
+
+  test('WODDONE: yesterday\'s score does not complete today', () => {
+    // The negative control. Without it "any score ever" would pass everything above.
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    const y = new Date(); y.setDate(y.getDate() - 1); y.setHours(12, 0, 0, 0);
+    seed(SCORES, [scoreRow('titan-kronos', y.toISOString())]);
+    assert.equal(app._blabTodayStatus({ custom: true, libId: 'titan-kronos', scheduledDate: today }),
+      'todo', 'a session done yesterday is still to do today');
+  });
+
+  test('WODDONE: another session\'s score does not complete this one', () => {
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    seed(SCORES, [scoreRow('some-other-wod', new Date().toISOString())]);
+    assert.equal(app._blabTodayStatus({ custom: true, libId: 'titan-kronos', scheduledDate: today }),
+      'todo', 'matched on the session, not on "he did something today"');
+  });
+
+  // ── THE SCREEN ────────────────────────────────────────────────────────────
+  // The counter and the per-card state both read _blabTodayStatus, so both follow —
+  // but that is the claim, and a claim about the screen is tested on the screen.
+
+  test('WODDONE: the Today card shows COMPLETED and no START for a finished WOD', () => {
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [], customs: [CUSTOM('c1', 'titan-kronos', today)] });
+    seed(SCORES, [scoreRow('titan-kronos', new Date().toISOString())]);
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 3);
+    assert.ok(/Completed/i.test(inner.innerHTML), 'the green tag is there');
+    assert.ok(!/Start →/.test(inner.innerHTML), 'and the START button is gone');
+  });
+
+  test('WODDONE: the counter reaches "3 of 3 done" — his exact screenshot', () => {
+    // 1 BLAB + 2 WODs, all finished. It said "1 OF 3 DONE".
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [Object.assign(S(3, 4, today), { status: 'completed' })],
+              customs: [CUSTOM('c1', 'titan-kronos', today), CUSTOM('c2', 'titan-atlas', today)] });
+    seed(SCORES, [scoreRow('titan-kronos', new Date().toISOString()),
+                  scoreRow('titan-atlas', new Date().toISOString())]);
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 3);
+    assert.ok(/3 of 3 done/.test(inner.innerHTML),
+      'got: ' + (inner.innerHTML.match(/\d of \d done/) || ['(no counter)'])[0]);
+  });
+
+  test('WODDONE: an unfinished WOD still counts as outstanding', () => {
+    // The positive control for the counter: it must not simply say everything is done.
+    const today = app._phxLocalISO();
+    calSeed({ sessions: [Object.assign(S(3, 4, today), { status: 'completed' })],
+              customs: [CUSTOM('c1', 'titan-kronos', today), CUSTOM('c2', 'titan-atlas', today)] });
+    seed(SCORES, [scoreRow('titan-kronos', new Date().toISOString())]);
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 3);
+    assert.ok(/2 of 3 done/.test(inner.innerHTML),
+      'got: ' + (inner.innerHTML.match(/\d of \d done/) || ['(no counter)'])[0]);
+    assert.ok(/Start →/.test(inner.innerHTML), 'and the one left still offers its start');
   });
 }

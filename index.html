@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.328';
+var APP_VERSION='4.9.329';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19501,11 +19501,35 @@ window._blabRenderTodayError = function(err){
 // Only BLAB entries can be in progress: a custom WOD/Core has no per-block progress to
 // read, so it is completed or not. Claiming otherwise would need a mechanism that does
 // not exist, and inventing one to make the UI symmetrical is how a card comes to lie.
+// v4.9.329 — has this library session already been done today?
+//
+// The stamp above fixes every session from now on. It does NOT fix the ones Jon had
+// ALREADY finished when he reported this — their scores exist, the calendar flag never
+// will, and telling him to redo two WODs to see a tag is not a fix.
+//
+// So Today also accepts a score dated today as proof. No migration, nothing rewritten:
+// the calendar is left alone and this is a read.
+//
+// THE DATE COMPARISON IS LOCAL ON BOTH SIDES. rec.date is toISOString() — UTC — and the
+// calendar is local. At 4:30am in Brisbane the UTC date is still YESTERDAY, so slicing
+// the ISO string would have failed on exactly the sessions he actually does. That is
+// the bug that silently reset his walk streak for evening walks until .170.
+function _blabCustomDoneToday(libId, dateISO){
+  try {
+    if(!libId || typeof _phxScoresAll !== 'function') return false;
+    var day = dateISO || _blabCalTodayISO();
+    return _phxScoresAll().some(function(r){
+      if(!r || r.wod_id !== libId || !r.date) return false;
+      return _phxLocalISO(new Date(r.date)) === day;
+    });
+  } catch(_e){ return false; }
+}
+
 function _blabTodayStatus(e){
   try {
     if(!e) return 'todo';
     if(String(e.status || '') === 'completed') return 'completed';
-    if(e.custom) return 'todo';
+    if(e.custom) return _blabCustomDoneToday(e.libId, e.scheduledDate) ? 'completed' : 'todo';
     var unfin = (typeof window._blabUnfinishedToday === 'function') ? window._blabUnfinishedToday() : null;
     if(unfin && unfin.week === e.blabWeek && unfin.day === e.blabDay) return 'in_progress';
     return 'todo';
@@ -35987,6 +36011,49 @@ window.blabCalMarkCompleted = function(week, day){
   window.blabCalSave(cal);
 };
 
+// v4.9.329 — THE SAME STAMP, FOR A WOD OR CORE SESSION.
+//
+// Jon: two WODs he had finished still showed START on Today, and the counter said
+// "1 of 3 done".
+//
+// blabCalMarkCompleted above only ever searched cal.sessions — BLAB. Nothing in the
+// app marked cal.customs. So a finished WOD wrote a score to phoenix_scores and
+// wod_scores, and the Today card read cal.customs[].status, which stayed 'pending'
+// forever. Two stores, no bridge between them: exactly the question he asked.
+//
+// It is NOT only the Today screen. blabTrainingStateOn — the published API Nutrition
+// reads — tests `e.status === 'completed'` across sessions AND customs, so a day he
+// trained has been reading as 'due' to another domain for as long as this has existed.
+//
+// Matched on libId + scheduledDate. Marks ONE entry: if the same session is scheduled
+// twice in a day, finishing it once completes one of them, which is the truth.
+window.blabCalMarkCustomCompleted = function(libId, dateISO){
+  // BOTH dry-run flags. They are separate systems and this is the seam between them:
+  // _blabDryRun guards BLAB's writes, _phxDryRun guards the library's, and this
+  // function is called from a library path into the BLAB store. blabCalSave checks
+  // only _blabDryRun, so a WOD dry run would otherwise stamp the calendar for real.
+  if(window._blabDryRun || window._phxDryRun) return false;
+  if(!libId) return false;
+  try {
+    var cal = window.blabCalGet();
+    var day = dateISO || _blabCalTodayISO();
+    var hit = null;
+    for(var i=0;i<cal.customs.length;i++){
+      var c = cal.customs[i];
+      if(c.libId === libId && c.scheduledDate === day && c.status !== 'completed'){ hit = c; break; }
+    }
+    if(!hit) return false;
+    hit.status = 'completed';
+    hit.completedDate = day;
+    window.blabCalSave(cal);
+    // Repaint Today. He is on the score-saved overlay when this runs, and Today sits
+    // underneath it unrendered — without this the card still says START until he
+    // navigates away and back, which is indistinguishable from the bug being unfixed.
+    try { if(typeof renderTodayScreen === 'function') renderTodayScreen(); } catch(_r){}
+    return true;
+  } catch(_e){ console.warn('[PHX] mark custom completed failed:', _e); return false; }
+};
+
 // API other domains may call (contract-stable) — v4.9.188.
 // "What kind of day is this?" for a local YYYY-MM-DD date.
 //
@@ -38573,6 +38640,15 @@ function _phxSaveScore(session, rawScore, notes, extra){
     tier:(session.tier||session.coreType||''), score:String(rawScore), score_type:session.scoreType,
     date:new Date().toISOString(), notes:fullNotes, is_pb:isPb, sets:(extra&&extra.sets)||null };
   var all=_phxScoresAll(); all.push(rec); _phxScoresWrite(all);
+  // v4.9.329: a finished session must also READ as finished on Today. Placed after the
+  // score is stored and below the _phxDryRun early return above, so a preview can never
+  // reach it. `session` is a string on one legacy call path (the custom-session builder,
+  // ~L5257, which passes a wodId rather than a session object), hence the guard.
+  try {
+    if(session && session.id && typeof window.blabCalMarkCustomCompleted === 'function'){
+      window.blabCalMarkCustomCompleted(session.id);
+    }
+  } catch(_mc){ console.warn('[PHX] calendar completion stamp failed:', _mc); }
   // Supabase — wrapped so a missing table / offline never breaks the UI.
   try{
     if(typeof sb!=='undefined' && sb && uid){

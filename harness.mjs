@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.328'", 'version is 4.9.328');
+has("var APP_VERSION='4.9.329'", 'version is 4.9.329');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2463,7 +2463,9 @@ has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped s
   // 20 since v4.9.298: blabCalAllOn — Training's own reader, added so the Today card can
   // show a session that is already finished. blabCalSessionsOn drops completed entries
   // ("history, not an agenda") and Nutrition depends on that, so it was left alone.
-  const MINE = 20;
+  // 21 since v4.9.329: blabCalMarkCustomCompleted — the WOD/Core half of
+  // blabCalMarkCompleted, which had only ever stamped BLAB sessions.
+  const MINE = 21;
   if (n === MINE) ok('CONTRACT: blabCalGet has only its ' + MINE + ' Training call sites');
   else bad(`CONTRACT: blabCalGet is invoked ${n}× in code, expected ${MINE} (all Training's). ` +
            `If you added one, update the count. If a peer added one, that is my internal storage ` +
@@ -2556,6 +2558,38 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── A FINISHED WOD READS AS FINISHED (v4.9.329) ─────────────────────────────
+// Jon, 11 Sep: Lower Power showed COMPLETED, the two WODs he had done still showed
+// START, and the counter said "1 of 3 done". blabCalMarkCompleted only ever searched
+// cal.sessions — nothing in the app marked cal.customs.
+hasCode('window.blabCalMarkCustomCompleted = function(libId, dateISO)',
+  'WODDONE: STRUCTURAL a WOD/Core completion can be stamped on the calendar');
+// THE BRIDGE. _phxSaveScore is the one place every library score is written; without
+// this call the score store and the calendar stay two stores with nothing between them,
+// which is the bug he reported and the question he asked.
+hasCode('window.blabCalMarkCustomCompleted(session.id);',
+  'WODDONE: and saving a score actually stamps it');
+// BOTH DRY-RUN FLAGS. This is a library path writing into the BLAB store, and
+// blabCalSave checks only _blabDryRun — so a WOD preview would otherwise complete his
+// real session. The two flags are separate systems by design (.324); this is the seam.
+hasCode('if(window._blabDryRun || window._phxDryRun) return false;',
+  'WODDONE: a preview never completes a real session');
+// HIS ALREADY-FINISHED SESSIONS. The stamp is forward-only; these two WODs were done
+// before it existed. Today accepts a same-day score as proof, without rewriting anything.
+hasCode('function _blabCustomDoneToday(libId, dateISO)',
+  'WODDONE: STRUCTURAL a same-day score counts as done');
+// LOCAL ON BOTH SIDES. rec.date is toISOString() (UTC), the calendar is local. At 4:30am
+// in Brisbane the UTC date is still yesterday, so a string slice fails on exactly the
+// sessions he does. Same bug that reset his walk streak until .170.
+hasCode('return _phxLocalISO(new Date(r.date)) === day;',
+  'WODDONE: the date comparison converts, it does not slice the UTC string');
+// Behaviour in tests/training.mjs under WODDONE: — 15 cases. Proved by inversion
+// 2026-09-11, three separate ones: removing the read fallback reproduces his screenshot
+// verbatim ("got: 1 of 3 done"); slicing the UTC string breaks the 4:30am case; removing
+// the write hook turns exactly one red. That last one matters — the write is NOT what
+// fixes the Today screen, it is what fixes blabTrainingStateOn for Nutrition, which reads
+// `status === completed` across customs too.
 
 // ── RUN THE RACK (v4.9.325) ─────────────────────────────────────────────────
 // Jon wanted a drop added at a time with a tick, a "run the rack completed" button,

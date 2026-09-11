@@ -27,17 +27,10 @@ design. The three open questions are CLOSED — do not reopen them, build to thi
       peptide tile move together. They do not scroll independently.
 - [ ] **TRAINING — render your Today surfaces for a GIVEN DATE, and make your write
       controls unreachable when that date is not today.**
-- [x] **NUTRITION — DONE v4.9.328.** No write control is drawn on a day that is not
-      today: no tick, no component swap, no extra-food logger, no review card. The guard
-      is inside `_nutProgTodayCard`, keyed on the date it was asked to draw, so all three
-      callers get it — a call-site guard would have missed the calendar drill-down.
-      The tick CIRCLES stay (whether a meal was eaten is what he came to read) and the card
-      says "Viewing only". PLAN still edits any day — that is its purpose.
-      **A SWEEP FOUND A CONTROL THE ENUMERATION MISSED, AND IT WAS THE WORST ONE.**
-      `data-prog-add` passed `_nutToday()` HARDCODED, so from the calendar drill-down —
-      reachable since v4.9.296 — logging food on a screen showing the 7th wrote it to the
-      8th silently. Proven by 6 functional tests incl. one that derives the write-attribute
-      list from the screen's own source, and 5 inversions.
+- [x] **NUTRITION — DONE v4.9.328.** No write control drawn off today; guard inside
+      `_nutProgTodayCard` so all three callers get it. The trap it surfaced — a handler
+      that hardcodes `_nutToday()` — is written up in `KNOWN_ISSUES.md`; **worth ten
+      minutes for TRAINING and PEPTIDES, whose Today surfaces have the same shape.**
 
 - [ ] **PEPTIDES — same.** Your read path needs NO new work: `_pepGetDoses(ps, dateStr)`
       has taken a date since v4.9.255 and the calendar already uses it.
@@ -315,6 +308,20 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       set it. Nothing is broken — per-day picks are reachable from Today and the calendar
       — but the weekly default has no control. **Eighth instance of finished code with no
       door.** Closes when the weekly setup offers it, or it is archived as unwanted.
+
+- [ ] PM/ALL — **NUTRITION added one line to `_phxBootRestoreApply` (v4.9.330), and it is
+      shared plumbing.** It sets `window._phxRestoringPosition` around its own `navTo`,
+      so a screen can tell "the boot restore is putting me back" from "the user tapped in".
+      **It changes no routing and no behaviour outside Nutrition.** Invite revert if PM
+      would rather own the shape.
+      **Why a caller had to say it:** Jon asked Nutrition to always open on DAILY. The
+      saved-tab replay that v4.9.211 added for screen locks runs on the same `navTo`, so
+      the two are indistinguishable from inside the screen — and only the caller knows
+      which it is. `_phxBooting` already exists but is cleared BEFORE the restore's
+      `navTo`, so it cannot answer this.
+      **PEPTIDES: `_pepTab` has the identical pattern** (v4.9.212 comment says so
+      explicitly) and can read the same flag if Jon reports the same thing there. Nothing
+      of yours changed.
 
 ## OPEN — CROSS-DOMAIN
 

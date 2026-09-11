@@ -3545,7 +3545,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.329';
+var APP_VERSION='4.9.330';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -19751,6 +19751,9 @@ function _renderTodayNutritionPlaceholder(){
 // ─────────────────────────────────────────────────────────────────────────────
 
 var _nutTab = 'today';
+// What the NEXT entry to the screen should show, when something in the app is
+// navigating him somewhere specific. Consumed once, by _nutRestoreView.
+var _nutNavIntent = null;
 var _nutWeekMode = 'overview';   // WEEK tab: 'overview' | 'plan'
 var _nutWeekOffset = 0;          // WEEK tab: 0 = this week, +1 next, -1 last
 
@@ -19970,18 +19973,49 @@ function _nutSaveView(){
   } catch(_e){}
 }
 
+// THREE WAYS IN, and they do not want the same tab.
+//
+//   1. Something in the app is sending him somewhere specific — the meals tile
+//      wants DAILY, "Create week" wants PLAN. Those callers get what they asked
+//      for. They used to set _nutTab and have it overwritten here a moment later
+//      (measured: a caller asking for DAILY landed on SHOPPING), which is why the
+//      intent is a separate variable and not _nutTab — every variable has a value,
+//      so "did the caller choose this" cannot be read off _nutTab itself.
+//   2. iOS killed the app on a screen lock and the boot restore is putting him
+//      back. v4.9.211 made that keep his tab and that still holds: being dropped
+//      out of the shopping list mid-shop and back onto DAILY is the .211 bug.
+//   3. He tapped into Nutrition. DAILY — Jon, v4.9.330.
+//
+// DAILY IS THE DEFAULT AND THE RESTORE IS THE OPT-IN, deliberately that way
+// round: a new entry point added later that knows nothing about any of this gets
+// case 3, which is the one he asked for. The other order would have it silently
+// inherit whatever tab happened to be saved, which is this bug again.
 function _nutRestoreView(){
   var v = null;
   try { v = JSON.parse(localStorage.getItem('phx_nut_view_v1') || 'null'); } catch(_e){}
-  if(!v || typeof v !== 'object'){ _nutTab = 'today'; return; }
-  var tab = v.tab;
-  // 'meals' is only meaningful with a date to show; without one it would render
-  // an empty day rather than the tab he left.
-  if(tab === 'meals' && !v.mealDate) tab = 'week';
-  _nutTab       = (['today','recipes','week','meals','prep','shopping','programme'].indexOf(tab) >= 0) ? tab : 'today';
+  v = (v && typeof v === 'object') ? v : {};
+  // The position WITHIN a tab is restored either way — it is never the thing that
+  // lands him on the wrong screen, and losing it mid-plan is its own annoyance.
   _nutWeekOffset = parseInt(v.weekOffset, 10) || 0;
   _nutWeekMode   = (v.weekMode === 'plan') ? 'plan' : 'overview';
   _nutMealDate   = v.mealDate || null;
+
+  var intent = _nutNavIntent;
+  _nutNavIntent = null;                       // consumed, so it cannot leak into the next entry
+  if(_nutTabExists(intent)){ _nutTab = intent; return; }
+
+  if(window._phxRestoringPosition){
+    var tab = v.tab;
+    // 'meals' is only meaningful with a date to show; without one it would render
+    // an empty day rather than the tab he left.
+    if(tab === 'meals' && !v.mealDate) tab = 'week';
+    if(_nutTabExists(tab)){ _nutTab = tab; return; }
+  }
+  _nutTab = 'today';
+}
+
+function _nutTabExists(tab){
+  return ['today','recipes','week','meals','prep','shopping','programme'].indexOf(tab) >= 0;
 }
 
 function nutRenderScreen(){
@@ -25351,7 +25385,7 @@ function nutOpenShopList(){
 function _nutGoToWeekAndCreate(){
   var ns = nutGetState();
   if(!ns || !ns.setup_done){ nutOpenSetup(); return; }
-  _nutTab = 'week';
+  _nutNavIntent = 'week';
   navTo('nutrition');
   setTimeout(function(){ _nutCreateWeekPlan(); }, 350);
 }
@@ -26596,7 +26630,7 @@ function _nutProgWireMealsTile(tile, today){
   });
   tile.querySelectorAll('[data-prog-tile-open]').forEach(function(el){
     el.addEventListener('click', function(){
-      _nutTab = 'today';
+      _nutNavIntent = 'today';
       if(typeof navTo === 'function') navTo('nutrition');
     });
   });
@@ -26627,7 +26661,7 @@ function nutRenderMealsTile(){
       '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">PLAN &#8250;</div>' +
       '</div></div>';
     var emptyEl = tile.querySelector('#nut-meals-empty');
-    if(emptyEl) emptyEl.addEventListener('click', function(){ _nutTab = 'week'; _nutWeekMode = 'plan'; navTo('nutrition'); });
+    if(emptyEl) emptyEl.addEventListener('click', function(){ _nutNavIntent = 'week'; _nutWeekMode = 'plan'; navTo('nutrition'); });
     return;
   }
   var eatenMap  = _nutEnsureEaten(day);
@@ -26682,7 +26716,7 @@ function nutRenderMealsTile(){
     });
   });
   tile.querySelectorAll('[data-nut-meal-open]').forEach(function(el){
-    el.addEventListener('click', function(){ _nutTab = 'today'; navTo('nutrition'); });
+    el.addEventListener('click', function(){ _nutNavIntent = 'today'; navTo('nutrition'); });
   });
 }
 
@@ -44042,7 +44076,8 @@ function _phxBootRestoreApply(){
     try { localStorage.setItem('phx_lastTab_v1', tab); } catch(_e){}
     if(typeof navTo === 'function'){
       console.log('[PHX] boot restore -> ' + tab);
-      navTo(tab);
+      window._phxRestoringPosition = true;
+      try { navTo(tab); } finally { window._phxRestoringPosition = false; }
     }
   } catch(_e){ window._phxBooting = false; }
 }

@@ -433,6 +433,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nutProgSelDay = null;
     app._nutProgDayOffset = 0;
     app._nutProgPlanOffset = 0;
+    app._nutTab = 'today';
+    app._nutNavIntent = null;
+    app._nutMealDate = null;
+    app._nutWeekOffset = 0;
+    app._nutWeekMode = 'overview';
+    app.window._phxRestoringPosition = false;
     app.nutSaveState({
       setup_done: true,
       goal: 'hypertrophy',
@@ -661,7 +667,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nutTab = 'today';                    // as if arriving fresh
     app._nutWeekMode = 'overview';
     app._nutWeekOffset = 0;
-    app.navTo('nutrition');                   // the path Jon actually takes on resume
+    // THE RESUME PATH, which since v4.9.330 is the boot restore and says so. A
+    // plain tap into Nutrition lands on DAILY now; this is the screen-lock case,
+    // where losing his place mid-plan is the .211 bug.
+    app.window._phxRestoringPosition = true;
+    try { app.navTo('nutrition'); } finally { app.window._phxRestoringPosition = false; }
     assert.equal(app._nutTab, 'week', 'back on the week tab');
     assert.equal(app._nutWeekMode, 'plan', 'in plan mode');
     assert.equal(app._nutWeekOffset, 1, 'on the week he was planning');
@@ -676,7 +686,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const d = dom();
     app.nutRenderScreen();
     app._nutTab = 'today'; app._nutMealDate = null;
-    app._nutRestoreView();
+    app.window._phxRestoringPosition = true;
+    try { app._nutRestoreView(); } finally { app.window._phxRestoringPosition = false; }
     assert.equal(app._nutTab, 'meals', 'back on the day card');
     assert.equal(app._nutMealDate, days[3], 'showing the same day');
     app._nutTab = 'today';
@@ -685,7 +696,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('BUG2 a day card with no date falls back rather than rendering an empty day', () => {
     setUp(90);
     seed('phx_nut_view_v1', { tab: 'meals', mealDate: null, weekMode: 'overview', weekOffset: 0 });
-    app._nutRestoreView();
+    app.window._phxRestoringPosition = true;
+    try { app._nutRestoreView(); } finally { app.window._phxRestoringPosition = false; }
     assert.equal(app._nutTab, 'week', 'falls back to the week it came from');
     app._nutTab = 'today';
   });
@@ -4836,6 +4848,124 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       ' vs ' + prot(base).toFixed(1));
     assert.ok(prot(whites) - 3.6 < prot(base),
       'and must not overshoot by a whole extra white — it is a round UP, not a pad');
+  });
+
+  // The boot restore sets this immediately around its navTo to say "this is a
+  // position restore, not a fresh entry". Nothing else sets it.
+  const window_phxSet = (a, on) => { a.window._phxRestoringPosition = on; };
+
+  // ── which tab Nutrition opens on ─────────────────────────────────────────
+  // v4.9.330. Jon: "When tapping the NUTRITION nav button from the main app,
+  // it's landing on the Shopping tab by default. It should always open to the
+  // DAILY (today) tab."
+  //
+  // The saved view was replayed on every navTo('nutrition'), so whatever tab he
+  // last happened to leave the screen on became the tab it opened on.
+  //
+  // These drive the REAL entry points — openNutritionScreen (what the sidebar
+  // item calls) and navTo — not _nutRestoreView on its own. The helper being
+  // right is not the claim; the claim is where he lands.
+
+  const savedView = (tab) => seed('phx_nut_view_v1',
+    { tab: tab, weekOffset: 0, weekMode: 'overview', mealDate: null });
+
+  test('OPEN Nutrition opens on DAILY whatever tab he left it on', () => {
+    setUp(110);
+    // Every tab, not one lucky one — SHOPPING is just the one he reported.
+    ['shopping', 'prep', 'week', 'programme', 'recipes', 'today'].forEach((left) => {
+      savedView(left);
+      app._nutTab = left;
+      app.openNutritionScreen();
+      assert.equal(app._nutTab, 'today',
+        'left on ' + left + ', so it must still open on DAILY');
+    });
+  });
+
+  test('OPEN the same is true of navTo, which every other route goes through', () => {
+    setUp(110);
+    savedView('shopping');
+    app._nutTab = 'shopping';
+    app.navTo('nutrition');
+    assert.equal(app._nutTab, 'today', 'a plain navigation lands on DAILY');
+  });
+
+  test('OPEN a caller that wants a particular tab still gets it', () => {
+    setUp(110);
+    // "Create week" and the two meals tiles each send him somewhere specific.
+    // They used to set _nutTab and have _nutRestoreView overwrite it a moment
+    // later — measured before the fix: a caller asking for DAILY landed on
+    // SHOPPING. That is why the intent is a separate variable: every variable
+    // has a value, so "did the caller choose this" cannot be read off _nutTab.
+    savedView('shopping');
+    app._nutNavIntent = 'week';
+    app.navTo('nutrition');
+    assert.equal(app._nutTab, 'week', 'the caller asked for PLAN and got PLAN');
+  });
+
+  test('OPEN and that intent is consumed, not left lying around', () => {
+    setUp(110);
+    savedView('shopping');
+    app._nutNavIntent = 'week';
+    app.navTo('nutrition');
+    assert.equal(app._nutTab, 'week', 'first entry honours it');
+    app.navTo('nutrition');
+    assert.equal(app._nutTab, 'today',
+      'the NEXT entry is a plain one and lands on DAILY — an intent that ' +
+      'survived would send him somewhere he did not ask for, once, unrepeatably');
+  });
+
+  test('OPEN a junk intent falls through to DAILY rather than a blank screen', () => {
+    setUp(110);
+    savedView('shopping');
+    app._nutNavIntent = 'not-a-tab';
+    app.navTo('nutrition');
+    assert.equal(app._nutTab, 'today', 'unknown tab names are not honoured');
+  });
+
+  test('OPEN a screen-lock restore still puts him back where he was — v4.9.211', () => {
+    setUp(110);
+    // THE HALF THAT MUST NOT REGRESS. iOS kills the PWA on a screen lock and the
+    // boot restore returns him to Nutrition. Dropping him onto DAILY there is the
+    // .211 bug — he loses his place mid-shop. That path sets the flag; nothing
+    // else does.
+    savedView('shopping');
+    app._nutTab = 'today';
+    window_phxSet(app, true);
+    try { app.navTo('nutrition'); } finally { window_phxSet(app, false); }
+    assert.equal(app._nutTab, 'shopping',
+      'the shopping list he was interrupted in the middle of');
+  });
+
+  test('OPEN the boot restore is what announces itself — driven, not simulated', () => {
+    setUp(110);
+    // WRITTEN BECAUSE AN INVERSION FIRED NOTHING. Every case above sets
+    // _phxRestoringPosition by hand, so all of them passed with the one line that
+    // actually sets it removed from _phxBootRestoreApply. That line is the whole
+    // link between "iOS killed the app" and "put his tab back"; unexercised, it
+    // could be deleted and only Jon would find out, on a locked phone, mid-shop.
+    savedView('shopping');
+    app._nutTab = 'today';
+    seed('phx_lastTab_v1', 'nutrition');
+    app.window._phxBootRestoreTab = 'nutrition';
+    app.window._phxShouldReopenSession = () => null;   // no unfinished workout to win over it
+    app._phxBootRestoreApply();
+    assert.equal(app._nutTab, 'shopping',
+      'the real boot restore put him back on the shopping list');
+    assert.equal(app.window._phxRestoringPosition, false,
+      'and cleared the flag behind it, so the NEXT tap is a fresh entry again');
+  });
+
+  test('OPEN the position inside a tab is restored on BOTH paths', () => {
+    setUp(110);
+    // Never the thing that lands him on the wrong screen, and losing it mid-plan
+    // is its own annoyance — so it comes back whether or not the tab does.
+    seed('phx_nut_view_v1',
+      { tab: 'week', weekOffset: 2, weekMode: 'plan', mealDate: '2026-09-16' });
+    app.navTo('nutrition');
+    assert.equal(app._nutTab, 'today', 'a plain entry still lands on DAILY');
+    assert.equal(app._nutWeekOffset, 2, 'but the week he was planning came back');
+    assert.equal(app._nutWeekMode, 'plan', 'in the mode he was using');
+    assert.equal(app._nutMealDate, '2026-09-16', 'and the day he was editing');
   });
 
   // ── the home screen's meals tile ─────────────────────────────────────────

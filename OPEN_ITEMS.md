@@ -273,6 +273,26 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
 
 ## OPEN — NUTRITION
 
+- [ ] NUTRITION — **AN ACCEPTED REVIEW ADJUSTMENT MOVES THE TARGET AND NOT THE FOOD.**
+      `nutProgSetAdjust(week, delta)` changes `nutProgTargetsOn().total` — measured, week 1
+      at -3 blocks reads 2250 kcal / C188 / blocks 6.66 instead of 2550 / C263 / 9.66. The
+      PLATE does not move: lunch is `Chicken breast 135 cooked | Basmati 271.5 cooked |
+      Avocado 80 | Mixed veg 150` at 0, -3 and -5 blocks, byte-identical.
+      **Cause.** `nutProgMealsOn` sizes every item from `ix = t.phase_n - 1`, an index into
+      22 five-element per-phase arrays. The adjustment changes the phase's NUMBERS; `ix` is
+      unchanged, so the quantities are. A real phase change does move it (phase 2 rice
+      226.7 g, phase 5 rice 95 g and chicken 172 g), which is why this looks like it works.
+      **Why it matters.** This is the entire point of the weekly review. Jon weighs in, the
+      review says "losing 0.4 kg a week, take a block off", he accepts — and the food he is
+      told to eat is identical, while the number above it says he cut 100 calories. The
+      shopping list and prep plan are built from the same meals, so they do not move either.
+      Live since the review shipped; never surfaced because the settle period blocks any
+      proposal before week 4 and week 4 is 5 October.
+      **Not folded into the week-1 restructure** — that one works, because it moves the
+      PHASE and the food follows. Closes when the plate is sized from the adjusted carb
+      target rather than from the phase index alone.
+
+
 - [ ] NUTRITION — **The free-form planner's meals tile is now shadowed for the whole
       cut.** v4.9.326 made the home tile render the programme's day (it had said "Nothing
       planned for today" on every programme day since v4.9.277). Consequence, deliberate

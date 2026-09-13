@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.334';
+var APP_VERSION='4.9.335';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -21623,12 +21623,24 @@ var _NUT_PROG = {
 
 // Five phases of three weeks. Carbs are the plan; protein rises slightly as
 // calories fall, fat drifts down. These macros sum to their stated calories.
+//
+// v4.9.335: 'Adaptation' (2550) is GONE. Jon ran it as week 0 and came out level,
+// so week 1 opens where phase 2 used to and a new phase carries weeks 13-15 down
+// to 1850. Each row continues the plan's own arithmetic rather than a new idea:
+// calories step -200/-150/-150/-100/-100, protein climbs as they fall, fat drifts.
+//   208*4 + 106*4 + 66*9 = 832 + 424 + 594 = 1850.
+//
+// WEEK 0 NOW READS 2350 IF HE LOOKS BACK AT IT, and it was run at 2550. It is a
+// rehearsal the plan says counts for nothing, and the baseline weigh-in the
+// fifteen weeks are judged against is a weigh-in record, untouched by this. The
+// alternative was a sixth column and `ix` moving at ten-plus call sites, which
+// risks his real food to make one finished week display correctly.
 var _NUT_PROG_PHASES = [
-  { n:1, name:'Adaptation', from:1,  to:3,  kcal:2550, p:190, c:263, f:82 },
-  { n:2, name:'Linear',     from:4,  to:6,  kcal:2350, p:194, c:218, f:78 },
-  { n:3, name:'Intensify',  from:7,  to:9,  kcal:2200, p:198, c:186, f:74 },
-  { n:4, name:'Peak push',  from:10, to:12, kcal:2050, p:202, c:153, f:70 },
-  { n:5, name:'Finish',     from:13, to:15, kcal:1950, p:205, c:130, f:68 }
+  { n:1, name:'Linear',     from:1,  to:3,  kcal:2350, p:194, c:218, f:78 },
+  { n:2, name:'Intensify',  from:4,  to:6,  kcal:2200, p:198, c:186, f:74 },
+  { n:3, name:'Peak push',  from:7,  to:9,  kcal:2050, p:202, c:153, f:70 },
+  { n:4, name:'Deep cut',   from:10, to:12, kcal:1950, p:205, c:130, f:68 },
+  { n:5, name:'Finish',     from:13, to:15, kcal:1850, p:208, c:106, f:66 }
 ];
 
 // The four formulas. `when` is 'daily' | 'lift' | 'hiit'.
@@ -21861,30 +21873,30 @@ function nutProgRiceFor(riceId, blocks){
 // `carb:true` marks an item the ladder acts on. Everything else is an anchor.
 var _NUT_PROG_PLATE = [
   // meal    name                     per-phase grams          macros per 100 g
-  { m:'pre',    n:'Banana', grp:'produce', piece:120,  g:[120,120,120,120,85],  carb:true,  u:'',        k:89,  p:1.1, c:21,  f:0.3 },
+  { m:'pre',    n:'Banana', grp:'produce', piece:120,  g:[120,120,120,85,85],  carb:true,  u:'',        k:89,  p:1.1, c:21,  f:0.3 },
 
-  { m:'bfast',  n:'Oats', grp:'carb',              g:[60,60,52,45,43],      carb:true,  u:' dry',    k:389, p:13,  c:67,  f:7 },
-  { m:'bfast',  n:'Whey protein', grp:'protein',      g:[38,46,50,56,58],                  u:'',        k:400, p:82,  c:5,   f:5 },
-  { m:'bfast',  n:'Blueberries', grp:'produce',       g:[80,80,80,80,80],      carb:true,  u:'',        k:57,  p:0.7, c:10,  f:0.3 },
-  { m:'bfast',  n:'Semi-skimmed milk', grp:'dairy', g:[80,80,50,35,20],      carb:true,  u:' ml',     k:50,  p:3.5, c:5,   f:1.8 },
+  { m:'bfast',  n:'Oats', grp:'carb',              g:[60,52,45,43,26],      carb:true,  u:' dry',    k:389, p:13,  c:67,  f:7 },
+  { m:'bfast',  n:'Whey protein', grp:'protein',      g:[46,50,56,58,60],                  u:'',        k:400, p:82,  c:5,   f:5 },
+  { m:'bfast',  n:'Blueberries', grp:'produce',       g:[80,80,80,80,50],      carb:true,  u:'',        k:57,  p:0.7, c:10,  f:0.3 },
+  { m:'bfast',  n:'Semi-skimmed milk', grp:'dairy', g:[80,50,35,20,0],      carb:true,  u:' ml',     k:50,  p:3.5, c:5,   f:1.8 },
 
   { m:'midam',  n:'Greek yoghurt, 0%', grp:'dairy', g:[200,200,200,200,200],             u:'',        k:57,  p:10,  c:4,   f:0.2 },
-  { m:'midam',  n:'Almonds', grp:'fat',           g:[30,30,28,26,24],                  u:'',        k:579,p:21,c:9,f:50 },
+  { m:'midam',  n:'Almonds', grp:'fat',           g:[30,28,26,24,22],                  u:'',        k:579,p:21,c:9,f:50 },
 
-  { m:'lunch',  n:'Chicken breast', grp:'protein', yld:0.75,    g:[135,135,154,165,172],             u:' cooked', k:165, p:30,  c:0,   f:3.6 },
-  { m:'lunch',  n:'Rice', grp:'carb', rice:true,              g:[230,179,143,79,61],   carb:true,  u:' cooked', k:130, p:2.7, c:28,  f:0.3 },
-  { m:'lunch',  n:'Avocado',           g:[80,80,75,70,60],                  u:'',        k:160, p:2,   c:1,   f:15 },
+  { m:'lunch',  n:'Chicken breast', grp:'protein', yld:0.75,    g:[135,154,165,172,178],             u:' cooked', k:165, p:30,  c:0,   f:3.6 },
+  { m:'lunch',  n:'Rice', grp:'carb', rice:true,              g:[179,143,79,61,45],   carb:true,  u:' cooked', k:130, p:2.7, c:28,  f:0.3 },
+  { m:'lunch',  n:'Avocado',           g:[80,75,70,60,52],                  u:'',        k:160, p:2,   c:1,   f:15 },
   { m:'lunch',  n:'Mixed vegetables', grp:'produce',  g:[150,150,150,150,150], carb:true,  u:'',        k:35,  p:2,   c:5.3, f:0.3 },
 
   { m:'arvo',   n:'Tuna, springwater', grp:'protein', tin:145, g:[100,100,100,100,100],             u:'',        k:109, p:25,  c:0,   f:0.8 },
-  { m:'arvo',   n:'Rice cakes', grp:'carb', count:true,        g:[2,1,0,0,0],           carb:true,  u:'',        k:387, p:8,   c:81,  f:3, each:9.5 },
-  { m:'arvo',   n:'Peanut butter', grp:'fat',     g:[15,15,8,0,0],                     u:'',        k:588, p:25,  c:20,  f:50 },
+  { m:'arvo',   n:'Rice cakes', grp:'carb', count:true,        g:[1,0,0,0,0],           carb:true,  u:'',        k:387, p:8,   c:81,  f:3, each:9.5 },
+  { m:'arvo',   n:'Peanut butter', grp:'fat',     g:[15,8,0,0,0],                     u:'',        k:588, p:25,  c:20,  f:50 },
 
-  { m:'dinner', n:'Salmon fillet', grp:'protein',     g:[135,135,140,150,160],             u:'',        k:208, p:22,  c:0,   f:13 },
+  { m:'dinner', n:'Salmon fillet', grp:'protein',     g:[135,140,150,160,168],             u:'',        k:208, p:22,  c:0,   f:13 },
   // FIXED. The fresh veg side is not a swap slot — see _NUT_PROG_DINNER_VEG.
-  { m:'dinner', n:'Sweet potato', grp:'produce',      g:[260,144,115,75,35],   carb:true,  u:'',        k:86,  p:1.6, c:20,  f:0.1 },
+  { m:'dinner', n:'Sweet potato', grp:'produce',      g:[144,115,75,35,15],   carb:true,  u:'',        k:86,  p:1.6, c:20,  f:0.1 },
   { m:'dinner', n:'Greens', grp:'produce',            g:[200,200,200,200,200], carb:true,  u:'',        k:35,  p:2.8, c:4,   f:0.4 },
-  { m:'dinner', n:'Olive oil', grp:'fat',         g:[13,12,12,11,10],                  u:' ml',     k:884, p:0,   c:0,   f:100 },
+  { m:'dinner', n:'Olive oil', grp:'fat',         g:[12,12,11,10,9],                  u:' ml',     k:884, p:0,   c:0,   f:100 },
 
   // MEAL 7, and it is OFF by default. The source plan's before-bed meal — egg
   // whites and a spoon of nut butter. Fixed across the phases: it is a whole
@@ -23130,7 +23142,7 @@ var _NUT_BFAST_PROTEIN_ITEM = 'Whey protein';   // the plate row the pick replac
 // and a test proves that rather than this comment asserting it.
 var _NUT_EGG_WHITE_G = 33;                        // one large egg white, grams
 var _NUT_EGG_WHITE = { n:'Egg whites', grp:'protein', count:true, each:_NUT_EGG_WHITE_G,
-                       each_u:' ml', g:[7,9,10,11,11], u:'',
+                       each_u:' ml', g:[9,10,11,11,12], u:'',
                        k:52, p:10.9, c:0.7, f:0.17 };
 // Two eggs, counted, because that is how Jon specified the meal and how anyone
 // cooks it. 50 g is one large egg without its shell, so the macros are unchanged

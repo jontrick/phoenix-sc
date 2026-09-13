@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.334'", 'version is 4.9.334');
+has("var APP_VERSION='4.9.335'", 'version is 4.9.335');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -3501,10 +3501,11 @@ hasCode('function _nutProgPartsMacros(',
         'item he cannot buy');
 hasCode('function _nutPartG(',
         'EGGS: and a part can carry a per-phase weight, like a plate row');
-hasCode('g:[7,9,10,11,11]',
-        'EGGS: the whites FOLLOW THE PHASE — 7 whites to 11. Held at the phase-1 ' +
-        'quantity the option ran 7.2 g of protein SHORT at phase 5, because the ' +
-        'whey it replaces grows 38 g to 58 g');
+hasCode('g:[9,10,11,11,12]',
+        'EGGS: the whites FOLLOW THE PHASE — 9 whites to 12. Held at one quantity ' +
+        'the option ran 7.2 g of protein SHORT at the last phase, because the whey ' +
+        'it replaces grows across the cut. Was [7,9,10,11,11] until v4.9.331 ' +
+        'dropped the opening phase — the column moved with every other one');
 hasCode('function _nutProgPlateRowIn(',
         'EGGS: a plate row is looked up per MEAL — two meals can carry one food at ' +
         'different weights, and the first match would size one from the other');
@@ -3565,7 +3566,7 @@ hasCode("(isToday ? '' : ' &middot; not today')",
         'mistaking it for today would put adherence on the wrong date');
 
 // Whole eggs. Jon: "eg 1 whole egg, 3 egg whites this is easier to buy to".
-hasCode("each_u:' ml', g:[7,9,10,11,11]", 'EGGW: the breakfast whites are whole counts');
+hasCode("each_u:' ml', g:[9,10,11,11,12]", 'EGGW: the breakfast whites are whole counts');
 hasCode("_pt.count ? Math.max(1, Math.round(_pScaled))",
         'EGGW: and STAY whole through Meal 7\'s trim, which had been scaling ' +
         'seven of them to 5.3');
@@ -3612,7 +3613,7 @@ hasCode("row.getAttribute('data-prog-day') || _nutToday()",
 // Egg whites counted, not poured. Jon: "based on average of whole eggs and how
 // many that would be instead of ml."
 hasCode('_NUT_EGG_WHITE_G = 33',   'EGGW: one large egg white, written down as the basis');
-hasCode('g:[7,9,10,11,11]', 'EGGW: the breakfast whites counted, phase by phase, in WHOLE whites');
+hasCode('g:[9,10,11,11,12]', 'EGGW: the breakfast whites counted, phase by phase, in WHOLE whites');
 hasCode('function _nutUnitMult(',
         'EGGW: ONE quantity-to-multiplier helper. Counting them meant six call ' +
         'sites had to agree about what a portion is, which is five too many to ' +

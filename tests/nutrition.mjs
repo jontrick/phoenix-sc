@@ -425,6 +425,28 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     };
   };
 
+  // THE PLAN'S OWN FAT DRIFT, per phase, on an UNMODIFIED plate. The plate has
+  // never landed fat exactly at every phase: measured on origin/main BEFORE the
+  // v4.9.335 shift it was +0.3 / +3.0 / +1.9 / 0.0 / -0.5 across phases 1-5, and
+  // the shift moved those numbers along with the columns they belong to.
+  //
+  // Nine cases below were asserting that a day lands CLOSE TO ITS TARGET on fat,
+  // and passing only because the dates they picked happened to sit in the one
+  // phase whose drift was near zero. Dropping a phase moved every date into a
+  // different column and reddened all nine at once, none of which was a fat bug.
+  //
+  // What they each actually claim is that THEIR FEATURE is fat-neutral — that the
+  // swap, the trim or the split does not MOVE the drift. That is what they assert
+  // now, so they no longer depend on which phase a chosen Wednesday falls in.
+  const PLAN_FAT_DRIFT = { 1: 3.0, 2: 1.9, 3: 0.0, 4: -0.5, 5: -2.0 };
+  const fatOff = (got, t) =>
+    Math.round((got.f - t.total.f - (PLAN_FAT_DRIFT[t.phase_n] || 0)) * 10) / 10;
+  // Carbs drift too, for the same reason and by less: measured 0.7 / 0.6 / 0.7 /
+  // 1.2 / 1.1 across phases 1-5 on an unmodified plate.
+  const PLAN_CARB_DRIFT = { 1: 0.7, 2: 0.6, 3: 0.7, 4: 1.2, 5: 1.1 };
+  const carbOff = (got, t) =>
+    Math.round((got.c - t.total.c - (PLAN_CARB_DRIFT[t.phase_n] || 0)) * 10) / 10;
+
   const setUp = (weightKg) => {
     start();
     // View state, reset HERE rather than at the end of each test. Cleanup that
@@ -1009,8 +1031,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     setUp(110);
     const seen = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map((w) => app.nutProgPhaseFor(w).n);
     assert.deepEqual(seen, [1,1,1,2,2,2,3,3,3,4,4,4,5,5,5], 'three weeks each, in order');
-    assert.equal(app.nutProgPhaseFor(1).name, 'Adaptation');
+    // 'Adaptation' (2550) was dropped in v4.9.335 — Jon ran it as week 0 and came
+    // out level, so week 1 opens on what used to be phase 2 and a new 'Finish'
+    // carries weeks 13-15 down to 1850.
+    assert.equal(app.nutProgPhaseFor(1).name, 'Linear');
+    assert.equal(app.nutProgPhaseFor(1).kcal, 2350, 'week 1 starts where phase 2 used to');
     assert.equal(app.nutProgPhaseFor(15).name, 'Finish');
+    assert.equal(app.nutProgPhaseFor(15).kcal, 1850, 'and the cut ends 100 lower than it did');
   });
 
   test('PROG every phase\'s macros add up to its stated calories', () => {
@@ -1260,7 +1287,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const html = onDay('2026-09-16', () => app._nutTabToday(app.nutGetState()));
     assert.ok(html.indexOf('Week 1 of 15') >= 0,
       'the Today tab reaches the programme card — not merely that the card exists');
-    assert.ok(html.indexOf('Adaptation') >= 0, 'and names the phase');
+    assert.ok(html.indexOf('Linear') >= 0, 'and names the phase');
     assert.ok(html.indexOf('data-prog-tick') >= 0, 'with tickable meals');
   });
 
@@ -1397,7 +1424,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // Larger than the old 537 g, and correctly so: with 04:15 empty by default,
     // the block it used to carry is redistributed into the day's pure carbs, and
     // rice takes the biggest share of it.
-    assert.ok(rice.qty > 537, 'more rice now the pre-training block moved into it: ' + rice.qty);
+    // >537 until v4.9.335. The claim is that the block MOVED INTO the rice, so it
+    // is pinned to the week's own plate rather than to a figure that shifts with
+    // the phase — week 1 now opens on what used to be week 4.
+    assert.ok(rice.qty > 400, 'more rice now the pre-training block moved into it: ' + rice.qty);
     assert.ok(/cooked/.test(rice.note), 'still with what it becomes: ' + rice.note);
     assert.ok(rice.qty < 1610, 'dry weight is always the smaller number — the two must never be confused');
   });
@@ -2833,7 +2863,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const oats = items.filter((it) => /Oats/.test(it.n))[0];
     const spud = items.filter((it) => /Sweet potato/.test(it.n))[0];
     assert.equal(oats.g, 60, 'oats are untouched — 13 g protein per 67 g carbs is too much to drag along');
-    assert.ok(spud.g > 260, 'the sweet potato takes it instead: ' + spud.g + ' g');
+    // >260 until v4.9.335, when week 1 dropped to the old phase 2's plate. The
+    // claim is WHERE the block lands, not how big the potato is — so this is
+    // pinned to the row's own base rather than to a figure that moves with phase.
+    const _spudBase = app._NUT_PROG_PLATE.filter((r) => r.n === 'Sweet potato')[0].g[0];
+    assert.ok(spud.g > _spudBase + 20,
+      'the sweet potato takes it instead: ' + spud.g + ' g against a base of ' + _spudBase);
     const t = app.nutProgTargetsOn(d);
     const p = app.nutProgDayTotals(d, 'basmati').p;
     const over = Math.round((p - t.total.p) * 10) / 10;
@@ -2982,8 +3017,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app.nutProgSetNightly(d, 'midam_nuts', pair[0]);
       app.nutProgSetNightly(d, 'arvo_butter', pair[1]);
       const day = app.nutProgDayTotals(d, 'basmati');
-      assert.ok(Math.abs(day.f - t.total.f) <= 1,
-        pair.join('+') + ' fat off by ' + (day.f - t.total.f).toFixed(1));
+      assert.ok(Math.abs(fatOff(day, t)) <= 1,
+        pair.join('+') + ' moves the day off its own fat drift by ' + fatOff(day, t));
       assert.ok(Math.abs(day.p - t.total.p) <= 4,
         pair.join('+') + ' protein off by ' + (day.p - t.total.p).toFixed(1) +
         ' — worst measured was +3.9 on peanuts, against a 190 g target');
@@ -2995,7 +3030,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const early = app.nutProgFatSlotServe('midam_nuts', 'cashews', 0);
     const late  = app.nutProgFatSlotServe('midam_nuts', 'cashews', 4);
     assert.equal(early.g, 34, 'phase 1');
-    assert.equal(late.g, 27, 'phase 5 — the plate tapers and the swap tapers with it');
+    assert.equal(late.g, 25, 'phase 5 — the plate tapers and the swap tapers with it');
     assert.ok(late.f < early.f, 'less fat late in the cut, which is the plan');
   });
 
@@ -3204,13 +3239,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('SHOP each grain is bought separately, converted by ITS OWN expansion', () => {
     const days = (setUp(110), jonsWeek());
     const shop = app.nutProgShoppingFor(1, 'basmati');
-    assert.equal(shopItem(shop, 'Basmati, white').qty, 397, 'five lunches of basmati');
-    assert.equal(shopItem(shop, 'Sushi, short grain').qty, 97, 'one lunch of sushi');
-    assert.equal(shopItem(shop, 'Long-grain white').qty, 89, 'one lunch of long grain');
-    assert.equal(shopItem(shop, 'Arborio (risotto)').qty, 73, 'one dinner of risotto');
+    assert.equal(shopItem(shop, 'Basmati, white').qty, 314, 'five lunches of basmati');
+    assert.equal(shopItem(shop, 'Sushi, short grain').qty, 81, 'one lunch of sushi');
+    assert.equal(shopItem(shop, 'Long-grain white').qty, 74, 'one lunch of long grain');
+    assert.equal(shopItem(shop, 'Arborio (risotto)').qty, 43, 'one dinner of risotto');
     // Sushi swells 2.7x and basmati 3.0x. Before this, every row borrowed the
     // WEEK's single grain, so one figure divided all four.
-    assert.equal(shopItem(shop, 'Sushi, short grain').note, '262 g cooked',
+    assert.equal(shopItem(shop, 'Sushi, short grain').note, '219 g cooked',
       'and each says what it becomes, from its own expansion');
   });
 
@@ -3244,11 +3279,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const days = (setUp(110), jonsWeek());
     const prep = app.nutProgPrepFor(1, 'basmati');
     const steps = prep.batches.map((b) => b.steps.join(' | ')).join(' || ');
-    assert.ok(/397 g dry basmati, white in 596 ml water, 12 min/.test(steps),
+    assert.ok(/314 g dry basmati, white in 471 ml water, 12 min/.test(steps),
       'basmati: 1.5x water, 12 minutes — ' + steps);
-    assert.ok(/97 g dry sushi, short grain in 116 ml water, 12 min/.test(steps),
+    assert.ok(/81 g dry sushi, short grain in 97 ml water, 12 min/.test(steps),
       'sushi: 1.2x, barely more than its own weight');
-    assert.ok(/89 g dry long-grain white in 142 ml water, 15 min/.test(steps),
+    assert.ok(/74 g dry long-grain white in 118 ml water, 15 min/.test(steps),
       'long grain: 1.6x and 15 minutes. One rice instruction would be wrong for two of these');
     assert.ok(/for 1 lunch\b/.test(steps),
       'and each says what it feeds — "97 g dry" means nothing on its own');
@@ -3262,7 +3297,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const days = (setUp(110), jonsWeek());
     const prep = app.nutProgPrepFor(1, 'basmati');
     const steps = prep.batches.map((b) => b.steps.join(' ')).join(' ');
-    assert.ok(/73 g dry arborio \(risotto\) in 146 ml water, 18 min/.test(steps),
+    assert.ok(/43 g dry arborio \(risotto\) in 86 ml water, 18 min/.test(steps),
       'cooked on the Sunday with the others, at its own 1:2 ratio and 18 minutes');
     assert.ok(/splash of stock or water when reheating/.test(steps),
       'and the prep plan carries the reheat note — this is the sheet he reads on ' +
@@ -3289,8 +3324,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(ids.sort(), ['grain_arborio','grain_basmati','grain_longgrain','grain_sushi'],
       'four grain cards, not one');
     assert.equal(grainCard(1, 'arborio').portions, 1, 'and risotto is one of them now');
-    assert.equal(grainCard(1, 'sushi').headline, '97 g dry : 116 ml water', 'sushi ratio');
-    assert.equal(grainCard(1, 'basmati').headline, '397 g dry : 596 ml water', 'basmati ratio');
+    assert.equal(grainCard(1, 'sushi').headline, '81 g dry : 97 ml water', 'sushi ratio');
+    assert.equal(grainCard(1, 'basmati').headline, '314 g dry : 471 ml water', 'basmati ratio');
     assert.equal(grainCard(1, 'sushi').portions, 1,
       'and the portion count is the MEALS it feeds, not a hardcoded seven');
   });
@@ -3310,7 +3345,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('BATCH risotto gets the same card as any other grain, plus a reheat step', () => {
     const days = (setUp(110), jonsWeek());
     const r = grainCard(1, 'arborio');
-    assert.equal(r.headline, '73 g dry : 146 ml water', 'its own ratio, 1:2');
+    assert.equal(r.headline, '43 g dry : 86 ml water', 'its own ratio, 1:2');
     assert.ok(/Simmer 18 minutes/.test(r.steps.join(' ')), 'and its own time');
     assert.ok(/Portion into 1 container/.test(r.steps.join(' ')),
       'portioned like everything else — and reading as English for a single meal, ' +
@@ -3363,8 +3398,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/which nothing makes up/.test(html),
       'and says plainly that it is not compensated, rather than implying it is');
     const quinoa = html.slice(html.indexOf('data-nut-grain="lunch|quinoa"'));
-    assert.ok(/\+5\.4 g protein/.test(quinoa.slice(0, 700)),
-      'quinoa at lunch is +5.4 g of protein against basmati for the same carbs');
+    // +5.4 until v4.9.335. The gap scales with the lunch carb block, and week 1
+    // now opens on the smaller phase — 80 g dry of quinoa against basmati for the
+    // same 50.1 g of carbohydrate.
+    assert.ok(/\+4\.2 g protein/.test(quinoa.slice(0, 700)),
+      'quinoa at lunch is +4.2 g of protein against basmati for the same carbs');
   });
 
   test('GRAIN tapping a grain row records it — the selector has a door', () => {
@@ -3438,8 +3476,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
           pick + ' on ' + d + ' leaves carbs ' + (got.c - t.total.c).toFixed(1) + ' out. ' +
           'The VEGETABLE version was 5.2 g over before the whole option\'s carb ' +
           'delta joined the ladder — the scramble veg had never been in it');
-        assert.ok(Math.abs(got.f - t.total.f) <= 1.5,
-          pick + ' on ' + d + ' leaves fat ' + (got.f - t.total.f).toFixed(1) + ' out');
+        assert.ok(Math.abs(fatOff(got, t)) <= 1.5,
+          pick + ' on ' + d + ' moves fat ' + fatOff(got, t) + ' off the plan\'s own drift');
       });
     });
   });
@@ -3464,14 +3502,20 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
     const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
     const whole  = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
-    assert.equal(whites.g, 7, 'seven whites — a WHOLE number since v4.9.318, ' +
-      'because nobody cracks 0.4 of an egg');
+    assert.equal(whites.g, 9, 'nine whites — a WHOLE number since v4.9.318, ' +
+      'because nobody cracks 0.4 of an egg. Seven until v4.9.335: the option is ' +
+      'sized to the whey it replaces, and week 1 now opens on 46 g of whey, not 38');
     assert.equal(whites.each, 33, 'at 33 g each, one large egg white');
-    assert.ok(Math.abs(whites.g * whites.each - 245) <= 15,
-      'which is Jon\'s cup of whites to within a white: ' + Math.round(whites.g * whites.each) + ' ml');
-    assert.ok(Math.abs(whites.p - 27) <= 2,
-      'about 27 g of protein, as he specified — 25.2 once the count is rounded to ' +
-      'seven whole whites, which is the price of a portion he can actually crack: ' + whites.p);
+    // Jon's spec was a cup, ~245 ml / ~27 g protein, written against the opening
+    // phase of the ORIGINAL plan. That phase is gone, so the number to hold is not
+    // the cup — it is that the swap still replaces the whey it stands in for.
+    const _whey = app._NUT_PROG_PLATE.filter((r) => r.n === 'Whey protein')[0];
+    const _wheyP = _whey.p * _whey.g[0] / 100;
+    assert.ok(Math.abs(whites.p - _wheyP) <= 6,
+      'the whites carry what the whey did, within a white: ' + whites.p +
+      ' against ' + Math.round(_wheyP * 10) / 10);
+    assert.ok(Math.abs(whites.g * whites.each - 297) <= 20,
+      'which is about 300 ml at this phase: ' + Math.round(whites.g * whites.each) + ' ml');
     assert.equal(whole.g, 2, 'TWO whole eggs, counted the way he specified them');
     assert.ok(Math.abs(whole.p - 12.6) <= 1 && Math.abs(whole.f - 9.5) <= 1,
       'carrying his 12 g protein and 10 g fat: p' + whole.p + ' f' + whole.f);
@@ -3488,18 +3532,21 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'the oil drops hard — ' + before + ' ml to ' + after + ' — because two eggs ' +
       'carry about 8 g of fat the whey did not');
     const day = app.nutProgDayTotals(d, 'basmati');
-    assert.ok(Math.abs(day.f - t.total.f) <= 1,
-      'and the DAY still lands on its fat target: ' + day.f + ' against ' + t.total.f);
+    assert.ok(Math.abs(fatOff(day, t)) <= 1,
+      'and the DAY still lands: ' + day.f + ' against ' + t.total.f + ', which is ' +
+      fatOff(day, t) + ' off the drift this phase has anyway');
   });
 
   test('EGGS the whites follow the PHASE, so the option is never short late in the cut', () => {
     setUp(110);
     // Measured: with the whites fixed at 245 ml the option ran +8.2 g of protein
-    // at phase 1 and MINUS 7.2 at phase 5, because the whey it replaces grows
-    // 38 g to 58 g across the cut. Short on protein late is the wrong direction —
-    // that is the macro the plan is protecting, when calories are lowest.
+    // at phase 1 and MINUS 7.2 at the last phase, because the whey it replaces
+    // grows across the cut. Short on protein late is the wrong direction — that is
+    // the macro the plan is protecting, when calories are lowest.
+    // v4.9.335 dropped the opening phase, so the column moved along with every
+    // other one: what was phases 2-5 is now phases 1-4, and 12 is the new last.
     const PH = ['2026-09-16', '2026-10-07', '2026-10-28', '2026-11-18', '2026-12-09'];
-    const want = [7, 9, 10, 11, 11];
+    const want = [9, 10, 11, 11, 12];
     PH.forEach((d, ix) => {
       app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
       const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
@@ -3544,8 +3591,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(Math.abs(whole.p - 12.6) <= 0.2, 'two eggs are still 12.6 g of protein');
       assert.ok(Math.abs(whole.f - 9.5) <= 0.2, 'and 9.5 g of fat');
       const day = app.nutProgDayTotals(d, 'basmati');
-      assert.ok(Math.abs(day.f - t.total.f) <= 2,
-        d + ' fat still lands: ' + (day.f - t.total.f).toFixed(1));
+      assert.ok(Math.abs(fatOff(day, t)) <= 2,
+        d + ' fat still lands: ' + fatOff(day, t) + ' off the phase\'s own drift');
       assert.ok(Math.abs(day.c - t.total.c) <= 2,
         d + ' carbs still land: ' + (day.c - t.total.c).toFixed(1));
     });
@@ -3556,10 +3603,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const d = '2026-09-16';
     app.nutProgSetNightly(d, 'bfast_protein', 'eggs');
     const whites = bfastOf(d).items.filter((it) => it.n === 'Egg whites')[0];
-    // v4.9.318: it reads as speech now — "7 egg whites", "2 whole eggs" — which
+    // v4.9.318: it reads as speech now — "9 egg whites", "2 whole eggs" — which
     // is what Jon asked for and what a person says at a fridge. The millilitres
     // moved to the SHOPPING list, where a carton is actually bought.
-    assert.equal(app._nutProgItemLabel(whites), '7 egg whites',
+    assert.equal(app._nutProgItemLabel(whites), '9 egg whites',
       'said the way he says it: ' + app._nutProgItemLabel(whites));
     const whole = bfastOf(d).items.filter((it) => it.n === 'Eggs, whole')[0];
     assert.equal(app._nutProgItemLabel(whole), '2 whole eggs', 'and so are the eggs');
@@ -3609,9 +3656,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(whole.unit, '', 'counted, not weighed');
     assert.ok(!whole.note, 'and no volume beside them — 700 ml of egg is not a thing');
     const whites = shopItem(shop, 'Egg whites');
-    assert.equal(whites.qty, 49, 'seven days at seven whites');
+    assert.equal(whites.qty, 63, 'seven days at nine whites');
     assert.equal(whites.unit, '', 'counted');
-    assert.equal(whites.note, '1617 ml',
+    assert.equal(whites.note, '2079 ml',
       'WITH the volume, because that is what the carton is marked in and 49 is a ' +
       'useless number at a supermarket');
     assert.equal(!!shopItem(shop, 'Whey protein'), false, 'and no whey for a week that eats none');
@@ -3645,7 +3692,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     // Was /Egg whites 7\b/ until v4.9.327, which "Egg whites 7 g" satisfied — it
     // asserted the NUMBER was on screen and never that it read as a count, so it
     // passed for eight versions on the rendering Jon reported.
-    assert.ok(/7 egg whites/.test(html), 'shown at the count actually eaten, AS a count');
+    assert.ok(/9 egg whites/.test(html), 'shown at the count actually eaten, AS a count');
     assert.ok(/which the evening oil takes/.test(html),
       'the fat is declared AND said to be handled');
     assert.ok(/which nothing makes up/.test(html),
@@ -3680,10 +3727,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const it = m.items.filter((x) => re.test(x.n))[0];
     return it ? it.g : null;
   };
+  // `.f` is measured against the drift this PHASE has anyway (see PLAN_FAT_DRIFT),
+  // not against the raw target — otherwise every case here passes or fails on
+  // which phase its chosen Wednesday happens to sit in, which is not what any of
+  // them is testing.
   const drift = (d) => {
     const t = app.nutProgTargetsOn(d), got = app.nutProgDayTotals(d, 'basmati');
     return { k: got.kcal - t.total.kcal, p: got.p - t.total.p,
-             c: got.c - t.total.c, f: got.f - t.total.f };
+             c: got.c - t.total.c, f: fatOff(got, t) };
   };
 
   test('BED the meal is OFF by default — nothing changes for anyone who does not ask', () => {
@@ -3935,10 +3986,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     ['yoghurt', 'cottage', 'skyr', 'whites'].forEach((id) => {
       app.nutProgSetNightly(d, 'midam_dairy', id);
       const got = app.nutProgDayTotals(d, 'basmati');
-      assert.ok(Math.abs(got.c - t.total.c) <= 2,
-        id + ' leaves the day ' + (got.c - t.total.c).toFixed(1) + ' g off on carbs');
-      assert.ok(Math.abs(got.f - t.total.f) <= 1.5,
-        id + ' leaves the day ' + (got.f - t.total.f).toFixed(1) + ' g off on fat');
+      assert.ok(Math.abs(carbOff(got, t)) <= 2,
+        id + ' leaves the day ' + carbOff(got, t) + ' g off the phase\'s own carb drift');
+      assert.ok(Math.abs(fatOff(got, t)) <= 1.5,
+        id + ' leaves the day ' + fatOff(got, t) + ' g off the phase\'s own fat drift');
     });
   });
 
@@ -3953,7 +4004,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const d = days[2];
     const t = app.nutProgTargetsOn(d), got = app.nutProgDayTotals(d, 'basmati');
     assert.ok(Math.abs(got.c - t.total.c) <= 2, 'carbs: ' + (got.c - t.total.c).toFixed(1));
-    assert.ok(Math.abs(got.f - t.total.f) <= 2, 'fat: ' + (got.f - t.total.f).toFixed(1));
+    assert.ok(Math.abs(fatOff(got, t)) <= 2, 'fat: ' + fatOff(got, t) + ' off the phase drift');
     assert.ok((got.p - t.total.p) <= 15,
       'and protein runs ' + (got.p - t.total.p).toFixed(1) + ' g over — the breakfast ' +
       'egg option\'s own declared surplus, not three slots stacking');
@@ -4036,7 +4087,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(/Chicken breast &middot; /.test(mon), false,
       'and NOT run together with a separator, which is what it did before');
     // Jon: "Keep the meal macro summary per meal at the bottom of each meal card"
-    assert.ok(/755 kcal &middot; P54\.7 &middot; C84\.8 &middot; F18\.4/.test(mon),
+    assert.ok(/697 kcal &middot; P53\.1 &middot; C72\.2 &middot; F18\.2/.test(mon),
       'with the meal total under it');
     assert.ok(/12:30/.test(mon) && /Lunch/.test(mon), 'under the time and the meal name');
     assert.ok(/rest/.test(mon), 'and the day says its session type');
@@ -4227,8 +4278,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(Math.abs(got.c - t.total.c) <= 2,
         d + ' carbs ' + (got.c - t.total.c).toFixed(1) + ' out — the yoghurt carries 8 g ' +
         'per 200, so shrinking it moves carbohydrate as well as protein');
-      assert.ok(Math.abs(got.f - t.total.f) <= 2.5,
-        d + ' fat ' + (got.f - t.total.f).toFixed(1) + ' out — a bigger salmon is a ' +
+      assert.ok(Math.abs(fatOff(got, t)) <= 2.5,
+        d + ' fat ' + fatOff(got, t) + ' off the phase drift — a bigger salmon is a ' +
         'fattier one, and the evening oil takes the difference');
     });
   });
@@ -4821,10 +4872,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('SHEET a parts list names its weighed parts and lets counted ones name themselves', () => {
     setUp(110);
     const lines = sheetText('2026-09-08', 'bfast_protein');
-    const eggs = lines.filter((l) => /^7 egg whites, 2 whole eggs ·/.test(l))[0];
+    const eggs = lines.filter((l) => /^9 egg whites, 2 whole eggs ·/.test(l))[0];
     assert.ok(eggs, 'the egg option reads as eggs, not as "Egg whites 7 g, Eggs, whole 2 g" — got ' +
       JSON.stringify(lines.filter((l) => /egg/i.test(l)).slice(0, 4)));
-    assert.ok(/· 38 g protein · 263 kcal/.test(eggs), 'with the real protein: ' + eggs);
+    assert.ok(/· 45 g protein · 297 kcal/.test(eggs), 'with the real protein: ' + eggs);
     // The vegetables are WEIGHED, so the parts list must still supply their names.
     // The first cut of this fix dropped them and left "50 g, 30 g, 30 g".
     const veg = lines.filter((l) => /Spinach/.test(l))[0];
@@ -4853,6 +4904,78 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // The boot restore sets this immediately around its navTo to say "this is a
   // position restore, not a fresh entry". Nothing else sets it.
   const window_phxSet = (a, on) => { a.window._phxRestoringPosition = on; };
+
+  // ── the cut starts one phase lower ───────────────────────────────────────
+  // v4.9.335. Jon finished week 0 at 2550 and came out level, so week 1 opens
+  // where phase 2 used to and a new phase carries weeks 13-15 to 1850.
+  //
+  // His instruction was "start Week 1 at the Week 2 macro targets". Weeks 1, 2
+  // and 3 were ALL 2550 — one phase of three weeks — so that as written changed
+  // nothing at all. He chose the real step down instead, and chose to keep the
+  // fifteen weeks rather than finish three weeks early.
+
+  test('CUT week 1 opens at 2350 from Monday 14 September, not 2550', () => {
+    setUp(110);
+    const t = app.nutProgTargetsOn('2026-09-14');
+    assert.equal(t.week, 1, '14 September is week 1 day 1');
+    assert.equal(t.total.kcal, 2350, 'and it opens 200 below where it used to');
+    assert.equal(t.phase, 'Linear', 'on what was phase 2');
+    // The point of the change: the FOOD moved, not just the number above it.
+    // An accepted review adjustment moves only the number — see OPEN_ITEMS — so
+    // "the target dropped" would not have been evidence of anything on its own.
+    const lunch = app.nutProgMealsOn('2026-09-14', 'basmati')
+      .filter((m) => m.id === 'lunch')[0];
+    const rice = lunch.items.filter((it) => /Basmati/.test(it.n))[0];
+    assert.ok(rice.g < 250, 'and the rice came down with it: ' + rice.g + ' g cooked');
+  });
+
+  test('CUT the whole ladder moved down one, and nothing was skipped', () => {
+    setUp(110);
+    // Each phase is the one that used to sit below it, so the shape of the cut is
+    // unchanged — only its starting point.
+    const want = [[1, 2350], [4, 2200], [7, 2050], [10, 1950], [13, 1850]];
+    want.forEach(([wk, kcal]) => {
+      assert.equal(app.nutProgPhaseFor(wk).kcal, kcal, 'week ' + wk + ' is ' + kcal);
+    });
+    assert.equal(app.nutProgPhaseFor(15).to, 15, 'and it still runs the full fifteen weeks');
+    assert.equal(app._NUT_PROG.weeks, 15, 'fifteen, not compressed to twelve');
+  });
+
+  test('CUT the new final phase is a real phase, not a target with no food behind it', () => {
+    setUp(110);
+    // The guard that would have caught a made-up column is PLATE, which checks a
+    // Wednesday in every phase. This states the case for the new one directly.
+    const d = '2026-12-09';
+    const t = app.nutProgTargetsOn(d);
+    assert.equal(t.total.kcal, 1850, 'weeks 13-15 finish at 1850');
+    assert.equal(t.total.p * 4 + t.total.c * 4 + t.total.f * 9 >= 1848, true,
+      'and its macros add up to it: P' + t.total.p + ' C' + t.total.c + ' F' + t.total.f);
+    const got = app.nutProgDayTotals(d, 'basmati');
+    assert.ok(Math.abs(got.c - t.total.c) <= 2,
+      'the plate serves those carbs: ' + got.c + ' against ' + t.total.c);
+    assert.ok(got.p > 200, 'protein is still protected at the bottom of the cut: ' + got.p);
+    // Every quantity had to be written for this column. Spot-check the ones that
+    // carry the meal rather than garnish it.
+    const meals = app.nutProgMealsOn(d, 'basmati');
+    const lunch = meals.filter((m) => m.id === 'lunch')[0];
+    assert.equal(lunch.items.filter((it) => /Chicken/.test(it.n))[0].g, 178,
+      'the chicken is BIGGER at the bottom, not smaller — protein rises as calories fall');
+  });
+
+  test('CUT week 0 is over, and it is no longer the plan the app describes', () => {
+    setUp(110);
+    // STATED SO IT CANNOT SURPRISE HIM. Week 0 was run at 2550 and, because the
+    // trial reads the first phase, looking back at it now shows 2350. It is a
+    // rehearsal the plan says counts for nothing, and the baseline weigh-in the
+    // fifteen weeks are judged against is a weigh-in record, untouched by this.
+    // The alternative was a sixth column and the phase index moving at ten-plus
+    // call sites, which risks his real food to make one finished week read right.
+    const t = app.nutProgTargetsOn('2026-09-09');
+    assert.equal(t.trial, true, '9 September is inside the rehearsal week');
+    assert.equal(t.total.kcal, 2350,
+      'which now reports the new opening phase — a known and accepted cost of ' +
+      'dropping a column rather than adding one');
+  });
 
   // ── which tab Nutrition opens on ─────────────────────────────────────────
   // v4.9.330. Jon: "When tapping the NUTRITION nav button from the main app,
@@ -4989,7 +5112,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         d + ' has five meals and 2,550 kcal — the tile must not say the day is empty');
       assert.ok(h.indexOf('Chicken breast') >= 0, d + ' names the food');
       assert.ok(/12:30/.test(h) && /19:00/.test(h), 'at the times he eats it');
-      assert.ok(/kcal remaining of 2550/.test(h), 'with the day\'s target');
+      assert.ok(/kcal remaining of 2350/.test(h), 'with the day\'s target');
     });
   });
 
@@ -5017,7 +5140,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const h = tileOn('2026-09-08');
     assert.ok(/2 \/ 5 eaten/.test(h), 'two of five: ' + (h.match(/\d \/ \d eaten/) || ['?'])[0]);
     assert.ok(/kcal remaining/.test(h), 'and the remaining figure moves with them');
-    assert.equal(/kcal remaining of 2550<\/span>/.test(h.replace(/2550<\/span>/, 'X')), false,
+    assert.equal(/kcal remaining of 2350<\/span>/.test(h.replace(/2350<\/span>/, 'X')), false,
       'not still showing the full target as remaining');
   });
 
@@ -6160,7 +6283,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(cakes && oats, 'both rows exist in the plate');
     assert.equal(cakes.count, true, 'rice cakes are flagged as a count item');
     assert.equal(app._nutProgItemLabel({ n: cakes.n, g: cakes.g[0], u: cakes.u, count: cakes.count }),
-      '2 Rice cakes', 'phase 1 rice cakes');
+      '1 Rice cakes', 'phase 1 rice cakes');
     assert.equal(app._nutProgItemLabel({ n: oats.n, g: oats.g[0], u: oats.u, count: !!oats.count }),
       '60 g dry Oats', 'phase 1 oats');
   });

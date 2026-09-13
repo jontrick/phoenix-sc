@@ -331,6 +331,32 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
 
 ## OPEN — NUTRITION
 
+- [ ] NUTRITION — **The carb ladder runs out on LIFT DAYS at the bottom of the cut, and
+      the guard cannot see it.** Measured on origin/main BEFORE v4.9.335, so pre-existing:
+      the lowest phase serves 137.5 g of carbohydrate against a target of 130 on a lifting
+      day — 7.5 g over — while its rest days land within 1. Higher phases land on both.
+      The intra shot carries 24.4 g on a lift day and the food cannot taper far enough to
+      make room once the target is low.
+      **Why nobody saw it:** `PLATE every phase serves the carbs its own target asks for`
+      walks `PHASE_WED` and asserts `t.lift === false`. It only ever tests Wednesdays. A
+      guard that checks one kind of day reports on that kind of day.
+      Now affects phases 4 AND 5, since v4.9.335 added a lower phase below the old floor
+      (phase 5 rest lands at 107.1 against 106; its lift days will be over by a similar
+      margin). Closes when the ladder can taper on a lift day, or when the intra's carbs
+      are taken out of the food budget. **Add a lift day to the PLATE guard either way** —
+      the fix is unverifiable while the test only looks at Wednesdays.
+
+- [ ] NUTRITION — **A counted food can still render a fraction: "1.3 Rice cakes".** Week 1
+      Monday, measured, and present identically on origin/main's week 4 — so pre-existing,
+      just visible three weeks earlier now. The ladder adjusts `carb:true` rows and rice
+      cakes are counted (`count:true, each:9.5`), so the adjustment lands as 1.3 of a cake.
+      Same class as the egg whites Jon reported in v4.9.327 — "6 g" for six whites — and
+      the same fix shape: counted foods round to whole through every path that resizes
+      them, as the protein trim already does (`_cnt ? Math.max(1, Math.round(...))`).
+      Low harm, visible on the eating screen, and he has already told us once that
+      fractional counts of a thing you crack or unwrap read as wrong.
+
+
 - [ ] NUTRITION — **AN ACCEPTED REVIEW ADJUSTMENT MOVES THE TARGET AND NOT THE FOOD.**
       `nutProgSetAdjust(week, delta)` changes `nutProgTargetsOn().total` — measured, week 1
       at -3 blocks reads 2250 kcal / C188 / blocks 6.66 instead of 2550 / C263 / 9.66. The

@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.333';
+var APP_VERSION='4.9.334';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4376,6 +4376,56 @@ function _blabIncrementFor(name){
 
 // Returns {kg, basis, note} or null. NULL IS A REAL ANSWER — it means "not enough
 // history", and the card shows nothing rather than a made-up number.
+// v4.9.334 — EXERCISE FAMILIES, FOR HISTORY ONLY.
+//
+// Jon: "different exercise names need fuzzy matching (e.g. 'Single Arm Bent Over Row' vs
+// 'Seated Row' are different; 'Shrug' was missing last week's data entirely)".
+//
+// THE SHRUG CASE IS REAL AND THE CAUSE IS NOT A BUG. The shrug slot changes movement by
+// block — DB Shrugs (2-sec holds) in W1-2, BB Shrugs (2-sec holds) in W3-4, Timed DB
+// Shrugs in W8-9, Barbell Overhead Shrugs in W11. Records are keyed by exercise NAME, so
+// arriving in week 3 he had a shrug card with no history, because his shrug history was
+// filed under the week-1 name. Correct behaviour that reads as missing data.
+//
+// AN EXPLICIT TABLE, NOT A FUZZY MATCHER. He named the trap himself: a keyword matcher on
+// "row" merges Single Arm Bent Over Row with Seated Row, which are different lifts at
+// different loads. Any string-similarity rule eventually merges the wrong pair and does
+// it silently. A table can be read, argued with, and is wrong only where someone wrote it
+// wrong. Anything not listed is its own family — today's behaviour, unchanged.
+//
+// HISTORY ONLY. The family is shown so he can see progression across the block change;
+// it is NEVER used to derive a weight. A barbell shrug and a dumbbell shrug are the same
+// movement and nowhere near the same load, so suggesting one from the other would be a
+// confident wrong answer. blabSuggestWeight stays strictly same-name.
+var _BLAB_FAMILIES = {
+  shrug: ['DB Shrugs', 'DB Shrugs (2-sec holds)', 'BB Shrugs (2-sec holds)',
+          'Timed DB Shrugs', 'Barbell Overhead Shrugs']
+};
+function _blabFamilyOf(name){
+  try {
+    for(var fam in _BLAB_FAMILIES){
+      if(_BLAB_FAMILIES[fam].indexOf(name) >= 0) return _BLAB_FAMILIES[fam];
+    }
+  } catch(_e){}
+  return [name];
+}
+// Every week this movement was trained under ANY name in its family, each row carrying
+// the variant it was done as. The variant is not decoration: "42.5kg in week 2" means
+// something different on a barbell than on dumbbells, and the label is what stops the
+// number being read as one continuous progression.
+window.blabFamilyHistory = function(name){
+  try {
+    var fam = _blabFamilyOf(name);
+    var out = [];
+    fam.forEach(function(n){
+      (blabWeeklyMaxes(n) || []).forEach(function(r){
+        out.push({ week: r.week, wt: r.wt, reps: r.reps, date: r.date, variant: n });
+      });
+    });
+    return out.sort(function(a, b){ return a.week - b.week; });
+  } catch(_e){ return []; }
+};
+
 function blabSuggestWeight(name, targetReps){
   try {
     var hist = blabWeeklyMaxes(name);
@@ -41438,7 +41488,11 @@ window._blabHistorySection = function(ex, i, targetReps){
   var out = '';
   try {
 
-    var _hist = (typeof blabWeeklyMaxes === 'function') ? blabWeeklyMaxes(ex.name) : [];
+    // v4.9.334: family history, so a shrug that changed variant between blocks still
+    // shows where he has got to. Falls back to the plain per-name reader if the family
+    // helper is missing, so a partial deploy loses the labels rather than the history.
+    var _hist = (typeof blabFamilyHistory === 'function') ? blabFamilyHistory(ex.name)
+              : ((typeof blabWeeklyMaxes === 'function') ? blabWeeklyMaxes(ex.name) : []);
     var _sg = null;
     if(typeof blabSuggestWeight === 'function'){
       // targetReps is PASSED IN. The first draft read perSetTargets[0] straight out of
@@ -41456,8 +41510,13 @@ window._blabHistorySection = function(ex, i, targetReps){
         return (r.wt ? r.wt + 'kg' : '') + (r.wt && r.reps ? ' \u00d7 ' : '') + (r.reps ? r.reps + (r.wt ? '' : ' reps') : '');
       };
       var _rows = _hist.slice().reverse().map(function(r){
+        // Name the variant when it is not the one he is doing now. Without it a
+        // dumbbell week and a barbell week read as one progression, which is the
+        // misreading the family is most likely to cause.
+        var _vt = (r.variant && r.variant !== ex.name)
+          ? '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + r.variant + '</div>' : '';
         return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
-          '<span style="color:var(--text3);">Week ' + r.week + '</span>' +
+          '<span style="color:var(--text3);">Week ' + r.week + _vt + '</span>' +
           '<span style="font-family:var(--font-d);font-weight:700;color:var(--text);">' + (_fmtRow(r) || '\u2014') + '</span>' +
         '</div>';
       }).join('');
@@ -41473,7 +41532,13 @@ window._blabHistorySection = function(ex, i, targetReps){
                 '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Last time</div>' +
                 '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">' + (_fmtRow(_last) || '\u2014') + '</div>' +
               '</div>' +
-              '<div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4;">Week ' + _last.week + ' \u00b7 beat it.</div>') +
+              // Say which movement the headline number was done as. "beat it" is only
+              // honest when it was the same lift; on a different variant it is a
+              // reference point, not a target.
+              '<div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4;">Week ' + _last.week +
+                ((_last.variant && _last.variant !== ex.name)
+                  ? ' \u00b7 as ' + _last.variant + ' \u2014 different lift, for reference.'
+                  : ' \u00b7 beat it.') + '</div>') +
           (_rows
             ? '<div data-blab-hist="' + i + '" style="font-family:var(--font-d);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-top:7px;cursor:pointer;touch-action:manipulation;">Weekly history \u25be</div>' +
               '<div id="blab-hist-' + i + '" style="display:none;margin-top:6px;">' + _rows + '</div>'

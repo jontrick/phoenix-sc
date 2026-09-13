@@ -5138,4 +5138,109 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     } finally { app.document.getElementById = realGet; app._blabCalRender = realRender; }
     assert.equal(painted, 1, 'the calendar still repaints');
   });
+
+  // ── EXERCISE FAMILIES (v4.9.334) ──────────────────────────────────────────
+  // Jon: "different exercise names need fuzzy matching (e.g. 'Single Arm Bent Over Row'
+  // vs 'Seated Row' are different; 'Shrug' was missing last week's data entirely)".
+  //
+  // The shrug slot changes movement by block — DB Shrugs (2-sec holds) W1-2, BB Shrugs
+  // (2-sec holds) W3-4, Timed DB Shrugs W8-9, Barbell Overhead Shrugs W11. Records are
+  // keyed by NAME, so arriving in week 3 he had a shrug card with no history.
+
+  const famSeed = (records) => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: records || {}, _ts: NEWER });
+  };
+
+  test('FAMILY: the premise — the shrug slot really does change name by block', () => {
+    // If the programme ever stops rotating these, the family is redundant. Assert it
+    // rather than trusting a comment.
+    famSeed({});
+    // Day 1, verified by probe — the shrug accessory sits in Upper Body day 1, and it is
+    // the SUPERSET's A movement, which is the name the mapper puts on the card.
+    const nameIn = (w) => {
+      const s = app.blabGetSessionData(w, 1);
+      const hit = ((s && s.exercises) || []).find((e) => /Shrug/i.test(e.name || '') ||
+        ((e.movements || []).some((m) => /Shrug/i.test(m.name || ''))));
+      if (!hit) return null;
+      return /Shrug/i.test(hit.name) ? hit.name : (hit.movements.find((m) => /Shrug/i.test(m.name)) || {}).name;
+    };
+    const w1 = nameIn(1), w3 = nameIn(3);
+    assert.ok(w1 && w3, 'both weeks have a shrug: ' + w1 + ' / ' + w3);
+    assert.ok(w1 !== w3, 'and they are different names — ' + w1 + ' vs ' + w3);
+  });
+
+  test('FAMILY: week 3 BB Shrugs now sees the week 1-2 DB Shrugs history', () => {
+    // THE REPORTED GAP. Same movement, different variant, filed under a different key.
+    famSeed({ 'DB Shrugs (2-sec holds)_wk': { '1': { wt: 22.5, reps: 15 }, '2': { wt: 24, reps: 12 } } });
+    const rows = app.blabFamilyHistory('BB Shrugs (2-sec holds)');
+    assert.equal(rows.length, 2, 'his shrug history is reachable from the week-3 card');
+    assert.equal(rows[0].week, 1);
+    assert.equal(rows[1].wt, 24);
+  });
+
+  test('FAMILY: every row says which variant it was done as', () => {
+    // The label is not decoration. 42.5kg on a barbell and on dumbbells are not one
+    // progression, and without the variant the dropdown reads as though they were.
+    famSeed({ 'DB Shrugs (2-sec holds)_wk': { '1': { wt: 22.5, reps: 15 } },
+              'BB Shrugs (2-sec holds)_wk': { '3': { wt: 60, reps: 10 } } });
+    const rows = app.blabFamilyHistory('BB Shrugs (2-sec holds)');
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].variant, 'DB Shrugs (2-sec holds)', 'the dumbbell week is named');
+    assert.equal(rows[1].variant, 'BB Shrugs (2-sec holds)', 'and so is the barbell one');
+  });
+
+  test('FAMILY: the two rows Jon named are NOT merged', () => {
+    // He pre-empted the trap: a keyword matcher on "row" merges these, and they are
+    // different lifts at different loads. This is why the table is explicit.
+    famSeed({ 'Seated Row_wk': { '1': { wt: 60, reps: 12 } } });
+    assert.equal(app.blabFamilyHistory('Single Arm Bent Over Row').length, 0,
+      'a seated row is not a single-arm bent-over row');
+    assert.equal(app.blabFamilyHistory('Seated Row').length, 1, 'and each still sees its own');
+  });
+
+  test('FAMILY: an unlisted exercise is its own family — nothing else changes', () => {
+    famSeed({ 'Bench Press_wk': { '2': { wt: 100, reps: 6 } },
+              'Incline DB Press_wk': { '2': { wt: 34, reps: 10 } } });
+    const rows = app.blabFamilyHistory('Bench Press');
+    assert.equal(rows.length, 1, 'only its own history');
+    assert.equal(rows[0].variant, 'Bench Press');
+  });
+
+  test('FAMILY: the WEIGHT SUGGESTION is never derived across variants', () => {
+    // A barbell shrug and a dumbbell shrug are the same movement nowhere near the same
+    // load. Suggesting one from the other is a confident wrong answer, which is worse
+    // than no answer — the rule blabSuggestWeight has followed since .291.
+    famSeed({ 'DB Shrugs (2-sec holds)_wk': { '1': { wt: 24, reps: 15 } } });
+    assert.equal(app.blabSuggestWeight('BB Shrugs (2-sec holds)', 10), null,
+      'no suggestion from a different variant');
+    assert.ok(app.blabSuggestWeight('DB Shrugs (2-sec holds)', 15), 'but its own still works');
+  });
+
+  test('FAMILY: the section renders the family rows with their variants', () => {
+    // Drive the thing that draws it, not just the reader.
+    famSeed({ 'DB Shrugs (2-sec holds)_wk': { '1': { wt: 22.5, reps: 15 } } });
+    const html = app._blabHistorySection({ name: 'BB Shrugs (2-sec holds)', reps: 10 }, 0, 10);
+    assert.ok(html, 'a section is drawn at all');
+    assert.ok(/Week 1/.test(html), 'the earlier week is listed');
+    assert.ok(/DB Shrugs/.test(html), 'and named as the dumbbell variant: ' + html.slice(0, 260));
+    assert.ok(/different lift, for reference/.test(html),
+      'the headline says it is a reference, not a target');
+  });
+
+  test('FAMILY: same-variant history still says "beat it"', () => {
+    // The positive control for that wording — it must not become "for reference" always.
+    // A LOAD-LESS exercise, deliberately: with a weight on file blabSuggestWeight answers
+    // and the "Last time" headline is not the branch that renders. The first draft of this
+    // case seeded 60kg and asserted against the suggestion branch's text.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 4, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 },
+                records: { 'BB Shrugs (2-sec holds)_wk': { '3': { wt: 0, reps: 10 } } }, _ts: NEWER });
+    const html = app._blabHistorySection({ name: 'BB Shrugs (2-sec holds)', reps: 8 }, 0, 8);
+    assert.ok(/beat it/.test(html), 'same lift, so it is a target: ' + html.slice(0, 300));
+    assert.ok(!/different lift/.test(html), 'and not flagged as a different one');
+  });
 }

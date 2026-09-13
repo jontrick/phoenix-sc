@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.333'", 'version is 4.9.333');
+has("var APP_VERSION='4.9.334'", 'version is 4.9.334');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2558,6 +2558,43 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── EXERCISE FAMILIES (v4.9.334) ────────────────────────────────────────────
+// Jon: "'Shrug' was missing last week's data entirely" — the shrug slot changes movement
+// by block (DB W1-2, BB W3-4, Timed DB W8-9, Barbell Overhead W11) and records are keyed
+// by NAME, so week 3 opened with no shrug history.
+hasCode('var _BLAB_FAMILIES = {', 'FAMILY: STRUCTURAL related variants can share a history');
+hasCode('window.blabFamilyHistory = function(name)', 'FAMILY: STRUCTURAL and a reader that spans them');
+
+// AN EXPLICIT TABLE, NOT A FUZZY MATCHER, and this pin is the reason. Jon named the trap
+// in the same sentence as the request: "Single Arm Bent Over Row vs Seated Row are
+// different". Any string-similarity rule on "row" merges those, at loads nowhere near
+// each other, and does it silently. The table is wrong only where someone wrote it wrong.
+(() => {
+  const m = html.match(/var _BLAB_FAMILIES = \{([\s\S]*?)\n\};/);
+  if (!m) { bad('FAMILY: could not parse _BLAB_FAMILIES — the merge check did NOT run.'); return; }
+  const body = m[1];
+  if (/[Rr]ow'/.test(body)) {
+    bad('FAMILY: a row variant has been added to the family table. Jon ruled on this ' +
+        'directly — Single Arm Bent Over Row and Seated Row are DIFFERENT lifts at ' +
+        'different loads. If a row family is genuinely wanted, it needs his say-so, not ' +
+        'a pattern match.');
+  } else {
+    ok('FAMILY: no row variants have crept into the table — the pair Jon ruled on stays split');
+  }
+})();
+
+// HISTORY ONLY. A barbell shrug and a dumbbell shrug are the same movement nowhere near
+// the same load, so a suggestion derived across them would be a confident wrong answer.
+hasNotCode('blabFamilyHistory(name);\n    if(!hist.length) return null;',
+  'FAMILY: the weight suggestion does not read family history');
+hasCode('var hist = blabWeeklyMaxes(name);',
+  'FAMILY: blabSuggestWeight still reads the exercise ALONE');
+// And the rows say which variant they were, so two different lifts cannot read as one
+// progression. Behaviour in tests/training.mjs under FAMILY:, proved by inversion
+// 2026-09-14 — emptying the table turns 3 red while the do-not-merge controls stay green.
+hasCode("? '<div style=\"font-size:10px;color:var(--text3);margin-top:1px;\">' + r.variant + '</div>' : '';",
+  'FAMILY: every history row names the variant it was done as');
 
 // ── LAST SESSION DATA ARRIVES BEFORE HE NEEDS IT (v4.9.333) ─────────────────
 // Jon, 11 Sep: last week's weights and reps missing at 6:23am, present by 7:04am.

@@ -167,6 +167,35 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
         listener). So if a screen changes on a switch, the PWA was RELOADED, and the only
         lever is the restore list. That rules out a whole class of guess.
 
+- [ ] TRAINING — **The exercise family table has exactly one entry.** `_BLAB_FAMILIES`
+      (v4.9.334) groups the five shrug variants so a block change does not look like lost
+      history. Nothing else is grouped, deliberately: the table is explicit because Jon
+      named the trap in the same sentence as the request — a keyword matcher on "row"
+      merges Single Arm Bent Over Row with Seated Row, which are different lifts at
+      different loads. **Other slots almost certainly rotate the same way** (the Day 4
+      jump slot: Box Jumps / Depth Drops into Box Jump / Max Height Box Jumps; the Day 1
+      press slot: Flat DB Press / Incline DB Press / Offset Med Ball Push-ups). Those are
+      NOT grouped and should not be without Jon's ruling on each — some are genuinely
+      different lifts. Worth asking him the next time he is looking at a card with no
+      history. Harness pin blocks any row variant being added without a decision.
+
+- [ ] JON — **Four items from 11 Sep, three fixed and one already was (.332-.334).**
+      · **WOD completion on Today** — was already fixed in v4.9.329, which shipped about
+        10am on the 11th; your report is from the 6:23am session, so it predates the
+        build. Legionnaire ROW and Atlas are now pinned BY NAME so this cannot regress
+        silently. **Please confirm on the next WOD day.**
+      · **Hamburger dot** — gone (.332). The MENU stays on your ruling: it is the only
+        route to Nutrition, Peptides, Records, the calendar and the timer.
+      · **Last session data at open** — the session screen now repaints when the cloud
+        records land (.333), rather than racing the fetch. Watch the 4:30am open: last
+        week's numbers should be on the cards when they first draw. It deliberately does
+        NOT repaint once you have logged a set.
+      · **Shrugs** — week 3 now shows the week 1-2 shrug history, each row LABELLED with
+        the variant it was done as (.334). The weight suggestion still will not cross
+        variants: a barbell shrug and a dumbbell shrug are nowhere near the same load, so
+        a suggestion across them would be confidently wrong. Expect "as DB Shrugs —
+        different lift, for reference" rather than "beat it" when the variant changed.
+
 ## WAITING ON JON
 
 - [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together

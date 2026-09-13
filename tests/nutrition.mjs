@@ -4905,6 +4905,110 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // position restore, not a fresh entry". Nothing else sets it.
   const window_phxSet = (a, on) => { a.window._phxRestoringPosition = on; };
 
+  // ── the formulas are a choice, not a consequence of the day ──────────────
+  // Jon: "supplements are fixed to training days but Jon may or may not take them
+  // on any given day ... it should be deselectable, remove those macros/cals from
+  // the day total, and adjust remaining cals accordingly. The daily view needs to
+  // reflect actual intake not assumed intake."
+  //
+  // The filter this rests on had existed since nutProgSuppsOn was written and had
+  // NO CALLER — every call site passed a date and nothing else, so it was
+  // reachable only from a test. The door is opened inside nutProgTargetsOn rather
+  // than at eighteen call sites, which is why the plan, the shopping list, the
+  // prep plan and the home tile all follow a skip without being touched.
+
+  const LIFTDAY = '2026-09-15';
+
+  test('SUPP a formula can be skipped, and the food takes back what it carried', () => {
+    setUp(110);
+    const before = app.nutProgTargetsOn(LIFTDAY);
+    assert.ok(before.supps.items.indexOf('post') >= 0, 'the post-workout is due on a lift day');
+
+    app.nutProgToggleSupp(LIFTDAY, 'post');
+    const after = app.nutProgTargetsOn(LIFTDAY);
+    assert.equal(after.supps.items.indexOf('post'), -1, 'and it comes off the day');
+    assert.equal(after.total.kcal, before.total.kcal,
+      'the TARGET does not move — skipping a drink is not a reason to eat 81 fewer ' +
+      'calories, it is a reason to eat 81 more of something else');
+    assert.ok(after.food.kcal > before.food.kcal,
+      'so the food budget grows instead: ' + before.food.kcal + ' to ' + after.food.kcal);
+  });
+
+  test('SUPP and the PLATE actually moves, not just the number above it', () => {
+    setUp(110);
+    // THE HALF THAT MATTERS. An accepted review adjustment moves the target and
+    // leaves the plate identical — recorded in OPEN_ITEMS — so "the budget went
+    // up" is not evidence that anything he eats changed.
+    const plate = () => (app.nutProgMealsOn(LIFTDAY, 'basmati') || [])
+      .reduce((a, m) => ({ k: a.k + m.k, c: a.c + m.c }), { k: 0, c: 0 });
+    const before = plate();
+    app.nutProgToggleSupp(LIFTDAY, 'post');
+    const after = plate();
+    assert.ok(Math.abs(after.c - before.c) <= 1.5,
+      'the day still lands on its carbohydrate: ' + before.c.toFixed(1) + ' to ' + after.c.toFixed(1));
+    const food = (m) => (m || []).filter((x) => !x.supp)
+      .reduce((a, x) => a + x.c, 0);
+    const fBefore = food(app.nutProgMealsOn(LIFTDAY, 'basmati'));
+    app.nutProgToggleSupp(LIFTDAY, 'post');          // back on
+    const fOn = food(app.nutProgMealsOn(LIFTDAY, 'basmati'));
+    assert.ok(fBefore > fOn + 15,
+      'and with it skipped the FOOD carries about 19 g more carbohydrate: ' +
+      fOn.toFixed(1) + ' with it, ' + fBefore.toFixed(1) + ' without');
+  });
+
+  test('SUPP a skipped formula stays on screen, so it can be put back', () => {
+    setUp(110);
+    // Dropping the row would take the only control that restores it — skip the
+    // coffee once and there is no coffee row left to tap. Eleven orphans in this
+    // domain already; this would have been the twelfth, created by the fix.
+    app.nutProgToggleSupp(LIFTDAY, 'coffee');
+    const row = (app.nutProgMealsOn(LIFTDAY, 'basmati') || [])
+      .filter((m) => m.suppId === 'coffee')[0];
+    assert.ok(row, 'the coffee row is still there');
+    assert.equal(row.skipped, true, 'marked as skipped');
+    assert.equal(row.k, 0, 'carrying nothing — its calories went back to the food');
+    assert.equal(row.c, 0, 'and none of its carbohydrate, which would serve it twice');
+  });
+
+  test('SUPP the intra is refused here — the 04:15 slot already owns it', () => {
+    setUp(110);
+    assert.equal(app.nutProgToggleSupp(LIFTDAY, 'lift'), false,
+      'two controls for one drink would let them disagree, with nothing on ' +
+      'screen to say which the day used');
+    assert.equal(app.nutProgSuppSkipOn(LIFTDAY).indexOf('lift'), -1, 'and nothing is stored');
+    // The real control for it, which does work:
+    app.nutProgSetPre(LIFTDAY, 'none');
+    assert.equal(app.nutProgTargetsOn(LIFTDAY).supps.items.indexOf('lift'), -1,
+      'choosing nothing at 04:15 takes the intra off the day');
+  });
+
+  test('SUPP the control is on the DAILY screen and is WIRED', () => {
+    setUp(110);
+    const d = dom();
+    onDay(LIFTDAY, () => { app._nutTab = 'today'; app.nutRenderScreen(); });
+    const body = d.node('nut-screen-body');
+    const chip = body.querySelectorAll('[data-prog-supp]')
+      .filter((el) => el.getAttribute('data-prog-supp') === 'post')[0];
+    assert.ok(chip, 'the post-workout row carries a control');
+    assert.equal(chip.getAttribute('data-prog-day'), LIFTDAY, 'for the day it was drawn for');
+    onDay(LIFTDAY, () => d.fire(chip, 'click'));
+    assert.deepEqual(app.nutProgSuppSkipOn(LIFTDAY), ['post'],
+      'and tapping it records the skip — markup alone would prove nothing');
+  });
+
+  test('SUPP no such control on a day that is not today', () => {
+    setUp(110);
+    // Jon's read-only ruling. This is a write, so it obeys it like the tick and
+    // the component swaps beside it.
+    app._nutProgDayOffset = -1;
+    const d = dom();
+    onDay(LIFTDAY, () => { app._nutTab = 'today'; app.nutRenderScreen(); });
+    const html = d.html('nut-screen-body');
+    app._nutProgDayOffset = 0;
+    assert.ok(/not today/.test(html), 'the screen is showing another day');
+    assert.equal(html.indexOf('data-prog-supp'), -1, 'and carries no formula control');
+  });
+
   // ── the cut starts one phase lower ───────────────────────────────────────
   // v4.9.335. Jon finished week 0 at 2550 and came out level, so week 1 opens
   // where phase 2 used to and a new phase carries weeks 13-15 to 1850.

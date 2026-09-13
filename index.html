@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.335';
+var APP_VERSION='4.9.336';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20251,6 +20251,17 @@ function nutRenderScreen(){
   });
   // Tapping a food opens ONLY that food's options — Jon's ruling, and the reason
   // the Substitutions banner is gone.
+  // The formula toggle. Writes to the day the ROW was drawn for, same rule as the
+  // tick — a control on a screen showing Monday must not land on today.
+  body.querySelectorAll('[data-prog-supp]').forEach(function(row){
+    row.addEventListener('click', function(e){
+      if(e && e.stopPropagation) e.stopPropagation();
+      nutProgToggleSupp(row.getAttribute('data-prog-day') || _nutToday(),
+                        row.getAttribute('data-prog-supp'));
+      if(typeof nutRenderScreen === 'function') nutRenderScreen();
+      if(typeof nutRenderMealsTile === 'function') nutRenderMealsTile();
+    });
+  });
   body.querySelectorAll('[data-nut-item]').forEach(function(row){
     row.addEventListener('click', function(e){
       if(e && e.stopPropagation) e.stopPropagation();
@@ -21779,6 +21790,49 @@ function nutProgIsLiftDay(dateKey){
 // Which formulas apply, and what they cost. `taken` is optional: an array of
 // supplement ids actually logged. A missed intra is a block Jon still owes, so
 // the food target has to know the difference between planned and taken.
+// v4.9.336 — what he has said he is NOT taking today. Ids, not objects — the formulas are
+// a fixed list and an id survives a rename of the product.
+function nutProgSuppSkipOn(dateKey){
+  var ns  = (typeof nutGetState === 'function') ? nutGetState() : null;
+  var day = ns && ns.daily && ns.daily[dateKey];
+  var sk  = day && day.prog_supp_skip;
+  return Array.isArray(sk) ? sk : [];
+}
+
+// Everything DUE today that he has not skipped. This is the list the targets use
+// when a caller does not name one, which is every caller in the app.
+function nutProgSuppsTakenOn(dateKey){
+  var sess = (typeof nutProgSessionsOn === 'function') ? nutProgSessionsOn(dateKey) : [];
+  var skip = nutProgSuppSkipOn(dateKey);
+  var out = [];
+  for(var i = 0; i < _NUT_SUPPS.length; i++){
+    var s = _NUT_SUPPS[i];
+    if(!((s.when === 'daily') || (sess.indexOf(s.when) >= 0))) continue;
+    if(skip.indexOf(s.id) >= 0) continue;
+    out.push(s.id);
+  }
+  return out;
+}
+
+function nutProgToggleSupp(dateKey, suppId){
+  if(!dateKey || !suppId) return false;
+  // The intra already has a control — the 04:15 slot, which offers it against the
+  // banana and against nothing. A second switch for the same drink would let the
+  // two disagree, with nothing on screen to say which one the day used.
+  if(suppId === 'lift') return false;
+  var found = false;
+  for(var i = 0; i < _NUT_SUPPS.length; i++) if(_NUT_SUPPS[i].id === suppId) found = true;
+  if(!found) return false;
+  var ns = nutGetState();
+  var day = _nutProgDay(ns, dateKey);
+  if(!day) return false;
+  if(!Array.isArray(day.prog_supp_skip)) day.prog_supp_skip = [];
+  var at = day.prog_supp_skip.indexOf(suppId);
+  if(at >= 0) day.prog_supp_skip.splice(at, 1); else day.prog_supp_skip.push(suppId);
+  nutSaveState(ns);
+  return true;
+}
+
 function nutProgSuppsOn(dateKey, taken){
   var sess = nutProgSessionsOn(dateKey);
   var out = { items: [], kcal: 0, c: 0, p: 0, f: 0 };
@@ -21811,7 +21865,11 @@ function nutProgTargetsOn(dateKey, taken){
   var ph = trial ? nutProgPhaseFor(1) : nutProgPhaseFor(week);
   if(!ph) return null;
   if(trial) week = 0;
-  var sup = nutProgSuppsOn(dateKey, taken);
+  // NO EXPLICIT LIST MEANS "what he is actually taking", not "everything due".
+  // Passing one still overrides, which is what the adherence calculation does.
+  var _taken = (taken === undefined && typeof nutProgSuppsTakenOn === 'function')
+    ? nutProgSuppsTakenOn(dateKey) : taken;
+  var sup = nutProgSuppsOn(dateKey, _taken);
   // An approved adjustment is a real change to the plan from its week onward.
   var adjBlocks = trial ? 0 : ((typeof nutProgAdjustBlocks === 'function') ? nutProgAdjustBlocks(week) : 0);
   var adjC = adjBlocks * _NUT_BLOCK_G;
@@ -21952,6 +22010,19 @@ function nutProgMealsOn(dateKey, riceId){
   // any other day the banana the plate was written around.
   var _baseC  = lift ? 24.4 : (_preRow ? (_preRow.c * _preRow.g[ix] / 100) : 0);
   var _shortC = Math.round((_baseC - (pre ? pre.c : 0)) * 10) / 10;
+  var _skipped = (typeof nutProgSuppSkipOn === 'function') ? nutProgSuppSkipOn(dateKey) : [];
+  if(_skipped.length){
+    var _sessSk = (typeof nutProgSessionsOn === 'function') ? nutProgSessionsOn(dateKey) : [];
+    var _skipC = 0;
+    for(var _si = 0; _si < _NUT_SUPPS.length; _si++){
+      var _sp = _NUT_SUPPS[_si];
+      if(_sp.id === 'lift') continue;                       // the 04:15 slot owns that one
+      if(_skipped.indexOf(_sp.id) < 0) continue;
+      if(!((_sp.when === 'daily') || (_sessSk.indexOf(_sp.when) >= 0))) continue;
+      _skipC += _sp.c;
+    }
+    if(_skipC) _shortC = Math.round((_shortC + _skipC) * 10) / 10;
+  }
   var _dayCarbBase = (typeof _nutProgDayCarbBase === 'function') ? _nutProgDayCarbBase(ix) : 0;
   // The distribution. `_splitTake` shrinks the two daytime anchors; `_splitGive`
   // is the exact total those two gave up, handed to dinner — so the day's
@@ -22032,8 +22103,17 @@ function nutProgMealsOn(dateKey, riceId){
         var sup = null;
         for(var si = 0; si < _NUT_SUPPS.length; si++) if(_NUT_SUPPS[si].id === want[wi]) sup = _NUT_SUPPS[si];
         if(!sup) continue;
+        // A formula he has said he is not taking STAYS ON THE SCREEN, carrying
+        // nothing. Dropping the row would have taken the only control that can
+        // put it back with it — skip the coffee once and there would be no coffee
+        // row left to tap. It contributes zero because its carbohydrate has
+        // already gone back into the food above; counting it here too would
+        // serve the same 19.5 g twice.
+        var _sk = (_skipped.indexOf(sup.id) >= 0);
         out.push({ id: (want.length > 1 ? M.id + '-' + sup.id : M.id), time:M.t, name:sup.name,
-                   supp:true, code:sup.code, items:[], k:sup.kcal, p:sup.p, c:sup.c, f:sup.f });
+                   supp:true, suppId:sup.id, skipped:_sk, code:sup.code, items:[],
+                   k:_sk ? 0 : sup.kcal, p:_sk ? 0 : sup.p,
+                   c:_sk ? 0 : sup.c,    f:_sk ? 0 : sup.f });
       }
       continue;
     }
@@ -22805,7 +22885,16 @@ function _nutProgTodayCard(forDate){
   meals.forEach(function(m){
     var on = !!done[m.id];
     var line = m.supp
-      ? ('<span style="font-size:11px;color:var(--text2);">' + (m.code || '') + '</span>')
+      ? ('<span style="font-size:11px;color:' + (m.skipped ? 'var(--text3)' : 'var(--text2)') + ';' +
+         (m.skipped ? 'text-decoration:line-through;' : '') + '">' + (m.code || '') + '</span>' +
+         (_ro
+           ? (m.skipped ? '<span style="font-size:10px;color:var(--text3);margin-left:8px;">not taken</span>' : '')
+           : ('<span data-prog-supp="' + m.suppId + '" data-prog-day="' + today + '" ' +
+              'style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;cursor:pointer;' +
+              'touch-action:manipulation;font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase;' +
+              'border:1px solid ' + (m.skipped ? 'var(--border2)' : 'var(--gold)') + ';' +
+              'color:' + (m.skipped ? 'var(--text3)' : 'var(--gold)') + ';">' +
+              (m.skipped ? 'Skipped &middot; tap to add back' : 'Taking') + '</span>')))
       : m.items.map(function(it){
           var lbl = _nutProgItemLabel(it);
           if(!it.slot) return '<div style="font-size:11px;color:var(--text2);padding:2px 0;">' + lbl + '</div>';

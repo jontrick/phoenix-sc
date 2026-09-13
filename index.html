@@ -309,7 +309,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .hamburger-btn{width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;position:relative;}
 .hamburger-btn span{display:block;width:16px;height:1.5px;background:var(--text2);}
 /* v4.7.34 BUILD 1: notification dot — shown on Sunday when weekly check-in is unsubmitted */
-#hamburger-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#CC3333;display:none;pointer-events:none;}
 
 /* v4.9.110 PROGRAMME AUDIT — 12-week read-only audit + dry-run mode */
 #blab-audit-overlay{position:fixed;inset:0;background:var(--bg);z-index:99998;overflow-y:auto;-webkit-overflow-scrolling:touch;}
@@ -1704,7 +1703,6 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
 <div class="app-header">
   <div class="hamburger-btn" onclick="openSidebar()">
     <span></span><span></span><span></span>
-    <div id="hamburger-dot"></div>
   </div>
   <div class="header-logo">PHOENIX <span>PLAN</span></div>
   <div class="icon-btn" onclick="navTo('athlete')">
@@ -3545,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.331';
+var APP_VERSION='4.9.332';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -18472,7 +18470,6 @@ function setupSplashButtons(){
   <div class="app-header">
     <div class="hamburger-btn" onclick="openSidebar()">
       <span></span><span></span><span></span>
-      <div id="hamburger-dot-records"></div>
     </div>
     <div class="header-logo">PHOENIX <span>RECORDS</span></div>
     <div class="icon-btn" onclick="_phxOpenSessionLibrary()">
@@ -19433,8 +19430,6 @@ function renderTodayScreen(){
   if(checkinBanner) checkinBanner.style.display='none';
   // v4.7.31 BUILD 1: morning weight check-in card (5am-10am Brisbane).
   if(typeof _phxMaybeShowMorningCheckin==='function') _phxMaybeShowMorningCheckin();
-  // v4.7.34 BUILD 1: hamburger notification dot for Sunday weekly check-in.
-  if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
   // v4.7.19 BUILD 2: Sunday → append a Weekly Review card after the session tiles.
   _phxRenderSundayReviewCard();
   // v4.7.21 FIX 5: query Supabase for today's completed sessions and mark matching tiles.
@@ -34020,16 +34015,15 @@ function _phxCheckInDayIndex(){
   var v = (athlete && athlete.fqCheckInDay) || 'friday';
   return CHECK_IN_DAYS[v] != null ? CHECK_IN_DAYS[v] : 5;
 }
-window._phxUpdateHamburgerDot = function(){
-  try {
-    var b = _phxBrisbaneNow();
-    var isCheckInDay = b.date.getDay() === _phxCheckInDayIndex();
-    var weekStart = _phxBrisbaneMondayISO();
-    var checkinDone = localStorage.getItem('phoenix_weekly_checkin_done_' + weekStart);
-    var dot = document.getElementById('hamburger-dot');
-    if(dot) dot.style.display = (isCheckInDay && !checkinDone) ? 'block' : 'none';
-  } catch(_e){}
-};
+// v4.9.332 — THE HAMBURGER DOT IS GONE. Jon asked for it twice; removed on his ruling
+// of 11 Sep after he was told what it actually was (the weekly check-in reminder, not
+// the AI-programme notifier he took it for). _phxUpdateHamburgerDot is in
+// blab_archive.js if it is ever wanted back.
+//
+// CHECK_IN_DAYS and _phxCheckInDayIndex above STAY. They are not the dot's — three other
+// places read them (the Sunday review card, the check-in gate, and the schedule
+// adjustment), and deleting a shared helper because its most visible consumer went is
+// how a working feature dies quietly.
 
 window._phxSkipMorningCheckin = function(){
   var keys = _phxMorningKeys();
@@ -34308,7 +34302,6 @@ window._wciGoToTimetable = async function(){
       // Clear hamburger dot
       try {
         if(typeof _phxBrisbaneMondayISO==='function') localStorage.setItem('phoenix_weekly_checkin_done_'+_phxBrisbaneMondayISO(), '1');
-        if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
       } catch(_e){}
     } catch(e){ console.warn('[PHX] check-in save error:', e); _phxRecordWriteError('checkin.save.throw', e, null); }
   }
@@ -34418,7 +34411,6 @@ async function submitWeeklyCheckin(){
       if(typeof _phxBrisbaneMondayISO==='function'){
         localStorage.setItem('phoenix_weekly_checkin_done_' + _phxBrisbaneMondayISO(), '1');
       }
-      if(typeof _phxUpdateHamburgerDot==='function') _phxUpdateHamburgerDot();
     } catch(_e){}
     // v4.7.37 FIX 2: hand off to the schedule-adjustment screen → next-week generation.
     // Stash the freshly-submitted check-in payload so the regen call can ground the prompt.

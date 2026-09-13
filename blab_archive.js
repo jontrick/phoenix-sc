@@ -775,3 +775,29 @@ function _nutProgWeekPickerCard(week){
   return h;
 }
 
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REMOVED v4.9.332 — the hamburger notification dot.
+//
+// Jon asked for it gone twice. The first time (v4.9.314) it was left in place because
+// his stated reason was false: he called it "leftover from the old AI programme" and it
+// was actually the WEEKLY CHECK-IN reminder — shown only on athlete.fqCheckInDay when
+// that week's check-in had not been submitted. He was told that, and asked again, so it
+// went. The menu itself stayed: it is the only route to Nutrition, Peptides, Records,
+// the training calendar and the standalone timer.
+//
+// The markup removed with it: `#hamburger-dot` (Today header), `#hamburger-dot-records`
+// (Records header, which nothing ever updated — only the Today one was written), and the
+// CSS rule. CHECK_IN_DAYS and _phxCheckInDayIndex were NOT removed; three other callers
+// use them.
+window._phxUpdateHamburgerDot = function(){
+  try {
+    var b = _phxBrisbaneNow();
+    var isCheckInDay = b.date.getDay() === _phxCheckInDayIndex();
+    var weekStart = _phxBrisbaneMondayISO();
+    var checkinDone = localStorage.getItem('phoenix_weekly_checkin_done_' + weekStart);
+    var dot = document.getElementById('hamburger-dot');
+    if(dot) dot.style.display = (isCheckInDay && !checkinDone) ? 'block' : 'none';
+  } catch(_e){}
+};

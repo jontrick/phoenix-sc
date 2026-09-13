@@ -4158,47 +4158,30 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(!dom.isOpen(), 'open then close leaves it closed');
   });
 
-  // ── THE RED DOT IS THE WEEKLY CHECK-IN, NOT THE AI PROGRAMME ──────────────
-  // Jon believed it was the old AI-programme notifier and asked for it gone if so.
-  // It is not: it is the weekly check-in reminder, and it is conditional on his own
-  // configured check-in day. Pinned so the next person does not delete it on the
-  // same assumption.
+  // ── THE RED DOT IS GONE (v4.9.332) ────────────────────────────────────────
+  // It was the weekly check-in reminder, not the AI-programme notifier Jon took it for.
+  // He was told that on .314 and asked again, so it went on his ruling. The two cases
+  // that used to pin its behaviour are removed with it — a test for deleted behaviour is
+  // not coverage, it is a guard against reinstating something nobody wants back.
+  //
+  // What is pinned instead is in harness.mjs: the markup must not return, and the menu
+  // itself must survive. The menu was NOT removed — it is the only route to Nutrition,
+  // Peptides, Records, the training calendar and the standalone timer.
 
-  test('DOT: it shows only on his check-in day, and only when the check-in is not done', () => {
+  test('DOT: the check-in day helper survived the dot that used it', () => {
+    // CHECK_IN_DAYS / _phxCheckInDayIndex have three other callers (the Sunday review
+    // card, the check-in gate, the schedule adjustment). Deleting a shared helper because
+    // its most visible consumer went is how a working feature dies quietly.
     reset(); signIn(UID);
-    app.athlete = { id: UID, fqCheckInDay: 'friday' };
-    const dot = { id: 'hamburger-dot', style: {} };
-    const real = app.document.getElementById;
-    app.document.getElementById = (id) => (id === 'hamburger-dot' ? dot : null);
-    try { app._phxUpdateHamburgerDot(); } finally { app.document.getElementById = real; }
-    // Today is whatever it is; the assertion is that the decision is DERIVED, not pinned on.
-    const isFriday = app._phxBrisbaneNow().date.getDay() === 5;
-    assert.equal(dot.style.display, isFriday ? 'block' : 'none',
-      'the dot tracks the configured check-in day, so it is not an always-on badge');
+    app.athlete = { id: UID, fqCheckInDay: 'sunday' };
+    assert.equal(app._phxCheckInDayIndex(), 0, 'sunday still resolves');
+    app.athlete = { id: UID };
+    assert.equal(app._phxCheckInDayIndex(), 5, 'and the friday default still holds');
   });
 
-  test('DOT: a submitted check-in clears it on the day itself', () => {
-    // CLOCK PINNED, and it has to be. The first version of this derived the day name
-    // from the wall clock and set fqCheckInDay to it — which looked robust and was not:
-    // CHECK_IN_DAYS only accepts friday/saturday/sunday/monday, so from Tuesday to
-    // Thursday it silently fell back to Friday and asserted the dot was hidden while
-    // claiming to test that it shows. Written on a Sunday, dead by Tuesday. This is the
-    // decay the header of this file warns about, so: 2026-09-11 is a Friday, pinned.
-    reset(); signIn(UID);
-    app.athlete = { id: UID, fqCheckInDay: 'friday' };
-    const dot = { id: 'hamburger-dot', style: {} };
-    const real = app.document.getElementById;
-    app.document.getElementById = (id) => (id === 'hamburger-dot' ? dot : null);
-    try {
-      withClock('2026-09-11T02:00:00.000Z', () => {   // 12:00 Friday in Brisbane
-        assert.equal(app._phxBrisbaneNow().date.getDay(), 5, 'the pin really is a Friday');
-        app._phxUpdateHamburgerDot();
-        assert.equal(dot.style.display, 'block', 'shown when the check-in is outstanding');
-        seed('phoenix_weekly_checkin_done_' + app._phxBrisbaneMondayISO(), '1');
-        app._phxUpdateHamburgerDot();
-        assert.equal(dot.style.display, 'none', 'and cleared once he has done it');
-      });
-    } finally { app.document.getElementById = real; }
+  test('DOT: the updater is gone from the app', () => {
+    assert.equal(typeof app._phxUpdateHamburgerDot, 'undefined',
+      'removed, not left defined-but-uncalled — that is the dead-code shape this repo keeps producing');
   });
 
   // ── THE PREVIOUS RESULT MUST BE THIS EXERCISE'S (v4.9.320) ────────────────
@@ -5033,6 +5016,29 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._blabRenderTodayFromCalendar(card, inner, 3);
     assert.ok(/3 of 3 done/.test(inner.innerHTML),
       'got: ' + (inner.innerHTML.match(/\d of \d done/) || ['(no counter)'])[0]);
+  });
+
+  test('WODDONE: his exact two sessions — Legionnaire ROW and Atlas', () => {
+    // Named rather than generic. He reported these two by name on 11 Sep, and the
+    // generic fixtures above would keep passing if either id ever stopped resolving:
+    // a scheduled custom whose libId does not match a real PHX_LIB session would show
+    // START forever and no test would notice.
+    const today = app._phxLocalISO();
+    assert.ok(app.phxSessionById('wod-leg-row'), 'Legionnaire ROW resolves in PHX_LIB');
+    assert.ok(app.phxSessionById('titan-atlas'), 'Atlas resolves in PHX_LIB');
+    calSeed({ sessions: [Object.assign(S(3, 4, today), { status: 'completed' })],
+              customs: [CUSTOM('c1', 'wod-leg-row', today), CUSTOM('c2', 'titan-atlas', today)] });
+    // Finish them the way he does: through the score sheet, which is the only path.
+    app._phxSaveScore(app.phxSessionById('wod-leg-row'), 'done', '');
+    app._phxSaveScore(app.phxSessionById('titan-atlas'), 'done', '');
+    const cal = read(`blab_calendar_v1_${UID}`);
+    assert.equal(cal.customs[0].status, 'completed', 'Legionnaire ROW is marked done');
+    assert.equal(cal.customs[1].status, 'completed', 'Atlas is marked done');
+    const card = stubEl(), inner = stubEl();
+    app._blabRenderTodayFromCalendar(card, inner, 3);
+    assert.ok(/3 of 3 done/.test(inner.innerHTML),
+      'got: ' + (inner.innerHTML.match(/\d of \d done/) || ['(no counter)'])[0]);
+    assert.ok(!/Start →/.test(inner.innerHTML), 'and neither still offers START');
   });
 
   test('WODDONE: an unfinished WOD still counts as outstanding', () => {

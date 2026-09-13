@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.331'", 'version is 4.9.331');
+has("var APP_VERSION='4.9.332'", 'version is 4.9.332');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2756,8 +2756,14 @@ hasCode("catch(_wl){ return 0; }", 'MENU: STRUCTURAL a corrupt walk log yields n
 // The dot is the WEEKLY CHECK-IN reminder, conditional on athlete.fqCheckInDay — not
 // an AI-programme badge and not always on. Named here because the whole request was
 // premised on it being the other thing.
-hasCode('var isCheckInDay = b.date.getDay() === _phxCheckInDayIndex();',
-  'MENU: the red dot is the check-in-day reminder, not a permanent badge');
+// v4.9.332: the dot is REMOVED on Jon's ruling. This pin used to assert what it was;
+// it now asserts it has not come back. Archived in blab_archive.js.
+hasNot('id="hamburger-dot"', 'MENU: the check-in dot markup is gone from the header');
+hasNot('id="hamburger-dot-records"', 'MENU: and from the Records header, where nothing ever updated it');
+hasNotCode('window._phxUpdateHamburgerDot = function()', 'MENU: the updater is gone, not merely uncalled');
+// The helper it shared with three other callers STAYS. Removing a shared helper along
+// with its most visible consumer is how a working feature dies quietly.
+hasCode('function _phxCheckInDayIndex(){', 'MENU: the check-in day helper survives the dot');
 
 // ── TWO WEEK BADGES, ONE PER DOMAIN (v4.9.301) ──────────────────────────────
 // Jon: "WEEK 1" top right against "Week 3" on the session card. The badge read

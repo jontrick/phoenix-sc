@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.332';
+var APP_VERSION='4.9.333';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3901,6 +3901,39 @@ function _blabApplyCloud(key, cloud, rawLocal){
     var _cs = document.getElementById('screen-blab-calendar');
     if(_cs && _cs.classList && _cs.classList.contains('active') && typeof _blabCalRender === 'function') _blabCalRender();
   } catch(_cre){ console.warn('[PHX] calendar repaint after cloud restore failed:', _cre); }
+  // v4.9.333 — AND THE SESSION SCREEN. Jon, 11 Sep: last week's weights and reps were
+  // missing when he opened the session at 6:23am and were there by 7:04am.
+  //
+  // The comment on blabOpenSession's wait has said the reason out loud since .291:
+  // "_blabApplyCloud repaints the calendar and Today but not the session screen." The
+  // wait was supposed to make the repaint unnecessary — and it is gated on
+  // `Object.keys(records).length > 0`, which is a proxy for "the records have loaded" and
+  // is wrong the moment localStorage holds a PARTIAL set. A couple of stale keys from a
+  // previous device satisfy it, the wait is skipped, the cards render blank, and nothing
+  // fills them in. Waiting is a race; repainting when the data actually arrives is not.
+  //
+  // GATED ON NOTHING BEING LOGGED YET. A re-render rebuilds the card list, and while
+  // _phxRestoreSessionVisualState puts back every ticked set with its kg and reps, a
+  // value TYPED but not yet ticked would be lost. So this only fires in the window Jon
+  // described — he has opened the session and not started it. Once a set is on file the
+  // blank banner is the lesser problem.
+  try {
+    var _ss = document.getElementById('screen-session');
+    if(_ss && _ss.classList && _ss.classList.contains('active')
+       && window._blabCurrentSession && typeof window.blabOpenSession === 'function'){
+      var _logged = 0;
+      try {
+        (typeof _phxSetShadowKeys === 'function' ? _phxSetShadowKeys() : []).forEach(function(k){
+          var a = JSON.parse(localStorage.getItem(k) || '[]');
+          if(Array.isArray(a)) _logged += a.length;
+        });
+      } catch(_sk){ _logged = 1; }   // unreadable shadow -> assume work exists, do not repaint
+      if(_logged === 0){
+        console.log('[PHX] cloud records landed with the session screen open and nothing logged — repainting');
+        window.blabOpenSession(window._blabCurrentSession.week, window._blabCurrentSession.day);
+      }
+    }
+  } catch(_sre){ console.warn('[PHX] session repaint after cloud restore failed:', _sre); }
 }
 
 window.blabRestoreFromCloud = function(profileRow){

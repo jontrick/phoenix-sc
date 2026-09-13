@@ -5053,4 +5053,89 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       'got: ' + (inner.innerHTML.match(/\d of \d done/) || ['(no counter)'])[0]);
     assert.ok(/Start →/.test(inner.innerHTML), 'and the one left still offers its start');
   });
+
+  // ── LAST SESSION DATA, PRESENT WHEN THE CARDS FIRST RENDER (v4.9.333) ─────
+  // Jon, 11 Sep: last week's weights and reps were missing when he opened the session at
+  // 6:23am and were there by 7:04am.
+  //
+  // blabOpenSession waits for records ONLY when localStorage has none at all
+  // (`Object.keys(records).length > 0`). That is a proxy for "the records have loaded"
+  // and it is wrong the moment the store is PARTIAL: a couple of stale keys satisfy it,
+  // the wait is skipped, the cards render blank, and _blabApplyCloud repaints the
+  // calendar and Today but never the session screen. Waiting is a race; repainting when
+  // the data actually lands is not.
+
+  const cloudApply = (opts) => {
+    const o = opts || {};
+    reset(); signIn(UID);
+    seed(KEY, o.local || { active: true, week: 3, last_completed_day: 2,
+                           maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: OLDER });
+    app._blabCurrentSession = o.current === undefined ? { week: 3, day: 3 } : o.current;
+    app._phxActiveSessionKey = 'blab:3:3:' + app._phxLocalISO();
+    if (o.shadow) seed('phoenix_sets_blab:3:3:' + app._phxLocalISO(), o.shadow);
+    const el = { classList: { contains: () => o.sessionActive !== false, add(){}, remove(){} } };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'screen-session' ? el : null);
+    const realOpen = app.blabOpenSession;
+    const calls = [];
+    app.blabOpenSession = (w, d) => calls.push([w, d]);
+    try {
+      app._blabApplyCloud(KEY, o.cloud || { active: true, week: 3, last_completed_day: 2,
+        maxes: { bench: 130, squat: 150, deadlift: 170 },
+        records: { 'Bench Press_wk': { '2': { wt: 100, reps: 6 } } }, _ts: NEWER }, null);
+    } finally { app.document.getElementById = realGet; app.blabOpenSession = realOpen; }
+    return calls;
+  };
+
+  test('LOADLATE: cloud records landing on an open session repaint it', () => {
+    // THE REPORTED BUG. Without this the cards he is looking at stay blank for the whole
+    // session and only fill in if he leaves and comes back.
+    const calls = cloudApply({});
+    assert.equal(calls.length, 1, 'the session screen was repainted');
+    assert.deepEqual(calls[0], [3, 3], 'with the session he is actually in');
+  });
+
+  test('LOADLATE: it does NOT repaint once a set is logged', () => {
+    // A re-render rebuilds the card list. Ticked sets come back with their kg and reps,
+    // but a value typed and not yet ticked would be lost — so this stays out of his way
+    // the moment there is real work on file.
+    const calls = cloudApply({ shadow: [{ exId: 'bench', setIdx: 0, kg: 100, reps: 5 }] });
+    assert.equal(calls.length, 0, 'work in progress is left alone');
+  });
+
+  test('LOADLATE: an unreadable shadow store is treated as work, not as empty', () => {
+    // UNKNOWN MUST NOT RESOLVE TO "FINE". If the store cannot be parsed we cannot know
+    // whether he has logged anything, and the cautious branch is to leave the screen be.
+    const calls = cloudApply({ shadow: 'not-json{{' });
+    assert.equal(calls.length, 0, 'unreadable means assume work exists');
+  });
+
+  test('LOADLATE: nothing happens when he is not on the session screen', () => {
+    const calls = cloudApply({ sessionActive: false });
+    assert.equal(calls.length, 0, 'no session on screen, nothing to repaint');
+  });
+
+  test('LOADLATE: nothing happens with no current session recorded', () => {
+    const calls = cloudApply({ current: null });
+    assert.equal(calls.length, 0, 'no identity, no repaint — never guess which session');
+  });
+
+  test('LOADLATE: the calendar repaint it copies still works', () => {
+    // The pattern this was modelled on. If the session repaint had been bolted in ahead
+    // of it and thrown, the calendar would have stopped repainting silently.
+    reset(); signIn(UID);
+    seed(KEY, { active: true, week: 3, last_completed_day: 2,
+                maxes: { bench: 130, squat: 150, deadlift: 170 }, _ts: OLDER });
+    const el = { classList: { contains: () => true, add(){}, remove(){} } };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'screen-blab-calendar' ? el : null);
+    const realRender = app._blabCalRender;
+    let painted = 0;
+    app._blabCalRender = () => { painted++; };
+    try {
+      app._blabApplyCloud(KEY, { active: true, week: 3, last_completed_day: 2,
+        maxes: { bench: 130, squat: 150, deadlift: 170 }, records: {}, _ts: NEWER }, null);
+    } finally { app.document.getElementById = realGet; app._blabCalRender = realRender; }
+    assert.equal(painted, 1, 'the calendar still repaints');
+  });
 }

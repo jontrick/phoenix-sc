@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.332'", 'version is 4.9.332');
+has("var APP_VERSION='4.9.333'", 'version is 4.9.333');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2558,6 +2558,23 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── LAST SESSION DATA ARRIVES BEFORE HE NEEDS IT (v4.9.333) ─────────────────
+// Jon, 11 Sep: last week's weights and reps missing at 6:23am, present by 7:04am.
+//
+// blabOpenSession's wait is gated on `Object.keys(records).length > 0` — a proxy for
+// "the records have loaded" that a PARTIAL store satisfies. The comment on that wait has
+// named the real gap since .291: "_blabApplyCloud repaints the calendar and Today but
+// not the session screen." So repaint it, rather than racing the fetch.
+hasCode("var _ss = document.getElementById('screen-session');",
+  'LOADLATE: STRUCTURAL cloud records landing repaint the open session screen');
+// Gated on nothing being logged: a re-render rebuilds the cards, and while ticked sets
+// come back with their kg and reps, a value typed and not yet ticked would be lost.
+hasCode('if(_logged === 0){', 'LOADLATE: it stays out of the way once real work is on file');
+hasCode('catch(_sk){ _logged = 1; }',
+  'LOADLATE: an unreadable shadow store counts as work — unknown does not resolve to "fine"');
+// Behaviour in tests/training.mjs under LOADLATE:, including the calendar repaint this
+// was modelled on, so bolting one in ahead of the other cannot silently break it.
 
 // ── THE SESSION SCREEN HOLDS (v4.9.331) ─────────────────────────────────────
 // Jon, 11 Sep: "the screen he's on doesn't hold when he briefly switches to look at

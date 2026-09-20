@@ -353,6 +353,21 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
 
 ## OPEN — NUTRITION
 
+- [ ] NUTRITION — **Two walkthrough findings left unfixed, by Jon's choice of what to take
+      in that pass (20 Sep).** Both are legibility, not correctness.
+      **(a) Tappable and untappable components look almost the same.** On the DAILY card,
+      chicken, yoghurt, almonds, the grain, greens, the nut butter and the two proteins open
+      a sheet; oats, blueberries, milk, avocado, tuna, rice cakes and olive oil do nothing.
+      The only difference is a small gold chevron. He taps a line, nothing happens, and
+      there is no way to tell a line with no options from one that failed to respond —
+      the `alert()` shape again, in a milder form.
+      **(b) Decimals nobody weighs.** "101.3 g Blueberries", "226.7 g cooked" rice. The
+      ladder's output is exact and the kitchen is not. Rounding the garnish rows to 5 g
+      would not move a macro enough to measure.
+      Closes with a ruling on (a) — a muted affordance on every line, or a label on the ones
+      with nothing to offer — and a rounding rule for display on (b).
+
+
 - [ ] NUTRITION — **The carb ladder runs out on LIFT DAYS at the bottom of the cut, and
       the guard cannot see it.** Measured on origin/main BEFORE v4.9.335, so pre-existing:
       the lowest phase serves 137.5 g of carbohydrate against a target of 130 on a lifting

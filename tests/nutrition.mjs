@@ -4906,6 +4906,62 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // position restore, not a fresh entry". Nothing else sets it.
   const window_phxSet = (a, on) => { a.window._phxRestoringPosition = on; };
 
+  // ── a formula he is not taking is not a thing to log ─────────────────────
+  // v4.9.340. Walkthrough finding, and a rough edge on v4.9.336's own feature:
+  // skipping the coffee left its row tickable and left it in the denominator, so
+  // "0 of 7 logged" still asked for seven and 7 of 7 became unreachable. The app
+  // agreed he was not having it and then kept asking him to tick it.
+
+  test('SKIPLOG a skipped formula leaves the count, so a full day is reachable', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    const before = app.nutProgConsumedOn(d, 'basmati');
+    app.nutProgToggleSupp(d, 'coffee');
+    const after = app.nutProgConsumedOn(d, 'basmati');
+    assert.equal(after.meal_count, before.meal_count - 1,
+      'the denominator drops by one: ' + before.meal_count + ' to ' + after.meal_count);
+    // And the day can actually be completed.
+    (app.nutProgMealsOn(d, 'basmati') || []).forEach((m) => {
+      if (!m.skipped) app.nutProgToggleMeal(d, m.id);
+    });
+    const done = app.nutProgConsumedOn(d, 'basmati');
+    assert.equal(done.done_count, done.meal_count,
+      'ticking everything that is left reaches a full day: ' +
+      done.done_count + ' of ' + done.meal_count);
+  });
+
+  test('SKIPLOG it carries no tick control, and cannot be ticked round the back', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    app.nutProgToggleSupp(d, 'coffee');
+    const dm = dom();
+    onDay(d, () => { app._nutTab = 'today'; app.nutRenderScreen(); });
+    const body = dm.node('nut-screen-body');
+    const tick = body.querySelectorAll('[data-prog-tick]')
+      .filter((el) => el.getAttribute('data-prog-tick') === 'coffee')[0];
+    assert.equal(tick, undefined, 'no tick on the skipped row');
+    // The control is gone; the store must refuse it anyway, because "unreachable"
+    // is a claim about today's layout and layouts move.
+    assert.equal(app.nutProgToggleMeal(d, 'coffee'), false, 'and the write is refused');
+    assert.equal(!!app.nutProgTicked(d).coffee, false, 'so nothing is recorded');
+  });
+
+  test('SKIPLOG a tick recorded BEFORE the skip stops counting', () => {
+    setUp(110);
+    const d = '2026-09-15';
+    app.nutProgToggleMeal(d, 'coffee');                 // he had it
+    const had = app.nutProgConsumedOn(d, 'basmati');
+    assert.equal(had.done_count, 1, 'logged once');
+    app.nutProgToggleSupp(d, 'coffee');                 // then says he did not
+    const now = app.nutProgConsumedOn(d, 'basmati');
+    assert.equal(now.done_count, 0,
+      'the stale tick stops counting rather than inflating the day');
+    // And it comes back if he changes his mind again, because the tick was never
+    // deleted — only ignored while the formula is skipped.
+    app.nutProgToggleSupp(d, 'coffee');
+    assert.equal(app.nutProgConsumedOn(d, 'basmati').done_count, 1, 'and returns');
+  });
+
   // ── one basis per sheet ──────────────────────────────────────────────────
   // v4.9.338. Walkthrough finding: the lunch-protein rows read "165 kcal · P30
   // C0 F3.6 per 100 g" while every other section of the SAME sheet read "... in

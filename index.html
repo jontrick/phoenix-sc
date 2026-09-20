@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.339';
+var APP_VERSION='4.9.340';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22403,6 +22403,10 @@ function nutProgTicked(dateKey){
 }
 
 function nutProgToggleMeal(dateKey, mealId){
+  // A skipped formula cannot be logged. The control is not drawn, so this only
+  // fires for a caller that bypassed the screen — but "unreachable" is a claim
+  // about today's layout, and layouts move.
+  if(typeof nutProgSuppSkipOn === 'function' && nutProgSuppSkipOn(dateKey).indexOf(mealId) >= 0) return false;
   if(!dateKey || !mealId) return false;
   var ns = nutGetState();
   var day = _nutProgDay(ns, dateKey);
@@ -22460,8 +22464,11 @@ function nutProgConsumedOn(dateKey, riceId){
              p: Math.round((plan.p + ex.p)*10)/10,
              c: Math.round((plan.c + ex.c)*10)/10,
              f: Math.round((plan.f + ex.f)*10)/10 },
-    done_count: meals.filter(function(m){ return !!done[m.id]; }).length,
-    meal_count: meals.length
+    // v4.9.340 — a skipped formula is out of BOTH figures. Leaving it in the denominator
+    // made a full day impossible to reach; leaving a stale tick in the numerator
+    // would count something he has since said he did not have.
+    done_count: meals.filter(function(m){ return !m.skipped && !!done[m.id]; }).length,
+    meal_count: meals.filter(function(m){ return !m.skipped; }).length
   };
 }
 
@@ -22902,8 +22909,11 @@ function _nutProgTodayCard(forDate){
           return '<div data-nut-item="' + today + '|' + it.slot + '" style="font-size:11px;color:var(--text);padding:3px 0;cursor:pointer;touch-action:manipulation;">' +
             lbl + ' <span style="color:var(--gold);font-size:10px;">&rsaquo;</span></div>';
         }).join('');
-    h += '<div' + (_ro ? '' : ' data-prog-tick="' + m.id + '" data-prog-day="' + today + '"') + ' style="display:flex;gap:10px;align-items:flex-start;padding:10px 11px;background:var(--bg2);border:1px solid ' + (m.supp ? 'rgba(200,150,62,0.35)' : 'var(--border)') + ';border-radius:9px;margin-bottom:8px;' + (_ro ? '' : 'cursor:pointer;touch-action:manipulation;') + '">' +
-      '<div style="width:19px;height:19px;border-radius:50%;flex-shrink:0;margin-top:2px;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;">' + (on ? '&#10003;' : '') + '</div>' +
+    var _inert = _ro || !!m.skipped;
+    h += '<div' + (_inert ? '' : ' data-prog-tick="' + m.id + '" data-prog-day="' + today + '"') + ' style="display:flex;gap:10px;align-items:flex-start;padding:10px 11px;background:var(--bg2);border:1px solid ' + (m.supp ? 'rgba(200,150,62,0.35)' : 'var(--border)') + ';border-radius:9px;margin-bottom:8px;' + (_inert ? '' : 'cursor:pointer;touch-action:manipulation;') + (m.skipped ? 'opacity:0.55;' : '') + '">' +
+      (m.skipped
+        ? '<div style="width:19px;height:19px;border-radius:50%;flex-shrink:0;margin-top:2px;border:1.5px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text3);">&ndash;</div>'
+        : '<div style="width:19px;height:19px;border-radius:50%;flex-shrink:0;margin-top:2px;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';display:flex;align-items:center;justify-content:center;font-size:11px;color:#000;">' + (on ? '&#10003;' : '') + '</div>') +
       '<div style="flex:1;min-width:0;">' +
         '<div style="display:flex;gap:7px;align-items:baseline;flex-wrap:wrap;">' +
           '<span style="font-size:10px;font-weight:700;color:var(--gold);">' + m.time + '</span>' +

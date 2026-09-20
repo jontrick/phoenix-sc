@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.337';
+var APP_VERSION='4.9.338';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23681,6 +23681,24 @@ function nutOpenSwapSheet(forDate, only){
   // `only` is the slot tapped on the plan. Null means every section — which is
   // how the day header opens it.
   var _show = function(slot){ return !only || only === slot; };
+  // v4.9.338 — the lunch protein's serve for THIS day, from the plate itself.
+  var _swServe = 0, _swUnit = ' g';
+  (function(){
+    if(typeof nutProgMealsOn !== 'function') return;
+    var _ms = nutProgMealsOn(today, (typeof nutProgRiceChoice === 'function') ? nutProgRiceChoice() : null) || [];
+    _ms.forEach(function(M){
+      if(M.supp) return;
+      (M.items || []).forEach(function(it){
+        // Same rule the plate label uses: a volume unit stands alone, anything
+        // else is grams with the state after it — "135 g cooked", not "135 cooked".
+        if(it.slot === 'lunch_protein'){
+          _swServe = it.g || 0;
+          var _u = it.u || '';
+          _swUnit = (_NUT_VOLUME_UNITS.indexOf(_u) >= 0) ? _u : (' g' + _u);
+        }
+      });
+    });
+  })();
   var h = '';
   Object.keys(_NUT_PROG_SWAPS).forEach(function(slot){
     if(!_show(slot)) return;
@@ -23696,7 +23714,14 @@ function nutOpenSwapSheet(forDate, only){
         '<div style="width:17px;height:17px;border-radius:50%;flex-shrink:0;border:1.5px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';"></div>' +
         '<div style="flex:1;min-width:0;">' +
           '<div style="font-size:13px;font-weight:600;color:var(--text);">' + o.n + (o.base ? ' <span style="font-size:9px;color:var(--text3);font-weight:400;">default</span>' : '') + '</div>' +
-          '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' + o.k + ' kcal &middot; P' + o.p + ' C' + o.c + ' F' + o.f + ' per 100 g</div>' +
+          '<div style="font-size:10px;color:var(--text3);margin-top:1px;">' +
+            (_swServe > 0
+              ? (_swServe + _swUnit + ' &middot; ' +
+                 Math.round(o.p * _swServe / 100) + ' g protein &middot; ' +
+                 Math.round(o.f * _swServe / 100 * 10) / 10 + ' g fat &middot; ' +
+                 Math.round(o.k * _swServe / 100) + ' kcal in this serve')
+              : (o.k + ' kcal &middot; P' + o.p + ' C' + o.c + ' F' + o.f + ' per 100 g')) +
+          '</div>' +
         '</div></div>';
     });
     h += '</div>';

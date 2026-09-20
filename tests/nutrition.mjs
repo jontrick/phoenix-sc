@@ -4906,6 +4906,66 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // position restore, not a fresh entry". Nothing else sets it.
   const window_phxSet = (a, on) => { a.window._phxRestoringPosition = on; };
 
+  // ── one basis per sheet ──────────────────────────────────────────────────
+  // v4.9.338. Walkthrough finding: the lunch-protein rows read "165 kcal · P30
+  // C0 F3.6 per 100 g" while every other section of the SAME sheet read "... in
+  // this serve". Two bases in one screen, and the per-100 one does not answer
+  // what he is asking, which is how much protein he gets if he picks this.
+
+  test('BASIS every option row on the sheet quotes a SERVE, not per 100 g', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-21', () => app.nutOpenSwapSheet('2026-09-21'));
+    const html = d.lastCreatedHtml();
+    assert.equal(/per 100 g/.test(html), false,
+      'no section quotes per 100 g any more: ' +
+      (html.replace(/<[^>]+>/g, ' ').match(/[^.]{0,60}per 100 g/) || [''])[0]);
+    assert.ok(/in this serve/.test(html), 'and they quote the serve instead');
+  });
+
+  test('BASIS the lunch protein serve is the one the plate gives', () => {
+    setUp(110);
+    const day = '2026-09-21';
+    const served = (app.nutProgMealsOn(day, 'basmati') || [])
+      .filter((m) => m.id === 'lunch')[0].items
+      .filter((i) => i.slot === 'lunch_protein')[0];
+    const d = dom();
+    onDay(day, () => app.nutOpenSwapSheet(day, 'lunch_protein'));
+    const html = d.lastCreatedHtml();
+    const i = html.indexOf('data-nut-swap="lunch_protein|');
+    const row = html.slice(i, i + 700).replace(/<[^>]+>/g, ' ').replace(/&middot;/g, '·');
+    const g = /([\d.]+) g cooked/.exec(row);
+    assert.ok(g, 'the row states a weight: ' + row.slice(0, 120));
+    assert.equal(parseFloat(g[1]), served.g,
+      'and it is the plate\'s: sheet ' + g[1] + ' g, plate ' + served.g + ' g');
+    // The default's protein in that serve must match what the plate reports, or
+    // the two screens disagree about the same portion.
+    const p = /([\d.]+) g protein/.exec(row);
+    assert.ok(Math.abs(parseFloat(p[1]) - served.p) <= 1,
+      'and its protein is the plate\'s: sheet ' + p[1] + ', plate ' + served.p);
+  });
+
+  test('BASIS a swap that changes the animal changes the protein on the row', () => {
+    setUp(110);
+    const d = dom();
+    onDay('2026-09-21', () => app.nutOpenSwapSheet('2026-09-21', 'lunch_protein'));
+    const html = d.lastCreatedHtml();
+    const grab = (id) => {
+      const i = html.indexOf('data-nut-swap="lunch_protein|' + id + '"');
+      if (i < 0) return null;
+      const m = /([\d.]+) g protein/.exec(html.slice(i, i + 700).replace(/<[^>]+>/g, ' '));
+      return m ? parseFloat(m[1]) : null;
+    };
+    const chicken = grab('chicken') || grab('base');
+    const fish = grab('whitefish') || grab('fish');
+    assert.ok(chicken !== null, 'the default row quotes protein');
+    if (fish !== null) {
+      assert.ok(fish < chicken,
+        'white fish carries less in the same portion: ' + fish + ' against ' + chicken +
+        '. A per-100 figure said the same thing without saying what HE gets.');
+    }
+  });
+
   // ── the sheet must offer the serve he will actually be given ─────────────
   // v4.9.337. Walkthrough finding: the grain sheet offered basmati at "179 g
   // cooked · same 50.1 g carbs" and the plate served 226.7 g. Sushi 172 against

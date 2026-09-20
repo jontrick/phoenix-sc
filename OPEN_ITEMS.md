@@ -196,6 +196,28 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
         a suggestion across them would be confidently wrong. Expect "as DB Shrugs —
         different lift, for reference" rather than "beat it" when the variant changed.
 
+- [ ] JON — **The hamburger menu: he is assessing what he still needs.** 20 Sep: "i dont
+      want all the hamburger menu gone, i will assess what is needed still and get back to
+      you". So this is PARKED, not open for anyone to action. The red dot went in v4.9.332
+      and that part is done. **Do not delete the menu on a later request without checking
+      this entry**: measured 20 Sep, `navTo('peptide')` occurs exactly ONCE in index.html
+      and that occurrence is the sidebar item, so removing the menu removes the only route
+      to Peptides. Same for the standalone timer and Adjust Programme. The bottom nav
+      covers only Today / Programme / Records / Profile / Feedback. If it does go, the
+      replacement routes ship FIRST and are confirmed reachable before anything is removed.
+
+- [ ] JON — **Repeated-effort sessions now take a typed time (v4.9.339).** Legionnaire ROW,
+      Legionnaire RUN and **Tartarus** — he guessed it was only the Legionnaires; Tartarus
+      is 6 x 500m row with 3 min rest and is the one it helps most.
+      **What to watch:** the effort time is prefilled from the app clock and you can type
+      over it with the rower's number. Rest starts on its own once the effort is logged,
+      and there is now a "Start next effort now" button because the rower sets its own
+      rest. The score is the average of what was ENTERED.
+      · A 0:00 effort is refused rather than logged — it would drag the average split down
+        and look identical to a real one.
+      · The 100m sprints have no machine, so leaving the prefill alone still logs the app
+        clock. That is pinned, because fixing the row must not break the run.
+
 ## WAITING ON JON
 
 - [ ] JON — **Upper 2, morning session of 2026-09-05.** Six Training fixes land together

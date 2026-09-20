@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.338'", 'version is 4.9.338');
+has("var APP_VERSION='4.9.339'", 'version is 4.9.339');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2558,6 +2558,36 @@ has("['afap','interval','steady_state','tabata','total_rep_goal']", 'PULLUP: the
 has("reps: st.trTotal, secs: st.elapsed || 0", 'PULLUP: STRUCTURAL reps and time are stored together (behaviour: tests/training.mjs PULLUP:)');
 has("_bs.records[_trKey + '_prev'] = _trCur;", 'PULLUP: STRUCTURAL an earlier day rotates rather than being overwritten');
 has("function recTR(name)", 'PULLUP: the reader that surfaces last time on the block');
+
+// ── REPEATED-EFFORT SESSIONS TAKE A TYPED TIME (v4.9.339) ───────────────────
+// Jon: "its really hard to line up the clock on the rower and the timer in the session
+// clock". The app timed each effort and he had to TAP at the moment it ended, while the
+// machine beside him already showed the real split.
+hasCode("id=\"phx-int-min\"", 'INTERVAL: STRUCTURAL an effort takes a typed time');
+hasCode('var _entered = readEntry();', 'INTERVAL: and the typed time is what gets logged');
+// The prefill must stop fighting him for the field the moment he types in it.
+hasCode("if(!plan.countReps && phase==='work' && !entryDirty) setEntry(clk);",
+  'INTERVAL: the clock prefills only until he touches it');
+// "a rest timer that auto starts once entered the previous set result" — the auto-start
+// already existed; what was missing is ending it early, because the rower sets its own.
+hasCode("id=\"phx-int-skiprest\"", 'INTERVAL: rest can be ended early');
+
+// HOW MANY SESSIONS THIS TOUCHES. Jon guessed "only the legionnaire sessions"; it is
+// three, and the third is Tartarus (6 x 500m row, 3 min rest) which is the case it helps
+// most. The count is pinned because a fourth added later needs the same entry and nobody
+// would think to check.
+(() => {
+  const code = phxStripComments(html);
+  const n = (code.match(/renderer:'intervals'/g) || []).length;
+  if (n === 3) ok('INTERVAL: 3 sessions use the intervals renderer (2 Legionnaire + Tartarus)');
+  else bad(`INTERVAL: ${n} sessions use renderer:'intervals', expected 3. A new one gets ` +
+           `the typed-time entry for free, but check its config has efforts/work/restSec ` +
+           `and update this count.`);
+})();
+// Behaviour in tests/training.mjs under INTERVAL: — 9 cases driving the real renderer,
+// including a whole Tartarus logged by hand. Proved by inversion 2026-09-20: making the
+// clock win turns 3 red, while "left alone, the app clock still logs it" stays green, so
+// the sprint sessions that have no machine to read were not traded away for the rows.
 
 // ── EXERCISE FAMILIES (v4.9.334) ────────────────────────────────────────────
 // Jon: "'Shrug' was missing last week's data entirely" — the shrug slot changes movement

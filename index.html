@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.338';
+var APP_VERSION='4.9.339';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -39581,13 +39581,54 @@ function _phxRenderIntervals(s){
           '<div id="phx-int-reps" style="font-family:var(--font-d);font-size:40px;font-weight:900;color:var(--text);min-width:60px;">0</div>'+
           '<div id="phx-int-repplus" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--gold);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;">+</div>'+
         '</div></div>'
-        : '')+
+        // v4.9.339 — Jon: "its really hard to line up the clock on the rower and the timer
+        // in the session clock - especially on the rower where i can set the rest".
+        //
+        // The app timed the effort and he had to TAP at the exact moment it ended. On a
+        // rower or a treadmill the machine is already showing the real split, so he was
+        // being asked to race his own thumb against a number he could already read.
+        //
+        // PREFILLED FROM THE CLOCK, OVERWRITABLE BY HAND. Not a mode switch: the 100m
+        // sprints have no machine and the app clock is the only source, while the rows
+        // have a better one. Prefilling serves both, and the moment he types the
+        // prefill stops fighting him for the field.
+        : '<div style="text-align:center;">'+
+            '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Time for this effort</div>'+
+            '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;">'+
+              '<input id="phx-int-min" type="number" inputmode="numeric" min="0" placeholder="min" style="width:86px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:26px;font-weight:800;text-align:center;outline:none;">'+
+              '<span style="font-family:var(--font-d);font-size:26px;font-weight:900;color:var(--text3);">:</span>'+
+              '<input id="phx-int-sec" type="number" inputmode="numeric" min="0" max="59" placeholder="sec" style="width:86px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:26px;font-weight:800;text-align:center;outline:none;">'+
+            '</div>'+
+            '<div style="font-size:11px;color:var(--text3);margin-top:6px;">Filled from the clock above. Type over it with the machine&rsquo;s time.</div>'+
+          '</div>')+
       '<button id="phx-int-action" style="width:100%;margin-top:16px;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;">'+(plan.countReps?'Log Round':'Log Split')+'</button>'+
+      // v4.9.339: the rower's own rest is set on the rower. Forcing him to sit through
+      // the app's 60s when the machine says 90 is the same fight in the other direction.
+      '<button id="phx-int-skiprest" style="display:none;width:100%;margin-top:10px;padding:13px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--text2);cursor:pointer;">Start next effort now</button>'+
       '<div id="phx-int-log" style="margin-top:14px;"></div>'+
     '</div>'+
     '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Log Score')+'</div>';
   o.querySelector('.phx-lib-back').onclick=function(){ _phxClearTick(); o.remove(); _phxOpenSessionDetail(s.id); };
-  function setClock(){ var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(clk); }
+  // Stops the prefill overwriting what he has typed. Reset at the start of every effort,
+  // so the next one prefills again rather than keeping the last effort's number.
+  var entryDirty=false;
+  function setEntry(sec){
+    var m=document.getElementById('phx-int-min'), s2=document.getElementById('phx-int-sec');
+    if(!m||!s2) return;
+    sec=Math.max(0,Math.floor(+sec||0));
+    m.value=String(Math.floor(sec/60)); s2.value=String(sec%60);
+  }
+  function readEntry(){
+    var m=document.getElementById('phx-int-min'), s2=document.getElementById('phx-int-sec');
+    if(!m||!s2) return null;
+    var mi=parseInt(m.value,10), se=parseInt(s2.value,10);
+    if(!(mi>0) && !(se>0)) return null;
+    return (mi>0?mi:0)*60 + (se>0?se:0);
+  }
+  function setClock(){
+    var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(clk);
+    if(!plan.countReps && phase==='work' && !entryDirty) setEntry(clk);
+  }
   function repaintLog(){
     var arr = plan.countReps ? reps : splits;
     var html=arr.map(function(v,i){ return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-family:var(--font-d);font-size:13px;"><span style="color:var(--text3);text-transform:uppercase;">'+label(i)+'</span><span style="color:var(--text);font-weight:800;">'+(plan.countReps?(v+' reps'):phxFmtTime(v))+'</span></div>'; }).join('');
@@ -39596,7 +39637,8 @@ function _phxRenderIntervals(s){
   // v4.9.118 FIX 1: work + rest phases are measured from phStart (a timestamp) rather than a
   // per-tick ++/--, so a split logged after a screen lock is the real elapsed work time.
   var phStart=0;
-  function startWork(){ phase='work'; clk=0; curReps=0; phStart=Date.now();
+  function startWork(){ phase='work'; clk=0; curReps=0; phStart=Date.now(); entryDirty=false;
+    var sk=document.getElementById('phx-int-skiprest'); if(sk) sk.style.display='none';
     var e=document.getElementById('phx-int-eff'); if(e) e.textContent='Effort '+(effort+1)+' / '+plan.efforts;
     var p=document.getElementById('phx-int-phase'); if(p){ p.textContent=label(effort); p.style.color='var(--gold)'; }
     var rp=document.getElementById('phx-int-reps'); if(rp) rp.textContent='0';
@@ -39606,6 +39648,7 @@ function _phxRenderIntervals(s){
   function startRest(){ phase='rest'; clk=plan.restSec; phStart=Date.now();
     var p=document.getElementById('phx-int-phase'); if(p){ p.textContent='Rest'; p.style.color='var(--text3)'; }
     var a=document.getElementById('phx-int-action'); if(a) a.style.display='none';
+    var sk=document.getElementById('phx-int-skiprest'); if(sk) sk.style.display='block';
     setClock();
   }
   function paintInt(){
@@ -39615,7 +39658,20 @@ function _phxRenderIntervals(s){
   }
   function logEffort(){
     if(phase==='work' && phStart) clk=_phxElapsedSince(phStart); // log the true split, not a stale tick
-    if(plan.countReps) reps.push(curReps); else splits.push(clk);
+    if(plan.countReps) reps.push(curReps);
+    else {
+      // v4.9.339: what he entered wins over what the app timed. The typed number is the
+      // one he read off the machine; the clock is only the fallback when he has left the
+      // prefill alone. A zero is refused rather than logged — an effort of 0:00 would
+      // drag the average split down and there would be no way to tell it from a real one.
+      var _entered = readEntry();
+      var _val = (_entered != null) ? _entered : clk;
+      if(!(_val > 0)){
+        if(typeof window._blabCalToast === 'function') window._blabCalToast('Enter the time for this effort','error');
+        return;
+      }
+      splits.push(_val);
+    }
     repaintLog(); effort++;
     if(effort>=plan.efforts){ finish(); return; }
     if(plan.restSec>0) startRest(); else startWork();
@@ -39629,6 +39685,14 @@ function _phxRenderIntervals(s){
     document.getElementById('phx-int-repminus').onclick=function(){ if(curReps>0) curReps--; var r=document.getElementById('phx-int-reps'); if(r) r.textContent=curReps; };
   }
   document.getElementById('phx-int-action').onclick=logEffort;
+  if(!plan.countReps){
+    ['phx-int-min','phx-int-sec'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el) el.addEventListener('input', function(){ entryDirty=true; });
+    });
+    var _sk=document.getElementById('phx-int-skiprest');
+    if(_sk) _sk.onclick=function(){ if(phase==='rest') startWork(); };
+  }
   document.getElementById('phx-run-finish').onclick=finish;
   // v4.9.118 FIX 3: effort 1 starts at 0:00 only after the 5-4-3-2-1-GO! count-in.
   showCountIn(function(){

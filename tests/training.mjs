@@ -5243,4 +5243,171 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/beat it/.test(html), 'same lift, so it is a target: ' + html.slice(0, 300));
     assert.ok(!/different lift/.test(html), 'and not flagged as a different one');
   });
+
+  // ── REPEATED-EFFORT SESSIONS TAKE A TYPED TIME (v4.9.339) ─────────────────
+  // Jon: "its really hard to line up the clock on the rower and the timer in the session
+  // clock - especially on the rower where i can set the rest - maybe can i have a rest
+  // timer that auto starts once entered the previous set result".
+  //
+  // The app timed each effort and he had to TAP at the moment it ended. On a rower the
+  // machine already shows the real split, so he was racing his own thumb against a number
+  // he could read. The entry is now prefilled from the app clock and overwritable.
+
+  // Drives the real renderer. Everything it touches is stubbed rather than faked around,
+  // so the wiring is under test and not just the arithmetic.
+  const intervalRig = (sessionId) => {
+    reset(); signIn(UID);
+    const els = {};
+    const mk = (id) => ({
+      id: id || '', style: {}, value: '', textContent: '', innerHTML: '', _h: {},
+      addEventListener(k, f) { this._h[k] = f; },
+      removeAttribute() {}, setAttribute() {}, remove() {}, appendChild(c) { return c; },
+      querySelector() { return mk('q'); },
+      classList: { add() {}, remove() {}, contains: () => false }
+    });
+    const real = {
+      create: app.document.createElement, get: app.document.getElementById,
+      countIn: app.showCountIn, reg: app._phxRegisterTimer,
+      since: app._phxElapsedSince, score: app._phxOpenScoreEntry,
+      body: app.document.body, toast: app._blabCalToast
+    };
+    let tick = null, scored = null, toasted = null, elapsed = 0;
+    app.document.createElement = () => mk('');
+    app.document.getElementById = (id) => (els[id] || (els[id] = mk(id)));
+    app.document.body = Object.assign({}, real.body || {}, { appendChild(){}, contains: () => true });
+    app.showCountIn = (cb) => cb();
+    app._phxRegisterTimer = (fn) => { tick = fn; };
+    app._phxElapsedSince = () => elapsed;
+    app._phxOpenScoreEntry = (s, v) => { scored = v; };
+    app._blabCalToast = (m) => { toasted = m; };
+    app._phxRenderIntervals(app.phxSessionById(sessionId));
+    return {
+      els,
+      type: (m, s) => { els['phx-int-min'].value = String(m); els['phx-int-sec'].value = String(s);
+                        if (els['phx-int-min']._h.input) els['phx-int-min']._h.input(); },
+      advance: (sec) => { elapsed = sec; if (tick) tick(); },
+      log: () => els['phx-int-action'].onclick(),
+      skip: () => els['phx-int-skiprest'].onclick(),
+      score: () => scored,
+      toast: () => toasted,
+      restore: () => {
+        app.document.createElement = real.create; app.document.getElementById = real.get;
+        app.showCountIn = real.countIn; app._phxRegisterTimer = real.reg;
+        app._phxElapsedSince = real.since; app._phxOpenScoreEntry = real.score;
+        app.document.body = real.body; app._blabCalToast = real.toast;
+      }
+    };
+  };
+
+  test('INTERVAL: the premise — it is NOT only the Legionnaire sessions', () => {
+    // Jon: "to start i believe this will only affect the legionnaire sessions?" Close, but
+    // Tartarus is the third and it is 6 x 500m row with 3 min rest — the case this helps
+    // most. Asserted so the count cannot drift without someone noticing.
+    const ids = ['wod-leg-run', 'wod-leg-row', 'titan-tartarus'];
+    ids.forEach((id) => {
+      const s = app.phxSessionById(id);
+      assert.ok(s, id + ' exists');
+      assert.equal(s.renderer, 'intervals', id + ' uses the intervals renderer');
+    });
+  });
+
+  test('INTERVAL: the effort entry exists and is prefilled from the clock', () => {
+    const r = intervalRig('wod-leg-row');
+    try {
+      r.advance(23);
+      assert.equal(r.els['phx-int-min'].value, '0', 'minutes prefilled');
+      assert.equal(r.els['phx-int-sec'].value, '23', 'seconds prefilled from the app clock');
+    } finally { r.restore(); }
+  });
+
+  test('INTERVAL: once he types, the clock stops overwriting him', () => {
+    // The whole point. A prefill that keeps reclaiming the field is worse than none.
+    const r = intervalRig('wod-leg-row');
+    try {
+      r.advance(23);
+      r.type(0, 19);
+      r.advance(31);
+      assert.equal(r.els['phx-int-sec'].value, '19', 'his number survives the next tick');
+    } finally { r.restore(); }
+  });
+
+  test('INTERVAL: the TYPED time is what gets logged, not the app clock', () => {
+    // The reported problem, at its smallest: the machine said 0:19, the app clock said 0:31.
+    const r = intervalRig('wod-leg-row');
+    try {
+      r.advance(31);
+      r.type(0, 19);
+      r.log();
+      assert.ok(/0:19/.test(r.els['phx-int-log'].innerHTML),
+        'the log shows what he read off the rower: ' + r.els['phx-int-log'].innerHTML);
+      assert.ok(!/0:31/.test(r.els['phx-int-log'].innerHTML), 'and not the app clock');
+    } finally { r.restore(); }
+  });
+
+  test('INTERVAL: left alone, the app clock still logs it', () => {
+    // The 100m sprints have no machine to read, so the clock must remain a real source.
+    // Without this the fix would quietly break the run session to fix the row one.
+    const r = intervalRig('wod-leg-run');
+    try {
+      r.advance(17);
+      r.log();
+      assert.ok(/0:17/.test(r.els['phx-int-log'].innerHTML),
+        'got: ' + r.els['phx-int-log'].innerHTML);
+    } finally { r.restore(); }
+  });
+
+  test('INTERVAL: an empty or zero effort is refused, not logged as 0:00', () => {
+    // A 0:00 effort drags the average split down and reads exactly like a real one.
+    const r = intervalRig('wod-leg-row');
+    try {
+      r.type(0, 0);
+      r.log();
+      assert.ok(r.toast() && /time for this effort/i.test(r.toast()), 'he is told why: ' + r.toast());
+      // Prove nothing was recorded by logging a REAL effort next and counting the rows.
+      // Asserting the log element is empty would pass vacuously — a refused log never
+      // repaints, so that element has not even been created yet.
+      r.type(0, 19);
+      r.log();
+      const rows = (r.els['phx-int-log'].innerHTML.match(/border-bottom/g) || []).length;
+      assert.equal(rows, 1, 'exactly one effort on file, not a 0:00 and a 0:19');
+    } finally { r.restore(); }
+  });
+
+  test('INTERVAL: rest starts on entry, and offers to be skipped', () => {
+    // "a rest timer that auto starts once entered the previous set result".
+    const r = intervalRig('wod-leg-row');
+    try {
+      r.advance(19); r.log();
+      assert.equal(r.els['phx-int-phase'].textContent, 'Rest', 'rest began on its own');
+      assert.equal(r.els['phx-int-skiprest'].style.display, 'block',
+        'and can be ended early — the rower sets its own rest');
+      assert.equal(r.els['phx-int-action'].style.display, 'none', 'the log button is out of the way');
+    } finally { r.restore(); }
+  });
+
+  test('INTERVAL: skipping rest starts the next effort cleanly', () => {
+    const r = intervalRig('wod-leg-row');
+    try {
+      r.advance(19); r.type(0, 19); r.log();
+      r.skip();
+      assert.equal(r.els['phx-int-eff'].textContent, 'Effort 2 / 10', 'on to the next');
+      assert.equal(r.els['phx-int-skiprest'].style.display, 'none', 'skip is hidden again');
+      r.advance(22);
+      assert.equal(r.els['phx-int-sec'].value, '22',
+        'and the entry prefills again rather than keeping effort 1 on screen');
+    } finally { r.restore(); }
+  });
+
+  test('INTERVAL: the score is the average of what he ENTERED', () => {
+    // Tartarus is 6 efforts, so this finishes a whole session by hand.
+    const r = intervalRig('titan-tartarus');
+    try {
+      [95, 97, 99, 101, 103, 105].forEach(function(sec){
+        r.type(Math.floor(sec / 60), sec % 60);
+        r.log();
+        if (r.els['phx-int-skiprest'].style.display === 'block') r.skip();
+      });
+      assert.equal(r.score(), 100, 'mean of 95..105 is 100 seconds');
+    } finally { r.restore(); }
+  });
 }

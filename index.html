@@ -3543,7 +3543,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.336';
+var APP_VERSION='4.9.337';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23881,12 +23881,36 @@ function nutOpenSwapSheet(forDate, only){
   if(typeof nutProgGrainOpts === 'function'){
     var _gt = nutProgTargetsOn(today);
     var _gix = _gt ? (_gt.phase_n - 1) : 0;
+    // v4.9.337 — what the day ACTUALLY serves, asked once. The plate row is the plan before
+    // the ladder; this is the plan after it, which is what lands in front of him.
+    var _gMeals = (typeof nutProgMealsOn === 'function')
+      ? (nutProgMealsOn(today, nutProgRiceChoice()) || []) : [];
+    var _gServedC = function(mealId){
+      var out = null;
+      _gMeals.forEach(function(M){
+        if(M.id !== mealId || M.supp) return;
+        (M.items || []).forEach(function(it){
+          if(it.slot !== ('grain_' + mealId)) return;
+          // CAREFUL: a converted grain row carries ABSOLUTE macros (nutProgRiceFor
+          // returns the serve's own totals), while an unconverted plate row carries
+          // them per 100 g. Reading `c` without knowing which doubles the figure —
+          // it put basmati at 514 g on the first attempt. The grain's own
+          // carbs-per-100-cooked and the served weight are unambiguous.
+          var _r = (typeof _nutRiceByName === 'function') ? _nutRiceByName(it.n) : null;
+          if(_r) out = _r.c100 * it.g / 100;
+        });
+      });
+      return out;
+    };
     Object.keys(_NUT_PROG_GRAIN_SLOTS).forEach(function(mealId){
       if(!_show('grain_' + mealId)) return;
       var slot = _NUT_PROG_GRAIN_SLOTS[mealId];
       var prow = _nutProgPlateRow(slot.item);
       if(!prow || !(prow.g[_gix] > 0)) return;     // not on the plate this phase
-      var baseC = prow.c * prow.g[_gix] / 100;
+      // The served figure where there is one; the row only as a fallback, for a
+      // meal the engine did not put a grain on.
+      var _sc = _gServedC(mealId);
+      var baseC = (_sc !== null && _sc > 0) ? _sc : (prow.c * prow.g[_gix] / 100);
       var cur = nutProgGrainOn(today, mealId, nutProgRiceChoice());
       // Dinner's reference is the sweet potato itself; lunch's is the week's
       // default grain, because that is what the shopping list already has in it.

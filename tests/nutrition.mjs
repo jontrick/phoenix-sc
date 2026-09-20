@@ -3398,11 +3398,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/which nothing makes up/.test(html),
       'and says plainly that it is not compensated, rather than implying it is');
     const quinoa = html.slice(html.indexOf('data-nut-grain="lunch|quinoa"'));
-    // +5.4 until v4.9.335. The gap scales with the lunch carb block, and week 1
-    // now opens on the smaller phase — 80 g dry of quinoa against basmati for the
-    // same 50.1 g of carbohydrate.
-    assert.ok(/\+4\.2 g protein/.test(quinoa.slice(0, 700)),
-      'quinoa at lunch is +4.2 g of protein against basmati for the same carbs');
+    // Back to +5.4 at v4.9.337, and for a better reason than it was there before:
+    // the sheet now sizes from the serve the day actually puts on the plate
+    // (63.5 g of carbohydrate on this rest day) rather than from the plate row
+    // before the ladder has run (50.1 g). The cost scales with the serve.
+    assert.ok(/\+5\.4 g protein/.test(quinoa.slice(0, 700)),
+      'quinoa at lunch is +5.4 g of protein against basmati for the same carbs');
   });
 
   test('GRAIN tapping a grain row records it — the selector has a door', () => {
@@ -4904,6 +4905,64 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // The boot restore sets this immediately around its navTo to say "this is a
   // position restore, not a fresh entry". Nothing else sets it.
   const window_phxSet = (a, on) => { a.window._phxRestoringPosition = on; };
+
+  // ── the sheet must offer the serve he will actually be given ─────────────
+  // v4.9.337. Walkthrough finding: the grain sheet offered basmati at "179 g
+  // cooked · same 50.1 g carbs" and the plate served 226.7 g. Sushi 172 against
+  // 219.1, brown 217 against 276.1 — every option understated by about a quarter.
+  //
+  // Neither number was careless. They were two DERIVATIONS of "the serve": the
+  // sheet sized from the plate row at this phase, the plate from what the meal
+  // carries once the carb ladder has run, which on a rest day includes the
+  // pre-training block that moved into lunch. The wrong one was on the screen he
+  // chooses from.
+
+  test('GRAINX the sheet offers the serve the plate will give, on both kinds of day', () => {
+    setUp(110);
+    // A rest day and a lift day, because the difference between them is exactly
+    // the shortfall that made these two disagree.
+    [['2026-09-21', false], ['2026-09-22', true]].forEach(([day, wantLift]) => {
+      assert.equal(app.nutProgTargetsOn(day).lift, wantLift,
+        day + ' is the kind of day this case needs');
+      ['basmati', 'sushi', 'brown'].forEach((g) => {
+        app.nutProgSetGrain(day, 'lunch', g);
+        const served = (app.nutProgMealsOn(day, 'basmati') || [])
+          .filter((m) => m.id === 'lunch')[0].items
+          .filter((i) => i.slot === 'grain_lunch')[0];
+        const d = dom();
+        onDay(day, () => app.nutOpenSwapSheet(day, 'grain_lunch'));
+        const html = d.lastCreatedHtml();
+        const i = html.indexOf('data-nut-grain="lunch|' + g + '"');
+        assert.ok(i >= 0, g + ' is offered on ' + day);
+        const m = /([\d.]+) g cooked/.exec(html.slice(i, i + 600));
+        assert.ok(m, 'and says what it weighs');
+        assert.ok(Math.abs(parseFloat(m[1]) - served.g) <= 1,
+          day + ' ' + g + ': the sheet offers ' + m[1] + ' g and the plate serves ' +
+          served.g + ' g. He picks from this screen and eats from the other one.');
+      });
+    });
+  });
+
+  test('GRAINX and the carbohydrate it quotes is the one it holds', () => {
+    setUp(110);
+    const day = '2026-09-21';
+    const d = dom();
+    onDay(day, () => app.nutOpenSwapSheet(day, 'grain_lunch'));
+    const html = d.lastCreatedHtml();
+    const quoted = (html.match(/same ([\d.]+) g carbs/g) || [])
+      .map((x) => parseFloat(/([\d.]+)/.exec(x)[1]));
+    assert.ok(quoted.length >= 3, 'several options quote a carb figure');
+    assert.equal(quoted.every((q) => Math.abs(q - quoted[0]) < 0.05), true,
+      'and every one of them quotes the SAME figure — holding the carbohydrate is ' +
+      'the whole point of the swap: ' + JSON.stringify(quoted.slice(0, 6)));
+    const served = (app.nutProgMealsOn(day, 'basmati') || [])
+      .filter((m) => m.id === 'lunch')[0].items
+      .filter((i) => i.slot === 'grain_lunch')[0];
+    const rice = app._nutRiceByName(served.n);
+    assert.ok(Math.abs(quoted[0] - (rice.c100 * served.g / 100)) <= 0.5,
+      'and it is the carbohydrate actually on the plate: quoted ' + quoted[0] +
+      ', served ' + Math.round(rice.c100 * served.g / 100 * 10) / 10);
+  });
 
   // ── the formulas are a choice, not a consequence of the day ──────────────
   // Jon: "supplements are fixed to training days but Jon may or may not take them

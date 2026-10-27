@@ -224,3 +224,44 @@ helper-level cases stay green.
 still show `athlete.currentWeek`. They are internally consistent (week-1 label over
 week-1 content) and the flow increments the same number it displays. See `OPEN_ITEMS.md`
 — it needs a ruling on whose week the weekly review is, not a patch.
+
+
+---
+
+## Road to Draft Day — v4.9.341 (27 Oct 2026)
+
+**What it is.** A second programme on the BLAB rails. `blab_state.programme === 'draft'`
+switches `blabGetSessionData` to `draftGetSessionData`; translator, renderers, set logging,
+history banners, completion, cloud mirror and calendar are all shared. Code lives between
+`DRAFT PROGRAMME — BEGIN` and `— END` in index.html.
+
+**Weeks/days.** Internal week 1 = baseline test (days 5 Sat, 6 Sun only). Weeks 2-6 =
+training weeks 1-5; week 6 tapers Mon-Thu and retests Sat/Sun. Days are fixed weekdays:
+1 Mon conditioning · 2 Tue upper ME · 3 Wed sprint · 4 Thu lower ME · 5 Sat speed upper ·
+6 Sun speed lower. `draftStart` schedules every session on the calendar, plus PHX_LIB
+Core (Sat) and WOD (Sun) customs tagged `draft:true`.
+
+**Engine — `draftAfterSession(week, day)`**, called from `blabCompleteSession` after both
+saves. Reads only what existing loggers wrote: `records[name+'_wk']` (top set),
+`_lastsets`, `_result`, and `records[name+'_rpe']` (new: mirrored from the block-RPE
+overlay by `draftRecordRpe`, Draft states only). Tests SET maxes; training top sets can
+only RAISE a max, max +5% per update, via variation ratios in `_DRAFT_LIFT_MAP`. Speed-day
+loads ±5% from RPE (bounded -10/+5). Conditioning/sprint level 1-5 from RPE. Rep bench
++2.5 kg at 20 reps. Weighted pull-up +2.5 kg when all reps hit. Every change is shown in
+a notice and kept in `draft.changes`.
+
+**Contract changes other domains should know.**
+- `blabDayLabel(d)` returns Draft names for 1-6 while Draft is active (BLAB branch and its
+  1-4 range line untouched).
+- `blabTrainingWeekLabel()` returns `TRAIN TEST` in the test week, then `TRAIN W1..W5`.
+- `blabProgressScore` uses 6 days/week for a Draft state.
+- `blabRestoreFromCloud` — PROGRAMME EPOCH rule before the progress guard: copies with
+  different `programme_started` resolve to the newer epoch. Without it the Draft reset to
+  week 1 reads as "behind" and is blocked on every other device. Pinned in tests.
+- `_blabLogResult` now uses parseFloat (a 40-yd 4.95 was stored as 4); result inputs can
+  be decimal (`result_decimal`).
+
+**Switching back.** `draftReturnToBlab()` restores BLAB position, maxes, log, per-week
+history maps and calendar; Draft is kept in `draft_parked`.
+
+Tests: `tests/training.mjs`, cases prefixed `DRAFT`. Four were inverted and went red.

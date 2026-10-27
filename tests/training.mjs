@@ -5410,4 +5410,251 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(r.score(), 100, 'mean of 95..105 is 100 seconds');
     } finally { r.restore(); }
   });
+  // ══════════════════════════════════════════════════════════════════════════
+  // DRAFT — Road to Draft Day, Block 1 (v4.9.341)
+  // Every case drives the real entry points: draftStart, blabGetSessionData (which
+  // delegates), blabToPhoenixSession, draftAfterSession, blabCompleteSession,
+  // blabRestoreFromCloud and renderTodayScreen. Dates: START is an arbitrary Monday —
+  // only offsets from it are asserted, so it cannot decay. The Today-card case pins
+  // `now` with withClock and says which day it means.
+  // ══════════════════════════════════════════════════════════════════════════
+  const START = '2026-10-26';                 // a Monday; Sat test = 31 Oct, Sun = 1 Nov
+  const CALKEY = `blab_calendar_v1_${UID}`;
+  const DMAX = { bench: 125, squat: 150, deadlift: 160 };
+  const BLAB_W7 = () => ({ active: true, week: 7, last_completed_day: 2, maxes: { bench: 130, squat: 150, deadlift: 170 },
+    chin_max: 11, log: [{ week: 7, day: 1 }], records: { 'Bench Press_wk': { '7': { wt: 110, reps: 3 } }, 'Flat DB Press_max': 22 },
+    _ts: OLDER });
+  const startDraft = (pre) => {
+    reset(); signIn(UID);
+    if (pre) seed(KEY, pre);
+    seed(CALKEY, { sessions: [{ blabWeek: 7, blabDay: 3, scheduledDate: '2026-10-28', status: 'pending' }], customs: [{ id: 'mine', cat: 'WOD', libId: 'wod-ajax', label: 'Ajax', scheduledDate: '2026-10-29', status: 'pending' }] });
+    return app.draftStart(DMAX, START);
+  };
+  const DRAFT_FORMATS = new Set(['percentage_sets','superset','afap','max_reps_sets','standard_sets']);
+  const logWk = (name, week, wt, reps) => {
+    const s = read(KEY); s.records = s.records || {};
+    const m = s.records[name + '_wk'] || {}; m[String(week)] = { wt, reps, date: app._phxLocalISO() };
+    s.records[name + '_wk'] = m; seed(KEY, s);
+  };
+  const logToday = (key, val) => { const s = read(KEY); s.records = s.records || {}; s.records[key] = val; seed(KEY, s); };
+
+  test('DRAFT: every scheduled session builds and translates (32 sessions)', () => {
+    startDraft();
+    let n = 0;
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) {
+      const sess = app.blabGetSessionData(w, d);
+      if (w === 1 && d < 5) { assert.equal(sess, null, `test week W1D${d} has no session`); continue; }
+      assert.ok(sess && sess.exercises && sess.exercises.length, `W${w}D${d} has exercises`);
+      const phx = app.blabToPhoenixSession(sess, w, d);
+      assert.equal(phx.exercises.length, sess.exercises.length, `W${w}D${d} translator keeps every block`);
+      sess.exercises.forEach((e) => {
+        assert.ok(e && e.name, `W${w}D${d} block has a name`);
+        assert.ok(DRAFT_FORMATS.has(e.format), `W${w}D${d} ${e.name}: known format (${e.format})`);
+        if (e.format === 'percentage_sets') e.sets.forEach((st) => assert.ok(st.kg > 0, `W${w}D${d} ${e.name}: every set has a load`));
+        if (e.format === 'superset') assert.equal(e.movements.length, 2, `W${w}D${d} ${e.name}: a pair`);
+      });
+      n++;
+    }
+    assert.equal(n, 32, '2 test-week sessions + 5 weeks x 6 days');
+  });
+
+  test('DRAFT: max effort lifts are never paired with anything', () => {
+    // Jon, 25 Oct: "max press with supersetting tri dips? Taking away the point??"
+    startDraft();
+    for (let w = 2; w <= 5; w++) for (const d of [2, 4]) {
+      const ex = app.blabGetSessionData(w, d).exercises;
+      const me = ex.find((e) => /MAX EFFORT/.test(e.note || ''));
+      assert.ok(me, `W${w}D${d} has a max effort lift`);
+      assert.equal(me.format, 'percentage_sets', 'as straight sets');
+      assert.ok(!ex.some((e) => e.format === 'superset' && e.movements.some((m) => m.name === me.name)), 'not inside any superset');
+    }
+  });
+
+  test('DRAFT: start parks BLAB instead of deleting it', () => {
+    const s = startDraft(BLAB_W7());
+    assert.equal(s.programme, 'draft');
+    assert.equal(s.week, 1, 'starts in the test week');
+    assert.equal(s.blab_paused.week, 7, 'BLAB position parked');
+    assert.equal(s.blab_paused.maxes.deadlift, 170, 'BLAB maxes parked');
+    assert.equal(s.blab_paused.calendarSessions.length, 1, 'BLAB calendar parked');
+    assert.ok(s.blab_paused.records_wk['Bench Press_wk'], 'BLAB per-week history parked');
+    assert.equal(s.records['Bench Press_wk'], undefined, 'and cleared, so BLAB weeks cannot pose as Draft weeks');
+    assert.equal(s.records['Flat DB Press_max'], 22, 'other records are kept');
+    assert.equal(s.maxes.bench, 125, 'Draft maxes set');
+  });
+
+  test('DRAFT: the calendar is fixed weekdays, Sat/Sun tests first, Fri always free', () => {
+    startDraft(BLAB_W7());
+    const cal = read(CALKEY);
+    const at = (w, d) => cal.sessions.find((e) => e.blabWeek === w && e.blabDay === d);
+    assert.equal(at(1, 5).scheduledDate, '2026-10-31', 'baseline Saturday');
+    assert.equal(at(1, 6).scheduledDate, '2026-11-01', 'baseline Sunday');
+    assert.equal(at(2, 1).scheduledDate, '2026-11-02', 'Week 1 Monday conditioning');
+    assert.equal(at(2, 4).scheduledDate, '2026-11-05', 'Week 1 Thursday lower');
+    assert.equal(at(6, 6).scheduledDate, '2026-12-06', 'retest Sunday');
+    assert.ok(!cal.sessions.some((e) => new Date(e.scheduledDate + 'T00:00:00').getDay() === 5), 'nothing on a Friday');
+    assert.equal(cal.sessions.length, 32, 'every session scheduled');
+    assert.ok(cal.customs.some((c) => c.id === 'mine'), 'his own custom sessions are kept');
+    assert.ok(!cal.sessions.some((e) => e.blabWeek === 7), 'BLAB sessions are off the calendar');
+    const sat = cal.customs.filter((c) => c.draft && c.scheduledDate === '2026-11-07');
+    assert.equal(sat.length, 1, 'a Phoenix Core session sits beside Week 1 Saturday');
+    assert.equal(sat[0].libId, 'core-s1');
+    const sun = cal.customs.filter((c) => c.draft && c.scheduledDate === '2026-11-08');
+    assert.equal(sun[0].libId, 'wod-valkyrie', 'and a Phoenix WOD beside Sunday');
+  });
+
+  test('DRAFT: switching back to BLAB restores position, maxes, history and calendar', () => {
+    startDraft(BLAB_W7());
+    assert.equal(app.draftReturnToBlab(), true);
+    const s = read(KEY);
+    assert.equal(s.programme, undefined, 'back on BLAB');
+    assert.equal(s.week, 7); assert.equal(s.last_completed_day, 2);
+    assert.equal(s.maxes.deadlift, 170);
+    assert.ok(s.records['Bench Press_wk'], 'BLAB per-week history back');
+    const cal = read(CALKEY);
+    assert.equal(cal.sessions.length, 1, 'BLAB calendar back');
+    assert.ok(!cal.customs.some((c) => c.draft), 'Draft add-ons removed');
+    assert.equal(app.blabGetSessionData(7, 1).name.indexOf('Upper'), 0, 'BLAB sessions build again');
+  });
+
+  test('DRAFT: restarting Draft over Draft keeps the parked BLAB', () => {
+    startDraft(BLAB_W7());
+    const again = app.draftStart(DMAX, START);
+    assert.equal(again.blab_paused.week, 7, 'the BLAB parking is not overwritten by a Draft copy');
+  });
+
+  test('DRAFT ENGINE: the test SETS a max, even downwards', () => {
+    startDraft();
+    logWk('Back Squat — 1RM Test', 1, 145, 1);
+    logWk('Bench Press — 1RM Test', 1, 130, 1);
+    const ch = app.draftAfterSession(1, 5);
+    const s = read(KEY);
+    assert.equal(s.maxes.squat, 145, 'squat max set from the made single, lower than the estimate');
+    assert.equal(s.maxes.bench, 125, 'bench untouched: it is not tested on Saturday');
+    assert.ok(ch.some((c) => /Squat max 150/.test(c)), 'and the change is reported');
+    assert.equal(app.blabGetSessionData(2, 4).exercises[1].sets[4].kg, app.blabPct(145, 86), 'next Thursday loads from the new max');
+  });
+
+  test('DRAFT ENGINE: a training top set can raise a max (capped at 5%) but never lower it', () => {
+    startDraft();
+    logWk('Floor Press', 2, 115, 3);            // e1RM 126.5 / 0.90 = 140.6 → capped at 131.25 → 130
+    app.draftAfterSession(2, 2);
+    assert.equal(read(KEY).maxes.bench, 130, 'raised, capped at +5% and floored to 2.5 kg');
+    logWk('Close-Grip Bench', 3, 90, 3);        // implies well under 130
+    app.draftAfterSession(3, 2);
+    assert.equal(read(KEY).maxes.bench, 130, 'a light day never lowers it');
+  });
+
+  test('DRAFT ENGINE: a grinding speed day drops next week 5%', () => {
+    startDraft();
+    const before = app.blabGetSessionData(3, 5).exercises[1].sets[0].pct;
+    logToday('Speed Bench (mini bands)_rpe', { date: app._phxLocalISO(), rpe: 9 });
+    const ch = app.draftAfterSession(2, 5);
+    assert.equal(read(KEY).draft.speedAdj.upper, -5);
+    assert.equal(app.blabGetSessionData(3, 5).exercises[1].sets[0].pct, before - 5, 'next Saturday is 5% lighter');
+    assert.ok(ch.some((c) => /down 5%/.test(c)), 'reported');
+  });
+
+  test('DRAFT ENGINE: conditioning levels move with the rating', () => {
+    startDraft();
+    const bouts = () => app.blabGetSessionData(3, 1).exercises.find((e) => e.name === 'Repeated-Effort Bouts').sets;
+    const b0 = bouts();
+    logToday('Repeated-Effort Bouts_rpe', { date: app._phxLocalISO(), rpe: 5 });
+    app.draftAfterSession(3, 1);
+    assert.equal(read(KEY).draft.level.cond, 3, 'easy rating moves up a level');
+    assert.equal(bouts(), b0 + 1, 'and next Monday has one more bout');
+    logToday('Repeated-Effort Bouts_rpe', { date: app._phxLocalISO(), rpe: 10 });
+    app.draftAfterSession(3, 1);
+    assert.equal(read(KEY).draft.level.cond, 2, 'a 10 moves back down');
+    logToday('Repeated-Effort Bouts_rpe', { date: '2020-01-01', rpe: 3 });
+    app.draftAfterSession(3, 1);
+    assert.equal(read(KEY).draft.level.cond, 2, 'an old rating is ignored');
+  });
+
+  test('DRAFT ENGINE: 20 reps on the rep bench earns +2.5 kg', () => {
+    startDraft();
+    const rb = app.blabGetSessionData(2, 5).exercises.find((e) => e.name === 'Bench Rep Set');
+    assert.equal(rb.load_choices[0], 75, 'starts at 60% of a 125 bench');
+    logToday('Bench Rep Set_lastsets', { date: app._phxLocalISO(), sets: [{ reps: 21, wt: 75 }] });
+    app.draftAfterSession(2, 5);
+    assert.equal(app.blabGetSessionData(3, 5).exercises.find((e) => e.name === 'Bench Rep Set').load_choices[0], 77.5);
+  });
+
+  test('DRAFT ENGINE: hitting every pull-up rep adds 2.5 kg', () => {
+    startDraft();
+    logWk('Weighted Pull-Up', 2, 15, 4);
+    app.draftAfterSession(2, 2);
+    assert.equal(read(KEY).draft.pullLoad, 17.5);
+    assert.ok(/17.5 kg/.test(app.blabGetSessionData(3, 2).exercises.find((e) => e.name === 'Weighted Pull-Up').note), 'next week says so');
+  });
+
+  test('DRAFT ENGINE: combine results are kept as dated history', () => {
+    startDraft();
+    logToday('40-yd Dash (sec)_result', 5.12);
+    logToday('Broad Jump (cm)_result', 251);
+    app.draftAfterSession(1, 5);
+    const t = read(KEY).draft.tests;
+    assert.equal(t['40-yd Dash (sec)'][0].value, 5.12, 'decimals survive');
+    assert.equal(t['Broad Jump (cm)'][0].value, 251);
+  });
+
+  test('DRAFT: completing Sunday (day 6) closes the week; Thursday does not', () => {
+    startDraft();
+    app.blabCompleteSession(2, 4);
+    assert.equal(read(KEY).week, 1, 'day 4 is not the end of a Draft week');
+    app.blabCompleteSession(1, 6);
+    assert.equal(read(KEY).week, 2, 'Sunday closes the test week');
+    const c = read(CALKEY).sessions.find((e) => e.blabWeek === 1 && e.blabDay === 6);
+    assert.equal(c.status, 'completed', 'and the calendar entry is ticked');
+  });
+
+  test('DRAFT RESTORE: a newer programme epoch wins although its week is lower', () => {
+    // Phone starts Draft (week 1); an old device still holds BLAB week 7. Without the
+    // epoch rule the progress guard reads Draft as "behind" and blocks it everywhere.
+    reset(); signIn(UID);
+    seed(KEY, BLAB_W7());
+    const cloud = { active: true, programme: 'draft', programme_started: NEWER, week: 1, last_completed_day: 0, maxes: DMAX, _ts: NEWER, draft: {} };
+    assert.equal(app.blabRestoreFromCloud({ blab_state: cloud }), true, 'cloud applied');
+    assert.equal(read(KEY).programme, 'draft');
+  });
+
+  test('DRAFT RESTORE: an OLDER programme epoch never replaces the newer one', () => {
+    reset(); signIn(UID);
+    seed(KEY, { active: true, programme: 'draft', programme_started: NEWER, week: 1, last_completed_day: 0, maxes: DMAX, _ts: OLDER });
+    const cloud = Object.assign(BLAB_W7(), { programme_started: OLDER, _ts: NEWER });
+    assert.equal(app.blabRestoreFromCloud({ blab_state: cloud }), false, 'blocked');
+    assert.equal(read(KEY).programme, 'draft', 'Draft stays');
+  });
+
+  test('DRAFT LABELS: week and day labels follow the programme; BLAB unchanged', () => {
+    startDraft();
+    assert.equal(app.blabTrainingWeekLabel(), 'TRAIN TEST', 'test week');
+    assert.equal(app.blabTrainingWeekLabelLong(), 'Test Week');
+    assert.equal(app.blabDayLabel(5), 'Speed Upper');
+    assert.equal(app.blabDayLabel(7), '', 'still empty out of range');
+    const s = read(KEY); s.week = 3; seed(KEY, s);
+    assert.equal(app.blabTrainingWeekLabel(), 'TRAIN W2', 'internal week 3 is training week 2');
+    assert.equal(app.blabTrainingWeekLabelLong(), 'Week 2 of 5');
+    reset(); signIn(UID); seed(KEY, BLAB_W7());
+    assert.equal(app.blabDayLabel(4), 'Lower Power', 'BLAB labels untouched');
+    assert.equal(app.blabTrainingWeekLabelLong(), 'Week 7 of 12');
+  });
+
+  test('DRAFT TODAY: the Today card shows the scheduled Draft session (drives renderTodayScreen)', () => {
+    // Pinned now: Tue 3 Nov 2026, midday UTC = training Week 1, Tuesday = Upper Max Effort.
+    withClock('2026-11-03T12:00:00.000Z', () => {
+      startDraft(BLAB_W7());
+      const inner = { innerHTML: '', style: {}, querySelector: () => null };
+      const card = { style: {}, querySelector: () => inner, removeAttribute: () => {}, setAttribute: () => {}, classList: { contains: () => false } };
+      const realGet = app.document.getElementById;
+      app.document.getElementById = (id) => (id === 'card-today-session' ? card : null);
+      try {
+        app.renderTodayScreen();
+        assert.ok(/Upper — Max Effort/.test(inner.innerHTML), 'today is the Tuesday upper session');
+        assert.ok(/DRAFT/.test(inner.innerHTML), 'labelled as the Draft programme');
+        assert.ok(/blabOpenSession\(2,2\)/.test(inner.innerHTML), 'wired to week 2 day 2');
+        assert.ok(!/BLAB/.test(inner.innerHTML), 'no BLAB wording');
+      } finally { app.document.getElementById = realGet; }
+    });
+  });
 }

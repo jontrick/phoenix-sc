@@ -2872,6 +2872,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <button onclick="_phxDevForceReload()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:12px;background:#c44;">Force Reload from Supabase</button>
   <button onclick="_phxDevForceRenderToday()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;border-color:var(--gold);color:var(--gold);">Debug + Force Render Today Card</button>
   <button onclick="window.blabOpenSetup()" style="width:100%;padding:14px;margin-bottom:12px;background:rgba(200,150,62,0.1);border:1px solid var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);cursor:pointer;">⚡ Built Like A Badass Setup</button>
+  <button onclick="window.draftOpenSetup()" style="width:100%;padding:14px;margin-bottom:12px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:#000;cursor:pointer;">Road to Draft Day &mdash; Setup</button>
   <button onclick="_phxDevForceCheckin()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Force Weekly Check-in (any day)</button>
   <button onclick="_phxDevBumpWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Bump Week Number (+1)</button>
   <button onclick="_phxDevResetWeek()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Reset to Week 1</button>
@@ -3543,7 +3544,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.340';
+var APP_VERSION='4.9.341';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3653,7 +3654,11 @@ window.blabTrainingWeek = function(){
     var s = window.blabGetState && window.blabGetState();
     // Paused counts. `paused` lives INSIDE `active` — a paused programme still has
     // a position, and blanking the badge would read as "no programme".
-    if(s && s.active) return s.week || 1;
+    if(s && s.active){
+      // v4.9.341 — Draft: test week shows as week 0's label; training weeks are 1-5.
+      if(s.programme === 'draft') return Math.max(1, (s.week || 1) - 1);
+      return s.week || 1;
+    }
   } catch(_tw){}
   var a = (typeof athlete !== 'undefined') ? athlete : null;
   if(a && a.aiProgramme){
@@ -3667,6 +3672,10 @@ window.blabTrainingWeek = function(){
 // THE PREFIX IS LOAD-BEARING, same as Nutrition's. A bare "Week 3" beside a bare
 // "Week 1" is the collision Jon reported; "TRAIN W3" beside "CUT W1" is not.
 window.blabTrainingWeekLabel = function(){
+  try {
+    var _s = window.blabGetState && window.blabGetState();
+    if(_s && _s.active && _s.programme === 'draft' && (_s.week || 1) <= 1) return 'TRAIN TEST';
+  } catch(_wl){}
   var w = window.blabTrainingWeek();
   return (w == null) ? null : ('TRAIN W' + w);
 };
@@ -3677,6 +3686,7 @@ window.blabTrainingWeekLabelLong = function(){
   if(w == null) return null;
   var s = null;
   try { s = window.blabGetState && window.blabGetState(); } catch(_tl){}
+  if(s && s.active && s.programme === 'draft') return window.draftWeekName(s.week || 1);
   return (s && s.active) ? ('Week ' + w + ' of 12') : ('Week ' + w);
 };
 
@@ -3804,7 +3814,10 @@ window.blabProgressScore = function(s){
   if(!s || typeof s !== 'object') return -1;
   var w = parseInt(s.week, 10); if(isNaN(w)) w = 0;
   var d = parseInt(s.last_completed_day, 10); if(isNaN(d)) d = 0;
-  return (w * 4) + d;
+  // v4.9.341: a Draft week has 6 days. Scores are only ever compared within one
+  // programme — see the epoch rule in blabRestoreFromCloud for across programmes.
+  var _dpw = (s.programme === 'draft') ? 6 : 4;
+  return (w * _dpw) + d;
 };
 
 // v4.9.195 — what is in the backup, in terms Jon can judge. Returns null when there
@@ -3986,6 +3999,21 @@ window.blabRestoreFromCloud = function(profileRow){
     else                                    cloudWins = false;     // rows 6 / 7
 
     if(!cloudWins) return false;
+
+    // v4.9.341 — PROGRAMME EPOCH. Starting Road to Draft Day resets week/day to 1, which
+    // the progress guard below would read as "cloud is behind" and block forever on any
+    // other device. programme_started is stamped once per programme switch: when the
+    // two copies carry different epochs, the newer epoch is the programme he chose last.
+    var _le = Date.parse(local.programme_started || ''), _ce = Date.parse(cloud.programme_started || '');
+    var _lE = isNaN(_le) ? 0 : _le, _cE = isNaN(_ce) ? 0 : _ce;
+    if(_cE !== _lE){
+      if(_cE > _lE){
+        _blabApplyCloud(key, cloud, rawLocal);
+        console.log('[PHX] BLAB state restored from cloud (newer programme epoch)');
+        return true;
+      }
+      return false;
+    }
 
     // Progress guard — rows 3 and 5 only.
     var localScore = window.blabProgressScore(local);
@@ -4523,7 +4551,7 @@ window._blabAuditWeekStatus = function(w, s){
   }
   var active = !!(s && s.active);
   var cur = (s && s.week) || 0;
-  if(completed >= 4) return 'done';
+  if(completed >= ((typeof window.trnProgramme === 'function') ? window.trnProgramme(s).days : 4)) return 'done';
   if(active && cur && w < cur) return 'done';
   if(active && cur && w === cur) return 'prog';
   if(completed > 0) return 'prog';
@@ -4563,7 +4591,7 @@ window._blabAuditGridHTML = function(s){
   var placeholder = !!(s && s._placeholder);
   var h = '<div style="padding:22px 18px 60px;max-width:640px;margin:0 auto;">';
   h += '<button onclick="window._blabCloseAudit()" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 15px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:20px;">← Back</button>';
-  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Built Like A Badass</div>';
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">'+((typeof window.trnProgramme === 'function') ? window.trnProgramme(s).name : 'Built Like A Badass')+'</div>';
   h += '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:8px;">Programme Audit</div>';
   h += '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:'+(placeholder?'10':'18')+'px;">Tap a week to reveal its four days. Tap a day for a read-only session preview, then Dry Run to walk the full live session with nothing saved.</div>';
   if(placeholder){
@@ -4574,7 +4602,8 @@ window._blabAuditGridHTML = function(s){
     '<span class="blab-audit-status prog">In Progress</span>'+
     '<span class="blab-audit-status upcoming">Upcoming</span></div>';
   h += '<div class="blab-audit-week-grid">';
-  for(var w=1; w<=12; w++){ h += window._blabAuditWeekTileHTML(w, s); }
+  var _aw = (typeof window.trnProgramme === 'function') ? window.trnProgramme(s).weeks : 12;
+  for(var w=1; w<=_aw; w++){ h += window._blabAuditWeekTileHTML(w, s); }
   h += '</div></div>';
   return h;
 };
@@ -4584,6 +4613,8 @@ window._blabAuditWeekTileHTML = function(w, s){
   var status = window._blabAuditWeekStatus(w, s);
   var statusLabel = status==='done' ? 'Completed' : status==='prog' ? 'In Progress' : 'Upcoming';
   var sub = 'Block '+meta.block + (meta.deload ? ' · Deload' : '');
+  var _adraft = (typeof window.trnIsDraft === 'function') && window.trnIsDraft(s);
+  if(_adraft) sub = window.draftWeekName(w);
   var expanded = window._blabAuditExpanded === w;
   var h = '<div class="blab-audit-week-tile'+(expanded?' expanded':'')+'" onclick="window._blabAuditToggleWeek('+w+')">'+
     '<div class="baw-num">Wk '+w+'</div>'+
@@ -4592,14 +4623,16 @@ window._blabAuditWeekTileHTML = function(w, s){
   '</div>';
   if(expanded){
     h += '<div class="blab-audit-day-panel" style="grid-column:1/-1;"><div class="blab-audit-day-grid">';
-    for(var d=1; d<=4; d++){
+    var _ad = _adraft ? 6 : 4;
+    for(var d=1; d<=_ad; d++){
       var sess = null;
       try { sess = window.blabGetSessionData(w, d); } catch(_e){}
+      if(_adraft && !sess) continue;
       var nm = (sess && sess.name) || ('Day '+d);
       var done = window._blabAuditDayDone(w, d, s);
       h += '<div class="blab-audit-day-tile" onclick="window.blabOpenAuditDay('+w+','+d+',false)">'+
         (done?'<span class="bad-check">✓</span>':'')+
-        '<div class="bad-day">Day '+d+'</div>'+
+        '<div class="bad-day">'+(_adraft ? ['','Mon','Tue','Wed','Thu','Sat','Sun'][d] : 'Day '+d)+'</div>'+
         '<div class="bad-name">'+nm+'</div>'+
       '</div>';
     }
@@ -4706,10 +4739,12 @@ window.blabOpenViewProg = function(){
   var curW = s.week || 1, curD = s.day || 1;
   var h = '<div style="padding:22px 18px 60px;max-width:640px;margin:0 auto;">';
   h += '<button onclick="var e=document.getElementById(\'blab-viewprog-overlay\');if(e)e.remove();" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 15px;font-family:var(--font-d);font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:20px;">← Back</button>';
-  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Built Like A Badass</div>';
+  var _vdraft = (typeof window.trnIsDraft === 'function') && window.trnIsDraft(s);
+  var _vprog = (typeof window.trnProgramme === 'function') ? window.trnProgramme(s) : {name:'Built Like A Badass', weeks:12, days:4};
+  h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">'+_vprog.name+'</div>';
   h += '<div style="font-family:var(--font-d);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:4px;">View Programme</div>';
   h += '<div style="font-size:12px;color:var(--text2);margin-bottom:20px;">Week '+curW+', Day '+curD+' — currently active. Tap a session to preview it.</div>';
-  for(var w=1; w<=12; w++){
+  for(var w=1; w<=_vprog.weeks; w++){
     var isCurWeek = (w===curW);
     var weekStatus = window._blabAuditWeekStatus ? window._blabAuditWeekStatus(w, s) : 'upcoming';
     var weekDone = weekStatus==='done';
@@ -4717,13 +4752,14 @@ window.blabOpenViewProg = function(){
     var deload = (w===5||w===10);
     h += '<div style="margin-bottom:16px;">';
     h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
-    h += '<span style="font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(isCurWeek?'var(--gold)':'var(--text)')+';">Week '+w+'</span>';
-    h += '<span style="font-size:11px;color:var(--text3);">Block '+blockNum+(deload?' \xb7 Deload':'')+(weekDone?' \xb7 ✓':'')+'</span>';
+    h += '<span style="font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:'+(isCurWeek?'var(--gold)':'var(--text)')+';">'+(_vdraft ? window.draftWeekName(w) : 'Week '+w)+'</span>';
+    h += '<span style="font-size:11px;color:var(--text3);">'+(_vdraft ? (w===6?'Taper + retest':(w===1?'Baseline':'Block 1')) : 'Block '+blockNum+(deload?' \xb7 Deload':''))+(weekDone?' \xb7 ✓':'')+'</span>';
     if(isCurWeek) h += '<span style="font-family:var(--font-d);font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#000;background:var(--gold);padding:2px 7px;border-radius:2px;">CURRENT</span>';
     h += '</div>';
-    h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';
-    for(var d=1; d<=4; d++){
+    h += '<div style="display:grid;grid-template-columns:repeat('+(_vdraft?3:4)+',1fr);gap:8px;">';
+    for(var d=1; d<=_vprog.days; d++){
       var sess=null; try{sess=window.blabGetSessionData(w,d);}catch(_e){}
+      if(_vdraft && !sess) continue;
       var nm=(sess&&sess.name)?sess.name.replace('DeFranco: ',''):('Day '+d);
       var isDone=window._blabAuditDayDone?window._blabAuditDayDone(w,d,s):false;
       var isNext=isCurWeek&&(d===curD)&&!isDone;
@@ -4732,7 +4768,7 @@ window.blabOpenViewProg = function(){
       var tileBorder=isNext?'var(--gold)':'var(--border)';
       var tileOp=(!isDone&&!isNext&&(w>curW||(isCurWeek&&d>curD)))?'opacity:0.55;':'';
       h += '<div style="padding:10px 8px;border-radius:var(--radius);cursor:pointer;text-align:center;background:'+tileBg+';border:1px solid '+tileBorder+';'+tileOp+'" onclick="window.blabOpenAuditDay('+w+','+d+',false)">';
-      h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:'+(isNext?'var(--gold)':'var(--text3)')+';margin-bottom:3px;">Day '+d+'</div>';
+      h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:'+(isNext?'var(--gold)':'var(--text3)')+';margin-bottom:3px;">'+(_vdraft ? ['','Mon','Tue','Wed','Thu','Sat','Sun'][d] : 'Day '+d)+'</div>';
       h += '<div style="font-family:var(--font-d);font-size:12px;font-weight:700;line-height:1.2;color:'+(isDone?'var(--text2)':isNext?'var(--gold)':'var(--text)')+';">'+nm+'</div>';
       if(isDone) h += '<div style="font-size:13px;color:var(--green);margin-top:4px;">✓</div>';
       else if(isNext) h += '<div style="font-family:var(--font-d);font-size:9px;color:var(--gold);margin-top:4px;letter-spacing:1px;">NEXT</div>';
@@ -4762,6 +4798,10 @@ function openBlabAdjust(){
         '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);margin-bottom:5px;">Pause Programme</div>'+
         '<div style="font-size:13px;color:var(--text3);line-height:1.5;">Going away? Saves your current week and day. Resume when you are back.</div>'+
       '</div>'+
+      '<div data-act="draft" style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:18px 16px;margin-bottom:12px;cursor:pointer;">'+
+        '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);margin-bottom:5px;">Road to Draft Day</div>'+
+        '<div style="font-size:13px;color:var(--text3);line-height:1.5;">'+((typeof window.trnIsDraft === 'function' && window.trnIsDraft()) ? 'Restart Block 1, update maxes, or switch back to BLAB.' : 'Start the strength + combine block. BLAB is parked, not deleted.')+'</div>'+
+      '</div>'+
       '<div data-act="reset" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;cursor:pointer;">'+
         '<div style="font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);margin-bottom:5px;">Reset to Week 1</div>'+
         '<div style="font-size:13px;color:var(--text3);line-height:1.5;">Back from a long break? Enter new 1-rep maxes and restart from Week 1. Records are kept.</div>'+
@@ -4789,7 +4829,8 @@ function openBlabAdjust(){
     var a=el.getAttribute('data-act');
     if(a==='close'){ ov.remove(); }
     else if(a==='pause'){ ov.remove(); window._blabPause(); }
-    else if(a==='reset'){ ov.remove(); window._blabOpenReset(); }
+    else if(a==='draft'){ ov.remove(); window.draftOpenSetup(); }
+    else if(a==='reset'){ ov.remove(); if(typeof window.trnIsDraft === 'function' && window.trnIsDraft()) window.draftOpenSetup(); else window._blabOpenReset(); }
     else if(a==='recover'){
       var okRec = window.blabRestoreBackup();
       ov.remove();
@@ -6198,8 +6239,10 @@ window.blabToPhoenixSession = function(sess, week, day){
       }
       // v4.9.108: result capture for "record …" cues (sled/prowler/tests). autoLogSet writes
       // records[name+'_result']; the generic block surfaces the prior result.
-      if(ex.note && /record/i.test(ex.note)){
+      if(ex.result_capture || (ex.note && /record/i.test(ex.note))){
         phxEx._blabResultCapture = true;
+        phxEx._blabResultDecimal = !!ex.result_decimal;
+        phxEx._blabResultUnit = ex.result_unit || '';
         phxEx.prev_result = (bs.records && bs.records[ex.name+'_result']) || 0;
       }
     }
@@ -6208,7 +6251,7 @@ window.blabToPhoenixSession = function(sess, week, day){
   });
 
   return {
-    day: 'BLAB Week '+week+' Day '+day,
+    day: ((sess && sess.week != null && bs.programme === 'draft') ? 'DRAFT Week ' : 'BLAB Week ')+week+' Day '+day,
     session_type: sess.name,
     duration_min: sess.duration_min || 75,
     exercises: exercises,
@@ -6994,7 +7037,7 @@ function blabRenderAfap(ex,st,body){
   // into scoring — changing what 100 Push-ups scores on would break comparability with
   // every attempt he has already logged.
   var _singleMov = movs.length === 1 && totalSets === 1;
-  var _repGoal = _singleMov ? (parseInt(movs[0] && movs[0].reps, 10) || 0) : 0;
+  var _repGoal = (_singleMov && /^\s*\d+\s*$/.test(String(movs[0] && movs[0].reps))) ? (parseInt(movs[0].reps, 10) || 0) : 0;
   if(_singleMov && _repGoal > 0 && st.afapIdx < 0){
     var _rt = st.afapRepTotal || 0;
     var _rpct = Math.min(100, Math.round(_rt / _repGoal * 100));
@@ -7029,7 +7072,7 @@ function blabRenderAfap(ex,st,body){
     h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border2);">'+
       '<div>'+
         '<div style="font-size:15px;font-weight:600;color:'+(isDone?'var(--text3)':'var(--text)')+';line-height:1.2;">'+(isDone?'\u2713 ':'')+m.name+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(curReps||m.reps)+' reps'+(ex.has_load&&st.afapLoad?' &middot; '+st.afapLoad+'kg':'')+'</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(curReps||m.reps)+(/[a-z]/i.test(String(curReps||m.reps))?'':' reps')+(ex.has_load&&st.afapLoad?' &middot; '+st.afapLoad+'kg':'')+'</div>'+
       '</div>'+
       '<button onclick="window._blabAfapTick('+i+')" style="padding:10px 16px;background:'+(isDone?'#3a7d44':'var(--gold)')+';border:none;border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:#000;cursor:pointer;min-width:64px;">'+(isDone?'\u2713':'Done')+'</button>'+
     '</div>';
@@ -7184,6 +7227,9 @@ window._blabTabataDone=function(){
 window.blabGetSessionData = function(week, day){
   var s = window.blabGetState();
   if(!s || !s.maxes) return null;
+  // v4.9.341 — Road to Draft Day runs through this pipeline. Its sessions come from
+  // draftGetSessionData; everything downstream (translator, renderers, loggers) is shared.
+  if(s.programme === 'draft' && typeof window.draftGetSessionData === 'function') return window.draftGetSessionData(week, day, s);
   var B = s.maxes.bench, S = s.maxes.squat, D = s.maxes.deadlift;
   var C = s.chin_max || 0;
   var p = window.blabPct;
@@ -7784,8 +7830,11 @@ window.blabCompleteSession = function(week, day){
   s.last_completed_date = new Date().toISOString();
   if(!s.log) s.log = [];
   s.log.push({week:week, day:day, date:s.last_completed_date});
-  if(day === 4){
-    s.week = week + 1;
+  // v4.9.341 — the week's last day comes from the programme (BLAB 4, Draft 6).
+  var _cprog = (typeof window.trnProgramme === 'function') ? window.trnProgramme(s) : null;
+  var _lastDay = _cprog ? _cprog.days : 4;
+  if(day === _lastDay){
+    s.week = (_cprog && _cprog.id === 'draft') ? Math.min(_cprog.weeks, week + 1) : week + 1;
     s.last_completed_day = 0;
     window._blabWeekDone = true;
   }
@@ -7799,6 +7848,17 @@ window.blabCompleteSession = function(week, day){
   // the local calendar from blab_state.calendar and found nothing there.
   if(typeof window.blabCalMarkCompleted === 'function'){
     try { window.blabCalMarkCompleted(week, day); } catch(_ce){ console.warn('[PHX] blabCalMarkCompleted failed:', _ce); }
+  }
+  // v4.9.341 — Draft: adjust maxes / speed loads / levels from what was just logged,
+  // AFTER both saves above so it reads the final state, and tell him what moved.
+  if(_cprog && _cprog.id === 'draft' && typeof window.draftAfterSession === 'function'){
+    try {
+      var _chg = window.draftAfterSession(week, day);
+      if(_chg && _chg.length && typeof window._blabNotice === 'function') window._blabNotice('Programme updated', _chg);
+    } catch(_de){
+      console.error('[PHX] draftAfterSession failed:', _de);
+      if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.afterSession', _de, null);
+    }
   }
   if(typeof renderTodayScreen === 'function') renderTodayScreen();
   if(typeof navTo === 'function') navTo('today');
@@ -7815,6 +7875,755 @@ window.blabOpenCheckin = function(){
     if(typeof renderTodayScreen === 'function') renderTodayScreen();
   }, 'Start Week ' + s.week);
 };
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DRAFT PROGRAMME — BEGIN  (v4.9.341, Training)
+//
+// "Road to Draft Day" — Jon's 15-month strength / combine plan, Block 1 of 9.
+// Westside conjugate for the main lifts, the Built Like a Badass five-slot session
+// template around them, CrossFit Football finishers, rugby-league repeated-effort
+// conditioning, and PHX_LIB Core / WOD sessions scheduled beside the Sat / Sun gym days.
+//
+// IT RUNS THROUGH THE BLAB PIPELINE, NOT BESIDE IT. The state lives in the same
+// blab_v1_<uid> blob (so the existing debounced Supabase mirror, the pagehide flush,
+// the restore resolution and the calendar all carry it) with `programme:'draft'`.
+// blabGetSessionData delegates here when that flag is set, and every renderer,
+// set logger, history banner and completion path is the one BLAB already uses.
+//
+// BLAB IS PARKED, NOT DELETED. draftStart() moves BLAB's position, maxes, log,
+// calendar sessions and per-week history maps into `blab_paused`;
+// draftReturnToBlab() puts them back.
+//
+// WEEKS. Internal week 1 is the baseline test week (Sat + Sun only). Weeks 2-6 are
+// training weeks 1-5; week 6 tapers Mon-Thu and retests Sat + Sun. Days are fixed
+// weekdays: 1 Mon · 2 Tue · 3 Wed · 4 Thu · 5 Sat · 6 Sun. Friday is rest.
+//
+// DYNAMIC. draftAfterSession() runs on every completion and adjusts the state the
+// generator reads: maxes (from logged top sets / tests), speed-day percentages (from
+// block RPE), conditioning + sprint levels (from block RPE), the rep-bench load and
+// the weighted pull-up load. Every change is written to draft.changes and shown.
+// ══════════════════════════════════════════════════════════════════════════════
+
+var _TRN_BLAB_DESC = {
+  id:'blab', short:'BLAB', name:'Built Like A Badass', sub:'Built Like A Badass · DeFranco Protocol',
+  days:4, weeks:12, gate48:true,
+  labels:['','Upper Body','Lower Body','Upper Body — Chins','Lower Power']
+};
+var _TRN_DRAFT_DESC = {
+  id:'draft', short:'DRAFT', name:'Road to Draft Day', sub:'Road to Draft Day · Block 1',
+  days:6, weeks:6, gate48:false,
+  labels:['','Conditioning','Upper — Max Effort','Sprint & Power','Lower — Max Effort','Speed Upper','Speed Lower']
+};
+
+// The ONE place that answers "which programme is this state running". Every site that
+// used to hard-code 4 days / 12 weeks / the BLAB labels asks this instead.
+window.trnProgramme = function(s){
+  if(s === undefined){ try { s = window.blabGetState(); } catch(_e){ s = null; } }
+  return (s && s.programme === 'draft') ? _TRN_DRAFT_DESC : _TRN_BLAB_DESC;
+};
+window.trnIsDraft = function(s){ return window.trnProgramme(s).id === 'draft'; };
+// Session name for a week/day, programme-aware. Draft test-week days have their own names.
+window.trnDayLabel = function(week, day, s){
+  var p = window.trnProgramme(s);
+  if(p.id === 'draft') return window.draftDayLabel(week, day);
+  return p.labels[day] || ('Day ' + day);
+};
+// Eyebrow text used on Today / calendar cards, e.g. "DRAFT · Week 2".
+window.trnEyebrow = function(week, s){
+  var p = window.trnProgramme(s);
+  if(p.id === 'draft') return 'DRAFT · ' + window.draftWeekName(week);
+  return 'BLAB · Week ' + week;
+};
+
+// ── dates ────────────────────────────────────────────────────────────────────
+var _DRAFT_DAY_OFFSET = [null, 0, 1, 2, 3, 5, 6];
+function _draftISO(d){
+  var m = d.getMonth() + 1, dd = d.getDate();
+  return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (dd < 10 ? '0' : '') + dd;
+}
+function _draftParseISO(iso){
+  var p = String(iso || '').split('-');
+  if(p.length !== 3) return null;
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  d.setHours(0,0,0,0);
+  return isNaN(d.getTime()) ? null : d;
+}
+function _draftAddDays(iso, n){
+  var d = _draftParseISO(iso); if(!d) return null;
+  d.setDate(d.getDate() + n);
+  return _draftISO(d);
+}
+window.draftDateFor = function(startMonday, week, day){
+  return _draftAddDays(startMonday, (week - 1) * 7 + _DRAFT_DAY_OFFSET[day]);
+};
+// Monday of the week whose Saturday is the next test day. Sat/Sun count as "this week".
+window.draftDefaultStartMonday = function(now){
+  var d = now ? new Date(now.getTime()) : new Date();
+  d.setHours(0,0,0,0);
+  var dow = d.getDay();                       // 0 Sun .. 6 Sat
+  var back = (dow === 0) ? 6 : dow - 1;       // back to Monday
+  d.setDate(d.getDate() - back);
+  return _draftISO(d);
+};
+// Programme week for a date (clamped 1..6). Elapsed calendar, used for the label only.
+window.draftWeekForDate = function(startMonday, iso){
+  var a = _draftParseISO(startMonday), b = _draftParseISO(iso);
+  if(!a || !b) return 1;
+  var w = Math.floor(Math.round((b.getTime() - a.getTime()) / 86400000) / 7) + 1;
+  return Math.max(1, Math.min(6, w));
+};
+window.draftWeekName = function(week){
+  return (week <= 1) ? 'Test Week' : ('Week ' + (week - 1) + ' of 5');
+};
+window.draftDayLabel = function(week, day){
+  if(week === 1){
+    if(day === 5) return 'Combine Test — Speed & Lower';
+    if(day === 6) return 'Combine Test — Upper & Pull';
+    return '';
+  }
+  if(week === 6){
+    if(day === 5) return 'Retest — Speed & Lower';
+    if(day === 6) return 'Retest — Upper & Pull';
+  }
+  return _TRN_DRAFT_DESC.labels[day] || ('Day ' + day);
+};
+
+// ── state helpers ────────────────────────────────────────────────────────────
+function _draftDefaults(){
+  return {
+    block: 1,
+    startMonday: null,
+    level: { cond: 2, sprint: 2 },          // 1..5 — scaled from block RPE
+    speedAdj: { upper: 0, lower: 0 },       // % points added to speed-day loads
+    repBench: 0,                             // kg for the Saturday rep set (0 = derive)
+    pullLoad: 0,                             // kg on the weighted pull-up (0 = not set)
+    tests: {},                               // label -> [{date, value}]
+    changes: []                              // [{date, text}] — what the engine adjusted
+  };
+}
+function _draftOf(s){
+  var d = (s && s.draft && typeof s.draft === 'object') ? s.draft : _draftDefaults();
+  var def = _draftDefaults();
+  Object.keys(def).forEach(function(k){ if(d[k] === undefined) d[k] = def[k]; });
+  if(!d.level || typeof d.level !== 'object') d.level = def.level;
+  if(!d.speedAdj || typeof d.speedAdj !== 'object') d.speedAdj = def.speedAdj;
+  return d;
+}
+function _draftR25(x){ return Math.round(x / 2.5) * 2.5; }
+function _draftFloor25(x){ return Math.floor(x / 2.5) * 2.5; }
+// Max for a lift, with the estimate rule for the two lifts Jon may not have tested yet.
+// Returns {kg, est}. est=true means "derived — test to set".
+function _draftMax(s, lift){
+  var m = (s && s.maxes) || {};
+  var v = parseFloat(m[lift]) || 0;
+  if(v > 0) return { kg: v, est: false };
+  if(lift === 'clean') return { kg: _draftR25((parseFloat(m.squat) || 0) * 0.6), est: true };
+  if(lift === 'press') return { kg: _draftR25((parseFloat(m.bench) || 0) * 0.62), est: true };
+  return { kg: 0, est: true };
+}
+
+// ── what the engine learns from: exercise -> lift, and how that variation relates ─
+// ratio = typical variation 1RM / competition-lift 1RM. Used ONLY to raise a max when
+// a logged top set implies more than the current max — never to lower one outside a test.
+var _DRAFT_LIFT_MAP = {
+  'Back Squat — 1RM Test':     { lift:'squat',    ratio:1,    test:true },
+  'Bench Press — 1RM Test':    { lift:'bench',    ratio:1,    test:true },
+  'Deadlift — 1RM Test':       { lift:'deadlift', ratio:1,    test:true },
+  'Power Clean — 1RM Test':    { lift:'clean',    ratio:1,    test:true },
+  'Strict Press — 1RM Test':   { lift:'press',    ratio:1,    test:true },
+  'Floor Press':                     { lift:'bench',    ratio:0.90 },
+  'Close-Grip Bench':                { lift:'bench',    ratio:0.92 },
+  'Paused Bench (2 sec)':            { lift:'bench',    ratio:0.95 },
+  'Bench Press — Heavy Single': { lift:'bench',    ratio:1 },
+  'Box Squat (parallel)':            { lift:'squat',    ratio:0.95 },
+  'Deficit Deadlift (5 cm)':         { lift:'deadlift', ratio:0.90 },
+  'Front Squat':                     { lift:'squat',    ratio:0.82 },
+  'Back Squat — Heavy Single':  { lift:'squat',    ratio:1 },
+  'Deadlift — Heavy Doubles':   { lift:'deadlift', ratio:1 },
+  'Strict Press':                    { lift:'press',    ratio:1 }
+};
+window.draftE1RM = function(wt, reps){
+  wt = parseFloat(wt) || 0; reps = parseInt(reps, 10) || 0;
+  if(wt <= 0 || reps <= 0 || reps > 10) return 0;
+  return reps === 1 ? wt : wt * (1 + reps / 30);     // Epley
+};
+
+// ── PHX_LIB sessions placed beside the gym days ─────────────────────────────
+// Ids, not copies: the library owns the content, scoring and Records history.
+var _DRAFT_CORE_ROTATION = ['core-s1', 'core-r1', 'core-s2', 'core-r2'];         // Sat, training weeks 1-4
+var _DRAFT_WOD_ROTATION  = ['wod-valkyrie', 'wod-hammerfall', 'wod-hermes', 'wod-leg-row']; // Sun, weeks 1-4
+function _draftLibName(id){
+  try {
+    if(typeof PHX_LIB !== 'undefined' && PHX_LIB){
+      var groups = ['WOD','AEROBIC','CORE'];
+      for(var g = 0; g < groups.length; g++){
+        var arr = PHX_LIB[groups[g]] || [];
+        for(var i = 0; i < arr.length; i++) if(arr[i] && arr[i].id === id) return arr[i].name;
+      }
+    }
+  } catch(_e){}
+  return id;
+}
+
+// ── schedule: every session + the PHX_LIB add-ons, on fixed weekdays ─────────
+window.draftSchedule = function(startMonday){
+  var sessions = [], customs = [];
+  for(var w = 1; w <= 6; w++){
+    for(var d = 1; d <= 6; d++){
+      if(w === 1 && d < 5) continue;               // test week is Sat + Sun only
+      sessions.push({ blabWeek:w, blabDay:d, scheduledDate:window.draftDateFor(startMonday, w, d), status:'pending' });
+    }
+    var t = w - 1;                                  // training week
+    if(t >= 1 && t <= 4){
+      var sat = window.draftDateFor(startMonday, w, 5), sun = window.draftDateFor(startMonday, w, 6);
+      var core = _DRAFT_CORE_ROTATION[t - 1], wod = _DRAFT_WOD_ROTATION[t - 1];
+      customs.push({ id:'draft-' + sat + '-' + core, cat:'CORE', libId:core, label:_draftLibName(core), scheduledDate:sat, status:'pending', draft:true });
+      customs.push({ id:'draft-' + sun + '-' + wod,  cat:'WOD',  libId:wod,  label:_draftLibName(wod),  scheduledDate:sun, status:'pending', draft:true });
+    }
+  }
+  return { sessions:sessions, customs:customs };
+};
+
+// ── the session generator ────────────────────────────────────────────────────
+// Returns the BLAB session shape: {name, week, day, duration_min, exercises:[...]},
+// or null for a day with no session (test week Mon-Thu, anything out of range).
+window.draftGetSessionData = function(week, day, s){
+  s = s || window.blabGetState();
+  if(!s) return null;
+  week = parseInt(week, 10); day = parseInt(day, 10);
+  if(!(week >= 1 && week <= 6 && day >= 1 && day <= 6)) return null;
+  var D = _draftOf(s);
+  var t = week - 1;                       // training week 1..5 (0 = test week)
+  var P = window.blabPct;
+  function kgOf(lift, pct){ var m = _draftMax(s, lift); return m.kg ? P(m.kg, pct) : 0; }
+  function estNote(lift){ return _draftMax(s, lift).est ? ' Load is an ESTIMATE until you test this lift.' : ''; }
+  function ramp(lift, pcts, reps, topAmrap){
+    var m = _draftMax(s, lift).kg;
+    return pcts.map(function(p, i){
+      return { pct:p, kg:P(m, p), reps:(Array.isArray(reps) ? reps[i] : reps), amrap:!!topAmrap && i === pcts.length - 1 };
+    });
+  }
+  function flat(lift, n, pct, reps){
+    var out = [], m = _draftMax(s, lift).kg;
+    for(var i = 0; i < n; i++) out.push({ pct:pct, kg:P(m, pct), reps:reps, amrap:false });
+    return out;
+  }
+  function SS(name, sets, rest, an, ar, bn, br, note){
+    return { name:name, format:'superset', sets:sets, rest:rest, movements:[{name:an, reps:ar},{name:bn, reps:br}], note:note || '' };
+  }
+  function std(name, sets, reps, note, extra){
+    var o = { name:name, format:'standard_sets', sets:sets, reps:reps, note:note || '' };
+    if(extra) Object.keys(extra).forEach(function(k){ o[k] = extra[k]; });
+    return o;
+  }
+  function result(name, unit, note){
+    return std(name, 1, 'Best attempt', note, { result_capture:true, result_decimal:true, result_unit:unit });
+  }
+  function afap(name, sets, rest, movs, note){
+    return { name:name, format:'afap', sets:sets, rest:rest, has_load:false, suggested_load:0, movements:movs,
+             _timeRecordKey:name + '_time', prev_best:(s.records && s.records[name + '_time']) || 0, note:note || '' };
+  }
+  function sess(name, mins, exs){ return { name:name, week:week, day:day, duration_min:mins, exercises:exs }; }
+  var LC = Math.max(1, Math.min(5, D.level.cond || 2));
+  var LS = Math.max(1, Math.min(5, D.level.sprint || 2));
+  var adjU = D.speedAdj.upper || 0, adjL = D.speedAdj.lower || 0;
+  function clampPct(x){ return Math.max(40, Math.min(70, x)); }
+
+  // ════ TEST SESSIONS — week 1 (baseline) and week 6 Sat/Sun (retest) ═════════
+  if((week === 1 || week === 6) && (day === 5 || day === 6)){
+    var tag = (week === 1) ? 'Baseline' : 'Retest';
+    if(day === 5){
+      return sess(window.draftDayLabel(week, day), 120, [
+        std('Combine Warm-up', 1, '15 min', 'Jog, dynamic mobility, A-skips, 4 build-up runs to 90%. Do the jumps and sprints FIRST, while you are fresh.'),
+        result('Vertical Jump (cm)', 'cm', 'Record best of 3. Jump touch minus standing reach. NFL linebacker average is about 86 cm.'),
+        result('Broad Jump (cm)', 'cm', 'Record best of 3. Two-foot take-off, landing must be held. Linebacker average is about 297 cm.'),
+        result('40-yd Dash (sec)', 'sec', 'Record best of 2. 36.58 m from a 3-point start, full rest between. Linebacker average 4.75 s.'),
+        result('5-10-5 Shuttle (sec)', 'sec', 'Record best of 2, one each direction. Linebacker average 4.28 s.'),
+        result('3-Cone Drill (sec)', 'sec', 'Record best of 2. Linebacker average 7.13 s. Skip it if you have no room and test it next block.'),
+        { name:'Power Clean — 1RM Test', format:'percentage_sets', rest:180,
+          sets:ramp('clean', [50, 65, 75, 85, 92.5, 100], [3, 2, 1, 1, 1, 1], true),
+          note:'Work up in singles. The last row is a target, not a ceiling: log the heaviest clean you actually made.' + estNote('clean') },
+        { name:'Back Squat — 1RM Test', format:'percentage_sets', rest:240,
+          sets:ramp('squat', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
+          note:'3-5 min between attempts. Depth: hip crease below the knee. Log the heaviest good single.' },
+        { name:'Strict Press — 1RM Test', format:'percentage_sets', rest:180,
+          sets:ramp('press', [50, 70, 85, 92.5, 100], [5, 3, 1, 1, 1], true),
+          note:'OPTIONAL. Skip it if you are cooked. No leg drive.' + estNote('press') },
+        result('Bodyweight (kg)', 'kg', 'Record bodyweight. Morning, after the toilet, before food. Do it Sunday if you weighed in late today.')
+      ]);
+    }
+    return sess(window.draftDayLabel(week, day), 110, [
+      result('Bodyweight (kg)', 'kg', 'Record bodyweight. Morning, after the toilet, before food.'),
+      { name:'Bench Press — 1RM Test', format:'percentage_sets', rest:240,
+        sets:ramp('bench', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
+        note:'Pause on the chest. 3-5 min between attempts. Log the heaviest good single.' },
+      { name:'Deadlift — 1RM Test', format:'percentage_sets', rest:240,
+        sets:ramp('deadlift', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
+        note:'Reset every rep. Log the heaviest good single.' },
+      { name:'Bench 102.5 kg Rep Test', format:'max_reps_sets', sets:1, reps:'Max reps', load_choices:[102.5],
+        prev_best:(s.records && s.records['Bench 102.5 kg Rep Test_max']) || 0, prev_best_wt:102.5,
+        note:'The NFL 225 lb test. 20+ min after the deadlift. Touch the chest, no bounce, full lockout. Goal: 20 reps.' },
+      { name:'Strict Pull-Up Test', format:'max_reps_sets', sets:1, reps:'Max reps',
+        prev_best:(s.records && s.records['Strict Pull-Up Test_max']) || 0,
+        note:'Dead hang every rep, chin over the bar, no kip. 10 min after the bench reps. Goal: 20.' }
+    ]);
+  }
+  if(week === 1) return null;            // test week Mon-Thu: nothing scheduled
+
+  var taper = (t === 5);
+
+  // ════ MON — CONDITIONING (45 min, field or gym) ═════════════════════════════
+  // Rugby league repeated-effort work: bouts of 2-3 efforts (sprint / hit-and-get-up),
+  // recovery shrinking across the block — the shape of the hardest passages of a game
+  // (Black & Gabbett 2015; Johnston & Gabbett 2011). Then 15 s on / 15 s off running.
+  if(day === 1){
+    if(t === 1 || taper){
+      return sess('Conditioning — Bronco ' + (t === 1 ? 'Baseline' : 'Retest'), 40, [
+        std('Conditioning Warm-up', 1, '12 min', 'Jog, dynamic mobility, 3 build-up runs.'),
+        afap('Bronco Test', 1, 0, [{name:'Shuttle 20 m out and back, then 40 m, then 60 m', reps:'5 sets non-stop (1200 m)'}],
+          'FIELD. Five sets of 20-40-60 m shuttles, no rest, 1200 m total. Start the clock and go. Your time is the score.'),
+        afap('2 km Row Test', 1, 0, [{name:'Row', reps:'2000 m'}],
+          'WET-WEATHER OPTION ONLY. Skip this if you ran the Bronco.'),
+        std('Cool-down', 1, '8 min', 'Easy jog or bike, then hips and calves.')
+      ]);
+    }
+    // level-scaled volume and density
+    var bouts = [null, 6, 7, 8, 9, 10][LC];
+    var efforts = (t === 2) ? 2 : 3;
+    var restRHIE = [null, 120, 105, 90, 75, 60][LC] - ((t - 2) * 10);
+    restRHIE = Math.max(45, restRHIE);
+    var ivSets = (LC >= 4) ? 3 : 2;
+    var ivMins = [null, 5, 6, 6, 7, 8][LC];
+    var ivDist = [null, '55-60 m', '60-65 m', '65-70 m', '70-75 m', '75-80 m'][LC];
+    var effortTxt = (efforts === 2)
+      ? 'sprint 20 m, hit the ground and get up, sprint 20 m'
+      : 'sprint 20 m, hit and get up, sprint 20 m, 5 s sled or bag drive';
+    return sess('Conditioning — Repeated Efforts', 45, [
+      std('Conditioning Warm-up', 1, '10 min', 'Jog, dynamic mobility, 3 build-up runs, 2 practice hit-and-get-ups.'),
+      std('Repeated-Effort Bouts', bouts, efforts + ' efforts',
+        'Each bout: ' + effortTxt + '. Rest ' + restRHIE + ' s between bouts. ' +
+        'GYM: 8 s assault bike sprint, burpee, 8 s bike sprint' + (efforts === 3 ? ', 10 m prowler push' : '') + '. ' +
+        'Level ' + LC + ' of 5. Rate it honestly at the end: an easy rating moves you up a level next week.'),
+      std('15/15 Intervals', ivSets, ivMins + ' min blocks',
+        '15 s on / 15 s off for ' + ivMins + ' min, 3 min easy between blocks. FIELD: cover ' + ivDist + ' in each 15 s. ' +
+        'GYM: assault bike, hard 15 s / easy 15 s, same calories every rep.'),
+      std('Cool-down', 1, '5 min', 'Walk, hips, calves.')
+    ]);
+  }
+
+  // ════ WED — SPRINT & POWER (45 min, field or gym) ═══════════════════════════
+  if(day === 3){
+    if(taper){
+      return sess('Sprint & Power — Taper', 30, [
+        std('Sprint Warm-up', 1, '12 min', 'A-skips, B-skips, wall drills, 3 build-ups.'),
+        std('Acceleration Sprints', 4, '20 m', 'At 90%. Full walk-back rest. Smooth and fast, nothing to prove today.'),
+        std('Agility Rehearsal', 2, '5-10-5 + 3-cone', 'One of each, smooth, to rehearse Saturday. Not timed.')
+      ]);
+    }
+    var accReps = [null, 5, 6, 6, 7, 8][LS];
+    var accDist = (t <= 2) ? '10 m' : '20 m';
+    var sled = (t === 4) ? 4 : [null, 4, 5, 5, 6, 6][LS];
+    var agil = (t % 2 === 1) ? '5-10-5 Shuttle' : '3-Cone Drill';
+    var plyo = [null, ['Bounds', '3 × 5'], ['Hurdle Hops (low)', '3 × 5'], ['Single-Leg Bounds', '3 × 4 / leg'], ['Depth Jump to Broad', '3 × 3']][t];
+    return sess('Sprint & Power', 45, [
+      std('Sprint Warm-up', 1, '12 min', 'A-skips, B-skips, wall drills, 3 build-ups to 90%.'),
+      std('Acceleration Sprints', accReps, accDist,
+        'From a 3-point or falling start. Full walk-back rest (about 90 s). Max intent every rep. ' +
+        'GYM: heavy prowler sprint, same count, 10 m. Level ' + LS + ' of 5.'),
+      std('Resisted Sprints', sled, '15 m',
+        'Sled heavy enough to roughly halve your speed, or hill sprints on the field. Rest 2 min.'),
+      std(agil, 4, '1 rep', 'Alternate directions. Full rest. Clean cuts, low hips.'),
+      std(plyo[0], parseInt(plyo[1], 10) || 3, plyo[1].replace(/^\d+\s*×\s*/, ''), 'Stick every landing. Quality over quantity.'),
+      result('20 m Sprint (sec)', 'sec', 'Optional: record your best timed 20 m if you have gates or a phone timer.')
+    ]);
+  }
+
+  // ════ TUE — UPPER, MAX EFFORT ═══════════════════════════════════════════════
+  if(day === 2){
+    if(taper){
+      return sess('Upper — Taper', 45, [
+        { name:'Bench Press — Taper', format:'percentage_sets', rest:150, sets:flat('bench', 3, 80, 2), note:'Fast and crisp. Leave plenty in the tank.' },
+        std('Weighted Pull-Up — Taper', 3, 2, 'Use your Week 2 load.'),
+        SS('Incline DB Press / Chest-Supported DB Row', 2, 90, 'Incline DB Press', '10 reps', 'Chest-Supported DB Row', '10 reps')
+      ]);
+    }
+    var ME_U = [null,
+      { n:'Floor Press',                 sets:ramp('bench', [55, 65, 72.5, 80, 85], [5, 3, 3, 3, 3], true), note:'Work up to a hard 3. Go heavier than the top row if it moves fast.' },
+      { n:'Close-Grip Bench',            sets:ramp('bench', [55, 65, 72.5, 80, 86], [5, 3, 3, 3, 3], true), note:'Index fingers on the smooth. Work up to a hard 3.' },
+      { n:'Paused Bench (2 sec)',        sets:ramp('bench', [55, 67.5, 77.5, 85, 90], [5, 3, 2, 2, 2], true), note:'Full 2-second pause on the chest. Work up to a hard 2.' },
+      { n:'Bench Press — Heavy Single', sets:ramp('bench', [55, 70, 80, 87.5, 92.5], [5, 3, 1, 1, 1], true), note:'Work up to a heavy single at about RPE 9. Not a max.' }
+    ][t];
+    var pullTxt = [null, '4 × 4', '4 × 3', '5 × 2', '5 × 2'][t];
+    var pullNote = D.pullLoad > 0
+      ? ('Suggested load: ' + D.pullLoad + ' kg added. ')
+      : 'Pick a load you could do about 6 times. ';
+    var pw = [null, 'Med Ball Chest Pass', 'Plyo Push-Up', 'Med Ball Chest Pass', 'Plyo Push-Up'][t];
+    var fin = [null,
+      afap('Finisher — Pull / Push / Slam', 3, 60, [{name:'Strict Pull-Ups', reps:5},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10}], 'CrossFit Football style. 3 rounds for time, 60 s rest between. Skip it if you are under-recovered.'),
+      afap('Finisher — Dips / Rows / Slams', 3, 60, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10}], '3 rounds for time. Skip it if you are under-recovered.'),
+      afap('Finisher — Pull / Push / Slam', 4, 45, [{name:'Strict Pull-Ups', reps:5},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10}], 'Same as Week 1, one more round, shorter rest. Beat your time.'),
+      afap('Finisher — Dips / Rows / Slams', 3, 45, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10}], 'Beat your Week 2 time.')
+    ][t];
+    return sess('Upper — Max Effort', 70, [
+      std(pw, 3, 5, 'Power slot. Light and fast, max intent, 2 min rest.'),
+      { name:ME_U.n, format:'percentage_sets', rest:240, sets:ME_U.sets,
+        note:'MAX EFFORT, done alone: 3-5 min between heavy sets, nothing paired. ' + ME_U.note + ' Log the real weight and reps of your top set: it can raise your bench max.' },
+      std('Weighted Pull-Up', parseInt(pullTxt, 10), pullTxt.replace(/^\d+\s*×\s*/, ''),
+        pullNote + 'Straight sets after the bench, 2-3 min rest. Log the load: hit every rep and it goes up 2.5 kg next week.'),
+      SS((t <= 2 ? 'Incline DB Press / Chest-Supported DB Row' : 'Flat DB Press / 1-Arm DB Row'), 3, 90,
+        (t <= 2 ? 'Incline DB Press' : 'Flat DB Press'), '10 reps', (t <= 2 ? 'Chest-Supported DB Row' : '1-Arm DB Row'), '10 reps'),
+      SS('DB Lateral Raise / Rope Pushdown', 2, 45, 'DB Lateral Raise', 'To failure', 'Rope Triceps Pushdown', 'To failure'),
+      fin
+    ]);
+  }
+
+  // ════ THU — LOWER, MAX EFFORT ═══════════════════════════════════════════════
+  if(day === 4){
+    if(taper){
+      return sess('Lower — Taper', 40, [
+        std('Box Jump', 2, 3, 'Step down. Crisp.'),
+        { name:'Back Squat — Taper', format:'percentage_sets', rest:150, sets:flat('squat', 3, 75, 2), note:'Fast and crisp. Leave plenty in the tank.' },
+        SS('Bulgarian Split Squat / 45° Back Extension', 2, 90, 'Bulgarian Split Squat (DBs)', '8 / leg', '45° Back Extension', '12 reps')
+      ]);
+    }
+    var ME_L = [null,
+      { n:'Box Squat (parallel)',          lift:'squat',    sets:ramp('squat', [50, 62.5, 72.5, 80, 86], [5, 3, 3, 3, 3], true), note:'Sit back to a parallel box, pause, explode up. Work up to a hard 3.' },
+      { n:'Deficit Deadlift (5 cm)',       lift:'deadlift', sets:ramp('deadlift', [50, 62.5, 70, 77.5, 82.5], [5, 3, 3, 3, 3], true), note:'Stand on a 5 cm plate. Work up to a hard 3. This attacks your slow start off the floor.' },
+      { n:'Front Squat',                   lift:'squat',    sets:ramp('squat', [45, 55, 65, 72.5, 78], [5, 3, 2, 2, 2], true), note:'Elbows high. Work up to a hard 2.' },
+      { n:'Back Squat — Heavy Single', lift:'squat',   sets:ramp('squat', [50, 65, 77.5, 87.5, 92.5], [5, 3, 1, 1, 1], true), note:'Work up to a heavy single at about RPE 9. Not a max.' }
+    ][t];
+    var L2 = [null,
+      { n:'Romanian Deadlift',            sets:flat('deadlift', 3, 60, 5) },
+      { n:'Paused Back Squat (2 sec)',    sets:flat('squat', 3, 70, 3) },
+      { n:'Deadlift — Triples',      sets:flat('deadlift', 3, 77.5, 3) },
+      { n:'Deadlift — Heavy Doubles', sets:flat('deadlift', 2, 85, 2) }
+    ][t];
+    var finL = [null,
+      std('Prowler Push', 6, '25 m', 'Rest 60 s. Record the load.'),
+      afap('Finisher — Slams & Swings', 5, 30, [{name:'Ball Slams', reps:5},{name:'KB Swings', reps:10}], '5 rounds, 30 s rest. Skip it if you are under-recovered.'),
+      std('Prowler Push', 8, '20 m', 'Rest 60 s. Record the load: match or beat Week 1.'),
+      std('Prowler Push', 5, '20 m', 'Heavy. Rest 90 s. Record the load.')
+    ][t];
+    return sess('Lower — Max Effort', 70, [
+      std((t % 2 === 1) ? 'Box Jump' : 'Broad Jump', 3, 3, 'Power slot. Full reset each rep. Stick the landing.'),
+      { name:ME_L.n, format:'percentage_sets', rest:240, sets:ME_L.sets,
+        note:'MAX EFFORT, done alone: 3-5 min between heavy sets. ' + ME_L.note + ' Log the real weight and reps of your top set.' },
+      { name:L2.n, format:'percentage_sets', rest:180, sets:L2.sets, note:'Straight sets after the max effort lift. 3 min rest.' },
+      SS((t <= 2 ? 'Bulgarian Split Squat / 45° Back Extension' : 'DB Reverse Lunge / Nordic Curl'), 3, 90,
+        (t <= 2 ? 'Bulgarian Split Squat (DBs)' : 'DB Reverse Lunge'), (t <= 2 ? '8 / leg' : '10 / leg'),
+        (t <= 2 ? '45° Back Extension' : 'Nordic Curl'), (t <= 2 ? '12 reps' : '5 reps')),
+      SS('Lying Leg Curl / Ab Wheel', 2, 45, 'Lying Leg Curl', 'To failure', 'Ab Wheel Rollout', 'To failure'),
+      finL
+    ]);
+  }
+
+  // ════ SAT — SPEED UPPER (+ PHX Core session scheduled beside it) ════════════
+  if(day === 5){
+    var deB = [null, 50, 55, 60, 50][t];
+    var dePct = clampPct(deB + adjU);
+    var deSets = (t === 4) ? 6 : 9;
+    var ohp = [null, [3, 5, 70], [3, 4, 75], [3, 3, 80], [2, 3, 82.5]][t];
+    var rb = D.repBench > 0 ? D.repBench : kgOf('bench', 60);
+    var pwS = [null, 'Med Ball Overhead Throw', 'Clapping Push-Up', 'Med Ball Overhead Throw', 'Clapping Push-Up'][t];
+    return sess('Speed Upper', 75, [
+      std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.'),
+      { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3),
+        note:'Bar weight shown; add light bands if you have them. 45 s rest, rotate three grip widths. Every rep FAST. ' +
+             (adjU ? ('Load adjusted ' + (adjU > 0 ? '+' : '') + adjU + '% from your ratings. ') : '') +
+             'Rate it at the end: if it felt like a grind, next week drops 5%.' },
+      { name:'Strict Press', format:'percentage_sets', rest:180, sets:flat('press', ohp[0], ohp[2], ohp[1]),
+        note:'Straight sets, 3 min rest. No leg drive.' + estNote('press') },
+      { name:'Bench Rep Set', format:'max_reps_sets', sets:1, reps:'Max reps', load_choices:[rb],
+        prev_best:(s.records && s.records['Bench Rep Set_max']) || 0, prev_best_wt:rb,
+        note:'One all-out set at ' + rb + ' kg. Builds toward 102.5 kg × 20. Hit 20 and the load goes up 2.5 kg next week.' },
+      SS('Flat DB Bench / Strict Pull-Up', 3, 90, 'Flat DB Bench', '12 reps', 'Strict Pull-Up', 'Max minus 2', 'Stop the pull-ups 2 short of failure.'),
+      SS('Band Face Pull / DB Hammer Curl', 2, 45, 'Band Face Pull', 'To failure', 'DB Hammer Curl', 'To failure')
+    ]);
+  }
+
+  // ════ SUN — SPEED LOWER (+ PHX WOD finisher scheduled beside it) ════════════
+  if(day === 6){
+    var pcl = [null, [6, 70], [6, 72.5], [6, 75], [5, 77.5]][t];
+    var dsq = [null, [10, 50], [10, 55], [10, 60], [6, 50]][t];
+    var ddl = [null, [6, 60], [6, 65], [6, 70], [4, 60]][t];
+    return sess('Speed Lower', 75, [
+      { name:'Power Clean', format:'percentage_sets', rest:90, sets:flat('clean', pcl[0], pcl[1], 2),
+        note:'Power slot. Fast and crisp, reset each rep.' + estNote('clean') },
+      { name:'Speed Box Squat (band)', format:'percentage_sets', rest:45, sets:flat('squat', dsq[0], clampPct(dsq[1] + adjL), 2),
+        note:'Bar weight shown; add a light band if you have one. 45 s rest. Sit, pause, EXPLODE. ' +
+             (adjL ? ('Load adjusted ' + (adjL > 0 ? '+' : '') + adjL + '% from your ratings. ') : '') +
+             'Rate it at the end: a grind drops next week 5%.' },
+      { name:'Speed Deadlift', format:'percentage_sets', rest:30, sets:flat('deadlift', ddl[0], clampPct(ddl[1] + adjL), 1),
+        note:'One rep every 30 s. Reset each rep. Pull as fast as you can.' },
+      SS('Barbell Hip Thrust / Copenhagen Plank', 3, 90, 'Barbell Hip Thrust', '10 reps', 'Copenhagen Plank', '20 s / side', 'Adductors matter for a back-rower: they take the hit in every tackle.'),
+      SS('Standing Calf Raise / Hanging Knee Raise', 2, 45, 'Standing Calf Raise', 'To failure', 'Hanging Knee Raise', 'To failure')
+    ]);
+  }
+  return null;
+};
+
+// ── start / switch back ──────────────────────────────────────────────────────
+function _draftIsWkKey(k){ return /_wk$/.test(k); }
+window.draftStart = function(maxes, startMonday){
+  var s = window.blabGetState() || {};
+  var nowISO = new Date().toISOString();
+  var cal = window.blabCalGet();
+  // Park BLAB, once. Starting Draft again over Draft must not overwrite the parked BLAB.
+  if(s.programme !== 'draft' && (s.active || s.week || (s.log && s.log.length))){
+    var wk = {};
+    Object.keys(s.records || {}).forEach(function(k){ if(_draftIsWkKey(k)) wk[k] = s.records[k]; });
+    s.blab_paused = {
+      active: !!s.active, paused: !!s.paused, week: s.week || 1,
+      last_completed_day: s.last_completed_day || 0, last_completed_date: s.last_completed_date || null,
+      maxes: s.maxes || null, chin_max: s.chin_max || 0, chin_established: !!s.chin_established,
+      squat_var: s.squat_var, dl_var: s.dl_var, log: s.log || [],
+      calendarSessions: (cal && cal.sessions) || [], records_wk: wk, parkedAt: nowISO
+    };
+  }
+  // Per-week history maps are keyed by exercise name + week number. BLAB weeks and Draft
+  // weeks are different weeks, so carrying them over would show BLAB numbers as "last week".
+  if(s.records) Object.keys(s.records).forEach(function(k){ if(_draftIsWkKey(k)) delete s.records[k]; });
+  var D = _draftDefaults();
+  D.startMonday = startMonday;
+  s.programme = 'draft';
+  s.programme_started = nowISO;
+  s.active = true; s.paused = false; delete s.pausedAt;
+  s.week = 1; s.last_completed_day = 0; s.last_completed_date = null; s.log = [];
+  s.maxes = {
+    bench: parseFloat(maxes.bench) || 0, squat: parseFloat(maxes.squat) || 0, deadlift: parseFloat(maxes.deadlift) || 0,
+    clean: parseFloat(maxes.clean) || 0, press: parseFloat(maxes.press) || 0
+  };
+  if(!s.records) s.records = {};
+  s.draft = D;
+  window.blabSaveState(s);
+  // Calendar AFTER the state save — blabCalSave re-reads state and saves it back with
+  // .calendar attached (same ordering rule as blabCompleteSession, v4.9.164).
+  var sched = window.draftSchedule(startMonday);
+  var keepCustoms = ((cal && cal.customs) || []).filter(function(c){ return !c.draft; });
+  window.blabCalSave({ sessions: sched.sessions, customs: keepCustoms.concat(sched.customs) });
+  return window.blabGetState();
+};
+window.draftReturnToBlab = function(){
+  var s = window.blabGetState();
+  if(!s || s.programme !== 'draft' || !s.blab_paused) return false;
+  var b = s.blab_paused, cal = window.blabCalGet();
+  s.draft_parked = { draft: s.draft, maxes: s.maxes, week: s.week, last_completed_day: s.last_completed_day,
+                     log: s.log, programme_started: s.programme_started, parkedAt: new Date().toISOString() };
+  if(s.records) Object.keys(s.records).forEach(function(k){ if(_draftIsWkKey(k)) delete s.records[k]; });
+  Object.keys(b.records_wk || {}).forEach(function(k){ s.records[k] = b.records_wk[k]; });
+  delete s.programme; delete s.draft;
+  s.programme_started = new Date().toISOString();
+  s.active = b.active; s.paused = b.paused; s.week = b.week;
+  s.last_completed_day = b.last_completed_day; s.last_completed_date = b.last_completed_date;
+  s.maxes = b.maxes; s.chin_max = b.chin_max; s.chin_established = b.chin_established;
+  s.squat_var = b.squat_var; s.dl_var = b.dl_var; s.log = b.log || [];
+  delete s.blab_paused;
+  window.blabSaveState(s);
+  window.blabCalSave({ sessions: b.calendarSessions || [], customs: ((cal && cal.customs) || []).filter(function(c){ return !c.draft; }) });
+  return true;
+};
+
+// ── the engine ───────────────────────────────────────────────────────────────
+// Called from blabCompleteSession for a Draft state, AFTER the completion is saved.
+// Reads only what the existing loggers already wrote (records[name+'_wk'],
+// '_lastsets', '_result', and the block RPE mirrored to records[name+'_rpe']).
+// Returns the list of human-readable changes it made (also appended to draft.changes).
+window.draftAfterSession = function(week, day){
+  var s = window.blabGetState();
+  if(!s || s.programme !== 'draft') return [];
+  var D = _draftOf(s);
+  var R = s.records || {};
+  var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : _draftISO(new Date());
+  var changes = [];
+  var sess = window.draftGetSessionData(week, day, s);
+  var names = (sess && sess.exercises) ? sess.exercises.map(function(e){ return e.name; }) : [];
+  var isTest = (week === 1 || week === 6) && (day === 5 || day === 6);
+  function wkRow(name){ var m = R[name + '_wk']; return (m && typeof m === 'object') ? m[String(week)] : null; }
+  function todaySets(name){ var b = R[name + '_lastsets']; return (b && b.date === today && Array.isArray(b.sets)) ? b.sets : null; }
+  function rpeToday(name){ var r = R[name + '_rpe']; return (r && r.date === today) ? (parseInt(r.rpe, 10) || 0) : 0; }
+  if(!s.maxes) s.maxes = {};
+
+  // 1. Maxes — tests SET the max; training top sets can only RAISE it, by at most 5%.
+  names.forEach(function(n){
+    var map = _DRAFT_LIFT_MAP[n]; if(!map) return;
+    var row = wkRow(n); if(!row) return;
+    var e1 = window.draftE1RM(row.wt, row.reps); if(!e1) return;
+    var implied = e1 / map.ratio;
+    var cur = parseFloat(s.maxes[map.lift]) || 0;
+    var next;
+    if(map.test) next = _draftR25(implied);
+    else if(implied > cur && cur > 0) next = Math.min(_draftFloor25(implied), _draftFloor25(cur * 1.05));
+    else if(cur <= 0) next = _draftFloor25(implied);
+    if(next && next !== cur && (map.test || next > cur)){
+      s.maxes[map.lift] = next;
+      changes.push(map.lift.charAt(0).toUpperCase() + map.lift.slice(1) + ' max ' + (cur || '—') + ' → ' + next + ' kg');
+    }
+  });
+
+  // 2. Combine results and test reps — copied into draft.tests as a dated history.
+  if(isTest){
+    var resultNames = ['Vertical Jump (cm)','Broad Jump (cm)','40-yd Dash (sec)','5-10-5 Shuttle (sec)','3-Cone Drill (sec)','Bodyweight (kg)'];
+    resultNames.forEach(function(n){
+      if(names.indexOf(n) < 0) return;
+      var v = parseFloat(R[n + '_result']); if(!(v > 0)) return;
+      var h = D.tests[n] = Array.isArray(D.tests[n]) ? D.tests[n] : [];
+      if(!h.length || h[h.length - 1].date !== today) h.push({ date: today, value: v });
+      else h[h.length - 1].value = v;
+    });
+    ['Bench 102.5 kg Rep Test','Strict Pull-Up Test'].forEach(function(n){
+      if(names.indexOf(n) < 0) return;
+      var st = todaySets(n); if(!st || !st[0] || !st[0].reps) return;
+      var h2 = D.tests[n] = Array.isArray(D.tests[n]) ? D.tests[n] : [];
+      if(!h2.length || h2[h2.length - 1].date !== today) h2.push({ date: today, value: st[0].reps });
+      else h2[h2.length - 1].value = st[0].reps;
+    });
+    ['Squat','Bench','Deadlift','Clean','Press'].forEach(function(L){
+      var k = L.toLowerCase(), v = parseFloat(s.maxes[k]); if(!(v > 0)) return;
+      var key = L + ' 1RM', h3 = D.tests[key] = Array.isArray(D.tests[key]) ? D.tests[key] : [];
+      if(names.some(function(n){ return _DRAFT_LIFT_MAP[n] && _DRAFT_LIFT_MAP[n].lift === k && _DRAFT_LIFT_MAP[n].test; })){
+        if(!h3.length || h3[h3.length - 1].date !== today) h3.push({ date: today, value: v });
+        else h3[h3.length - 1].value = v;
+      }
+    });
+  }
+
+  // 3. Speed-day loads — a grind (RPE 8+) drops next week 5%; a breeze (RPE 5 or less)
+  //    lets a previous drop recover. Bounded at -10 / +5.
+  function speed(name, key){
+    var r = rpeToday(name); if(!r) return;
+    var cur = D.speedAdj[key] || 0, nx = cur;
+    if(r >= 8) nx = Math.max(-10, cur - 5);
+    else if(r <= 5) nx = Math.min(5, cur + 5);
+    if(nx !== cur){ D.speedAdj[key] = nx; changes.push('Speed ' + key + ' loads ' + (nx - cur > 0 ? 'up' : 'down') + ' 5% (you rated it ' + r + ')'); }
+  }
+  if(names.indexOf('Speed Bench (mini bands)') >= 0) speed('Speed Bench (mini bands)', 'upper');
+  if(names.indexOf('Speed Box Squat (band)') >= 0) speed('Speed Box Squat (band)', 'lower');
+
+  // 4. Conditioning + sprint levels — RPE 6 or less moves up, 9+ moves down.
+  function level(name, key, label){
+    var r = rpeToday(name); if(!r) return;
+    var cur = D.level[key] || 2, nx = cur;
+    if(r <= 6) nx = Math.min(5, cur + 1);
+    else if(r >= 9) nx = Math.max(1, cur - 1);
+    if(nx !== cur){ D.level[key] = nx; changes.push(label + ' level ' + cur + ' → ' + nx + ' (you rated it ' + r + ')'); }
+  }
+  if(names.indexOf('Repeated-Effort Bouts') >= 0) level('Repeated-Effort Bouts', 'cond', 'Conditioning');
+  if(names.indexOf('Acceleration Sprints') >= 0) level('Acceleration Sprints', 'sprint', 'Sprint');
+
+  // 5. Rep bench — 20 reps earns +2.5 kg; under 12 drops 2.5 kg.
+  if(names.indexOf('Bench Rep Set') >= 0){
+    var rs = todaySets('Bench Rep Set');
+    if(rs && rs[0] && rs[0].reps){
+      var load = rs[0].wt || D.repBench || 0, reps = rs[0].reps, nl = load;
+      if(reps >= 20) nl = load + 2.5;
+      else if(reps < 12) nl = Math.max(20, load - 2.5);
+      if(load && nl !== D.repBench){ D.repBench = nl; changes.push('Rep bench next week: ' + nl + ' kg (' + reps + ' reps today)'); }
+    }
+  }
+
+  // 6. Weighted pull-up — every prescribed rep at the logged load earns +2.5 kg.
+  if(names.indexOf('Weighted Pull-Up') >= 0){
+    var pr = wkRow('Weighted Pull-Up');
+    var ex = (sess.exercises || []).filter(function(e){ return e.name === 'Weighted Pull-Up'; })[0];
+    var target = ex ? (parseInt(ex.reps, 10) || 0) : 0;
+    if(pr && pr.wt > 0){
+      var npl = (target && pr.reps >= target) ? pr.wt + 2.5 : pr.wt;
+      if(npl !== D.pullLoad){ D.pullLoad = npl; changes.push('Weighted pull-up next week: +' + npl + ' kg'); }
+    }
+  }
+
+  if(changes.length){
+    changes.forEach(function(c){ D.changes.push({ date: today, week: week, day: day, text: c }); });
+    if(D.changes.length > 60) D.changes = D.changes.slice(-60);
+  }
+  s.draft = D;
+  window.blabSaveState(s);
+  return changes;
+};
+
+// Today's Draft session from the calendar: the first non-custom entry still to do.
+// Built on blabCalTodaySessions (full agenda) — blabCalTodayEntry is reserved for the
+// sequential 48h gate (harness TODAY pin).
+window.draftTodayEntry = function(){
+  try {
+    var list = (typeof window.blabCalTodaySessions === 'function') ? window.blabCalTodaySessions() : [];
+    for(var i = 0; i < list.length; i++){ if(list[i] && !list[i].custom && list[i].blabWeek) return list[i]; }
+  } catch(_e){}
+  return null;
+};
+
+// Block RPE mirror — the RPE overlay writes set_logs in Supabase only. The engine needs
+// it on the device, so a Draft state also keeps the latest rating per exercise name.
+window.draftRecordRpe = function(exName, rpe){
+  try {
+    var s = window.blabGetState();
+    if(!s || s.programme !== 'draft' || !exName || !rpe) return false;
+    if(!s.records) s.records = {};
+    s.records[exName + '_rpe'] = { date: (typeof _phxLocalISO === 'function') ? _phxLocalISO() : _draftISO(new Date()), rpe: rpe };
+    window.blabSaveState(s);
+    return true;
+  } catch(_e){ return false; }
+};
+
+// ── setup screen ─────────────────────────────────────────────────────────────
+window.draftOpenSetup = function(){
+  var s = window.blabGetState() || {};
+  var m = s.maxes || {};
+  var isDraft = s.programme === 'draft';
+  var old = document.getElementById('draft-setup-overlay'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'draft-setup-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:99999;overflow-y:auto;';
+  var start = (isDraft && s.draft && s.draft.startMonday) ? s.draft.startMonday : window.draftDefaultStartMonday();
+  var satISO = _draftAddDays(start, 5), sunISO = _draftAddDays(start, 6);
+  function field(id, label, hint, val){
+    return '<div style="margin-bottom:14px;"><div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">' + label + '</div>' +
+      (hint ? '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">' + hint + '</div>' : '') +
+      '<input id="' + id + '" type="number" inputmode="decimal" step="2.5" value="' + (val || '') + '" style="width:100%;padding:13px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:24px;font-weight:700;box-sizing:border-box;"></div>';
+  }
+  ov.innerHTML = '<div style="padding:24px 20px 60px;max-width:520px;margin:0 auto;">' +
+    '<button id="draft-setup-back" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-family:var(--font-d);font-size:12px;color:var(--text2);margin-bottom:20px;">← Back</button>' +
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Programme Setup · Block 1 of 9</div>' +
+    '<div style="font-family:var(--font-d);font-size:30px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1;margin-bottom:8px;">Road to<br>Draft Day</div>' +
+    '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:22px;">Baseline test Sat ' + satISO + ' and Sun ' + sunISO + ', then 5 weeks: Mon conditioning, Tue upper, Wed sprint, Thu lower, Fri rest, Sat speed upper + Core, Sun speed lower + WOD. Enter your best current estimates; the test sets the real numbers.</div>' +
+    field('draft-bench', 'Bench Press 1RM (kg)', null, m.bench || 125) +
+    field('draft-squat', 'Back Squat 1RM (kg)', null, m.squat || 150) +
+    field('draft-dead',  'Deadlift 1RM (kg)', null, m.deadlift || 160) +
+    field('draft-clean', 'Power Clean 1RM (kg)', 'Leave blank if unknown: estimated from your squat until you test it.', m.clean || '') +
+    field('draft-press', 'Strict Press 1RM (kg)', 'Leave blank if unknown: estimated from your bench until you test it.', m.press || '') +
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin:6px 0 18px;font-size:12px;color:var(--text2);line-height:1.5;">' +
+      (s.programme === 'draft' ? 'Restarting resets Draft progress to the test week. ' : '') +
+      (s.programme !== 'draft' && s.active ? 'Your BLAB programme is parked, not deleted: position, maxes, log and calendar are kept and you can switch back here. ' : '') +
+      'Records and history are kept.</div>' +
+    '<button id="draft-setup-go" style="width:100%;padding:20px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;">' + (isDraft ? 'Restart Block 1 →' : 'Start Road to Draft Day →') + '</button>' +
+    (isDraft && s.blab_paused ? '<button id="draft-setup-blab" style="width:100%;margin-top:12px;padding:14px;background:transparent;border:1px solid var(--border2);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text2);">Switch back to BLAB (Week ' + (s.blab_paused.week || 1) + ')</button>' : '') +
+    '<div id="draft-setup-err" style="color:var(--orange);font-size:12px;margin-top:10px;"></div>' +
+  '</div>';
+  document.body.appendChild(ov);
+  function close(){ var o = document.getElementById('draft-setup-overlay'); if(o) o.remove(); }
+  document.getElementById('draft-setup-back').onclick = close;
+  document.getElementById('draft-setup-go').onclick = function(){
+    var v = function(id){ var el = document.getElementById(id); return el ? parseFloat(el.value) || 0 : 0; };
+    var mx = { bench:v('draft-bench'), squat:v('draft-squat'), deadlift:v('draft-dead'), clean:v('draft-clean'), press:v('draft-press') };
+    if(!mx.bench || !mx.squat || !mx.deadlift){
+      document.getElementById('draft-setup-err').textContent = 'Enter bench, squat and deadlift. Estimates are fine.';
+      return;
+    }
+    window.draftStart(mx, start);
+    close();
+    if(typeof renderTodayScreen === 'function') renderTodayScreen();
+    if(typeof navTo === 'function') navTo('today');
+  };
+  var bb = document.getElementById('draft-setup-blab');
+  if(bb) bb.onclick = function(){
+    window.draftReturnToBlab();
+    close();
+    if(typeof renderTodayScreen === 'function') renderTodayScreen();
+    if(typeof navTo === 'function') navTo('today');
+  };
+};
+// ══ DRAFT PROGRAMME — END ═════════════════════════════════════════════════════
 
 window._phxDevForceReload = async function(){
   try { localStorage.removeItem('phoenix_athlete'); } catch(_e){}
@@ -12165,6 +12974,9 @@ function showExerciseBlockRPE(exIdx, ex){
     var rpe = parseInt(slider ? slider.value : '0') || null;
     var notesEl = document.getElementById('phx-rpe-notes');
     var notes = notesEl ? (notesEl.value||'').trim() : '';
+    // v4.9.341 — the Draft engine scales speed loads and conditioning levels from this
+    // rating, and set_logs is server-side only. Mirror it locally (Draft states only).
+    if(rpe && ex && ex.name && typeof window.draftRecordRpe === 'function') window.draftRecordRpe(ex.name, rpe);
     // PATCH the set_logs rows for this block. Match by session_id + exercise_name.
     if(rpe || notes){
       try {
@@ -12345,7 +13157,8 @@ function autoLogSet(row){
 // count, etc.) to records[name+'_result']. Wired to the Save button in the generic block.
 window._blabLogResult=function(name, idx){
   var el=document.getElementById('blab-result-'+idx);
-  var v=parseInt(el&&el.value)||0;
+  // v4.9.341: parseFloat — a 40-yd time of 4.95 was stored as 4. Whole numbers are unchanged.
+  var v=parseFloat(el&&el.value)||0;
   if(v<=0){ window._blabCalToast('Enter a result to log', 'error'); return; }
   var bs=window.blabGetState();
   if(bs){
@@ -19337,10 +20150,12 @@ function renderTodayScreen(){
         var _inner = _card.querySelector('.game-card-inner');
         if(!_inner) return;
         var _lastDay = _bs.last_completed_day || 0;
-        var _nextDay = _lastDay === 0 ? 1 : (_lastDay % 4) + 1;
-        var _weekDone = _lastDay === 4;
+        // v4.9.341 — days per week, labels and the 48h gate come from the programme.
+        var _tprog = (typeof window.trnProgramme === 'function') ? window.trnProgramme(_bs) : {id:'blab', days:4, gate48:true, labels:['','Upper Body','Lower Body','Upper Body — Chins','Lower Power']};
+        var _nextDay = _lastDay === 0 ? 1 : (_lastDay % _tprog.days) + 1;
+        var _weekDone = _lastDay === _tprog.days;
         var _week = _bs.week || 1;
-        var _dayLabels = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
+        var _dayLabels = _tprog.labels;
         // v4.9.141: when the athlete has scheduled a BLAB session for today on the
         // training calendar, that session is today's session — it overrides the
         // purely sequential next-day guess.
@@ -19354,7 +20169,7 @@ function renderTodayScreen(){
         // has been done, otherwise its scheduled date); fall back to the legacy
         // last_completed_date path when no calendar entry exists.
         var _canTrain = true;
-        if(_nextDay === 4){
+        if(_tprog.gate48 && _nextDay === 4){
           var _d2ref = (typeof window._blabCalDay2RefDate === 'function') ? window._blabCalDay2RefDate(_week) : null;
           if(_d2ref){
             var _tmid = new Date(); _tmid.setHours(0,0,0,0);
@@ -19410,7 +20225,7 @@ function renderTodayScreen(){
           var _pausedDays = _bs.pausedAt ? Math.floor((Date.now()-new Date(_bs.pausedAt).getTime())/86400000) : 0;
           var _pausedStr = _pausedDays===0?'Paused today':(_pausedDays===1?'Paused 1 day ago':'Paused '+_pausedDays+' days ago');
           _inner.innerHTML =
-            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">BLAB · Week '+_week+'</div>'+
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">'+window.trnEyebrow(_week)+'</div>'+
             '<div class="game-card-title" style="font-size:28px;color:var(--text2);">Programme Paused</div>'+
             '<div style="font-size:13px;color:var(--text3);margin-top:6px;">'+_pausedStr+' &nbsp;·&nbsp; Will resume at Week '+_week+' Day '+_nextDay+'</div>'+
             '<div style="display:flex;gap:10px;margin-top:16px;">'+
@@ -19433,16 +20248,16 @@ function renderTodayScreen(){
         var _startBtn = '<div style="margin-top:16px;"><button onclick="event.stopPropagation();window.blabOpenSession(' + _week + ',' + _nextDay + ');" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Start →</button></div>';
         if(_weekDone){
           _inner.innerHTML =
-            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">BLAB · Week ' + _week + ' Complete</div>' +
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + window.trnEyebrow(_week) + ' Complete</div>' +
             '<div class="game-card-title" style="font-size:30px;">Week ' + _week + ' Done</div>' +
-            '<div style="font-size:13px;color:var(--text2);margin-top:6px;">All 4 sessions complete. Ready for Week ' + (_week+1) + '.</div>' +
+            '<div style="font-size:13px;color:var(--text2);margin-top:6px;">All ' + _tprog.days + ' sessions complete. Ready for Week ' + (_week+1) + '.</div>' +
             '<div style="margin-top:16px;"><button onclick="event.stopPropagation();window.blabOpenCheckin&&window.blabOpenCheckin();" style="width:100%;padding:15px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:#000;cursor:pointer;">Check In →</button></div>';
           _card.style.border = '2px solid var(--gold)';
           _card.style.cursor = 'pointer';
           _card.setAttribute('onclick', 'window.blabOpenCheckin && window.blabOpenCheckin()');
         } else if(!_canTrain){
           _inner.innerHTML =
-            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">BLAB · Week ' + _week + '</div>' +
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">' + window.trnEyebrow(_week) + '</div>' +
             '<div class="game-card-title" style="font-size:30px;">Rest Day</div>' +
             '<div style="font-size:13px;color:var(--text2);margin-top:6px;">Day 4 requires 48hrs after lower body. Back tomorrow.</div>';
           _card.style.border = '1px solid var(--border)';
@@ -19450,9 +20265,9 @@ function renderTodayScreen(){
           _card.removeAttribute('onclick');
         } else {
           _inner.innerHTML =
-            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">BLAB · Week ' + _week + ' · Day ' + _nextDay + '</div>' +
-            '<div class="game-card-title" style="font-size:30px;">' + _dayLabels[_nextDay] + '</div>' +
-            '<div style="font-size:13px;color:var(--text2);margin-top:6px;">Built Like A Badass · DeFranco Protocol</div>' +
+            '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + window.trnEyebrow(_week) + ' · Day ' + _nextDay + '</div>' +
+            '<div class="game-card-title" style="font-size:30px;">' + window.trnDayLabel(_week, _nextDay, _bs) + '</div>' +
+            '<div style="font-size:13px;color:var(--text2);margin-top:6px;">' + _tprog.sub + '</div>' +
             _startBtn;
           _card.style.border = '2px solid var(--gold)';
           _card.style.cursor = 'pointer';
@@ -19634,7 +20449,7 @@ function _blabRenderTodayFromCalendar(card, inner, weekNum){
       ? ('Next: ' + next[0].label + ' — ' + window.blabCalEntryView(next[0].entries[0]).title)
       : 'Nothing scheduled yet.';
     inner.innerHTML =
-      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">BLAB · Week ' + weekNum + '</div>' +
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:4px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">' + window.trnEyebrow(weekNum) + '</div>' +
       '<div class="game-card-title" style="font-size:30px;">No Session Today</div>' +
       '<div style="font-size:13px;color:var(--text2);margin-top:6px;">' + when + '</div>' +
       '<div style="display:flex;gap:10px;margin-top:16px;">' +
@@ -19782,11 +20597,12 @@ function _renderTodayRemainingRow(bs, nextDay, weekDone){
   var row = document.getElementById('today-remaining-row');
   if(!row) return;
   // No remaining tiles if week is done or on Day 4 (last day)
-  if(weekDone || nextDay >= 4){ row.innerHTML = ''; return; }
+  var _rprog = (typeof window.trnProgramme === 'function') ? window.trnProgramme(bs) : {days:4, labels:['','Upper Body','Lower Body','Upper Body — Chins','Lower Power']};
+  if(weekDone || nextDay >= _rprog.days){ row.innerHTML = ''; return; }
   var week = bs.week || 1;
-  var dayLabels = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
+  var dayLabels = _rprog.labels;
   var remaining = [];
-  for(var d = nextDay + 1; d <= 4; d++) remaining.push(d);
+  for(var d = nextDay + 1; d <= _rprog.days; d++) remaining.push(d);
   if(!remaining.length){ row.innerHTML = ''; return; }
   var h = '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">This Week</div>';
   h += '<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;">';
@@ -35936,6 +36752,10 @@ var _BLAB_DAY_LABELS = ['','Upper Body','Lower Body','Upper Body — Chins','Low
 // than in a consumer's suite — by which point the break has already shipped.
 window.blabDayLabel = function(dayNumber){
   var d = parseInt(dayNumber, 10);
+  // v4.9.341 — Draft has six days. Same contract: '' for anything out of range.
+  if(typeof window.trnIsDraft === 'function' && window.trnIsDraft()){
+    return (d >= 1 && d <= 6) ? (_TRN_DRAFT_DESC.labels[d] || '') : '';
+  }
   if(!(d >= 1 && d <= 4)) return '';
   return _BLAB_DAY_LABELS[d] || '';
 };
@@ -36057,7 +36877,8 @@ function _blabCalIsRest(e){
 // BLAB is a fixed 12-week x 4-day block. The queue is the next unscheduled
 // sessions in strict order from the athlete's current position.
 function _blabCalSeqAfter(w, d){
-  if(d >= 4) return (w >= 12) ? null : {w: w+1, d: 1};
+  var _qp = (typeof window.trnProgramme === 'function') ? window.trnProgramme() : {days:4, weeks:12};
+  if(d >= _qp.days) return (w >= _qp.weeks) ? null : {w: w+1, d: 1};
   return {w: w, d: d+1};
 }
 window._blabCalQueue = function(limit){
@@ -36067,12 +36888,14 @@ window._blabCalQueue = function(limit){
   var cal = window.blabCalGet();
   var w = s.week || 1;
   var d = (s.last_completed_day || 0) + 1;
-  if(d > 4){ w = w + 1; d = 1; }
+  var _qp2 = (typeof window.trnProgramme === 'function') ? window.trnProgramme(s) : {id:'blab', days:4, weeks:12};
+  if(d > _qp2.days){ w = w + 1; d = 1; }
   var out = [], guard = 0;
-  while(out.length < lim && w <= 12 && guard < 60){
+  while(out.length < lim && w <= _qp2.weeks && guard < 60){
     guard++;
     var existing = _blabCalFindBlab(w, d, cal);
-    if(!existing || existing.status === 'skipped'){
+    var _qok = (_qp2.id !== 'draft') || !!window.blabGetSessionData(w, d);
+    if(_qok && (!existing || existing.status === 'skipped')){
       out.push({blabWeek: w, blabDay: d});
     }
     var nx = _blabCalSeqAfter(w, d);
@@ -36512,10 +37335,10 @@ window.blabCalEntryView = function(e){
       blockNote: ''
     };
   }
-  var labels = ['','Upper Body','Lower Body','Upper Body — Chins','Lower Power'];
+  var _vp = (typeof window.trnProgramme === 'function') ? window.trnProgramme() : {id:'blab', gate48:true, sub:'Built Like A Badass · DeFranco Protocol'};
   var blocked = false, note = '';
-  // 48h gate — Day 4 must not land within 48h of that week's Day 2.
-  if(e.blabDay === 4 && typeof window._blabCalDay2RefDate === 'function'){
+  // 48h gate — Day 4 must not land within 48h of that week's Day 2. BLAB only (v4.9.341).
+  if(_vp.gate48 && e.blabDay === 4 && typeof window._blabCalDay2RefDate === 'function'){
     var ref = window._blabCalDay2RefDate(e.blabWeek);
     if(ref){
       var t = _blabCalParse(e.scheduledDate) || _blabCalToday();
@@ -36526,9 +37349,9 @@ window.blabCalEntryView = function(e){
     }
   }
   return {
-    eyebrow: 'BLAB · Week ' + e.blabWeek + ' · Day ' + e.blabDay,
-    title:   labels[e.blabDay] || ('Day ' + e.blabDay),
-    sub:     'Built Like A Badass · DeFranco Protocol',
+    eyebrow: window.trnEyebrow(e.blabWeek) + ' · Day ' + e.blabDay,
+    title:   window.trnDayLabel(e.blabWeek, e.blabDay) || ('Day ' + e.blabDay),
+    sub:     _vp.sub,
     onStart: 'window.blabOpenSession(' + e.blabWeek + ',' + e.blabDay + ')',
     blocked: blocked,
     blockNote: note
@@ -36869,7 +37692,7 @@ function _blabCalWireGrid(){
       document.body.appendChild(ghost);
       el.style.opacity = '0.2';
       // Pre-paint the days blocked by the 48h gate for this Day 4 session.
-      if(!item.custom && item.blabDay === 4) blockedSet = _blabCalBlockedFor(item.blabWeek);
+      if(!item.custom && item.blabDay === 4 && !(typeof window.trnIsDraft === 'function' && window.trnIsDraft())) blockedSet = _blabCalBlockedFor(item.blabWeek);
       _paintBlocked();
     }, HOLD_MS);
   }
@@ -38994,6 +39817,14 @@ function _phxSmartRecommend(){
   var blabDoneToday = !!(bs && bs.last_completed_date &&
     new Date(bs.last_completed_date).toDateString()===new Date().toDateString());
   var allBlabDone = lastDay>=4;
+  // v4.9.341 — Draft: today's session is whatever the calendar holds today, or nothing.
+  var _rdraft = (typeof window.trnIsDraft === 'function') && window.trnIsDraft(bs);
+  if(_rdraft){
+    var _rce = (typeof window.draftTodayEntry === 'function') ? window.draftTodayEntry() : null;
+    if(_rce){ blabWeek = _rce.blabWeek; nextDay = _rce.blabDay; blabDoneToday = false; }
+    else blabDoneToday = true;
+    isDeload = false; allBlabDone = false;
+  }
 
   var now = new Date();
   var hour = now.getHours();
@@ -39001,7 +39832,7 @@ function _phxSmartRecommend(){
   var isMorning = hour>=5 && hour<13;
   var isEvening = hour>=17;
 
-  var dayNames = ['Upper Strength','Upper Hypertrophy','Lower Hypertrophy','Lower Power'];
+  var dayNames = _rdraft ? _TRN_DRAFT_DESC.labels.slice(1) : ['Upper Strength','Upper Hypertrophy','Lower Hypertrophy','Lower Power'];
   var msPerDay = 86400000;
   var nowMs = now.getTime();
 
@@ -39099,6 +39930,12 @@ function _phxOpenSmartAddSession(){
   var lastDay = bs ? (bs.last_completed_day||0) : 0;
   var nextDay = lastDay>=4 ? 1 : lastDay+1;
   var dayNames = ['Upper Strength','Upper Hypertrophy','Lower Hypertrophy','Lower Power'];
+  // v4.9.341 — Draft: the tile names today's calendar session.
+  if(typeof window.trnIsDraft === 'function' && window.trnIsDraft(bs)){
+    dayNames = _TRN_DRAFT_DESC.labels.slice(1);
+    var _tce = (typeof window.draftTodayEntry === 'function') ? window.draftTodayEntry() : null;
+    if(_tce){ blabWeek = _tce.blabWeek; nextDay = _tce.blabDay; } else { blabActive = false; }
+  }
   var templates = _phxLoadCustomTemplates();
 
   function tile(key, label, sub, accentColor){
@@ -42123,7 +42960,7 @@ function openTodaySession(){
       resultCaptureSection = '<div style="margin:12px 0 0;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);">'+
         '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;font-family:var(--font-d);">Log result'+(ex.prev_result?' &middot; last: '+ex.prev_result:'')+'</div>'+
         '<div style="display:flex;gap:8px;">'+
-          '<input type="number" inputmode="numeric" id="blab-result-'+i+'" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="reps / m / rounds">'+
+          '<input type="number" inputmode="'+(ex._blabResultDecimal?'decimal':'numeric')+'" step="any" id="blab-result-'+i+'" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="'+(ex._blabResultUnit || 'reps / m / rounds')+'">'+
           '<button type="button" onclick="window._blabLogResult(\''+exNameEsc+'\','+i+')" style="flex:0 0 80px;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Save</button>'+
         '</div>'+
       '</div>';

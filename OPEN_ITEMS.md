@@ -15,6 +15,25 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ---
 
+## ROAD TO DRAFT DAY — v4.9.341 (Training, 27 Oct 2026)
+
+Jon's new programme, Block 1 of 9: baseline test Sat 31 Oct + Sun 1 Nov, five weeks from
+Mon 2 Nov, retest Sat 5 + Sun 6 Dec. Runs THROUGH the BLAB pipeline (`programme:'draft'`
+inside blab_state); `trnProgramme(s)` is the one place that answers days/weeks/labels.
+Opt-in: Settings → Developer Shortcuts → "Road to Draft Day — Setup", or Adjust Programme.
+BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md, section
+"Road to Draft Day".
+
+- [ ] JON — run Setup on the phone before Saturday and confirm the Today card shows
+      "Combine Test" on Sat 31 Oct. No Training fix has ever been confirmed on device.
+- [ ] NUTRITION — `nutTrainingForDay` adds carbs on `dayNum === 2 || 4` (BLAB's lower
+      days). Under Draft, day 2 is UPPER (Tue) and the lower days are 4 (Thu) and 6 (Sun).
+      `blabDayLabel(d)` returns the Draft names while Draft is active. Your call how to key it.
+- [ ] TRAINING — Blocks 2-9 are outlines only (plan artifact). Write each after the test
+      before it. Phoenix → desktop-folder export for Jon's work tracker: not started.
+- [ ] TRAINING — Draft test/result blocks are standard_sets, so they show a kg/reps row
+      above the "Log result" box. Works; reads oddly. A result-only block would be cleaner.
+
 ## ⭐ ACTIVE BUILD — DAY SWIPE. READ-ONLY. ALL THREE DOMAINS. START HERE.
 
 **RULED BY JON, 2026-09-08: READ-ONLY.** He asked for this across peptides, nutrition and

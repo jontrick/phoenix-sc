@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.340'", 'version is 4.9.340');
+has("var APP_VERSION='4.9.341'", 'version is 4.9.341');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2465,7 +2465,9 @@ has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped s
   // ("history, not an agenda") and Nutrition depends on that, so it was left alone.
   // 21 since v4.9.329: blabCalMarkCustomCompleted — the WOD/Core half of
   // blabCalMarkCompleted, which had only ever stamped BLAB sessions.
-  const MINE = 21;
+  // v4.9.341: +2 — draftStart and draftReturnToBlab (Training) swap the calendar's
+  // BLAB sessions for Draft's and back.
+  const MINE = 23;
   if (n === MINE) ok('CONTRACT: blabCalGet has only its ' + MINE + ' Training call sites');
   else bad(`CONTRACT: blabCalGet is invoked ${n}× in code, expected ${MINE} (all Training's). ` +
            `If you added one, update the count. If a peer added one, that is my internal storage ` +

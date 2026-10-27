@@ -5626,7 +5626,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(read(KEY).programme, 'draft', 'Draft stays');
   });
 
-  test('DRAFT LABELS: week and day labels follow the programme; BLAB unchanged', () => {
+  test('DRAFT LABELS: week and day labels follow the programme; BLAB unchanged', () => withClock('2026-10-27T12:00:00.000Z', () => {
+    // Pinned now: Tue 27 Oct 2026, inside the test week of START — labels are date-aware.
     startDraft();
     assert.equal(app.blabTrainingWeekLabel(), 'TRAIN TEST', 'test week');
     assert.equal(app.blabTrainingWeekLabelLong(), 'Test Week');
@@ -5638,6 +5639,83 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     reset(); signIn(UID); seed(KEY, BLAB_W7());
     assert.equal(app.blabDayLabel(4), 'Lower Power', 'BLAB labels untouched');
     assert.equal(app.blabTrainingWeekLabelLong(), 'Week 7 of 12');
+  }));
+
+  test('DRAFT LABELS: a skipped Sunday does not freeze the week label', () => {
+    // Pinned now: Wed 11 Nov 2026 = training Week 2 by the calendar, with state still on
+    // the test week because the Sunday was never completed.
+    withClock('2026-11-11T12:00:00.000Z', () => {
+      startDraft();
+      assert.equal(app.blabTrainingWeekLabel(), 'TRAIN W2', 'calendar week wins over a stuck counter');
+    });
+  });
+
+  test('DRAFT MOVE: any Draft session can be moved to any day (no BLAB 48h rule)', () => {
+    startDraft();
+    const thu = { blabWeek: 2, blabDay: 4 };
+    assert.equal(app._blabCalCanDrop(thu, '2026-11-04').ok, true, 'Thursday lower onto Wednesday is allowed');
+    assert.equal(app._blabCalPlace(thu, '2026-11-04'), true, 'and placing it works');
+    const cal = read(CALKEY);
+    assert.equal(cal.sessions.find((e) => e.blabWeek === 2 && e.blabDay === 4).scheduledDate, '2026-11-04', 'moved, not duplicated');
+    assert.equal(cal.sessions.filter((e) => e.blabWeek === 2 && e.blabDay === 4).length, 1);
+    reset(); signIn(UID); seed(KEY, BLAB_W7());
+    seed(CALKEY, { sessions: [{ blabWeek: 7, blabDay: 2, scheduledDate: '2026-11-03', status: 'pending' }], customs: [] });
+    assert.equal(app._blabCalCanDrop({ blabWeek: 7, blabDay: 4 }, '2026-11-04').ok, false, 'BLAB keeps its 48h rule');
+  });
+
+  test('DRAFT MOVE: an unscheduled Draft session goes to the queue and can be put back', () => {
+    startDraft();
+    app._blabCalUnschedule('b:2:3');
+    const q = app._blabCalQueue(40);
+    assert.ok(q.some((e) => e.blabWeek === 2 && e.blabDay === 3), 'Wednesday sprint waits in the queue');
+    assert.ok(!q.some((e) => e.blabWeek === 1 && e.blabDay === 1), 'test-week days with no session never appear');
+    assert.ok(/Sprint & Power/.test(app._blabCalLabel(2, 3)), 'queue card names the Draft session');
+    assert.equal(app._blabCalPlace({ blabWeek: 2, blabDay: 3 }, '2026-11-06'), true, 'and it can go on a Friday if he wants');
+  });
+
+  test('DRAFT WARNINGS: conditioning and sprint days are not counted as strength', () => {
+    startDraft();
+    assert.equal(app._blabCalIsStrength({ blabWeek: 2, blabDay: 1 }), false, 'Monday conditioning');
+    assert.equal(app._blabCalIsStrength({ blabWeek: 2, blabDay: 3 }), false, 'Wednesday sprint');
+    assert.equal(app._blabCalIsStrength({ blabWeek: 2, blabDay: 4 }), true, 'Thursday lower');
+    const days = [2, 3, 4, 5].map((n) => new Date(2026, 10, n));
+    const w = app._blabCalWarnings(days);
+    assert.ok(!Object.values(w).some((x) => x.consecutive), 'Mon-Thu is not four strength days in a row');
+    assert.ok(!Object.values(w).some((x) => x.deload), 'no deload badge in a training week');
+  });
+
+  test('DRAFT EXTRAS: he can still add any Phoenix WOD or Core to a Draft day', () => {
+    startDraft();
+    const cal = read(CALKEY);
+    cal.customs.push({ id: 'extra', cat: 'WOD', libId: 'titan-kronos', label: 'Kronos', scheduledDate: '2026-11-03', status: 'pending' });
+    app.blabCalSave(cal);
+    const on = app.blabCalSessionsOn('2026-11-03');
+    assert.ok(on.some((e) => !e.custom && e.blabDay === 2), 'Tuesday upper still there');
+    assert.ok(on.some((e) => e.custom && e.libId === 'titan-kronos'), 'with the added WOD beside it');
+    assert.ok(/_phxStartSession\('titan-kronos'\)/.test(app.blabCalEntryView(on.find((e) => e.custom)).onStart), 'which opens the library session');
+  });
+
+  test('DRAFT SESSION: a half-done Draft session is offered to resume', () => {
+    startDraft();
+    const s = read(KEY);
+    s.blockProgress = {}; s.blockProgress['blab:2:2:' + app._phxLocalISO()] = { '0': { done: true }, '1': { done: true } };
+    seed(KEY, s);
+    const u = app._blabUnfinishedToday();
+    assert.ok(u, 'offered');
+    assert.equal(u.week, 2); assert.equal(u.day, 2); assert.equal(u.done, 2);
+  });
+
+  test('DRAFT SESSION: last week shows on the next exposure of the same lift', () => {
+    startDraft();
+    logWk('Weighted Pull-Up', 2, 15, 4);
+    const sess = app.blabGetSessionData(3, 2);
+    const phx = app.blabToPhoenixSession(sess, 3, 2);
+    const bench = phx.exercises.find((e) => e.name === 'Close-Grip Bench');
+    assert.ok(bench, 'week 3 Tuesday is close-grip');
+    logWk('Close-Grip Bench', 3, 105, 3);
+    const phx4 = app.blabToPhoenixSession(app.blabGetSessionData(4, 2), 4, 2);
+    assert.equal(phx4.exercises.find((e) => e.format === 'percentage_sets').prev_amrap_wt || 0, 0,
+      'a DIFFERENT variation next week does not borrow close-grip history (keyed by exercise name)');
   });
 
   test('DRAFT TODAY: the Today card shows the scheduled Draft session (drives renderTodayScreen)', () => {

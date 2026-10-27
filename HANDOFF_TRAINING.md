@@ -265,3 +265,9 @@ a notice and kept in `draft.changes`.
 history maps and calendar; Draft is kept in `draft_parked`.
 
 Tests: `tests/training.mjs`, cases prefixed `DRAFT`. Four were inverted and went red.
+
+**v4.9.342 — calendar fixes for Draft** (found by tests written for Jon's "are they
+moveable?"): the BLAB Day2→Day4 48h drop gate blocked legal Draft moves; Mon/Wed counted
+as strength so Mon-Thu flagged "consecutive strength"; Draft week 5 showed a deload badge;
+queue cards used BLAB day names; a skipped Sunday froze the week label
+(`draftCurrentWeek` now takes the later of state and calendar week).

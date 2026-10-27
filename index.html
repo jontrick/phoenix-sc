@@ -3544,7 +3544,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.341';
+var APP_VERSION='4.9.342';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -3656,7 +3656,7 @@ window.blabTrainingWeek = function(){
     // a position, and blanking the badge would read as "no programme".
     if(s && s.active){
       // v4.9.341 — Draft: test week shows as week 0's label; training weeks are 1-5.
-      if(s.programme === 'draft') return Math.max(1, (s.week || 1) - 1);
+      if(s.programme === 'draft') return Math.max(1, window.draftCurrentWeek(s) - 1);
       return s.week || 1;
     }
   } catch(_tw){}
@@ -3674,7 +3674,7 @@ window.blabTrainingWeek = function(){
 window.blabTrainingWeekLabel = function(){
   try {
     var _s = window.blabGetState && window.blabGetState();
-    if(_s && _s.active && _s.programme === 'draft' && (_s.week || 1) <= 1) return 'TRAIN TEST';
+    if(_s && _s.active && _s.programme === 'draft' && window.draftCurrentWeek(_s) <= 1) return 'TRAIN TEST';
   } catch(_wl){}
   var w = window.blabTrainingWeek();
   return (w == null) ? null : ('TRAIN W' + w);
@@ -3686,7 +3686,7 @@ window.blabTrainingWeekLabelLong = function(){
   if(w == null) return null;
   var s = null;
   try { s = window.blabGetState && window.blabGetState(); } catch(_tl){}
-  if(s && s.active && s.programme === 'draft') return window.draftWeekName(s.week || 1);
+  if(s && s.active && s.programme === 'draft') return window.draftWeekName(window.draftCurrentWeek(s));
   return (s && s.active) ? ('Week ' + w + ' of 12') : ('Week ' + w);
 };
 
@@ -7972,6 +7972,19 @@ window.draftWeekForDate = function(startMonday, iso){
   if(!a || !b) return 1;
   var w = Math.floor(Math.round((b.getTime() - a.getTime()) / 86400000) / 7) + 1;
   return Math.max(1, Math.min(6, w));
+};
+// The Draft week right now: the later of the logged position and the calendar week.
+// A skipped Sunday never closes the week in state, but the calendar still moves on.
+window.draftCurrentWeek = function(s){
+  s = s || window.blabGetState();
+  if(!s || s.programme !== 'draft') return null;
+  var w = s.week || 1;
+  var st = s.draft && s.draft.startMonday;
+  if(st){
+    var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : _draftISO(new Date());
+    w = Math.max(w, window.draftWeekForDate(st, today));
+  }
+  return Math.min(6, w);
 };
 window.draftWeekName = function(week){
   return (week <= 1) ? 'Test Week' : ('Week ' + (week - 1) + ' of 5');
@@ -36864,6 +36877,9 @@ function _blabCalFindBlab(w, d, cal){
 }
 function _blabCalIsStrength(e){
   if(!e) return false;
+  // v4.9.342 — Draft days 1 (conditioning) and 3 (sprint) are not strength sessions;
+  // counting them flagged Mon-Thu as four strength days in a row every week.
+  if(!e.custom && typeof window.trnIsDraft === 'function' && window.trnIsDraft()) return [2,4,5,6].indexOf(e.blabDay) >= 0;
   if(!e.custom) return true;                       // every BLAB session is strength
   return String(e.cat||'').toUpperCase() === 'STRENGTH';
 }
@@ -36904,7 +36920,7 @@ window._blabCalQueue = function(limit){
   }
   return out;
 };
-function _blabCalLabel(w, d){ return 'W'+w+' D'+d+' — '+(_BLAB_DAY_LABELS[d] || ('Day '+d)); }
+function _blabCalLabel(w, d){ return 'W'+w+' D'+d+' — '+((typeof window.trnDayLabel === 'function') ? window.trnDayLabel(w, d) : (_BLAB_DAY_LABELS[d] || ('Day '+d))); }
 // Key-lift summary pulled straight from the live session builder so the queue card
 // always matches what the session will actually render.
 function _blabCalKeyLifts(w, d){
@@ -36952,6 +36968,9 @@ function _blabCalBlockedFor(blabWeek){
 // Drop validation. Returns {ok, reason}. Only the 48h gate is blocking.
 window._blabCalCanDrop = function(item, dateISO){
   if(!item || item.custom) return {ok:true, reason:''};
+  // v4.9.342 — BLAB's Day 2 -> Day 4 48h rule. In Draft, day 2 is upper and day 4 is
+  // lower, so the rule would block a legal move. Draft sessions move freely.
+  if(typeof window.trnIsDraft === 'function' && window.trnIsDraft()) return {ok:true, reason:''};
   if(item.blabDay !== 4) return {ok:true, reason:''};
   var ref = window._blabCalDay2RefDate(item.blabWeek);
   if(!ref) return {ok:true, reason:''};
@@ -36973,6 +36992,8 @@ window._blabCalWarnings = function(weekDates){
 
   // Rule 4 — deload badge. BLAB deload weeks are 5 / 10 / 15 (isDeload()).
   var _isDl = (typeof isDeload === 'function') ? isDeload : function(w){ return w===5||w===10||w===15; };
+  // v4.9.342 — Draft has no deload weeks; its only light week is the taper (week 6).
+  if(typeof window.trnIsDraft === 'function' && window.trnIsDraft()) _isDl = function(w){ return w === 6; };
   all.forEach(function(e){
     if(!e.custom && _isDl(e.blabWeek) && byDate[e.scheduledDate]) byDate[e.scheduledDate].deload = true;
   });
@@ -37581,6 +37602,7 @@ window._blabCalRenderQueue = function(){
     var qid = 'q:'+it.blabWeek+':'+it.blabDay;
     var lifts = _blabCalKeyLifts(it.blabWeek, it.blabDay);
     var _isDl = (typeof isDeload === 'function') ? isDeload : function(w){ return w===5||w===10||w===15; };
+    if(typeof window.trnIsDraft === 'function' && window.trnIsDraft()) _isDl = function(w){ return w === 6; };
     var dl = _isDl(it.blabWeek);
     return '<div data-cal-drag="'+qid+'" data-cal-queue="'+it.blabWeek+':'+it.blabDay+'" '+
       'style="flex:0 0 auto;width:200px;background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--gold);'+

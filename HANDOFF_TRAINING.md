@@ -271,3 +271,13 @@ moveable?"): the BLAB Day2→Day4 48h drop gate blocked legal Draft moves; Mon/W
 as strength so Mon-Thu flagged "consecutive strength"; Draft week 5 showed a deload badge;
 queue cards used BLAB day names; a skipped Sunday froze the week label
 (`draftCurrentWeek` now takes the later of state and calendar week).
+
+**v4.9.344 — Video timer** (`phxVideoTimerOpen`, between `VIDEO TIMER` markers). A
+"Time it from a video" button on every result block whose unit is `sec` (40-yd,
+5-10-5, 3-cone, 20 m). On-device only: file input → blob URL → frame stepping; nothing
+is uploaded or stored, only the time is logged via `_blabLogResult`. Frame step =
+median frame gap from `requestVideoFrameCallback`, snapped to a standard rate (raw
+minimum read 1/63 s on a 60 fps clip). Slo-mo factor (1x/4x/8x) is chosen by Jon
+because a slo-mo clip shared from Photos may play slowed. Verified in Chromium with
+generated 60 and 30 fps clips: 300 and 150 frames both measured 5.00 s. Not yet tried
+on iPhone Safari.

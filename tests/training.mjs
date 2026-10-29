@@ -5735,4 +5735,49 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       } finally { app.document.getElementById = realGet; }
     });
   });
+  // ── VIDEO TIMER (v4.9.344) ──────────────────────────────────────────────────
+  test('VIDEO: time is finish minus start, divided by the slow-motion factor', () => {
+    assert.equal(app._phxVtTime(1.2, 6.31, 1), 5.11, 'normal clip');
+    assert.equal(app._phxVtTime(2.0, 42.88, 8), 5.11, '8x slo-mo clip that plays slowed');
+    assert.equal(app._phxVtTime(5, 4, 1), null, 'finish before start is not a time');
+    assert.equal(app._phxVtTime(null, 4, 1), null, 'needs both marks');
+  });
+
+  test('VIDEO: the button appears on timed results only', () => {
+    assert.ok(/phxVideoTimerOpen\('40-yd Dash \(sec\)',3\)/.test(app._phxVtButtonHTML({ name: '40-yd Dash (sec)', _blabResultUnit: 'sec' }, 3)), 'on the 40');
+    assert.equal(app._phxVtButtonHTML({ name: 'Broad Jump (cm)', _blabResultUnit: 'cm' }, 2), '', 'not on a jump');
+    assert.equal(app._phxVtButtonHTML({ name: 'Prowler Push' }, 1), '', 'not on ordinary results');
+  });
+
+  test('VIDEO: a measured time is logged exactly like the Save button, decimals kept', () => {
+    startDraft();
+    const input = { value: '', style: {} };
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'blab-result-4' ? input : null);
+    try {
+      assert.equal(app._phxVtApply('40-yd Dash (sec)', 4, 5.11), true);
+    } finally { app.document.getElementById = realGet; }
+    assert.equal(input.value, '5.11', 'the box shows it');
+    assert.equal(read(KEY).records['40-yd Dash (sec)_result'], 5.11, 'and it is saved with its decimals');
+  });
+
+  test('VIDEO: the live session screen draws the button on the 40-yd (drives openTodaySession)', () => {
+    startDraft();
+    const made = [];
+    const mk = () => { const e = { style: {}, innerHTML: '', children: [], appendChild(c) { this.children.push(c); return c; },
+      addEventListener() {}, setAttribute() {}, removeAttribute() {}, querySelector: () => null, querySelectorAll: () => [],
+      classList: { add() {}, remove() {}, contains: () => false, toggle() {} } }; made.push(e); return e; };
+    const body = mk();
+    const realGet = app.document.getElementById, realCreate = app.document.createElement;
+    app.document.getElementById = (id) => (id === 'session-body-content' ? body : null);
+    app.document.createElement = mk;
+    try {
+      app.blabOpenSession(1, 5);
+    } catch (e) { /* screen chrome outside the body is not stubbed; the body is what we assert on */ }
+    finally { app.document.getElementById = realGet; app.document.createElement = realCreate; }
+    const html = made.map((m) => m.innerHTML).join('\n');
+    assert.ok(/phxVideoTimerOpen\('40-yd Dash \(sec\)'/.test(html), 'the 40-yd block offers the video timer');
+    assert.ok(/phxVideoTimerOpen\('5-10-5 Shuttle \(sec\)'/.test(html), 'and the shuttle');
+    assert.ok(!/phxVideoTimerOpen\('Broad Jump/.test(html), 'the broad jump does not');
+  });
 }

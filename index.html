@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.343';
+var APP_VERSION='4.9.344';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -13191,6 +13191,194 @@ window._blabLogResult=function(name, idx){
 };
 
 // AMRAP Rep Counter
+// ══════════════════════════════════════════════════════════════════════════════
+// VIDEO TIMER — v4.9.344 (Training)
+// Jon: "Can you set up the video upload in Phoenix itself??" — to time his 40-yd,
+// shuttle and 3-cone from a phone video instead of a stopwatch.
+//
+// ON-DEVICE ONLY. The clip is opened from the camera roll with a file input and played
+// from a blob: URL. Nothing is uploaded or stored — no Supabase bucket, no schema
+// change, no cost, works offline. Only the resulting time is saved, through the same
+// _blabLogResult path the Save button uses.
+//
+// HOW THE TIME IS MEASURED. He steps frame by frame, marks first movement and the
+// frame his chest crosses the line; time = (finish - start) / slow-motion factor.
+// The step size is the clip's own frame duration, measured with
+// requestVideoFrameCallback while it plays (Safari 15.4+); until then 1/60 s.
+//
+// SLOW-MOTION TRAP. An iPhone slo-mo clip shared out of Photos can arrive as a normal
+// clip that PLAYS slowed down, so the video clock runs 4x or 8x slower than real time.
+// There is no reliable way to read that from the browser, so he says so: the factor
+// selector divides the measured interval. Defaults to 1x (normal video).
+// ══════════════════════════════════════════════════════════════════════════════
+window._phxVtTime = function(startT, finishT, slowFactor){
+  var a = parseFloat(startT), b = parseFloat(finishT), f = parseFloat(slowFactor) || 1;
+  if(isNaN(a) || isNaN(b) || !(b > a) || !(f > 0)) return null;
+  return Math.round(((b - a) / f) * 100) / 100;
+};
+// The button that opens it — drawn only for results measured in seconds.
+window._phxVtButtonHTML = function(ex, i){
+  if(!ex || ex._blabResultUnit !== 'sec') return '';
+  var n = String(ex.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  return '<button type="button" onclick="window.phxVideoTimerOpen(\'' + n + '\',' + i + ')" ' +
+    'style="width:100%;margin-top:8px;padding:10px;background:transparent;border:1px solid var(--gold);border-radius:var(--radius);' +
+    'font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--gold);cursor:pointer;">' +
+    '&#9654; Time it from a video</button>';
+};
+// Put a measured time into the block and log it exactly as the Save button would.
+window._phxVtApply = function(exName, idx, secs){
+  var el = document.getElementById('blab-result-' + idx);
+  if(!el || !(secs > 0)) return false;
+  el.value = String(secs);
+  window._blabLogResult(exName, idx);
+  return true;
+};
+window.phxVideoTimerOpen = function(exName, idx){
+  var old = document.getElementById('phx-vt'); if(old) old.remove();
+  var st = { url: null, frame: 1 / 60, start: null, finish: null, factor: 1, measured: false, rafId: null };
+  var ov = document.createElement('div');
+  ov.id = 'phx-vt';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9900;background:#000;display:flex;flex-direction:column;' +
+    'padding:env(safe-area-inset-top,0px) 12px env(safe-area-inset-bottom,0px);color:#fff;font-family:var(--font-b,inherit);';
+  var B = 'padding:12px 0;border-radius:var(--radius);font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;';
+  ov.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0 8px;">' +
+      '<div><div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">Video timer</div>' +
+      '<div id="phx-vt-title" style="font-family:var(--font-d);font-size:17px;font-weight:900;text-transform:uppercase;"></div></div>' +
+      '<button id="phx-vt-close" type="button" style="background:none;border:none;color:#aaa;font-size:30px;line-height:1;padding:4px 8px;">&#215;</button>' +
+    '</div>' +
+    '<label id="phx-vt-pick" style="display:block;text-align:center;' + B + 'background:var(--gold);color:#000;margin-bottom:8px;">Choose or record video' +
+      '<input id="phx-vt-file" type="file" accept="video/*" style="display:none;"></label>' +
+    '<video id="phx-vt-v" playsinline muted preload="auto" style="width:100%;flex:1;min-height:120px;object-fit:contain;background:#111;border-radius:6px;"></video>' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:8px 2px 4px;">' +
+      '<div id="phx-vt-now" style="font-family:var(--font-d);font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;">0.000 s</div>' +
+      '<div id="phx-vt-fps" style="font-size:11px;color:#999;">frame step 1/60 s</div>' +
+    '</div>' +
+    '<input id="phx-vt-scrub" type="range" min="0" max="1000" value="0" step="1" style="width:100%;accent-color:var(--gold);">' +
+    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0;">' +
+      '<button type="button" data-vt="-10" style="' + B + 'background:#222;color:#fff;border:1px solid #333;">&laquo; 10</button>' +
+      '<button type="button" data-vt="-1" style="' + B + 'background:#222;color:#fff;border:1px solid #333;">&lsaquo; 1</button>' +
+      '<button type="button" data-vt="play" id="phx-vt-play" style="' + B + 'background:#333;color:#fff;border:1px solid #444;">Play</button>' +
+      '<button type="button" data-vt="1" style="' + B + 'background:#222;color:#fff;border:1px solid #333;">1 &rsaquo;</button>' +
+      '<button type="button" data-vt="10" style="' + B + 'background:#222;color:#fff;border:1px solid #333;">10 &raquo;</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+      '<button type="button" id="phx-vt-mstart" style="' + B + 'background:#1d2a1f;color:#7fd18b;border:1px solid #3a7d44;">Mark start<br><span id="phx-vt-s" style="font-size:11px;font-weight:700;">first movement</span></button>' +
+      '<button type="button" id="phx-vt-mfin" style="' + B + 'background:#2a1d1d;color:#f08a7f;border:1px solid #a04238;">Mark finish<br><span id="phx-vt-f" style="font-size:11px;font-weight:700;">chest on the line</span></button>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:12px;color:#bbb;">' +
+      '<span style="flex:1;">Clip plays in slow motion?</span>' +
+      '<button type="button" data-vtf="1" style="padding:6px 10px;border-radius:14px;border:1px solid var(--gold);background:var(--gold);color:#000;font-weight:700;">Normal</button>' +
+      '<button type="button" data-vtf="4" style="padding:6px 10px;border-radius:14px;border:1px solid #555;background:none;color:#ddd;font-weight:700;">4&times;</button>' +
+      '<button type="button" data-vtf="8" style="padding:6px 10px;border-radius:14px;border:1px solid #555;background:none;color:#ddd;font-weight:700;">8&times;</button>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin:10px 0 12px;">' +
+      '<div style="flex:1;"><div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#999;">Your time</div>' +
+      '<div id="phx-vt-res" style="font-family:var(--font-d);font-size:30px;font-weight:900;color:var(--gold);font-variant-numeric:tabular-nums;">&mdash;</div></div>' +
+      '<button type="button" id="phx-vt-use" disabled style="flex:1.2;' + B + 'background:var(--gold);color:#000;border:none;opacity:0.4;">Use this time</button>' +
+    '</div>' +
+    '<div style="font-size:11px;color:#888;line-height:1.5;margin-bottom:10px;">Your video stays on your phone. Only the time is saved.</div>';
+  document.body.appendChild(ov);
+  var $ = function(id){ return document.getElementById(id); };
+  $('phx-vt-title').textContent = String(exName || '').replace(/\s*\(sec\)\s*$/i, '');
+  var v = $('phx-vt-v');
+  function paint(){
+    var t = v.currentTime || 0;
+    $('phx-vt-now').textContent = t.toFixed(3) + ' s';
+    if(v.duration > 0) $('phx-vt-scrub').value = String(Math.round(t / v.duration * 1000));
+    $('phx-vt-s').textContent = (st.start != null) ? st.start.toFixed(3) + ' s' : 'first movement';
+    $('phx-vt-f').textContent = (st.finish != null) ? st.finish.toFixed(3) + ' s' : 'chest on the line';
+    var r = window._phxVtTime(st.start, st.finish, st.factor);
+    $('phx-vt-res').textContent = (r != null) ? r.toFixed(2) + ' s' : '\u2014';
+    var u = $('phx-vt-use'); u.disabled = (r == null); u.style.opacity = (r == null) ? '0.4' : '1';
+  }
+  function seek(t){
+    if(!(v.duration > 0)) return;
+    v.currentTime = Math.max(0, Math.min(v.duration, t));
+  }
+  // Measure the clip's real frame duration from the frames the browser actually shows.
+  // Median of the gaps, snapped to a standard camera rate: a single jittery gap (or
+  // the minimum) read 1/63 s on a 60 fps clip, which drifts 5% over a 40-yd.
+  var _VT_RATES = [24, 25, 30, 48, 50, 60, 90, 120, 240];
+  function watchFrames(){
+    if(typeof v.requestVideoFrameCallback !== 'function') return;
+    var last = null, gaps = [];
+    var cb = function(now, meta){
+      if(last != null && meta && meta.mediaTime > last){
+        var d = meta.mediaTime - last;
+        if(d >= 1 / 480 && d <= 1 / 20) gaps.push(d);
+        if(gaps.length >= 5){
+          var sorted = gaps.slice().sort(function(x, y){ return x - y; });
+          var med = sorted[Math.floor(sorted.length / 2)];
+          var fps = 1 / med, best = _VT_RATES[0];
+          _VT_RATES.forEach(function(r){ if(Math.abs(r - fps) < Math.abs(best - fps)) best = r; });
+          st.frame = 1 / best; st.measured = true;
+          $('phx-vt-fps').textContent = 'frame step 1/' + best + ' s';
+        }
+      }
+      if(meta) last = meta.mediaTime;
+      if(!v.paused) st.rafId = v.requestVideoFrameCallback(cb);
+    };
+    st.rafId = v.requestVideoFrameCallback(cb);
+  }
+  $('phx-vt-file').addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0];
+    if(!f) return;
+    if(st.url){ try { URL.revokeObjectURL(st.url); } catch(_r){} }
+    st.url = URL.createObjectURL(f);
+    st.start = null; st.finish = null; st.measured = false; st.frame = 1 / 60;
+    v.src = st.url;
+    $('phx-vt-pick').firstChild.textContent = 'Choose a different video';
+  });
+  // iOS shows a black box until the first seek after load.
+  v.addEventListener('loadedmetadata', function(){ seek(0.001); paint(); });
+  v.addEventListener('seeked', paint);
+  v.addEventListener('timeupdate', paint);
+  v.addEventListener('play', function(){ $('phx-vt-play').textContent = 'Pause'; watchFrames(); });
+  v.addEventListener('pause', function(){ $('phx-vt-play').textContent = 'Play'; paint(); });
+  $('phx-vt-scrub').addEventListener('input', function(e){
+    if(v.duration > 0){ v.pause(); seek(parseInt(e.target.value, 10) / 1000 * v.duration); }
+  });
+  ov.addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('[data-vt],[data-vtf]') : null;
+    if(!b) return;
+    if(b.hasAttribute('data-vtf')){
+      st.factor = parseFloat(b.getAttribute('data-vtf')) || 1;
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-vtf]'), function(x){
+        var on = x === b;
+        x.style.background = on ? 'var(--gold)' : 'none';
+        x.style.color = on ? '#000' : '#ddd';
+        x.style.borderColor = on ? 'var(--gold)' : '#555';
+      });
+      paint();
+      return;
+    }
+    var a = b.getAttribute('data-vt');
+    if(a === 'play'){
+      if(!v.src) return;
+      if(v.paused){ var p = v.play(); if(p && p.catch) p.catch(function(){}); } else v.pause();
+      return;
+    }
+    v.pause();
+    seek((v.currentTime || 0) + parseInt(a, 10) * st.frame);
+  });
+  $('phx-vt-mstart').addEventListener('click', function(){ if(v.src){ v.pause(); st.start = v.currentTime; paint(); } });
+  $('phx-vt-mfin').addEventListener('click', function(){ if(v.src){ v.pause(); st.finish = v.currentTime; paint(); } });
+  function close(){
+    try { v.pause(); } catch(_p){}
+    if(st.url){ try { URL.revokeObjectURL(st.url); } catch(_r){} }
+    var o = document.getElementById('phx-vt'); if(o) o.remove();
+  }
+  $('phx-vt-close').addEventListener('click', close);
+  $('phx-vt-use').addEventListener('click', function(){
+    var r = window._phxVtTime(st.start, st.finish, st.factor);
+    if(r == null) return;
+    window._phxVtApply(exName, idx, r);
+    close();
+  });
+};
+// ══ VIDEO TIMER — END ═════════════════════════════════════════════════════════
+
 var amrapRepCount=0;
 function renderAmrapCounter(targetEl){
   amrapRepCount=0;
@@ -42991,6 +43179,7 @@ function openTodaySession(){
           '<input type="number" inputmode="'+(ex._blabResultDecimal?'decimal':'numeric')+'" step="any" id="blab-result-'+i+'" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="'+(ex._blabResultUnit || 'reps / m / rounds')+'">'+
           '<button type="button" onclick="window._blabLogResult(\''+exNameEsc+'\','+i+')" style="flex:0 0 80px;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Save</button>'+
         '</div>'+
+        window._phxVtButtonHTML(ex, i)+
       '</div>';
     }
     // v4.9.131: hold timer button for timed-hold exercises (Nordic Planks etc.)

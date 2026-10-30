@@ -5526,11 +5526,11 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('DRAFT ENGINE: the test SETS a max, even downwards', () => {
     startDraft();
     logWk('Back Squat — 1RM Test', 1, 145, 1);
-    logWk('Bench Press — 1RM Test', 1, 130, 1);
+    logWk('Deadlift — 1RM Test', 1, 175, 1);
     const ch = app.draftAfterSession(1, 5);
     const s = read(KEY);
     assert.equal(s.maxes.squat, 145, 'squat max set from the made single, lower than the estimate');
-    assert.equal(s.maxes.bench, 125, 'bench untouched: it is not tested on Saturday');
+    assert.equal(s.maxes.deadlift, 160, 'deadlift untouched: it is not tested on Saturday');
     assert.ok(ch.some((c) => /Squat max 150/.test(c)), 'and the change is reported');
     assert.equal(app.blabGetSessionData(2, 4).exercises[1].sets[4].kg, app.blabPct(145, 86), 'next Thursday loads from the new max');
   });
@@ -5790,7 +5790,9 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(!sat.some((n) => /Jump|Dash|Shuttle|Cone/.test(n)), 'no field tests on Saturday');
     assert.ok(![...sat, ...sun].some((n) => /Bodyweight/.test(n)), 'bodyweight lives on the Today check-in, not in sessions');
     assert.ok(sun.includes('Bench 102.5 kg Rep Test') && sun.includes('Deadlift — 1RM Test'), 'Sunday lifts');
-    assert.equal(app.blabGetSessionData(1, 5).name, 'Lift Test — Clean, Squat, Press');
+    assert.equal(app.blabGetSessionData(1, 5).name, 'Lift Test — Clean, Squat, Bench');
+    assert.deepEqual(sat.filter((n) => /1RM/.test(n)), ['Power Clean — 1RM Test', 'Back Squat — 1RM Test', 'Bench Press — 1RM Test'], 'Jon\'s split: clean, squat, bench Saturday');
+    assert.deepEqual(sun, ['Deadlift — 1RM Test', 'Bench 102.5 kg Rep Test', 'Strict Pull-Up Test', 'Strict Press — 1RM Test'], 'Sunday: deadlift, reps before press, pull-ups, press last');
   });
 
   test('SPLIT: Sat 7 Nov is field tests first, then speed upper', () => {

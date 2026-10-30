@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.345';
+var APP_VERSION='4.9.346';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7997,8 +7997,8 @@ window.draftWeekName = function(week){
 };
 window.draftDayLabel = function(week, day){
   if(week === 1){
-    if(day === 5) return 'Lift Test — Clean, Squat, Press';
-    if(day === 6) return 'Lift Test — Bench, Deadlift, Reps';
+    if(day === 5) return 'Lift Test — Clean, Squat, Bench';
+    if(day === 6) return 'Lift Test — Deadlift, Reps, Press';
     return '';
   }
   if(week === 6){
@@ -8164,10 +8164,12 @@ window.draftGetSessionData = function(week, day, s){
   if((week === 1 || week === 6) && (day === 5 || day === 6)){
     var tag = (week === 1) ? 'Baseline' : 'Retest';
     if(day === 5){
+      // v4.9.346 — Jon's split: clean, squat, bench Sat; deadlift, 102.5 kg reps, pull-ups,
+      // strict press Sun (reps before press so the press does not pre-fatigue the rep test).
       // v4.9.345 — Jon had no tape for the field course on 31 Oct: the baseline lift
       // tests stay this weekend and the field tests move to Sat 7 Nov (week 2 day 5).
       return sess(window.draftDayLabel(week, day), (week === 1) ? 75 : 120, ((week === 1)
-        ? [std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, t-spine, then empty-bar clean and squat practice.')]
+        ? [std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, t-spine, shoulders, then empty-bar clean and squat practice.')]
         : fieldTests()).concat([
         { name:'Power Clean — 1RM Test', format:'percentage_sets', rest:180,
           sets:ramp('clean', [50, 65, 75, 85, 92.5, 100], [3, 2, 1, 1, 1, 1], true),
@@ -8175,15 +8177,12 @@ window.draftGetSessionData = function(week, day, s){
         { name:'Back Squat — 1RM Test', format:'percentage_sets', rest:240,
           sets:ramp('squat', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
           note:'3-5 min between attempts. Depth: hip crease below the knee. Log the heaviest good single.' },
-        { name:'Strict Press — 1RM Test', format:'percentage_sets', rest:180,
-          sets:ramp('press', [50, 70, 85, 92.5, 100], [5, 3, 1, 1, 1], true),
-          note:'OPTIONAL. Skip it if you are cooked. No leg drive.' + estNote('press') }
+        { name:'Bench Press — 1RM Test', format:'percentage_sets', rest:240,
+          sets:ramp('bench', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
+          note:'Pause on the chest. 3-5 min between attempts. Log the heaviest good single.' }
       ]));
     }
     return sess(window.draftDayLabel(week, day), 110, [
-      { name:'Bench Press — 1RM Test', format:'percentage_sets', rest:240,
-        sets:ramp('bench', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
-        note:'Pause on the chest. 3-5 min between attempts. Log the heaviest good single.' },
       { name:'Deadlift — 1RM Test', format:'percentage_sets', rest:240,
         sets:ramp('deadlift', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
         note:'Reset every rep. Log the heaviest good single.' },
@@ -8192,7 +8191,10 @@ window.draftGetSessionData = function(week, day, s){
         note:'The NFL 225 lb test. 20+ min after the deadlift. Touch the chest, no bounce, full lockout. Goal: 20 reps.' },
       { name:'Strict Pull-Up Test', format:'max_reps_sets', sets:1, reps:'Max reps',
         prev_best:(s.records && s.records['Strict Pull-Up Test_max']) || 0,
-        note:'Dead hang every rep, chin over the bar, no kip. 10 min after the bench reps. Goal: 20.' }
+        note:'Dead hang every rep, chin over the bar, no kip. 10 min after the bench reps. Goal: 20.' },
+      { name:'Strict Press — 1RM Test', format:'percentage_sets', rest:180,
+        sets:ramp('press', [50, 70, 85, 92.5, 100], [5, 3, 1, 1, 1], true),
+        note:'OPTIONAL. Skip it if you are cooked. No leg drive.' + estNote('press') }
     ]);
   }
   if(week === 1) return null;            // test week Mon-Thu: nothing scheduled

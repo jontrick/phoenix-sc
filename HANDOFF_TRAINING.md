@@ -301,3 +301,7 @@ heavier; ticking logs via autoLogSet, so the heaviest ticked set is the week's t
 the engine sets the max from it. Missed attempts are not ticked. Extra rows are counted in
 the Complete Session log (`window._phxExtraSets`). Verified in Chromium: 6 → 8 rows,
 160 → 162.5 / 165 kg, ticked 162.5 saved to records[name+'_wk'].
+**v4.9.349 — "✓ Done" beside "+ Add attempt"** (`_phxFinishAttempts`). Locks the block at
+the heaviest TICKED set: buttons replaced by "Done · top lift X kg", unticked rows dimmed;
+refuses with a toast if nothing is ticked. Extra rows now insert above `att-wrap-<i>` —
+the first build inserted them inside it, so Done deleted them (caught in Chromium).

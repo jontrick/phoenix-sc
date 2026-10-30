@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.348';
+var APP_VERSION='4.9.349';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -13465,13 +13465,37 @@ window._phxAddAttemptRow = function(exIdx){
       });
       done.parentNode.replaceChild(fresh, done);
     }
-    btn.parentNode.insertBefore(row, btn);
+    // Insert ABOVE the button area, not inside it: Done replaces that area's contents.
+    var anchor = document.getElementById('att-wrap-' + exIdx) || btn;
+    anchor.parentNode.insertBefore(row, anchor);
     window._phxExtraSets[exIdx] = (window._phxExtraSets[exIdx] || 0) + 1;
     return true;
   } catch(e){
     if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('addAttempt', e, null);
     return false;
   }
+};
+// v4.9.349 — Jon: "is there a complete test option too? ... not leaving ambiguous".
+// Locks the block at the heaviest TICKED set: the add/done buttons go, a confirmation
+// line takes their place, and unticked rows are dimmed so they read as not lifted.
+window._phxFinishAttempts = function(exIdx){
+  var best = 0, n = 0;
+  while(document.getElementById('setrow-ai-' + exIdx + '-' + n)){
+    var b = document.getElementById('done-ai-' + exIdx + '-' + n);
+    var row = document.getElementById('setrow-ai-' + exIdx + '-' + n);
+    var kg = parseFloat((document.getElementById('kg-ai-' + exIdx + '-' + n) || {}).value) || 0;
+    if(b && b.classList.contains('done')){ if(kg > best) best = kg; }
+    else if(row){ row.style.opacity = '0.4'; }
+    n++;
+  }
+  if(!best){
+    if(typeof window._blabCalToast === 'function') window._blabCalToast('Tick the heaviest lift you made first', 'error');
+    for(var k = 0; k < n; k++){ var r = document.getElementById('setrow-ai-' + exIdx + '-' + k); if(r) r.style.opacity = ''; }
+    return 0;
+  }
+  var wrap = document.getElementById('att-wrap-' + exIdx);
+  if(wrap) wrap.innerHTML = '<div style="margin:4px 0 8px;padding:12px;border:1px solid #3a7d44;border-radius:var(--radius);background:rgba(58,125,68,0.12);text-align:center;font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#7fd18b;">&#10003; Done &middot; top lift ' + best + ' kg</div>';
+  return best;
 };
 var amrapRepCount=0;
 function renderAmrapCounter(targetEl){
@@ -43153,8 +43177,10 @@ function openTodaySession(){
         '</div>';
     }
     if(ex._allowAttempts){
-      setsHTML += '<button type="button" id="add-ai-'+i+'" onclick="window._phxAddAttemptRow('+i+')" style="width:100%;margin:2px 0 6px;padding:11px;background:transparent;border:1px dashed var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--gold);cursor:pointer;">+ Add attempt</button>'+
-        '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:8px;">Going heavier? Add a row. Only tick lifts you made.</div>';
+      setsHTML += '<div id="att-wrap-'+i+'"><div style="display:flex;gap:8px;margin:2px 0 6px;">'+
+          '<button type="button" id="add-ai-'+i+'" onclick="window._phxAddAttemptRow('+i+')" style="flex:1;padding:11px;background:transparent;border:1px dashed var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--gold);cursor:pointer;">+ Add attempt</button>'+
+          '<button type="button" id="fin-ai-'+i+'" onclick="window._phxFinishAttempts('+i+')" style="flex:1;padding:11px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#000;cursor:pointer;">&#10003; Done</button>'+
+        '</div><div id="att-hint-'+i+'" style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:8px;">Going heavier? Add a row. Happy with it? Tap Done. Only tick lifts you made.</div></div>';
     }
     // AMRAP counter
     if(isAmrap){

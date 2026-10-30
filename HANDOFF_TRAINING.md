@@ -288,3 +288,8 @@ tests stay Sat 31 Oct / Sun 1 Nov (lifts only). Field tests (vertical, broad, 40
 Training week 1 Mon/Wed are gym versions; Bronco baseline moved to Mon 9 Nov (week 3
 day 1). Bodyweight blocks removed from sessions: Jon logs it on the Today check-in.
 Field results are now recorded from any session that has them, not only test weeks.
+
+**v4.9.347 — test-day lift order is Jon's ruling (31 Oct): squat → power clean → bench.**
+"The squat preps for the cleans which loosens shoulders for the bench." Applies to every
+future lift-test Saturday (week 1 and the week 6 retest). Sunday: deadlift → 102.5 kg
+reps → pull-ups → strict press. Pinned in tests/training.mjs (SPLIT cases).

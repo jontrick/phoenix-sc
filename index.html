@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.346';
+var APP_VERSION='4.9.347';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7997,7 +7997,7 @@ window.draftWeekName = function(week){
 };
 window.draftDayLabel = function(week, day){
   if(week === 1){
-    if(day === 5) return 'Lift Test — Clean, Squat, Bench';
+    if(day === 5) return 'Lift Test — Squat, Clean, Bench';
     if(day === 6) return 'Lift Test — Deadlift, Reps, Press';
     return '';
   }
@@ -8164,6 +8164,8 @@ window.draftGetSessionData = function(week, day, s){
   if((week === 1 || week === 6) && (day === 5 || day === 6)){
     var tag = (week === 1) ? 'Baseline' : 'Retest';
     if(day === 5){
+      // v4.9.347 — Jon's order from the 31 Oct test: squat, then clean, then bench. The squat
+      // warms the hips for the cleans and the cleans loosen the shoulders for the bench.
       // v4.9.346 — Jon's split: clean, squat, bench Sat; deadlift, 102.5 kg reps, pull-ups,
       // strict press Sun (reps before press so the press does not pre-fatigue the rep test).
       // v4.9.345 — Jon had no tape for the field course on 31 Oct: the baseline lift
@@ -8171,12 +8173,12 @@ window.draftGetSessionData = function(week, day, s){
       return sess(window.draftDayLabel(week, day), (week === 1) ? 75 : 120, ((week === 1)
         ? [std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, t-spine, shoulders, then empty-bar clean and squat practice.')]
         : fieldTests()).concat([
-        { name:'Power Clean — 1RM Test', format:'percentage_sets', rest:180,
-          sets:ramp('clean', [50, 65, 75, 85, 92.5, 100], [3, 2, 1, 1, 1, 1], true),
-          note:'Work up in singles. The last row is a target, not a ceiling: log the heaviest clean you actually made.' + estNote('clean') },
         { name:'Back Squat — 1RM Test', format:'percentage_sets', rest:240,
           sets:ramp('squat', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
-          note:'3-5 min between attempts. Depth: hip crease below the knee. Log the heaviest good single.' },
+          note:'FIRST: it warms the legs and hips for the cleans. 3-5 min between attempts. Depth: hip crease below the knee. Log the heaviest good single.' },
+        { name:'Power Clean — 1RM Test', format:'percentage_sets', rest:180,
+          sets:ramp('clean', [50, 65, 75, 85, 92.5, 100], [3, 2, 1, 1, 1, 1], true),
+          note:'After the squat. Work up in singles. The last row is a target, not a ceiling: log the heaviest clean you actually made.' + estNote('clean') },
         { name:'Bench Press — 1RM Test', format:'percentage_sets', rest:240,
           sets:ramp('bench', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
           note:'Pause on the chest. 3-5 min between attempts. Log the heaviest good single.' }

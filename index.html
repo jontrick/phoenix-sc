@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.350';
+var APP_VERSION='4.9.351';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -30096,7 +30096,10 @@ function pepRenderScreen(){
     }
   });
   body.querySelectorAll("[data-pep-check]").forEach(function(btn){
-    btn.addEventListener("click", function(){ pepToggleDose(btn.getAttribute("data-pep-check")); });
+    btn.addEventListener("click", function(){ pepToggleDose(btn.getAttribute("data-pep-check"), _pepViewISO()); });
+  });
+  body.querySelectorAll("[data-pep-day]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepShiftDay(parseInt(btn.getAttribute("data-pep-day"), 10) || 0); });
   });
   body.querySelectorAll("[data-pep-unextra]").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -30108,7 +30111,7 @@ function pepRenderScreen(){
   var addDose = body.querySelector("#pep-add-dose");
   if(addDose) addDose.addEventListener("click", pepOpenAddDose);
   body.querySelectorAll("[data-pep-skip]").forEach(function(btn){
-    btn.addEventListener("click", function(){ pepSkipDose(btn.getAttribute("data-pep-skip")); });
+    btn.addEventListener("click", function(){ pepSkipDose(btn.getAttribute("data-pep-skip"), _pepViewISO()); });
   });
   document.querySelectorAll("[data-pep-madeup]").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -30298,10 +30301,50 @@ function pepRenderScreen(){
 }
 
 // ── TODAY tab ─────────────────────────────────────────────────────────────
+// v4.9.351 — Jon: "I can't see a previous day which is annoying if miss something".
+// The TODAY tab can step back up to 7 days to tick or skip a missed dose. Adding a dose
+// and logging a make-up stay on today only: those are things done now, not records of
+// a day gone. State already keyed every tick and skip by date; only the view was fixed.
+var _PEP_BACK_DAYS = 7;
+var _pepViewDate = null, _pepViewSetOn = null;
+function _pepViewISO(){
+  var t = _pepToday();
+  if(_pepViewSetOn !== t) _pepViewDate = null;
+  if(!_pepViewDate || _pepViewDate >= t) return t;
+  var min = _pepISO(new Date(new Date(t + "T12:00:00").getTime() - _PEP_BACK_DAYS * 86400000));
+  return (_pepViewDate < min) ? min : _pepViewDate;
+}
+function pepShiftDay(n){
+  var cur = _pepViewISO();
+  var next = _pepISO(new Date(new Date(cur + "T12:00:00").getTime() + n * 86400000));
+  _pepViewDate = (next >= _pepToday()) ? null : next;
+  _pepViewSetOn = _pepToday();
+  _pepViewDate = (_pepViewDate && _pepViewISO() !== _pepViewDate) ? _pepViewISO() : _pepViewDate;
+  if(typeof pepRenderScreen === "function") pepRenderScreen();
+  return _pepViewISO();
+}
+function _pepDayStrip(iso){
+  var t = _pepToday();
+  var isToday = iso === t;
+  var min = _pepISO(new Date(new Date(t + "T12:00:00").getTime() - _PEP_BACK_DAYS * 86400000));
+  var d = new Date(iso + "T12:00:00");
+  var names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], mons = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var yest = _pepISO(new Date(new Date(t + "T12:00:00").getTime() - 86400000));
+  var label = isToday ? "Today" : (iso === yest ? "Yesterday" : names[d.getDay()]);
+  var btn = "background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:16px;font-weight:900;width:44px;height:40px;cursor:pointer;";
+  return "<div style=\"display:flex;align-items:center;gap:10px;margin-bottom:14px;\">" +
+    "<button data-pep-day=\"-1\" aria-label=\"Previous day\" style=\"" + btn + (iso <= min ? "opacity:0.3;pointer-events:none;" : "") + "\">&lsaquo;</button>" +
+    "<div style=\"flex:1;text-align:center;\"><div style=\"font-family:var(--font-d);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:1px;color:" + (isToday ? "var(--text)" : "var(--gold)") + ";\">" + label + "</div>" +
+      "<div style=\"font-size:11px;color:var(--text3);\">" + d.getDate() + " " + mons[d.getMonth()] + (isToday ? "" : " &middot; fixing a past day") + "</div></div>" +
+    "<button data-pep-day=\"1\" aria-label=\"Next day\" style=\"" + btn + (isToday ? "opacity:0.3;pointer-events:none;" : "") + "\">&rsaquo;</button>" +
+  "</div>";
+}
+
 function _pepTabToday(ps){
-  var today = _pepToday();
+  var today = _pepViewISO();
+  var isToday = (today === _pepToday());
   var checked = (ps.checked && ps.checked[today]) || [];
-  var doses = _pepGetDoses(ps);
+  var doses = _pepGetDoses(ps, today);
   var total = doses.morning.length + doses.anytime.length + doses.evening.length;
 
   if(total === 0 && (ps.stacks||[]).length === 0){
@@ -30316,7 +30359,8 @@ function _pepTabToday(ps){
   if(total === 0){
     var d = new Date(today + "T12:00:00");
     var dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    return "<div style=\"text-align:center;padding:48px 0;color:var(--text3);\">" +
+    if(!isToday) return _pepDayStrip(today) + "<div style=\"text-align:center;padding:40px 0;color:var(--text3);font-size:13px;\">No doses were scheduled for " + dayNames[d.getDay()] + ".</div>";
+    return _pepDayStrip(today) + "<div style=\"text-align:center;padding:48px 0;color:var(--text3);\">" +
       "<div style=\"font-size:48px;margin-bottom:12px;\">&#10003;</div>" +
       "<div style=\"font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text2);margin-bottom:6px;\">Rest Day</div>" +
       "<div style=\"font-size:13px;\">No doses scheduled for " + dayNames[d.getDay()] + "</div>" +
@@ -30330,17 +30374,20 @@ function _pepTabToday(ps){
   var allItems = doses.morning.concat(doses.anytime).concat(doses.evening);
   allItems.forEach(function(item){ if(checked.indexOf(item.id) >= 0) doneCount++; });
 
-  var h = "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
+  var h = _pepDayStrip(today);
+  h += "<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;\">";
   h += "<div style=\"font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--text3);\">" + doneCount + " / " + total + " done</div>";
   h += "<div style=\"height:4px;flex:1;background:var(--bg3);border-radius:2px;margin:0 12px;overflow:hidden;\"><div style=\"height:4px;width:" + Math.round(doneCount/total*100) + "%;background:#7B68EE;border-radius:2px;\"></div></div>";
   h += "<div style=\"font-size:11px;color:" + (doneCount===total?"#7B68EE":"var(--text3)") + ";\">" + today + "</div>";
   h += "</div>";
+  if(isToday){
   h += "<div style=\"display:flex;gap:8px;margin-bottom:14px;\">";
   h += "<button id=\"pep-add-dose\" style=\"flex:1;padding:11px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Add a dose</button>";
   // v4.9.302: the daily-view way in for a compound with nothing scheduled
   // today. Mixing a vial does not wait for a dosing day.
   h += "<button id=\"pep-any-makeup\" style=\"flex:1;padding:11px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Made up a vial</button>";
   h += "</div>";
+  }
 
   function renderSection(label, items){
     if(!items.length) return "";
@@ -30361,14 +30408,16 @@ function _pepTabToday(ps){
       // Skip is deliberately small and secondary — the primary action is taking
       // the dose. It only offers itself on a dose not already ticked.
       if(item.extra){
-        s += "<button data-pep-unextra=\"" + item.id + "\" style=\"flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:800;padding:3px 9px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Added &middot; undo</button>";
+        if(isToday) s += "<button data-pep-unextra=\"" + item.id + "\" style=\"flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:800;padding:3px 9px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Added &middot; undo</button>";
       } else if(!done){
         s += "<button data-pep-skip=\"" + item.id + "\" style=\"flex-shrink:0;background:none;border:1px solid " + (skipped ? "var(--text3)" : "var(--border2)") + ";border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:800;padding:3px 9px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">" + (skipped ? "Skipped" : "Skip") + "</button>";
       }
       s += "</div>";
       s += "<div style=\"font-size:12px;color:#7B68EE;font-weight:600;margin-top:2px;\">" + _pepFmtDose(item.dose, item.doseUnit) +
            (item.draw ? "<span style=\"color:var(--text2);font-weight:700;\"> &middot; " + _pepDrawText(item.draw) + "</span>" : "") + "</div>";
-      if(item.needsMakeUp){
+      if(item.needsMakeUp && !isToday){
+        s += "<div style=\"font-size:10px;color:var(--text3);margin-top:2px;\">No unit count was available that day.</div>";
+      } else if(item.needsMakeUp){
         // v4.9.278: no units and no concentration until he logs what went into
         // the vial. The button is the exit — a note with nothing to press is
         // just a nag.
@@ -30394,7 +30443,7 @@ function _pepTabToday(ps){
       // ANY compound — not only one currently showing the note. Mixing a fresh
       // vial is a thing that happens on a normal day, and the stock count now
       // depends entirely on him recording it.
-      if(item.canLogMakeUp && !item.needsMakeUp){
+      if(isToday && item.canLogMakeUp && !item.needsMakeUp){
         s += "<div style=\"display:flex;align-items:center;gap:8px;margin-top:6px;\">";
         s += "<button data-pep-madeup=\"" + item.id + "\" style=\"background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text3);font-family:var(--font-d);font-size:9px;font-weight:900;padding:4px 10px;cursor:pointer;touch-action:manipulation;text-transform:uppercase;letter-spacing:1px;\">Made up today</button>";
         if(item.madeUpOn) s += "<span style=\"font-size:10px;color:var(--text3);\">mixed " + _esc(item.madeUpOn) + "</span>";
@@ -30468,9 +30517,9 @@ function _pepConsumeDose(ps, compoundId, direction){
 // days from the DENOMINATOR rather than counting them as missed: a day he chose
 // not to dose is not evidence about compliance, and scoring it as a miss would
 // punish him for using the feature.
-function pepSkipDose(compoundId){
+function pepSkipDose(compoundId, dateISO){
   var ps = pepGetState();
-  var today = _pepToday();
+  var today = dateISO || _pepToday();
   if(!ps.skipped) ps.skipped = {};
   if(!ps.skipped[today]) ps.skipped[today] = [];
   var i = ps.skipped[today].indexOf(compoundId);
@@ -30492,9 +30541,9 @@ function _pepIsSkipped(ps, iso, compoundId){
   return d.indexOf(compoundId) >= 0;
 }
 
-function pepToggleDose(compoundId){
+function pepToggleDose(compoundId, dateISO){
   var ps = pepGetState();
-  var today = _pepToday();
+  var today = dateISO || _pepToday();
   if(!ps.checked) ps.checked = {};
   if(!ps.checked[today]) ps.checked[today] = [];
   var idx = ps.checked[today].indexOf(compoundId);
@@ -33738,10 +33787,10 @@ function pepOpenMakeUp(idx){
     "<input id=\"pep-mu-water\" type=\"number\" step=\"0.1\" min=\"0\" value=\"" + (plan.waterMl != null ? plan.waterMl : "") + "\" style=\"width:100%;padding:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:17px;box-sizing:border-box;margin-top:4px;\"></div>" +
     "</div>" +
     "<div id=\"pep-mu-preview\" style=\"background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px;\"></div>" +
-    "<div style=\"display:flex;gap:10px;\">" +
     (_hasOpen ? "<button id=\"pep-mu-fix\" style=\"width:100%;margin-bottom:10px;padding:12px;background:none;border:1px solid #7B68EE;border-radius:var(--radius);color:#7B68EE;font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;\">Correct the vial already open (mixed " + _esc(st.openedDate) + ")</button>" : "") +
+    "<div style=\"display:flex;gap:10px;\">" +
     "<button id=\"pep-mu-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Cancel</button>" +
-    "<button id=\"pep-mu-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">Log make-up</button>" +
+    "<button id=\"pep-mu-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;\">New vial made up</button>" +
     "</div></div>";
   document.body.appendChild(ov);
   _phxKeyboardSafe(ov);

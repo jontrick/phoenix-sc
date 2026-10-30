@@ -31,7 +31,7 @@ Reproduced against the real functions (bpc157, plan 10 mg / 2 mL, dose 0.5 mg):
       panel / coach context (`_pepRecon`, plan) say 5 u. Only "log make-up" with 1 mL makes
       them agree. Plan-recon callers: _pepTabProtocol, _pepPanelCompounds, _pepTabStock,
       _pepBuildContext, _pepDosesPerVial, pepMarkMadeUpToday.
-- [ ] **No previous day.** `_pepTabToday` and `pepToggleDose` are hard-wired to `_pepToday()`,
+- [x] **DONE v4.9.351** — TODAY tab ‹ › steps back up to 7 days (`pepShiftDay`, `_pepViewISO`); tick and skip take a date; add-dose and make-up stay today-only; the view resets at midnight; the main-screen tile still ticks today. Original finding: **No previous day.** `_pepTabToday` and `pepToggleDose` are hard-wired to `_pepToday()`,
       though state (`checked{iso}`, `skipped{iso}`) and `_pepGetDoses(ps, date)` already
       take a date. A missed tick cannot be fixed.
 - [ ] **Size.** Peptide block ~376 KB, 150 top-level functions, 6 tabs. Jon finds it hard

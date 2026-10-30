@@ -1256,6 +1256,38 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.ok(app._pepTabStock(ps).includes(want), 'stock shows it too');
     });
 
+    // ── v4.9.351 — PAST DAYS (Jon: "can't see a previous day ... if miss something") ──
+    test('DAY he can step back to yesterday and tick a missed dose there', () => {
+      mu({ openedDate: daysAgo(3), openVialMg: 10, openWaterMl: 2, waterConfirmedAt: daysAgo(3) });
+      const y = daysAgo(1), t = app._pepToday();
+      assert.equal(app.pepShiftDay(-1), y, 'one tap back is yesterday');
+      const h = app._pepTabToday(app.pepGetState());
+      assert.ok(h.includes('Yesterday'), 'the tab says which day it is showing');
+      assert.ok(!h.includes('id="pep-add-dose"'), 'adding a dose is a today-only action');
+      app.pepToggleDose('ipamorelin', app._pepViewISO());
+      const ps = app.pepGetState();
+      assert.ok((ps.checked[y] || []).includes('ipamorelin'), 'the tick lands on yesterday');
+      assert.ok(!(ps.checked[t] || []).includes('ipamorelin'), 'and not on today');
+      app.pepShiftDay(1);
+      assert.equal(app._pepViewISO(), t, 'forward returns to today');
+    });
+
+    test('DAY it cannot go past 7 days back or into the future', () => {
+      mu();
+      for (let k = 0; k < 12; k++) app.pepShiftDay(-1);
+      assert.equal(app._pepViewISO(), daysAgo(7), 'stops at 7 days');
+      for (let k = 0; k < 12; k++) app.pepShiftDay(1);
+      assert.equal(app._pepViewISO(), app._pepToday(), 'stops at today');
+    });
+
+    test('DAY the main-screen tile still ticks today, whatever the tab is showing', () => {
+      mu({ openedDate: daysAgo(3), openVialMg: 10, openWaterMl: 2, waterConfirmedAt: daysAgo(3) });
+      app.pepShiftDay(-2);
+      app.pepToggleDose('ipamorelin');            // the tile passes no date
+      assert.ok((app.pepGetState().checked[app._pepToday()] || []).includes('ipamorelin'));
+      app.pepShiftDay(5);
+    });
+
     test('MADEUP the Today tile carries both controls', () => {
       const h = withStubbedDom(() => {
         mu();

@@ -15,6 +15,24 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ---
 
+## PEPTIDES AUDIT — 31 Oct 2026 (Training chat, at Jon's request; peptides owner please read)
+
+Jon: "buggy and annoying ... can't see a previous day ... app says 2ml but I add one and
+note it's one, the daily dosage still seems to think 2 ... haven't trusted the make ups."
+Reproduced against the real functions (bpc157, plan 10 mg / 2 mL, dose 0.5 mg):
+
+- [ ] **Two water figures, and screens disagree.** "Made up today" one-tap stamps the PLAN
+      volume (2 mL) as the mixed vial. Correcting water in the edit sheet changes only the
+      PLAN. Result: TODAY (`_pepLiveRecon`) says 10 u, while PROTOCOL / STOCK / compound
+      panel / coach context (`_pepRecon`, plan) say 5 u. Only "log make-up" with 1 mL makes
+      them agree. Plan-recon callers: _pepTabProtocol, _pepPanelCompounds, _pepTabStock,
+      _pepBuildContext, _pepDosesPerVial, pepMarkMadeUpToday.
+- [ ] **No previous day.** `_pepTabToday` and `pepToggleDose` are hard-wired to `_pepToday()`,
+      though state (`checked{iso}`, `skipped{iso}`) and `_pepGetDoses(ps, date)` already
+      take a date. A missed tick cannot be fixed.
+- [ ] **Size.** Peptide block ~376 KB, 150 top-level functions, 6 tabs. Jon finds it hard
+      to use and is open to starting again. Redesign options put to him 31 Oct — ???.
+
 ## ROAD TO DRAFT DAY — v4.9.341 (Training, 27 Oct 2026)
 
 Jon's new programme, Block 1 of 9: baseline test Sat 31 Oct + Sun 1 Nov, five weeks from

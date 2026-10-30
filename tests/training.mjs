@@ -5824,4 +5824,23 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(app.blabGetSessionData(6, 1).exercises.some((e) => e.name === 'Bronco Test'), 'retest Mon 30 Nov');
     assert.equal(app.blabGetSessionData(4, 1).exercises.find((e) => e.name === 'Repeated-Effort Bouts').reps, '3 efforts', 'Week 3 moves to 3-effort bouts');
   });
+
+  test('ATTEMPTS: test lifts and max-effort lifts offer extra attempts; speed work does not', () => {
+    startDraft();
+    const flag = (w, d, name) => app.blabToPhoenixSession(app.blabGetSessionData(w, d), w, d).exercises.find((e) => e.name === name)._allowAttempts;
+    assert.equal(flag(1, 5, 'Back Squat — 1RM Test'), true);
+    assert.equal(flag(1, 6, 'Deadlift — 1RM Test'), true);
+    assert.equal(flag(2, 2, 'Floor Press'), true, 'max effort upper');
+    assert.equal(flag(2, 4, 'Box Squat (parallel)'), true, 'max effort lower');
+    assert.equal(flag(2, 5, 'Speed Bench (mini bands)'), false, 'speed sets are fixed');
+  });
+
+  test('ATTEMPTS: the heaviest ticked set is the week\'s top set, so an extra attempt can set the max', () => {
+    startDraft();
+    logWk('Deadlift — 1RM Test', 1, 160, 1);
+    // an extra attempt at 165 logged through the same per-week store
+    const s = read(KEY); s.records['Deadlift — 1RM Test_wk']['1'] = { wt: 165, reps: 1, date: app._phxLocalISO() }; seed(KEY, s);
+    app.draftAfterSession(1, 6);
+    assert.equal(read(KEY).maxes.deadlift, 165);
+  });
 }

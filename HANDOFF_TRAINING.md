@@ -293,3 +293,11 @@ Field results are now recorded from any session that has them, not only test wee
 "The squat preps for the cleans which loosens shoulders for the bench." Applies to every
 future lift-test Saturday (week 1 and the week 6 retest). Sunday: deadlift → 102.5 kg
 reps → pull-ups → strict press. Pinned in tests/training.mjs (SPLIT cases).
+
+**v4.9.348 — "+ Add attempt" (Jon, 31 Oct test day).** Every 1RM test on both test days
+(squat, clean, bench Sat; deadlift, press Sun; week 1 and week 6 retest) and the Tue/Thu
+max-effort lifts carry `allow_attempts:true`. The button clones the last set row 2.5 kg
+heavier; ticking logs via autoLogSet, so the heaviest ticked set is the week's top set and
+the engine sets the max from it. Missed attempts are not ticked. Extra rows are counted in
+the Complete Session log (`window._phxExtraSets`). Verified in Chromium: 6 → 8 rows,
+160 → 162.5 / 165 kg, ticked 162.5 saved to records[name+'_wk'].

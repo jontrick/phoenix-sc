@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.347';
+var APP_VERSION='4.9.348';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6019,6 +6019,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.load_guidance = sets.map(function(s){ return s.kg+'kg'; }).join('/');
       // Store raw sets for custom rendering
       phxEx._blabSets = sets;
+      phxEx._allowAttempts = !!ex.allow_attempts;
       phxEx._blabFmt = 'percentage_sets';
       phxEx.format = 'percentage_sets';
       phxEx._perSetKg = sets.map(function(s){ return s.kg; });
@@ -8173,19 +8174,19 @@ window.draftGetSessionData = function(week, day, s){
       return sess(window.draftDayLabel(week, day), (week === 1) ? 75 : 120, ((week === 1)
         ? [std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, t-spine, shoulders, then empty-bar clean and squat practice.')]
         : fieldTests()).concat([
-        { name:'Back Squat — 1RM Test', format:'percentage_sets', rest:240,
+        { name:'Back Squat — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
           sets:ramp('squat', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
           note:'FIRST: it warms the legs and hips for the cleans. 3-5 min between attempts. Depth: hip crease below the knee. Log the heaviest good single.' },
-        { name:'Power Clean — 1RM Test', format:'percentage_sets', rest:180,
+        { name:'Power Clean — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:180,
           sets:ramp('clean', [50, 65, 75, 85, 92.5, 100], [3, 2, 1, 1, 1, 1], true),
           note:'After the squat. Work up in singles. The last row is a target, not a ceiling: log the heaviest clean you actually made.' + estNote('clean') },
-        { name:'Bench Press — 1RM Test', format:'percentage_sets', rest:240,
+        { name:'Bench Press — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
           sets:ramp('bench', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
           note:'Pause on the chest. 3-5 min between attempts. Log the heaviest good single.' }
       ]));
     }
     return sess(window.draftDayLabel(week, day), 110, [
-      { name:'Deadlift — 1RM Test', format:'percentage_sets', rest:240,
+      { name:'Deadlift — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
         sets:ramp('deadlift', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
         note:'Reset every rep. Log the heaviest good single.' },
       { name:'Bench 102.5 kg Rep Test', format:'max_reps_sets', sets:1, reps:'Max reps', load_choices:[102.5],
@@ -8194,7 +8195,7 @@ window.draftGetSessionData = function(week, day, s){
       { name:'Strict Pull-Up Test', format:'max_reps_sets', sets:1, reps:'Max reps',
         prev_best:(s.records && s.records['Strict Pull-Up Test_max']) || 0,
         note:'Dead hang every rep, chin over the bar, no kip. 10 min after the bench reps. Goal: 20.' },
-      { name:'Strict Press — 1RM Test', format:'percentage_sets', rest:180,
+      { name:'Strict Press — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:180,
         sets:ramp('press', [50, 70, 85, 92.5, 100], [5, 3, 1, 1, 1], true),
         note:'OPTIONAL. Skip it if you are cooked. No leg drive.' + estNote('press') }
     ]);
@@ -8322,7 +8323,7 @@ window.draftGetSessionData = function(week, day, s){
     ][t];
     return sess('Upper — Max Effort', 70, [
       std(pw, 3, 5, 'Power slot. Light and fast, max intent, 2 min rest.'),
-      { name:ME_U.n, format:'percentage_sets', rest:240, sets:ME_U.sets,
+      { name:ME_U.n, format:'percentage_sets', allow_attempts:true, rest:240, sets:ME_U.sets,
         note:'MAX EFFORT, done alone: 3-5 min between heavy sets, nothing paired. ' + ME_U.note + ' Log the real weight and reps of your top set: it can raise your bench max.' },
       std('Weighted Pull-Up', parseInt(pullTxt, 10), pullTxt.replace(/^\d+\s*×\s*/, ''),
         pullNote + 'Straight sets after the bench, 2-3 min rest. Log the load: hit every rep and it goes up 2.5 kg next week.'),
@@ -8362,7 +8363,7 @@ window.draftGetSessionData = function(week, day, s){
     ][t];
     return sess('Lower — Max Effort', 70, [
       std((t % 2 === 1) ? 'Box Jump' : 'Broad Jump', 3, 3, 'Power slot. Full reset each rep. Stick the landing.'),
-      { name:ME_L.n, format:'percentage_sets', rest:240, sets:ME_L.sets,
+      { name:ME_L.n, format:'percentage_sets', allow_attempts:true, rest:240, sets:ME_L.sets,
         note:'MAX EFFORT, done alone: 3-5 min between heavy sets. ' + ME_L.note + ' Log the real weight and reps of your top set.' },
       { name:L2.n, format:'percentage_sets', rest:180, sets:L2.sets, note:'Straight sets after the max effort lift. 3 min rest.' },
       SS((t <= 2 ? 'Bulgarian Split Squat / 45° Back Extension' : 'DB Reverse Lunge / Nordic Curl'), 3, 90,
@@ -13423,6 +13424,55 @@ window.phxVideoTimerOpen = function(exName, idx){
 };
 // ══ VIDEO TIMER — END ═════════════════════════════════════════════════════════
 
+// ══ EXTRA ATTEMPTS — v4.9.348 (Training) ═══════════════════════════════════════
+// Jon, 31 Oct test day: "I lift what the plan says ... but I may be able to lift heavier
+// or at least attempt a next set". Test lifts and max-effort lifts get "+ Add attempt",
+// which appends a row prefilled 2.5 kg above the last. Ticking it logs through
+// autoLogSet like any set, so the heaviest ticked set still becomes the week's top set
+// (records[name+'_wk']) and the Draft engine reads it. A missed attempt is simply not
+// ticked. Extra rows are counted into the session log on Complete Session.
+window._phxExtraSets = window._phxExtraSets || {};
+window._phxAddAttemptRow = function(exIdx){
+  try {
+    var btn = document.getElementById('add-ai-' + exIdx);
+    if(!btn) return false;
+    var n = 0;
+    while(document.getElementById('setrow-ai-' + exIdx + '-' + n)) n++;
+    if(!n) return false;
+    var last = document.getElementById('setrow-ai-' + exIdx + '-' + (n - 1));
+    var lastKg = parseFloat((document.getElementById('kg-ai-' + exIdx + '-' + (n - 1)) || {}).value) || 0;
+    var lastReps = (document.getElementById('reps-ai-' + exIdx + '-' + (n - 1)) || {}).value || '1';
+    var row = last.cloneNode(true);
+    row.id = 'setrow-ai-' + exIdx + '-' + n;
+    row.setAttribute('data-setidx', String(n));
+    row.style.background = ''; row.style.borderLeft = '';
+    var num = row.querySelector('.set-num'); if(num) num.textContent = String(n + 1);
+    var kg = row.querySelector('[id^="kg-ai-"]');
+    if(kg){ kg.id = 'kg-ai-' + exIdx + '-' + n; kg.value = lastKg ? String(lastKg + 2.5) : ''; }
+    var rp = row.querySelector('[id^="reps-ai-"]');
+    if(rp){ rp.id = 'reps-ai-' + exIdx + '-' + n; rp.value = String(parseInt(lastReps, 10) || 1); }
+    var done = row.querySelector('.set-done-btn');
+    if(done){
+      // A clone carries no listeners; replace it so a stale handler can never ride along.
+      var fresh = done.cloneNode(true);
+      fresh.id = 'done-ai-' + exIdx + '-' + n;
+      fresh.setAttribute('data-setidx', String(n));
+      fresh.classList.remove('done');
+      fresh.addEventListener('click', function(){
+        this.classList.add('done');
+        row.style.background = 'rgba(200,150,62,0.08)'; row.style.borderLeft = '3px solid var(--gold)';
+        if(typeof autoLogSet === 'function') autoLogSet(row);
+      });
+      done.parentNode.replaceChild(fresh, done);
+    }
+    btn.parentNode.insertBefore(row, btn);
+    window._phxExtraSets[exIdx] = (window._phxExtraSets[exIdx] || 0) + 1;
+    return true;
+  } catch(e){
+    if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('addAttempt', e, null);
+    return false;
+  }
+};
 var amrapRepCount=0;
 function renderAmrapCounter(targetEl){
   amrapRepCount=0;
@@ -42987,6 +43037,7 @@ function openTodaySession(){
   // Apply swaps + inject superset partners before rendering the exercise blocks.
   var exercises = _phxApplyCustomisations(sess.exercises||[], _customs);
   window._blabPhxExercises = exercises; // needed by BLAB block builders
+  window._phxExtraSets = {};
   exercises.forEach(function(ex,i){
     // BLAB special formats — inject custom block instead of Phoenix set rows
     if(ex._blabFmt === 'superset'){
@@ -43100,6 +43151,10 @@ function openTodaySession(){
         '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);text-align:center;align-self:center;">'+repsUnitLabel+'</div>'+
         '<button class="set-done-btn" id="done-ai-'+i+'-'+s+'" data-exidx="'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'">&#10003;</button>'+
         '</div>';
+    }
+    if(ex._allowAttempts){
+      setsHTML += '<button type="button" id="add-ai-'+i+'" onclick="window._phxAddAttemptRow('+i+')" style="width:100%;margin:2px 0 6px;padding:11px;background:transparent;border:1px dashed var(--gold);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--gold);cursor:pointer;">+ Add attempt</button>'+
+        '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:8px;">Going heavier? Add a row. Only tick lifts you made.</div>';
     }
     // AMRAP counter
     if(isAmrap){
@@ -43348,7 +43403,7 @@ function openTodaySession(){
       // Collect AI session sets from DOM
       var aiSets={};
       exercises.forEach(function(ex,i){
-        var setsCount=parseInt(ex.sets)||3;
+        var setsCount=(parseInt(ex.sets)||3)+((window._phxExtraSets&&window._phxExtraSets[i])||0);
         aiSets['ai-'+i]=[];
         for(var s=0;s<setsCount;s++){
           var kgEl=document.getElementById('kg-ai-'+i+'-'+s);

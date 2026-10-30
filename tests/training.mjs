@@ -5557,17 +5557,17 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('DRAFT ENGINE: conditioning levels move with the rating', () => {
     startDraft();
-    const bouts = () => app.blabGetSessionData(3, 1).exercises.find((e) => e.name === 'Repeated-Effort Bouts').sets;
+    const bouts = () => app.blabGetSessionData(4, 1).exercises.find((e) => e.name === 'Repeated-Effort Bouts').sets;
     const b0 = bouts();
     logToday('Repeated-Effort Bouts_rpe', { date: app._phxLocalISO(), rpe: 5 });
-    app.draftAfterSession(3, 1);
+    app.draftAfterSession(2, 1);
     assert.equal(read(KEY).draft.level.cond, 3, 'easy rating moves up a level');
     assert.equal(bouts(), b0 + 1, 'and next Monday has one more bout');
     logToday('Repeated-Effort Bouts_rpe', { date: app._phxLocalISO(), rpe: 10 });
-    app.draftAfterSession(3, 1);
+    app.draftAfterSession(2, 1);
     assert.equal(read(KEY).draft.level.cond, 2, 'a 10 moves back down');
     logToday('Repeated-Effort Bouts_rpe', { date: '2020-01-01', rpe: 3 });
-    app.draftAfterSession(3, 1);
+    app.draftAfterSession(2, 1);
     assert.equal(read(KEY).draft.level.cond, 2, 'an old rating is ignored');
   });
 
@@ -5592,7 +5592,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     startDraft();
     logToday('40-yd Dash (sec)_result', 5.12);
     logToday('Broad Jump (cm)_result', 251);
-    app.draftAfterSession(1, 5);
+    app.draftAfterSession(2, 5);                 // Sat 7 Nov: field tests + speed upper
     const t = read(KEY).draft.tests;
     assert.equal(t['40-yd Dash (sec)'][0].value, 5.12, 'decimals survive');
     assert.equal(t['Broad Jump (cm)'][0].value, 251);
@@ -5772,12 +5772,48 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.document.getElementById = (id) => (id === 'session-body-content' ? body : null);
     app.document.createElement = mk;
     try {
-      app.blabOpenSession(1, 5);
+      app.blabOpenSession(2, 5);                 // Sat 7 Nov: field tests + speed upper
     } catch (e) { /* screen chrome outside the body is not stubbed; the body is what we assert on */ }
     finally { app.document.getElementById = realGet; app.document.createElement = realCreate; }
     const html = made.map((m) => m.innerHTML).join('\n');
     assert.ok(/phxVideoTimerOpen\('40-yd Dash \(sec\)'/.test(html), 'the 40-yd block offers the video timer');
     assert.ok(/phxVideoTimerOpen\('5-10-5 Shuttle \(sec\)'/.test(html), 'and the shuttle');
     assert.ok(!/phxVideoTimerOpen\('Broad Jump/.test(html), 'the broad jump does not');
+  });
+
+  // ── v4.9.345: lift tests 31 Oct / 1 Nov, field tests Sat 7 Nov, gym Week 1 ──
+  test('SPLIT: this weekend is lifts only, no field drills and no bodyweight block', () => {
+    startDraft();
+    const sat = app.blabGetSessionData(1, 5).exercises.map((e) => e.name);
+    const sun = app.blabGetSessionData(1, 6).exercises.map((e) => e.name);
+    assert.ok(sat.includes('Power Clean — 1RM Test') && sat.includes('Back Squat — 1RM Test'), 'Saturday lifts');
+    assert.ok(!sat.some((n) => /Jump|Dash|Shuttle|Cone/.test(n)), 'no field tests on Saturday');
+    assert.ok(![...sat, ...sun].some((n) => /Bodyweight/.test(n)), 'bodyweight lives on the Today check-in, not in sessions');
+    assert.ok(sun.includes('Bench 102.5 kg Rep Test') && sun.includes('Deadlift — 1RM Test'), 'Sunday lifts');
+    assert.equal(app.blabGetSessionData(1, 5).name, 'Lift Test — Clean, Squat, Press');
+  });
+
+  test('SPLIT: Sat 7 Nov is field tests first, then speed upper', () => {
+    startDraft();
+    const ss = app.blabGetSessionData(2, 5);
+    const names = ss.exercises.map((e) => e.name);
+    assert.equal(ss.name, 'Field Tests + Speed Upper');
+    const iField = names.indexOf('40-yd Dash (sec)'), iBench = names.indexOf('Speed Bench (mini bands)');
+    assert.ok(iField >= 0 && iBench > iField, 'sprints before the bench work');
+    ['Vertical Jump (cm)', 'Broad Jump (cm)', '5-10-5 Shuttle (sec)', '3-Cone Drill (sec)'].forEach((n) => assert.ok(names.includes(n), n));
+    assert.ok(!app.blabGetSessionData(3, 5).exercises.some((e) => /Dash/.test(e.name)), 'only that one Saturday');
+    assert.ok(app.blabGetSessionData(6, 5).exercises.some((e) => e.name === '40-yd Dash (sec)'), 'the December retest still has them');
+  });
+
+  test('SPLIT: Week 1 Monday and Wednesday are gym sessions; the Bronco is Mon 9 Nov', () => {
+    startDraft();
+    const mon = app.blabGetSessionData(2, 1), wed = app.blabGetSessionData(2, 3);
+    assert.ok(/Gym/.test(mon.name) && /Gym/.test(wed.name), 'both gym');
+    assert.ok(!JSON.stringify(mon).includes('Bronco') && !JSON.stringify(wed).match(/FIELD|20 m Sprint/), 'nothing that needs a measured course');
+    assert.ok(mon.exercises.some((e) => e.name === 'Repeated-Effort Bouts'), 'conditioning still scales from his rating');
+    assert.ok(wed.exercises.some((e) => e.name === 'Acceleration Sprints'), 'and so does the sprint day');
+    assert.ok(app.blabGetSessionData(3, 1).exercises.some((e) => e.name === 'Bronco Test'), 'Bronco baseline Mon 9 Nov');
+    assert.ok(app.blabGetSessionData(6, 1).exercises.some((e) => e.name === 'Bronco Test'), 'retest Mon 30 Nov');
+    assert.equal(app.blabGetSessionData(4, 1).exercises.find((e) => e.name === 'Repeated-Effort Bouts').reps, '3 efforts', 'Week 3 moves to 3-effort bouts');
   });
 }

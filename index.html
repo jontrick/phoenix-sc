@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.344';
+var APP_VERSION='4.9.345';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -7997,8 +7997,8 @@ window.draftWeekName = function(week){
 };
 window.draftDayLabel = function(week, day){
   if(week === 1){
-    if(day === 5) return 'Combine Test — Speed & Lower';
-    if(day === 6) return 'Combine Test — Upper & Pull';
+    if(day === 5) return 'Lift Test — Clean, Squat, Press';
+    if(day === 6) return 'Lift Test — Bench, Deadlift, Reps';
     return '';
   }
   if(week === 6){
@@ -8148,18 +8148,27 @@ window.draftGetSessionData = function(week, day, s){
   var LS = Math.max(1, Math.min(5, D.level.sprint || 2));
   var adjU = D.speedAdj.upper || 0, adjL = D.speedAdj.lower || 0;
   function clampPct(x){ return Math.max(40, Math.min(70, x)); }
+  // The field combine, used by the Sat 7 Nov baseline (week 2) and the retest (week 6).
+  function fieldTests(){
+    return [
+      std('Combine Warm-up', 1, '15 min', 'Jog, dynamic mobility, A-skips, 4 build-up runs to 90%. Jumps and sprints FIRST, while you are fresh.'),
+      result('Vertical Jump (cm)', 'cm', 'Record best of 3. Jump touch minus standing reach. NFL linebacker average is about 86 cm.'),
+      result('Broad Jump (cm)', 'cm', 'Record best of 3. Two-foot take-off, landing must be held. Linebacker average is about 297 cm.'),
+      result('40-yd Dash (sec)', 'sec', 'Record best of 2. 36.58 m from a 3-point start, full rest between. Linebacker average 4.75 s.'),
+      result('5-10-5 Shuttle (sec)', 'sec', 'Record best of 2, one each direction. Linebacker average 4.28 s.'),
+      result('3-Cone Drill (sec)', 'sec', 'Record best of 2. Linebacker average 7.13 s.')
+    ];
+  }
 
   // ════ TEST SESSIONS — week 1 (baseline) and week 6 Sat/Sun (retest) ═════════
   if((week === 1 || week === 6) && (day === 5 || day === 6)){
     var tag = (week === 1) ? 'Baseline' : 'Retest';
     if(day === 5){
-      return sess(window.draftDayLabel(week, day), 120, [
-        std('Combine Warm-up', 1, '15 min', 'Jog, dynamic mobility, A-skips, 4 build-up runs to 90%. Do the jumps and sprints FIRST, while you are fresh.'),
-        result('Vertical Jump (cm)', 'cm', 'Record best of 3. Jump touch minus standing reach. NFL linebacker average is about 86 cm.'),
-        result('Broad Jump (cm)', 'cm', 'Record best of 3. Two-foot take-off, landing must be held. Linebacker average is about 297 cm.'),
-        result('40-yd Dash (sec)', 'sec', 'Record best of 2. 36.58 m from a 3-point start, full rest between. Linebacker average 4.75 s.'),
-        result('5-10-5 Shuttle (sec)', 'sec', 'Record best of 2, one each direction. Linebacker average 4.28 s.'),
-        result('3-Cone Drill (sec)', 'sec', 'Record best of 2. Linebacker average 7.13 s. Skip it if you have no room and test it next block.'),
+      // v4.9.345 — Jon had no tape for the field course on 31 Oct: the baseline lift
+      // tests stay this weekend and the field tests move to Sat 7 Nov (week 2 day 5).
+      return sess(window.draftDayLabel(week, day), (week === 1) ? 75 : 120, ((week === 1)
+        ? [std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, t-spine, then empty-bar clean and squat practice.')]
+        : fieldTests()).concat([
         { name:'Power Clean — 1RM Test', format:'percentage_sets', rest:180,
           sets:ramp('clean', [50, 65, 75, 85, 92.5, 100], [3, 2, 1, 1, 1, 1], true),
           note:'Work up in singles. The last row is a target, not a ceiling: log the heaviest clean you actually made.' + estNote('clean') },
@@ -8168,12 +8177,10 @@ window.draftGetSessionData = function(week, day, s){
           note:'3-5 min between attempts. Depth: hip crease below the knee. Log the heaviest good single.' },
         { name:'Strict Press — 1RM Test', format:'percentage_sets', rest:180,
           sets:ramp('press', [50, 70, 85, 92.5, 100], [5, 3, 1, 1, 1], true),
-          note:'OPTIONAL. Skip it if you are cooked. No leg drive.' + estNote('press') },
-        result('Bodyweight (kg)', 'kg', 'Record bodyweight. Morning, after the toilet, before food. Do it Sunday if you weighed in late today.')
-      ]);
+          note:'OPTIONAL. Skip it if you are cooked. No leg drive.' + estNote('press') }
+      ]));
     }
     return sess(window.draftDayLabel(week, day), 110, [
-      result('Bodyweight (kg)', 'kg', 'Record bodyweight. Morning, after the toilet, before food.'),
       { name:'Bench Press — 1RM Test', format:'percentage_sets', rest:240,
         sets:ramp('bench', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
         note:'Pause on the chest. 3-5 min between attempts. Log the heaviest good single.' },
@@ -8197,8 +8204,9 @@ window.draftGetSessionData = function(week, day, s){
   // recovery shrinking across the block — the shape of the hardest passages of a game
   // (Black & Gabbett 2015; Johnston & Gabbett 2011). Then 15 s on / 15 s off running.
   if(day === 1){
-    if(t === 1 || taper){
-      return sess('Conditioning — Bronco ' + (t === 1 ? 'Baseline' : 'Retest'), 40, [
+    // v4.9.345 — Bronco baseline moved from training week 1 to week 2 (no tape on 2 Nov).
+    if(t === 2 || taper){
+      return sess('Conditioning — Bronco ' + (t === 2 ? 'Baseline' : 'Retest'), 40, [
         std('Conditioning Warm-up', 1, '12 min', 'Jog, dynamic mobility, 3 build-up runs.'),
         afap('Bronco Test', 1, 0, [{name:'Shuttle 20 m out and back, then 40 m, then 60 m', reps:'5 sets non-stop (1200 m)'}],
           'FIELD. Five sets of 20-40-60 m shuttles, no rest, 1200 m total. Start the clock and go. Your time is the score.'),
@@ -8209,8 +8217,20 @@ window.draftGetSessionData = function(week, day, s){
     }
     // level-scaled volume and density
     var bouts = [null, 6, 7, 8, 9, 10][LC];
-    var efforts = (t === 2) ? 2 : 3;
-    var restRHIE = [null, 120, 105, 90, 75, 60][LC] - ((t - 2) * 10);
+    var efforts = (t >= 3) ? 3 : 2;
+    var restRHIE = [null, 120, 105, 90, 75, 60][LC] - (Math.max(0, t - 2) * 10);
+    if(t === 1){
+      // Week 1 is gym-only: the field course is not marked until Sat 7 Nov.
+      return sess('Conditioning — Repeated Efforts (Gym)', 45, [
+        std('Conditioning Warm-up', 1, '10 min', 'Bike or row, dynamic mobility, 2 practice burpees.'),
+        std('Repeated-Effort Bouts', bouts, '2 efforts',
+          'Each bout: 8 s all-out assault bike sprint, 1 burpee, 8 s all-out bike sprint. Rest ' + restRHIE + ' s between bouts. ' +
+          'Level ' + LC + ' of 5. Rate it honestly at the end: an easy rating moves you up a level next week.'),
+        std('15/15 Intervals', ivSets, ivMins + ' min blocks',
+          'Assault bike: 15 s hard / 15 s easy for ' + ivMins + ' min, 3 min easy between blocks. Aim for the same calories every hard rep.'),
+        std('Cool-down', 1, '5 min', 'Easy bike, hips, calves.')
+      ]);
+    }
     restRHIE = Math.max(45, restRHIE);
     var ivSets = (LC >= 4) ? 3 : 2;
     var ivMins = [null, 5, 6, 6, 7, 8][LC];
@@ -8241,6 +8261,18 @@ window.draftGetSessionData = function(week, day, s){
       ]);
     }
     var accReps = [null, 5, 6, 6, 7, 8][LS];
+    if(t === 1){
+      // Week 1 is gym-only (no measured course until Sat 7 Nov).
+      return sess('Sprint & Power (Gym)', 45, [
+        std('Sprint Warm-up', 1, '12 min', 'Bike, A-skips, wall drills, 3 fast prowler build-ups.'),
+        std('Acceleration Sprints', accReps, '10 m prowler',
+          'Prowler sprint, light enough to run, heavy enough to drive. Full rest (about 90 s). Max intent every rep. Level ' + LS + ' of 5.'),
+        std('Resisted Sprints', [null, 4, 5, 5, 6, 6][LS], '15 m heavy sled',
+          'Heavy sled push or drag, about half your sprint speed. Rest 2 min.'),
+        std('Lateral Bound', 3, '4 / side', 'Stick each landing for a second. Builds the change of direction for the shuttle.'),
+        std('Seated Box Jump', 3, 3, 'Sit on a bench, then explode onto the box. Step down.')
+      ]);
+    }
     var accDist = (t <= 2) ? '10 m' : '20 m';
     var sled = (t === 4) ? 4 : [null, 4, 5, 5, 6, 6][LS];
     var agil = (t % 2 === 1) ? '5-10-5 Shuttle' : '3-Cone Drill';
@@ -8345,7 +8377,7 @@ window.draftGetSessionData = function(week, day, s){
     var ohp = [null, [3, 5, 70], [3, 4, 75], [3, 3, 80], [2, 3, 82.5]][t];
     var rb = D.repBench > 0 ? D.repBench : kgOf('bench', 60);
     var pwS = [null, 'Med Ball Overhead Throw', 'Clapping Push-Up', 'Med Ball Overhead Throw', 'Clapping Push-Up'][t];
-    return sess('Speed Upper', 75, [
+    return sess((t === 1) ? 'Field Tests + Speed Upper' : 'Speed Upper', (t === 1) ? 120 : 75, ((t === 1) ? fieldTests() : []).concat([
       std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.'),
       { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3),
         note:'Bar weight shown; add light bands if you have them. 45 s rest, rotate three grip widths. Every rep FAST. ' +
@@ -8358,7 +8390,7 @@ window.draftGetSessionData = function(week, day, s){
         note:'One all-out set at ' + rb + ' kg. Builds toward 102.5 kg × 20. Hit 20 and the load goes up 2.5 kg next week.' },
       SS('Flat DB Bench / Strict Pull-Up', 3, 90, 'Flat DB Bench', '12 reps', 'Strict Pull-Up', 'Max minus 2', 'Stop the pull-ups 2 short of failure.'),
       SS('Band Face Pull / DB Hammer Curl', 2, 45, 'Band Face Pull', 'To failure', 'DB Hammer Curl', 'To failure')
-    ]);
+    ]));
   }
 
   // ════ SUN — SPEED LOWER (+ PHX WOD finisher scheduled beside it) ════════════
@@ -8481,9 +8513,17 @@ window.draftAfterSession = function(week, day){
   });
 
   // 2. Combine results and test reps — copied into draft.tests as a dated history.
+  //    Field results are taken from any session that carries them (v4.9.345: the
+  //    baseline field tests run on Sat 7 Nov, which is not a test-week session).
+  ['Vertical Jump (cm)','Broad Jump (cm)','40-yd Dash (sec)','5-10-5 Shuttle (sec)','3-Cone Drill (sec)'].forEach(function(n){
+      if(names.indexOf(n) < 0) return;
+      var v = parseFloat(R[n + '_result']); if(!(v > 0)) return;
+      var h = D.tests[n] = Array.isArray(D.tests[n]) ? D.tests[n] : [];
+      if(!h.length || h[h.length - 1].date !== today) h.push({ date: today, value: v });
+      else h[h.length - 1].value = v;
+  });
   if(isTest){
-    var resultNames = ['Vertical Jump (cm)','Broad Jump (cm)','40-yd Dash (sec)','5-10-5 Shuttle (sec)','3-Cone Drill (sec)','Bodyweight (kg)'];
-    resultNames.forEach(function(n){
+    [].forEach(function(n){
       if(names.indexOf(n) < 0) return;
       var v = parseFloat(R[n + '_result']); if(!(v > 0)) return;
       var h = D.tests[n] = Array.isArray(D.tests[n]) ? D.tests[n] : [];

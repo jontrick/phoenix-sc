@@ -281,3 +281,10 @@ minimum read 1/63 s on a 60 fps clip). Slo-mo factor (1x/4x/8x) is chosen by Jon
 because a slo-mo clip shared from Photos may play slowed. Verified in Chromium with
 generated 60 and 30 fps clips: 300 and 150 frames both measured 5.00 s. Not yet tried
 on iPhone Safari.
+
+**v4.9.345 — test split moved (Jon, 31 Oct: no tape until next week).** Baseline lift
+tests stay Sat 31 Oct / Sun 1 Nov (lifts only). Field tests (vertical, broad, 40-yd,
+5-10-5, 3-cone) run Sat 7 Nov ahead of speed upper (week 2 day 5, `fieldTests()`).
+Training week 1 Mon/Wed are gym versions; Bronco baseline moved to Mon 9 Nov (week 3
+day 1). Bodyweight blocks removed from sessions: Jon logs it on the Today check-in.
+Field results are now recorded from any session that has them, not only test weeks.

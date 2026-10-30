@@ -21,7 +21,11 @@ Jon: "buggy and annoying ... can't see a previous day ... app says 2ml but I add
 note it's one, the daily dosage still seems to think 2 ... haven't trusted the make ups."
 Reproduced against the real functions (bpc157, plan 10 mg / 2 mL, dose 0.5 mg):
 
-- [ ] **Two water figures, and screens disagree.** "Made up today" one-tap stamps the PLAN
+- [x] **DONE v4.9.350** (Jon's ruling: always confirm). "Made up" always opens the sheet,
+      prefilled from the open vial; "Correct the vial already open" (`pepCorrectOpenVial`)
+      fixes a wrong volume without touching stock; Protocol / Stock / panel / coach context
+      now draw from `_pepLiveRecon`. Edit-sheet water relabelled "for new vials".
+      Original finding: **Two water figures, and screens disagree.** "Made up today" one-tap stamps the PLAN
       volume (2 mL) as the mixed vial. Correcting water in the edit sheet changes only the
       PLAN. Result: TODAY (`_pepLiveRecon`) says 10 u, while PROTOCOL / STOCK / compound
       panel / coach context (`_pepRecon`, plan) say 5 u. Only "log make-up" with 1 mL makes

@@ -1222,6 +1222,40 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       assert.equal(r.opened, true, 'it asks rather than guessing');
     });
 
+    // ── v4.9.350 — ONE WATER FIGURE (Jon, 31 Oct, via Training chat) ───────────
+    // "app says 2ml but I add one and note it's one, the daily dosage still seems to
+    // think was at 2". The one-tap stamped the plan's 2 mL as the mixed vial; editing
+    // the water changed only the plan; TODAY and PROTOCOL then showed different draws.
+    test('WATER Made up always asks, even when the volume is known', () => {
+      mu({ waterConfirmedAt: daysAgo(1) });
+      const r = app.pepMadeUpTodayAction('ipamorelin');
+      assert.equal(r.opened, true, 'the sheet opens; nothing is recorded silently');
+      assert.equal(ipa().sealedVials, 8, 'no vial deducted by the tap itself');
+      assert.ok(!ipa().openedDate, 'nothing opened by the tap itself');
+    });
+
+    test('WATER correcting the open vial fixes the draw without touching stock', () => {
+      mu({ openedDate: daysAgo(2), openVialMg: 10, openWaterMl: 2, openUsedAmt: 0.6, sealedVials: 7, waterConfirmedAt: daysAgo(2) });
+      assert.equal(ipaItem().recon.waterMl, 2, 'stamped at the plan figure');
+      assert.equal(app.pepCorrectOpenVial(0, 10, 1), true);
+      assert.equal(ipaItem().recon.waterMl, 1, 'TODAY now reads the 1 mL he actually added');
+      assert.equal(ipa().sealedVials, 7, 'a correction is not a new vial');
+      assert.equal(ipa().openedDate, daysAgo(2), 'shelf life still runs from the real mix date');
+      assert.equal(ipa().openUsedAmt, 0.6, 'what he already drew is kept');
+    });
+
+    test('WATER every screen shows the same draw as TODAY', () => {
+      mu({ openedDate: daysAgo(1), openVialMg: 10, openWaterMl: 1, waterMl: 2, waterConfirmedAt: daysAgo(1) });
+      const it = ipaItem();
+      const want = app._pepDrawText(app._pepDraw(it.dose, it.doseUnit, it.recon));
+      const planDraw = app._pepDrawText(app._pepDraw(0.3, 'mg', app._pepRecon(ipa(), app._pepCompound('ipamorelin'))));
+      assert.ok(want !== planDraw, 'positive control: the plan and the mixed vial really differ here');
+      const ps = app.pepGetState();
+      assert.ok(app._pepTabProtocol(ps).includes(want), 'protocol shows the mixed-vial draw');
+      assert.ok(!app._pepTabProtocol(ps).includes(planDraw), 'and not the plan draw');
+      assert.ok(app._pepTabStock(ps).includes(want), 'stock shows it too');
+    });
+
     test('MADEUP the Today tile carries both controls', () => {
       const h = withStubbedDom(() => {
         mu();

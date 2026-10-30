@@ -1,4 +1,12 @@
 # PHOENIX — PEPTIDES DOMAIN HANDOFF
+
+> **UPDATE 31 Oct 2026, v4.9.350–.353 (done from the Training chat at Jon's request).**
+> Section 1's six-tab table is SUPERSEDED. The bar is TODAY · MY PEPTIDES (`mine`) · MORE
+> (`more`); `overview/stock/adjust/order/bloods` keep their keys and open from MORE.
+> Also: make-ups always confirmed (`pepMadeUpTodayAction` opens the sheet), new
+> `pepCorrectOpenVial`, every draw-up reads `_pepLiveRecon`; TODAY steps back 7 days
+> (`pepShiftDay`); "prep for tomorrow AM" (`ps.prepped[iso]`). Details in OPEN_ITEMS.md
+> under PEPTIDES AUDIT.
 # Rewritten 2026-09-01 at v4.9.263. Supersedes the previous version entirely.
 # Read CLAUDE.md first — every rule in it applies here. Then COMMS_PROTOCOL.md.
 #

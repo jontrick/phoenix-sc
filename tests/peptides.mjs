@@ -741,25 +741,27 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     // v4.9.205 — Jon overruled the five-tab arrangement: BLOODS is a tab in its
     // own right. Six labels do not fit 390px, so the bar scrolls rather than
     // shrinking the text.
-    test('RENDER the portal paints all SIX of Jon\'s tabs', () => {
+    // v4.9.353 — three tabs (Jon: "too complicated"). Replaces the six-tab pins.
+    test('RENDER the portal paints the three tabs', () => {
       const h = render('today');
-      ['TODAY','SCHEDULE','STOCK','ADJUST','ORDER','BLOODS'].forEach(t =>
-        assert.ok(h.includes('>' + t + '<'), t + ' tab painted'));
+      ['TODAY','MY PEPTIDES','MORE'].forEach(t => assert.ok(h.includes('>' + t + '<'), t + ' tab painted'));
+      assert.notIncludes(h, '>SCHEDULE<', 'the old six-tab bar is gone');
     });
 
-    test('RENDER the tab bar scrolls instead of squeezing six labels', () => {
-      const h = render('today');
-      assert.ok(h.includes('overflow-x:auto'), 'bar scrolls horizontally');
-      assert.ok(h.includes('white-space:nowrap'), 'labels are not wrapped');
-      assert.notIncludes(h.slice(0, h.indexOf('</div>')), 'flex:1;padding:12px 4px',
-        'tabs are no longer squeezed to equal width');
+    test('RENDER MORE lists every detail screen, and each one opens with a way back', () => {
+      const m = render('more');
+      ['overview','stock','adjust','order','bloods'].forEach(k => assert.ok(m.includes('data-pep-tab="' + k + '"'), k + ' listed'));
+      const b = render('bloods');
+      assert.ok(b.includes('Add Panel') || b.includes('No panels yet'), 'BLOODS still opens');
+      assert.ok(b.includes('data-pep-tab="more"'), 'with a way back to MORE');
     });
 
-    test('RENDER BLOODS opens directly, with no route through ADJUST', () => {
-      const h = render('bloods');
-      assert.ok(h.includes('Add Panel') || h.includes('No panels yet'), 'the bloods screen itself');
-      assert.notIncludes(h, 'pep-bloods-back', 'no back button — the tab bar is the way out');
-      assert.notIncludes(render('adjust'), 'pep-open-bloods', 'and ADJUST no longer needs an entry point');
+    test('RENDER MY PEPTIDES shows each compound with its draw, vial and stock', () => {
+      const h = render('mine');
+      assert.ok(h.includes('data-pep-edit='), 'edit per compound');
+      assert.ok(h.includes('data-pep-madeup='), 'made up per compound');
+      assert.ok(h.includes('Sealed'), 'stock');
+      assert.ok(h.includes('+ Add a compound'), 'and a way to add one');
     });
 
     test('RENDER the STOCK tab paints per-compound stock controls', () => {

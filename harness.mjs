@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.352'", 'version is 4.9.352');
+has("var APP_VERSION='4.9.353'", 'version is 4.9.353');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1677,11 +1677,18 @@ has('createSignedUrl',                         'PEP: private bucket read via sig
 // that screen to be the calendar and nothing else, with everything describing
 // the protocol moved into ADJUST under "Protocol info". The KEY is unchanged so
 // his persisted tab and every restore path still resolve.
-[['today','TODAY'],['overview','SCHEDULE'],['stock','STOCK'],['adjust','ADJUST'],['order','ORDER'],['bloods','BLOODS']].forEach(([k,lab]) => {
-  const t = lab;
+// v4.9.353 — Jon, 31 Oct: "not very user friendly ... too complicated". The bar is now
+// TODAY · MY PEPTIDES · MORE. The five detail screens keep their KEYS (persisted tab and
+// every restore path) and are reached from MORE; tests/peptides.mjs proves each opens.
+[['today','TODAY'],['mine','MY PEPTIDES'],['more','MORE']].forEach(([k,lab]) => {
   html.includes('{key:"' + k + '",label:"' + lab + '"}')
-    ? ok('PEP: ' + t.toUpperCase() + ' tab registered')
-    : bad('PEP: ' + t.toUpperCase() + ' tab missing from tab bar');
+    ? ok('PEP: ' + lab + ' tab registered')
+    : bad('PEP: ' + lab + ' tab missing from tab bar');
+});
+['overview','stock','adjust','order','bloods'].forEach((k) => {
+  html.includes('["' + k + '", ')
+    ? ok('PEP: ' + k + ' reachable from MORE')
+    : bad('PEP: ' + k + ' is no longer listed in MORE');
 });
 
 // v4.9.152 restore rule — newest timestamp wins

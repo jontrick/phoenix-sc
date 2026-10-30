@@ -37,8 +37,10 @@ Reproduced against the real functions (bpc157, plan 10 mg / 2 mL, dose 0.5 mg):
 - [x] **ADDED v4.9.352 (Jon's request)** — "Tonight · prep for tomorrow AM" on TODAY and the
       main tile: tomorrow's morning + any-time doses with draw-ups, a "prepped" tick
       (`ps.prepped[iso]`, consumes nothing), and "prepped last night" shown next morning.
-- [ ] NEXT (Jon chose "fix now, simplify after") — rebuild into 3 tabs: Today · My Peptides
-      · More. Same data. Not started.
+- [x] **DONE v4.9.353** — 3 tabs: TODAY · MY PEPTIDES (card per compound: dose, schedule,
+      next due, draw, doses left in the open vial, sealed, Made up / Edit) · MORE (list to
+      the five detail screens, which keep their keys and show "‹ More"). Six-tab pins in
+      harness + tests replaced with three-tab + reachable-from-MORE checks.
 - [ ] **Size.** Peptide block ~376 KB, 150 top-level functions, 6 tabs. Jon finds it hard
       to use and is open to starting again. Redesign options put to him 31 Oct — ???.
 

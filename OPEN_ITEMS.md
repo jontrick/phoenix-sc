@@ -34,6 +34,11 @@ Reproduced against the real functions (bpc157, plan 10 mg / 2 mL, dose 0.5 mg):
 - [x] **DONE v4.9.351** — TODAY tab ‹ › steps back up to 7 days (`pepShiftDay`, `_pepViewISO`); tick and skip take a date; add-dose and make-up stay today-only; the view resets at midnight; the main-screen tile still ticks today. Original finding: **No previous day.** `_pepTabToday` and `pepToggleDose` are hard-wired to `_pepToday()`,
       though state (`checked{iso}`, `skipped{iso}`) and `_pepGetDoses(ps, date)` already
       take a date. A missed tick cannot be fixed.
+- [x] **ADDED v4.9.352 (Jon's request)** — "Tonight · prep for tomorrow AM" on TODAY and the
+      main tile: tomorrow's morning + any-time doses with draw-ups, a "prepped" tick
+      (`ps.prepped[iso]`, consumes nothing), and "prepped last night" shown next morning.
+- [ ] NEXT (Jon chose "fix now, simplify after") — rebuild into 3 tabs: Today · My Peptides
+      · More. Same data. Not started.
 - [ ] **Size.** Peptide block ~376 KB, 150 top-level functions, 6 tabs. Jon finds it hard
       to use and is open to starting again. Redesign options put to him 31 Oct — ???.
 

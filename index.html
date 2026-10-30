@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.351';
+var APP_VERSION='4.9.352';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -30098,6 +30098,9 @@ function pepRenderScreen(){
   body.querySelectorAll("[data-pep-check]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepToggleDose(btn.getAttribute("data-pep-check"), _pepViewISO()); });
   });
+  body.querySelectorAll("[data-pep-prep]").forEach(function(btn){
+    btn.addEventListener("click", function(){ pepTogglePrepped(btn.getAttribute("data-pep-prep")); pepRenderScreen(); if(typeof pepRenderTodayTile === "function") pepRenderTodayTile(); });
+  });
   body.querySelectorAll("[data-pep-day]").forEach(function(btn){
     btn.addEventListener("click", function(){ pepShiftDay(parseInt(btn.getAttribute("data-pep-day"), 10) || 0); });
   });
@@ -30340,6 +30343,63 @@ function _pepDayStrip(iso){
   "</div>";
 }
 
+// v4.9.352 — Jon: "if something is required for am the next morning I want it prepped the
+// day before at night before bed - so the day tile shows what to take when plus what to
+// prep for next morning? With anytime also listed as I usually do those in the morning".
+// Tomorrow's MORNING + ANY TIME doses, with draw-ups from the vial open now. Ticking
+// "prepped" records it only (ps.prepped[tomorrowISO]); nothing is consumed until the dose
+// is ticked as taken. Hand-added extras are day-specific, so they are not carried over.
+function _pepTomorrowISO(){
+  return _pepISO(new Date(new Date(_pepToday() + "T12:00:00").getTime() + 86400000));
+}
+function _pepPrepList(ps){
+  var iso = _pepTomorrowISO();
+  var d = _pepGetDoses(ps, iso);
+  var items = d.morning.concat(d.anytime).filter(function(it){ return !it.extra; });
+  var done = (ps.prepped && ps.prepped[iso]) || [];
+  return {iso: iso, items: items, prepped: done};
+}
+function pepTogglePrepped(compoundId){
+  var ps = pepGetState();
+  var iso = _pepTomorrowISO();
+  if(!ps.prepped) ps.prepped = {};
+  // keep only the last few nights
+  Object.keys(ps.prepped).forEach(function(k){ if(k < _pepToday()) delete ps.prepped[k]; });
+  var list = ps.prepped[iso] = ps.prepped[iso] || [];
+  var i = list.indexOf(compoundId);
+  if(i >= 0) list.splice(i, 1); else list.push(compoundId);
+  pepSaveState(ps);
+  return list.indexOf(compoundId) >= 0;
+}
+function _pepWasPrepped(ps, iso, compoundId){
+  return !!(ps && ps.prepped && ps.prepped[iso] && ps.prepped[iso].indexOf(compoundId) >= 0);
+}
+function _pepPrepHTML(ps, attr){
+  var L = _pepPrepList(ps);
+  if(!L.items.length) return "";
+  var nDone = L.items.filter(function(it){ return L.prepped.indexOf(it.id) >= 0; }).length;
+  var h = "<div style=\"margin-top:14px;padding:12px 14px;border:1px dashed #7B68EE;border-radius:var(--radius);background:rgba(123,104,238,0.06);\">";
+  h += "<div style=\"display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px;\">" +
+       "<div style=\"font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;\">Tonight &middot; prep for tomorrow AM</div>" +
+       "<div style=\"font-family:var(--font-d);font-size:10px;color:var(--text3);\">" + nDone + "/" + L.items.length + " prepped</div></div>";
+  h += "<div style=\"font-size:10px;color:var(--text3);margin-bottom:6px;\">Morning and any-time doses. Draws use the vial open now.</div>";
+  L.items.forEach(function(it){
+    var on = L.prepped.indexOf(it.id) >= 0;
+    h += "<div style=\"display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--border);" + (on ? "opacity:0.55;" : "") + "\">";
+    h += "<button " + attr + "=\"" + it.id + "\" aria-label=\"Prepped\" style=\"flex-shrink:0;width:22px;height:22px;border-radius:5px;border:2px solid " + (on ? "#7B68EE" : "var(--border2)") + ";background:" + (on ? "#7B68EE" : "transparent") + ";padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;\">" +
+         (on ? "<svg viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' width='12' height='12'><polyline points='20 6 9 17 4 12'/></svg>" : "") + "</button>";
+    h += "<div style=\"flex:1;min-width:0;\"><div style=\"font-size:13px;font-weight:700;color:var(--text);\">" + _esc(it.name) + "</div>" +
+         "<div style=\"font-size:10px;color:var(--text3);\">" + _esc(it.timing || "") + "</div></div>";
+    h += "<div style=\"text-align:right;flex-shrink:0;\">" +
+         (it.needsMakeUp ? "<div style=\"font-size:10px;color:var(--gold);font-weight:700;\">Mix a vial first</div>"
+                         : "<div style=\"font-family:var(--font-d);font-size:14px;font-weight:900;color:#7B68EE;\">" + (it.draw ? _pepDrawText(it.draw) : "&mdash;") + "</div>") +
+         "<div style=\"font-size:10px;color:var(--text3);\">" + _pepFmtDose(it.dose, it.doseUnit) + "</div></div>";
+    h += "</div>";
+  });
+  h += "</div>";
+  return h;
+}
+
 function _pepTabToday(ps){
   var today = _pepViewISO();
   var isToday = (today === _pepToday());
@@ -30359,6 +30419,7 @@ function _pepTabToday(ps){
   if(total === 0){
     var d = new Date(today + "T12:00:00");
     var dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    if(isToday && _pepPrepList(ps).items.length) return _pepDayStrip(today) + "<div style=\"text-align:center;padding:24px 0 8px;color:var(--text3);font-size:13px;\">No doses today.</div>" + _pepPrepHTML(ps, "data-pep-prep");
     if(!isToday) return _pepDayStrip(today) + "<div style=\"text-align:center;padding:40px 0;color:var(--text3);font-size:13px;\">No doses were scheduled for " + dayNames[d.getDay()] + ".</div>";
     return _pepDayStrip(today) + "<div style=\"text-align:center;padding:48px 0;color:var(--text3);\">" +
       "<div style=\"font-size:48px;margin-bottom:12px;\">&#10003;</div>" +
@@ -30437,7 +30498,7 @@ function _pepTabToday(ps){
       } else {
         s += "<div style=\"font-size:10px;color:var(--gold);margin-top:2px;\">Set vial size + BAC water to see units</div>";
       }
-      s += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + item.timing + "</div>";
+      s += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">" + item.timing + (_pepWasPrepped(ps, today, item.id) && !done ? " &middot; <span style=\"color:#7B68EE;font-weight:700;\">prepped last night</span>" : "") + "</div>";
       if(item.notes) s += "<div style=\"font-size:10px;color:var(--text3);margin-top:4px;font-style:italic;\">" + item.notes + "</div>";
       // v4.9.300: log a reconstitution as it happens, from the daily view, for
       // ANY compound — not only one currently showing the note. Mixing a fresh
@@ -30457,6 +30518,7 @@ function _pepTabToday(ps){
   h += renderSection("Morning / Fasted AM", doses.morning);
   h += renderSection("Any Time", doses.anytime);
   h += renderSection("Evening / Pre-Sleep", doses.evening);
+  if(isToday) h += _pepPrepHTML(ps, "data-pep-prep");
   return h;
 }
 
@@ -30591,7 +30653,7 @@ function pepRenderTodayTile(){
       // too — the branch with no doses scheduled is not a branch with nothing
       // to do.
       "<button data-pep-tile-anymu=\"1\" style=\"flex:1;padding:9px;background:none;border:1px dashed var(--border2);border-radius:var(--radius);color:var(--text3);font-family:var(--font-d);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1px;cursor:pointer;touch-action:manipulation;\">+ Made up a vial</button>" +
-      "</div></div>";
+      "</div>" + _pepPrepHTML(ps, "data-pep-tile-prep") + "</div>";
     _pepBindTile(tile);
     return;
   }
@@ -30695,6 +30757,7 @@ function pepRenderTodayTile(){
   h += block("Morning", doses.morning);
   h += block("Any Time", doses.anytime);
   h += block("Evening", doses.evening);
+  h += _pepPrepHTML(ps, "data-pep-tile-prep");
   // v4.9.261: adding a dose from the main screen, without opening the portal.
   // stopPropagation on the handler, because the whole tile navigates.
   h += "<div style=\"display:flex;gap:8px;margin-top:10px;\">";
@@ -30716,6 +30779,13 @@ function pepRenderTodayTile(){
 function _pepBindTile(tile){
   tile.querySelectorAll("[data-pep-tile-open]").forEach(function(el){
     el.addEventListener("click", function(){ navTo("peptide"); });
+  });
+  tile.querySelectorAll("[data-pep-tile-prep]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      pepTogglePrepped(btn.getAttribute("data-pep-tile-prep"));
+      pepRenderTodayTile();
+    });
   });
   tile.querySelectorAll("[data-pep-tile-check]").forEach(function(btn){
     btn.addEventListener("click", function(e){

@@ -1288,6 +1288,48 @@ const settle = () => new Promise(r => setTimeout(r, 0));
       app.pepShiftDay(5);
     });
 
+    // ── v4.9.352 — PREP TONIGHT FOR TOMORROW AM (Jon, 31 Oct) ──────────────────
+    const prepSetup = () => {
+      reset(); signIn('jon');
+      const st = app.pepGetState(); st.settings = {};
+      const base = { startDate: daysAgo(10), freq: 'daily', vialMg: 10, waterMl: 2, sealedVials: 4, status: 'instock',
+                     openedDate: daysAgo(2), openVialMg: 10, openWaterMl: 2, waterConfirmedAt: daysAgo(2) };
+      st.stacks = [Object.assign({ compoundId: 'bpc157', dose: 0.5 }, base),      // any time
+                   Object.assign({ compoundId: 'ipamorelin', dose: 0.3 }, base)]; // evening
+      app.pepSaveState(st);
+    };
+    test('PREP tomorrow morning + any-time doses are listed tonight; evening ones are not', () => {
+      prepSetup();
+      const L = app._pepPrepList(app.pepGetState());
+      const ids = L.items.map((i) => i.id);
+      assert.ok(ids.includes('bpc157'), 'any-time dose listed (he does those in the morning)');
+      assert.ok(!ids.includes('ipamorelin'), 'the evening dose is not morning prep');
+      const h = app._pepTabToday(app.pepGetState());
+      assert.ok(h.includes('prep for tomorrow AM'), 'the TODAY tab shows the prep section');
+      assert.ok(h.includes('data-pep-prep="bpc157"'), 'with a prepped tick');
+      assert.ok(h.includes('10u'), 'and the draw-up from the open vial');
+    });
+
+    test('PREP ticking prepped consumes nothing, and shows on tomorrow as prepped last night', () => {
+      prepSetup();
+      const used0 = app.pepGetState().stacks[0].openUsedAmt || 0;
+      assert.equal(app.pepTogglePrepped('bpc157'), true);
+      assert.equal(app.pepGetState().stacks[0].openUsedAmt || 0, used0, 'prepping is not taking');
+      const tom = app._pepTomorrowISO();
+      assert.ok(app._pepWasPrepped(app.pepGetState(), tom, 'bpc157'), 'recorded against tomorrow');
+      assert.equal(app.pepTogglePrepped('bpc157'), false, 'and can be untoggled');
+    });
+
+    test('PREP the main-screen tile shows it too', () => {
+      const h = withStubbedDom(() => {
+        prepSetup();
+        nodes['today-peptide-tile'] = mk('today-peptide-tile');
+        app.pepRenderTodayTile();
+        return nodes['today-peptide-tile'].innerHTML;
+      });
+      assert.ok(h.includes('data-pep-tile-prep="bpc157"'), 'prep tick on the tile');
+    });
+
     test('MADEUP the Today tile carries both controls', () => {
       const h = withStubbedDom(() => {
         mu();

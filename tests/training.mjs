@@ -5557,7 +5557,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
 
   test('DRAFT ENGINE: conditioning levels move with the rating', () => {
     startDraft();
-    const bouts = () => app.blabGetSessionData(4, 1).exercises.find((e) => e.name === 'Repeated-Effort Bouts').sets;
+    const bouts = () => app.blabGetSessionData(4, 1).conditioning.find((p) => p.title === 'Repeated-Effort Bouts').spec.config.efforts;
     const b0 = bouts();
     logToday('Repeated-Effort Bouts_rpe', { date: app._phxLocalISO(), rpe: 5 });
     app.draftAfterSession(2, 1);
@@ -5822,7 +5822,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(wed.exercises.some((e) => e.name === 'Acceleration Sprints'), 'and so does the sprint day');
     assert.ok(app.blabGetSessionData(3, 1).exercises.some((e) => e.name === 'Bronco Test'), 'Bronco baseline Mon 9 Nov');
     assert.ok(app.blabGetSessionData(6, 1).exercises.some((e) => e.name === 'Bronco Test'), 'retest Mon 30 Nov');
-    assert.equal(app.blabGetSessionData(4, 1).exercises.find((e) => e.name === 'Repeated-Effort Bouts').reps, '3 efforts', 'Week 3 moves to 3-effort bouts');
+    assert.ok(/drop and get up, sprint 20 m, 5 s/.test(app.blabGetSessionData(4, 1).conditioning.find((p) => p.title === 'Repeated-Effort Bouts').spec.note), 'Week 3 moves to 3-effort bouts');
   });
 
   test('ATTEMPTS: test lifts and max-effort lifts offer extra attempts; speed work does not', () => {
@@ -5842,5 +5842,54 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const s = read(KEY); s.records['Deadlift — 1RM Test_wk']['1'] = { wt: 165, reps: 1, date: app._phxLocalISO() }; seed(KEY, s);
     app.draftAfterSession(1, 6);
     assert.equal(read(KEY).maxes.deadlift, 165);
+  });
+
+  // ── v4.9.354 — Mon/Wed run on the WOD timers ───────────────────────────────
+  test('COND: every Mon and Wed session is a set of parts, and every timed part is a valid WOD', () => {
+    startDraft();
+    let timed = 0;
+    for (let w = 2; w <= 6; w++) for (const d of [1, 3]) {
+      const s = app.blabGetSessionData(w, d);
+      assert.ok(Array.isArray(s.conditioning) && s.conditioning.length >= 3, `W${w}D${d} has parts`);
+      s.conditioning.forEach((p) => {
+        assert.ok(p.title && p.presc, `W${w}D${d} part named and described`);
+        assert.ok(!/undefined|NaN/.test(p.presc + (p.spec ? p.spec.format + p.spec.note : '')), `W${w}D${d} ${p.title}: no undefined numbers`);
+        [p.spec, p.alt].filter(Boolean).forEach((sp) => { app.phxBuildSessionPlan(sp); timed++; });
+      });
+    }
+    assert.ok(timed >= 20, 'timed parts built through the real WOD plan builder');
+  });
+
+  test('COND: week 1 Monday is exact — 7 bouts at 105 s rest, two 6-minute 15/15 blocks', () => {
+    startDraft();
+    const c = app.blabGetSessionData(2, 1).conditioning;
+    const b = c.find((p) => p.title === 'Repeated-Effort Bouts').spec;
+    assert.equal(b.config.efforts, 7); assert.equal(b.config.restSec, 105); assert.equal(b.scoreType, 'calories');
+    const blocks = c.filter((p) => /^15\/15 Block/.test(p.title));
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0].spec.config.efforts, 12); assert.equal(blocks[0].spec.config.workSec, 15);
+  });
+
+  test('COND: a score logged today marks the part done; blocks sharing a timer fill in order', () => {
+    startDraft();
+    const c = app.blabGetSessionData(2, 1).conditioning;
+    seed('phoenix_lib_scores', [
+      { wod_id: 'draft-rhie-gym', score: '64', score_type: 'calories', date: new Date().toISOString() },
+      { wod_id: 'draft-1515-bike', score: '48', score_type: 'calories', date: new Date().toISOString() },
+      { wod_id: 'draft-1515-bike', score: '40', score_type: 'calories', date: '2020-01-01T00:00:00.000Z' }]);
+    const st = app.draftConditioningStatus(c, [0]);
+    assert.equal(st[0].done, true, 'warm-up ticked');
+    assert.equal(st[1].score, '64 cal', 'bouts scored');
+    assert.equal(st[2].done, true, 'block 1 done');
+    assert.equal(st[3].done, false, 'block 2 not — the old score is from another day');
+  });
+
+  test('COND: Draft Monday opens the conditioning screen, not the lift screen (drives blabOpenSession)', () => {
+    startDraft();
+    let opened = null;
+    const real = app.window.draftOpenConditioning;
+    app.window.draftOpenConditioning = (w, d) => { opened = [w, d]; return true; };
+    try { app.blabOpenSession(2, 1); } finally { app.window.draftOpenConditioning = real; }
+    assert.deepEqual(opened, [2, 1]);
   });
 }

@@ -305,3 +305,15 @@ the Complete Session log (`window._phxExtraSets`). Verified in Chromium: 6 → 8
 the heaviest TICKED set: buttons replaced by "Done · top lift X kg", unticked rows dimmed;
 refuses with a toast if nothing is ticked. Extra rows now insert above `att-wrap-<i>` —
 the first build inserted them inside it, so Done deleted them (caught in Chromium).
+
+**v4.9.354 — Mon/Wed Draft sessions run on the WOD timers (Jon, 2 Nov).** The generator
+returns `conditioning: [parts]`; timed parts carry a hidden PHX_LIB-shaped spec
+(`tier:'DRAFT'`, ids `draft-rhie-gym|field`, `draft-1515-bike|run`, `draft-bronco`,
+`draft-row2k`, `draft-accel-field|gym`, `draft-sled`, `draft-shuttle`, `draft-3cone`)
+registered into `phxAllWods()` via `window._draftLibList`. `blabOpenSession` routes a
+session with `conditioning` to `draftOpenConditioning` (parts list, Start timer →
+`_phxStartSession`, status from today's library scores, one overall rating mirrored to
+the engine, then `blabCompleteSession`). Intervals runner gained `config.countLabel`.
+Fixed: week-1 gym 15/15 read ivSets/ivMins before assignment ("undefined").
+Also pinned `NOTSTARTED applying a phase…` (tests/peptides.mjs) to 15 Oct 2026: it
+decayed on 2 Nov when Phase 2's last start date passed — red on an unchanged build.

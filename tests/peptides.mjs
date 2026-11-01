@@ -1726,16 +1726,28 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     });
 
     test('NOTSTARTED applying a phase marks a future start as not-yet-begun', () => {
-      reset(); signIn('jon');
-      const st = app.pepGetState();
-      st.settings = {}; st.stacks = [];
-      app.pepSaveState(st);
-      assert.equal(app.pepApplyPhase('phase2').ok, true, 'applied');
-      const after = app.pepGetState().stacks;
-      const future = after.filter(x => x.startDate >= app._pepToday());
-      assert.ok(future.length >= 1, `${future.length} compounds start today or later`);
-      assert.deepEqual(future.filter(x => !x.awaitingStart).map(x => x.compoundId), [],
-        'every one of them is awaiting HIS confirmation — a phase date is a plan');
+      // DATE PINNED (fixed 2 Nov 2026, by the Training chat). This decayed: Phase 2's last
+      // start date is 2026-11-01, so from 2 Nov no compound started "today or later" and
+      // the case went red on an unchanged build. Pinned to 15 Oct 2026 (UTC midday), a
+      // date with future starts in the phase, so it keeps testing what it says it does.
+      const RealDate = app.Date, FIXED = RealDate.parse('2026-10-15T02:00:00.000Z');
+      class FakeDate extends RealDate {
+        constructor(...a) { if (a.length === 0) super(FIXED); else super(...a); }
+        static now() { return FIXED; }
+      }
+      app.Date = FakeDate;
+      try {
+        reset(); signIn('jon');
+        const st = app.pepGetState();
+        st.settings = {}; st.stacks = [];
+        app.pepSaveState(st);
+        assert.equal(app.pepApplyPhase('phase2').ok, true, 'applied');
+        const after = app.pepGetState().stacks;
+        const future = after.filter(x => x.startDate >= app._pepToday());
+        assert.ok(future.length >= 1, `${future.length} compounds start today or later`);
+        assert.deepEqual(future.filter(x => !x.awaitingStart).map(x => x.compoundId), [],
+          'every one of them is awaiting HIS confirmation — a phase date is a plan');
+      } finally { app.Date = RealDate; }
     });
 
     test('NOTSTARTED applying a phase never stops something already running', () => {

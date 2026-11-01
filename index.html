@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.353';
+var APP_VERSION='4.9.354';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4512,6 +4512,11 @@ window.blabOpenSession = function(week, day){
     return;
   }
   window._blabCurrentSession = {week:week, day:day, data:sess};
+  // v4.9.354 — Draft conditioning / sprint days run on the WOD timers.
+  if(sess.conditioning && typeof window.draftOpenConditioning === 'function'){
+    window.draftOpenConditioning(week, day, sess);
+    return;
+  }
   // Translate BLAB session into Phoenix session format and use the existing renderer
   var phoenixSess = window.blabToPhoenixSession(sess, week, day);
   if(phoenixSess){
@@ -8204,94 +8209,127 @@ window.draftGetSessionData = function(week, day, s){
 
   var taper = (t === 5);
 
-  // ════ MON — CONDITIONING (45 min, field or gym) ═════════════════════════════
-  // Rugby league repeated-effort work: bouts of 2-3 efforts (sprint / hit-and-get-up),
-  // recovery shrinking across the block — the shape of the hardest passages of a game
-  // (Black & Gabbett 2015; Johnston & Gabbett 2011). Then 15 s on / 15 s off running.
-  if(day === 1){
-    // v4.9.345 — Bronco baseline moved from training week 1 to week 2 (no tape on 2 Nov).
-    if(t === 2 || taper){
-      return sess('Conditioning — Bronco ' + (t === 2 ? 'Baseline' : 'Retest'), 40, [
-        std('Conditioning Warm-up', 1, '12 min', 'Jog, dynamic mobility, 3 build-up runs.'),
-        afap('Bronco Test', 1, 0, [{name:'Shuttle 20 m out and back, then 40 m, then 60 m', reps:'5 sets non-stop (1200 m)'}],
-          'FIELD. Five sets of 20-40-60 m shuttles, no rest, 1200 m total. Start the clock and go. Your time is the score.'),
-        afap('2 km Row Test', 1, 0, [{name:'Row', reps:'2000 m'}],
-          'WET-WEATHER OPTION ONLY. Skip this if you ran the Bronco.'),
-        std('Cool-down', 1, '8 min', 'Easy jog or bike, then hips and calves.')
-      ]);
-    }
-    // level-scaled volume and density
-    var bouts = [null, 6, 7, 8, 9, 10][LC];
-    var efforts = (t >= 3) ? 3 : 2;
-    var restRHIE = [null, 120, 105, 90, 75, 60][LC] - (Math.max(0, t - 2) * 10);
-    if(t === 1){
-      // Week 1 is gym-only: the field course is not marked until Sat 7 Nov.
-      return sess('Conditioning — Repeated Efforts (Gym)', 45, [
-        std('Conditioning Warm-up', 1, '10 min', 'Bike or row, dynamic mobility, 2 practice burpees.'),
-        std('Repeated-Effort Bouts', bouts, '2 efforts',
-          'Each bout: 8 s all-out assault bike sprint, 1 burpee, 8 s all-out bike sprint. Rest ' + restRHIE + ' s between bouts. ' +
-          'Level ' + LC + ' of 5. Rate it honestly at the end: an easy rating moves you up a level next week.'),
-        std('15/15 Intervals', ivSets, ivMins + ' min blocks',
-          'Assault bike: 15 s hard / 15 s easy for ' + ivMins + ' min, 3 min easy between blocks. Aim for the same calories every hard rep.'),
-        std('Cool-down', 1, '5 min', 'Easy bike, hips, calves.')
-      ]);
-    }
-    restRHIE = Math.max(45, restRHIE);
-    var ivSets = (LC >= 4) ? 3 : 2;
-    var ivMins = [null, 5, 6, 6, 7, 8][LC];
-    var ivDist = [null, '55-60 m', '60-65 m', '65-70 m', '70-75 m', '75-80 m'][LC];
-    var effortTxt = (efforts === 2)
-      ? 'sprint 20 m, hit the ground and get up, sprint 20 m'
-      : 'sprint 20 m, hit and get up, sprint 20 m, 5 s sled or bag drive';
-    return sess('Conditioning — Repeated Efforts', 45, [
-      std('Conditioning Warm-up', 1, '10 min', 'Jog, dynamic mobility, 3 build-up runs, 2 practice hit-and-get-ups.'),
-      std('Repeated-Effort Bouts', bouts, efforts + ' efforts',
-        'Each bout: ' + effortTxt + '. Rest ' + restRHIE + ' s between bouts. ' +
-        'GYM: 8 s assault bike sprint, burpee, 8 s bike sprint' + (efforts === 3 ? ', 10 m prowler push' : '') + '. ' +
-        'Level ' + LC + ' of 5. Rate it honestly at the end: an easy rating moves you up a level next week.'),
-      std('15/15 Intervals', ivSets, ivMins + ' min blocks',
-        '15 s on / 15 s off for ' + ivMins + ' min, 3 min easy between blocks. FIELD: cover ' + ivDist + ' in each 15 s. ' +
-        'GYM: assault bike, hard 15 s / easy 15 s, same calories every rep.'),
-      std('Cool-down', 1, '5 min', 'Walk, hips, calves.')
+  // ════ MON / WED — CONDITIONING AND SPRINT, RUN ON THE WOD TIMERS (v4.9.354) ════
+  // Jon, 2 Nov: "the first conditioning session wasn't built very well - need more
+  // specificity than just undetermined rounds and also need to have a way to score what
+  // time doing and timers etc - like in the wods not the lift sessions". (The week-1 gym
+  // 15/15 also read ivSets/ivMins before they were assigned: "undefined × undefined".)
+  // Each timed part is a hidden PHX_LIB-shaped session run by the WOD runners, so it
+  // gets the count-in, work/rest timers, per-effort logging, a score and Records
+  // history. `conditioning` carries the parts; `exercises` mirrors them for the audit
+  // view and for the engine, which reads 'Repeated-Effort Bouts' / 'Acceleration Sprints'.
+  function libSpec(id, name, renderer, scoreType, scoreLabel, format, note, movs, cfg){
+    return { id:id, name:name, cat:'WOD', tier:'DRAFT', hidden:true, renderer:renderer, scoreType:scoreType,
+             scoreLabel:scoreLabel, format:format, note:note, config:cfg || {},
+             movements:(movs || []).map(function(m){ return { name:m[0], detail:m[1] || '' }; }) };
+  }
+  function part(title, presc, spec, alt){ return { kind: spec ? 'timed' : 'check', title:title, presc:presc, spec:spec || null, alt:alt || null }; }
+  function partsSess(name, mins, parts){
+    var exs = parts.map(function(p){ return std(p.title, 1, p.spec ? (p.spec.config.efforts ? p.spec.config.efforts + ' efforts' : 'For time') : 'Do it', p.presc); });
+    var o = sess(name, mins, exs);
+    o.conditioning = parts;
+    return o;
+  }
+  function bronco(isRetest){
+    return partsSess('Conditioning — Bronco ' + (isRetest ? 'Retest' : 'Baseline'), 40, [
+      part('Warm-up', '12 min: jog, dynamic mobility, 3 build-up runs.'),
+      part('Bronco Test', 'Cones at 0, 20, 40 and 60 m. One set = run to 20 m and back, 40 m and back, 60 m and back (240 m). Five sets non-stop = 1200 m. Tap a movement as each set finishes; your time is the score.',
+        libSpec('draft-bronco', 'Bronco Test', 'time', 'time', 'Bronco time', 'FOR TIME · 1200 m',
+          'Five sets of 20-40-60 m out-and-back shuttles, no rest. Do not pace the first set.',
+          [['Set 1', '20 · 40 · 60 m out and back'], ['Set 2', '20 · 40 · 60 m out and back'], ['Set 3', '20 · 40 · 60 m out and back'], ['Set 4', '20 · 40 · 60 m out and back'], ['Set 5', '20 · 40 · 60 m out and back']],
+          { chipper:true }),
+        libSpec('draft-row2k', '2 km Row Test', 'time', 'time', '2 km row time', 'FOR TIME · 2000 m',
+          'Wet-weather option only. Damper 5-6.', [['Row', '2000 m']], { chipper:true })),
+      part('Cool-down', '8 min easy jog or bike, then hips and calves.')
     ]);
   }
+  if(day === 1){
+    if(t === 2) return bronco(false);
+    if(taper) return bronco(true);
+    var bouts = [null, 6, 7, 8, 9, 10][LC];
+    var effortsPerBout = (t >= 3) ? 3 : 2;
+    var restRHIE = Math.max(45, [null, 120, 105, 90, 75, 60][LC] - (Math.max(0, t - 2) * 10));
+    var ivSets = (LC >= 4) ? 3 : 2;
+    var ivMins = [null, 5, 6, 6, 7, 8][LC];
+    var ivReps = ivMins * 2;
+    var ivDist = [null, 55, 60, 65, 70, 75][LC];
+    var gymBoutTxt = '8 s all-out bike sprint, 1 burpee, 8 s all-out bike sprint' + (effortsPerBout === 3 ? ', 10 m prowler push' : '');
+    var fieldBoutTxt = (effortsPerBout === 2)
+      ? 'sprint 20 m, drop to the ground and get up, sprint 20 m'
+      : 'sprint 20 m, drop and get up, sprint 20 m, 5 s sled or bag drive';
+    var lbl = function(n, txt){ var a = []; for(var k = 1; k <= n; k++) a.push('Bout ' + k + ' · ' + txt); return a; };
+    var rhieGym = libSpec('draft-rhie-gym', 'Repeated Efforts — Bike', 'intervals', 'calories', 'Total calories',
+      bouts + ' BOUTS · REST ' + restRHIE + ' s',
+      'Each bout: ' + gymBoutTxt + '. Count the bike calories for the whole bout, tap Log Round, rest runs automatically.',
+      [['Bout', gymBoutTxt]], { efforts:bouts, work:'Bout', restSec:restRHIE, countReps:true, countLabel:'Bike calories this bout', labels:lbl(bouts, 'sprint · burpee · sprint') });
+    var rhieField = libSpec('draft-rhie-field', 'Repeated Efforts — Field', 'intervals', 'avg_split', 'Average bout time',
+      bouts + ' BOUTS · REST ' + restRHIE + ' s',
+      'Each bout: ' + fieldBoutTxt + '. Tap Log Split the moment you finish; rest runs automatically. Score is your average bout time.',
+      [['Bout', fieldBoutTxt]], { efforts:bouts, work:'Bout', restSec:restRHIE, labels:lbl(bouts, fieldBoutTxt) });
+    var b1515 = libSpec('draft-1515-bike', '15/15 Bike', 'intervals', 'calories', 'Calories for the block',
+      ivReps + ' × 15 s ON / 15 s OFF',
+      'Assault bike. 15 s hard, 15 s easy pedal, ' + ivReps + ' times (' + ivMins + ' min). Count calories each hard 15 s and tap Log Round; the timer moves you on.',
+      [['15 s hard', 'calories']], { efforts:ivReps, work:'15 s hard', workSec:15, restSec:15, countReps:true, countLabel:'Calories this 15 s' });
+    var r1515 = libSpec('draft-1515-run', '15/15 Run', 'intervals', 'reps', 'Reps on target',
+      ivReps + ' × 15 s ON / 15 s OFF',
+      'Mark a line ' + ivDist + ' m out. Run it in 15 s, walk back in 15 s, ' + ivReps + ' times. Tap + if you reached the line, then Log Round.',
+      [['15 s run', ivDist + ' m']], { efforts:ivReps, work:'Run ' + ivDist + ' m', workSec:15, restSec:15, countReps:true, countLabel:'Reached the line? Tap + once' });
+    var cParts = [part('Warm-up', t === 1 ? '10 min: easy bike or row, dynamic mobility, 2 practice burpees.' : '10 min: jog, dynamic mobility, 3 build-up runs, 2 practice drop-and-get-ups.')];
+    cParts.push(part('Repeated-Effort Bouts',
+      bouts + ' bouts, ' + restRHIE + ' s rest between. ' + (t === 1 ? 'GYM: ' + gymBoutTxt + '.' : 'FIELD: ' + fieldBoutTxt + '. Gym version listed too.') + ' Level ' + LC + ' of 5.',
+      t === 1 ? rhieGym : rhieField, t === 1 ? null : rhieGym));
+    for(var bk = 1; bk <= ivSets; bk++){
+      cParts.push(part('15/15 Block ' + bk + ' of ' + ivSets,
+        ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min.' + (bk < ivSets ? ' Then 3 min easy before the next block.' : ''),
+        t === 1 ? b1515 : r1515, t === 1 ? null : b1515));
+    }
+    cParts.push(part('Cool-down', '5 min easy, hips, calves.'));
+    return partsSess(t === 1 ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts);
+  }
 
-  // ════ WED — SPRINT & POWER (45 min, field or gym) ═══════════════════════════
   if(day === 3){
+    var accReps = taper ? 4 : [null, 5, 6, 6, 7, 8][LS];
+    var accDist = taper ? 20 : ((t <= 2) ? 10 : 20);
+    var sledN = (t === 4) ? 4 : [null, 4, 5, 5, 6, 6][LS];
+    var accField = libSpec('draft-accel-field', 'Acceleration Sprints — ' + accDist + ' m', 'intervals', 'avg_split', 'Average sprint time',
+      accReps + ' × ' + accDist + ' m · REST 90 s',
+      (taper ? 'At 90%, smooth. ' : 'Max intent. ') + '3-point or falling start. Tap Log Split as you cross the line, or type the time from your phone or video timer.',
+      [['Sprint', accDist + ' m']], { efforts:accReps, work:'Sprint ' + accDist + ' m', restSec:90 });
+    var accGym = libSpec('draft-accel-gym', 'Acceleration — Prowler 10 m', 'intervals', 'avg_split', 'Average sprint time',
+      accReps + ' × 10 m · REST 90 s',
+      'Prowler light enough to run, heavy enough to drive. Tap Log Split at the line.',
+      [['Prowler sprint', '10 m']], { efforts:accReps, work:'Prowler 10 m', restSec:90 });
+    var sled = libSpec('draft-sled', 'Resisted Sprints — 15 m', 'intervals', 'avg_split', 'Average time',
+      sledN + ' × 15 m · REST 120 s',
+      'Heavy sled push or drag, about half your sprint speed (or a hill sprint). Tap Log Split at 15 m.',
+      [['Heavy sled', '15 m']], { efforts:sledN, work:'Sled 15 m', restSec:120 });
     if(taper){
-      return sess('Sprint & Power — Taper', 30, [
-        std('Sprint Warm-up', 1, '12 min', 'A-skips, B-skips, wall drills, 3 build-ups.'),
-        std('Acceleration Sprints', 4, '20 m', 'At 90%. Full walk-back rest. Smooth and fast, nothing to prove today.'),
-        std('Agility Rehearsal', 2, '5-10-5 + 3-cone', 'One of each, smooth, to rehearse Saturday. Not timed.')
+      return partsSess('Sprint & Power — Taper', 30, [
+        part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups.'),
+        part('Acceleration Sprints', '4 × 20 m at 90%, full walk-back rest. Smooth and fast, nothing to prove today.', accField, accGym),
+        part('Agility Rehearsal', 'One 5-10-5 and one 3-cone, smooth, to rehearse Saturday. Not timed.')
       ]);
     }
-    var accReps = [null, 5, 6, 6, 7, 8][LS];
     if(t === 1){
-      // Week 1 is gym-only (no measured course until Sat 7 Nov).
-      return sess('Sprint & Power (Gym)', 45, [
-        std('Sprint Warm-up', 1, '12 min', 'Bike, A-skips, wall drills, 3 fast prowler build-ups.'),
-        std('Acceleration Sprints', accReps, '10 m prowler',
-          'Prowler sprint, light enough to run, heavy enough to drive. Full rest (about 90 s). Max intent every rep. Level ' + LS + ' of 5.'),
-        std('Resisted Sprints', [null, 4, 5, 5, 6, 6][LS], '15 m heavy sled',
-          'Heavy sled push or drag, about half your sprint speed. Rest 2 min.'),
-        std('Lateral Bound', 3, '4 / side', 'Stick each landing for a second. Builds the change of direction for the shuttle.'),
-        std('Seated Box Jump', 3, 3, 'Sit on a bench, then explode onto the box. Step down.')
+      return partsSess('Sprint & Power (Gym)', 45, [
+        part('Sprint Warm-up', '12 min: bike, A-skips, wall drills, 3 fast prowler build-ups.'),
+        part('Acceleration Sprints', accReps + ' × 10 m prowler sprints, 90 s rest. Level ' + LS + ' of 5.', accGym),
+        part('Resisted Sprints', sledN + ' × 15 m heavy sled, 2 min rest.', sled),
+        part('Lateral Bound', '3 × 4 each side. Stick each landing for a second.'),
+        part('Seated Box Jump', '3 × 3. Sit on a bench, explode onto the box, step down.')
       ]);
     }
-    var accDist = (t <= 2) ? '10 m' : '20 m';
-    var sled = (t === 4) ? 4 : [null, 4, 5, 5, 6, 6][LS];
-    var agil = (t % 2 === 1) ? '5-10-5 Shuttle' : '3-Cone Drill';
-    var plyo = [null, ['Bounds', '3 × 5'], ['Hurdle Hops (low)', '3 × 5'], ['Single-Leg Bounds', '3 × 4 / leg'], ['Depth Jump to Broad', '3 × 3']][t];
-    return sess('Sprint & Power', 45, [
-      std('Sprint Warm-up', 1, '12 min', 'A-skips, B-skips, wall drills, 3 build-ups to 90%.'),
-      std('Acceleration Sprints', accReps, accDist,
-        'From a 3-point or falling start. Full walk-back rest (about 90 s). Max intent every rep. ' +
-        'GYM: heavy prowler sprint, same count, 10 m. Level ' + LS + ' of 5.'),
-      std('Resisted Sprints', sled, '15 m',
-        'Sled heavy enough to roughly halve your speed, or hill sprints on the field. Rest 2 min.'),
-      std(agil, 4, '1 rep', 'Alternate directions. Full rest. Clean cuts, low hips.'),
-      std(plyo[0], parseInt(plyo[1], 10) || 3, plyo[1].replace(/^\d+\s*×\s*/, ''), 'Stick every landing. Quality over quantity.'),
-      result('20 m Sprint (sec)', 'sec', 'Optional: record your best timed 20 m if you have gates or a phone timer.')
+    var agilName = (t % 2 === 1) ? '5-10-5 Shuttle' : '3-Cone Drill';
+    var agil = libSpec((t % 2 === 1) ? 'draft-shuttle' : 'draft-3cone', agilName, 'intervals', 'avg_split', 'Average time',
+      '4 REPS · REST 60 s', 'Alternate directions. Clean cuts, low hips. Tap Log Split at the finish, or type the video time.',
+      [[agilName, '1 rep']], { efforts:4, work:agilName, restSec:60 });
+    var plyo = [null, null, ['Hurdle Hops (low)', '3 × 5'], ['Single-Leg Bounds', '3 × 4 / leg'], ['Depth Jump to Broad', '3 × 3']][t] || ['Bounds', '3 × 5'];
+    return partsSess('Sprint & Power', 45, [
+      part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups to 90%.'),
+      part('Acceleration Sprints', accReps + ' × ' + accDist + ' m, 90 s rest. Level ' + LS + ' of 5. Gym version listed too.', accField, accGym),
+      part('Resisted Sprints', sledN + ' × 15 m sled or hill, 2 min rest.', sled),
+      part(agilName, '4 reps, 60 s rest, alternate directions.', agil),
+      part(plyo[0], plyo[1] + '. Stick every landing.')
     ]);
   }
 
@@ -8615,6 +8653,169 @@ window.draftTodayEntry = function(){
     for(var i = 0; i < list.length; i++){ if(list[i] && !list[i].custom && list[i].blabWeek) return list[i]; }
   } catch(_e){}
   return null;
+};
+
+
+// ── v4.9.354 — CONDITIONING SESSION SCREEN (WOD-style) ────────────────────────
+// Lists the parts of a Mon/Wed Draft session. Timed parts start the WOD runner
+// (_phxStartSession) on a hidden, generated library session; each part's status and
+// score come from today's library scores, so a part done, the app closed and reopened
+// still shows as done. Untimed parts (warm-up, plyos) are ticks. Completing asks one
+// rating, mirrors it for the engine, then completes the Draft session as normal.
+window._draftLibActive = window._draftLibActive || {};
+window._draftLibList = function(){
+  var out = [];
+  Object.keys(window._draftLibActive).forEach(function(k){ out.push(window._draftLibActive[k]); });
+  return out;
+};
+function _draftRegisterParts(parts){
+  (parts || []).forEach(function(p){
+    if(p.spec) window._draftLibActive[p.spec.id] = p.spec;
+    if(p.alt) window._draftLibActive[p.alt.id] = p.alt;
+  });
+}
+function _draftLocalDay(iso){
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return _draftISO(d);
+}
+// Scores logged TODAY for a library id, oldest first.
+window._draftPartScores = function(id){
+  var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : _draftISO(new Date());
+  var all = (typeof _phxScoresAll === 'function') ? _phxScoresAll() : [];
+  return all.filter(function(r){ return r && r.wod_id === id && _draftLocalDay(r.date) === today && !r.dry_run; });
+};
+// Which parts are done, and with what score. Blocks sharing one id are done in order.
+window.draftConditioningStatus = function(parts, checks){
+  var used = {};
+  return (parts || []).map(function(p, i){
+    if(p.kind === 'check') return { done: !!(checks && checks.indexOf(i) >= 0) };
+    var ids = [p.spec.id].concat(p.alt ? [p.alt.id] : []);
+    for(var k = 0; k < ids.length; k++){
+      var list = window._draftPartScores(ids[k]);
+      var n = used[ids[k]] || 0;
+      if(list.length > n){
+        used[ids[k]] = n + 1;
+        var r = list[n];
+        return { done: true, score: (typeof phxFormatScore === 'function') ? phxFormatScore(r.score_type, r.score) : r.score, via: ids[k] };
+      }
+    }
+    return { done: false };
+  });
+};
+function _draftChkKey(week, day){
+  var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user && currentSession.user.id) || '';
+  var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : _draftISO(new Date());
+  return 'draft_chk_' + uid + '_' + today + '_' + week + '_' + day;
+}
+function _draftChecks(week, day){
+  try { return JSON.parse(localStorage.getItem(_draftChkKey(week, day)) || '[]'); } catch(_e){ return []; }
+}
+function _draftSetChecks(week, day, arr){
+  try { localStorage.setItem(_draftChkKey(week, day), JSON.stringify(arr)); } catch(_e){}
+}
+window.draftOpenConditioning = function(week, day, sess){
+  sess = sess || window.blabGetSessionData(week, day);
+  if(!sess || !sess.conditioning) return false;
+  var parts = sess.conditioning;
+  _draftRegisterParts(parts);
+  var old = document.getElementById('draft-cond'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'draft-cond';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9500;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;' +
+    'padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);';
+  document.body.appendChild(ov);
+  var dry = !!window._blabDryRun;
+  var engineName = parts.some(function(p){ return p.title === 'Repeated-Effort Bouts'; }) ? 'Repeated-Effort Bouts'
+                 : (parts.some(function(p){ return p.title === 'Acceleration Sprints'; }) ? 'Acceleration Sprints' : null);
+  var lastSig = '';
+  var B = 'font-family:var(--font-d);font-weight:900;text-transform:uppercase;letter-spacing:1px;border-radius:var(--radius);cursor:pointer;';
+  function paint(force){
+    var checks = _draftChecks(week, day);
+    var st = window.draftConditioningStatus(parts, checks);
+    var sig = JSON.stringify(st);
+    if(!force && sig === lastSig) return;
+    lastSig = sig;
+    var nDone = st.filter(function(x){ return x.done; }).length;
+    var h = '<div style="padding:16px 18px 40px;max-width:640px;margin:0 auto;">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+         '<button data-dc="close" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 14px;font-family:var(--font-d);font-size:12px;color:var(--text2);">&larr; Back</button>' +
+         '<div style="font-family:var(--font-d);font-size:11px;color:var(--text3);">' + nDone + ' / ' + parts.length + ' done</div></div>';
+    h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-top:10px;">' +
+         ((typeof window.trnEyebrow === 'function') ? window.trnEyebrow(week) : 'Week ' + week) + (dry ? ' &middot; preview' : '') + '</div>';
+    h += '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.05;margin:4px 0 14px;">' + _esc(sess.name) + '</div>';
+    parts.forEach(function(p, i){
+      var s = st[i];
+      var edge = s.done ? '#3a7d44' : 'var(--border)';
+      h += '<div style="background:var(--bg2);border:1px solid ' + edge + ';border-left:3px solid ' + (s.done ? '#3a7d44' : (p.kind === 'timed' ? 'var(--gold)' : 'var(--border2)')) + ';border-radius:var(--radius);padding:13px 14px;margin-bottom:10px;">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;">' +
+           '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text);">' + _esc(p.title) + '</div>' +
+           (s.done ? '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;color:#7fd18b;white-space:nowrap;">&#10003; ' + (s.score ? _esc(s.score) : 'Done') + '</div>' : '') + '</div>';
+      if(p.spec) h += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--gold);margin-top:3px;">' + _esc(p.spec.format) + '</div>';
+      h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-top:5px;">' + _esc(p.presc) + '</div>';
+      if(p.kind === 'timed'){
+        h += '<div style="display:flex;gap:8px;margin-top:10px;">' +
+             '<button data-dc-start="' + i + '" style="flex:1.4;padding:12px;background:' + (s.done ? 'transparent' : 'var(--gold)') + ';border:' + (s.done ? '1px solid var(--border2)' : 'none') + ';color:' + (s.done ? 'var(--text2)' : '#000') + ';font-size:12px;' + B + '">' + (s.done ? 'Do again' : '&#9654; Start timer') + '</button>' +
+             (p.alt ? '<button data-dc-alt="' + i + '" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:11px;' + B + '">' + (/gym|bike|prowler/i.test(p.alt.name) ? 'Gym version' : _esc(p.alt.name)) + '</button>' : '') +
+             '</div>';
+      } else {
+        h += '<button data-dc-chk="' + i + '" style="margin-top:10px;padding:10px 14px;background:' + (s.done ? 'rgba(58,125,68,0.15)' : 'transparent') + ';border:1px solid ' + (s.done ? '#3a7d44' : 'var(--border2)') + ';color:' + (s.done ? '#7fd18b' : 'var(--text2)') + ';font-size:11px;' + B + '">' + (s.done ? '&#10003; Done' : 'Mark done') + '</button>';
+      }
+      h += '</div>';
+    });
+    h += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-top:6px;">' +
+         '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">How hard was the session overall?</div>' +
+         '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;"><input id="dc-rpe" type="range" min="1" max="10" step="1" value="7" style="flex:1;accent-color:var(--gold);">' +
+         '<div id="dc-rpe-v" style="font-family:var(--font-d);font-size:28px;font-weight:900;color:var(--gold);min-width:32px;text-align:right;">7</div></div>' +
+         '<div style="font-size:11px;color:var(--text3);margin-top:4px;">6 or less moves you up a level next week. 9 or more moves you down.</div>' +
+         '<button data-dc="complete" style="width:100%;margin-top:12px;padding:16px;background:var(--gold);border:none;color:#000;font-size:14px;' + B + '">Complete session &#10003;</button></div>';
+    h += '</div>';
+    var keep = document.getElementById('dc-rpe'); var rv = keep ? keep.value : null;
+    ov.innerHTML = h;
+    if(rv){ var nr = document.getElementById('dc-rpe'); if(nr){ nr.value = rv; document.getElementById('dc-rpe-v').textContent = rv; } }
+    var rpe = document.getElementById('dc-rpe');
+    if(rpe) rpe.addEventListener('input', function(){ document.getElementById('dc-rpe-v').textContent = rpe.value; });
+  }
+  function close(){
+    if(window._draftCondTick){ clearInterval(window._draftCondTick); window._draftCondTick = null; }
+    var o = document.getElementById('draft-cond'); if(o) o.remove();
+  }
+  ov.addEventListener('click', function(e){
+    var t = e.target.closest ? e.target.closest('[data-dc],[data-dc-start],[data-dc-alt],[data-dc-chk]') : null;
+    if(!t) return;
+    if(t.hasAttribute('data-dc-start') || t.hasAttribute('data-dc-alt')){
+      var p = parts[parseInt(t.getAttribute(t.hasAttribute('data-dc-start') ? 'data-dc-start' : 'data-dc-alt'), 10)];
+      var spec = t.hasAttribute('data-dc-alt') ? p.alt : p.spec;
+      _draftRegisterParts([p]);
+      if(typeof _phxStartSession === 'function') _phxStartSession(spec.id, dry);
+      return;
+    }
+    if(t.hasAttribute('data-dc-chk')){
+      var i = parseInt(t.getAttribute('data-dc-chk'), 10);
+      var c = _draftChecks(week, day), at = c.indexOf(i);
+      if(at >= 0) c.splice(at, 1); else c.push(i);
+      _draftSetChecks(week, day, c);
+      paint(true);
+      return;
+    }
+    var a = t.getAttribute('data-dc');
+    if(a === 'close'){ close(); if(typeof navTo === 'function') navTo('today'); return; }
+    if(a === 'complete'){
+      var r = parseInt((document.getElementById('dc-rpe') || {}).value, 10) || 0;
+      close();
+      if(dry){ if(typeof window._blabExitAuditSession === 'function') window._blabExitAuditSession(); return; }
+      if(engineName && r && typeof window.draftRecordRpe === 'function') window.draftRecordRpe(engineName, r);
+      window.blabCompleteSession(week, day);
+    }
+  });
+  paint(true);
+  // Scores land from the runner on top of this screen; repaint when they do.
+  if(window._draftCondTick) clearInterval(window._draftCondTick);
+  window._draftCondTick = setInterval(function(){
+    if(!document.getElementById('draft-cond')){ clearInterval(window._draftCondTick); window._draftCondTick = null; return; }
+    paint(false);
+  }, 1000);
+  return true;
 };
 
 // Block RPE mirror — the RPE overlay writes set_logs in Supabase only. The engine needs
@@ -40190,7 +40391,7 @@ CORE: [
 };
 
 // ─────────────────────────── Accessors ─────────────────────────────────────
-function phxAllWods(){ return PHX_LIB.WOD.concat(PHX_LIB.AEROBIC||[]); }
+function phxAllWods(){ return PHX_LIB.WOD.concat(PHX_LIB.AEROBIC||[]).concat((typeof window !== 'undefined' && typeof window._draftLibList === 'function') ? window._draftLibList() : []); }
 function phxAllCore(){ return PHX_LIB.CORE; }
 function phxAllSessions(){ return phxAllWods().concat(phxAllCore()); }
 function phxSessionById(id){ var a=phxAllSessions(); for(var i=0;i<a.length;i++){ if(a[i].id===id) return a[i]; } return null; }
@@ -40235,6 +40436,7 @@ function phxBuildSessionPlan(s){
     if(!cfg.work) throw new Error(s.id+': intervals needs config.work');
     plan.efforts=cfg.efforts; plan.work=cfg.work; plan.restSec=cfg.restSec||0;
     plan.countReps=!!cfg.countReps; plan.labels=cfg.labels||null; plan.workSec=cfg.workSec||0;
+    plan.countLabel=cfg.countLabel||'Reps this round';   // v4.9.354: 'Calories this round' etc.
   }
   return plan;
 }
@@ -41004,7 +41206,7 @@ function _phxRenderIntervals(s){
       '<div id="phx-run-clock" style="font-family:var(--font-d);font-size:52px;font-weight:900;color:var(--gold);line-height:1;margin-top:4px;">00:00</div></div>'+
     '<div style="padding:6px 16px 16px;flex:1;">'+
       (plan.countReps ?
-        '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">Reps this round</div>'+
+        '<div style="text-align:center;"><div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);">'+plan.countLabel+'</div>'+
         '<div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:6px;">'+
           '<div id="phx-int-repminus" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text2);cursor:pointer;">–</div>'+
           '<div id="phx-int-reps" style="font-family:var(--font-d);font-size:40px;font-weight:900;color:var(--text);min-width:60px;">0</div>'+

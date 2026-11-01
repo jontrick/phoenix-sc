@@ -317,3 +317,10 @@ the engine, then `blabCompleteSession`). Intervals runner gained `config.countLa
 Fixed: week-1 gym 15/15 read ivSets/ivMins before assignment ("undefined").
 Also pinned `NOTSTARTED applying a phase…` (tests/peptides.mjs) to 15 Oct 2026: it
 decayed on 2 Nov when Phase 2's last start date passed — red on an unchanged build.
+
+**v4.9.355 — retest over two weekends, Jon's lift orders (2 Nov).** Sat wk5 (28 Nov):
+Retest A = squat → power clean → bench. Sat wk6 (5 Dec): field combine only. Sun wk6
+(6 Dec): Retest B = deadlift → HEAVY strict press → 102.5 kg reps → pull-ups ("load
+better than volume"). Week-1 Sunday uses the same B order. `liftsA()` / `liftsB()` in
+the generator; pinned in tests (SPLIT). Future blocks' tests should follow the same
+two-weekend shape.

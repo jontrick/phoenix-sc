@@ -5792,13 +5792,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(sun.includes('Bench 102.5 kg Rep Test') && sun.includes('Deadlift — 1RM Test'), 'Sunday lifts');
     assert.equal(app.blabGetSessionData(1, 5).name, 'Lift Test — Squat, Clean, Bench');
     assert.deepEqual(sat.filter((n) => /1RM/.test(n)), ['Back Squat — 1RM Test', 'Power Clean — 1RM Test', 'Bench Press — 1RM Test'], 'Jon\'s order: squat, clean, bench');
-    assert.deepEqual(sun, ['Deadlift — 1RM Test', 'Bench 102.5 kg Rep Test', 'Strict Pull-Up Test', 'Strict Press — 1RM Test'], 'Sunday: deadlift, reps before press, pull-ups, press last');
+    assert.deepEqual(sun.filter((n) => !/Warm-up/.test(n)), ['Deadlift — 1RM Test', 'Strict Press — 1RM Test', 'Bench 102.5 kg Rep Test', 'Strict Pull-Up Test'], 'Jon\'s ruling 2 Nov: deadlift, heavy press, then reps and pull-ups');
   });
 
-  test('SPLIT: the December retest Saturday keeps squat, clean, bench in that order', () => {
+  test('SPLIT: the retest is spread over two weekends (Jon, 2 Nov)', () => {
     startDraft();
-    const n = app.blabGetSessionData(6, 5).exercises.map((e) => e.name).filter((x) => /1RM/.test(x));
-    assert.deepEqual(n, ['Back Squat \u2014 1RM Test', 'Power Clean \u2014 1RM Test', 'Bench Press \u2014 1RM Test']);
+    const names = (w, d) => app.blabGetSessionData(w, d).exercises.map((e) => e.name);
+    const lifts = (w, d) => names(w, d).filter((x) => /1RM|Rep Test|Pull-Up Test/.test(x));
+    assert.deepEqual(lifts(5, 5), ['Back Squat \u2014 1RM Test', 'Power Clean \u2014 1RM Test', 'Bench Press \u2014 1RM Test'], 'Sat 28 Nov: squat, clean, bench');
+    assert.ok(!names(5, 5).some((n) => /Speed Bench/.test(n)), 'replacing that Saturday\'s speed upper');
+    assert.deepEqual(lifts(6, 5), [], 'Sat 5 Dec: no lifts');
+    assert.ok(names(6, 5).includes('40-yd Dash (sec)'), 'just the field combine');
+    assert.deepEqual(lifts(6, 6), ['Deadlift \u2014 1RM Test', 'Strict Press \u2014 1RM Test', 'Bench 102.5 kg Rep Test', 'Strict Pull-Up Test'], 'Sun 6 Dec: deadlift, press, reps, pull-ups');
+    assert.equal(app.blabGetSessionData(5, 5).name, 'Retest A \u2014 Squat, Clean, Bench');
   });
 
   test('SPLIT: Sat 7 Nov is field tests first, then speed upper', () => {

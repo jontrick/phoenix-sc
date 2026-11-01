@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.354';
+var APP_VERSION='4.9.355';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8004,12 +8004,13 @@ window.draftWeekName = function(week){
 window.draftDayLabel = function(week, day){
   if(week === 1){
     if(day === 5) return 'Lift Test — Squat, Clean, Bench';
-    if(day === 6) return 'Lift Test — Deadlift, Reps, Press';
+    if(day === 6) return 'Lift Test — Deadlift, Press, Reps';
     return '';
   }
+  if(week === 5 && day === 5) return 'Retest A — Squat, Clean, Bench';
   if(week === 6){
-    if(day === 5) return 'Retest — Speed & Lower';
-    if(day === 6) return 'Retest — Upper & Pull';
+    if(day === 5) return 'Retest — Field Combine';
+    if(day === 6) return 'Retest B — Deadlift, Press, Reps';
   }
   return _TRN_DRAFT_DESC.labels[day] || ('Day ' + day);
 };
@@ -8166,45 +8167,51 @@ window.draftGetSessionData = function(week, day, s){
     ];
   }
 
-  // ════ TEST SESSIONS — week 1 (baseline) and week 6 Sat/Sun (retest) ═════════
-  if((week === 1 || week === 6) && (day === 5 || day === 6)){
-    var tag = (week === 1) ? 'Baseline' : 'Retest';
-    if(day === 5){
-      // v4.9.347 — Jon's order from the 31 Oct test: squat, then clean, then bench. The squat
-      // warms the hips for the cleans and the cleans loosen the shoulders for the bench.
-      // v4.9.346 — Jon's split: clean, squat, bench Sat; deadlift, 102.5 kg reps, pull-ups,
-      // strict press Sun (reps before press so the press does not pre-fatigue the rep test).
-      // v4.9.345 — Jon had no tape for the field course on 31 Oct: the baseline lift
-      // tests stay this weekend and the field tests move to Sat 7 Nov (week 2 day 5).
-      return sess(window.draftDayLabel(week, day), (week === 1) ? 75 : 120, ((week === 1)
-        ? [std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, t-spine, shoulders, then empty-bar clean and squat practice.')]
-        : fieldTests()).concat([
-        { name:'Back Squat — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
+  // ════ TEST SESSIONS ════════════════════════════════════════════════════════
+  // v4.9.355 — Jon, 2 Nov: "I need to break the testing over 2 weekends I was struggling by
+  // last test Sunday". Retest A (squat, clean, bench) moves to the week-5 Saturday; the
+  // field combine has the week-6 Saturday to itself; Retest B is the week-6 Sunday.
+  // ORDERS ARE JON'S RULINGS:
+  //   Lifts A — squat, then power clean, then bench (v4.9.347: "the squat preps for the
+  //             cleans which loosens shoulders for the bench").
+  //   Lifts B — deadlift, then HEAVY strict press, then 102.5 kg reps, then pull-ups
+  //             (2 Nov: "did heavy shoulder press before reps of bench and chins as load
+  //             better than volume").
+  function liftsA(){
+    return [
+      std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, t-spine, shoulders, then empty-bar squat and clean practice.'),
+      { name:'Back Squat — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
           sets:ramp('squat', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
           note:'FIRST: it warms the legs and hips for the cleans. 3-5 min between attempts. Depth: hip crease below the knee. Log the heaviest good single.' },
-        { name:'Power Clean — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:180,
+      { name:'Power Clean — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:180,
           sets:ramp('clean', [50, 65, 75, 85, 92.5, 100], [3, 2, 1, 1, 1, 1], true),
           note:'After the squat. Work up in singles. The last row is a target, not a ceiling: log the heaviest clean you actually made.' + estNote('clean') },
-        { name:'Bench Press — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
+      { name:'Bench Press — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
           sets:ramp('bench', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
           note:'Pause on the chest. 3-5 min between attempts. Log the heaviest good single.' }
-      ]));
-    }
-    return sess(window.draftDayLabel(week, day), 110, [
+    ];
+  }
+  function liftsB(){
+    return [
+      std('Lift Test Warm-up', 1, '10 min', 'Bike or row, hips, hamstrings, shoulders, then empty-bar deadlift and press practice.'),
       { name:'Deadlift — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:240,
         sets:ramp('deadlift', [50, 65, 75, 85, 92.5, 100], [5, 3, 2, 1, 1, 1], true),
         note:'Reset every rep. Log the heaviest good single.' },
-      { name:'Bench 102.5 kg Rep Test', format:'max_reps_sets', sets:1, reps:'Max reps', load_choices:[102.5],
-        prev_best:(s.records && s.records['Bench 102.5 kg Rep Test_max']) || 0, prev_best_wt:102.5,
-        note:'The NFL 225 lb test. 20+ min after the deadlift. Touch the chest, no bounce, full lockout. Goal: 20 reps.' },
-      { name:'Strict Pull-Up Test', format:'max_reps_sets', sets:1, reps:'Max reps',
-        prev_best:(s.records && s.records['Strict Pull-Up Test_max']) || 0,
-        note:'Dead hang every rep, chin over the bar, no kip. 10 min after the bench reps. Goal: 20.' },
       { name:'Strict Press — 1RM Test', format:'percentage_sets', allow_attempts:true, rest:180,
         sets:ramp('press', [50, 70, 85, 92.5, 100], [5, 3, 1, 1, 1], true),
-        note:'OPTIONAL. Skip it if you are cooked. No leg drive.' + estNote('press') }
-    ]);
+        note:'Heavy, straight after the deadlift: load before volume. No leg drive.' + estNote('press') },
+      { name:'Bench 102.5 kg Rep Test', format:'max_reps_sets', sets:1, reps:'Max reps', load_choices:[102.5],
+        prev_best:(s.records && s.records['Bench 102.5 kg Rep Test_max']) || 0, prev_best_wt:102.5,
+        note:'The NFL 225 lb test. After the press. Touch the chest, no bounce, full lockout. Goal: 20 reps.' },
+      { name:'Strict Pull-Up Test', format:'max_reps_sets', sets:1, reps:'Max reps',
+        prev_best:(s.records && s.records['Strict Pull-Up Test_max']) || 0,
+        note:'Dead hang every rep, chin over the bar, no kip. 10 min after the bench reps. Goal: 20.' }
+    ];
   }
+  if(week === 1 && day === 5) return sess(window.draftDayLabel(week, day), 75, liftsA());
+  if((week === 1 || week === 6) && day === 6) return sess(window.draftDayLabel(week, day), 100, liftsB());
+  if(week === 5 && day === 5) return sess(window.draftDayLabel(week, day), 75, liftsA());
+  if(week === 6 && day === 5) return sess(window.draftDayLabel(week, day), 60, fieldTests());
   if(week === 1) return null;            // test week Mon-Thu: nothing scheduled
 
   var taper = (t === 5);

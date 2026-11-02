@@ -334,7 +334,7 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.357'", 'version is 4.9.357');
+has("var APP_VERSION='4.9.358'", 'version is 4.9.358');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -1690,6 +1690,12 @@ has('createSignedUrl',                         'PEP: private bucket read via sig
     ? ok('PEP: ' + k + ' reachable from MORE')
     : bad('PEP: ' + k + ' is no longer listed in MORE');
 });
+
+// v4.9.358 — iOS renders U+25B6 (▶ / &#9654;) as a blue emoji. Jon: "looks cheap and out of
+// place". Use the SVG play icon instead; this fails if the character comes back.
+(html.includes('&#9654;') || html.includes('\u25b6') || html.includes('\u25B6') || html.includes('▶'))
+  ? bad('UI: a ▶ character is back — iOS shows it as a blue emoji; use the SVG play icon')
+  : ok('UI: no ▶ emoji-prone play characters');
 
 // v4.9.152 restore rule — newest timestamp wins
 has('ps._ts = new Date().toISOString();',      'PEP: pepSaveState stamps _ts');

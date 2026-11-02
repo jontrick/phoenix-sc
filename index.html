@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.357';
+var APP_VERSION='4.9.358';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -4680,7 +4680,7 @@ window._blabDecorateAuditSession = function(){
   var banner = document.createElement('div');
   banner.id = 'blab-audit-banner';
   var label = 'Audit · Week '+am.week+' · Day '+am.day+' — '+(am.readOnly ? 'Read-only preview' : 'Dry run · nothing saved');
-  var mid = am.readOnly ? '<button class="bab-btn" onclick="window._blabAuditDryRun()">Dry Run ▶</button>' : '';
+  var mid = am.readOnly ? '<button class="bab-btn" onclick="window._blabAuditDryRun()">Dry Run <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-left:4px;" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg></button>' : '';
   banner.innerHTML = '<div class="bab-label">'+label+'</div>'+mid+
     '<button class="bab-btn ghost" onclick="window._blabExitAuditSession()">Exit</button>';
   var header = screen.querySelector('.app-header');
@@ -8990,7 +8990,7 @@ window.draftOpenConditioning = function(week, day, sess){
       h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-top:5px;">' + _esc(p.presc) + '</div>';
       if(p.kind === 'timed'){
         h += '<div style="display:flex;gap:8px;margin-top:10px;">' +
-             '<button data-dc-start="' + i + '" style="flex:1.4;padding:12px;background:' + (s.done ? 'transparent' : 'var(--gold)') + ';border:' + (s.done ? '1px solid var(--border2)' : 'none') + ';color:' + (s.done ? 'var(--text2)' : '#000') + ';font-size:12px;' + B + '">' + (s.done ? 'Do again' : '&#9654; Start timer') + '</button>' +
+             '<button data-dc-start="' + i + '" style="flex:1.4;padding:12px;background:' + (s.done ? 'transparent' : 'var(--gold)') + ';border:' + (s.done ? '1px solid var(--border2)' : 'none') + ';color:' + (s.done ? 'var(--text2)' : '#000') + ';font-size:12px;' + B + '">' + (s.done ? 'Do again' : '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:6px;" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>Start timer') + '</button>' +
              (p.alt ? '<button data-dc-alt="' + i + '" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:11px;' + B + '">' + (/gym|bike|prowler/i.test(p.alt.name) ? 'Gym version' : _esc(p.alt.name)) + '</button>' : '') +
              '</div>';
       } else {
@@ -13699,13 +13699,15 @@ window._phxVtTime = function(startT, finishT, slowFactor){
   return Math.round(((b - a) / f) * 100) / 100;
 };
 // The button that opens it — drawn only for results measured in seconds.
+// v4.9.358 — Jon: the Start timer button "looks cheap and out of place". iOS draws U+25B6 as a
+// blue emoji; every play symbol is now a small SVG in the button's own colour.
 window._phxVtButtonHTML = function(ex, i){
   if(!ex || ex._blabResultUnit !== 'sec') return '';
   var n = String(ex.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
   return '<button type="button" onclick="window.phxVideoTimerOpen(\'' + n + '\',' + i + ')" ' +
     'style="width:100%;margin-top:8px;padding:10px;background:transparent;border:1px solid var(--gold);border-radius:var(--radius);' +
     'font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--gold);cursor:pointer;">' +
-    '&#9654; Time it from a video</button>';
+    '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:6px;" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>Time it from a video</button>';
 };
 // Put a measured time into the block and log it exactly as the Save button would.
 window._phxVtApply = function(exName, idx, secs){
@@ -43997,7 +43999,7 @@ function openTodaySession(){
     var holdTimerSection = '';
     if(ex._holdSecs){
       holdTimerSection = '<div style="text-align:center;padding:4px 0 8px;">'+
-        '<button type="button" onclick="window._phxStartHoldTimer('+ex._holdSecs+')" style="padding:10px 28px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;">&#9654; Start '+ex._holdSecs+'s Hold</button>'+
+        '<button type="button" onclick="window._phxStartHoldTimer('+ex._holdSecs+')" style="padding:10px 28px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;touch-action:manipulation;"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:6px;" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg> Start '+ex._holdSecs+'s Hold</button>'+
         '</div>';
     }
     block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+

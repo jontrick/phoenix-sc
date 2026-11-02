@@ -5974,4 +5974,42 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/>BW</.test(bw) && /id="bss-ra-0"/.test(bw), 'it says BW and still takes reps');
   });
 
+
+  // ── v4.9.360: no chin-ups in finishers for now; unloaded blocks show their work (Jon, 2 Nov) ──
+  test('FINISH: finishers carry no pull-ups or chin-ups; the heavy pull-up stays', () => {
+    startDraft();
+    let finishers = 0;
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) {
+      const x = app.blabGetSessionData(w, d); if (!x) continue;
+      (x.exercises || []).filter((e) => /^Finisher/.test(e.name)).forEach((e) => {
+        finishers++;
+        assert.ok(!e.movements.some((m) => /pull-up|chin/i.test(m.name)), `W${w}D${d} ${e.name}: ` + e.movements.map((m) => m.name).join(', '));
+      });
+    }
+    assert.ok(finishers >= 4, 'positive control: finishers exist (' + finishers + ')');
+    const tue = app.blabGetSessionData(2, 2).exercises;
+    assert.ok(tue.some((e) => e.name === 'Weighted Pull-Up'), 'Jon: finishers only — weighted pull-up stays');
+    assert.ok(tue.find((e) => /^Finisher/.test(e.name)).movements.some((m) => /Renegade/.test(m.name)), 'renegade rows hold the pull');
+  });
+
+  test('FINISH: an unloaded block lists its work on the card, with no kg target', () => {
+    startDraft();
+    const draw = (hasLoad) => {
+      const made = [];
+      const mk = () => { const e = { style: {}, innerHTML: '', textContent: '', children: [], appendChild(c) { this.children.push(c); return c; },
+        addEventListener() {}, setAttribute() {}, removeAttribute() {}, insertBefore(c) { return c; }, querySelector: () => null, querySelectorAll: () => [],
+        classList: { add() {}, remove() {}, contains: () => false, toggle() {} } }; made.push(e); return e; };
+      const realCreate = app.document.createElement;
+      app.document.createElement = mk;
+      try { app.window._blabBuildComplexBlock({ name: 'Finisher — X', sets: 3, _blabRest: 60, _blabHasLoad: hasLoad,
+        _blabMovements: [{ name: 'DB Renegade Rows (alternating)', reps: 10 }, { name: 'Ball Slams', reps: 10 }] }, 5); }
+      finally { app.document.createElement = realCreate; }
+      return made.map((m) => m.innerHTML + ' ' + m.textContent).join('\n');
+    };
+    const loaded = draw(true), bw = draw(false);
+    assert.ok(/blab-cpx-load-5/.test(loaded) && /Start Complex/.test(loaded), 'positive control: a loaded complex keeps its kg target');
+    assert.ok(!/blab-cpx-load-5/.test(bw), 'an unloaded block has no kg target');
+    assert.ok(/3 rounds for time/.test(bw) && /60 s rest between/.test(bw), 'it states rounds and rest');
+    assert.ok(/DB Renegade Rows \(alternating\)<\/div>/.test(bw) && /Ball Slams<\/div>/.test(bw), 'each movement on its own line');
+  });
 }

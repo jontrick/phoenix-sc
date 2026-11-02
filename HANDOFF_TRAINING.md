@@ -1,5 +1,9 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.360 (2 Nov 2026) — CHIN-UPS OUT OF FINISHERS "FOR NOW"; UNLOADED BLOCKS SHOW THEIR WORK.**
+> Jon: find an alternative to chin-ups in the finishers, scope = finishers only (weighted pull-up and the Sat DB bench / pull-up pair UNCHANGED). Replacement chosen by Jon: DB renegade rows, 10 alternating. Affects "Finisher — Pull / Push / Slam" (training wk 1 and wk 3 Tue). When he says pull-ups are back, revert the two `afap(...)` lines — see the v4.9.360 comment above `function afap`.
+> `_blabBuildComplexBlock`: when `_blabHasLoad` is false the card lists rounds / each movement / rest and "Score: total time", no 0 kg target, button "Start →". Reason: in read-only preview the Start button is shielded, so the work was invisible. Applies to BLAB unloaded afap blocks too (Core Circuit, 100 Push-ups, Bodyweight Complex) — none had a meaningful kg target. Tests: `FINISH:`.
+
 > **v4.9.359 (2 Nov 2026) — BODYWEIGHT IS A STANDARD SET TYPE (Jon: "it should be standard through the programme sessions").**
 > Lift sessions: `std(..., {bodyweight:true, rest:N})` → translator sets `_bodyweight` + `rest_sec` → the renderer drops the kg column (`_noLoad`) and says "· bodyweight". Used on the Tue/Thu/Sat power slots and the taper Box Jump.
 > Supersets: `SS()` flags each movement `bw` by name (`_BW` regex in the Draft module; "weighted" overrides) → translator `_ssBwA/_ssBwB` → `_blabBuildSupersetBlock` shows **BW** in place of the kg box. Reps still logged; loads were already optional.

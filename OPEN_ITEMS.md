@@ -617,3 +617,5 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       named the first for both. Read the actual error text.
 - [x] Coach-worker vision passthrough — **VERIFIED** 2026-08-22, synthetic report with
       unguessable values, all four returned exactly.
+
+- **Pull-ups paused in Draft finishers (2 Nov, v4.9.360)** — renegade rows stand in. Ask Jon when to bring them back. Owner: Training. Weighted pull-up / Sat pair untouched.

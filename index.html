@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.359';
+var APP_VERSION='4.9.360';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5838,12 +5838,24 @@ window._blabBuildComplexBlock = function(ex, idx){
   header.innerHTML =
     '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Exercise '+(idx+1)+'</div>'+
     '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:4px;">'+ex.name+'</div>'+
-    '<div style="font-size:12px;color:var(--text3);margin-bottom:2px;">'+totalSets+' sets &middot; '+movs.map(function(m){return m.name+' x'+m.reps;}).join(', ')+'</div>'+
+    (ex._blabHasLoad
+      ? '<div style="font-size:12px;color:var(--text3);margin-bottom:2px;">'+totalSets+' sets &middot; '+movs.map(function(m){return m.name+' x'+m.reps;}).join(', ')+'</div>'
+      // v4.9.360 — Jon: "can't see the finisher session work in preview". An unloaded
+      // block (finisher, core circuit) lists the work itself — rounds, each movement on
+      // its own line, rest — because in a read-only preview the Start button is shielded
+      // and the runner, which is the only other place the list appears, cannot be opened.
+      : '<div style="font-size:13px;color:var(--text2);margin:6px 0 2px;">'+totalSets+' round'+(totalSets===1?'':'s')+' for time'+(ex._blabRest&&totalSets>1?' &middot; '+ex._blabRest+' s rest between':'')+'</div>'+
+        '<div style="margin:6px 0 2px;border-left:2px solid var(--gold);padding-left:10px;">'+
+          movs.map(function(m){ var r = String(m.reps); return '<div style="font-size:15px;color:var(--text);padding:3px 0;"><span style="font-family:var(--font-d);font-weight:900;color:var(--gold);">'+r+'</span> &nbsp;'+m.name+'</div>'; }).join('')+
+        '</div>')+
     (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);font-style:italic;margin-top:4px;">'+ex.coaching_note+'</div>':'');
 
   // Load adjuster + chips
   var loadDiv = document.createElement('div');
   loadDiv.style.cssText = 'padding:0 16px 12px;';
+  if(!ex._blabHasLoad){
+    loadDiv.innerHTML = '<div style="font-size:12px;color:var(--text3);">Score: total time'+(prevBest?' &middot; Prev best '+Math.floor(prevBest/60)+':'+String(prevBest%60).padStart(2,'0'):'')+'</div>';
+  } else
   loadDiv.innerHTML =
     '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">COACH TARGET</div>'+
     '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'+
@@ -5862,7 +5874,7 @@ window._blabBuildComplexBlock = function(ex, idx){
   // Start button
   var startBtn = document.createElement('button');
   startBtn.style.cssText = 'display:block;margin:0 16px 16px;width:calc(100% - 32px);padding:16px;background:var(--gold);border:none;border-radius:12px;font-family:var(--font-d);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#000;cursor:pointer;';
-  startBtn.textContent = 'Start Complex →';
+  startBtn.textContent = ex._blabHasLoad ? 'Start Complex →' : 'Start →';
   startBtn.onclick = function(){
     var exArr = window._blabPhxExercises || [];
     var ex2 = exArr[idx] || ex;
@@ -8153,6 +8165,8 @@ window.draftGetSessionData = function(week, day, s){
   function result(name, unit, note){
     return std(name, 1, 'Best attempt', note, { result_capture:true, result_decimal:true, result_unit:unit });
   }
+  // v4.9.360 — Jon 2 Nov: no chin-ups in the finishers "for now". DB renegade rows hold
+  // the pull. Finishers only — the weighted pull-up and the Saturday pair are unchanged.
   function afap(name, sets, rest, movs, note){
     return { name:name, format:'afap', sets:sets, rest:rest, has_load:false, suggested_load:0, movements:movs,
              _timeRecordKey:name + '_time', prev_best:(s.records && s.records[name + '_time']) || 0, note:note || '' };
@@ -8395,9 +8409,9 @@ window.draftGetSessionData = function(week, day, s){
       : 'Pick a load you could do about 6 times. ';
     var pw = [null, 'Med Ball Chest Pass', 'Plyo Push-Up', 'Med Ball Chest Pass', 'Plyo Push-Up'][t];
     var fin = [null,
-      afap('Finisher — Pull / Push / Slam', 3, 60, [{name:'Strict Pull-Ups', reps:5},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10}], 'CrossFit Football style. 3 rounds for time, 60 s rest between. Skip it if you are under-recovered.'),
+      afap('Finisher — Pull / Push / Slam', 3, 60, [{name:'DB Renegade Rows (alternating)', reps:10},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10}], 'CrossFit Football style. 3 rounds for time, 60 s rest between. Skip it if you are under-recovered.'),
       afap('Finisher — Dips / Rows / Slams', 3, 60, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10}], '3 rounds for time. Skip it if you are under-recovered.'),
-      afap('Finisher — Pull / Push / Slam', 4, 45, [{name:'Strict Pull-Ups', reps:5},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10}], 'Same as Week 1, one more round, shorter rest. Beat your time.'),
+      afap('Finisher — Pull / Push / Slam', 4, 45, [{name:'DB Renegade Rows (alternating)', reps:10},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10}], 'Same as Week 1, one more round, shorter rest. Beat your time.'),
       afap('Finisher — Dips / Rows / Slams', 3, 45, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10}], 'Beat your Week 2 time.')
     ][t];
     return sess('Upper — Max Effort', 70, [

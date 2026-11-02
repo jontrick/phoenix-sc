@@ -5871,9 +5871,10 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const c = app.blabGetSessionData(2, 1).conditioning;
     const b = c.find((p) => p.title === 'Repeated-Effort Bouts').spec;
     assert.equal(b.config.efforts, 7); assert.equal(b.config.restSec, 105); assert.equal(b.scoreType, 'calories');
-    const blocks = c.filter((p) => /^15\/15 Block/.test(p.title));
-    assert.equal(blocks.length, 2);
-    assert.equal(blocks[0].spec.config.efforts, 12); assert.equal(blocks[0].spec.config.workSec, 15);
+    const iv = c.filter((p) => /^15\/15/.test(p.title));
+    assert.equal(iv.length, 1, 'one 15/15 part (Jon: run it as one session)');
+    assert.equal(iv[0].spec.guided.blocks, 2); assert.equal(iv[0].spec.guided.rounds, 12);
+    assert.equal(iv[0].spec.guided.blockRest, 180, 'the 3 min between blocks is in the timer');
   });
 
   test('COND: a score logged today marks the part done; blocks sharing a timer fill in order', () => {
@@ -5908,20 +5909,27 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
           if (/bronco|row2k/.test(sp.id)) { assert.ok(!sp.guided, 'tests stay for time'); return; }
           assert.ok(sp.guided, `W${w}D${d} ${sp.id} is guided`);
           const seq = app.draftGuidedSequence(sp.guided);
-          assert.ok(seq.length > 0 && seq.every((x) => x.secs > 0), `${sp.id}: every phase has a countdown`);
+          assert.ok(seq.length > 0 && seq.every((x) => x.kind === 'tap' ? true : x.secs > 0), `${sp.id}: every timed phase counts down`);
         });
       });
     }
   });
 
-  test('GUIDED: week 1 Monday bouts are sprint 8 · burpee 5 · sprint 8, then 105 s rest', () => {
+  test('GUIDED: week 1 Monday bouts are sprint 8 · burpee (tap) · get set 3 · sprint 8, then 105 s rest', () => {
     startDraft();
     const g = app.blabGetSessionData(2, 1).conditioning.find((p) => p.title === 'Repeated-Effort Bouts').spec.guided;
     const seq = app.draftGuidedSequence(g);
-    assert.deepEqual(seq.slice(0, 4).map((x) => x.label + ' ' + x.secs), ['Bike sprint 8', 'Burpee 5', 'Bike sprint 8', 'Rest 105']);
-    assert.equal(seq.length, 7 * 3 + 6, '7 bouts, rest between (none after the last)');
+    assert.deepEqual(seq.slice(0, 5).map((x) => x.kind + ':' + x.label + (x.secs ? ' ' + x.secs : '')),
+      ['work:Bike sprint 8', 'tap:Burpee', 'set:Get set 3', 'work:Bike sprint 8', 'rest:Rest 105'],
+      'Jon\'s rule: no clock on the burpee, then a 3 s count-in to the next sprint');
+    assert.equal(seq.length, 7 * 4 + 6, '7 bouts of 4 phases, rest between (none after the last)');
     assert.equal(g.entry.per, 'round', 'calories typed during each rest');
     const b = app.blabGetSessionData(2, 1).conditioning.find((p) => /^15\/15/.test(p.title)).spec.guided;
-    assert.equal(b.entry.per, 'end', 'the 15/15 takes one total from the bike at the end');
+    assert.equal(b.entry.per, 'block', 'the 15/15 takes the bike total once per block, during the easy spin');
+    const bs = app.draftGuidedSequence(b);
+    const easy = bs.filter((x) => x.blockEnd);
+    assert.equal(easy.length, 1, 'one 3 min easy spin between two blocks');
+    assert.equal(easy[0].secs, 180);
+    assert.equal(bs.length, 2 * (12 + 11) + 1, 'two blocks of 12 hard / 11 easy, plus the spin');
   });
 }

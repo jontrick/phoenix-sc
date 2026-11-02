@@ -335,3 +335,11 @@ parts run on fixed windows so the phone can sit on the ground. Score saved via
 `_phxSaveScore`. Bronco and 2 km row stay on the for-time stopwatch. Verified in Chromium
 with `page.clock`: 8 → burpee 5 → 8 → rest 1:44 → per-round entry summed into the end
 total → saved score shown on the session screen.
+
+**v4.9.357 — Jon's guided-timer rule (2 Nov): a movement measured by reps or distance
+(burpee, prowler push) is a TAP step — no clock shown, never auto-advances — followed by
+a 3 s "Get set" count-in when a timed step comes next. Use this for every similar build.**
+15/15 runs as ONE part: `guided.blocks` + `blockRest` (3 min easy spin counts down inside
+the sequence); bike calories entered per block during the spin (`entry.per:'block'`).
+Verified in Chromium: burpee held 20 s without advancing → Done → Get set 3 → sprint 8;
+end of block 1 → "Easy spin 3 min" 2:58 with the block entry.

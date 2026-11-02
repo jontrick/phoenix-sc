@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.356';
+var APP_VERSION='4.9.357';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8282,26 +8282,27 @@ window.draftGetSessionData = function(week, day, s){
       'Mark a line ' + ivDist + ' m out. Run it in 15 s, walk back in 15 s, ' + ivReps + ' times. Tap + if you reached the line, then Log Round.',
       [['15 s run', ivDist + ' m']], { efforts:ivReps, work:'Run ' + ivDist + ' m', workSec:15, restSec:15, countReps:true, countLabel:'Reached the line? Tap + once' });
     // v4.9.356 — hands-free guided timings (phone runs the clock, bike counts calories)
-    var gymSteps = [{label:'Bike sprint', secs:8, sub:'All out'}, {label:'Burpee', secs:5, sub:'1 burpee, straight back on'}, {label:'Bike sprint', secs:8, sub:'All out'}];
-    if(effortsPerBout === 3) gymSteps.push({label:'Prowler push', secs:10, sub:'10 m, drive'});
+    var gymSteps = [{label:'Bike sprint', secs:8, sub:'All out'}, {label:'Burpee', tap:true, sub:'1 burpee, back on the bike, tap Done'}, {label:'Bike sprint', secs:8, sub:'All out'}];
+    if(effortsPerBout === 3) gymSteps.push({label:'Prowler push', tap:true, sub:'10 m, drive, tap Done'});
     rhieGym.guided = { rounds:bouts, steps:gymSteps, restSec:restRHIE,
       entry:{ per:'round', label:'Bike calories this bout', unit:'cal', endLabel:'Total bike calories' } };
     rhieField.scoreType = 'reps'; rhieField.scoreLabel = 'Bouts finished in the window';
     rhieField.guided = { rounds:bouts, steps:[{label:'Bout', secs:(effortsPerBout === 3 ? 25 : 20), sub:fieldBoutTxt}], restSec:restRHIE,
       entry:{ per:'end', endLabel:'Bouts you finished inside the window', prefillRounds:true } };
-    b1515.guided = { rounds:ivReps, steps:[{label:'Hard', secs:15, sub:'Assault bike, all out'}], restSec:15,
-      entry:{ per:'end', endLabel:'Total calories for the block (from the bike display)' } };
-    r1515.guided = { rounds:ivReps, steps:[{label:'Run', secs:15, sub:'Reach the ' + ivDist + ' m line'}], restSec:15,
-      entry:{ per:'end', endLabel:'Reps you reached the line', prefillRounds:true } };
+    b1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Hard', secs:15, sub:'Assault bike, all out'}], restSec:15,
+      blockRest:180, blockRestLabel:'Easy spin 3 min',
+      entry:{ per:'block', label:'Bike calories for the block', unit:'cal', endLabel:'Total calories, all blocks' } };
+    r1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Run', secs:15, sub:'Reach the ' + ivDist + ' m line'}], restSec:15,
+      blockRest:180, blockRestLabel:'Walk 3 min',
+      entry:{ per:'end', endLabel:'Reps you reached the line (all blocks)', prefillRounds:true } };
+    b1515.format = r1515.format = ivSets + ' BLOCKS \u00d7 ' + ivReps + ' \u00d7 15/15 \u00b7 3 MIN EASY BETWEEN';
     var cParts = [part('Warm-up', t === 1 ? '10 min: easy bike or row, dynamic mobility, 2 practice burpees.' : '10 min: jog, dynamic mobility, 3 build-up runs, 2 practice drop-and-get-ups.')];
     cParts.push(part('Repeated-Effort Bouts',
       bouts + ' bouts, ' + restRHIE + ' s rest between. ' + (t === 1 ? 'GYM: ' + gymBoutTxt + '.' : 'FIELD: ' + fieldBoutTxt + '. Gym version listed too.') + ' Level ' + LC + ' of 5.',
       t === 1 ? rhieGym : rhieField, t === 1 ? null : rhieGym));
-    for(var bk = 1; bk <= ivSets; bk++){
-      cParts.push(part('15/15 Block ' + bk + ' of ' + ivSets,
-        ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min.' + (bk < ivSets ? ' Then 3 min easy before the next block.' : ''),
-        t === 1 ? b1515 : r1515, t === 1 ? null : b1515));
-    }
+    cParts.push(part('15/15 Intervals',
+      ivSets + ' blocks of ' + ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min each, 3 min easy between. One timer runs it all.',
+      t === 1 ? b1515 : r1515, t === 1 ? null : b1515));
     cParts.push(part('Cool-down', '5 min easy, hips, calves.'));
     return partsSess(t === 1 ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts);
   }
@@ -8757,13 +8758,28 @@ function _draftSetChecks(week, day, arr){
 //                 entry:{ per:'round'|'end', label, unit } }
 // Score: the end total (prefilled with the sum of per-round entries), saved through
 // _phxSaveScore so it lands in Records like any WOD.
+// v4.9.357 — Jon: "don't have time on burpee as if takes more than 5 sec I'm out of sync -
+// just note then 3 sec count in for next 8 secs - use this rule for similar build
+// sessions". RULE: a movement measured by reps or distance, not time (burpee, prowler
+// push), is a TAP step — shown, no clock against it — followed by a 3 s "get set"
+// count-in when a timed step comes next. Also: blocks run as ONE part, with the block
+// rest (3 min easy) counting down inside the sequence.
 window.draftGuidedSequence = function(g){
-  var seq = [];
-  for(var r = 1; r <= g.rounds; r++){
-    (g.steps || []).forEach(function(st, i){
-      seq.push({ kind:'work', round:r, label:st.label, sub:st.sub || '', secs:st.secs, step:i });
-    });
-    if(r < g.rounds && g.restSec > 0) seq.push({ kind:'rest', round:r, label:'Rest', sub:'', secs:g.restSec });
+  var seq = [], blocks = g.blocks || 1, steps = g.steps || [];
+  for(var bk = 1; bk <= blocks; bk++){
+    for(var r = 1; r <= g.rounds; r++){
+      steps.forEach(function(st, i){
+        if(st.tap){
+          seq.push({ kind:'tap', block:bk, round:r, label:st.label, sub:st.sub || 'Tap when done', secs:0, step:i });
+          var nx = steps[i + 1];
+          if(nx && !nx.tap) seq.push({ kind:'set', block:bk, round:r, label:'Get set', sub:nx.label + ' next', secs:3 });
+        } else {
+          seq.push({ kind:'work', block:bk, round:r, label:st.label, sub:st.sub || '', secs:st.secs, step:i });
+        }
+      });
+      if(r < g.rounds && g.restSec > 0) seq.push({ kind:'rest', block:bk, round:r, label:'Rest', sub:'', secs:g.restSec });
+    }
+    if(bk < blocks && g.blockRest > 0) seq.push({ kind:'rest', blockEnd:true, block:bk, round:g.rounds, label:g.blockRestLabel || 'Rest', sub:'Before block ' + (bk + 1), secs:g.blockRest });
   }
   return seq;
 };
@@ -8788,7 +8804,7 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     'padding:env(safe-area-inset-top,0px) 16px env(safe-area-inset-bottom,0px);transition:background 0.25s;';
   document.body.appendChild(ov);
   _dgBeep(660, 60);   // unlocks audio on iOS: this runs inside the Start tap
-  var idx = -1, endsAt = 0, tick = null, lastWhole = null, entries = [], ended = false;
+  var idx = -1, endsAt = 0, startedAt = 0, tick = null, lastWhole = null, entries = [], ended = false;
   var B = 'font-family:var(--font-d);font-weight:900;text-transform:uppercase;letter-spacing:1px;border-radius:var(--radius);cursor:pointer;';
   ov.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 6px;">' +
@@ -8806,10 +8822,14 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     '<div id="dg-foot" style="display:flex;gap:8px;padding:10px 0 18px;"></div>';
   var $ = function(id){ return document.getElementById(id); };
   function fmt(s){ s = Math.max(0, Math.ceil(s)); return s >= 60 ? Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) : String(s); }
-  function entryHTML(round){
-    if(!g.entry || g.entry.per !== 'round') return '';
-    var v = entries[round - 1];
-    return '<div style="font-size:12px;opacity:0.85;margin-bottom:6px;">' + _esc(g.entry.label) + ' &middot; round ' + round + ' <span style="opacity:0.6;">(optional)</span></div>' +
+  function entryKey(cur){ return (g.entry && g.entry.per === 'block') ? cur.block : cur.round; }
+  function entryHTML(cur){
+    if(!g.entry) return '';
+    if(g.entry.per === 'round' && cur.blockEnd) return '';
+    if(g.entry.per === 'block' && !cur.blockEnd) return '';
+    if(g.entry.per !== 'round' && g.entry.per !== 'block') return '';
+    var k = entryKey(cur), v = entries[k - 1];
+    return '<div style="font-size:12px;opacity:0.85;margin-bottom:6px;">' + _esc(g.entry.label) + ' &middot; ' + (g.entry.per === 'block' ? 'block ' : 'round ') + k + ' <span style="opacity:0.6;">(optional)</span></div>' +
       '<div style="display:flex;align-items:center;justify-content:center;gap:10px;">' +
         '<button data-dg-adj="-1" style="width:52px;height:52px;border-radius:50%;background:#222;border:1px solid #444;color:#fff;font-size:26px;">&minus;</button>' +
         '<input id="dg-val" type="number" inputmode="numeric" value="' + (v != null ? v : '') + '" placeholder="' + _esc(g.entry.unit || '') + '" style="width:110px;padding:12px;text-align:center;font-family:var(--font-d);font-size:30px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;">' +
@@ -8820,20 +8840,23 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     var el = $('dg-val'), cur = seq[idx];
     if(!el || !cur) return;
     var n = parseFloat(el.value);
-    entries[cur.round - 1] = isNaN(n) ? null : n;
+    entries[entryKey(cur) - 1] = isNaN(n) ? null : n;
   }
   function paintPhase(){
     var cur = seq[idx];
-    var work = cur.kind === 'work';
-    ov.style.background = work ? '#3a2a08' : '#0b1a10';
-    $('dg-round').textContent = (cur.kind === 'rest' ? 'Rest after round ' : 'Round ') + cur.round + ' of ' + g.rounds;
+    var work = cur.kind === 'work' || cur.kind === 'tap';
+    ov.style.background = work ? '#3a2a08' : (cur.kind === 'set' ? '#2a2208' : '#0b1a10');
+    var bl = (g.blocks > 1) ? 'Block ' + cur.block + ' of ' + g.blocks + ' \u00b7 ' : '';
+    $('dg-round').textContent = cur.blockEnd ? 'Block ' + cur.block + ' done' : bl + (cur.kind === 'rest' ? 'Rest after ' : '') + (g.blocks > 1 ? 'rep ' : 'round ') + cur.round + ' of ' + g.rounds;
     $('dg-label').textContent = cur.label;
     $('dg-label').style.color = work ? 'var(--gold)' : '#7fd18b';
     $('dg-sub').textContent = cur.sub || '';
     var nx = seq[idx + 1];
-    $('dg-next').textContent = nx ? 'Next: ' + nx.label + (nx.secs ? ' ' + nx.secs + ' s' : '') : 'Last one';
-    $('dg-entry').innerHTML = (cur.kind === 'rest') ? entryHTML(cur.round) : '';
-    $('dg-foot').innerHTML = (cur.kind === 'rest')
+    $('dg-next').textContent = nx ? 'Next: ' + nx.label + (nx.kind === 'tap' ? '' : (nx.secs ? ' ' + nx.secs + ' s' : '')) : 'Last one';
+    $('dg-entry').innerHTML = (cur.kind === 'rest') ? entryHTML(cur) : '';
+    $('dg-foot').innerHTML = (cur.kind === 'tap')
+      ? '<button data-dg="skip" style="flex:1;padding:34px 14px;background:var(--gold);border:none;color:#000;font-size:20px;' + B + '">Done &#10003;</button>'
+      : (cur.kind === 'rest')
       ? '<button data-dg="plus" style="flex:1;padding:14px;background:none;border:1px solid #444;color:#ddd;font-size:12px;' + B + '">+15 s</button>' +
         '<button data-dg="skip" style="flex:1.4;padding:14px;background:#7fd18b;border:none;color:#000;font-size:12px;' + B + '">Skip rest</button>'
       : '<button data-dg="skip" style="flex:1;padding:14px;background:none;border:1px solid #444;color:#ddd;font-size:12px;' + B + '">Next &rsaquo;</button>';
@@ -8842,14 +8865,21 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     if(seq[idx] && seq[idx].kind === 'rest') saveEntry();
     idx++;
     if(idx >= seq.length){ finish(); return; }
-    endsAt = Date.now() + seq[idx].secs * 1000;
+    startedAt = Date.now();
+    endsAt = (seq[idx].kind === 'tap') ? 0 : Date.now() + seq[idx].secs * 1000;
     lastWhole = null;
-    _dgBeep(seq[idx].kind === 'work' ? 1046 : 523, 450);
+    _dgBeep((seq[idx].kind === 'work' || seq[idx].kind === 'tap') ? 1046 : 523, (seq[idx].kind === 'set') ? 150 : 450);
     paintPhase();
     paint();
   }
   function paint(){
     if(ended || idx < 0) return;
+    if(seq[idx] && seq[idx].kind === 'tap'){
+      // no clock at all against a rep-based movement, and never advance by itself
+      var c0 = $('dg-clock'); if(c0){ c0.textContent = '\u00a0'; }
+      return;
+    }
+    var cc = $('dg-clock'); if(cc) cc.style.opacity = '1';
     var left = (endsAt - Date.now()) / 1000;
     var whole = Math.ceil(left);
     var c = $('dg-clock'); if(c) c.textContent = fmt(left);
@@ -8864,7 +8894,7 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     ov.style.background = '#0b0b0b';
     var sum = 0, any = false;
     entries.forEach(function(v){ if(v != null && !isNaN(v)){ sum += v; any = true; } });
-    var pre = any ? sum : (g.entry && g.entry.prefillRounds ? g.rounds : '');
+    var pre = any ? sum : (g.entry && g.entry.prefillRounds ? g.rounds * (g.blocks || 1) : '');
     var lab = (g.entry && g.entry.endLabel) || 'Score';
     ov.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;max-width:360px;margin:0 auto;width:100%;">' +
       '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">Done</div>' +

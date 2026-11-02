@@ -324,3 +324,14 @@ Retest A = squat → power clean → bench. Sat wk6 (5 Dec): field combine only.
 better than volume"). Week-1 Sunday uses the same B order. `liftsA()` / `liftsB()` in
 the generator; pinned in tests (SPLIT). Future blocks' tests should follow the same
 two-weekend shape.
+
+**v4.9.356 — hands-free guided timer (`draftRunGuided`, Jon 2 Nov: "timers go up not
+count down ... hard to work the phone clock and the machine clock").** Specs carry
+`guided:{rounds, steps:[{label,secs,sub}], restSec, entry:{per:'round'|'end'}}`; every
+phase counts DOWN from absolute end timestamps (lock-safe), beeps 3-2-1 and on change
+(WebAudio, unlocked by the Start tap), and advances itself. Bike counts calories only:
+per-bout calories typed during rest (optional), 15/15 total typed once at the end. Field
+parts run on fixed windows so the phone can sit on the ground. Score saved via
+`_phxSaveScore`. Bronco and 2 km row stay on the for-time stopwatch. Verified in Chromium
+with `page.clock`: 8 → burpee 5 → 8 → rest 1:44 → per-round entry summed into the end
+total → saved score shown on the session screen.

@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.355';
+var APP_VERSION='4.9.356';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8267,7 +8267,7 @@ window.draftGetSessionData = function(week, day, s){
     var lbl = function(n, txt){ var a = []; for(var k = 1; k <= n; k++) a.push('Bout ' + k + ' · ' + txt); return a; };
     var rhieGym = libSpec('draft-rhie-gym', 'Repeated Efforts — Bike', 'intervals', 'calories', 'Total calories',
       bouts + ' BOUTS · REST ' + restRHIE + ' s',
-      'Each bout: ' + gymBoutTxt + '. Count the bike calories for the whole bout, tap Log Round, rest runs automatically.',
+      'Each bout: ' + gymBoutTxt + '. The phone counts every phase down and beeps; type the bike calories while you rest.',
       [['Bout', gymBoutTxt]], { efforts:bouts, work:'Bout', restSec:restRHIE, countReps:true, countLabel:'Bike calories this bout', labels:lbl(bouts, 'sprint · burpee · sprint') });
     var rhieField = libSpec('draft-rhie-field', 'Repeated Efforts — Field', 'intervals', 'avg_split', 'Average bout time',
       bouts + ' BOUTS · REST ' + restRHIE + ' s',
@@ -8275,12 +8275,24 @@ window.draftGetSessionData = function(week, day, s){
       [['Bout', fieldBoutTxt]], { efforts:bouts, work:'Bout', restSec:restRHIE, labels:lbl(bouts, fieldBoutTxt) });
     var b1515 = libSpec('draft-1515-bike', '15/15 Bike', 'intervals', 'calories', 'Calories for the block',
       ivReps + ' × 15 s ON / 15 s OFF',
-      'Assault bike. 15 s hard, 15 s easy pedal, ' + ivReps + ' times (' + ivMins + ' min). Count calories each hard 15 s and tap Log Round; the timer moves you on.',
+      'Assault bike. 15 s hard, 15 s easy pedal, ' + ivReps + ' times (' + ivMins + ' min). Reset the bike display first; enter its calorie total at the end.',
       [['15 s hard', 'calories']], { efforts:ivReps, work:'15 s hard', workSec:15, restSec:15, countReps:true, countLabel:'Calories this 15 s' });
     var r1515 = libSpec('draft-1515-run', '15/15 Run', 'intervals', 'reps', 'Reps on target',
       ivReps + ' × 15 s ON / 15 s OFF',
       'Mark a line ' + ivDist + ' m out. Run it in 15 s, walk back in 15 s, ' + ivReps + ' times. Tap + if you reached the line, then Log Round.',
       [['15 s run', ivDist + ' m']], { efforts:ivReps, work:'Run ' + ivDist + ' m', workSec:15, restSec:15, countReps:true, countLabel:'Reached the line? Tap + once' });
+    // v4.9.356 — hands-free guided timings (phone runs the clock, bike counts calories)
+    var gymSteps = [{label:'Bike sprint', secs:8, sub:'All out'}, {label:'Burpee', secs:5, sub:'1 burpee, straight back on'}, {label:'Bike sprint', secs:8, sub:'All out'}];
+    if(effortsPerBout === 3) gymSteps.push({label:'Prowler push', secs:10, sub:'10 m, drive'});
+    rhieGym.guided = { rounds:bouts, steps:gymSteps, restSec:restRHIE,
+      entry:{ per:'round', label:'Bike calories this bout', unit:'cal', endLabel:'Total bike calories' } };
+    rhieField.scoreType = 'reps'; rhieField.scoreLabel = 'Bouts finished in the window';
+    rhieField.guided = { rounds:bouts, steps:[{label:'Bout', secs:(effortsPerBout === 3 ? 25 : 20), sub:fieldBoutTxt}], restSec:restRHIE,
+      entry:{ per:'end', endLabel:'Bouts you finished inside the window', prefillRounds:true } };
+    b1515.guided = { rounds:ivReps, steps:[{label:'Hard', secs:15, sub:'Assault bike, all out'}], restSec:15,
+      entry:{ per:'end', endLabel:'Total calories for the block (from the bike display)' } };
+    r1515.guided = { rounds:ivReps, steps:[{label:'Run', secs:15, sub:'Reach the ' + ivDist + ' m line'}], restSec:15,
+      entry:{ per:'end', endLabel:'Reps you reached the line', prefillRounds:true } };
     var cParts = [part('Warm-up', t === 1 ? '10 min: easy bike or row, dynamic mobility, 2 practice burpees.' : '10 min: jog, dynamic mobility, 3 build-up runs, 2 practice drop-and-get-ups.')];
     cParts.push(part('Repeated-Effort Bouts',
       bouts + ' bouts, ' + restRHIE + ' s rest between. ' + (t === 1 ? 'GYM: ' + gymBoutTxt + '.' : 'FIELD: ' + fieldBoutTxt + '. Gym version listed too.') + ' Level ' + LC + ' of 5.',
@@ -8310,6 +8322,15 @@ window.draftGetSessionData = function(week, day, s){
       sledN + ' × 15 m · REST 120 s',
       'Heavy sled push or drag, about half your sprint speed (or a hill sprint). Tap Log Split at 15 m.',
       [['Heavy sled', '15 m']], { efforts:sledN, work:'Sled 15 m', restSec:120 });
+    accField.scoreType = 'reps'; accField.scoreLabel = 'Sprints done';
+    accField.guided = { rounds:accReps, steps:[{label:'Sprint', secs:6, sub:accDist + ' m \u2014 go on the beep'}], restSec:90,
+      entry:{ per:'end', endLabel:'Sprints done', prefillRounds:true } };
+    accGym.scoreType = 'reps'; accGym.scoreLabel = 'Sprints done';
+    accGym.guided = { rounds:accReps, steps:[{label:'Prowler sprint', secs:8, sub:'10 m \u2014 go on the beep'}], restSec:90,
+      entry:{ per:'end', endLabel:'Sprints done', prefillRounds:true } };
+    sled.scoreType = 'reps'; sled.scoreLabel = 'Reps done';
+    sled.guided = { rounds:sledN, steps:[{label:'Sled', secs:12, sub:'15 m heavy push or drag'}], restSec:120,
+      entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     if(taper){
       return partsSess('Sprint & Power — Taper', 30, [
         part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups.'),
@@ -8330,6 +8351,9 @@ window.draftGetSessionData = function(week, day, s){
     var agil = libSpec((t % 2 === 1) ? 'draft-shuttle' : 'draft-3cone', agilName, 'intervals', 'avg_split', 'Average time',
       '4 REPS · REST 60 s', 'Alternate directions. Clean cuts, low hips. Tap Log Split at the finish, or type the video time.',
       [[agilName, '1 rep']], { efforts:4, work:agilName, restSec:60 });
+    agil.scoreType = 'reps'; agil.scoreLabel = 'Reps done';
+    agil.guided = { rounds:4, steps:[{label:agilName, secs:8, sub:'Go on the beep, alternate directions'}], restSec:60,
+      entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     var plyo = [null, null, ['Hurdle Hops (low)', '3 × 5'], ['Single-Leg Bounds', '3 × 4 / leg'], ['Depth Jump to Broad', '3 × 3']][t] || ['Bounds', '3 × 5'];
     return partsSess('Sprint & Power', 45, [
       part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups to 90%.'),
@@ -8721,6 +8745,180 @@ function _draftChecks(week, day){
 function _draftSetChecks(week, day, arr){
   try { localStorage.setItem(_draftChkKey(week, day), JSON.stringify(arr)); } catch(_e){}
 }
+// ── v4.9.356 — GUIDED TIMER: hands-free countdowns for conditioning ────────────
+// Jon, 2 Nov: "The timers go up not count down ... 8 sec on with 1 burpee then 8 secs is
+// also hard to do in the phone ... I always find it hard to work the phone clock and the
+// machine clock". The phone owns ALL the timing: every phase counts DOWN, beeps at 3-2-1
+// and on each change, and moves on by itself. The bike only counts calories. Numbers are
+// typed only while resting (per round, optional) or once at the end (block total).
+// Phase ends are absolute timestamps, so a locked screen cannot drift the clock.
+//
+// spec.guided = { rounds, steps:[{label, secs, sub}], restSec,
+//                 entry:{ per:'round'|'end', label, unit } }
+// Score: the end total (prefilled with the sum of per-round entries), saved through
+// _phxSaveScore so it lands in Records like any WOD.
+window.draftGuidedSequence = function(g){
+  var seq = [];
+  for(var r = 1; r <= g.rounds; r++){
+    (g.steps || []).forEach(function(st, i){
+      seq.push({ kind:'work', round:r, label:st.label, sub:st.sub || '', secs:st.secs, step:i });
+    });
+    if(r < g.rounds && g.restSec > 0) seq.push({ kind:'rest', round:r, label:'Rest', sub:'', secs:g.restSec });
+  }
+  return seq;
+};
+var _dgAudio = null;
+function _dgBeep(freq, ms){
+  try {
+    if(!_dgAudio){ var AC = window.AudioContext || window.webkitAudioContext; if(!AC) return; _dgAudio = new AC(); }
+    if(_dgAudio.state === 'suspended' && _dgAudio.resume) _dgAudio.resume();
+    var o = _dgAudio.createOscillator(), gn = _dgAudio.createGain();
+    o.frequency.value = freq || 880; o.connect(gn); gn.connect(_dgAudio.destination);
+    gn.gain.setValueAtTime(0.25, _dgAudio.currentTime);
+    gn.gain.exponentialRampToValueAtTime(0.0001, _dgAudio.currentTime + (ms || 150) / 1000);
+    o.start(); o.stop(_dgAudio.currentTime + (ms || 150) / 1000);
+  } catch(_e){}
+}
+window.draftRunGuided = function(spec, dryRun, onSaved){
+  var g = spec.guided, seq = window.draftGuidedSequence(g);
+  var old = document.getElementById('dg-run'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'dg-run';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9700;display:flex;flex-direction:column;background:#0b0b0b;color:#fff;' +
+    'padding:env(safe-area-inset-top,0px) 16px env(safe-area-inset-bottom,0px);transition:background 0.25s;';
+  document.body.appendChild(ov);
+  _dgBeep(660, 60);   // unlocks audio on iOS: this runs inside the Start tap
+  var idx = -1, endsAt = 0, tick = null, lastWhole = null, entries = [], ended = false;
+  var B = 'font-family:var(--font-d);font-weight:900;text-transform:uppercase;letter-spacing:1px;border-radius:var(--radius);cursor:pointer;';
+  ov.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 6px;">' +
+      '<div><div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">' + _esc(spec.format || '') + '</div>' +
+      '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;text-transform:uppercase;">' + _esc(spec.name) + '</div></div>' +
+      '<button id="dg-x" style="background:none;border:1px solid #444;color:#bbb;padding:8px 12px;font-size:11px;' + B + '">End</button></div>' +
+    '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">' +
+      '<div id="dg-round" style="font-family:var(--font-d);font-size:13px;letter-spacing:3px;text-transform:uppercase;opacity:0.75;"></div>' +
+      '<div id="dg-label" style="font-family:var(--font-d);font-size:34px;font-weight:900;text-transform:uppercase;line-height:1.05;margin-top:6px;"></div>' +
+      '<div id="dg-sub" style="font-size:14px;opacity:0.8;margin-top:6px;max-width:320px;"></div>' +
+      '<div id="dg-clock" style="font-family:var(--font-d);font-size:120px;font-weight:900;line-height:1;margin-top:14px;font-variant-numeric:tabular-nums;"></div>' +
+      '<div id="dg-next" style="font-size:13px;opacity:0.7;margin-top:10px;"></div>' +
+      '<div id="dg-entry" style="margin-top:18px;width:100%;max-width:320px;"></div>' +
+    '</div>' +
+    '<div id="dg-foot" style="display:flex;gap:8px;padding:10px 0 18px;"></div>';
+  var $ = function(id){ return document.getElementById(id); };
+  function fmt(s){ s = Math.max(0, Math.ceil(s)); return s >= 60 ? Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) : String(s); }
+  function entryHTML(round){
+    if(!g.entry || g.entry.per !== 'round') return '';
+    var v = entries[round - 1];
+    return '<div style="font-size:12px;opacity:0.85;margin-bottom:6px;">' + _esc(g.entry.label) + ' &middot; round ' + round + ' <span style="opacity:0.6;">(optional)</span></div>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:10px;">' +
+        '<button data-dg-adj="-1" style="width:52px;height:52px;border-radius:50%;background:#222;border:1px solid #444;color:#fff;font-size:26px;">&minus;</button>' +
+        '<input id="dg-val" type="number" inputmode="numeric" value="' + (v != null ? v : '') + '" placeholder="' + _esc(g.entry.unit || '') + '" style="width:110px;padding:12px;text-align:center;font-family:var(--font-d);font-size:30px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;">' +
+        '<button data-dg-adj="1" style="width:52px;height:52px;border-radius:50%;background:#222;border:1px solid var(--gold);color:var(--gold);font-size:26px;">+</button>' +
+      '</div>';
+  }
+  function saveEntry(){
+    var el = $('dg-val'), cur = seq[idx];
+    if(!el || !cur) return;
+    var n = parseFloat(el.value);
+    entries[cur.round - 1] = isNaN(n) ? null : n;
+  }
+  function paintPhase(){
+    var cur = seq[idx];
+    var work = cur.kind === 'work';
+    ov.style.background = work ? '#3a2a08' : '#0b1a10';
+    $('dg-round').textContent = (cur.kind === 'rest' ? 'Rest after round ' : 'Round ') + cur.round + ' of ' + g.rounds;
+    $('dg-label').textContent = cur.label;
+    $('dg-label').style.color = work ? 'var(--gold)' : '#7fd18b';
+    $('dg-sub').textContent = cur.sub || '';
+    var nx = seq[idx + 1];
+    $('dg-next').textContent = nx ? 'Next: ' + nx.label + (nx.secs ? ' ' + nx.secs + ' s' : '') : 'Last one';
+    $('dg-entry').innerHTML = (cur.kind === 'rest') ? entryHTML(cur.round) : '';
+    $('dg-foot').innerHTML = (cur.kind === 'rest')
+      ? '<button data-dg="plus" style="flex:1;padding:14px;background:none;border:1px solid #444;color:#ddd;font-size:12px;' + B + '">+15 s</button>' +
+        '<button data-dg="skip" style="flex:1.4;padding:14px;background:#7fd18b;border:none;color:#000;font-size:12px;' + B + '">Skip rest</button>'
+      : '<button data-dg="skip" style="flex:1;padding:14px;background:none;border:1px solid #444;color:#ddd;font-size:12px;' + B + '">Next &rsaquo;</button>';
+  }
+  function next(){
+    if(seq[idx] && seq[idx].kind === 'rest') saveEntry();
+    idx++;
+    if(idx >= seq.length){ finish(); return; }
+    endsAt = Date.now() + seq[idx].secs * 1000;
+    lastWhole = null;
+    _dgBeep(seq[idx].kind === 'work' ? 1046 : 523, 450);
+    paintPhase();
+    paint();
+  }
+  function paint(){
+    if(ended || idx < 0) return;
+    var left = (endsAt - Date.now()) / 1000;
+    var whole = Math.ceil(left);
+    var c = $('dg-clock'); if(c) c.textContent = fmt(left);
+    if(whole !== lastWhole && whole >= 1 && whole <= 3) _dgBeep(880, 120);
+    lastWhole = whole;
+    if(left <= 0) next();
+  }
+  function stopClock(){ if(tick){ clearInterval(tick); tick = null; } if(typeof releaseWakeLock === 'function'){ try { releaseWakeLock(); } catch(_r){} } }
+  function close(){ stopClock(); var o = $('dg-run'); if(o) o.remove(); }
+  function finish(){
+    ended = true; stopClock(); _dgBeep(1318, 700);
+    ov.style.background = '#0b0b0b';
+    var sum = 0, any = false;
+    entries.forEach(function(v){ if(v != null && !isNaN(v)){ sum += v; any = true; } });
+    var pre = any ? sum : (g.entry && g.entry.prefillRounds ? g.rounds : '');
+    var lab = (g.entry && g.entry.endLabel) || 'Score';
+    ov.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;max-width:360px;margin:0 auto;width:100%;">' +
+      '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">Done</div>' +
+      '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;margin:6px 0 18px;">' + _esc(spec.name) + '</div>' +
+      '<div style="font-size:13px;opacity:0.85;margin-bottom:8px;">' + _esc(lab) + '</div>' +
+      '<input id="dg-total" type="number" inputmode="numeric" value="' + pre + '" style="width:100%;padding:16px;text-align:center;font-family:var(--font-d);font-size:40px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;box-sizing:border-box;">' +
+      (any ? '<div style="font-size:11px;opacity:0.6;margin-top:6px;">Sum of the rounds you entered. Change it if the bike says different.</div>' : '') +
+      '<button id="dg-save" style="width:100%;margin-top:16px;padding:16px;background:var(--gold);border:none;color:#000;font-size:14px;' + B + '">Save</button>' +
+      '<button id="dg-nosave" style="width:100%;margin-top:10px;padding:12px;background:none;border:1px solid #444;color:#bbb;font-size:11px;' + B + '">Close without saving</button></div>';
+    $('dg-save').onclick = function(){
+      var v = parseFloat(($('dg-total') || {}).value);
+      if(isNaN(v)){ if(typeof window._blabCalToast === 'function') window._blabCalToast('Enter a number, or close without saving', 'error'); return; }
+      if(typeof _phxSaveScore === 'function' && !dryRun){
+        var s2 = Object.assign({}, spec); delete s2.guided;
+        _phxSaveScore(s2, v, entries.filter(function(x){ return x != null; }).length ? 'rounds: ' + entries.map(function(x){ return x == null ? '-' : x; }).join(', ') : '');
+      }
+      close();
+      if(typeof onSaved === 'function') onSaved(v);
+    };
+    $('dg-nosave').onclick = close;
+  }
+  ov.addEventListener('click', function(e){
+    var t = e.target.closest ? e.target.closest('[data-dg],[data-dg-adj]') : null;
+    if(!t) return;
+    if(t.hasAttribute('data-dg-adj')){
+      var el = $('dg-val'); if(!el) return;
+      el.value = String(Math.max(0, (parseFloat(el.value) || 0) + parseInt(t.getAttribute('data-dg-adj'), 10)));
+      saveEntry();
+      return;
+    }
+    var a = t.getAttribute('data-dg');
+    if(a === 'skip'){ next(); return; }
+    if(a === 'plus'){ endsAt += 15000; paint(); return; }
+  });
+  ov.addEventListener('input', function(e){ if(e.target && e.target.id === 'dg-val') saveEntry(); });
+  $('dg-x').onclick = function(){ if(idx >= 0 && !ended) finish(); else close(); };
+  // 5 s get-ready countdown, then the sequence runs itself.
+  $('dg-round').textContent = 'Get ready';
+  $('dg-label').textContent = seq.length ? seq[0].label : '';
+  $('dg-sub').textContent = seq.length ? (seq[0].sub || '') : '';
+  endsAt = Date.now() + 5000;
+  var readyTick = setInterval(function(){
+    if(!document.getElementById('dg-run')){ clearInterval(readyTick); return; }
+    var left = (endsAt - Date.now()) / 1000;
+    var c = $('dg-clock'); if(c) c.textContent = fmt(left);
+    var whole = Math.ceil(left);
+    if(whole !== lastWhole && whole >= 1 && whole <= 3) _dgBeep(880, 120);
+    lastWhole = whole;
+    if(left <= 0){ clearInterval(readyTick); next(); tick = setInterval(paint, 200); }
+  }, 200);
+  if(typeof requestWakeLock === 'function'){ try { requestWakeLock(); } catch(_w){} }
+  return seq.length;
+};
+
 window.draftOpenConditioning = function(week, day, sess){
   sess = sess || window.blabGetSessionData(week, day);
   if(!sess || !sess.conditioning) return false;
@@ -8794,7 +8992,8 @@ window.draftOpenConditioning = function(week, day, sess){
       var p = parts[parseInt(t.getAttribute(t.hasAttribute('data-dc-start') ? 'data-dc-start' : 'data-dc-alt'), 10)];
       var spec = t.hasAttribute('data-dc-alt') ? p.alt : p.spec;
       _draftRegisterParts([p]);
-      if(typeof _phxStartSession === 'function') _phxStartSession(spec.id, dry);
+      if(spec.guided) window.draftRunGuided(spec, dry, function(){ paint(true); });
+      else if(typeof _phxStartSession === 'function') _phxStartSession(spec.id, dry);
       return;
     }
     if(t.hasAttribute('data-dc-chk')){

@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.358';
+var APP_VERSION='4.9.359';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5597,8 +5597,8 @@ window._blabBuildSupersetBlock = function(ex, idx){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadA?state.loadA+'kg &middot; ':'')+state.aReps+' reps</div>';
       } else {
         h += '<div style="display:flex;gap:8px;">'+
-          '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Load kg</div>'+
-          '<input type="number" inputmode="decimal" id="bss-ka-'+idx+'" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" value="'+(state.loadA||'')+'" placeholder="kg"></div>'+
+          (ex._ssBwA ? '<div style="flex:0 0 64px;align-self:flex-end;padding:12px 0;text-align:center;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;color:var(--text3);">BW</div>' : ('<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Load kg</div>'+
+          '<input type="number" inputmode="decimal" id="bss-ka-'+idx+'" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" value="'+(state.loadA||'')+'" placeholder="kg"></div>'))+
           '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Reps done</div>'+
           '<input type="number" inputmode="numeric" id="bss-ra-'+idx+'" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:8px;font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" value="'+aRepsDefault+'" placeholder="reps"></div>'+
           '<button onclick="window._blabSSdoneA('+idx+')" style="align-self:flex-end;width:44px;height:44px;background:var(--gold);border:none;border-radius:8px;font-size:18px;cursor:pointer;">✓</button>'+
@@ -5615,8 +5615,8 @@ window._blabBuildSupersetBlock = function(ex, idx){
         h += '<div style="color:#3a7d44;font-family:var(--font-d);font-size:13px;">✓ '+(state.loadB?state.loadB+'kg &middot; ':'')+state.bReps+' reps</div>';
       } else if(state.aOk){
         h += '<div style="display:flex;gap:8px;">'+
-          '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Load kg</div>'+
-          '<input type="number" inputmode="decimal" id="bss-kb-'+idx+'" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" value="'+(state.loadB||'')+'" placeholder="kg"></div>'+
+          (ex._ssBwB ? '<div style="flex:0 0 64px;align-self:flex-end;padding:12px 0;text-align:center;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;color:var(--text3);">BW</div>' : ('<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Load kg</div>'+
+          '<input type="number" inputmode="decimal" id="bss-kb-'+idx+'" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" value="'+(state.loadB||'')+'" placeholder="kg"></div>'))+
           '<div style="flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Reps done</div>'+
           '<input type="number" inputmode="numeric" id="bss-rb-'+idx+'" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:8px;font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" value="'+bRepsDefault+'" placeholder="reps"></div>'+
           '<button onclick="window._blabSSdoneB('+idx+')" style="align-self:flex-end;width:44px;height:44px;background:var(--gold);border:none;border-radius:8px;font-size:18px;cursor:pointer;">✓</button>'+
@@ -6077,6 +6077,8 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.reps = ex.movements[0].reps;
       phxEx.rest_sec = 0; // no rest between A and B
       phxEx._supersetPartner = ex.movements[1];
+      // v4.9.359 — bodyweight movement in a pair: no load box, shown as BW.
+      phxEx._ssBwA = !!ex.movements[0].bw; phxEx._ssBwB = !!ex.movements[1].bw;
       phxEx._supersetRest = ex.rest || 90;
       phxEx._blabFmt = 'superset';
       phxEx.format = 'superset';
@@ -6239,6 +6241,8 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.reps = String(ex.reps || 10);
       phxEx.load_guidance = '';
       phxEx._blabFmt = 'standard_sets';
+      phxEx._bodyweight = !!ex.bodyweight;
+      if(ex.rest > 0) phxEx.rest_sec = ex.rest;
       // v4.9.131: timed-hold exercises carry hold_secs through so the session renderer
       // can inject a countdown timer button (e.g. Copenhagen Planks).
       if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs; phxEx.reps = ex.hold_secs+'s'; }
@@ -8135,8 +8139,11 @@ window.draftGetSessionData = function(week, day, s){
     for(var i = 0; i < n; i++) out.push({ pct:pct, kg:P(m, pct), reps:reps, amrap:false });
     return out;
   }
+  // v4.9.359 — movements named here carry no load: shown as BW, no kg box.
+  var _BW = /pull-up|chin-up|push-up|dip|nordic|ab wheel|knee raise|leg raise|copenhagen|plank|burpee|box jump|broad jump|bound|hop/i;
   function SS(name, sets, rest, an, ar, bn, br, note){
-    return { name:name, format:'superset', sets:sets, rest:rest, movements:[{name:an, reps:ar},{name:bn, reps:br}], note:note || '' };
+    return { name:name, format:'superset', sets:sets, rest:rest,
+             movements:[{name:an, reps:ar, bw:_BW.test(an) && !/weighted/i.test(an)},{name:bn, reps:br, bw:_BW.test(bn) && !/weighted/i.test(bn)}], note:note || '' };
   }
   function std(name, sets, reps, note, extra){
     var o = { name:name, format:'standard_sets', sets:sets, reps:reps, note:note || '' };
@@ -8231,6 +8238,8 @@ window.draftGetSessionData = function(week, day, s){
              movements:(movs || []).map(function(m){ return { name:m[0], detail:m[1] || '' }; }) };
   }
   function part(title, presc, spec, alt){ return { kind: spec ? 'timed' : 'check', title:title, presc:presc, spec:spec || null, alt:alt || null }; }
+  // v4.9.359 — bodyweight sets: one tick per set, each tick starts the rest countdown.
+  function bwPart(title, presc, sets, rest){ return { kind:'sets', title:title, presc:presc, sets:sets, rest:rest, spec:null, alt:null }; }
   function partsSess(name, mins, parts){
     var exs = parts.map(function(p){ return std(p.title, 1, p.spec ? (p.spec.config.efforts ? p.spec.config.efforts + ' efforts' : 'For time') : 'Do it', p.presc); });
     var o = sess(name, mins, exs);
@@ -8344,8 +8353,8 @@ window.draftGetSessionData = function(week, day, s){
         part('Sprint Warm-up', '12 min: bike, A-skips, wall drills, 3 fast prowler build-ups.'),
         part('Acceleration Sprints', accReps + ' × 10 m prowler sprints, 90 s rest. Level ' + LS + ' of 5.', accGym),
         part('Resisted Sprints', sledN + ' × 15 m heavy sled, 2 min rest.', sled),
-        part('Lateral Bound', '3 × 4 each side. Stick each landing for a second.'),
-        part('Seated Box Jump', '3 × 3. Sit on a bench, explode onto the box, step down.')
+        bwPart('Lateral Bound', '3 × 4 each side. Stick each landing for a second.', 3, 60),
+        bwPart('Seated Box Jump', '3 × 3. Sit on a bench, explode onto the box, step down.', 3, 60)
       ]);
     }
     var agilName = (t % 2 === 1) ? '5-10-5 Shuttle' : '3-Cone Drill';
@@ -8361,7 +8370,7 @@ window.draftGetSessionData = function(week, day, s){
       part('Acceleration Sprints', accReps + ' × ' + accDist + ' m, 90 s rest. Level ' + LS + ' of 5. Gym version listed too.', accField, accGym),
       part('Resisted Sprints', sledN + ' × 15 m sled or hill, 2 min rest.', sled),
       part(agilName, '4 reps, 60 s rest, alternate directions.', agil),
-      part(plyo[0], plyo[1] + '. Stick every landing.')
+      bwPart(plyo[0], plyo[1] + '. Stick every landing.', parseInt(plyo[1], 10) || 3, 60)
     ]);
   }
 
@@ -8392,7 +8401,7 @@ window.draftGetSessionData = function(week, day, s){
       afap('Finisher — Dips / Rows / Slams', 3, 45, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10}], 'Beat your Week 2 time.')
     ][t];
     return sess('Upper — Max Effort', 70, [
-      std(pw, 3, 5, 'Power slot. Light and fast, max intent, 2 min rest.'),
+      std(pw, 3, 5, 'Power slot. Light and fast, max intent, 2 min rest.', { bodyweight:true, rest:120 }),
       { name:ME_U.n, format:'percentage_sets', allow_attempts:true, rest:240, sets:ME_U.sets,
         note:'MAX EFFORT, done alone: 3-5 min between heavy sets, nothing paired. ' + ME_U.note + ' Log the real weight and reps of your top set: it can raise your bench max.' },
       std('Weighted Pull-Up', parseInt(pullTxt, 10), pullTxt.replace(/^\d+\s*×\s*/, ''),
@@ -8408,7 +8417,7 @@ window.draftGetSessionData = function(week, day, s){
   if(day === 4){
     if(taper){
       return sess('Lower — Taper', 40, [
-        std('Box Jump', 2, 3, 'Step down. Crisp.'),
+        std('Box Jump', 2, 3, 'Step down. Crisp.', { bodyweight:true, rest:90 }),
         { name:'Back Squat — Taper', format:'percentage_sets', rest:150, sets:flat('squat', 3, 75, 2), note:'Fast and crisp. Leave plenty in the tank.' },
         SS('Bulgarian Split Squat / 45° Back Extension', 2, 90, 'Bulgarian Split Squat (DBs)', '8 / leg', '45° Back Extension', '12 reps')
       ]);
@@ -8432,7 +8441,7 @@ window.draftGetSessionData = function(week, day, s){
       std('Prowler Push', 5, '20 m', 'Heavy. Rest 90 s. Record the load.')
     ][t];
     return sess('Lower — Max Effort', 70, [
-      std((t % 2 === 1) ? 'Box Jump' : 'Broad Jump', 3, 3, 'Power slot. Full reset each rep. Stick the landing.'),
+      std((t % 2 === 1) ? 'Box Jump' : 'Broad Jump', 3, 3, 'Power slot. Full reset each rep. Stick the landing.', { bodyweight:true, rest:120 }),
       { name:ME_L.n, format:'percentage_sets', allow_attempts:true, rest:240, sets:ME_L.sets,
         note:'MAX EFFORT, done alone: 3-5 min between heavy sets. ' + ME_L.note + ' Log the real weight and reps of your top set.' },
       { name:L2.n, format:'percentage_sets', rest:180, sets:L2.sets, note:'Straight sets after the max effort lift. 3 min rest.' },
@@ -8453,7 +8462,7 @@ window.draftGetSessionData = function(week, day, s){
     var rb = D.repBench > 0 ? D.repBench : kgOf('bench', 60);
     var pwS = [null, 'Med Ball Overhead Throw', 'Clapping Push-Up', 'Med Ball Overhead Throw', 'Clapping Push-Up'][t];
     return sess((t === 1) ? 'Field Tests + Speed Upper' : 'Speed Upper', (t === 1) ? 120 : 75, ((t === 1) ? fieldTests() : []).concat([
-      std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.'),
+      std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.', { bodyweight:true, rest:120 }),
       { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3),
         note:'Bar weight shown; add light bands if you have them. 45 s rest, rotate three grip widths. Every rep FAST. ' +
              (adjU ? ('Load adjusted ' + (adjU > 0 ? '+' : '') + adjU + '% from your ratings. ') : '') +
@@ -8722,6 +8731,10 @@ window.draftConditioningStatus = function(parts, checks){
   var used = {};
   return (parts || []).map(function(p, i){
     if(p.kind === 'check') return { done: !!(checks && checks.indexOf(i) >= 0) };
+    if(p.kind === 'sets'){
+      var n = (checks && checks.filter(function(c){ return String(c).indexOf(i + ':') === 0; }).length) || 0;
+      return { done: n >= p.sets, setsDone: n };
+    }
     var ids = [p.spec.id].concat(p.alt ? [p.alt.id] : []);
     for(var k = 0; k < ids.length; k++){
       var list = window._draftPartScores(ids[k]);
@@ -8993,6 +9006,13 @@ window.draftOpenConditioning = function(week, day, sess){
              '<button data-dc-start="' + i + '" style="flex:1.4;padding:12px;background:' + (s.done ? 'transparent' : 'var(--gold)') + ';border:' + (s.done ? '1px solid var(--border2)' : 'none') + ';color:' + (s.done ? 'var(--text2)' : '#000') + ';font-size:12px;' + B + '">' + (s.done ? 'Do again' : '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:6px;" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>Start timer') + '</button>' +
              (p.alt ? '<button data-dc-alt="' + i + '" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:11px;' + B + '">' + (/gym|bike|prowler/i.test(p.alt.name) ? 'Gym version' : _esc(p.alt.name)) + '</button>' : '') +
              '</div>';
+      } else if(p.kind === 'sets'){
+        h += '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">';
+        for(var k = 1; k <= p.sets; k++){
+          var on = checks.indexOf(i + ':' + k) >= 0;
+          h += '<button data-dc-set="' + i + ':' + k + '" style="flex:1;min-width:70px;padding:11px 6px;background:' + (on ? 'rgba(58,125,68,0.15)' : 'transparent') + ';border:1px solid ' + (on ? '#3a7d44' : 'var(--border2)') + ';color:' + (on ? '#7fd18b' : 'var(--text2)') + ';font-size:11px;' + B + '">' + (on ? '&#10003; ' : '') + 'Set ' + k + '</button>';
+        }
+        h += '</div><div style="font-size:11px;color:var(--text3);margin-top:6px;">Bodyweight &middot; tick each set, ' + p.rest + ' s rest starts by itself</div>';
       } else {
         h += '<button data-dc-chk="' + i + '" style="margin-top:10px;padding:10px 14px;background:' + (s.done ? 'rgba(58,125,68,0.15)' : 'transparent') + ';border:1px solid ' + (s.done ? '#3a7d44' : 'var(--border2)') + ';color:' + (s.done ? '#7fd18b' : 'var(--text2)') + ';font-size:11px;' + B + '">' + (s.done ? '&#10003; Done' : 'Mark done') + '</button>';
       }
@@ -9016,7 +9036,7 @@ window.draftOpenConditioning = function(week, day, sess){
     var o = document.getElementById('draft-cond'); if(o) o.remove();
   }
   ov.addEventListener('click', function(e){
-    var t = e.target.closest ? e.target.closest('[data-dc],[data-dc-start],[data-dc-alt],[data-dc-chk]') : null;
+    var t = e.target.closest ? e.target.closest('[data-dc],[data-dc-start],[data-dc-alt],[data-dc-chk],[data-dc-set]') : null;
     if(!t) return;
     if(t.hasAttribute('data-dc-start') || t.hasAttribute('data-dc-alt')){
       var p = parts[parseInt(t.getAttribute(t.hasAttribute('data-dc-start') ? 'data-dc-start' : 'data-dc-alt'), 10)];
@@ -9024,6 +9044,18 @@ window.draftOpenConditioning = function(week, day, sess){
       _draftRegisterParts([p]);
       if(spec.guided) window.draftRunGuided(spec, dry, function(){ paint(true); });
       else if(typeof _phxStartSession === 'function') _phxStartSession(spec.id, dry);
+      return;
+    }
+    if(t.hasAttribute('data-dc-set')){
+      var key = t.getAttribute('data-dc-set'), pi = parseInt(key, 10), sk = parseInt(key.split(':')[1], 10);
+      var cs = _draftChecks(week, day), pos = cs.indexOf(key);
+      if(pos >= 0) cs.splice(pos, 1); else cs.push(key);
+      _draftSetChecks(week, day, cs);
+      paint(true);
+      var pp = parts[pi];
+      if(pos < 0 && pp && sk < pp.sets && typeof startRestTimer === 'function'){
+        startRestTimer(pp.rest, pp.title + ' \u00b7 Set ' + (sk + 1), '', '', '', true);
+      }
       return;
     }
     if(t.hasAttribute('data-dc-chk')){
@@ -43816,6 +43848,10 @@ function openTodaySession(){
     }
     // v4.7.17 FIX 1: external unit labels per exercise type.
     var unitClass = phxExerciseUnitClass(ex.name);
+    // v4.9.359 — Jon: bodyweight movements "track as body weight with the rest counter ... it
+    // should be standard through the programme". ex._bodyweight hides the kg column the same
+    // way a timed hold does; reps and the per-set rest timer are unchanged.
+    var _noLoad = (unitClass === 'sec') || !!ex._bodyweight;
     var loadUnitLabel = unitClass === 'sec' ? '' : unitClass;   // holds: no kg input
     var repsUnitLabel = unitClass === 'sec' ? 'sec' : 'reps';
     // v4.7.31 FIX 3: if the prescribed reps value already carries a unit (e.g. "200m" carry,
@@ -43834,7 +43870,7 @@ function openTodaySession(){
     // same unit-label column width, same tick column width across every set in the block. The
     // earlier `auto` columns let the unit labels ("kg" vs "reps") drift the inputs sideways.
     // 6-column grid: set# | kg input (fixed) | kg unit (fixed) | reps input (fixed) | reps unit (fixed) | tick (fixed)
-    var setsGrid = unitClass === 'sec'
+    var setsGrid = _noLoad
       ? '28px 1fr 40px 36px'                       // hold: reps input | reps unit | tick (no load input)
       : '28px 88px 40px 88px 40px 36px';
 
@@ -43851,7 +43887,7 @@ function openTodaySession(){
       var repsPrefill = phxStripUnit(t.reps);
       var kgValAttr   = kgPrefill   ? (' value="'+String(kgPrefill).replace(/"/g,'&quot;')+'"')   : ' value=""';
       var repsValAttr = repsPrefill ? (' value="'+String(repsPrefill).replace(/"/g,'&quot;')+'"') : ' value=""';
-      var loadInputHTML = unitClass === 'sec' ? '' :
+      var loadInputHTML = _noLoad ? '' :
         '<input type="number" class="set-input"'+kgValAttr+' id="kg-ai-'+i+'-'+s+'" placeholder="—" inputmode="decimal" style="text-align:center;width:100%;font-size:22px;font-weight:900;padding:10px 0;box-sizing:border-box;">' +
         '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);text-align:center;align-self:center;">'+loadUnitLabel+'</div>';
       setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+setsGrid+';align-items:center;gap:6px;" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(t.kg).replace(/"/g,'&quot;')+'" data-target-reps="'+String(t.reps).replace(/"/g,'&quot;')+'">'+
@@ -44005,7 +44041,7 @@ function openTodaySession(){
     block.innerHTML='<div class="ex-block-header"><div style="flex:1;min-width:0;">'+
       '<div class="ex-num">Exercise '+(i+1)+'</div>'+
       '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
-      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
+      '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex._bodyweight?' &middot; bodyweight':'')+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
       targetSection+
       suggestSection+

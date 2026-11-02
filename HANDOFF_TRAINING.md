@@ -1,5 +1,11 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.359 (2 Nov 2026) — BODYWEIGHT IS A STANDARD SET TYPE (Jon: "it should be standard through the programme sessions").**
+> Lift sessions: `std(..., {bodyweight:true, rest:N})` → translator sets `_bodyweight` + `rest_sec` → the renderer drops the kg column (`_noLoad`) and says "· bodyweight". Used on the Tue/Thu/Sat power slots and the taper Box Jump.
+> Supersets: `SS()` flags each movement `bw` by name (`_BW` regex in the Draft module; "weighted" overrides) → translator `_ssBwA/_ssBwB` → `_blabBuildSupersetBlock` shows **BW** in place of the kg box. Reps still logged; loads were already optional.
+> Conditioning screen: `bwPart(title, presc, sets, rest)` = part kind `'sets'` — Set 1..n ticks, each tick (except the last) starts `startRestTimer`. Lateral Bound, Seated Box Jump, Wed plyos.
+> Tests: `BWSTD:` in tests/training.mjs (superset card test proved red by inverting the BW branch). NB card B only draws after A is ticked — test on card A or you assert on nothing.
+
 **Written:** 4 Sep 2026, end of Training session
 **From:** Training chat (worktree `.claude/worktrees/training`)
 **Delivery:** the cross-chat channel is GONE from my session — `SendMessage` was removed

@@ -5932,4 +5932,46 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(easy[0].secs, 180);
     assert.equal(bs.length, 2 * (12 + 11) + 1, 'two blocks of 12 hard / 11 easy, plus the spin');
   });
+
+  // ── v4.9.359: bodyweight is a standard set type across the programme (Jon, 2 Nov) ──
+  test('BWSTD: bodyweight movements carry no load box, in pairs and on their own', () => {
+    startDraft();
+    const all = [];
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) { const x = app.blabGetSessionData(w, d); if (x) all.push(...(x.exercises || [])); }
+    const pairs = all.filter((e) => e.format === 'superset');
+    const moves = pairs.flatMap((e) => e.movements);
+    const pull = moves.find((m) => m.name === 'Strict Pull-Up');
+    assert.ok(pull, 'positive control: the pull-up pair exists');
+    assert.equal(pull.bw, true, 'Strict Pull-Up is bodyweight');
+    assert.equal(moves.find((m) => m.name === 'Flat DB Bench').bw, false, 'a dumbbell lift keeps its kg box');
+    assert.equal(moves.find((m) => m.name === 'Copenhagen Plank').bw, true);
+    const box = all.filter((e) => /^(Box|Broad) Jump$/.test(e.name));
+    assert.ok(box.length > 0, 'positive control: jumps are programmed');
+    assert.ok(box.every((e) => e.bodyweight === true && e.rest > 0), 'every jump: bodyweight with a rest — ' + JSON.stringify(box.filter((e) => !e.bodyweight).map((e) => e.name + ':' + e.format)));
+  });
+
+  test('BWSTD: the superset card draws BW in place of the load input', () => {
+    // Card B only draws after A is ticked, so both cases are cut on card A.
+    startDraft();
+    const draw = (bwA) => {
+      const made = [];
+      const mk = () => { const e = { style: {}, innerHTML: '', children: [], appendChild(c) { this.children.push(c); return c; },
+        addEventListener() {}, setAttribute() {}, removeAttribute() {}, insertBefore(c) { return c; }, querySelector: () => null, querySelectorAll: () => [],
+        classList: { add() {}, remove() {}, contains: () => false, toggle() {} } }; made.push(e); return e; };
+      const realCreate = app.document.createElement, realGet = app.document.getElementById, realST = app.setTimeout;
+      const target = mk();
+      app.document.createElement = mk;
+      app.document.getElementById = (id) => (id === 'blab-ss-0' ? target : null);
+      app.setTimeout = (fn) => { fn(); return 0; };   // renderSS is deferred 50 ms — run it now
+      try { app.window._blabBuildSupersetBlock({ name: 'A', sets: 3, reps: '10', _supersetPartner: { name: 'B', reps: '10' }, _ssBwA: bwA }, 0); }
+      finally { app.document.createElement = realCreate; app.document.getElementById = realGet; app.setTimeout = realST; }
+      return target.innerHTML;
+    };
+    const loaded = draw(false), bw = draw(true);
+    assert.ok(/id="bss-ra-0"/.test(loaded), 'positive control: the card drew');
+    assert.ok(/id="bss-ka-0"/.test(loaded) && !/>BW</.test(loaded), 'a loaded movement keeps its kg box');
+    assert.ok(!/id="bss-ka-0"/.test(bw), 'a bodyweight movement has no kg box');
+    assert.ok(/>BW</.test(bw) && /id="bss-ra-0"/.test(bw), 'it says BW and still takes reps');
+  });
+
 }

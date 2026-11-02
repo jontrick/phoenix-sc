@@ -1,5 +1,9 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.364 (3 Nov 2026) — TWO changes in one commit (Jon was mid-session; flagged, not ideal):**
+> 1. Finisher movements flagged `kg:true` (renegade rows, ball slams, KB swings) get their OWN kg box in the AFAP runner (`st.afapKg`, `_blabAfapKg`), prefilled from and saved to `records[name+'_wt']`, listed in the completion summary; the card shows "last X kg". Push-ups/dips/ring rows have none. Tests `FINKG:`.
+> 2. Superset progress survives leaving the screen: `_blabSSPersist` after every A/B tick → `blockProgress[<today key>]['ss:'+idx]` (name-checked); `_blabSSLoad` on build. Blocks finished before this shipped are rebuilt from today-dated `records[name+'_setlog']`. Tests `SSKEEP:`. Gap remaining: a superset abandoned mid-way does not trigger the "unfinished session" prompt (entries carry no `.done`).
+
 > **v4.9.363 (3 Nov 2026)** — `window._phxRepair1010`: one-off repair of Jon's 1010-rep typo (superset, 3 Nov). Local `records[*_reps]===1010` → 10 and 3 Nov `_setlog` sets; `set_logs` rows reps=1010 logged 3 Nov (Brisbane) → 10, via his own session (RLS). Flag `phx_fix1010_{uid}` set only after the cloud write succeeds. **Archive to blab_archive.js once Jon confirms the Prev line reads 10.** Test `REPAIR1010`.
 
 > **v4.9.362 (3 Nov 2026)** — Global `input,select,textarea{color:var(--text)}`: inputs without an inline colour were rendering black on the dark cards (Jon logged 1010 reps on top of an invisible prefilled 10). Number inputs select their content on focus (document `focusin`), so typing replaces a prefill. Superset A/B reject reps > 99 with a toast.

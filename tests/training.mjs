@@ -6042,4 +6042,101 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(r['Incline DB Press_setlog'].sets.map((x) => x.reps), [10, 10]);
     assert.equal(r['Old_setlog'].sets[0].reps, 1010, 'another day is not touched');
   });
+
+  test('FINKG: finisher implements carry their own kg; body-weight moves do not (Jon, 3 Nov)', () => {
+    startDraft();
+    const fin = app.blabGetSessionData(2, 2).exercises.find((e) => /^Finisher/.test(e.name));
+    const kg = Object.fromEntries(fin.movements.map((m) => [m.name, !!m.kg]));
+    assert.deepEqual(kg, { 'DB Renegade Rows (alternating)': true, 'Push-Ups': false, 'Ball Slams': true });
+  });
+
+  test('FINKG: the runner draws a kg box per loaded movement and saves it for next time', () => {
+    startDraft();
+    const st0 = app.blabGetState(); st0.records = st0.records || {}; st0.records['Ball Slams_wt'] = 12; app.blabSaveState(st0);
+    const ex = { name: 'Finisher — T', format: 'afap', sets: 1, rest: 0, _timeRecordKey: 'Finisher — T_time',
+      movements: [{ name: 'DB Renegade Rows (alternating)', reps: 10, kg: true }, { name: 'Push-Ups', reps: 10 }, { name: 'Ball Slams', reps: 10, kg: true }] };
+    const st = {};
+    const body = { innerHTML: '' };
+    app.blabRenderAfap(ex, st, body);
+    assert.ok(/id="afap-kg-0"/.test(body.innerHTML) && /id="afap-kg-2"/.test(body.innerHTML), 'boxes on the rows and the slams');
+    assert.ok(!/id="afap-kg-1"/.test(body.innerHTML), 'none on the push-ups');
+    assert.equal(st.afapKg[2], 12, 'slams prefilled from last time');
+    app.window._blabWoState = Object.assign(st, { ex, elapsed: 300, _elapsedBase: 300 });   // the clock re-derives elapsed from its base
+    app.window._blabAfapKg(0, '17.5');
+    const realNotice = app.window._blabNotice; let said = [];
+    app.window._blabNotice = (t, lines) => { said = lines; };
+    try { app.window._blabWoDone(); } catch (e) { said.push('THREW ' + e.message); }
+    finally { app.window._blabNotice = realNotice; }
+    const r = app.blabGetState().records;
+    assert.equal(r['DB Renegade Rows (alternating)_wt'], 17.5, 'row weight saved ' + JSON.stringify(said) + ' el=' + st.elapsed);
+    assert.equal(r['Ball Slams_wt'], 12, 'slam weight kept');
+    assert.ok(said.includes('DB Renegade Rows (alternating): 17.5 kg'), 'shown in the summary: ' + JSON.stringify(said));
+  });
+
+  // ── v4.9.364: superset progress survives leaving the screen (Jon, 3 Nov) ──
+  const ssDraw = (ex) => {
+    const made = [];
+    const mk = () => { const e = { style: {}, innerHTML: '', textContent: '', value: '', children: [], appendChild(c) { this.children.push(c); return c; },
+      addEventListener() {}, setAttribute() {}, removeAttribute() {}, insertBefore(c) { return c; }, querySelector: () => null, querySelectorAll: () => [],
+      classList: { add() {}, remove() {}, contains: () => false, toggle() {} } }; made.push(e); return e; };
+    const target = mk();
+    const inputs = {};
+    const realCreate = app.document.createElement, realGet = app.document.getElementById, realST = app.setTimeout;
+    app.document.createElement = mk;
+    app.document.getElementById = (id) => (id === 'blab-ss-0' ? target : (inputs[id] = inputs[id] || { value: '', style: {} }));
+    app.setTimeout = (fn) => { fn(); return 0; };
+    const restore = () => { app.document.createElement = realCreate; app.document.getElementById = realGet; app.setTimeout = realST; };
+    try { app.window._blabBuildSupersetBlock(ex, 0); } catch (e) { restore(); throw e; }
+    return { target, inputs, restore };
+  };
+  const SSEX = { name: 'DB Lateral Raise', sets: 2, reps: 'To failure', _supersetPartner: { name: 'Rope Triceps Pushdown', reps: 'To failure' } };
+
+  test('SSKEEP: sets ticked, screen left, screen re-entered — the sets are still there', () => {
+    startDraft();
+    app.window._blabCurrentSession = { week: 2, day: 2 };
+    app.window._blabPhxExercises = [SSEX];
+    let d = ssDraw(SSEX);
+    try {
+      d.inputs['bss-ka-0'] = { value: '10' }; d.inputs['bss-ra-0'] = { value: '18' };
+      app.window._blabSSdoneA(0);
+      d.inputs['bss-kb-0'] = { value: '25' }; d.inputs['bss-rb-0'] = { value: '21' };
+      const realRest = app.startRestTimer; app.startRestTimer = () => {};
+      try { app.window._blabSSdoneB(0); } finally { app.startRestTimer = realRest; }
+    } finally { d.restore(); }
+    app.window._blabSSState_0 = null;                      // left the page: the closure is gone
+    d = ssDraw(SSEX); d.restore();
+    const st = app.window._blabSSState_0;
+    assert.equal(st.set, 2, 'back on set 2');
+    assert.deepEqual(st.log, [{ a: 18, ka: 10, b: 21, kb: 25 }], 'set 1 kept');
+    assert.ok(/18 reps/.test(d.target.innerHTML), 'and drawn on the card: ' + d.target.innerHTML.slice(0, 200));
+  });
+
+  test('SSKEEP: a superset finished earlier today is rebuilt from its dated history', () => {
+    startDraft();
+    app.window._blabCurrentSession = { week: 2, day: 2 };
+    app.window._blabPhxExercises = [SSEX];
+    const today = app._phxLocalISO();
+    const st0 = app.blabGetState(); st0.records = st0.records || {};
+    st0.records['DB Lateral Raise_setlog'] = { date: today, sets: [{ wt: 10, reps: 20 }, { wt: 10, reps: 15 }] };
+    st0.records['Rope Triceps Pushdown_setlog'] = { date: today, sets: [{ wt: 25, reps: 22 }, { wt: 25, reps: 17 }] };
+    st0.records['Other_setlog'] = { date: '2020-01-01', sets: [{ wt: 1, reps: 1 }] };
+    app.blabSaveState(st0);
+    const d = ssDraw(SSEX); d.restore();
+    const st = app.window._blabSSState_0;
+    assert.equal(st.set, 3, 'both sets done');
+    assert.deepEqual(st.log.map((l) => [l.a, l.b]), [[20, 22], [15, 17]]);
+    assert.ok(/All 2 set/.test(d.target.innerHTML), 'shown complete');
+  });
+
+  test('SSKEEP: last week\'s history is NOT treated as today', () => {
+    startDraft();
+    app.window._blabCurrentSession = { week: 2, day: 2 };
+    app.window._blabPhxExercises = [SSEX];
+    const st0 = app.blabGetState(); st0.records = st0.records || {};
+    st0.records['DB Lateral Raise_setlog'] = { date: '2026-10-27', sets: [{ wt: 10, reps: 20 }] };
+    app.blabSaveState(st0);
+    const d = ssDraw(SSEX); d.restore();
+    assert.equal(app.window._blabSSState_0.set, 1);
+    assert.equal(app.window._blabSSState_0.log.length, 0);
+  });
 }

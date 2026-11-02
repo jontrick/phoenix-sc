@@ -6050,28 +6050,41 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(kg, { 'DB Renegade Rows (alternating)': true, 'Push-Ups': false, 'Ball Slams': true });
   });
 
-  test('FINKG: the runner draws a kg box per loaded movement and saves it for next time', () => {
+  test('FINKG: kg is set on the card before Start; the runner shows it and saves it', () => {
     startDraft();
     const st0 = app.blabGetState(); st0.records = st0.records || {}; st0.records['Ball Slams_wt'] = 12; app.blabSaveState(st0);
-    const ex = { name: 'Finisher — T', format: 'afap', sets: 1, rest: 0, _timeRecordKey: 'Finisher — T_time',
-      movements: [{ name: 'DB Renegade Rows (alternating)', reps: 10, kg: true }, { name: 'Push-Ups', reps: 10 }, { name: 'Ball Slams', reps: 10, kg: true }] };
-    const st = {};
-    const body = { innerHTML: '' };
+    const movements = [{ name: 'DB Renegade Rows (alternating)', reps: 10, kg: true }, { name: 'Push-Ups', reps: 10 }, { name: 'Ball Slams', reps: 10, kg: true }];
+    // the card
+    const made = [];
+    const mk = () => { const e = { style: {}, innerHTML: '', textContent: '', children: [], appendChild(c) { this.children.push(c); return c; },
+      addEventListener() {}, setAttribute() {}, removeAttribute() {}, insertBefore(c) { return c; }, querySelector: () => null, querySelectorAll: () => [],
+      classList: { add() {}, remove() {}, contains: () => false, toggle() {} } }; made.push(e); return e; };
+    const realCreate = app.document.createElement; app.document.createElement = mk;
+    try { app.window._blabBuildComplexBlock({ name: 'Finisher — T', sets: 1, _blabHasLoad: false, _blabMovements: movements }, 5); }
+    finally { app.document.createElement = realCreate; }
+    const card = made.map((m) => m.innerHTML).join('\n');
+    assert.ok(/id="blab-cpx-kg-5-0"/.test(card) && /id="blab-cpx-kg-5-2"/.test(card), 'kg boxes on the card for rows and slams');
+    assert.ok(!/id="blab-cpx-kg-5-1"/.test(card), 'none for push-ups');
+    assert.ok(/id="blab-cpx-kg-5-2" value="12"/.test(card), 'slams prefilled from last time');
+    app.window['_blabCpxKg_5'][0] = 17.5;                   // what typing in the card box does
+    // the runner, started with the card's weights
+    const ex = { name: 'Finisher — T', format: 'afap', sets: 1, rest: 0, _timeRecordKey: 'Finisher — T_time', movements,
+      _afapKgPre: app.window['_blabCpxKg_5'].slice() };
+    const st = {}; const body = { innerHTML: '' };
     app.blabRenderAfap(ex, st, body);
-    assert.ok(/id="afap-kg-0"/.test(body.innerHTML) && /id="afap-kg-2"/.test(body.innerHTML), 'boxes on the rows and the slams');
-    assert.ok(!/id="afap-kg-1"/.test(body.innerHTML), 'none on the push-ups');
-    assert.equal(st.afapKg[2], 12, 'slams prefilled from last time');
+    assert.ok(!/<input[^>]*afap-kg/.test(body.innerHTML), 'no typing mid-set');
+    assert.ok(/17.5 kg/.test(body.innerHTML) && /12 kg/.test(body.innerHTML), 'weights shown on the runner');
     app.window._blabWoState = Object.assign(st, { ex, elapsed: 300, _elapsedBase: 300 });   // the clock re-derives elapsed from its base
-    app.window._blabAfapKg(0, '17.5');
     const realNotice = app.window._blabNotice; let said = [];
     app.window._blabNotice = (t, lines) => { said = lines; };
     try { app.window._blabWoDone(); } catch (e) { said.push('THREW ' + e.message); }
     finally { app.window._blabNotice = realNotice; }
     const r = app.blabGetState().records;
-    assert.equal(r['DB Renegade Rows (alternating)_wt'], 17.5, 'row weight saved ' + JSON.stringify(said) + ' el=' + st.elapsed);
+    assert.equal(r['DB Renegade Rows (alternating)_wt'], 17.5, 'row weight saved ' + JSON.stringify(said));
     assert.equal(r['Ball Slams_wt'], 12, 'slam weight kept');
-    assert.ok(said.includes('DB Renegade Rows (alternating): 17.5 kg'), 'shown in the summary: ' + JSON.stringify(said));
+    assert.ok(said.includes('DB Renegade Rows (alternating): 17.5 kg'), 'shown in the summary');
   });
+
 
   // ── v4.9.364: superset progress survives leaving the screen (Jon, 3 Nov) ──
   const ssDraw = (ex) => {

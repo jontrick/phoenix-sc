@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.364';
+var APP_VERSION='4.9.365';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5899,10 +5899,18 @@ window._blabBuildComplexBlock = function(ex, idx){
       // and the runner, which is the only other place the list appears, cannot be opened.
       : '<div style="font-size:13px;color:var(--text2);margin:6px 0 2px;">'+totalSets+' round'+(totalSets===1?'':'s')+' for time'+(ex._blabRest&&totalSets>1?' &middot; '+ex._blabRest+' s rest between':'')+'</div>'+
         '<div style="margin:6px 0 2px;border-left:2px solid var(--gold);padding-left:10px;">'+
-          movs.map(function(m){ var r = String(m.reps);
-            var _w = m.kg ? ((((window.blabGetState && window.blabGetState()) || {}).records || {})[m.name+'_wt'] || 0) : 0;
-            return '<div style="font-size:15px;color:var(--text);padding:3px 0;"><span style="font-family:var(--font-d);font-weight:900;color:var(--gold);">'+r+'</span> &nbsp;'+m.name+
-              (m.kg ? '<span style="font-size:12px;color:var(--text3);"> &middot; '+(_w ? 'last '+_w+' kg' : 'log kg')+'</span>' : '')+'</div>'; }).join('')+
+          movs.map(function(m, mi){ var r = String(m.reps);
+            // v4.9.365 — Jon 3 Nov: "pre fill the kg on the finishers then hit go". The
+            // weight is set HERE, before Start; the runner only displays it.
+            var _w = m.kg ? ((((window.blabGetState && window.blabGetState()) || {}).records || {})[m.name+'_wt'] || '') : '';
+            if(m.kg){ window['_blabCpxKg_'+idx] = window['_blabCpxKg_'+idx] || []; window['_blabCpxKg_'+idx][mi] = _w; }
+            return '<div style="display:flex;align-items:center;gap:8px;font-size:15px;color:var(--text);padding:3px 0;min-height:40px;">'+
+              '<div style="flex:1;"><span style="font-family:var(--font-d);font-weight:900;color:var(--gold);">'+r+'</span> &nbsp;'+m.name+'</div>'+
+              (m.kg ? '<input type="number" inputmode="decimal" id="blab-cpx-kg-'+idx+'-'+mi+'" value="'+_w+'" placeholder="&ndash;" '+
+                  'oninput="(window[\'_blabCpxKg_'+idx+'\']||[])['+mi+']=parseFloat(this.value)||\'\'" '+
+                  'style="width:62px;padding:8px 4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;">'+
+                '<span style="font-size:11px;color:var(--text3);width:16px;">kg</span>' : '')+
+            '</div>'; }).join('')+
         '</div>')+
     (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);font-style:italic;margin-top:4px;">'+ex.coaching_note+'</div>':'');
 
@@ -5935,6 +5943,7 @@ window._blabBuildComplexBlock = function(ex, idx){
     var exArr = window._blabPhxExercises || [];
     var ex2 = exArr[idx] || ex;
     ex2._blabSuggestedLoad = window['_blabCpxLoad_'+idx];
+    ex2._afapKgPre = (window['_blabCpxKg_'+idx] || []).slice();   // v4.9.365 — weights set on the card
     window.blabRunWorkout(ex2, idx);
   };
 
@@ -7086,7 +7095,8 @@ function blabRenderAfap(ex,st,body){
   // last weight he used for that movement; saved on completion under records[name+'_wt'].
   if(!st.afapKg){
     var _kgRec = ((window.blabGetState && window.blabGetState()) || {}).records || {};
-    st.afapKg = movs.map(function(m){ return (m && m.kg) ? (_kgRec[m.name+'_wt'] || '') : ''; });
+    var _pre = ex._afapKgPre || [];
+    st.afapKg = movs.map(function(m, i){ return (m && m.kg) ? ((_pre[i] !== undefined && _pre[i] !== '') ? _pre[i] : (_kgRec[m.name+'_wt'] || '')) : ''; });
   }
   var prevBest=ex.prev_best||0;
 
@@ -7173,10 +7183,8 @@ function blabRenderAfap(ex,st,body){
         '<div style="font-size:15px;font-weight:600;color:'+(isDone?'var(--text3)':'var(--text)')+';line-height:1.2;">'+(isDone?'\u2713 ':'')+m.name+'</div>'+
         '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(curReps||m.reps)+(/[a-z]/i.test(String(curReps||m.reps))?'':' reps')+(ex.has_load&&st.afapLoad?' &middot; '+st.afapLoad+'kg':'')+'</div>'+
       '</div>'+
-      (m.kg ? '<div style="display:flex;align-items:center;gap:4px;margin-left:auto;margin-right:10px;">'+
-        '<input type="number" inputmode="decimal" id="afap-kg-'+i+'" value="'+(st.afapKg[i]||'')+'" placeholder="–" oninput="window._blabAfapKg('+i+',this.value)" '+
-          'style="width:64px;padding:9px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;">'+
-        '<span style="font-size:11px;color:var(--text3);">kg</span></div>' : '')+
+      // v4.9.365 — no typing mid-set: the weight was set on the card before Start.
+      (m.kg && st.afapKg[i] ? '<div style="margin-left:auto;margin-right:12px;font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--gold);">'+st.afapKg[i]+' kg</div>' : '')+
       '<button onclick="window._blabAfapTick('+i+')" style="padding:10px 16px;background:'+(isDone?'#3a7d44':'var(--gold)')+';border:none;border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:700;text-transform:uppercase;color:#000;cursor:pointer;min-width:64px;">'+(isDone?'\u2713':'Done')+'</button>'+
     '</div>';
   });
@@ -7186,12 +7194,6 @@ function blabRenderAfap(ex,st,body){
   if(allSetsDone) h+=blabFinishBtn('Complete \u2713 &mdash; Log Time');
   body.innerHTML=h;
 }
-
-window._blabAfapKg=function(i,v){
-  var st=window._blabWoState; if(!st) return;
-  if(!st.afapKg) st.afapKg=[];
-  st.afapKg[i]=parseFloat(v)||'';
-};
 
 window._blabAfapLoadAdj=function(delta){
   var st=window._blabWoState; if(!st) return;

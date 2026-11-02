@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.365 (3 Nov 2026)** — Finisher kg is entered ON THE CARD before Start (Jon: "pre fill the kg on the finishers then hit go"): `blab-cpx-kg-<idx>-<mi>` boxes → `window['_blabCpxKg_'+idx]` → `ex2._afapKgPre` → runner `st.afapKg`, displayed as text only (no inputs mid-set). `_blabAfapKg` removed. Test `FINKG: kg is set on the card before Start`.
+
 > **v4.9.364 (3 Nov 2026) — TWO changes in one commit (Jon was mid-session; flagged, not ideal):**
 > 1. Finisher movements flagged `kg:true` (renegade rows, ball slams, KB swings) get their OWN kg box in the AFAP runner (`st.afapKg`, `_blabAfapKg`), prefilled from and saved to `records[name+'_wt']`, listed in the completion summary; the card shows "last X kg". Push-ups/dips/ring rows have none. Tests `FINKG:`.
 > 2. Superset progress survives leaving the screen: `_blabSSPersist` after every A/B tick → `blockProgress[<today key>]['ss:'+idx]` (name-checked); `_blabSSLoad` on build. Blocks finished before this shipped are rebuilt from today-dated `records[name+'_setlog']`. Tests `SSKEEP:`. Gap remaining: a superset abandoned mid-way does not trigger the "unfinished session" prompt (entries carry no `.done`).

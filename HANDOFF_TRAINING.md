@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.362 (3 Nov 2026)** — Global `input,select,textarea{color:var(--text)}`: inputs without an inline colour were rendering black on the dark cards (Jon logged 1010 reps on top of an invisible prefilled 10). Number inputs select their content on focus (document `focusin`), so typing replaces a prefill. Superset A/B reject reps > 99 with a toast.
+
 > **v4.9.361 (3 Nov 2026)** — Med-ball power slots (Chest Pass, Overhead Throw) are LOADED, not bodyweight: Jon, "it used a med ball". `bodyweight:!/Med Ball/i.test(name)` on the Tue/Sat power slot; push-up variants stay bodyweight. Test: `BWSTD: a med-ball throw is loaded`.
 
 > **v4.9.360 (2 Nov 2026) — CHIN-UPS OUT OF FINISHERS "FOR NOW"; UNLOADED BLOCKS SHOW THEIR WORK.**

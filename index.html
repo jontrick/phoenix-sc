@@ -235,6 +235,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-b);min-height
 .disclaimer-box{background:var(--bg3);border:1px solid var(--border2);border-left:3px solid var(--orange);border-radius:var(--radius);padding:16px;margin-bottom:20px;font-size:13px;color:var(--text2);line-height:1.7;}
 .disclaimer-box strong{color:var(--text);display:block;margin-bottom:6px;font-family:var(--font-d);font-size:14px;letter-spacing:1px;text-transform:uppercase;}
 .disclaimer-check{display:flex;align-items:flex-start;gap:12px;padding:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;margin-bottom:12px;}
+/* v4.9.362 — Jon 3 Nov: "black font on black background in tiles". No rule set an input's
+   text colour, so any input without an inline colour fell back to the browser default
+   (black) on the dark cards. A prefilled "10" was invisible; he typed 10 and logged 1010. */
+input,select,textarea{color:var(--text);}
 .disclaimer-check input[type=checkbox]{width:20px;height:20px;flex-shrink:0;accent-color:var(--gold);cursor:pointer;margin-top:1px;}
 .disclaimer-check-text{font-size:13px;color:var(--text2);line-height:1.5;}
 .profile-result{background:var(--bg3);border:1px solid var(--gold);border-radius:var(--radius);padding:20px;margin-bottom:20px;text-align:center;}
@@ -3550,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.361';
+var APP_VERSION='4.9.362';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5637,6 +5641,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
     var ka = parseFloat(document.getElementById('bss-ka-'+i)&&document.getElementById('bss-ka-'+i).value)||0;
     var ra = parseInt(document.getElementById('bss-ra-'+i)&&document.getElementById('bss-ra-'+i).value)||0;
     if(ra<=0){ window._blabCalToast('Enter reps for A', 'error'); return; }
+    if(ra>99){ window._blabCalToast(ra+' reps? Check A — the box may already have had a number in it', 'error'); return; }
     st.loadA=ka; st.aReps=ra; st.aOk=true;
     window['_blabSSrender_'+i]();
   };
@@ -5647,6 +5652,7 @@ window._blabBuildSupersetBlock = function(ex, idx){
     var kb = parseFloat(document.getElementById('bss-kb-'+i)&&document.getElementById('bss-kb-'+i).value)||0;
     var rb = parseInt(document.getElementById('bss-rb-'+i)&&document.getElementById('bss-rb-'+i).value)||0;
     if(rb<=0){ window._blabCalToast('Enter reps for B', 'error'); return; }
+    if(rb>99){ window._blabCalToast(rb+' reps? Check B — the box may already have had a number in it', 'error'); return; }
     st.loadB=kb; st.bReps=rb; st.bOk=true;
     st.log.push({a:st.aReps,ka:st.loadA,b:rb,kb:kb});
     st.set++;
@@ -38118,6 +38124,16 @@ window._blabCalSmartRec = function(dateISO, weekDates){
 };
 
 // ── Toast (DOM only — native dialogs are banned on iOS PWA) ────────────────
+// v4.9.362 — tapping a number box selects what is in it, so typing replaces a prefilled
+// value rather than appending to it (10 + "10" = 1010, Jon 3 Nov). iOS needs the deferral.
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('focusin', function(e){
+    var t = e && e.target;
+    if(t && t.tagName === 'INPUT' && t.type === 'number' && t.value !== ''){
+      setTimeout(function(){ try { t.select(); } catch(_e){} }, 0);
+    }
+  });
+}
 window._blabCalToast = function(msg, kind){
   var old = document.getElementById('blab-cal-toast');
   if(old) old.remove();

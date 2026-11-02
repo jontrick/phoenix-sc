@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.362';
+var APP_VERSION='4.9.363';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -10716,6 +10716,59 @@ try {
     if(document.visibilityState === 'visible') window._phxOutboxFlush();
   });
 } catch(_e){}
+
+// v4.9.363 — ONE-OFF REPAIR, Jon 3 Nov 2026: "I just typed 1010 reps for 10 reps when
+// couldn't see the auto fill and now I pressed complete I can't edit". The prefilled 10
+// was black on black (fixed .362); his typed 10 appended to it. The block was a superset
+// (the only reps box with no text colour), logged 3 Nov. Scope is deliberately that
+// narrow: reps === 1010, logged on 2026-11-03, his rows only, set back to 10 — both the
+// local superset history (records[*_reps], records[*_setlog]) and set_logs. Runs once
+// per device; a failed cloud write is recorded and retried next open.
+window._phxRepair1010 = function(){
+  try {
+    if(!currentSession || !currentSession.user) return false;
+    var uid = currentSession.user.id;
+    var flag = 'phx_fix1010_' + uid;
+    if(localStorage.getItem(flag) === 'done') return false;
+    var bs = window.blabGetState && window.blabGetState();
+    var changed = false;
+    if(bs && bs.records){
+      Object.keys(bs.records).forEach(function(k){
+        var v = bs.records[k];
+        if(/_reps$/.test(k) && Number(v) === 1010){ bs.records[k] = 10; changed = true; }
+        if(/_setlog$/.test(k) && v && typeof v === 'object' && v.date === '2026-11-03' && Array.isArray(v.sets)){
+          v.sets.forEach(function(x){ if(x && Number(x.reps) === 1010){ x.reps = 10; changed = true; } });
+        }
+      });
+      if(changed) window.blabSaveState(bs);
+    }
+    if(typeof sb === 'undefined' || !sb || !sb.from) return changed;
+    var q = sb.from('set_logs').update({ reps: 10 }).eq('user_id', uid).eq('reps', 1010)
+      .gte('logged_at', '2026-11-02T14:00:00Z').lt('logged_at', '2026-11-03T14:00:00Z');   // 3 Nov, Brisbane
+    Promise.resolve(q).then(function(res){
+      if(res && res.error){
+        if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repair1010_setlogs', res.error, { reps: 10 });
+        return;   // flag stays unset — retried on the next open
+      }
+      localStorage.setItem(flag, 'done');
+    }, function(e){
+      if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repair1010_setlogs_reject', e, { reps: 10 });
+    });
+    return changed;
+  } catch(e){
+    if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repair1010_local', e, {});
+    return false;
+  }
+};
+(function(){
+  var tries = 0;
+  function tick(){
+    tries++;
+    try { if(currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window._phxRepair1010(); return; } } catch(_e){}
+    if(tries < 40) setTimeout(tick, 3000);
+  }
+  if(typeof setTimeout === 'function') setTimeout(tick, 4000);
+})();
 
 function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
   if(!currentSupabaseSessionId||!currentSession||!currentSession.user) return;

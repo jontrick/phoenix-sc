@@ -619,3 +619,4 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       unguessable values, all four returned exactly.
 
 - **Pull-ups paused in Draft finishers (2 Nov, v4.9.360)** — renegade rows stand in. Ask Jon when to bring them back. Owner: Training. Weighted pull-up / Sat pair untouched.
+- **`_phxRepair1010` (v4.9.363) is one-off** — move to blab_archive.js after Jon confirms the superset Prev reads 10 (and set_logs shows 10). Owner: Training.

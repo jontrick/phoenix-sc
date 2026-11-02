@@ -6022,4 +6022,24 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(mb.every((e) => !e.bodyweight && e.rest === 120), 'med ball: kg box, still 2 min rest');
     assert.ok(pu.every((e) => e.bodyweight === true), 'push-up variants: bodyweight');
   });
+
+  test('REPAIR1010: the 3 Nov 1010-rep typo is set back to 10, nothing else is touched', () => {
+    startDraft();
+    const KEY = Object.keys(app.localStorage._data || {}).find((k) => /^blab_v1_/.test(k));
+    const st = app.blabGetState();
+    st.records = st.records || {};
+    st.records['Incline DB Press_reps'] = 1010;
+    st.records['Chest-Supported DB Row_reps'] = 1010;          // not today-scoped: a lone 1010 is the typo
+    st.records['DB Lateral Raise_reps'] = 101;                 // control: a different number stays
+    st.records['Incline DB Press_setlog'] = { date: '2026-11-03', sets: [{ wt: 22.5, reps: 10 }, { wt: 22.5, reps: 1010 }] };
+    st.records['Old_setlog'] = { date: '2026-10-27', sets: [{ wt: 20, reps: 1010 }] };   // control: other day untouched
+    app.blabSaveState(st);
+    assert.equal(app.window._phxRepair1010(), true, 'it changed something');
+    const r = app.blabGetState().records;
+    assert.equal(r['Incline DB Press_reps'], 10);
+    assert.equal(r['Chest-Supported DB Row_reps'], 10);
+    assert.equal(r['DB Lateral Raise_reps'], 101);
+    assert.deepEqual(r['Incline DB Press_setlog'].sets.map((x) => x.reps), [10, 10]);
+    assert.equal(r['Old_setlog'].sets[0].reps, 1010, 'another day is not touched');
+  });
 }

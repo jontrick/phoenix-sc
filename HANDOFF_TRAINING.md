@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.363 (3 Nov 2026)** — `window._phxRepair1010`: one-off repair of Jon's 1010-rep typo (superset, 3 Nov). Local `records[*_reps]===1010` → 10 and 3 Nov `_setlog` sets; `set_logs` rows reps=1010 logged 3 Nov (Brisbane) → 10, via his own session (RLS). Flag `phx_fix1010_{uid}` set only after the cloud write succeeds. **Archive to blab_archive.js once Jon confirms the Prev line reads 10.** Test `REPAIR1010`.
+
 > **v4.9.362 (3 Nov 2026)** — Global `input,select,textarea{color:var(--text)}`: inputs without an inline colour were rendering black on the dark cards (Jon logged 1010 reps on top of an invisible prefilled 10). Number inputs select their content on focus (document `focusin`), so typing replaces a prefill. Superset A/B reject reps > 99 with a toast.
 
 > **v4.9.361 (3 Nov 2026)** — Med-ball power slots (Chest Pass, Overhead Throw) are LOADED, not bodyweight: Jon, "it used a med ball". `bodyweight:!/Med Ball/i.test(name)` on the Tue/Sat power slot; push-up variants stay bodyweight. Test: `BWSTD: a med-ball throw is loaded`.

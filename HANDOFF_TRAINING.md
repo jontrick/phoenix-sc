@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.361 (3 Nov 2026)** — Med-ball power slots (Chest Pass, Overhead Throw) are LOADED, not bodyweight: Jon, "it used a med ball". `bodyweight:!/Med Ball/i.test(name)` on the Tue/Sat power slot; push-up variants stay bodyweight. Test: `BWSTD: a med-ball throw is loaded`.
+
 > **v4.9.360 (2 Nov 2026) — CHIN-UPS OUT OF FINISHERS "FOR NOW"; UNLOADED BLOCKS SHOW THEIR WORK.**
 > Jon: find an alternative to chin-ups in the finishers, scope = finishers only (weighted pull-up and the Sat DB bench / pull-up pair UNCHANGED). Replacement chosen by Jon: DB renegade rows, 10 alternating. Affects "Finisher — Pull / Push / Slam" (training wk 1 and wk 3 Tue). When he says pull-ups are back, revert the two `afap(...)` lines — see the v4.9.360 comment above `function afap`.
 > `_blabBuildComplexBlock`: when `_blabHasLoad` is false the card lists rounds / each movement / rest and "Score: total time", no 0 kg target, button "Start →". Reason: in read-only preview the Start button is shielded, so the work was invisible. Applies to BLAB unloaded afap blocks too (Core Circuit, 100 Push-ups, Bodyweight Complex) — none had a meaningful kg target. Tests: `FINISH:`.

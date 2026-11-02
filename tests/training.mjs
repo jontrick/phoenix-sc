@@ -6012,4 +6012,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/3 rounds for time/.test(bw) && /60 s rest between/.test(bw), 'it states rounds and rest');
     assert.ok(/DB Renegade Rows \(alternating\)<\/div>/.test(bw) && /Ball Slams<\/div>/.test(bw), 'each movement on its own line');
   });
+
+  test('BWSTD: a med-ball throw is loaded (ball weight), a plyo push-up is bodyweight (Jon, 3 Nov)', () => {
+    startDraft();
+    const all = [];
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) { const x = app.blabGetSessionData(w, d); if (x) all.push(...(x.exercises || [])); }
+    const mb = all.filter((e) => /^Med Ball/.test(e.name)), pu = all.filter((e) => /^(Plyo|Clapping) Push-Up$/.test(e.name));
+    assert.ok(mb.length > 0 && pu.length > 0, 'positive control: both are programmed');
+    assert.ok(mb.every((e) => !e.bodyweight && e.rest === 120), 'med ball: kg box, still 2 min rest');
+    assert.ok(pu.every((e) => e.bodyweight === true), 'push-up variants: bodyweight');
+  });
 }

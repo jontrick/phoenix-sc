@@ -3550,7 +3550,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.360';
+var APP_VERSION='4.9.361';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8415,7 +8415,9 @@ window.draftGetSessionData = function(week, day, s){
       afap('Finisher — Dips / Rows / Slams', 3, 45, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10}], 'Beat your Week 2 time.')
     ][t];
     return sess('Upper — Max Effort', 70, [
-      std(pw, 3, 5, 'Power slot. Light and fast, max intent, 2 min rest.', { bodyweight:true, rest:120 }),
+      // v4.9.361 — Jon 3 Nov: "Med ball press isn't body weight it used a med ball". Med-ball
+      // slots keep the kg box (ball weight); only the push-up variants are bodyweight.
+      std(pw, 3, 5, 'Power slot. Light and fast, max intent, 2 min rest.', { bodyweight:!/Med Ball/i.test(pw), rest:120 }),
       { name:ME_U.n, format:'percentage_sets', allow_attempts:true, rest:240, sets:ME_U.sets,
         note:'MAX EFFORT, done alone: 3-5 min between heavy sets, nothing paired. ' + ME_U.note + ' Log the real weight and reps of your top set: it can raise your bench max.' },
       std('Weighted Pull-Up', parseInt(pullTxt, 10), pullTxt.replace(/^\d+\s*×\s*/, ''),
@@ -8476,7 +8478,7 @@ window.draftGetSessionData = function(week, day, s){
     var rb = D.repBench > 0 ? D.repBench : kgOf('bench', 60);
     var pwS = [null, 'Med Ball Overhead Throw', 'Clapping Push-Up', 'Med Ball Overhead Throw', 'Clapping Push-Up'][t];
     return sess((t === 1) ? 'Field Tests + Speed Upper' : 'Speed Upper', (t === 1) ? 120 : 75, ((t === 1) ? fieldTests() : []).concat([
-      std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.', { bodyweight:true, rest:120 }),
+      std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.', { bodyweight:!/Med Ball/i.test(pwS), rest:120 }),
       { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3),
         note:'Bar weight shown; add light bands if you have them. 45 s rest, rotate three grip widths. Every rep FAST. ' +
              (adjU ? ('Load adjusted ' + (adjU > 0 ? '+' : '') + adjU + '% from your ratings. ') : '') +

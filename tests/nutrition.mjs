@@ -6409,13 +6409,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   // from the planner, every add-sheet looked identical to opening it from Today,
   // so nothing on screen said which day the food was about to land on.
   test('the add sheet names the day it is writing to', () => {
-    setUp(90);
-    const days = app._nutSelectedWeekDays();
-    schedule(days[2], 2, 'completed');
-    const stamp = app._nutDayStamp(days[2]);
-    assert.ok(stamp.indexOf('Wednesday') >= 0, 'names the weekday');
-    assert.ok(stamp.indexOf('Lower Body') >= 0, 'and what is trained that day');
-    assert.equal(stamp.indexOf('today'), -1, 'a future day is not marked today');
+    // Clock pinned to a MONDAY (Training chat, 4 Nov 2026): days[2] is this week's
+    // Wednesday, so on a real Wednesday "a future day" was today and this went red
+    // on the unchanged live build. Same decay shape as the peptide NOTSTARTED test.
+    const _rt = app._nutToday; app._nutToday = () => '2027-01-04';
+    try {
+      setUp(90);
+      const days = app._nutSelectedWeekDays();
+      schedule(days[2], 2, 'completed');
+      const stamp = app._nutDayStamp(days[2]);
+      assert.ok(stamp.indexOf('Wednesday') >= 0, 'names the weekday');
+      assert.ok(stamp.indexOf('Lower Body') >= 0, 'and what is trained that day');
+      assert.equal(stamp.indexOf('today'), -1, 'a future day is not marked today');
+    } finally { app._nutToday = _rt; }
   });
 
   test('the add sheet marks today as today', () => {

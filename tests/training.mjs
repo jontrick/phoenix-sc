@@ -6152,4 +6152,17 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.window._blabSSState_0.set, 1);
     assert.equal(app.window._blabSSState_0.log.length, 0);
   });
+
+  test('SLEDKG: prowler and sled efforts carry a kg, remembered for next time (Jon, 4 Nov)', () => {
+    startDraft();
+    const parts = app.blabGetSessionData(2, 3).conditioning || [];
+    const specs = parts.flatMap((p) => [p.spec, p.alt]).filter(Boolean);
+    const sled = specs.find((x) => x.id === 'draft-sled');
+    assert.ok(sled, 'positive control: the sled effort is in Wednesday');
+    assert.equal(sled.loadKg, true);
+    assert.ok(specs.filter((x) => /bike|bronco|\brow\b/i.test(x.name || '')).every((x) => !x.loadKg), 'unloaded efforts have no kg');
+    assert.equal(app.window._draftKgGet('draft-sled'), '', 'nothing yet');
+    app.window._draftKgSet('draft-sled', 100);
+    assert.equal(app.window._draftKgGet('draft-sled'), 100, 'remembered');
+  });
 }

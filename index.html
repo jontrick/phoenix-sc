@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.369';
+var APP_VERSION='4.9.370';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8436,6 +8436,8 @@ window.draftGetSessionData = function(week, day, s){
     accGym.guided = { rounds:accReps, steps:[{label:'Prowler sprint', secs:8, sub:'10 m \u2014 go on the beep'}], restSec:90,
       entry:{ per:'end', endLabel:'Sprints done', prefillRounds:true } };
     sled.scoreType = 'reps'; sled.scoreLabel = 'Reps done';
+    // v4.9.370 — Jon 4 Nov: "Resisted prowler sprints need a kg". Set on the card before Start.
+    accGym.loadKg = true; sled.loadKg = true;
     sled.guided = { rounds:sledN, steps:[{label:'Sled', secs:12, sub:'15 m heavy push or drag'}], restSec:120,
       entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     if(taper){
@@ -8907,6 +8909,21 @@ function _dgBeep(freq, ms){
     o.start(); o.stop(_dgAudio.currentTime + (ms || 150) / 1000);
   } catch(_e){}
 }
+// v4.9.370 — per-effort loads for guided conditioning (prowler / sled). Kept in blab
+// records so they mirror with the rest of the training state.
+window._draftKgPending = window._draftKgPending || {};
+window._draftKgGet = function(id){
+  try { var r = ((window.blabGetState && window.blabGetState()) || {}).records || {}; return r[id + '_kg'] || ''; } catch(_e){ return ''; }
+};
+window._draftKgSet = function(id, kg){
+  try { var s = window.blabGetState(); if(!s) return false; if(!s.records) s.records = {}; s.records[id + '_kg'] = kg; window.blabSaveState(s); return true; } catch(_e){ return false; }
+};
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('input', function(e){
+    var t = e && e.target;
+    if(t && t.getAttribute && t.getAttribute('data-dc-kg')) window._draftKgPending[t.getAttribute('data-dc-kg')] = t.value;
+  });
+}
 window.draftRunGuided = function(spec, dryRun, onSaved){
   var g = spec.guided, seq = window.draftGuidedSequence(g);
   var old = document.getElementById('dg-run'); if(old) old.remove();
@@ -9021,7 +9038,9 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
       if(isNaN(v)){ if(typeof window._blabCalToast === 'function') window._blabCalToast('Enter a number, or close without saving', 'error'); return; }
       if(typeof _phxSaveScore === 'function' && !dryRun){
         var s2 = Object.assign({}, spec); delete s2.guided;
-        _phxSaveScore(s2, v, entries.filter(function(x){ return x != null; }).length ? 'rounds: ' + entries.map(function(x){ return x == null ? '-' : x; }).join(', ') : '');
+        var _note = entries.filter(function(x){ return x != null; }).length ? 'rounds: ' + entries.map(function(x){ return x == null ? '-' : x; }).join(', ') : '';
+        if(spec._loadKg > 0){ _note = '@ ' + spec._loadKg + ' kg' + (_note ? ' \u00b7 ' + _note : ''); window._draftKgSet(spec.id, spec._loadKg); }
+        _phxSaveScore(s2, v, _note);
       }
       close();
       if(typeof onSaved === 'function') onSaved(v);
@@ -9101,6 +9120,17 @@ window.draftOpenConditioning = function(week, day, sess){
       if(p.spec) h += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--gold);margin-top:3px;">' + _esc(p.spec.format) + '</div>';
       h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-top:5px;">' + _esc(p.presc) + '</div>';
       if(p.kind === 'timed'){
+        // v4.9.370 — a loaded effort (prowler, sled) takes its kg HERE, before Start,
+        // prefilled from the last time; it is saved with the score.
+        var _kgSpec = (p.spec && p.spec.loadKg) ? p.spec : ((p.alt && p.alt.loadKg) ? p.alt : null);
+        if(_kgSpec){
+          var _kgLast = window._draftKgGet(_kgSpec.id);
+          h += '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">' +
+               '<div style="flex:1;font-size:12px;color:var(--text3);">Load on the ' + (/sled/i.test(_kgSpec.name) ? 'sled' : 'prowler') + (_kgLast ? ' &middot; last ' + _kgLast + ' kg' : '') + '</div>' +
+               '<input data-dc-kg="' + _esc(_kgSpec.id) + '" type="number" inputmode="decimal" value="' + (window._draftKgPending[_kgSpec.id] || _kgLast || '') + '" placeholder="&ndash;" ' +
+                 'style="width:76px;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;">' +
+               '<span style="font-size:11px;color:var(--text3);">kg</span></div>';
+        }
         h += '<div style="display:flex;gap:8px;margin-top:10px;">' +
              '<button data-dc-start="' + i + '" style="flex:1.4;padding:12px;background:' + (s.done ? 'transparent' : 'var(--gold)') + ';border:' + (s.done ? '1px solid var(--border2)' : 'none') + ';color:' + (s.done ? 'var(--text2)' : '#000') + ';font-size:12px;' + B + '">' + (s.done ? 'Do again' : '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-1px;margin-right:6px;" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>Start timer') + '</button>' +
              (p.alt ? '<button data-dc-alt="' + i + '" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:11px;' + B + '">' + (/gym|bike|prowler/i.test(p.alt.name) ? 'Gym version' : _esc(p.alt.name)) + '</button>' : '') +
@@ -9135,11 +9165,16 @@ window.draftOpenConditioning = function(week, day, sess){
     var o = document.getElementById('draft-cond'); if(o) o.remove();
   }
   ov.addEventListener('click', function(e){
+    if(e.target && e.target.hasAttribute && e.target.hasAttribute('data-dc-kg')) return;   // typing in a kg box
     var t = e.target.closest ? e.target.closest('[data-dc],[data-dc-start],[data-dc-alt],[data-dc-chk],[data-dc-set]') : null;
     if(!t) return;
     if(t.hasAttribute('data-dc-start') || t.hasAttribute('data-dc-alt')){
       var p = parts[parseInt(t.getAttribute(t.hasAttribute('data-dc-start') ? 'data-dc-start' : 'data-dc-alt'), 10)];
       var spec = t.hasAttribute('data-dc-alt') ? p.alt : p.spec;
+      if(spec && spec.loadKg){
+        var _kv = parseFloat(window._draftKgPending[spec.id] || window._draftKgGet(spec.id)) || 0;
+        spec = Object.assign({}, spec, { _loadKg: _kv });
+      }
       _draftRegisterParts([p]);
       if(spec.guided) window.draftRunGuided(spec, dry, function(){ paint(true); });
       else if(typeof _phxStartSession === 'function') _phxStartSession(spec.id, dry);

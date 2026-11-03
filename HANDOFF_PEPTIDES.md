@@ -1,3 +1,4 @@
+> **v4.9.369 (3 Nov)** — GHK-Cu is now a fresh 30-day course from Sun 8 Nov (`planned:true`, 1mg d1–15, 2mg d16–30, last dose 7 Dec) — Jon: not run consistently, start the block Sunday. Supersedes the .368 GHK periods.
 > **UPDATE 3 Nov 2026 (later), v4.9.368 — PHASE 3 REWRITTEN at Jon's request ("scrap what is there and reapply it the same way as the gym programme").**
 > Continuous base: BPC daily, TB-500 Mon 2mg, Ipa + CJC 6 day (Mon off). GHK-Cu periods 24 Sep–7 Nov, then 7 Dec–5 Jan (its own 30 on / 30 off rule; 2mg carried, unconfirmed). NAD+ and TA-1 8-week courses from Sun 8 Nov (Jon's date) with `planned:true` = no Start tap needed. MOTS-c course 2 `complete` (Jon: "as if I ran that last vial on day 20"). Reta and 5-Amino paused. Calendar verified from `_pepStackDueOn` over 70 days. Supersedes the .367 Phase 3 shape below.
 > **UPDATE 3 Nov 2026, v4.9.366–.367 (from the Training chat at Jon's request).**

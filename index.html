@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.368';
+var APP_VERSION='4.9.369';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -34225,20 +34225,19 @@ var _PEP_PHASES = [
     name: "Phase 3 - Continuous base from 4 Nov 2026",
     from: "2026-11-04",
     to: null,
-    summary: "Base every week: BPC-157 daily, TB-500 Mondays, Ipamorelin + CJC-1295 nightly (Mon off). GHK-Cu finishes its run Sat 7 Nov, 4 weeks off, back Mon 7 Dec. NAD+ and TA-1 full courses from Sun 8 Nov. MOTS-c course 2 counted complete. Retatrutide and 5-Amino-1MQ paused.",
+    summary: "Base every week: BPC-157 daily, TB-500 Mondays, Ipamorelin + CJC-1295 nightly (Mon off). GHK-Cu (30 days), NAD+ and TA-1 (8 weeks) all start Sun 8 Nov. MOTS-c course 2 counted complete. Retatrutide and 5-Amino-1MQ paused.",
     stacks: [
     // ── BASE — runs continuously (Jon, 3 Nov) ───────────────────────────────
     {compoundId:"bpc157", dose:0.5, startDate:"2026-05-31", freq:"daily", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. Daily, any time."},
     {compoundId:"tb500", dose:2, startDate:"2026-09-01", freq:"mon", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. 2mg maintenance, Monday only."},
     {compoundId:"ipamorelin", dose:0.3, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. 300mcg pre-sleep, Monday off. Inject first, CJC 15 min after."},
     {compoundId:"cjc1295", dose:0.2, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. 200mcg, 15 min after Ipamorelin, Monday off."},
-    // ── GHK-Cu — flexed to its own rule (30 on / 30 off). The current run began
-    // 24 Sep and is well past 30 days, so it finishes at the end of this week,
-    // takes 4 weeks off, and restarts Mon 7 Dec for a 30-day run. Dose 2mg is
-    // carried from the end of the last course; Jon did not restate it.
-    {compoundId:"ghkcu", dose:2, startDate:"2026-09-24", freq:"daily", vialMg:50, waterMl:2, status:"instock",
-     periods:[{from:"2026-09-24", to:"2026-11-07"},{from:"2026-12-07", to:"2027-01-05"}],
-     notes:"Last dose Sat 7 Nov. Off 8 Nov - 6 Dec. Back Mon 7 Dec for 30 days. 2mg carried from the last course - edit if different."},
+    // ── v4.9.369 GHK-Cu — Jon 3 Nov: "I have not run GHK for 30 days - not consistent
+    // anyways - start that block from Sunday too". A fresh 30-day course from
+    // Sun 8 Nov on its own rule: 1mg days 1-15, 2mg days 16-30, then 30 off.
+    {compoundId:"ghkcu", dose:1, startDate:"2026-11-08", end_date:"2026-12-07", freq:"daily", vialMg:50, waterMl:2, status:"instock", planned:true,
+     escalation_schedule:[{"days": "1-15", "dose_mg": 1}, {"days": "16-30", "dose_mg": 2}],
+     notes:"30-day course from Sun 8 Nov: 1mg days 1-15, 2mg days 16-30, last dose Mon 7 Dec. Then 30 days off."},
     // ── NEW COURSES from Sun 8 Nov (Jon: "starting full course Sunday 8 Nov").
     // planned:true — Jon set this date himself, so it appears on the day without
     // a Start tap. First doses fall on the course's own weekdays: NAD+ Mon 9 Nov,

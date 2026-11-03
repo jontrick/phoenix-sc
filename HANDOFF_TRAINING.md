@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.371 (4 Nov 2026)** — Box height (cm) on EVERY box jump, matched by name (/box jump/i): `_phxBoxCmHTML(name)` in the lift renderer header and on conditioning 'sets' cards; saved on input to `records[name+'_box_cm']`, prefilled next time. Jon: "always have in measure on all box jumps". Test `BOXCM`.
+
 > **v4.9.370 (4 Nov 2026)** — Guided conditioning specs flagged `loadKg` (prowler `draft-accel-gym`, sled `draft-sled`) get a kg box on the card before Start (`data-dc-kg`, `_draftKgPending`), prefilled from `records[id+'_kg']`; saved into the score note as `@ X kg` and remembered. Test `SLEDKG`. Also pinned the Nutrition test 'the add sheet names the day' (red every Wednesday) — recorded in OPEN_ITEMS for Nutrition.
 
 > **v4.9.365 (3 Nov 2026)** — Finisher kg is entered ON THE CARD before Start (Jon: "pre fill the kg on the finishers then hit go"): `blab-cpx-kg-<idx>-<mi>` boxes → `window['_blabCpxKg_'+idx]` → `ex2._afapKgPre` → runner `st.afapKg`, displayed as text only (no inputs mid-set). `_blabAfapKg` removed. Test `FINKG: kg is set on the card before Start`.

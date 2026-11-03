@@ -6165,4 +6165,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.window._draftKgSet('draft-sled', 100);
     assert.equal(app.window._draftKgGet('draft-sled'), 100, 'remembered');
   });
+
+  test('BOXCM: every box jump carries a box height, remembered; other moves do not (Jon, 4 Nov)', () => {
+    startDraft();
+    assert.ok(/data-box-cm="Seated Box Jump"/.test(app.window._phxBoxCmHTML('Seated Box Jump')), 'seated box jump');
+    assert.ok(/data-box-cm="Box Jump"/.test(app.window._phxBoxCmHTML('Box Jump')), 'box jump');
+    assert.equal(app.window._phxBoxCmHTML('Lateral Bound'), '', 'a bound has none');
+    app.window._phxBoxCmSet('Box Jump', '61');
+    assert.ok(/value="61"/.test(app.window._phxBoxCmHTML('Box Jump')), 'prefilled from last time');
+  });
 }

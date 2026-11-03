@@ -5749,4 +5749,67 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     assert.equal(b.waterConfirmedAt, '2026-11-01', 'and the make-up confirmation');
     assert.equal(b.stockCounted, false, 'the count is still not claimed');
   });
+
+  // ── v4.9.367: Phase 3 — Jon's 3 Nov reset ────────────────────────────────
+  test('PHASE3 running compounds are due, paused ones are not, finished ones are done', () => {
+    reset(); signIn('jon');
+    const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
+    const r = app.pepApplyPhase('phase3');
+    assert.equal(r.ok, true, JSON.stringify(r.problems || ''));
+    const by = Object.fromEntries(app.pepGetState().stacks.map((x) => [x.compoundId, x]));
+    ['ipamorelin','cjc1295','bpc157','tb500','ghkcu'].forEach((id) => assert.ok(by[id] && !by[id].awaitingStart && by[id].status !== 'complete', id + ' running'));
+    ['retatrutide','ta1','nad','5amq','motsc'].forEach((id) => assert.equal(by[id] && by[id].awaitingStart, true, id + ' paused'));
+    ['epitalon','tesamorelin'].forEach((id) => assert.equal(by[id].status, 'complete', id + ' finished'));
+    const c = (id) => app._pepCompound(id);
+    const d = new Date('2026-11-05T12:00:00');   // a Thursday: BPC daily, Ipa (not Monday), Reta would be due if not paused
+    assert.ok(app._pepStackDueOn(by.bpc157, c('bpc157'), d) !== null, 'BPC due');
+    assert.ok(app._pepStackDueOn(by.ipamorelin, c('ipamorelin'), d) !== null, 'Ipa due');
+    assert.equal(app._pepStackDueOn(by.retatrutide, c('retatrutide'), d), null, 'Reta silent');
+    assert.equal(app._pepStackDueOn(by.motsc, c('motsc'), new Date('2026-11-04T12:00:00')), null, 'MOTS-c silent on its planned date — paused');
+  });
+
+  test('PHASE3 applied days late, a paused compound is still paused', () => {
+    const realToday = app._pepToday;
+    try {
+      app._pepToday = () => '2026-11-10';                 // applied six days after the phase's start date
+      reset(); signIn('jon');
+      const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
+      app.pepApplyPhase('phase3');
+      const by = Object.fromEntries(app.pepGetState().stacks.map((x) => [x.compoundId, x]));
+      assert.equal(by.bpc157.awaitingStart, undefined, 'positive control: a running one is not awaiting');
+      assert.equal(by.retatrutide.awaitingStart, true, 'paused is a flag, not a date');
+    } finally { app._pepToday = realToday; }
+  });
+
+  test('PHASE3 Start today on MOTS-c moves all four injections to that day, 5 days apart', () => {
+    reset(); signIn('jon');
+    const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
+    app.pepApplyPhase('phase3');
+    try { app.pepStartToday('motsc'); } catch (e) { /* screen re-render is not stubbed */ }
+    const m = app.pepGetState().stacks.find((x) => x.compoundId === 'motsc');
+    const t0 = app._pepToday();
+    assert.equal(m.awaitingStart, false);
+    assert.equal(m.dates[0], t0, 'first injection today');
+    const gaps = m.dates.slice(1).map((x, i) => Math.round((new Date(x + 'T12:00:00') - new Date(m.dates[i] + 'T12:00:00')) / 864e5));
+    assert.deepEqual(gaps, [5, 5, 5]);
+  });
+
+  test('PHASE3 a phase with no stock figure leaves his vial count alone', () => {
+    reset(); signIn('jon');
+    const st = app.pepGetState(); st.settings = {};
+    st.stacks = [{ compoundId:'tb500', dose:2, vialMg:10, waterMl:2, startDate:'2026-09-01', freq:'mon', sealedVials:4, stockCounted:false }];
+    app.pepSaveState(st);
+    app.pepApplyPhase('phase3');
+    assert.equal(app.pepGetState().stacks.find((x) => x.compoundId === 'tb500').sealedVials, 4);
+  });
+
+  test('PHASE3 MY PEPTIDES shows a paused compound as paused, with Start today', () => {
+    reset(); signIn('jon');
+    const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
+    app.pepApplyPhase('phase3');
+    const h = app._pepTabMine(app.pepGetState());
+    assert.ok(/data-pep-schedstart="retatrutide"/.test(h), 'Start today on Reta');
+    assert.ok(!/data-pep-schedstart="bpc157"/.test(h), 'not on a running one');
+    assert.ok(/every 6 days/.test(h), 'Reta reads every 6 days, not weekly');
+  });
 }

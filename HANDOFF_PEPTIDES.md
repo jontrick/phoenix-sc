@@ -1,3 +1,7 @@
+> **UPDATE 3 Nov 2026, v4.9.366–.367 (from the Training chat at Jon's request).**
+> PHASE 3 (`_PEP_PHASES[1]`, id `phase3`) = Jon's reset, stated 3 Nov: running Ipa, CJC, BPC, TB-500 (maint.), GHK-Cu daily; PAUSED Reta, TA-1, NAD+, 5-Amino, MOTS-c; FINISHED Epitalon, Tesamorelin; DSIP unchanged. GHK-Cu 2mg is CARRIED from Phase 2's last step — he did not restate it.
+> New phase field `paused:true` → `awaitingStart` on apply regardless of date (a start date alone cannot express "paused" if applied late). MY PEPTIDES shows paused rows with a Start today button (`data-pep-schedstart`).
+> `pepApplyPhase` now ALWAYS carries the open-vial facts (openedDate/openVialMg/openWaterMl/openUsedAmt/openDosesUsed/actualVialMg/waterConfirmedAt), and keeps his sealedVials when the phase states none. Previously both were dropped for uncounted compounds. Tests: PHASEVIAL, PHASE3.
 # PHOENIX — PEPTIDES DOMAIN HANDOFF
 
 > **UPDATE 31 Oct 2026, v4.9.350–.353 (done from the Training chat at Jon's request).**

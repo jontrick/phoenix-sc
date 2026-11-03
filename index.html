@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.366';
+var APP_VERSION='4.9.367';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -30725,8 +30725,14 @@ function _pepTabMine(ps){
          "<div style=\"font-family:var(--font-d);font-size:17px;font-weight:900;color:var(--text);\">" + _esc(c.name) + "</div>" +
          (statusTxt ? "<span style=\"font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text3);border:1px solid var(--border2);border-radius:10px;padding:2px 8px;\">" + statusTxt + "</span>" : "") + "</div>";
     h += "<div style=\"font-size:13px;color:#7B68EE;font-weight:700;margin-top:3px;\">" + (dose ? _pepFmtDose(dose, c.doseUnit) : "dose not set") +
-         " &middot; <span style=\"color:var(--text2);font-weight:600;\">" + _esc(st.freq || c.freq || "") + "</span></div>";
-    if(active) h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">Next: " + _pepWhenText(next) + " &middot; " + _esc(c.timing || "") + "</div>";
+         " &middot; <span style=\"color:var(--text2);font-weight:600;\">" + _esc(st.intervalDays ? ("every " + st.intervalDays + " days") : (st.freq || c.freq || "")) + "</span></div>";
+    // v4.9.367 — a PAUSED compound says so, with the one button that restarts it.
+    // "Next: not in the next 60 days" read as a fault, not as a pause.
+    if(active && st.awaitingStart){
+      h += "<div style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;\">" +
+           "<div style=\"font-size:11px;color:var(--text3);\">Paused &middot; nothing due until you start it</div>" +
+           "<button data-pep-schedstart=\"" + _esc(st.compoundId) + "\" style=\"background:none;border:1px solid #7B68EE;border-radius:12px;color:#7B68EE;font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:6px 12px;\">Start today</button></div>";
+    } else if(active) h += "<div style=\"font-size:11px;color:var(--text3);margin-top:2px;\">Next: " + _pepWhenText(next) + " &middot; " + _esc(c.timing || "") + "</div>";
     // the vial in use
     h += "<div style=\"display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;\">";
     function cell(label, val, sub, colour){
@@ -34213,6 +34219,34 @@ var _PEP_PHASES = [
     {compoundId:"5amq", dose:0.5, startDate:"2026-11-01", freq:"daily", vialMg:5, waterMl:1, cycleWeeks:8, offWeeks:4, status:"pipeline", sealedVials:3, escalation_schedule:[{"weeks": "1-2", "dose_mg": 0.5}, {"weeks": "3-4", "dose_mg": 0.75}, {"week_from": 5, "dose_mg": 1}], notes:"ON HOLD - 15mg stock, a full course needs 45mg. Do not start until 30mg more arrives. HIGH order priority. Fasted AM, black coffee fine. 5mg/mL: 500mcg = 10u, 750mcg = 15u, 1mg = 20u. Steps handled by the app once it starts."},
     {compoundId:"dsip", dose:0.3, startDate:"2026-09-01", freq:"as needed", vialMg:5, waterMl:2, continuous:true, status:"instock", notes:"As needed, 30-60 min before intended sleep - not immediately before. 2.5mg/mL -> 12u. If it becomes nightly, cycle 4 weeks on / 2 off."}
   ]
+  },
+  {
+    id: "phase3",
+    name: "Phase 3 - Reset from 4 Nov 2026",
+    from: "2026-11-04",
+    to: null,
+    summary: "Jon's reset, 3 Nov: Ipamorelin, CJC-1295, BPC-157, TB-500 and GHK-Cu running. Retatrutide, TA-1, NAD+, 5-Amino-1MQ and MOTS-c paused until he taps Start today. Epitalon and Tesamorelin finished.",
+    stacks: [
+    // RUNNING — Jon 3 Nov. Original start dates kept so nothing reads as a new course.
+    {compoundId:"ipamorelin", dose:0.3, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running. 300mcg pre-sleep, Monday OFF. Inject first, CJC 15 min after."},
+    {compoundId:"cjc1295", dose:0.2, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running. 200mcg, 15 min after Ipamorelin, Monday OFF."},
+    {compoundId:"bpc157", dose:0.5, startDate:"2026-05-31", freq:"daily", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running. Daily systemic."},
+    {compoundId:"tb500", dose:2, startDate:"2026-09-01", freq:"mon", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running - maintenance. 2mg Monday only."},
+    // GHK-Cu: Jon says daily and running. Dose carried from the last step of his Phase 2
+    // course (2mg) - he did not restate it; edit in the compound panel if different.
+    {compoundId:"ghkcu", dose:2, startDate:"2026-09-24", freq:"daily", vialMg:50, waterMl:2, continuous:true, status:"instock", notes:"Running daily. 2mg is carried from the end of the Phase 2 course - check and edit if not."},
+    // PAUSED — in the protocol, nothing due until Start today.
+    {compoundId:"retatrutide", dose:10, startDate:"2026-11-04", interval_days:6, vialMg:30, waterMl:1.8, continuous:true, status:"instock", paused:true, notes:"Paused 3 Nov. Tap Start today when it restarts - every 6 days from then."},
+    {compoundId:"ta1", dose:1.6, startDate:"2026-11-04", freq:"wed/sat", vialMg:10, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", paused:true, escalation_schedule:[{"weeks": "1-4", "dose_mg": 1.6}, {"week_from": 5, "dose_mg": 3.2}], notes:"Not restarted. Wed + Sat. Tap Start today when it begins."},
+    {compoundId:"nad", dose:50, startDate:"2026-11-04", vialMg:500, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", paused:true, active_days:[1, 3, 5], escalation_schedule:[{"week": 1, "dose_mg": 50}, {"week_from": 2, "dose_mg": 100}], notes:"Not restarted. Mon/Wed/Fri AM only. Tap Start today when it begins."},
+    {compoundId:"5amq", dose:0.5, startDate:"2026-11-04", freq:"daily", vialMg:5, waterMl:1, cycleWeeks:8, offWeeks:4, status:"pipeline", paused:true, escalation_schedule:[{"weeks": "1-2", "dose_mg": 0.5}, {"weeks": "3-4", "dose_mg": 0.75}, {"week_from": 5, "dose_mg": 1}], notes:"Not restarted. Tap Start today when it begins."},
+    {compoundId:"motsc", dose:10, startDate:"2026-11-04", vialMg:10, waterMl:0.5, status:"instock", paused:true, injection_dates:["2026-11-04", "2026-11-09", "2026-11-14", "2026-11-19"], notes:"Course 2 ended at 3 of 4. Next course: 4 injections 5 days apart - Start today moves all four dates to that day. For a single leftover dose instead, use + Add a dose."},
+    // FINISHED
+    {compoundId:"epitalon", dose:5, startDate:"2026-09-04", vialMg:10, waterMl:1, status:"complete", notes:"Course 2 finished."},
+    {compoundId:"tesamorelin", dose:2, startDate:"2026-09-08", end_date:"2026-10-02", freq:"6 day", vialMg:10, waterMl:2, status:"complete", notes:"Bridge finished 2 Oct."},
+    // UNCHANGED
+    {compoundId:"dsip", dose:0.3, startDate:"2026-09-01", freq:"as needed", vialMg:5, waterMl:2, continuous:true, status:"instock", notes:"As needed, 30-60 min before sleep."}
+  ]
   }
 ];
 
@@ -34272,6 +34306,10 @@ function pepApplyPhase(id){
   v.entries.forEach(function(st){
     var was = prior[st.compoundId];
     if(was) VIAL.forEach(function(k){ if(was[k] !== undefined && was[k] !== null) st[k] = was[k]; });
+    // v4.9.367 — a phase that states NO stock figure leaves his figure alone. Phase 3
+    // deliberately carries none (it is a schedule reset, not a stock take); without
+    // this every uncounted compound would have dropped to 0 sealed vials.
+    if(was && st.sealedVials === undefined && was.sealedVials !== undefined) st.sealedVials = was.sealedVials;
     if(was && was.stockCounted === true){
       KEEP.forEach(function(k){ if(was[k] !== undefined) st[k] = was[k]; });
       carried++;
@@ -34288,6 +34326,14 @@ function pepApplyPhase(id){
     // running, so applying a phase never silently stops a live compound.
     if(st.startDate && String(st.startDate) >= _pepToday()) st.awaitingStart = true;
   });
+  // v4.9.367 — a phase can mark a compound PAUSED: in the protocol, nothing due,
+  // until he taps Start today (pepStartToday, which shifts its dates to that day).
+  // Needed for the 4 Nov reset: Reta, TA-1, NAD+, 5-Amino and MOTS-c are paused,
+  // and a start date alone cannot say that — applied a day late it would read as
+  // "already running".
+  var _paused = {};
+  ph.stacks.forEach(function(x){ if(x && x.paused) _paused[x.compoundId] = true; });
+  v.entries.forEach(function(st){ if(_paused[st.compoundId]){ st.awaitingStart = true; st.startConfirmedAt = null; } });
 
   ps.stacks = v.entries;
   ps.activePhase = ph.id;

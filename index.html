@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.372';
+var APP_VERSION='4.9.373';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8860,6 +8860,13 @@ function _draftChecks(week, day){
 function _draftSetChecks(week, day, arr){
   try { localStorage.setItem(_draftChkKey(week, day), JSON.stringify(arr)); } catch(_e){}
 }
+// v4.9.373 — reps per set on a conditioning 'sets' part, keyed 'part:set', beside the ticks.
+function _draftReps(week, day){
+  try { return JSON.parse(localStorage.getItem(_draftChkKey(week, day) + '_reps') || '{}') || {}; } catch(_e){ return {}; }
+}
+function _draftSetReps(week, day, key, v){
+  try { var m = _draftReps(week, day); m[key] = v; localStorage.setItem(_draftChkKey(week, day) + '_reps', JSON.stringify(m)); } catch(_e){}
+}
 // ── v4.9.356 — GUIDED TIMER: hands-free countdowns for conditioning ────────────
 // Jon, 2 Nov: "The timers go up not count down ... 8 sec on with 1 burpee then 8 secs is
 // also hard to do in the phone ... I always find it hard to work the phone clock and the
@@ -8952,6 +8959,10 @@ if(typeof document !== 'undefined' && document.addEventListener){
   document.addEventListener('input', function(e){
     var t = e && e.target;
     if(t && t.getAttribute && t.getAttribute('data-dc-kg')) window._draftKgPending[t.getAttribute('data-dc-kg')] = t.value;
+    // v4.9.373 — reps on a conditioning set row, saved as typed for the open session.
+    if(t && t.getAttribute && t.getAttribute('data-dc-reps') && window._draftOpenWD){
+      _draftSetReps(window._draftOpenWD[0], window._draftOpenWD[1], t.getAttribute('data-dc-reps'), t.value);
+    }
   });
 }
 window.draftRunGuided = function(spec, dryRun, onSaved){
@@ -9111,6 +9122,7 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
 };
 
 window.draftOpenConditioning = function(week, day, sess){
+  window._draftOpenWD = [week, day];   // v4.9.373 — the reps listener needs to know which session
   sess = sess || window.blabGetSessionData(week, day);
   if(!sess || !sess.conditioning) return false;
   var parts = sess.conditioning;
@@ -9166,13 +9178,27 @@ window.draftOpenConditioning = function(week, day, sess){
              (p.alt ? '<button data-dc-alt="' + i + '" style="flex:1;padding:12px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:11px;' + B + '">' + (/gym|bike|prowler/i.test(p.alt.name) ? 'Gym version' : _esc(p.alt.name)) + '</button>' : '') +
              '</div>';
       } else if(p.kind === 'sets'){
-        h += '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">';
-        for(var k = 1; k <= p.sets; k++){
-          var on = checks.indexOf(i + ':' + k) >= 0;
-          h += '<button data-dc-set="' + i + ':' + k + '" style="flex:1;min-width:70px;padding:11px 6px;background:' + (on ? 'rgba(58,125,68,0.15)' : 'transparent') + ';border:1px solid ' + (on ? '#3a7d44' : 'var(--border2)') + ';color:' + (on ? '#7fd18b' : 'var(--text2)') + ';font-size:11px;' + B + '">' + (on ? '&#10003; ' : '') + 'Set ' + k + '</button>';
-        }
-        h += '</div><div style="font-size:11px;color:var(--text3);margin-top:6px;">Bodyweight &middot; tick each set, ' + p.rest + ' s rest starts by itself</div>';
+        // v4.9.373 — Jon 4 Nov: "should still read like regular lifting ... with the sets
+        // down and a tick box". One row per set: number, reps (prefilled from the
+        // prescription, editable), tick. The tick still starts the rest timer.
         h += window._phxBoxInHTML(p.title);
+        var _reps = _draftReps(week, day);
+        var _tgt = (String(p.presc).match(/×\s*(\d+)/) || [])[1] || '';
+        var _side = /each side|\/ ?side|each leg/i.test(p.presc) ? ' / side' : '';
+        h += '<div style="margin-top:10px;">';
+        for(var k = 1; k <= p.sets; k++){
+          var key = i + ':' + k, on = checks.indexOf(key) >= 0;
+          var rv = (_reps[key] != null && _reps[key] !== '') ? _reps[key] : _tgt;
+          h += '<div style="display:grid;grid-template-columns:28px 1fr 64px 44px;gap:8px;align-items:center;margin-bottom:8px;">' +
+               '<div style="font-family:var(--font-d);font-size:15px;font-weight:700;color:var(--text3);text-align:center;">' + k + '</div>' +
+               '<input data-dc-reps="' + key + '" type="number" inputmode="numeric" value="' + rv + '" ' +
+                 'style="width:100%;padding:11px 6px;background:var(--bg3);border:1px solid ' + (on ? '#3a7d44' : 'var(--border)') + ';border-radius:8px;color:' + (on ? '#7fd18b' : 'var(--gold)') + ';font-family:var(--font-d);font-size:20px;font-weight:700;text-align:center;outline:none;box-sizing:border-box;">' +
+               '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;">Reps' + _side + '</div>' +
+               '<button data-dc-set="' + key + '" aria-label="Set ' + k + ' done" style="width:44px;height:44px;border-radius:8px;background:' + (on ? '#3a7d44' : 'var(--bg3)') + ';border:1px solid ' + (on ? '#3a7d44' : 'var(--border2)') + ';display:flex;align-items:center;justify-content:center;">' +
+                 '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="' + (on ? '#fff' : 'var(--text3)') + '" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></button>' +
+               '</div>';
+        }
+        h += '</div><div style="font-size:11px;color:var(--text3);margin-top:2px;">Bodyweight &middot; ' + p.rest + ' s rest starts when you tick a set</div>';
       } else {
         h += '<button data-dc-chk="' + i + '" style="margin-top:10px;padding:10px 14px;background:' + (s.done ? 'rgba(58,125,68,0.15)' : 'transparent') + ';border:1px solid ' + (s.done ? '#3a7d44' : 'var(--border2)') + ';color:' + (s.done ? '#7fd18b' : 'var(--text2)') + ';font-size:11px;' + B + '">' + (s.done ? '&#10003; Done' : 'Mark done') + '</button>';
       }
@@ -9196,7 +9222,7 @@ window.draftOpenConditioning = function(week, day, sess){
     var o = document.getElementById('draft-cond'); if(o) o.remove();
   }
   ov.addEventListener('click', function(e){
-    if(e.target && e.target.hasAttribute && (e.target.hasAttribute('data-dc-kg') || e.target.hasAttribute('data-box-in'))) return;   // typing in a kg / cm box
+    if(e.target && e.target.hasAttribute && (e.target.hasAttribute('data-dc-kg') || e.target.hasAttribute('data-box-in') || e.target.hasAttribute('data-dc-reps'))) return;   // typing in a kg / in / reps box
     var t = e.target.closest ? e.target.closest('[data-dc],[data-dc-start],[data-dc-alt],[data-dc-chk],[data-dc-set]') : null;
     if(!t) return;
     if(t.hasAttribute('data-dc-start') || t.hasAttribute('data-dc-alt')){

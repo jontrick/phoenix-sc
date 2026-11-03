@@ -6175,4 +6175,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.window._phxBoxInSet('Box Jump', '24');
     assert.ok(/value="24"/.test(app.window._phxBoxInHTML('Box Jump')), 'prefilled from last time');
   });
+
+  test('SETROWS: draftReps keeps per-set reps beside the ticks for the open session (Jon, 4 Nov)', () => {
+    startDraft();
+    assert.deepEqual(app._draftReps(2, 3), {}, 'nothing yet');
+    app._draftSetReps(2, 3, '3:1', '5');
+    app._draftSetReps(2, 3, '3:2', '4');
+    assert.deepEqual(app._draftReps(2, 3), { '3:1': '5', '3:2': '4' });
+    assert.deepEqual(app._draftReps(2, 4), {}, 'another day is separate');
+  });
 }

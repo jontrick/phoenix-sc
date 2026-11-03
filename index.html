@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.365';
+var APP_VERSION='4.9.366';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -34261,8 +34261,17 @@ function pepApplyPhase(id){
   var prior = {};
   (ps.stacks || []).forEach(function(st){ if(st && st.compoundId) prior[st.compoundId] = st; });
   var carried = 0;
+  // v4.9.366 — THE OPEN VIAL IS A FACT WHETHER OR NOT HE HAS COUNTED HIS STOCK.
+  // KEEP above was all-or-nothing on stockCounted, so applying a phase to an
+  // uncounted compound threw away the vial he had actually mixed (invariant 2)
+  // and the make-up confirmation, putting every draw-up back to "make-up
+  // required". Found building Jon's 4 Nov reset. The stock COUNT stays gated on
+  // stockCounted; what is dissolved in the fridge is not a count.
+  var VIAL = ["openedDate","openVialMg","openWaterMl","openUsedAmt","openDosesUsed",
+              "actualVialMg","waterConfirmedAt"];
   v.entries.forEach(function(st){
     var was = prior[st.compoundId];
+    if(was) VIAL.forEach(function(k){ if(was[k] !== undefined && was[k] !== null) st[k] = was[k]; });
     if(was && was.stockCounted === true){
       KEEP.forEach(function(k){ if(was[k] !== undefined) st[k] = was[k]; });
       carried++;

@@ -5733,4 +5733,20 @@ const settle = () => new Promise(r => setTimeout(r, 0));
   test('no panels logged reports null rather than an empty shell', () => {
     assert.equal(app._pepLatestBloods({}), null, 'null when nothing logged');
   });
+
+  test('PHASEVIAL applying a phase keeps the vial he mixed even when stock is uncounted', () => {
+    reset(); signIn('jon');
+    const st = app.pepGetState();
+    st.settings = {};
+    st.stacks = [{ compoundId:'bpc157', dose:0.5, vialMg:10, waterMl:2, startDate:'2026-05-31', freq:'daily',
+                   openedDate:'2026-11-01', openVialMg:10, openWaterMl:2, openUsedAmt:1.5, waterConfirmedAt:'2026-11-01',
+                   stockCounted:false, sealedVials:9 }];
+    app.pepSaveState(st);
+    assert.equal(app.pepApplyPhase('phase2').ok, true);
+    const b = app.pepGetState().stacks.find((x) => x.compoundId === 'bpc157');
+    assert.equal(b.openedDate, '2026-11-01', 'open vial kept');
+    assert.equal(b.openUsedAmt, 1.5, 'and what has been drawn from it');
+    assert.equal(b.waterConfirmedAt, '2026-11-01', 'and the make-up confirmation');
+    assert.equal(b.stockCounted, false, 'the count is still not claimed');
+  });
 }

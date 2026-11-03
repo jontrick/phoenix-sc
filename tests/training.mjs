@@ -6166,12 +6166,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.window._draftKgGet('draft-sled'), 100, 'remembered');
   });
 
-  test('BOXCM: every box jump carries a box height, remembered; other moves do not (Jon, 4 Nov)', () => {
+  test('BOXIN: every box jump carries a box height in inches, remembered; other moves do not (Jon, 4 Nov)', () => {
     startDraft();
-    assert.ok(/data-box-cm="Seated Box Jump"/.test(app.window._phxBoxCmHTML('Seated Box Jump')), 'seated box jump');
-    assert.ok(/data-box-cm="Box Jump"/.test(app.window._phxBoxCmHTML('Box Jump')), 'box jump');
-    assert.equal(app.window._phxBoxCmHTML('Lateral Bound'), '', 'a bound has none');
-    app.window._phxBoxCmSet('Box Jump', '61');
-    assert.ok(/value="61"/.test(app.window._phxBoxCmHTML('Box Jump')), 'prefilled from last time');
+    assert.ok(/data-box-in="Seated Box Jump"/.test(app.window._phxBoxInHTML('Seated Box Jump')), 'seated box jump');
+    assert.ok(/data-box-in="Box Jump"/.test(app.window._phxBoxInHTML('Box Jump')), 'box jump');
+    assert.equal(app.window._phxBoxInHTML('Lateral Bound'), '', 'a bound has none');
+    assert.ok(/>in<\/span>/.test(app.window._phxBoxInHTML('Box Jump')) && !/>cm</.test(app.window._phxBoxInHTML('Box Jump')), 'inches, not cm');
+    app.window._phxBoxInSet('Box Jump', '24');
+    assert.ok(/value="24"/.test(app.window._phxBoxInHTML('Box Jump')), 'prefilled from last time');
   });
 }

@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.371';
+var APP_VERSION='4.9.372';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8910,31 +8910,33 @@ function _dgBeep(freq, ms){
   } catch(_e){}
 }
 // v4.9.371 — Jon 4 Nov: "always have in measure on all box jumps". Any exercise or
-// conditioning part whose name says Box Jump gets a box-height box (cm), prefilled
+// conditioning part whose name says Box Jump gets a box-height box, prefilled
+// v4.9.372 — in INCHES, not cm: "the boxes are measured that way". Key is _box_in;
+// any _box_cm value from the 20 minutes .371 was live is deliberately not carried.
 // from the last height used. Matched by NAME so it holds for every programme,
-// present and future. Kept in blab records[name+'_box_cm'], so it mirrors.
-window._phxBoxCmGet = function(name){
-  try { var r = ((window.blabGetState && window.blabGetState()) || {}).records || {}; return r[name + '_box_cm'] || ''; } catch(_e){ return ''; }
+// present and future. Kept in blab records[name+'_box_in'], so it mirrors.
+window._phxBoxInGet = function(name){
+  try { var r = ((window.blabGetState && window.blabGetState()) || {}).records || {}; return r[name + '_box_in'] || ''; } catch(_e){ return ''; }
 };
-window._phxBoxCmSet = function(name, cm){
+window._phxBoxInSet = function(name, cm){
   try { var s = window.blabGetState(); if(!s) return false; if(!s.records) s.records = {};
-        var v = parseFloat(cm); if(v > 0) s.records[name + '_box_cm'] = v; else delete s.records[name + '_box_cm'];
+        var v = parseFloat(cm); if(v > 0) s.records[name + '_box_in'] = v; else delete s.records[name + '_box_in'];
         window.blabSaveState(s); return true; } catch(_e){ return false; }
 };
-window._phxBoxCmHTML = function(name){
+window._phxBoxInHTML = function(name){
   if(!/box jump/i.test(String(name || ''))) return '';
-  var v = window._phxBoxCmGet(name);
+  var v = window._phxBoxInGet(name);
   var safe = String(name).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   return '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">' +
     '<div style="flex:1;font-size:12px;color:var(--text3);">Box height</div>' +
-    '<input data-box-cm="' + safe + '" type="number" inputmode="decimal" value="' + v + '" placeholder="&ndash;" ' +
+    '<input data-box-in="' + safe + '" type="number" inputmode="decimal" value="' + v + '" placeholder="&ndash;" ' +
       'style="width:76px;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;">' +
-    '<span style="font-size:11px;color:var(--text3);">cm</span></div>';
+    '<span style="font-size:11px;color:var(--text3);">in</span></div>';
 };
 if(typeof document !== 'undefined' && document.addEventListener){
   document.addEventListener('input', function(e){
     var t = e && e.target;
-    if(t && t.getAttribute && t.getAttribute('data-box-cm') !== null) window._phxBoxCmSet(t.getAttribute('data-box-cm'), t.value);
+    if(t && t.getAttribute && t.getAttribute('data-box-in') !== null) window._phxBoxInSet(t.getAttribute('data-box-in'), t.value);
   });
 }
 // v4.9.370 — per-effort loads for guided conditioning (prowler / sled). Kept in blab
@@ -9170,7 +9172,7 @@ window.draftOpenConditioning = function(week, day, sess){
           h += '<button data-dc-set="' + i + ':' + k + '" style="flex:1;min-width:70px;padding:11px 6px;background:' + (on ? 'rgba(58,125,68,0.15)' : 'transparent') + ';border:1px solid ' + (on ? '#3a7d44' : 'var(--border2)') + ';color:' + (on ? '#7fd18b' : 'var(--text2)') + ';font-size:11px;' + B + '">' + (on ? '&#10003; ' : '') + 'Set ' + k + '</button>';
         }
         h += '</div><div style="font-size:11px;color:var(--text3);margin-top:6px;">Bodyweight &middot; tick each set, ' + p.rest + ' s rest starts by itself</div>';
-        h += window._phxBoxCmHTML(p.title);
+        h += window._phxBoxInHTML(p.title);
       } else {
         h += '<button data-dc-chk="' + i + '" style="margin-top:10px;padding:10px 14px;background:' + (s.done ? 'rgba(58,125,68,0.15)' : 'transparent') + ';border:1px solid ' + (s.done ? '#3a7d44' : 'var(--border2)') + ';color:' + (s.done ? '#7fd18b' : 'var(--text2)') + ';font-size:11px;' + B + '">' + (s.done ? '&#10003; Done' : 'Mark done') + '</button>';
       }
@@ -9194,7 +9196,7 @@ window.draftOpenConditioning = function(week, day, sess){
     var o = document.getElementById('draft-cond'); if(o) o.remove();
   }
   ov.addEventListener('click', function(e){
-    if(e.target && e.target.hasAttribute && (e.target.hasAttribute('data-dc-kg') || e.target.hasAttribute('data-box-cm'))) return;   // typing in a kg / cm box
+    if(e.target && e.target.hasAttribute && (e.target.hasAttribute('data-dc-kg') || e.target.hasAttribute('data-box-in'))) return;   // typing in a kg / cm box
     var t = e.target.closest ? e.target.closest('[data-dc],[data-dc-start],[data-dc-alt],[data-dc-chk],[data-dc-set]') : null;
     if(!t) return;
     if(t.hasAttribute('data-dc-start') || t.hasAttribute('data-dc-alt')){
@@ -44334,7 +44336,7 @@ function openTodaySession(){
       '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
       '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex._bodyweight?' &middot; bodyweight':'')+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
-      ((typeof window._phxBoxCmHTML === 'function') ? window._phxBoxCmHTML(ex.name) : '')+
+      ((typeof window._phxBoxInHTML === 'function') ? window._phxBoxInHTML(ex.name) : '')+
       targetSection+
       suggestSection+
       customiseControlsHTML+

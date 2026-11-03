@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.367';
+var APP_VERSION='4.9.368';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -34222,29 +34222,35 @@ var _PEP_PHASES = [
   },
   {
     id: "phase3",
-    name: "Phase 3 - Reset from 4 Nov 2026",
+    name: "Phase 3 - Continuous base from 4 Nov 2026",
     from: "2026-11-04",
     to: null,
-    summary: "Jon's reset, 3 Nov: Ipamorelin, CJC-1295, BPC-157, TB-500 and GHK-Cu running. Retatrutide, TA-1, NAD+, 5-Amino-1MQ and MOTS-c paused until he taps Start today. Epitalon and Tesamorelin finished.",
+    summary: "Base every week: BPC-157 daily, TB-500 Mondays, Ipamorelin + CJC-1295 nightly (Mon off). GHK-Cu finishes its run Sat 7 Nov, 4 weeks off, back Mon 7 Dec. NAD+ and TA-1 full courses from Sun 8 Nov. MOTS-c course 2 counted complete. Retatrutide and 5-Amino-1MQ paused.",
     stacks: [
-    // RUNNING — Jon 3 Nov. Original start dates kept so nothing reads as a new course.
-    {compoundId:"ipamorelin", dose:0.3, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running. 300mcg pre-sleep, Monday OFF. Inject first, CJC 15 min after."},
-    {compoundId:"cjc1295", dose:0.2, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running. 200mcg, 15 min after Ipamorelin, Monday OFF."},
-    {compoundId:"bpc157", dose:0.5, startDate:"2026-05-31", freq:"daily", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running. Daily systemic."},
-    {compoundId:"tb500", dose:2, startDate:"2026-09-01", freq:"mon", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Running - maintenance. 2mg Monday only."},
-    // GHK-Cu: Jon says daily and running. Dose carried from the last step of his Phase 2
-    // course (2mg) - he did not restate it; edit in the compound panel if different.
-    {compoundId:"ghkcu", dose:2, startDate:"2026-09-24", freq:"daily", vialMg:50, waterMl:2, continuous:true, status:"instock", notes:"Running daily. 2mg is carried from the end of the Phase 2 course - check and edit if not."},
-    // PAUSED — in the protocol, nothing due until Start today.
-    {compoundId:"retatrutide", dose:10, startDate:"2026-11-04", interval_days:6, vialMg:30, waterMl:1.8, continuous:true, status:"instock", paused:true, notes:"Paused 3 Nov. Tap Start today when it restarts - every 6 days from then."},
-    {compoundId:"ta1", dose:1.6, startDate:"2026-11-04", freq:"wed/sat", vialMg:10, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", paused:true, escalation_schedule:[{"weeks": "1-4", "dose_mg": 1.6}, {"week_from": 5, "dose_mg": 3.2}], notes:"Not restarted. Wed + Sat. Tap Start today when it begins."},
-    {compoundId:"nad", dose:50, startDate:"2026-11-04", vialMg:500, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", paused:true, active_days:[1, 3, 5], escalation_schedule:[{"week": 1, "dose_mg": 50}, {"week_from": 2, "dose_mg": 100}], notes:"Not restarted. Mon/Wed/Fri AM only. Tap Start today when it begins."},
-    {compoundId:"5amq", dose:0.5, startDate:"2026-11-04", freq:"daily", vialMg:5, waterMl:1, cycleWeeks:8, offWeeks:4, status:"pipeline", paused:true, escalation_schedule:[{"weeks": "1-2", "dose_mg": 0.5}, {"weeks": "3-4", "dose_mg": 0.75}, {"week_from": 5, "dose_mg": 1}], notes:"Not restarted. Tap Start today when it begins."},
-    {compoundId:"motsc", dose:10, startDate:"2026-11-04", vialMg:10, waterMl:0.5, status:"instock", paused:true, injection_dates:["2026-11-04", "2026-11-09", "2026-11-14", "2026-11-19"], notes:"Course 2 ended at 3 of 4. Next course: 4 injections 5 days apart - Start today moves all four dates to that day. For a single leftover dose instead, use + Add a dose."},
-    // FINISHED
+    // ── BASE — runs continuously (Jon, 3 Nov) ───────────────────────────────
+    {compoundId:"bpc157", dose:0.5, startDate:"2026-05-31", freq:"daily", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. Daily, any time."},
+    {compoundId:"tb500", dose:2, startDate:"2026-09-01", freq:"mon", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. 2mg maintenance, Monday only."},
+    {compoundId:"ipamorelin", dose:0.3, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. 300mcg pre-sleep, Monday off. Inject first, CJC 15 min after."},
+    {compoundId:"cjc1295", dose:0.2, startDate:"2026-05-30", freq:"6 day", vialMg:10, waterMl:2, continuous:true, status:"instock", notes:"Base. 200mcg, 15 min after Ipamorelin, Monday off."},
+    // ── GHK-Cu — flexed to its own rule (30 on / 30 off). The current run began
+    // 24 Sep and is well past 30 days, so it finishes at the end of this week,
+    // takes 4 weeks off, and restarts Mon 7 Dec for a 30-day run. Dose 2mg is
+    // carried from the end of the last course; Jon did not restate it.
+    {compoundId:"ghkcu", dose:2, startDate:"2026-09-24", freq:"daily", vialMg:50, waterMl:2, status:"instock",
+     periods:[{from:"2026-09-24", to:"2026-11-07"},{from:"2026-12-07", to:"2027-01-05"}],
+     notes:"Last dose Sat 7 Nov. Off 8 Nov - 6 Dec. Back Mon 7 Dec for 30 days. 2mg carried from the last course - edit if different."},
+    // ── NEW COURSES from Sun 8 Nov (Jon: "starting full course Sunday 8 Nov").
+    // planned:true — Jon set this date himself, so it appears on the day without
+    // a Start tap. First doses fall on the course's own weekdays: NAD+ Mon 9 Nov,
+    // TA-1 Wed 11 Nov.
+    {compoundId:"nad", dose:50, startDate:"2026-11-08", vialMg:500, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", planned:true, active_days:[1, 3, 5], escalation_schedule:[{"week": 1, "dose_mg": 50}, {"week_from": 2, "dose_mg": 100}], notes:"8-week course from Sun 8 Nov (first dose Mon 9 Nov). Mon/Wed/Fri AM only, never evening. 50mg week 1, then 100mg. Then 4 weeks off."},
+    {compoundId:"ta1", dose:1.6, startDate:"2026-11-08", freq:"wed/sat", vialMg:10, waterMl:2, cycleWeeks:8, offWeeks:4, status:"instock", planned:true, escalation_schedule:[{"weeks": "1-4", "dose_mg": 1.6}, {"week_from": 5, "dose_mg": 3.2}], notes:"8-week course from Sun 8 Nov (first dose Wed 11 Nov). Wed + Sat. 1.6mg weeks 1-4, 3.2mg weeks 5-8. Then 4 weeks off."},
+    // ── DONE / PAUSED ───────────────────────────────────────────────────────
+    {compoundId:"motsc", dose:10, startDate:"2026-10-14", vialMg:10, waterMl:0.5, status:"complete", injection_dates:["2026-10-14", "2026-10-19", "2026-10-24", "2026-10-29"], notes:"Course 2 counted complete (Jon, 3 Nov: as if the last vial ran on day 20). Next course to be planned."},
+    {compoundId:"retatrutide", dose:10, startDate:"2026-11-04", interval_days:6, vialMg:30, waterMl:1.8, continuous:true, status:"instock", paused:true, notes:"Paused. Tap Start today when it restarts - every 6 days from then."},
+    {compoundId:"5amq", dose:0.5, startDate:"2026-11-04", freq:"daily", vialMg:5, waterMl:1, status:"pipeline", paused:true, notes:"On hold - 15mg in stock, a full course needs 45mg."},
     {compoundId:"epitalon", dose:5, startDate:"2026-09-04", vialMg:10, waterMl:1, status:"complete", notes:"Course 2 finished."},
     {compoundId:"tesamorelin", dose:2, startDate:"2026-09-08", end_date:"2026-10-02", freq:"6 day", vialMg:10, waterMl:2, status:"complete", notes:"Bridge finished 2 Oct."},
-    // UNCHANGED
     {compoundId:"dsip", dose:0.3, startDate:"2026-09-01", freq:"as needed", vialMg:5, waterMl:2, continuous:true, status:"instock", notes:"As needed, 30-60 min before sleep."}
   ]
   }
@@ -34326,6 +34332,11 @@ function pepApplyPhase(id){
     // running, so applying a phase never silently stops a live compound.
     if(st.startDate && String(st.startDate) >= _pepToday()) st.awaitingStart = true;
   });
+  // v4.9.368 — planned:true is a start date JON set ("starting full course Sunday
+  // 8 Nov"), not one a phase guessed, so it shows on the day with no Start tap.
+  var _planned = {};
+  ph.stacks.forEach(function(x){ if(x && x.planned) _planned[x.compoundId] = true; });
+  v.entries.forEach(function(st){ if(_planned[st.compoundId]) st.awaitingStart = false; });
   // v4.9.367 — a phase can mark a compound PAUSED: in the protocol, nothing due,
   // until he taps Start today (pepStartToday, which shifts its dates to that day).
   // Needed for the 4 Nov reset: Reta, TA-1, NAD+, 5-Amino and MOTS-c are paused,

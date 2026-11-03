@@ -5751,21 +5751,24 @@ const settle = () => new Promise(r => setTimeout(r, 0));
   });
 
   // ── v4.9.367: Phase 3 — Jon's 3 Nov reset ────────────────────────────────
-  test('PHASE3 running compounds are due, paused ones are not, finished ones are done', () => {
+  test('PHASE3 base runs, NAD+/TA-1 start Sun 8 Nov with no tap, GHK-Cu breaks, MOTS-c done', () => {
     reset(); signIn('jon');
     const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
     const r = app.pepApplyPhase('phase3');
     assert.equal(r.ok, true, JSON.stringify(r.problems || ''));
     const by = Object.fromEntries(app.pepGetState().stacks.map((x) => [x.compoundId, x]));
-    ['ipamorelin','cjc1295','bpc157','tb500','ghkcu'].forEach((id) => assert.ok(by[id] && !by[id].awaitingStart && by[id].status !== 'complete', id + ' running'));
-    ['retatrutide','ta1','nad','5amq','motsc'].forEach((id) => assert.equal(by[id] && by[id].awaitingStart, true, id + ' paused'));
-    ['epitalon','tesamorelin'].forEach((id) => assert.equal(by[id].status, 'complete', id + ' finished'));
     const c = (id) => app._pepCompound(id);
-    const d = new Date('2026-11-05T12:00:00');   // a Thursday: BPC daily, Ipa (not Monday), Reta would be due if not paused
-    assert.ok(app._pepStackDueOn(by.bpc157, c('bpc157'), d) !== null, 'BPC due');
-    assert.ok(app._pepStackDueOn(by.ipamorelin, c('ipamorelin'), d) !== null, 'Ipa due');
-    assert.equal(app._pepStackDueOn(by.retatrutide, c('retatrutide'), d), null, 'Reta silent');
-    assert.equal(app._pepStackDueOn(by.motsc, c('motsc'), new Date('2026-11-04T12:00:00')), null, 'MOTS-c silent on its planned date — paused');
+    const due = (id, iso) => app._pepStackDueOn(by[id], c(id), new Date(iso + 'T12:00:00')) !== null;
+    ['bpc157','tb500','ipamorelin','cjc1295'].forEach((id) => assert.ok(!by[id].awaitingStart, id + ' base'));
+    assert.ok(due('bpc157', '2026-12-25') && due('tb500', '2026-11-09') && due('ipamorelin', '2026-11-10'), 'base keeps running');
+    assert.ok(!due('ipamorelin', '2026-11-09'), 'Ipa Monday off');
+    assert.ok(due('ghkcu', '2026-11-07') && !due('ghkcu', '2026-11-08') && !due('ghkcu', '2026-12-06') && due('ghkcu', '2026-12-07'), 'GHK-Cu: last 7 Nov, back 7 Dec');
+    assert.equal(by.nad.awaitingStart, false, 'NAD+ needs no tap — Jon set the date');
+    assert.ok(!due('nad', '2026-11-08') && due('nad', '2026-11-09'), 'NAD+ first dose Mon 9 Nov');
+    assert.ok(!due('ta1', '2026-11-08') && due('ta1', '2026-11-11'), 'TA-1 first dose Wed 11 Nov');
+    assert.equal(by.motsc.status, 'complete', 'MOTS-c course 2 counted complete');
+    assert.equal(by.retatrutide.awaitingStart, true, 'Reta paused');
+    assert.equal(by['5amq'].awaitingStart, true, '5-Amino on hold');
   });
 
   test('PHASE3 applied days late, a paused compound is still paused', () => {
@@ -5781,18 +5784,18 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     } finally { app._pepToday = realToday; }
   });
 
-  test('PHASE3 Start today on MOTS-c moves all four injections to that day, 5 days apart', () => {
+  test('PHASE3 Start today on Retatrutide starts its 6-day rhythm that day', () => {
     reset(); signIn('jon');
     const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
     app.pepApplyPhase('phase3');
-    try { app.pepStartToday('motsc'); } catch (e) { /* screen re-render is not stubbed */ }
-    const m = app.pepGetState().stacks.find((x) => x.compoundId === 'motsc');
-    const t0 = app._pepToday();
-    assert.equal(m.awaitingStart, false);
-    assert.equal(m.dates[0], t0, 'first injection today');
-    const gaps = m.dates.slice(1).map((x, i) => Math.round((new Date(x + 'T12:00:00') - new Date(m.dates[i] + 'T12:00:00')) / 864e5));
-    assert.deepEqual(gaps, [5, 5, 5]);
+    try { app.pepStartToday('retatrutide'); } catch (e) { /* screen re-render is not stubbed */ }
+    const r = app.pepGetState().stacks.find((x) => x.compoundId === 'retatrutide');
+    const t0 = app._pepToday(), c = app._pepCompound('retatrutide');
+    const at = (n) => app._pepStackDueOn(r, c, new Date(new Date(t0 + 'T12:00:00').getTime() + n * 864e5)) !== null;
+    assert.equal(r.awaitingStart, false);
+    assert.ok(at(0) && !at(1) && !at(5) && at(6) && at(12), 'today, then every 6 days');
   });
+
 
   test('PHASE3 a phase with no stock figure leaves his vial count alone', () => {
     reset(); signIn('jon');

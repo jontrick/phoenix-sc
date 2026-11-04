@@ -6192,4 +6192,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) { const x = app.blabGetSessionData(w, d);
       if (x) assert.ok(!JSON.stringify(x.exercises || []).includes('45° Back Extension'), `W${w}D${d} no back extension`); }
   });
+
+  test('BOXSQ: box squats carry box height and depth against parallel, remembered (Jon, 5 Nov)', () => {
+    startDraft();
+    const h0 = app.window._phxBoxSqHTML('Box Squat (parallel)');
+    assert.ok(/data-boxsq-in="Box Squat \(parallel\)"/.test(h0), 'height box');
+    assert.ok(/data-boxsq-depth="Below"/.test(h0) && /data-boxsq-depth="Parallel"/.test(h0) && /data-boxsq-depth="Above"/.test(h0), 'three depths');
+    assert.equal(app.window._phxBoxSqGet('Box Squat (parallel)').depth, 'Parallel', 'a parallel box squat defaults to parallel');
+    assert.equal(app.window._phxBoxSqHTML('Back Squat'), '', 'a back squat has none');
+    app.window._phxBoxSqSet('Speed Box Squat (band)', 'in', '14');
+    app.window._phxBoxSqSet('Speed Box Squat (band)', 'depth', 'Below');
+    assert.deepEqual(app.window._phxBoxSqGet('Speed Box Squat (band)'), { inch: 14, depth: 'Below' });
+  });
 }

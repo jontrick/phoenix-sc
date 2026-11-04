@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.376';
+var APP_VERSION='4.9.377';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8917,6 +8917,57 @@ function _dgBeep(freq, ms){
     gn.gain.exponentialRampToValueAtTime(0.0001, _dgAudio.currentTime + (ms || 150) / 1000);
     o.start(); o.stop(_dgAudio.currentTime + (ms || 150) / 1000);
   } catch(_e){}
+}
+// v4.9.377 — Jon 5 Nov: "box height for box squats too - especially parallel against
+// below against above". Any exercise named Box Squat gets the box height (inches) and
+// where it puts him against parallel. Remembered per exercise name in blab records, so
+// the next session opens on the same box.
+window._phxBoxSqGet = function(name){
+  try { var r = ((window.blabGetState && window.blabGetState()) || {}).records || {};
+        return { inch: r[name + '_box_in'] || '', depth: r[name + '_box_depth'] || (/parallel/i.test(name) ? 'Parallel' : '') }; }
+  catch(_e){ return { inch:'', depth:'' }; }
+};
+window._phxBoxSqSet = function(name, field, v){
+  try { var s = window.blabGetState(); if(!s) return false; if(!s.records) s.records = {};
+        var k = name + (field === 'depth' ? '_box_depth' : '_box_in');
+        if(field === 'depth') s.records[k] = v;
+        else { var n = parseFloat(v); if(n > 0) s.records[k] = n; else delete s.records[k]; }
+        window.blabSaveState(s); return true; } catch(_e){ return false; }
+};
+window._phxBoxSqHTML = function(name){
+  if(!/box squat/i.test(String(name || ''))) return '';
+  var cur = window._phxBoxSqGet(name);
+  var safe = String(name).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  var chip = function(d){
+    var on = cur.depth === d;
+    return '<button type="button" data-boxsq-depth="' + d + '" data-boxsq="' + safe + '" style="flex:1;padding:9px 4px;border-radius:8px;font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;' +
+      'background:' + (on ? 'var(--gold)' : 'transparent') + ';color:' + (on ? '#000' : 'var(--text2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';">' + d + '</button>';
+  };
+  return '<div style="margin-top:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;">' +
+    '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<div style="flex:1;font-size:12px;color:var(--text3);">Box height</div>' +
+      '<input data-boxsq-in="' + safe + '" type="number" inputmode="decimal" value="' + cur.inch + '" placeholder="&ndash;" ' +
+        'style="width:72px;padding:9px 4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;">' +
+      '<span style="font-size:11px;color:var(--text3);">in</span></div>' +
+    '<div style="font-size:11px;color:var(--text3);margin:8px 0 6px;">Depth on the box</div>' +
+    '<div style="display:flex;gap:6px;">' + chip('Below') + chip('Parallel') + chip('Above') + '</div></div>';
+};
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('input', function(e){
+    var t = e && e.target;
+    if(t && t.getAttribute && t.getAttribute('data-boxsq-in') !== null) window._phxBoxSqSet(t.getAttribute('data-boxsq-in'), 'in', t.value);
+  });
+  document.addEventListener('click', function(e){
+    var b = e && e.target && e.target.closest ? e.target.closest('[data-boxsq-depth]') : null;
+    if(!b) return;
+    var nm = b.getAttribute('data-boxsq'), d = b.getAttribute('data-boxsq-depth');
+    window._phxBoxSqSet(nm, 'depth', d);
+    var row = b.parentNode; if(!row) return;
+    Array.prototype.forEach.call(row.querySelectorAll('[data-boxsq-depth]'), function(x){
+      var on = x === b;
+      x.style.background = on ? 'var(--gold)' : 'transparent'; x.style.color = on ? '#000' : 'var(--text2)'; x.style.borderColor = on ? 'var(--gold)' : 'var(--border2)';
+    });
+  });
 }
 // v4.9.370 — per-effort loads for guided conditioning (prowler / sled). Kept in blab
 // records so they mirror with the rest of the training state.
@@ -44355,6 +44406,7 @@ function openTodaySession(){
       '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
       '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex._bodyweight?' &middot; bodyweight':'')+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
+      ((typeof window._phxBoxSqHTML === 'function') ? window._phxBoxSqHTML(ex.name) : '')+
       targetSection+
       suggestSection+
       customiseControlsHTML+

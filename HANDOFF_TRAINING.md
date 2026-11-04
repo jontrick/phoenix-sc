@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.377 (5 Nov 2026)** — Box squats (matched by name, /box squat/i) show Box height (in) + Depth on the box (Below / Parallel / Above) under the coaching note: `_phxBoxSqHTML/Get/Set`, `records[name+'_box_in']` and `[name+'_box_depth']`; a 'parallel' box squat defaults to Parallel. Per exercise, not per set. Test `BOXSQ`.
+
 > **v4.9.375 (5 Nov 2026)** — Thu Bulgarian Split Squat now pairs with **Bench Reverse Hyper** (12 reps; v4.9.376 — DB RDL was tried first but RDL is already earlier on Thursday) instead of the 45° Back Extension, everywhere in the Draft programme. Jon: back extension is too far from the split-squat bench to superset. Test `SUBRDL`.
 
 > **v4.9.374 (4 Nov 2026)** — Box height is PER SET (Jon: "I build up the height so not all same"). Lift sessions: a bodyweight box jump keeps the load column, which `phxExerciseUnitClass` already labels `in` (value travels in the existing weight slot, as every `in`-class movement always has). Conditioning sets: box-jump rows get an IN input (`data-dc-in`), saved per session (`_draftReps` key `i:k:in`) and remembered per set number (`records[title+'_box_in_set'+k]`). The .371/.372 single header box is archived to blab_archive.js.

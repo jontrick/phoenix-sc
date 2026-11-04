@@ -6183,4 +6183,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(app._draftReps(2, 3), { '3:1': '5', '3:2': '4' });
     assert.deepEqual(app._draftReps(2, 4), {}, 'another day is separate');
   });
+
+  test('SUBRDL: Bulgarian pairs with a DB RDL, not the back extension (Jon, 5 Nov)', () => {
+    startDraft();
+    const pair = app.blabGetSessionData(2, 4).exercises.find((e) => /^Bulgarian/.test(e.name));
+    assert.ok(pair, 'positive control: the pair is in Thursday');
+    assert.deepEqual(pair.movements.map((m) => m.name), ['Bulgarian Split Squat (DBs)', 'DB Romanian Deadlift']);
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) { const x = app.blabGetSessionData(w, d);
+      if (x) assert.ok(!JSON.stringify(x.exercises || []).includes('45° Back Extension'), `W${w}D${d} no back extension`); }
+  });
 }

@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.375 (5 Nov 2026)** — Thu Bulgarian Split Squat now pairs with **DB Romanian Deadlift** (12 reps) instead of the 45° Back Extension, everywhere in the Draft programme. Jon: back extension is too far from the split-squat bench to superset. Test `SUBRDL`.
+
 > **v4.9.374 (4 Nov 2026)** — Box height is PER SET (Jon: "I build up the height so not all same"). Lift sessions: a bodyweight box jump keeps the load column, which `phxExerciseUnitClass` already labels `in` (value travels in the existing weight slot, as every `in`-class movement always has). Conditioning sets: box-jump rows get an IN input (`data-dc-in`), saved per session (`_draftReps` key `i:k:in`) and remembered per set number (`records[title+'_box_in_set'+k]`). The .371/.372 single header box is archived to blab_archive.js.
 
 > **v4.9.373 (4 Nov 2026)** — Conditioning 'sets' parts (Lateral Bound, Seated Box Jump, Wed plyos) render like a lift: one row per set — number, reps (prefilled from the ×N in the prescription, editable), tick; tick still starts the rest timer. Reps saved per session in localStorage `<draft_chk key>_reps` (`_draftReps`/`_draftSetReps`). Box height sits above the rows. Jon: "should still read like regular lifting ... with the sets down and a tick box". Test `SETROWS`.

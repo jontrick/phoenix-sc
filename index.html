@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.375';
+var APP_VERSION='4.9.376';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8520,7 +8520,7 @@ window.draftGetSessionData = function(week, day, s){
       return sess('Lower — Taper', 40, [
         std('Box Jump', 2, 3, 'Step down. Crisp.', { bodyweight:true, rest:90 }),
         { name:'Back Squat — Taper', format:'percentage_sets', rest:150, sets:flat('squat', 3, 75, 2), note:'Fast and crisp. Leave plenty in the tank.' },
-        SS('Bulgarian Split Squat / DB Romanian Deadlift', 2, 90, 'Bulgarian Split Squat (DBs)', '8 / leg', 'DB Romanian Deadlift', '12 reps')
+        SS('Bulgarian Split Squat / Bench Reverse Hyper', 2, 90, 'Bulgarian Split Squat (DBs)', '8 / leg', 'Bench Reverse Hyper', '12 reps')
       ]);
     }
     var ME_L = [null,
@@ -8546,11 +8546,11 @@ window.draftGetSessionData = function(week, day, s){
       { name:ME_L.n, format:'percentage_sets', allow_attempts:true, rest:240, sets:ME_L.sets,
         note:'MAX EFFORT, done alone: 3-5 min between heavy sets. ' + ME_L.note + ' Log the real weight and reps of your top set.' },
       { name:L2.n, format:'percentage_sets', rest:180, sets:L2.sets, note:'Straight sets after the max effort lift. 3 min rest.' },
-      // v4.9.375 — Jon 5 Nov: back extension is across the gym from the split-squat bench.
-      // DB RDL with the same dumbbells keeps the hinge and keeps him at one station.
-      SS((t <= 2 ? 'Bulgarian Split Squat / DB Romanian Deadlift' : 'DB Reverse Lunge / Nordic Curl'), 3, 90,
+      // v4.9.375, v4.9.376 — Jon 5 Nov: back extension is across the gym from the split-squat bench, and RDL is already earlier in the session.
+      // Reverse hyper on the SAME bench: lie face down, hips at the end, raise both legs.
+      SS((t <= 2 ? 'Bulgarian Split Squat / Bench Reverse Hyper' : 'DB Reverse Lunge / Nordic Curl'), 3, 90,
         (t <= 2 ? 'Bulgarian Split Squat (DBs)' : 'DB Reverse Lunge'), (t <= 2 ? '8 / leg' : '10 / leg'),
-        (t <= 2 ? 'DB Romanian Deadlift' : 'Nordic Curl'), (t <= 2 ? '12 reps' : '5 reps')),
+        (t <= 2 ? 'Bench Reverse Hyper' : 'Nordic Curl'), (t <= 2 ? '12 reps' : '5 reps')),
       SS('Lying Leg Curl / Ab Wheel', 2, 45, 'Lying Leg Curl', 'To failure', 'Ab Wheel Rollout', 'To failure'),
       finL
     ]);

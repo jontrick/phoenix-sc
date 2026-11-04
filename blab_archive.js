@@ -801,3 +801,37 @@ window._phxUpdateHamburgerDot = function(){
     if(dot) dot.style.display = (isCheckInDay && !checkinDone) ? 'block' : 'none';
   } catch(_e){}
 };
+
+
+// ── Archived v4.9.374 — single box-height box per exercise (v4.9.371/.372). Replaced by a
+// per-set inches column: Jon builds the height set to set.
+// v4.9.371 — Jon 4 Nov: "always have in measure on all box jumps". Any exercise or
+// conditioning part whose name says Box Jump gets a box-height box, prefilled
+// v4.9.372 — in INCHES, not cm: "the boxes are measured that way". Key is _box_in;
+// any _box_cm value from the 20 minutes .371 was live is deliberately not carried.
+// from the last height used. Matched by NAME so it holds for every programme,
+// present and future. Kept in blab records[name+'_box_in'], so it mirrors.
+window._phxBoxInGet = function(name){
+  try { var r = ((window.blabGetState && window.blabGetState()) || {}).records || {}; return r[name + '_box_in'] || ''; } catch(_e){ return ''; }
+};
+window._phxBoxInSet = function(name, cm){
+  try { var s = window.blabGetState(); if(!s) return false; if(!s.records) s.records = {};
+        var v = parseFloat(cm); if(v > 0) s.records[name + '_box_in'] = v; else delete s.records[name + '_box_in'];
+        window.blabSaveState(s); return true; } catch(_e){ return false; }
+};
+window._phxBoxInHTML = function(name){
+  if(!/box jump/i.test(String(name || ''))) return '';
+  var v = window._phxBoxInGet(name);
+  var safe = String(name).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">' +
+    '<div style="flex:1;font-size:12px;color:var(--text3);">Box height</div>' +
+    '<input data-box-in="' + safe + '" type="number" inputmode="decimal" value="' + v + '" placeholder="&ndash;" ' +
+      'style="width:76px;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;">' +
+    '<span style="font-size:11px;color:var(--text3);">in</span></div>';
+};
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('input', function(e){
+    var t = e && e.target;
+    if(t && t.getAttribute && t.getAttribute('data-box-in') !== null) window._phxBoxInSet(t.getAttribute('data-box-in'), t.value);
+  });
+}

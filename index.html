@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.373';
+var APP_VERSION='4.9.374';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8916,36 +8916,6 @@ function _dgBeep(freq, ms){
     o.start(); o.stop(_dgAudio.currentTime + (ms || 150) / 1000);
   } catch(_e){}
 }
-// v4.9.371 — Jon 4 Nov: "always have in measure on all box jumps". Any exercise or
-// conditioning part whose name says Box Jump gets a box-height box, prefilled
-// v4.9.372 — in INCHES, not cm: "the boxes are measured that way". Key is _box_in;
-// any _box_cm value from the 20 minutes .371 was live is deliberately not carried.
-// from the last height used. Matched by NAME so it holds for every programme,
-// present and future. Kept in blab records[name+'_box_in'], so it mirrors.
-window._phxBoxInGet = function(name){
-  try { var r = ((window.blabGetState && window.blabGetState()) || {}).records || {}; return r[name + '_box_in'] || ''; } catch(_e){ return ''; }
-};
-window._phxBoxInSet = function(name, cm){
-  try { var s = window.blabGetState(); if(!s) return false; if(!s.records) s.records = {};
-        var v = parseFloat(cm); if(v > 0) s.records[name + '_box_in'] = v; else delete s.records[name + '_box_in'];
-        window.blabSaveState(s); return true; } catch(_e){ return false; }
-};
-window._phxBoxInHTML = function(name){
-  if(!/box jump/i.test(String(name || ''))) return '';
-  var v = window._phxBoxInGet(name);
-  var safe = String(name).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-  return '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">' +
-    '<div style="flex:1;font-size:12px;color:var(--text3);">Box height</div>' +
-    '<input data-box-in="' + safe + '" type="number" inputmode="decimal" value="' + v + '" placeholder="&ndash;" ' +
-      'style="width:76px;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;">' +
-    '<span style="font-size:11px;color:var(--text3);">in</span></div>';
-};
-if(typeof document !== 'undefined' && document.addEventListener){
-  document.addEventListener('input', function(e){
-    var t = e && e.target;
-    if(t && t.getAttribute && t.getAttribute('data-box-in') !== null) window._phxBoxInSet(t.getAttribute('data-box-in'), t.value);
-  });
-}
 // v4.9.370 — per-effort loads for guided conditioning (prowler / sled). Kept in blab
 // records so they mirror with the rest of the training state.
 window._draftKgPending = window._draftKgPending || {};
@@ -8962,6 +8932,18 @@ if(typeof document !== 'undefined' && document.addEventListener){
     // v4.9.373 — reps on a conditioning set row, saved as typed for the open session.
     if(t && t.getAttribute && t.getAttribute('data-dc-reps') && window._draftOpenWD){
       _draftSetReps(window._draftOpenWD[0], window._draftOpenWD[1], t.getAttribute('data-dc-reps'), t.value);
+    }
+    // v4.9.374 — box height per set: today's row, and remembered per set number so
+    // next time's build-up is prefilled.
+    if(t && t.getAttribute && t.getAttribute('data-dc-in') && window._draftOpenWD){
+      var _ik = t.getAttribute('data-dc-in');
+      _draftSetReps(window._draftOpenWD[0], window._draftOpenWD[1], _ik + ':in', t.value);
+      try {
+        var _bs = window.blabGetState(); if(_bs){ if(!_bs.records) _bs.records = {};
+          var _v = parseFloat(t.value), _rk = t.getAttribute('data-dc-intitle') + '_box_in_set' + _ik.split(':')[1];
+          if(_v > 0) _bs.records[_rk] = _v; else delete _bs.records[_rk];
+          window.blabSaveState(_bs); }
+      } catch(_e){}
     }
   });
 }
@@ -9181,19 +9163,24 @@ window.draftOpenConditioning = function(week, day, sess){
         // v4.9.373 — Jon 4 Nov: "should still read like regular lifting ... with the sets
         // down and a tick box". One row per set: number, reps (prefilled from the
         // prescription, editable), tick. The tick still starts the rest timer.
-        h += window._phxBoxInHTML(p.title);
         var _reps = _draftReps(week, day);
+        var _isBox = /box jump/i.test(p.title);
+        var _lastIn = (((window.blabGetState && window.blabGetState()) || {}).records || {});
         var _tgt = (String(p.presc).match(/×\s*(\d+)/) || [])[1] || '';
         var _side = /each side|\/ ?side|each leg/i.test(p.presc) ? ' / side' : '';
         h += '<div style="margin-top:10px;">';
         for(var k = 1; k <= p.sets; k++){
           var key = i + ':' + k, on = checks.indexOf(key) >= 0;
           var rv = (_reps[key] != null && _reps[key] !== '') ? _reps[key] : _tgt;
-          h += '<div style="display:grid;grid-template-columns:28px 1fr 64px 44px;gap:8px;align-items:center;margin-bottom:8px;">' +
+          var _inV = _isBox ? ((_reps[key + ':in'] != null && _reps[key + ':in'] !== '') ? _reps[key + ':in'] : (_lastIn[p.title + '_box_in_set' + k] || '')) : '';
+          h += '<div style="display:grid;grid-template-columns:' + (_isBox ? '28px 1fr 26px 1fr 44px 44px' : '28px 1fr 64px 44px') + ';gap:6px;align-items:center;margin-bottom:8px;">' +
                '<div style="font-family:var(--font-d);font-size:15px;font-weight:700;color:var(--text3);text-align:center;">' + k + '</div>' +
+               (_isBox ? '<input data-dc-in="' + key + '" data-dc-intitle="' + _esc(p.title) + '" type="number" inputmode="decimal" value="' + _inV + '" placeholder="&ndash;" ' +
+                   'style="width:100%;padding:11px 4px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:20px;font-weight:700;text-align:center;outline:none;box-sizing:border-box;">' +
+                 '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);">IN</div>' : '') +
                '<input data-dc-reps="' + key + '" type="number" inputmode="numeric" value="' + rv + '" ' +
                  'style="width:100%;padding:11px 6px;background:var(--bg3);border:1px solid ' + (on ? '#3a7d44' : 'var(--border)') + ';border-radius:8px;color:' + (on ? '#7fd18b' : 'var(--gold)') + ';font-family:var(--font-d);font-size:20px;font-weight:700;text-align:center;outline:none;box-sizing:border-box;">' +
-               '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;">Reps' + _side + '</div>' +
+               '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;">Reps' + (_isBox ? '' : _side) + '</div>' +
                '<button data-dc-set="' + key + '" aria-label="Set ' + k + ' done" style="width:44px;height:44px;border-radius:8px;background:' + (on ? '#3a7d44' : 'var(--bg3)') + ';border:1px solid ' + (on ? '#3a7d44' : 'var(--border2)') + ';display:flex;align-items:center;justify-content:center;">' +
                  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="' + (on ? '#fff' : 'var(--text3)') + '" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></button>' +
                '</div>';
@@ -9222,7 +9209,7 @@ window.draftOpenConditioning = function(week, day, sess){
     var o = document.getElementById('draft-cond'); if(o) o.remove();
   }
   ov.addEventListener('click', function(e){
-    if(e.target && e.target.hasAttribute && (e.target.hasAttribute('data-dc-kg') || e.target.hasAttribute('data-box-in') || e.target.hasAttribute('data-dc-reps'))) return;   // typing in a kg / in / reps box
+    if(e.target && e.target.hasAttribute && (e.target.hasAttribute('data-dc-kg') || e.target.hasAttribute('data-dc-reps') || e.target.hasAttribute('data-dc-in'))) return;   // typing in a kg / in / reps box
     var t = e.target.closest ? e.target.closest('[data-dc],[data-dc-start],[data-dc-alt],[data-dc-chk],[data-dc-set]') : null;
     if(!t) return;
     if(t.hasAttribute('data-dc-start') || t.hasAttribute('data-dc-alt')){
@@ -44170,7 +44157,11 @@ function openTodaySession(){
     // v4.9.359 — Jon: bodyweight movements "track as body weight with the rest counter ... it
     // should be standard through the programme". ex._bodyweight hides the kg column the same
     // way a timed hold does; reps and the per-set rest timer are unchanged.
-    var _noLoad = (unitClass === 'sec') || !!ex._bodyweight;
+    var _noLoad = (unitClass === 'sec') || (!!ex._bodyweight && unitClass !== 'in');
+    // v4.9.374 — Jon 4 Nov: "each set needs an inches box ... I build up the height so not
+    // all same". A box jump is bodyweight but its column is the BOX HEIGHT, per set, which
+    // phxExerciseUnitClass has always labelled 'in'. .359 hid it with every other bodyweight
+    // load; .371's single header box could not record a build-up. Header box removed.
     var loadUnitLabel = unitClass === 'sec' ? '' : unitClass;   // holds: no kg input
     var repsUnitLabel = unitClass === 'sec' ? 'sec' : 'reps';
     // v4.7.31 FIX 3: if the prescribed reps value already carries a unit (e.g. "200m" carry,
@@ -44362,7 +44353,6 @@ function openTodaySession(){
       '<div class="ex-name">'+ex.name+customiseBadgeHTML+'</div>'+
       '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex._bodyweight?' &middot; bodyweight':'')+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
-      ((typeof window._phxBoxInHTML === 'function') ? window._phxBoxInHTML(ex.name) : '')+
       targetSection+
       suggestSection+
       customiseControlsHTML+

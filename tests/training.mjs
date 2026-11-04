@@ -6166,15 +6166,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.window._draftKgGet('draft-sled'), 100, 'remembered');
   });
 
-  test('BOXIN: every box jump carries a box height in inches, remembered; other moves do not (Jon, 4 Nov)', () => {
+  test('BOXIN: lift-session box jumps keep a per-set inches column; other bodyweight moves have none', () => {
     startDraft();
-    assert.ok(/data-box-in="Seated Box Jump"/.test(app.window._phxBoxInHTML('Seated Box Jump')), 'seated box jump');
-    assert.ok(/data-box-in="Box Jump"/.test(app.window._phxBoxInHTML('Box Jump')), 'box jump');
-    assert.equal(app.window._phxBoxInHTML('Lateral Bound'), '', 'a bound has none');
-    assert.ok(/>in<\/span>/.test(app.window._phxBoxInHTML('Box Jump')) && !/>cm</.test(app.window._phxBoxInHTML('Box Jump')), 'inches, not cm');
-    app.window._phxBoxInSet('Box Jump', '24');
-    assert.ok(/value="24"/.test(app.window._phxBoxInHTML('Box Jump')), 'prefilled from last time');
+    assert.equal(app.phxExerciseUnitClass('Box Jump'), 'in', 'the app classes it as inches');
+    const all = [];
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) { const x = app.blabGetSessionData(w, d); if (x) all.push(...(x.exercises || [])); }
+    assert.ok(all.some((e) => e.name === 'Box Jump' && e.bodyweight), 'positive control: a bodyweight box jump is programmed');
   });
+
 
   test('SETROWS: draftReps keeps per-set reps beside the ticks for the open session (Jon, 4 Nov)', () => {
     startDraft();

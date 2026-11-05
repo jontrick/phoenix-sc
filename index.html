@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.377';
+var APP_VERSION='4.9.378';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6617,7 +6617,7 @@ function _blabProgressKey(){
   try {
     var b = window._blabCurrentSession;
     var day = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
-    if(b && b.week != null && b.day != null) return 'blab:' + b.week + ':' + b.day + ':' + day;
+    if(b && b.week != null && b.day != null) return 'blab:' + b.week + ':' + b.day + (b.part ? b.part : '') + ':' + day;   // v4.9.378 part: 'f' = split-off field tests
     return 'ai:' + day;
   } catch(_e){ return null; }
 }
@@ -8200,7 +8200,13 @@ window.draftSchedule = function(startMonday){
       sessions.push({ blabWeek:w, blabDay:d, scheduledDate:window.draftDateFor(startMonday, w, d), status:'pending' });
     }
     var t = w - 1;                                  // training week
-    if(t >= 1 && t <= 4){
+    if(t === 1){
+      // v4.9.378 — Jon 5 Nov: field tests split from the gym session, and "this weekend
+      // only" no Phoenix Core / WOD add-ons.
+      var fsat = window.draftDateFor(startMonday, w, 5);
+      customs.push({ id:'draft-' + fsat + '-field', cat:'TEST', libId:'draft-field-tests', label:'Field Tests', scheduledDate:fsat, status:'pending', draft:true });
+    }
+    if(t >= 2 && t <= 4){
       var sat = window.draftDateFor(startMonday, w, 5), sun = window.draftDateFor(startMonday, w, 6);
       var core = _DRAFT_CORE_ROTATION[t - 1], wod = _DRAFT_WOD_ROTATION[t - 1];
       customs.push({ id:'draft-' + sat + '-' + core, cat:'CORE', libId:core, label:_draftLibName(core), scheduledDate:sat, status:'pending', draft:true });
@@ -8216,7 +8222,8 @@ window.draftSchedule = function(startMonday){
 window.draftGetSessionData = function(week, day, s){
   s = s || window.blabGetState();
   if(!s) return null;
-  week = parseInt(week, 10); day = parseInt(day, 10);
+  var _field = (day === 'field');          // v4.9.378 — the split-off field-test session
+  week = parseInt(week, 10); day = _field ? 5 : parseInt(day, 10);
   if(!(week >= 1 && week <= 6 && day >= 1 && day <= 6)) return null;
   var D = _draftOf(s);
   var t = week - 1;                       // training week 1..5 (0 = test week)
@@ -8316,6 +8323,7 @@ window.draftGetSessionData = function(week, day, s){
   if((week === 1 || week === 6) && day === 6) return sess(window.draftDayLabel(week, day), 100, liftsB());
   if(week === 5 && day === 5) return sess(window.draftDayLabel(week, day), 75, liftsA());
   if(week === 6 && day === 5) return sess(window.draftDayLabel(week, day), 60, fieldTests());
+  if(_field) return sess('Field Tests', 60, fieldTests());   // v4.9.378 — the split-off Saturday session
   if(week === 1) return null;            // test week Mon-Thu: nothing scheduled
 
   var taper = (t === 5);
@@ -8564,7 +8572,10 @@ window.draftGetSessionData = function(week, day, s){
     var ohp = [null, [3, 5, 70], [3, 4, 75], [3, 3, 80], [2, 3, 82.5]][t];
     var rb = D.repBench > 0 ? D.repBench : kgOf('bench', 60);
     var pwS = [null, 'Med Ball Overhead Throw', 'Clapping Push-Up', 'Med Ball Overhead Throw', 'Clapping Push-Up'][t];
-    return sess((t === 1) ? 'Field Tests + Speed Upper' : 'Speed Upper', (t === 1) ? 120 : 75, ((t === 1) ? fieldTests() : []).concat([
+    // v4.9.378 — Jon 5 Nov: "split the field testing and gym sessions up on the weekend".
+    // The week-2 field tests are now their own session (draftOpenFieldTests) on the same
+    // Saturday; this one is the gym half only.
+    return sess('Speed Upper', 75, [].concat([
       std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.', { bodyweight:!/Med Ball/i.test(pwS), rest:120 }),
       { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3),
         note:'Bar weight shown; add light bands if you have them. 45 s rest, rotate three grip widths. Every rep FAST. ' +
@@ -8600,6 +8611,78 @@ window.draftGetSessionData = function(week, day, s){
   }
   return null;
 };
+
+// ── v4.9.378 — the split-off field-test session ─────────────────────────────
+// Runs through the ordinary lift renderer (result boxes, video timer) but is NOT a
+// programme day: finishing it records the results and stamps its calendar tile, and
+// never advances the week. Its block progress / session row are keyed 'blab:2:5f:<date>'
+// so it can never mark the gym session's blocks done.
+var _DRAFT_FIELD_NAMES = ['Vertical Jump (cm)','Broad Jump (cm)','40-yd Dash (sec)','5-10-5 Shuttle (sec)','3-Cone Drill (sec)'];
+window.draftFieldResultsToTests = function(){
+  var s = window.blabGetState(); if(!s || !s.draft) return 0;
+  var D = s.draft, R = s.records || {}, today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+  if(!D.tests) D.tests = {};
+  var n = 0;
+  _DRAFT_FIELD_NAMES.forEach(function(nm){
+    var v = parseFloat(R[nm + '_result']); if(!(v > 0)) return;
+    var h = D.tests[nm] = Array.isArray(D.tests[nm]) ? D.tests[nm] : [];
+    if(!h.length || h[h.length - 1].date !== today) h.push({ date: today, value: v }); else h[h.length - 1].value = v;
+    n++;
+  });
+  window.blabSaveState(s);
+  return n;
+};
+window.draftOpenFieldTests = function(dryRun){
+  var sess = window.draftGetSessionData(2, 'field');
+  if(!sess) return false;
+  window._blabCurrentSession = { week:2, day:5, part:'f', data:sess };
+  var phx = window.blabToPhoenixSession(sess, 2, 5);
+  if(!phx) return false;
+  phx.name = 'Field Tests';
+  window._todaySession = phx;
+  window._phxWarmupSkipNext = true;
+  window._blabSessionCompleteCallback = function(){
+    if(window._blabDryRun || dryRun) return;
+    var n = window.draftFieldResultsToTests();
+    var R = (window.blabGetState() || {}).records || {};
+    var note = _DRAFT_FIELD_NAMES.map(function(nm){ var v = R[nm + '_result']; return v ? nm.replace(/ \(.*\)/, '') + ' ' + v : null; }).filter(Boolean).join(' · ');
+    if(typeof _phxSaveScore === 'function') _phxSaveScore({ id:'draft-field-tests', name:'Field Tests', cat:'TEST', scoreType:'done' }, n, note);
+  };
+  try { openTodaySession(); } catch(e){ console.error('[PHX] field tests open failed', e); return false; }
+  return true;
+};
+// An already-built Draft calendar predates the split: bring its PENDING Draft add-ons into
+// line with draftSchedule, from today on. Completed entries, past entries and anything he
+// added himself are never touched.
+window.draftReconcileCustoms = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft' || !s.draft || !s.draft.startMonday) return false;
+    var cal = window.blabCalGet(); if(!cal) return false;
+    var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    var want = window.draftSchedule(s.draft.startMonday).customs.filter(function(c){ return c.scheduledDate >= today; });
+    var wantIds = {}; want.forEach(function(c){ wantIds[c.id] = true; });
+    var before = JSON.stringify(cal.customs || []);
+    var kept = (cal.customs || []).filter(function(c){
+      if(!c || !c.draft) return true;
+      if(c.status === 'completed' || c.scheduledDate < today) return true;
+      return !!wantIds[c.id];
+    });
+    var have = {}; kept.forEach(function(c){ if(c) have[c.id] = true; });
+    want.forEach(function(c){ if(!have[c.id]) kept.push(c); });
+    if(JSON.stringify(kept) === before) return false;
+    window.blabCalSave({ sessions: cal.sessions || [], customs: kept });
+    return true;
+  } catch(_e){ return false; }
+};
+(function(){
+  var tries = 0;
+  function tick(){
+    tries++;
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); return; } } catch(_e){}
+    if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
+  }
+  if(typeof setTimeout === 'function') setTimeout(tick, 5000);
+})();
 
 // ── start / switch back ──────────────────────────────────────────────────────
 function _draftIsWkKey(k){ return /_wk$/.test(k); }
@@ -41554,6 +41637,7 @@ function _phxClearTick(){
   if(typeof releaseWakeLock==='function') releaseWakeLock();
 }
 function _phxStartSession(id, dryRun){
+  if(id === 'draft-field-tests' && typeof window.draftOpenFieldTests === 'function'){ window.draftOpenFieldTests(dryRun); return; }   // v4.9.378
   var s=phxSessionById(id); if(!s) return;
   // Set on EVERY start, not only the dry ones — otherwise a preview would leave the flag
   // armed and the next real session would silently discard his score. The default
@@ -44592,7 +44676,7 @@ function openTodaySession(){
     try {
       var b = window._blabCurrentSession;
       var day = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
-      if(b && b.week != null && b.day != null) return 'blab:' + b.week + ':' + b.day + ':' + day;
+      if(b && b.week != null && b.day != null) return 'blab:' + b.week + ':' + b.day + (b.part ? b.part : '') + ':' + day;   // v4.9.378 part: 'f' = split-off field tests
       return 'ai:' + (sess.session_type || 'training') + ':' + day;
     } catch(_e){ return null; }
   })();

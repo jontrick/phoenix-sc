@@ -5496,11 +5496,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(cal.sessions.length, 32, 'every session scheduled');
     assert.ok(cal.customs.some((c) => c.id === 'mine'), 'his own custom sessions are kept');
     assert.ok(!cal.sessions.some((e) => e.blabWeek === 7), 'BLAB sessions are off the calendar');
+    // v4.9.378 — Jon 5 Nov: field tests are their own Saturday session, and no Core/WOD
+    // add-ons that weekend ("this weekend only"); they return from Week 2.
     const sat = cal.customs.filter((c) => c.draft && c.scheduledDate === '2026-11-07');
-    assert.equal(sat.length, 1, 'a Phoenix Core session sits beside Week 1 Saturday');
-    assert.equal(sat[0].libId, 'core-s1');
-    const sun = cal.customs.filter((c) => c.draft && c.scheduledDate === '2026-11-08');
-    assert.equal(sun[0].libId, 'wod-valkyrie', 'and a Phoenix WOD beside Sunday');
+    assert.deepEqual(sat.map((c) => c.libId), ['draft-field-tests'], 'only the field tests beside Week 1 Saturday');
+    assert.equal(cal.customs.filter((c) => c.draft && c.scheduledDate === '2026-11-08').length, 0, 'nothing beside Week 1 Sunday');
+    assert.equal(cal.customs.find((c) => c.draft && c.scheduledDate === '2026-11-14').libId, 'core-r1', 'Core back on Week 2 Saturday');
+    assert.equal(cal.customs.find((c) => c.draft && c.scheduledDate === '2026-11-15').libId, 'wod-hammerfall', 'WOD back on Week 2 Sunday');
   });
 
   test('DRAFT: switching back to BLAB restores position, maxes, history and calendar', () => {
@@ -5592,7 +5594,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     startDraft();
     logToday('40-yd Dash (sec)_result', 5.12);
     logToday('Broad Jump (cm)_result', 251);
-    app.draftAfterSession(2, 5);                 // Sat 7 Nov: field tests + speed upper
+    assert.equal(app.draftFieldResultsToTests(), 2, 'the split-off field session records both');   // v4.9.378
     const t = read(KEY).draft.tests;
     assert.equal(t['40-yd Dash (sec)'][0].value, 5.12, 'decimals survive');
     assert.equal(t['Broad Jump (cm)'][0].value, 251);
@@ -5772,7 +5774,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.document.getElementById = (id) => (id === 'session-body-content' ? body : null);
     app.document.createElement = mk;
     try {
-      app.blabOpenSession(2, 5);                 // Sat 7 Nov: field tests + speed upper
+      app.window.draftOpenFieldTests();          // Sat 7 Nov: the split-off field-test session (v4.9.378)
     } catch (e) { /* screen chrome outside the body is not stubbed; the body is what we assert on */ }
     finally { app.document.getElementById = realGet; app.document.createElement = realCreate; }
     const html = made.map((m) => m.innerHTML).join('\n');
@@ -5807,17 +5809,49 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app.blabGetSessionData(5, 5).name, 'Retest A \u2014 Squat, Clean, Bench');
   });
 
-  test('SPLIT: Sat 7 Nov is field tests first, then speed upper', () => {
+  test('SPLIT: Sat 7 Nov is two sessions — Field Tests, and Speed Upper in the gym (Jon, 5 Nov)', () => {
     startDraft();
-    const ss = app.blabGetSessionData(2, 5);
-    const names = ss.exercises.map((e) => e.name);
-    assert.equal(ss.name, 'Field Tests + Speed Upper');
-    const iField = names.indexOf('40-yd Dash (sec)'), iBench = names.indexOf('Speed Bench (mini bands)');
-    assert.ok(iField >= 0 && iBench > iField, 'sprints before the bench work');
-    ['Vertical Jump (cm)', 'Broad Jump (cm)', '5-10-5 Shuttle (sec)', '3-Cone Drill (sec)'].forEach((n) => assert.ok(names.includes(n), n));
-    assert.ok(!app.blabGetSessionData(3, 5).exercises.some((e) => /Dash/.test(e.name)), 'only that one Saturday');
+    const gym = app.blabGetSessionData(2, 5), field = app.draftGetSessionData(2, 'field');
+    assert.equal(gym.name, 'Speed Upper');
+    assert.ok(!gym.exercises.some((e) => /Dash|Shuttle|Cone|Vertical|Broad Jump \(cm\)/.test(e.name)), 'no field tests in the gym session');
+    assert.ok(gym.exercises.some((e) => e.name === 'Speed Bench (mini bands)'), 'gym work intact');
+    ['Vertical Jump (cm)', 'Broad Jump (cm)', '40-yd Dash (sec)', '5-10-5 Shuttle (sec)', '3-Cone Drill (sec)'].forEach((n) => assert.ok(field.exercises.some((e) => e.name === n), n));
     assert.ok(app.blabGetSessionData(6, 5).exercises.some((e) => e.name === '40-yd Dash (sec)'), 'the December retest still has them');
   });
+
+  test('SPLIT: the field session never advances the programme and keys its own progress', () => {
+    startDraft();
+    const wk0 = read(KEY).week, lcd0 = read(KEY).last_completed_day;
+    try { app.window.draftOpenFieldTests(); } catch (e) {}
+    assert.equal(app.window._blabCurrentSession.part, 'f');
+    assert.ok(/^blab:2:5f:/.test(app._blabProgressKey()), 'its own progress key: ' + app._blabProgressKey());
+    logToday('40-yd Dash (sec)_result', 5.05);
+    try { app.window._blabSessionCompleteCallback(); } catch (e) {}
+    assert.equal(read(KEY).week, wk0); assert.equal(read(KEY).last_completed_day, lcd0, 'no day advanced');
+    assert.equal(read(KEY).draft.tests['40-yd Dash (sec)'].slice(-1)[0].value, 5.05, 'result kept as history');
+  });
+
+  test('SPLIT: an already-built calendar is brought into line, his own entries untouched', () => {
+    startDraft();
+    const realToday = app._phxLocalISO;
+    try {
+      app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-05';
+      const cal = read(CALKEY);
+      cal.customs = cal.customs.filter((c) => !c.draft).concat([
+        { id:'draft-2026-11-07-core-s1', cat:'CORE', libId:'core-s1', scheduledDate:'2026-11-07', status:'pending', draft:true },
+        { id:'draft-2026-11-08-wod-valkyrie', cat:'WOD', libId:'wod-valkyrie', scheduledDate:'2026-11-08', status:'pending', draft:true },
+        { id:'draft-2026-10-31-old', cat:'CORE', libId:'core-x', scheduledDate:'2026-10-31', status:'pending', draft:true },
+        { id:'mine2', cat:'WOD', libId:'wod-murph', scheduledDate:'2026-11-08', status:'pending' }]);
+      app.blabCalSave(cal);
+      assert.equal(app.window.draftReconcileCustoms(), true);
+      const ids = app.blabCalGet().customs.map((c) => c.id);
+      assert.ok(!ids.includes('draft-2026-11-07-core-s1') && !ids.includes('draft-2026-11-08-wod-valkyrie'), 'this weekend\'s add-ons gone');
+      assert.ok(ids.includes('draft-2026-11-07-field'), 'field tests added');
+      assert.ok(ids.includes('mine2') && ids.includes('draft-2026-10-31-old'), 'his own and past entries kept');
+      assert.equal(app.window.draftReconcileCustoms(), false, 'second run changes nothing');
+    } finally { app._phxLocalISO = realToday; }
+  });
+
 
   test('SPLIT: Week 1 Monday and Wednesday are gym sessions; the Bronco is Mon 9 Nov', () => {
     startDraft();

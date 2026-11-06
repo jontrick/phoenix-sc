@@ -1,5 +1,6 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.381 (7 Nov 2026)** — Every saved result is dated (`records[name+"_result_date"]`, from the Save button, video timer and attempts), and the Best box shows anything saved today when the session is reopened (Jon: "frustrating they aren't on the screen after flicking back").
 > **v4.9.380 (7 Nov 2026)** — Result-capture blocks (field tests and every other `_blabResultCapture`) show one box per attempt (count from "best of N" in the note, default 3), saved on every keystroke to `records[name+'_att'] = {date, vals}`; the best (min for unit 'sec', else max) is written to `records[name+'_result']` immediately and shown in the Best box. Jon: screen timed out between tests and the typed results were lost. Save button kept (shows the notice). Test `ATTEMPTS`.
 
 > **v4.9.378 (5 Nov 2026) — SAT 7 NOV SPLIT INTO TWO SESSIONS; NO CORE/WOD THAT WEEKEND.** Jon: "split the field testing and gym sessions up on the weekend and remove the wods/core" → chose *two sessions, same day* and *this weekend only*.

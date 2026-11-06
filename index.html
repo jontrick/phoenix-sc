@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.380';
+var APP_VERSION='4.9.381';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14081,7 +14081,7 @@ window._blabAttemptsSet = function(name, k, v, unit){
   a.vals[k] = (f > 0) ? f : null;
   bs.records[name + '_att'] = a;
   var best = window._blabAttemptsBest(a.vals, unit);
-  if(best > 0) bs.records[name + '_result'] = best;
+  if(best > 0){ bs.records[name + '_result'] = best; bs.records[name + '_result_date'] = today; }
   window.blabSaveState(bs);
   return best;
 };
@@ -14104,6 +14104,7 @@ window._blabLogResult=function(name, idx){
     if(!bs.records) bs.records={};
     var prev=bs.records[name+'_result']||0;
     bs.records[name+'_result']=v;
+    bs.records[name+'_result_date']=(typeof _phxLocalISO==='function')?_phxLocalISO():'';   // v4.9.381
     window.blabSaveState(bs);
     window._blabNotice(name, [v+' logged', (prev?'Previous: '+prev:'')]);
   }
@@ -44522,6 +44523,14 @@ function openTodaySession(){
           'style="width:100%;box-sizing:border-box;padding:10px 4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;"></div>';
       }
       var _attBest = window._blabAttemptsBest(_attSaved, ex._blabResultUnit);
+      // v4.9.381 — Jon 7 Nov: "frustrating they aren't on the screen after flicking back".
+      // A result saved today by the Save button or the video timer shows too, not only
+      // attempts typed in the boxes.
+      try {
+        var _rr = ((window.blabGetState && window.blabGetState()) || {}).records || {};
+        var _td = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+        if(!_attBest && _rr[ex.name + '_result'] && _rr[ex.name + '_result_date'] === _td) _attBest = _rr[ex.name + '_result'];
+      } catch(_re){}
       resultCaptureSection = '<div style="margin:12px 0 0;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);">'+
         '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;font-family:var(--font-d);">Log result'+(ex.prev_result?' &middot; last: '+ex.prev_result:'')+'</div>'+
         '<div style="display:flex;gap:6px;margin-bottom:10px;">'+_attRows+'</div>'+

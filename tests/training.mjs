@@ -6253,4 +6253,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const s = app.blabGetState(); s.records['40-yd Dash (sec)_att'].date = '2026-01-01'; app.blabSaveState(s);
     assert.deepEqual(app.window._blabAttemptsGet('40-yd Dash (sec)'), [], 'another day starts empty');
   });
+
+  test('ATTEMPTS: a result saved with the Save button is dated, so it can be shown again today', () => {
+    startDraft();
+    const realGet = app.document.getElementById;
+    app.document.getElementById = (id) => (id === 'blab-result-2' ? { value: '252', style: {} } : null);
+    const realNotice = app.window._blabNotice; app.window._blabNotice = () => {};
+    try { app.window._blabLogResult('Broad Jump (cm)', 2); }
+    finally { app.document.getElementById = realGet; app.window._blabNotice = realNotice; }
+    const r = read(KEY).records;
+    assert.equal(r['Broad Jump (cm)_result'], 252);
+    assert.equal(r['Broad Jump (cm)_result_date'], app._phxLocalISO(), 'stamped with today');
+  });
 }

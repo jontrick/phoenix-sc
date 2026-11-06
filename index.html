@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.379';
+var APP_VERSION='4.9.380';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -14056,6 +14056,44 @@ function autoLogSet(row){
 
 // v4.9.108: save a single "record …" result (sled/prowler distance-or-time, push-up test
 // count, etc.) to records[name+'_result']. Wired to the Save button in the generic block.
+// v4.9.380 — per-attempt results, saved on every keystroke. Dated, so a new test day
+// starts empty; the best (lowest time, highest distance/height) becomes the result.
+window._blabAttemptsGet = function(name){
+  try {
+    var r = ((window.blabGetState && window.blabGetState()) || {}).records || {};
+    var a = r[name + '_att'];
+    var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+    return (a && a.date === today && Array.isArray(a.vals)) ? a.vals : [];
+  } catch(_e){ return []; }
+};
+window._blabAttemptsBest = function(vals, unit){
+  var n = (vals || []).map(function(x){ return parseFloat(x); }).filter(function(x){ return x > 0; });
+  if(!n.length) return 0;
+  return unit === 'sec' ? Math.min.apply(null, n) : Math.max.apply(null, n);
+};
+window._blabAttemptsSet = function(name, k, v, unit){
+  var bs = window.blabGetState(); if(!bs) return 0;
+  if(!bs.records) bs.records = {};
+  var today = (typeof _phxLocalISO === 'function') ? _phxLocalISO() : '';
+  var a = bs.records[name + '_att'];
+  if(!a || a.date !== today || !Array.isArray(a.vals)) a = { date: today, vals: [] };
+  var f = parseFloat(v);
+  a.vals[k] = (f > 0) ? f : null;
+  bs.records[name + '_att'] = a;
+  var best = window._blabAttemptsBest(a.vals, unit);
+  if(best > 0) bs.records[name + '_result'] = best;
+  window.blabSaveState(bs);
+  return best;
+};
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('input', function(e){
+    var t = e && e.target;
+    if(!t || !t.getAttribute || t.getAttribute('data-att-name') === null) return;
+    var best = window._blabAttemptsSet(t.getAttribute('data-att-name'), parseInt(t.getAttribute('data-att-k'), 10), t.value, t.getAttribute('data-att-unit'));
+    var out = document.getElementById('blab-result-' + t.getAttribute('data-att-i'));
+    if(out){ out.value = best > 0 ? best : ''; out.style.borderColor = best > 0 ? '#3a7d44' : 'var(--gold)'; }
+  });
+}
 window._blabLogResult=function(name, idx){
   var el=document.getElementById('blab-result-'+idx);
   // v4.9.341: parseFloat — a 40-yd time of 4.95 was stored as 4. Whole numbers are unchanged.
@@ -44470,10 +44508,26 @@ function openTodaySession(){
     var resultCaptureSection = '';
     if(ex._blabResultCapture){
       var exNameEsc = String(ex.name).replace(/'/g,"\\'");
+      // v4.9.380 — Jon 7 Nov, field tests: "the screen times out and the results are not
+      // stored on the screen and I won't remember them all". Every attempt now has its own
+      // box, SAVED AS HE TYPES (records[name+'_att'], dated), and the best is written to
+      // records[name+'_result'] at once — no Save tap needed. Reopening the session, or the
+      // PWA being reloaded after the lock screen, puts every attempt back.
+      var _attN = parseInt(((ex.coaching_note || ex.note || '').match(/best of (\d)/i) || [])[1], 10) || 3;
+      var _attSaved = window._blabAttemptsGet(ex.name);
+      var _attRows = '';
+      for(var _ak = 0; _ak < _attN; _ak++){
+        _attRows += '<div style="flex:1;min-width:0;"><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);text-align:center;margin-bottom:3px;font-family:var(--font-d);">Attempt '+(_ak+1)+'</div>'+
+          '<input type="number" inputmode="decimal" step="any" data-att-name="'+String(ex.name).replace(/"/g,'&quot;')+'" data-att-k="'+_ak+'" data-att-i="'+i+'" data-att-unit="'+(ex._blabResultUnit||'')+'" value="'+(_attSaved[_ak] != null ? _attSaved[_ak] : '')+'" placeholder="&ndash;" '+
+          'style="width:100%;box-sizing:border-box;padding:10px 4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;"></div>';
+      }
+      var _attBest = window._blabAttemptsBest(_attSaved, ex._blabResultUnit);
       resultCaptureSection = '<div style="margin:12px 0 0;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);">'+
         '<div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;font-family:var(--font-d);">Log result'+(ex.prev_result?' &middot; last: '+ex.prev_result:'')+'</div>'+
+        '<div style="display:flex;gap:6px;margin-bottom:10px;">'+_attRows+'</div>'+
+        '<div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:3px;font-family:var(--font-d);">Best &middot; saved automatically</div>'+
         '<div style="display:flex;gap:8px;">'+
-          '<input type="number" inputmode="'+(ex._blabResultDecimal?'decimal':'numeric')+'" step="any" id="blab-result-'+i+'" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="'+(ex._blabResultUnit || 'reps / m / rounds')+'">'+
+          '<input type="number" inputmode="'+(ex._blabResultDecimal?'decimal':'numeric')+'" step="any" id="blab-result-'+i+'" value="'+(_attBest || '')+'" style="flex:1;padding:10px;background:var(--bg);border:1px solid var(--gold);border-radius:var(--radius);color:var(--text);font-family:var(--font-d);font-size:18px;font-weight:700;text-align:center;outline:none;" placeholder="'+(ex._blabResultUnit || 'reps / m / rounds')+'">'+
           '<button type="button" onclick="window._blabLogResult(\''+exNameEsc+'\','+i+')" style="flex:0 0 80px;padding:10px;background:var(--gold);border:none;border-radius:var(--radius);font-family:var(--font-d);font-size:13px;font-weight:900;text-transform:uppercase;color:#000;cursor:pointer;">Save</button>'+
         '</div>'+
         window._phxVtButtonHTML(ex, i)+

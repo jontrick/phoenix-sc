@@ -6238,4 +6238,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.window._phxBoxSqSet('Speed Box Squat (band)', 'depth', 'Below');
     assert.deepEqual(app.window._phxBoxSqGet('Speed Box Squat (band)'), { inch: 14, depth: 'Below' });
   });
+
+  test('ATTEMPTS: every attempt saved as typed; best = lowest time / highest jump (Jon, 7 Nov)', () => {
+    startDraft();
+    assert.deepEqual(app.window._blabAttemptsGet('40-yd Dash (sec)'), [], 'nothing yet');
+    app.window._blabAttemptsSet('40-yd Dash (sec)', 0, '5.21', 'sec');
+    assert.equal(app.window._blabAttemptsSet('40-yd Dash (sec)', 1, '5.08', 'sec'), 5.08);
+    app.window._blabAttemptsSet('Vertical Jump (cm)', 0, '61', 'cm');
+    app.window._blabAttemptsSet('Vertical Jump (cm)', 1, '64', 'cm');
+    const r = read(KEY).records;
+    assert.equal(r['40-yd Dash (sec)_result'], 5.08, 'fastest time is the result');
+    assert.equal(r['Vertical Jump (cm)_result'], 64, 'highest jump is the result');
+    assert.deepEqual(app.window._blabAttemptsGet('40-yd Dash (sec)'), [5.21, 5.08], 'both attempts kept');
+    const s = app.blabGetState(); s.records['40-yd Dash (sec)_att'].date = '2026-01-01'; app.blabSaveState(s);
+    assert.deepEqual(app.window._blabAttemptsGet('40-yd Dash (sec)'), [], 'another day starts empty');
+  });
 }

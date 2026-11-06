@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.380 (7 Nov 2026)** — Result-capture blocks (field tests and every other `_blabResultCapture`) show one box per attempt (count from "best of N" in the note, default 3), saved on every keystroke to `records[name+'_att'] = {date, vals}`; the best (min for unit 'sec', else max) is written to `records[name+'_result']` immediately and shown in the Best box. Jon: screen timed out between tests and the typed results were lost. Save button kept (shows the notice). Test `ATTEMPTS`.
+
 > **v4.9.378 (5 Nov 2026) — SAT 7 NOV SPLIT INTO TWO SESSIONS; NO CORE/WOD THAT WEEKEND.** Jon: "split the field testing and gym sessions up on the weekend and remove the wods/core" → chose *two sessions, same day* and *this weekend only*.
 > - W2 day 5 is now 'Speed Upper' (gym only). Field tests are `draftGetSessionData(2,'field')`, opened by the calendar custom `{cat:'TEST', libId:'draft-field-tests'}` via a hook at the top of `_phxStartSession` → `draftOpenFieldTests`. Completion copies results into `draft.tests` (`draftFieldResultsToTests`) and saves a `wod_scores` row (stamps the tile done). It NEVER calls blabCompleteSession.
 > - `_blabCurrentSession.part = 'f'` → both progress / session keys become `blab:2:5f:<date>`, so field blocks cannot mark the gym session's blocks done.

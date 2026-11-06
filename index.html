@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.381';
+var APP_VERSION='4.9.382';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6661,6 +6661,7 @@ window._blabUnfinishedToday = function(){
       // blab:<week>:<day>:<localdate>
       var p = String(k).split(':');
       if(p[0] !== 'blab' || p[3] !== day) return;
+      if(!/^\d+$/.test(p[2])) return;   // v4.9.382 — '5f' is the field-test part, not day 5
       var blocks = s.blockProgress[k] || {};
       var done = Object.keys(blocks).filter(function(b){ return blocks[b] && blocks[b].done; }).length;
       if(!done) return;
@@ -8652,6 +8653,48 @@ window.draftOpenFieldTests = function(dryRun){
   try { openTodaySession(); } catch(e){ console.error('[PHX] field tests open failed', e); return false; }
   return true;
 };
+// v4.9.382 — ONE-OFF REPAIR, Jon 7 Nov: "It's marked wrong session as complete". The
+// relaunch reopened Speed Upper in place of Field Tests and he completed it. Undo exactly
+// that completion — the 7 Nov log entry for week 2 day 5, last_completed_day back to the
+// previous day, the calendar tick — and, if today's field results are saved, finish the
+// field-test session properly. Runs once; only on 7 Nov's data.
+window._draftRepairSat7 = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft') return false;
+    var flag = 'phx_fix_sat7_' + ((typeof currentSession !== 'undefined' && currentSession && currentSession.user && currentSession.user.id) || 'x');
+    if(localStorage.getItem(flag) === 'done') return false;
+    var changed = false;
+    var isSat7 = function(iso){ try { return _phxLocalISO(new Date(iso)) === '2026-11-07'; } catch(_e){ return false; } };
+    var log = Array.isArray(s.log) ? s.log : [];
+    var hit = -1;
+    for(var i = log.length - 1; i >= 0; i--){ if(log[i] && log[i].week === 2 && log[i].day === 5 && isSat7(log[i].date)){ hit = i; break; } }
+    if(hit >= 0 && s.week === 2 && s.last_completed_day === 5){
+      log.splice(hit, 1);
+      var prev = 0;
+      for(var j = log.length - 1; j >= 0; j--){ if(log[j] && log[j].week === 2){ prev = log[j].day; break; } }
+      s.last_completed_day = prev;
+      window.blabSaveState(s);
+      changed = true;
+      var cal = window.blabCalGet();
+      if(cal && Array.isArray(cal.sessions)){
+        cal.sessions.forEach(function(e){ if(e && e.blabWeek === 2 && e.blabDay === 5 && e.status === 'completed'){ e.status = 'pending'; delete e.completedDate; delete e.completedAt; } });
+        window.blabCalSave(cal);
+      }
+    }
+    var R = (window.blabGetState() || {}).records || {};
+    var anyField = _DRAFT_FIELD_NAMES.some(function(nm){ return R[nm + '_result'] && R[nm + '_result_date'] === '2026-11-07'; });
+    if(anyField && _phxLocalISO() === '2026-11-07' && !(typeof _blabCustomDoneToday === 'function' && _blabCustomDoneToday('draft-field-tests'))){
+      var n = window.draftFieldResultsToTests();
+      var note = _DRAFT_FIELD_NAMES.map(function(nm){ var v = R[nm + '_result']; return (v && R[nm + '_result_date'] === '2026-11-07') ? nm.replace(/ \(.*\)/, '') + ' ' + v : null; }).filter(Boolean).join(' \u00b7 ');
+      if(typeof _phxSaveScore === 'function') _phxSaveScore({ id:'draft-field-tests', name:'Field Tests', cat:'TEST', scoreType:'done' }, n, note);
+      changed = true;
+    }
+    localStorage.setItem(flag, 'done');
+    if(changed && typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){}
+    return changed;
+  } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.repairSat7', _e, {}); return false; }
+};
+
 // An already-built Draft calendar predates the split: bring its PENDING Draft add-ons into
 // line with draftSchedule, from today on. Completed entries, past entries and anything he
 // added himself are never touched.
@@ -8679,7 +8722,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);
@@ -46779,6 +46822,11 @@ window._phxShouldReopenSession = function(){
     // meaning not completed, rather than partly done.
     var w = parseInt(parts[1], 10), d = parseInt(parts[2], 10);
     if(!(w > 0 && d > 0)) return null;
+    // v4.9.382 — a split-off part ('5f' = Saturday's field tests) is its own session.
+    // parseInt('5f') is 5, so the relaunch reopened the GYM session and Complete ticked
+    // Speed Upper (Jon, 7 Nov). A part reopens itself and is never judged by day progress.
+    var _part = String(parts[2]).replace(/^\d+/, '');
+    if(_part) return { week: w, day: d, part: _part };
     var s = (typeof window.blabGetState === 'function') ? window.blabGetState() : null;
     if(s){
       // Completed, or the programme has moved past it. Both mean Today is correct.
@@ -46818,7 +46866,12 @@ function _phxBootRestoreApply(){
     // shared list keeps meaning exactly what it says and this stays Training's decision
     // about Training's data.
     var _reopen = (typeof window._phxShouldReopenSession === 'function') ? window._phxShouldReopenSession() : null;
-    if(_reopen && typeof window.blabOpenSession === 'function'){
+    if(_reopen && _reopen.part === 'f' && typeof window.draftOpenFieldTests === 'function'){
+      console.log('[PHX] reopening field tests');   // v4.9.382
+      window.draftOpenFieldTests();
+      return;
+    }
+    if(_reopen && !_reopen.part && typeof window.blabOpenSession === 'function'){
       console.log('[PHX] reopening unfinished session', _reopen.week, _reopen.day);
       window.blabOpenSession(_reopen.week, _reopen.day);
       return;

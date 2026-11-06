@@ -6265,4 +6265,38 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(r['Broad Jump (cm)_result'], 252);
     assert.equal(r['Broad Jump (cm)_result_date'], app._phxLocalISO(), 'stamped with today');
   });
+
+  // ── v4.9.382: the relaunch reopened Speed Upper in place of Field Tests (Jon, 7 Nov) ──
+  test('SPLIT: a relaunch mid-field-tests reopens Field Tests, not the gym session', () => {
+    startDraft();
+    const day = app._phxLocalISO();
+    app.localStorage.setItem('phoenix_session_screen_open', 'blab:2:5f:' + day);
+    assert.deepEqual(JSON.parse(JSON.stringify(app.window._phxShouldReopenSession())), { week: 2, day: 5, part: 'f' });
+    app.localStorage.setItem('phoenix_session_screen_open', 'blab:2:5:' + day);
+    assert.equal(app.window._phxShouldReopenSession().part, undefined, 'the gym session still reopens as itself');
+    const s = app.blabGetState(); s.blockProgress = {}; s.blockProgress['blab:2:5f:' + day] = { '0': { done: true } }; app.blabSaveState(s);
+    assert.equal(app.window._blabUnfinishedToday(), null, 'field blocks never make Speed Upper "in progress"');
+  });
+
+  test('SPLIT: the 7 Nov repair un-ticks Speed Upper and finishes Field Tests', () => {
+    startDraft();
+    const realToday = app._phxLocalISO;
+    try {
+      app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-07';
+      const s = app.blabGetState();
+      s.week = 2; s.last_completed_day = 5;
+      s.log = (s.log || []).concat([{ week: 2, day: 4, date: '2026-11-05T19:00:00Z' }, { week: 2, day: 5, date: '2026-11-06T21:50:00Z' }]);
+      s.records = s.records || {};
+      s.records['40-yd Dash (sec)_result'] = 7.4; s.records['40-yd Dash (sec)_result_date'] = '2026-11-07';
+      app.blabSaveState(s);
+      const cal = app.blabCalGet(); const e = cal.sessions.find((x) => x.blabWeek === 2 && x.blabDay === 5); e.status = 'completed'; e.completedDate = '2026-11-07'; app.blabCalSave(cal);
+      assert.equal(app.window._draftRepairSat7(), true);
+      const s2 = app.blabGetState();
+      assert.equal(s2.last_completed_day, 4, 'back to Thursday');
+      assert.ok(!s2.log.some((l) => l.week === 2 && l.day === 5), 'the wrong completion is gone');
+      assert.equal(app.blabCalGet().sessions.find((x) => x.blabWeek === 2 && x.blabDay === 5).status, 'pending', 'Speed Upper un-ticked');
+      assert.ok(app._phxScoresAll().some((r) => r.wod_id === 'draft-field-tests'), 'Field Tests recorded as done');
+      assert.equal(app.window._draftRepairSat7(), false, 'runs once');
+    } finally { app._phxLocalISO = realToday; }
+  });
 }

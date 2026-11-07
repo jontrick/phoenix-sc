@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.383 (7 Nov 2026)** — Speed Bench sets carry `label: 'Grip: Close|Medium|Wide'` (repeating); translator passes `_perSetLabel`; the lift renderer draws any per-set label on its own gold line above the row (generic — any set can carry one). Test `GRIP`.
+
 > **v4.9.382 (7 Nov 2026) — BUG IN .378:** the PWA relaunch restore (`_phxShouldReopenSession`) parsed the field part key `blab:2:5f:<date>` with parseInt → day 5 → reopened the GYM session; Jon pressed Complete and Speed Upper was ticked while Field Tests stayed open. Fixed: parts reopen via `draftOpenFieldTests`; `_blabUnfinishedToday` ignores non-numeric day keys. One-off `_draftRepairSat7` (runs once on load) removes the 7 Nov week-2-day-5 log entry, restores last_completed_day, un-ticks the calendar entry, and records Field Tests done if today's results exist. **Archive `_draftRepairSat7` once Jon confirms Today is right.** Harness blabCalGet count 24 → 25.
 
 > **v4.9.381 (7 Nov 2026)** — Every saved result is dated (`records[name+"_result_date"]`, from the Save button, video timer and attempts), and the Best box shows anything saved today when the session is reopened (Jon: "frustrating they aren't on the screen after flicking back").

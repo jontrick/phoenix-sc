@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.382';
+var APP_VERSION='4.9.383';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6106,6 +6106,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx.format = 'percentage_sets';
       phxEx._perSetKg = sets.map(function(s){ return s.kg; });
       phxEx._perSetReps = sets.map(function(s){ return s.amrap ? s.reps+'+' : String(s.reps); });
+      phxEx._perSetLabel = sets.map(function(s){ return s.label || ''; });   // v4.9.383 — e.g. grip per set
       // v4.9.108: main-lift AMRAP capture + previous-week surfacing. Carry the lift key + week so
       // autoLogSet can persist the top-set reps to records[lift+'_amrap_w'+week], and read back the
       // PRIOR week's top-set reps@weight for the "Last week: X reps @ Ykg" banner.
@@ -8579,7 +8580,9 @@ window.draftGetSessionData = function(week, day, s){
     // Saturday; this one is the gym half only.
     return sess('Speed Upper', 75, [].concat([
       std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.', { bodyweight:!/Med Ball/i.test(pwS), rest:120 }),
-      { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3),
+      // v4.9.383 — Jon 7 Nov: the note says rotate grips but the sets did not show which.
+      // Each set now carries its grip: close, medium, wide, repeating.
+      { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3).map(function(x, gi){ x.label = 'Grip: ' + ['Close', 'Medium', 'Wide'][gi % 3]; return x; }),
         note:'Bar weight shown; add light bands if you have them. 45 s rest, rotate three grip widths. Every rep FAST. ' +
              (adjU ? ('Load adjusted ' + (adjU > 0 ? '+' : '') + adjU + '% from your ratings. ') : '') +
              'Rate it at the end: if it felt like a grind, next week drops 5%.' },
@@ -44420,6 +44423,8 @@ function openTodaySession(){
       var loadInputHTML = _noLoad ? '' :
         '<input type="number" class="set-input"'+kgValAttr+' id="kg-ai-'+i+'-'+s+'" placeholder="—" inputmode="decimal" style="text-align:center;width:100%;font-size:22px;font-weight:900;padding:10px 0;box-sizing:border-box;">' +
         '<div class="set-input-label" style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);text-align:center;align-self:center;">'+loadUnitLabel+'</div>';
+      // v4.9.383 — a per-set label (speed bench grip) sits on its own line above the row.
+      if(ex._perSetLabel && ex._perSetLabel[s]) setsHTML+='<div style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin:8px 0 2px 34px;">'+ex._perSetLabel[s]+'</div>';
       setsHTML+='<div class="set-row" id="setrow-'+setId+'" style="grid-template-columns:'+setsGrid+';align-items:center;gap:6px;" data-exid="ai-'+i+'" data-setidx="'+s+'" data-rest="'+restSec+'" data-target-kg="'+String(t.kg).replace(/"/g,'&quot;')+'" data-target-reps="'+String(t.reps).replace(/"/g,'&quot;')+'">'+
         '<div class="set-swipe-bg">DONE</div>'+
         '<div class="set-swipe-bg-right">DONE</div>'+

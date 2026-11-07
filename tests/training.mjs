@@ -6299,4 +6299,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(app.window._draftRepairSat7(), false, 'runs once');
     } finally { app._phxLocalISO = realToday; }
   });
+
+  test('GRIP: speed bench sets carry close / medium / wide, repeating (Jon, 7 Nov)', () => {
+    startDraft();
+    const sb = app.blabGetSessionData(2, 5).exercises.find((e) => /^Speed Bench/.test(e.name));
+    assert.ok(sb && sb.sets.length >= 3, 'positive control');
+    assert.deepEqual(sb.sets.slice(0, 4).map((x) => x.label), ['Grip: Close', 'Grip: Medium', 'Grip: Wide', 'Grip: Close'].slice(0, Math.min(4, sb.sets.length)));
+    const phx = app.blabToPhoenixSession(app.blabGetSessionData(2, 5), 2, 5).exercises.find((e) => /^Speed Bench/.test(e.name));
+    assert.equal(phx._perSetLabel[1], 'Grip: Medium', 'carried to the renderer');
+  });
 }

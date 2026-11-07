@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.386 (7 Nov 2026)** — `blabToPhoenixSession` percentage_sets used a FLAT `rest_sec = 180`, ignoring the programme's `rest` — every speed set ran a 3-min rest timer. Now `ex.rest > 0 ? ex.rest : 180`. Speed Bench 60 s, Speed Box Squat 90 s, Speed Deadlift 90 s (Jon). Only the Draft programme sets `rest` on percentage_sets, so BLAB is unchanged. Test `SPEEDREST`. (Near miss: a `//` comment placed mid-object-line commented out `sets:` — runtime check stayed CLEAN, functional DRAFT test caught it.)
+
 > **v4.9.385 (7 Nov 2026)** — Every timed Mon/Wed part from training week 2 has a gym version (Jon: field or gym by weather). New: `draft-sled-gym` (heavy prowler 15 m, takes kg) for Resisted Sprints, `draft-agil-gym` (same drill on the gym floor, or a 5 m lateral cone shuffle) for the 5-10-5 / 3-cone. One kg box per card keyed by the field spec; the gym version reads it. Test `WETDAY`.
 
 > **v4.9.384 (7 Nov 2026)** — Sat Flat DB Bench / Strict Pull-Up: pull-ups prescribed as a NUMBER = `records['Strict Pull-Up Test_max']` − 2 (min 1; 5 if untested), `_draftPullMax/_draftPullReps`. Jon: "for chins this needs to always be the case" — no 'max minus N' text anywhere in the Draft programme (test PULLREPS asserts it across all 36 days).

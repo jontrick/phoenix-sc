@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.385';
+var APP_VERSION='4.9.386';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6094,7 +6094,9 @@ window.blabToPhoenixSession = function(sess, week, day){
     if(fmt === 'percentage_sets' && ex.sets && ex.sets.length){
       var sets = ex.sets;
       phxEx.sets = sets.length;
-      phxEx.rest_sec = 180;
+      // v4.9.386 — honour the exercise's own rest. This was a flat 180 s, so every speed
+      // set (programmed 30-45 s) ran a 3-minute rest timer (Jon, 7 Nov).
+      phxEx.rest_sec = (ex.rest > 0) ? ex.rest : 180;
       var lastSet = sets[sets.length-1];
       // Pass as per-set arrays so Phoenix renderer pre-fills each row correctly
       phxEx.reps = sets.map(function(s){ return s.amrap ? s.reps+'+' : String(s.reps); }).join('/');
@@ -8602,8 +8604,8 @@ window.draftGetSessionData = function(week, day, s){
       std(pwS, 3, (t % 2 === 1) ? 3 : 5, 'Power slot. Max intent, 2 min rest.', { bodyweight:!/Med Ball/i.test(pwS), rest:120 }),
       // v4.9.383 — Jon 7 Nov: the note says rotate grips but the sets did not show which.
       // Each set now carries its grip: close, medium, wide, repeating.
-      { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:45, sets:flat('bench', deSets, dePct, 3).map(function(x, gi){ x.label = 'Grip: ' + ['Close', 'Medium', 'Wide'][gi % 3]; return x; }),
-        note:'Bar weight shown; add light bands if you have them. 45 s rest, rotate three grip widths. Every rep FAST. ' +
+      { name:'Speed Bench (mini bands)', format:'percentage_sets', rest:60, sets:flat('bench', deSets, dePct, 3).map(function(x, gi){ x.label = 'Grip: ' + ['Close', 'Medium', 'Wide'][gi % 3]; return x; }),
+        note:'Bar weight shown; add light bands if you have them. 60 s rest, rotate three grip widths. Every rep FAST. ' +
              (adjU ? ('Load adjusted ' + (adjU > 0 ? '+' : '') + adjU + '% from your ratings. ') : '') +
              'Rate it at the end: if it felt like a grind, next week drops 5%.' },
       { name:'Strict Press', format:'percentage_sets', rest:180, sets:flat('press', ohp[0], ohp[2], ohp[1]),
@@ -8627,12 +8629,13 @@ window.draftGetSessionData = function(week, day, s){
     return sess('Speed Lower', 75, [
       { name:'Power Clean', format:'percentage_sets', rest:90, sets:flat('clean', pcl[0], pcl[1], 2),
         note:'Power slot. Fast and crisp, reset each rep.' + estNote('clean') },
-      { name:'Speed Box Squat (band)', format:'percentage_sets', rest:45, sets:flat('squat', dsq[0], clampPct(dsq[1] + adjL), 2),
-        note:'Bar weight shown; add a light band if you have one. 45 s rest. Sit, pause, EXPLODE. ' +
+      { name:'Speed Box Squat (band)', format:'percentage_sets', rest:90, sets:flat('squat', dsq[0], clampPct(dsq[1] + adjL), 2),
+        note:'Bar weight shown; add a light band if you have one. 90 s rest. Sit, pause, EXPLODE. ' +
              (adjL ? ('Load adjusted ' + (adjL > 0 ? '+' : '') + adjL + '% from your ratings. ') : '') +
              'Rate it at the end: a grind drops next week 5%.' },
-      { name:'Speed Deadlift', format:'percentage_sets', rest:30, sets:flat('deadlift', ddl[0], clampPct(ddl[1] + adjL), 1),
-        note:'One rep every 30 s. Reset each rep. Pull as fast as you can.' },
+      // v4.9.386 — Jon 7 Nov: 1 min rest on speed upper, 90 s on speed squat / deadlift.
+      { name:'Speed Deadlift', format:'percentage_sets', rest:90, sets:flat('deadlift', ddl[0], clampPct(ddl[1] + adjL), 1),
+        note:'One fast single, then 90 s rest. Reset each rep. Pull as fast as you can.' },
       SS('Barbell Hip Thrust / Copenhagen Plank', 3, 90, 'Barbell Hip Thrust', '10 reps', 'Copenhagen Plank', '20 s / side', 'Adductors matter for a back-rower: they take the hit in every tackle.'),
       SS('Standing Calf Raise / Hanging Knee Raise', 2, 45, 'Standing Calf Raise', 'To failure', 'Hanging Knee Raise', 'To failure')
     ]);

@@ -6330,4 +6330,13 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const wed = app.blabGetSessionData(3, 3).conditioning;
     assert.equal(wed.find((p) => p.title === 'Resisted Sprints').alt.loadKg, true, 'heavy prowler takes a kg');
   });
+
+  test('SPEEDREST: speed bench 60 s, speed box squat and speed deadlift 90 s — and the timer uses it (Jon, 7 Nov)', () => {
+    startDraft();
+    const rest = (w, d, rx) => app.blabToPhoenixSession(app.blabGetSessionData(w, d), w, d).exercises.find((e) => rx.test(e.name)).rest_sec;
+    assert.equal(rest(3, 5, /^Speed Bench/), 60);
+    assert.equal(rest(3, 6, /^Speed Box Squat/), 90);
+    assert.equal(rest(3, 6, /^Speed Deadlift/), 90);
+    assert.equal(rest(3, 2, /^Bench Press|Floor Press|Board Press|Close-Grip|Max Effort/i) > 90, true, 'heavy lifts keep their long rest');
+  });
 }

@@ -6318,4 +6318,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) { const x = app.blabGetSessionData(w, d);
       if (x) assert.ok(!/max minus|max -/i.test(JSON.stringify(x.exercises || [])), `W${w}D${d}: no "max minus" left`); }
   });
+
+  test('WETDAY: every timed Mon / Wed part from training week 2 has a gym version (Jon, 7 Nov)', () => {
+    startDraft();
+    let n = 0;
+    for (let w = 3; w <= 6; w++) for (const d of [1, 3]) {
+      const x = app.blabGetSessionData(w, d); if (!x) continue;
+      (x.conditioning || []).filter((p) => p.kind === 'timed').forEach((p) => { n++; assert.ok(p.alt, `W${w}D${d} ${p.title} has a gym version`); });
+    }
+    assert.ok(n >= 8, 'positive control: timed parts exist (' + n + ')');
+    const wed = app.blabGetSessionData(3, 3).conditioning;
+    assert.equal(wed.find((p) => p.title === 'Resisted Sprints').alt.loadKg, true, 'heavy prowler takes a kg');
+  });
 }

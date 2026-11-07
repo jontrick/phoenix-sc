@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.384';
+var APP_VERSION='4.9.385';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8454,6 +8454,14 @@ window.draftGetSessionData = function(week, day, s){
     accGym.loadKg = true; sled.loadKg = true;
     sled.guided = { rounds:sledN, steps:[{label:'Sled', secs:12, sub:'15 m heavy push or drag'}], restSec:120,
       entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
+    // v4.9.385 — Jon 7 Nov: every Mon / Wed part needs a gym version for wet days.
+    var sledGym = libSpec('draft-sled-gym', 'Resisted — Heavy Prowler 15 m', 'intervals', 'avg_split', 'Average time',
+      sledN + ' × 15 m · REST 120 s',
+      'Heavy prowler, about half your sprint speed. Low hips, drive every step.',
+      [['Heavy prowler', '15 m']], { efforts:sledN, work:'Heavy prowler 15 m', restSec:120 });
+    sledGym.scoreType = 'reps'; sledGym.scoreLabel = 'Reps done'; sledGym.loadKg = true;
+    sledGym.guided = { rounds:sledN, steps:[{label:'Heavy prowler', secs:12, sub:'15 m \u2014 go on the beep'}], restSec:120,
+      entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     if(taper){
       return partsSess('Sprint & Power — Taper', 30, [
         part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups.'),
@@ -8477,12 +8485,21 @@ window.draftGetSessionData = function(week, day, s){
     agil.scoreType = 'reps'; agil.scoreLabel = 'Reps done';
     agil.guided = { rounds:4, steps:[{label:agilName, secs:8, sub:'Go on the beep, alternate directions'}], restSec:60,
       entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
+    // v4.9.385 — gym version: the same drill on the gym floor if there is room (about
+    // 10 x 5 m), otherwise a lateral cone shuffle that trains the same cut.
+    var agilGym = libSpec('draft-agil-gym', 'Agility (gym) — ' + agilName + ' or Lateral Shuffle', 'intervals', 'avg_split', 'Average time',
+      '4 REPS · REST 60 s',
+      'Same drill on the gym floor if you have about 10 x 5 m clear. No room: two cones 5 m apart, shuffle out and back twice, touch each cone. Alternate lead side.',
+      [[agilName + ' / shuffle', '1 rep']], { efforts:4, work:agilName + ' (gym)', restSec:60 });
+    agilGym.scoreType = 'reps'; agilGym.scoreLabel = 'Reps done';
+    agilGym.guided = { rounds:4, steps:[{label:'Agility', secs:8, sub:'Go on the beep, alternate sides'}], restSec:60,
+      entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     var plyo = [null, null, ['Hurdle Hops (low)', '3 × 5'], ['Single-Leg Bounds', '3 × 4 / leg'], ['Depth Jump to Broad', '3 × 3']][t] || ['Bounds', '3 × 5'];
     return partsSess('Sprint & Power', 45, [
       part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups to 90%.'),
       part('Acceleration Sprints', accReps + ' × ' + accDist + ' m, 90 s rest. Level ' + LS + ' of 5. Gym version listed too.', accField, accGym),
-      part('Resisted Sprints', sledN + ' × 15 m sled or hill, 2 min rest.', sled),
-      part(agilName, '4 reps, 60 s rest, alternate directions.', agil),
+      part('Resisted Sprints', sledN + ' × 15 m sled or hill, 2 min rest. Gym version listed too.', sled, sledGym),
+      part(agilName, '4 reps, 60 s rest, alternate directions. Gym version listed too.', agil, agilGym),
       bwPart(plyo[0], plyo[1] + '. Stick every landing.', parseInt(plyo[1], 10) || 3, 60)
     ]);
   }
@@ -9339,7 +9356,7 @@ window.draftOpenConditioning = function(week, day, sess){
         if(_kgSpec){
           var _kgLast = window._draftKgGet(_kgSpec.id);
           h += '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">' +
-               '<div style="flex:1;font-size:12px;color:var(--text3);">Load on the ' + (/sled/i.test(_kgSpec.name) ? 'sled' : 'prowler') + (_kgLast ? ' &middot; last ' + _kgLast + ' kg' : '') + '</div>' +
+               '<div style="flex:1;font-size:12px;color:var(--text3);">Load on the ' + ((p.spec && p.spec.loadKg && p.alt && p.alt.loadKg) ? 'sled / prowler' : (/sled/i.test(_kgSpec.name) ? 'sled' : 'prowler')) + (_kgLast ? ' &middot; last ' + _kgLast + ' kg' : '') + '</div>' +
                '<input data-dc-kg="' + _esc(_kgSpec.id) + '" type="number" inputmode="decimal" value="' + (window._draftKgPending[_kgSpec.id] || _kgLast || '') + '" placeholder="&ndash;" ' +
                  'style="width:76px;padding:10px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:17px;font-weight:700;text-align:center;outline:none;">' +
                '<span style="font-size:11px;color:var(--text3);">kg</span></div>';
@@ -9405,7 +9422,9 @@ window.draftOpenConditioning = function(week, day, sess){
       var p = parts[parseInt(t.getAttribute(t.hasAttribute('data-dc-start') ? 'data-dc-start' : 'data-dc-alt'), 10)];
       var spec = t.hasAttribute('data-dc-alt') ? p.alt : p.spec;
       if(spec && spec.loadKg){
-        var _kv = parseFloat(window._draftKgPending[spec.id] || window._draftKgGet(spec.id)) || 0;
+        // v4.9.385 — one kg box per card, keyed by the field spec; the gym version reads it too.
+        var _cardId = (p.spec && p.spec.loadKg) ? p.spec.id : spec.id;
+        var _kv = parseFloat(window._draftKgPending[_cardId] || window._draftKgPending[spec.id] || window._draftKgGet(spec.id) || window._draftKgGet(_cardId)) || 0;
         spec = Object.assign({}, spec, { _loadKg: _kv });
       }
       _draftRegisterParts([p]);

@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.383';
+var APP_VERSION='4.9.384';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8243,6 +8243,9 @@ window.draftGetSessionData = function(week, day, s){
     for(var i = 0; i < n; i++) out.push({ pct:pct, kg:P(m, pct), reps:reps, amrap:false });
     return out;
   }
+  // v4.9.384 — pull-up prescriptions are always a number, from the strict pull-up test.
+  function _draftPullMax(st){ var r = (st && st.records) || {}; return parseInt(r['Strict Pull-Up Test_max'], 10) || 0; }
+  function _draftPullReps(st){ var m = _draftPullMax(st); return m ? Math.max(1, m - 2) : 5; }
   // v4.9.359 — movements named here carry no load: shown as BW, no kg box.
   var _BW = /pull-up|chin-up|push-up|dip|nordic|ab wheel|knee raise|leg raise|copenhagen|plank|burpee|box jump|broad jump|bound|hop/i;
   function SS(name, sets, rest, an, ar, bn, br, note){
@@ -8591,7 +8594,10 @@ window.draftGetSessionData = function(week, day, s){
       { name:'Bench Rep Set', format:'max_reps_sets', sets:1, reps:'Max reps', load_choices:[rb],
         prev_best:(s.records && s.records['Bench Rep Set_max']) || 0, prev_best_wt:rb,
         note:'One all-out set at ' + rb + ' kg. Builds toward 102.5 kg × 20. Hit 20 and the load goes up 2.5 kg next week.' },
-      SS('Flat DB Bench / Strict Pull-Up', 3, 90, 'Flat DB Bench', '12 reps', 'Strict Pull-Up', 'Max minus 2', 'Stop the pull-ups 2 short of failure.'),
+      // v4.9.384 — Jon 7 Nov: "can this actually be a prescribed rep - for chins this needs
+      // to always be the case". Pull-ups are a NUMBER: test max minus 2 (min 1).
+      SS('Flat DB Bench / Strict Pull-Up', 3, 90, 'Flat DB Bench', '12 reps', 'Strict Pull-Up', _draftPullReps(s) + ' reps',
+         'Pull-ups set from your pull-up test (' + (_draftPullMax(s) || 'not tested yet') + ') minus 2. Same number every set.'),
       SS('Band Face Pull / DB Hammer Curl', 2, 45, 'Band Face Pull', 'To failure', 'DB Hammer Curl', 'To failure')
     ]));
   }

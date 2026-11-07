@@ -6308,4 +6308,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const phx = app.blabToPhoenixSession(app.blabGetSessionData(2, 5), 2, 5).exercises.find((e) => /^Speed Bench/.test(e.name));
     assert.equal(phx._perSetLabel[1], 'Grip: Medium', 'carried to the renderer');
   });
+
+  test('PULLREPS: the Saturday pull-ups are a number — test max minus 2 (Jon, 7 Nov)', () => {
+    startDraft();
+    const find = () => app.blabGetSessionData(2, 5).exercises.find((e) => /Pull-Up/.test(e.name)).movements[1];
+    assert.equal(find().reps, '5 reps', 'untested: a sensible default, still a number');
+    const s = app.blabGetState(); s.records = s.records || {}; s.records['Strict Pull-Up Test_max'] = 9; app.blabSaveState(s);
+    assert.equal(find().reps, '7 reps', '9 tested → 7');
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) { const x = app.blabGetSessionData(w, d);
+      if (x) assert.ok(!/max minus|max -/i.test(JSON.stringify(x.exercises || [])), `W${w}D${d}: no "max minus" left`); }
+  });
 }

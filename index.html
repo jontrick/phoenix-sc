@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.386';
+var APP_VERSION='4.9.387';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9123,6 +9123,40 @@ if(typeof document !== 'undefined' && document.addEventListener){
       var on = x === b;
       x.style.background = on ? 'var(--gold)' : 'transparent'; x.style.color = on ? '#000' : 'var(--text2)'; x.style.borderColor = on ? 'var(--gold)' : 'var(--border2)';
     });
+  });
+}
+// v4.9.387 — Jon 7 Nov: "need a band colour note and number of twist around bar for
+// tension". Any lift with "band" in its name gets band colour + wraps, remembered per
+// exercise in blab records so next week opens on the same set-up.
+window._phxBandGet = function(name){
+  try { var r = ((window.blabGetState && window.blabGetState()) || {}).records || {};
+        return { colour: r[name + '_band_colour'] || '', wraps: r[name + '_band_wraps'] || '' }; }
+  catch(_e){ return { colour:'', wraps:'' }; }
+};
+window._phxBandSet = function(name, field, v){
+  try { var s = window.blabGetState(); if(!s) return false; if(!s.records) s.records = {};
+        var k = name + (field === 'wraps' ? '_band_wraps' : '_band_colour');
+        var val = field === 'wraps' ? (parseInt(v, 10) || 0) : String(v || '').trim().slice(0, 30);
+        if(val) s.records[k] = val; else delete s.records[k];
+        window.blabSaveState(s); return true; } catch(_e){ return false; }
+};
+window._phxBandHTML = function(name){
+  if(!/\bband/i.test(String(name || ''))) return '';
+  var cur = window._phxBandGet(name);
+  var safe = String(name).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  var cv = String(cur.colour).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  var box = 'padding:9px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;box-sizing:border-box;';
+  return '<div style="margin-top:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:8px;">' +
+    '<div style="font-size:12px;color:var(--text3);">Band</div>' +
+    '<input data-band-colour="' + safe + '" type="text" value="' + cv + '" placeholder="colour" autocapitalize="words" style="flex:1;min-width:0;' + box + '">' +
+    '<input data-band-wraps="' + safe + '" type="number" inputmode="numeric" value="' + cur.wraps + '" placeholder="&ndash;" style="width:56px;' + box + '">' +
+    '<div style="font-size:11px;color:var(--text3);">wraps</div></div>';
+};
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('input', function(e){
+    var t = e && e.target; if(!t || !t.getAttribute) return;
+    if(t.getAttribute('data-band-colour') !== null) window._phxBandSet(t.getAttribute('data-band-colour'), 'colour', t.value);
+    if(t.getAttribute('data-band-wraps') !== null) window._phxBandSet(t.getAttribute('data-band-wraps'), 'wraps', t.value);
   });
 }
 // v4.9.370 — per-effort loads for guided conditioning (prowler / sled). Kept in blab
@@ -44631,6 +44665,7 @@ function openTodaySession(){
       '<div class="ex-scheme">'+ex.sets+' sets &times; '+ex.reps+(ex._bodyweight?' &middot; bodyweight':'')+(ex.load_guidance?' &mdash; '+ex.load_guidance:'')+(ex._holdSecs?' hold':'')+'</div>'+
       (ex.coaching_note?'<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;font-style:italic;">'+ex.coaching_note+'</div>':'')+
       ((typeof window._phxBoxSqHTML === 'function') ? window._phxBoxSqHTML(ex.name) : '')+
+      ((typeof window._phxBandHTML === 'function') ? window._phxBandHTML(ex.name) : '')+
       targetSection+
       suggestSection+
       customiseControlsHTML+

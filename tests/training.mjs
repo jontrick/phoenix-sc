@@ -6339,4 +6339,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(rest(3, 6, /^Speed Deadlift/), 90);
     assert.equal(rest(3, 2, /^Bench Press|Floor Press|Board Press|Close-Grip|Max Effort/i) > 90, true, 'heavy lifts keep their long rest');
   });
+
+  test('BAND: banded lifts carry band colour and wraps, remembered; others do not (Jon, 7 Nov)', () => {
+    startDraft();
+    assert.ok(/data-band-colour="Speed Bench \(mini bands\)"/.test(app.window._phxBandHTML('Speed Bench (mini bands)')));
+    assert.ok(/data-band-wraps="Speed Box Squat \(band\)"/.test(app.window._phxBandHTML('Speed Box Squat (band)')));
+    assert.equal(app.window._phxBandHTML('Bench Press'), '', 'an unbanded lift has none');
+    assert.equal(app.window._phxBandHTML('Barbell Hip Thrust'), '', 'no false match');
+    app.window._phxBandSet('Speed Bench (mini bands)', 'colour', 'Red');
+    app.window._phxBandSet('Speed Bench (mini bands)', 'wraps', '2');
+    assert.deepEqual(app.window._phxBandGet('Speed Bench (mini bands)'), { colour: 'Red', wraps: 2 });
+    assert.ok(/value="Red"/.test(app.window._phxBandHTML('Speed Bench (mini bands)')), 'prefilled next time');
+  });
 }

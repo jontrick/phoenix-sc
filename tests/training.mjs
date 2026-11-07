@@ -6351,4 +6351,21 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(app.window._phxBandGet('Speed Bench (mini bands)'), { colour: 'Red', wraps: 2 });
     assert.ok(/value="Red"/.test(app.window._phxBandHTML('Speed Bench (mini bands)')), 'prefilled next time');
   });
+
+  test('BAND: superset band movements and warm-up pull-aparts carry the band box too (Jon, 7 Nov)', () => {
+    startDraft();
+    assert.ok(/data-band-colour="Band Face Pull"/.test(app.window._phxBandHTML('Band Face Pull')));
+    assert.ok(/data-band-colour="Band Pull-Aparts"/.test(app.window._phxBandHTML('Band Pull-Aparts')));
+    const made = [];
+    const mk = () => { const e = { style: {}, innerHTML: '', textContent: '', children: [], appendChild(c) { this.children.push(c); return c; },
+      addEventListener() {}, setAttribute() {}, removeAttribute() {}, insertBefore(c) { return c; }, querySelector: () => null, querySelectorAll: () => [],
+      classList: { add() {}, remove() {}, contains: () => false, toggle() {} } }; made.push(e); return e; };
+    const realCreate = app.document.createElement, realST = app.setTimeout;
+    app.document.createElement = mk; app.setTimeout = () => 0;
+    try { app.window._blabBuildSupersetBlock({ name: 'Band Face Pull', sets: 2, reps: 'To failure', _supersetPartner: { name: 'DB Hammer Curl', reps: 'To failure' } }, 0); }
+    finally { app.document.createElement = realCreate; app.setTimeout = realST; }
+    const h = made.map((m) => m.innerHTML).join('\n');
+    assert.ok(/data-band-colour="Band Face Pull"/.test(h), 'band box on the superset card');
+    assert.ok(!/data-band-colour="DB Hammer Curl"/.test(h), 'none for the curl');
+  });
 }

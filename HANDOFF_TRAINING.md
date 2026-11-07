@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.388 (7 Nov 2026)** — Band colour/wraps box also on: superset cards (each band movement, labelled A/B band when both are banded — e.g. Band Face Pull), and session warm-up rows with `uses_band` (Band pull-aparts, Face pulls with band, Lateral band walks). Same `records[name+'_band_*']` store. Jon: "band colour for band pull aparts too all times in schedule".
+
 > **v4.9.387 (7 Nov 2026)** — Any lift with "band" in its name (/\bband/i: Speed Bench (mini bands), Speed Box Squat (band)) shows Band colour (text) + wraps around the bar (number) under the coaching note; saved as typed to `records[name+'_band_colour'|'_band_wraps']`, prefilled next time. Jon: "band colour note and number of twist around bar for tension". Test `BAND`.
 
 > **v4.9.386 (7 Nov 2026)** — `blabToPhoenixSession` percentage_sets used a FLAT `rest_sec = 180`, ignoring the programme's `rest` — every speed set ran a 3-min rest timer. Now `ex.rest > 0 ? ex.rest : 180`. Speed Bench 60 s, Speed Box Squat 90 s, Speed Deadlift 90 s (Jon). Only the Draft programme sets `rest` on percentage_sets, so BLAB is unchanged. Test `SPEEDREST`. (Near miss: a `//` comment placed mid-object-line commented out `sets:` — runtime check stayed CLEAN, functional DRAFT test caught it.)

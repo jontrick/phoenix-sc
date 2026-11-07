@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.387';
+var APP_VERSION='4.9.388';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -5559,7 +5559,9 @@ window._blabBuildSupersetBlock = function(ex, idx){
     '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Exercise '+(idx+1)+'</div>'+
     '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;text-transform:uppercase;color:var(--text);margin-bottom:2px;">'+ex.name+' / '+m.name+'</div>'+
     '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">'+totalSets+' sets &middot; A then B &middot; Rest '+ex._supersetRest+'s</div>'+
-    dotsHtml;
+    dotsHtml+
+    // v4.9.388 — Jon 7 Nov: band colour on every band movement "all times in schedule".
+    ((typeof window._phxBandHTML === 'function') ? window._phxBandHTML(ex.name, /\bband/i.test(m.name) ? 'A band' : 'Band') + window._phxBandHTML(m.name, /\bband/i.test(ex.name) ? 'B band' : 'Band') : '');
 
   // Coach target chips
   var chips = document.createElement('div');
@@ -9140,14 +9142,14 @@ window._phxBandSet = function(name, field, v){
         if(val) s.records[k] = val; else delete s.records[k];
         window.blabSaveState(s); return true; } catch(_e){ return false; }
 };
-window._phxBandHTML = function(name){
+window._phxBandHTML = function(name, label){
   if(!/\bband/i.test(String(name || ''))) return '';
   var cur = window._phxBandGet(name);
   var safe = String(name).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   var cv = String(cur.colour).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   var box = 'padding:9px 6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;box-sizing:border-box;';
-  return '<div style="margin-top:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:8px;">' +
-    '<div style="font-size:12px;color:var(--text3);">Band</div>' +
+  return '<div style="margin-top:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:8px;box-sizing:border-box;max-width:100%;">' +
+    '<div style="font-size:12px;color:var(--text3);">' + (label ? String(label).replace(/</g,'&lt;') : 'Band') + '</div>' +
     '<input data-band-colour="' + safe + '" type="text" value="' + cv + '" placeholder="colour" autocapitalize="words" style="flex:1;min-width:0;' + box + '">' +
     '<input data-band-wraps="' + safe + '" type="number" inputmode="numeric" value="' + cur.wraps + '" placeholder="&ndash;" style="width:56px;' + box + '">' +
     '<div style="font-size:11px;color:var(--text3);">wraps</div></div>';
@@ -18228,6 +18230,7 @@ function buildWarmupBlocks(sessionType,container){
       '<div class="wu-ex-name">'+ex.name+'</div>'+
       '<div class="wu-ex-scheme">'+ex.scheme+'</div>'+
       '<div class="wu-ex-cue">'+ex.cue+'</div>'+
+      ((typeof window._phxBandHTML === 'function') ? window._phxBandHTML(ex.name) : '')+   // v4.9.388
     '</div>';
   }).join('');
   dw.innerHTML=
@@ -43353,10 +43356,11 @@ function _phxRenderWarmup(warmup, sess){
     var note = ex.notes ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic;">'+ex.notes+'</div>' : '';
     return '<label style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;" data-wu-row="'+i+'">'+
       '<input type="checkbox" data-wu-tick="'+i+'" style="width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;">'+
-      '<div style="flex:1;">'+
+      '<div style="flex:1;min-width:0;">'+
         '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:1px;">'+ex.name+'</div>'+
         '<div style="font-size:12px;color:var(--gold);margin-top:2px;font-family:var(--font-d);">'+(ex.val||'')+'</div>'+
         note+
+        ((ex.uses_band && typeof window._phxBandHTML === 'function') ? window._phxBandHTML(/\bband/i.test(ex.name) ? ex.name : ex.name + ' (band)') : '')+   // v4.9.388
       '</div>'+
     '</label>';
   }).join('');

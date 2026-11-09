@@ -220,6 +220,33 @@ Neither chat was careless; both read the source and took the first claim.
 A stale handoff is worse than none, because it gets followed. A stale *rules* file is worse
 again, because it gets copied into handoffs and then followed at one remove.
 
+## THE SQL EDITOR IS NOT A SIGNED-IN CLIENT — `auth.uid()` IS NULL THERE (2026-11-10)
+
+A view's day spine was `select auth.uid() as user_id`. Tested in the Supabase SQL Editor it
+returned the right *dates* and every other column null — `trained` false, `weighed_in`
+false — **while the underlying tables held a completed session and a weigh-in for that exact
+day.**
+
+The editor connects as the `postgres` role with no JWT, so `auth.uid()` is NULL. Every join
+`t.user_id = d.user_id` then compares against NULL, which is never true. The spine rows
+appeared (generate_series needs no auth) and every left join missed.
+
+**The failure is indistinguishable from "nothing was logged".** Which is what it was read
+as, twice — once as "he hasn't trained" and once as a timezone bug that was real but was not
+this.
+
+> **THE INSTRUMENT DID NOT REPRODUCE THE SUBJECT.** The view was being tested in a context
+> it does not run in. A real client has a JWT; the editor does not. Testing RLS-dependent or
+> `auth.*`-dependent SQL from the editor measures a different system — and it can report
+> both false failures and false passes, because the editor also BYPASSES RLS.
+
+Fix: do not depend on `auth.uid()` inside a view. Derive the users from the data the caller
+can already see and let RLS scope it — correct for a real client, and testable in the editor
+because rows stay separated by `user_id` rather than collapsing to NULL.
+
+Sibling of **"a check that has never fired is untested, not clean"**: here the check fired,
+went red, and was red for a reason that had nothing to do with the thing under test.
+
 ## `current_date` IS THE DATABASE'S DATE, AND THE DATABASE IS IN UTC (2026-11-10)
 
 A view bucketed every timestamp into a Brisbane day — correctly, explicitly, five separate

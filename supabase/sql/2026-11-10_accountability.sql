@@ -65,7 +65,12 @@ with days as (
   -- `completed`, and the view returned Nov 3-9 with no Nov 10 row at all. This is the
   -- same UTC day-key bug the app shipped in v4.9.168, reintroduced in the one place
   -- in this view that was not explicitly converted.
-  select auth.uid() as user_id, gs::date as date
+  -- v2026-11-10c: does NOT use auth.uid(). In the SQL Editor auth.uid() is NULL
+  -- (postgres role, no JWT), so a spine built from it joined against NULL and every
+  -- column came back empty — indistinguishable from "nothing logged". The users are
+  -- derived from the visible data instead and RLS does the scoping. See the `me` CTE
+  -- in 2026-11-10c_fix_spine_auth.sql, which is the authoritative version.
+  select gs::date as date
   from generate_series(
          (now() at time zone 'Australia/Brisbane')::date - interval '180 days',
          (now() at time zone 'Australia/Brisbane')::date,

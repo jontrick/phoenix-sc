@@ -55,8 +55,21 @@ create policy nutrition_daily_own on public.nutrition_daily
 -- 04:30, which is 18:30 the PREVIOUS day in UTC.
 create or replace view public.accountability_day with (security_invoker = true) as
 with days as (
+  -- ⚠️ THE SPINE MUST BE BUILT IN BRISBANE DAYS, NOT `current_date`.
+  -- `current_date` is the DATABASE's date, which is UTC. Brisbane is UTC+10, so for
+  -- the first TEN HOURS of every Brisbane day Postgres still thinks it is yesterday.
+  -- Every bucket below converts to a Brisbane day; a UTC spine therefore has NO ROW
+  -- for the current Brisbane day until 10:00 local, and that day's session silently
+  -- has nothing to join to and disappears.
+  -- Caught live 2026-11-10: Jon trained, the session was in `sessions` and correctly
+  -- `completed`, and the view returned Nov 3-9 with no Nov 10 row at all. This is the
+  -- same UTC day-key bug the app shipped in v4.9.168, reintroduced in the one place
+  -- in this view that was not explicitly converted.
   select auth.uid() as user_id, gs::date as date
-  from generate_series(current_date - interval '180 days', current_date, interval '1 day') gs
+  from generate_series(
+         (now() at time zone 'Australia/Brisbane')::date - interval '180 days',
+         (now() at time zone 'Australia/Brisbane')::date,
+         interval '1 day') gs
 ),
 trained as (
   select user_id,
@@ -99,6 +112,9 @@ select
   coalesce(t.sessions_completed, 0) > 0   as trained,
   t.session_name,
   t.session_type,
+  -- NOTE 2026-11-10: null on every completed session in the live data — the
+  -- completion path does not always pass it. Present for when it is; do not build
+  -- a "time trained" feature on it without checking it has started arriving.
   t.duration_seconds,
   t.distance_m,
   t.volume_kg,

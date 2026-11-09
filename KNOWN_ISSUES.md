@@ -220,6 +220,34 @@ Neither chat was careless; both read the source and took the first claim.
 A stale handoff is worse than none, because it gets followed. A stale *rules* file is worse
 again, because it gets copied into handoffs and then followed at one remove.
 
+## `current_date` IS THE DATABASE'S DATE, AND THE DATABASE IS IN UTC (2026-11-10)
+
+A view bucketed every timestamp into a Brisbane day — correctly, explicitly, five separate
+conversions — and then built its day spine from `current_date`. `current_date` is UTC. **For
+the first TEN HOURS of every Brisbane day Postgres still thinks it is yesterday**, so the
+current local day had no spine row, and the session Jon completed that morning had nothing
+to join to and disappeared.
+
+Proven live: `sessions` held a row started *and* completed 2026-11-10 Brisbane with
+`status = 'completed'`, and the view returned 2026-11-03 .. 2026-11-09 with **no 11-10 row
+at all.** Not a wrong value — a missing day, which reads as "he did nothing today".
+
+**This is the v4.9.168 UTC day-key bug, server-side.** That one filed every 04:30 session
+under the previous day. This one deleted the day entirely. Same root cause, in the one place
+in a view written *specifically to stop it* that was not explicitly converted.
+
+> **CONVERTING THE DATA IS HALF THE JOB. THE AXIS YOU JOIN IT TO NEEDS THE SAME TIMEZONE.**
+> A date spine, a `BETWEEN`, a `current_date` default, a "last 7 days" filter — each is a
+> second clock, and a mismatch there silently drops rows rather than mis-stating them.
+
+Fix: `(now() at time zone 'Australia/Brisbane')::date`, used for both ends of the series.
+
+**And on how it was found:** the all-empty result was plausible. "He hasn't trained" and
+"the view drops today" look identical from the view. It surfaced only because the raw tables
+were queried separately — `select status, count(*) from sessions` showed 72 completed rows
+with the newest **after** the view's newest row. **A rollup cannot audit itself; compare it
+against its own sources.**
+
 ## Grepping the app for a column name does not prove the column exists
 
 2026-11-10. Four columns in a hand-written SQL view did not exist, and the editor runs a

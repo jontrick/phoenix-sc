@@ -71,6 +71,21 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       inferred. Closes when `select * from accountability_day where date = current_date`
       returns a row.
 
+- [ ] **TRAINING — 139 SESSIONS ARE STRANDED `in_progress`, NONE EVER COMPLETED.**
+      Found 2026-11-10 in a schema-side count: `in_progress` 139 rows, **0 with
+      `completed_at`**, spanning 2026-05-08 to 2026-11-06. Against 72 genuinely completed.
+      The ten most recent show the shape: on 2026-11-07 alone there are **two completed
+      "Speed Upper" rows plus four in_progress "Speed Upper" and four in_progress "Field
+      Tests"** — so a session is being STARTED repeatedly (each open writes a row) and only
+      sometimes completed. `supabaseStartSession` inserts on open; nothing reaps a row that
+      is never finished. Harmless to the external view (it filters on
+      `status='completed'`), but it is two thirds of the table, it will skew any
+      "sessions started" metric, and the duplicate-start behaviour may be the same
+      re-entry problem behind Jon's "flicked back to Today mid-session" report.
+      Closes when starts are idempotent per session identity, or stale rows are reaped.
+- [ ] **TRAINING — `duration_seconds` is NULL on every completed session** (live data,
+      2026-11-10). The completion path accepts it but callers mostly do not pass it, so
+      nothing can report time trained. Low severity, but the column reads as broken.
 - [ ] **TRAINING — `weight_logs` DOES NOT EXIST, and the weekly check-in reads it.**
       Found 2026-11-10 by a schema dump. `index.html:36219` and `:36228` select
       `logged_at,weight_kg` from `weight_logs`; the table is absent, so `res.data` is null,

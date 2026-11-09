@@ -1,5 +1,7 @@
 # TRAINING → CENTRAL PM — HANDOFF
 
+> **v4.9.390 (9 Nov 2026)** — Jon missed Sun 8 + Mon 9. One-off `_draftReschedule1109` (on load, dead after 11 Nov): W2D6 Speed Lower → skipped; W3D1 Bronco → Wed 11 Nov; W3D3 Sprint/Power → skipped this week. Progression unaffected (week is date-driven). Harness blabCalGet count 25 → 26. **Archive with `_draftRepairSat7` / `_phxRepair1010` once done.**
+
 > **v4.9.388 (7 Nov 2026)** — Band colour/wraps box also on: superset cards (each band movement, labelled A/B band when both are banded — e.g. Band Face Pull), and session warm-up rows with `uses_band` (Band pull-aparts, Face pulls with band, Lateral band walks). Same `records[name+'_band_*']` store. Jon: "band colour for band pull aparts too all times in schedule".
 
 > **v4.9.387 (7 Nov 2026)** — Any lift with "band" in its name (/\bband/i: Speed Bench (mini bands), Speed Box Squat (band)) shows Band colour (text) + wraps around the bar (number) under the coaching note; saved as typed to `records[name+'_band_colour'|'_band_wraps']`, prefilled next time. Jon: "band colour note and number of twist around bar for tension". Test `BAND`.

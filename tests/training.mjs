@@ -6368,4 +6368,22 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/data-band-colour="Band Face Pull"/.test(h), 'band box on the superset card');
     assert.ok(!/data-band-colour="DB Hammer Curl"/.test(h), 'none for the curl');
   });
+
+  test('RESCHED: 9 Nov — Sun speed lower skipped, Bronco to Wed 11 Nov, Wed sprint/power skipped (Jon)', () => {
+    startDraft();
+    const realToday = app._phxLocalISO;
+    try {
+      app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-09';
+      const at = (w, d) => app.blabCalGet().sessions.find((e) => e.blabWeek === w && e.blabDay === d);
+      assert.equal(at(3, 1).scheduledDate, '2026-11-09', 'positive control: Bronco starts on Monday');
+      assert.equal(app.window._draftReschedule1109(), true);
+      assert.equal(at(2, 6).status, 'skipped');
+      assert.equal(at(3, 1).scheduledDate, '2026-11-11'); assert.equal(at(3, 1).status, 'pending');
+      assert.equal(at(3, 3).status, 'skipped');
+      assert.equal(at(3, 2).scheduledDate, '2026-11-10', 'Tuesday untouched');
+      assert.equal(app.window._draftReschedule1109(), false, 'second run changes nothing');
+      app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-12';
+      assert.equal(app.window._draftReschedule1109(), false, 'dead after Wednesday');
+    } finally { app._phxLocalISO = realToday; }
+  });
 }

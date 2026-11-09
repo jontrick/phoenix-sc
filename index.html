@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.389';
+var APP_VERSION='4.9.390';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8726,6 +8726,28 @@ window._draftRepairSat7 = function(){
   } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.repairSat7', _e, {}); return false; }
 };
 
+// v4.9.390 — ONE-OFF RESCHEDULE, Jon 9 Nov: "I didn't do Sunday or Monday sessions need
+// to move the bronco to Wednesday morning and miss that lower speed to just start week 2".
+//   Sun 8 Nov  Speed Lower (W2 D6)       -> skipped
+//   Mon 9 Nov  Bronco (W3 D1)            -> moved to Wed 11 Nov
+//   Wed 11 Nov Sprint / Power (W3 D3)    -> skipped (the Bronco takes Wednesday)
+// Only touches those three entries, only while still pending, only up to 11 Nov.
+// Progression is unaffected: the programme week is date-driven (draftCurrentWeek).
+window._draftReschedule1109 = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft') return false;
+    var today = _phxLocalISO(); if(today > '2026-11-11') return false;
+    var cal = window.blabCalGet(); if(!cal || !Array.isArray(cal.sessions)) return false;
+    var changed = false;
+    var find = function(w, d, iso){ return cal.sessions.filter(function(e){ return e && e.blabWeek === w && e.blabDay === d && e.scheduledDate === iso && e.status !== 'completed'; })[0]; };
+    var sun = find(2, 6, '2026-11-08'); if(sun && sun.status !== 'skipped'){ sun.status = 'skipped'; changed = true; }
+    var wed = find(3, 3, '2026-11-11'); if(wed && wed.status !== 'skipped'){ wed.status = 'skipped'; changed = true; }
+    var mon = find(3, 1, '2026-11-09'); if(mon){ mon.scheduledDate = '2026-11-11'; if(mon.status === 'skipped') mon.status = 'pending'; changed = true; }
+    if(changed){ window.blabCalSave(cal); if(typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){} }
+    return changed;
+  } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.reschedule1109', _e, {}); return false; }
+};
+
 // An already-built Draft calendar predates the split: bring its PENDING Draft add-ons into
 // line with draftSchedule, from today on. Completed entries, past entries and anything he
 // added himself are never touched.
@@ -8753,7 +8775,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);

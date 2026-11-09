@@ -6683,4 +6683,128 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     finally { app._nutToday = realToday; }
     assert.ok(/Beef mince/.test(html), 'the current pick is visible on the button');
   });
+
+  test('MIRROR _nutDailyRow carries the TRAINING-ADJUSTED target, not the base', () => {
+    // The whole trap. nutAdjustForDay moves the day's numbers: a rest day is
+    // -120 kcal / -30g carbs. Mirroring ns.targets (the BASE) would make a rest
+    // day on which he hit his real target exactly read as 120 kcal UNDER to
+    // anything downstream — and nothing downstream could detect it, because
+    // both numbers are the same shape. One value answering two questions.
+    reset(); signIn('u-mirror');
+    const today = app._phxLocalISO();
+    seed('phx_nut_v1_u-mirror', {
+      setup_done: true,
+      targets: { kcal: 2400, protein_g: 180, carbs_g: 250, fat_g: 70 },
+      daily: { [today]: { meals: { breakfast: { components: [
+        { n: 'Oats', k: 380, p: 13, c: 67, f: 7, qty_g: 100 }
+      ] } } } }
+    });
+    const row = app._nutDailyRow(today);
+    assert.ok(row, 'a row is produced for a day that exists');
+    assert.equal(row.date, today, 'keyed on the LOCAL day');
+    assert.equal(row.kcal, 380, 'intake is summed from components, got ' + row.kcal);
+
+    const base = { kcal: 2400, protein_g: 180, carbs_g: 250, fat_g: 70 };
+    const adj = app.nutAdjustForDay(base, today);
+    assert.equal(row.target_kcal, adj.kcal,
+      'target_kcal must equal the ADJUSTED target, got ' + row.target_kcal + ' want ' + adj.kcal);
+    assert.equal(row.target_carbs_g, adj.carbs_g, 'and the adjusted carbs');
+  });
+
+  test('MIRROR a day with no record produces NOTHING, not a row of zeros', () => {
+    // Zero and unknown are different facts. A zero row reads downstream as "he
+    // ate nothing today" — a failed day — when the truth is he has not logged
+    // yet. This is the empty-stub trap: a half-real record is worse than none.
+    reset(); signIn('u-mirror2');
+    seed('phx_nut_v1_u-mirror2', { setup_done: true, targets: { kcal: 2400 }, daily: {} });
+    assert.equal(app._nutDailyRow('2026-01-01'), null, 'no day record -> no row');
+  });
+
+  test('MIRROR targets absent stay NULL, never zero', () => {
+    reset(); signIn('u-mirror3');
+    const today = app._phxLocalISO();
+    seed('phx_nut_v1_u-mirror3', { setup_done: true, daily: { [today]: { meals: {} } } });
+    const row = app._nutDailyRow(today);
+    assert.ok(row, 'a logged day still mirrors');
+    assert.equal(row.target_kcal, null, 'no targets -> NULL, got ' + row.target_kcal);
+  });
+
+  test('MIRROR the error summary carries SHAPE, never food or values', () => {
+    // Provider guarantee, not caller etiquette: the redaction is enforced in
+    // the helper so a future caller cannot leak by being careless.
+    const sum = app._nutDailyErrorSummary({
+      date: '2026-11-09', kcal: 2380, target_kcal: 2400,
+      user_id: 'df7fc046-0dd6-4416-b0ce-44b55fa2fb8e'
+    });
+    const txt = JSON.stringify(sum);
+    assert.ok(!/2380|2400/.test(txt), 'no macro values in the summary: ' + txt);
+    assert.ok(!/df7fc046/.test(txt), 'no user id in the summary: ' + txt);
+    assert.equal(sum.date, true, 'presence only');
+  });
+
+  test('ENTRY a failed mirror write reaches the diagnostic, never silence', () => {
+    // Rule 8. The console does not exist on the phone. And until the SQL is
+    // applied EVERY write fails with 42P01, so this is the live path today, not
+    // an edge case — Jon must be able to see why nothing is arriving.
+    reset(); signIn('u-mirror4');
+    const today = app._phxLocalISO();
+    seed('phx_nut_v1_u-mirror4', {
+      setup_done: true, targets: { kcal: 2400 },
+      daily: { [today]: { meals: { lunch: { components: [{ k: 500, p: 40, c: 50, f: 10, qty_g: 100 }] } } } }
+    });
+    app.localStorage.removeItem('phx_last_write_error');
+    const realSb = app.sb;
+    app.sb = { from: () => ({ upsert: () => Promise.resolve({ error: { code: '42P01', message: 'relation "nutrition_daily" does not exist' } }) }) };
+    try {
+      const p = app._nutMirrorDayNow(today);
+      assert.ok(p && typeof p.then === 'function', 'returns a thenable so it can be awaited');
+      return p.then(() => {
+        const raw = read('phx_last_write_error');
+        assert.ok(raw, 'a failed mirror write must land in phx_last_write_error');
+        // read() already parses; tolerate either shape rather than assuming.
+        const snap = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+        assert.ok(String(snap.context).includes('nutDailyMirror'), 'context names it, got ' + snap.context);
+        assert.equal(snap.code, '42P01', 'the code is carried, got ' + snap.code);
+      });
+    } finally { app.sb = realSb; }
+  });
+
+  test('ENTRY the backfill records ONCE with totals, not once per day', () => {
+    // Coalescing preserves FREQUENCY, never MAGNITUDE. "x7" says a thing failed
+    // seven times; "7 of 7 days did not reach the cloud" says how much is
+    // missing. On a bulk path the ring's count is not the count that matters.
+    reset(); signIn('u-mirror5');
+    const ns = { setup_done: true, targets: { kcal: 2400 }, daily: {} };
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      ns.daily[app._phxLocalISO(d)] = { meals: { lunch: { components: [{ k: 500, qty_g: 100 }] } } };
+    }
+    seed('phx_nut_v1_u-mirror5', ns);
+    let calls = 0, sentRows = 0;
+    const realSb = app.sb;
+    app.sb = { from: () => ({ upsert: (rows) => { calls++; sentRows = rows.length; return Promise.resolve({ error: { code: '42P01', message: 'nope' } }); } }) };
+    try {
+      return app._nutMirrorRecentDays(7).then((out) => {
+        assert.equal(calls, 1, 'ONE round trip for the whole backfill, got ' + calls);
+        assert.equal(sentRows, 7, 'all seven days in one upsert, got ' + sentRows);
+        assert.equal(out.attempted, 7, 'attempted is reported');
+        assert.equal(out.failed, 7, 'and so is how many failed — the magnitude');
+        assert.equal(out.first_code, '42P01', 'with a code to act on');
+      });
+    } finally { app.sb = realSb; }
+  });
+
+  test('ENTRY nutSaveState still saves locally when the mirror throws', () => {
+    // The mirror is best-effort and must NEVER be able to break the save that
+    // matters. Local first, unconditionally.
+    reset(); signIn('u-mirror6');
+    const realSb = app.sb;
+    app.sb = { from: () => { throw new Error('cloud is on fire'); } };
+    try {
+      app.nutSaveState({ setup_done: true, targets: { kcal: 1234 }, daily: {} });
+      const back = read('phx_nut_v1_u-mirror6');
+      assert.ok(back, 'the local save survived a throwing mirror');
+      assert.equal(back.targets.kcal, 1234, 'and carries the real state');
+    } finally { app.sb = realSb; }
+  });
 }

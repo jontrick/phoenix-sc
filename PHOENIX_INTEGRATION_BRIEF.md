@@ -76,6 +76,10 @@ allowed to see"** — and today the answer is *everything, including peptides*.
 
 **Do this instead. One Postgres view per concern, each exposing only allowed columns:**
 
+**The full, runnable version of everything below is in the repo at
+`supabase/sql/2026-11-09_nutrition_daily.sql`** — one file, table and views together. It is
+the authoritative copy; the excerpt here is for reading.
+
 ```sql
 -- Run in the Supabase SQL editor. Read-only, column-scoped, RLS-respecting.
 create view accountability_training with (security_invoker = true) as
@@ -142,35 +146,39 @@ The parts a second implementation gets wrong:
 
 ---
 
-## 5. THE FOOD PLAN — the only part needing Phoenix-side work
+## 5. THE FOOD PLAN — ✅ BUILT, v4.9.389. ONE SQL FILE TO APPLY.
 
-Only code running inside Jon's PWA can read his nutrition `localStorage`. So:
+**Phoenix now mirrors a daily nutrition summary.** Table `nutrition_daily`, one row per
+LOCAL calendar day, upserted on `(user_id, date)`:
 
-**Phoenix adds a summary mirror.** A new table, written by Phoenix on the same debounced +
-pagehide path its other mirrors already use:
+| column | meaning |
+|---|---|
+| `kcal` `protein_g` `carbs_g` `fat_g` | what he actually ate that day |
+| `target_kcal` `target_protein_g` `target_carbs_g` `target_fat_g` | **the TRAINING-ADJUSTED target for that day** |
+| `updated_at` | when the mirror last wrote |
 
-```sql
-create table nutrition_daily (
-  user_id    uuid not null references auth.users(id),
-  date       date not null,                 -- LOCAL day key
-  kcal       integer, protein_g integer, carbs_g integer, fat_g integer,
-  target_kcal integer, target_protein_g integer,
-  adherence  numeric,                       -- logged vs target, if wanted
-  updated_at timestamptz not null default now(),
-  primary key (user_id, date)
-);
-alter table nutrition_daily enable row level security;
--- then the same owner-only policy the other tables use
-```
+**⚠️ THE TARGETS ARE PER-DAY, NOT A FIXED GOAL — and this is the one thing to get right.**
+Phoenix moves them: a **rest day is -120 kcal and -30g carbs**, and **days 2 and 4 are +160
+kcal and +40g carbs**. So *"did he hit his target"* must compare `kcal` against
+**`target_kcal` on that same row**, never against a constant. Comparing against his base
+goal would show every rest day as under-eating when he hit his real number exactly, and both
+figures are the same shape so nothing downstream could detect the mistake.
 
-**Summary only — totals and targets, not every meal.** The work app wants *"did he eat to
-plan"*, and a per-meal mirror is a much larger surface for no benefit.
+**`NULL` targets mean "nutrition not set up for that day". They do not mean zero** — and a
+day he has not logged produces **no row at all**, deliberately, because a row of zeros reads
+as a failed day. **Absent and zero are different facts. Render absent as absent.**
 
-**This is the Phoenix lane's build, not the external app's.** Until it exists, the work app
-should show the food row as *"not available"* rather than guessing — and **not** as zero,
-because zero and unknown are different facts and a zero will read as a failed day.
+**Summary only.** No meals, no food names, no components. The question is whether he hit his
+numbers, and a per-meal mirror is a much larger surface for no extra answer.
 
----
+**IT WILL NOT WORK UNTIL JON RUNS THE SQL** — `supabase/sql/2026-11-09_nutrition_daily.sql`
+in the Supabase dashboard. Until then every write fails with `42P01` and lands in
+Settings → Diagnostic as `nutDailyMirror`, naming that file. Deliberate: a mirror that
+silently does nothing is the failure this app has shipped most often.
+
+**Latency to expect:** today's row is written on every nutrition save, so it is near-live.
+Edits to *earlier* days reconcile on the next app open, which backfills the last 7 days in
+one request. **So a correction to Tuesday may take until he next opens Phoenix to appear.**
 
 ## 6. WHAT TO ACTUALLY SEND THE OTHER CHAT
 
@@ -178,8 +186,11 @@ because zero and unknown are different facts and a zero will read as a failed da
 1. **This file.** It is self-contained and names the real tables, columns and meanings.
 2. The Supabase **project URL and `anon` key** — already public in the shipped app, so this
    grants nothing on its own. Jon can lift both from the live site.
-3. Which views exist once §3 is run. **Tell them the view names, not the table names** — if
-   they code against `sessions` directly they will eventually `select('*')` it.
+3. **The view names, not the table names** — if they code against `sessions` directly they
+   will eventually `select('*')` it. After the SQL is applied they are:
+   `accountability_training` · `accountability_lifts` · `accountability_weight` ·
+   `accountability_scores` · `accountability_nutrition` · `accountability_programme`.
+   **Everything they need is in those six. There is no reason to touch a base table.**
 
 **Never send:**
 - The **`service_role` key**. It bypasses RLS and would expose the pathology tables.

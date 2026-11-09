@@ -63,6 +63,28 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
 - [ ] TRAINING — Draft test/result blocks are standard_sets, so they show a kg/reps row
       above the "Log result" box. Works; reads oddly. A result-only block would be cleaner.
 
+## ⭐ WAITING ON JON — ONE SQL FILE, OR THE NUTRITION MIRROR DOES NOTHING
+
+- [ ] **JON — run `supabase/sql/2026-11-09_nutrition_daily.sql`** in the Supabase dashboard
+      (SQL editor). It creates `nutrition_daily` + RLS, and the six `accountability_*`
+      views for the external work app. **Until it runs, every nutrition mirror write fails
+      with `42P01`** and lands in Settings → Diagnostic as `nutDailyMirror`. The app is
+      otherwise unaffected — the local save is unconditional and happens first.
+      Closes when a row appears in `nutrition_daily`.
+- [ ] **PM — I EDITED NUTRITION'S AREA.** v4.9.389 added `_nutDailyRow`,
+      `_nutDailyErrorSummary`, `_nutMirrorDayNow`, `_nutMirrorRecentDays` next to
+      `_nutDayTotals`, and a mirror call inside `nutSaveState`. Jon asked the PM directly
+      and NUTRITION had no live session. Flagged per the isolation rule: **Nutrition, review
+      and revert freely — the diagnosis matters more than my patch.** The one judgement worth
+      checking is that the mirrored target is `nutAdjustForDay(ns.targets, dateKey)`, the
+      per-day adjusted figure, not `ns.targets`.
+- [ ] **??? — peptides and training are now readable SEPARATELY, by view, not by moving
+      data.** `peptide_state` is still a column on `profiles`. I did **not** migrate it to
+      its own table: that is Jon's live protocol — doses and stock — and a migration bug
+      there is the highest-consequence data loss in the app. The views give full read
+      separation with zero data risk and `drop view` undoes them. **If structural
+      separation is ever wanted, cost it as its own project with a tested migration.**
+
 ## ⭐ ACTIVE BUILD — DAY SWIPE. READ-ONLY. ALL THREE DOMAINS. START HERE.
 
 **RULED BY JON, 2026-09-08: READ-ONLY.** He asked for this across peptides, nutrition and

@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.388';
+var APP_VERSION='4.9.389';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -10834,6 +10834,11 @@ function _phxLocalISO(d){
     if(typeof _origBg === "function") _origBg(row);
     if(typeof pepRestoreFromCloud === "function" && pepRestoreFromCloud(row)) _pepAfterRestore();
     if(typeof nutRestoreRecipesFromCloud === "function" && nutRestoreRecipesFromCloud(row)) _nutAfterRestore();
+    // v4.9.389: backfill the daily nutrition mirror once per open. The save-path
+    // mirror only ever writes the day that changed, so an edit to an earlier day
+    // would never reach the cloud. Last in the chain — it is outbound and
+    // best-effort, and must not delay a restore that Jon's screen depends on.
+    try { if(typeof _nutMirrorRecentDays === "function") _nutMirrorRecentDays(7); } catch(_e){}
   };
 })();
 
@@ -21986,6 +21991,15 @@ function nutGetState(){
 
 function nutSaveState(s){
   try { localStorage.setItem(_nutKey(), JSON.stringify(s)); } catch(e){}
+  // v4.9.389: mirror TODAY's summary to the cloud. Local write first and
+  // unconditionally — the mirror is best-effort and must never be able to stop
+  // the save that matters. Fire-and-forget by design; failures are recorded by
+  // _nutMirrorDayNow, not surfaced here.
+  try {
+    if(typeof _nutMirrorDayNow === 'function' && typeof _nutToday === 'function'){
+      _nutMirrorDayNow(_nutToday());
+    }
+  } catch(_e){}
 }
 
 // v4.9.169: day keys are LOCAL dates, via the shared _phxLocalISO (v4.9.168).
@@ -22103,6 +22117,133 @@ function _nutDayTotals(dayData){
   (dayData.supplements||[]).forEach(function(s){ t.kcal+=s.kcal||0; t.protein_g+=s.p||0; t.carbs_g+=s.c||0; t.fat_g+=s.f||0; });
   t.protein_g=Math.round(t.protein_g*10)/10; t.carbs_g=Math.round(t.carbs_g*10)/10; t.fat_g=Math.round(t.fat_g*10)/10;
   return t;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// v4.9.389 [PM, in NUTRITION's area — flagged in OPEN_ITEMS] DAILY NUTRITION MIRROR
+//
+// WHY THIS EXISTS. Nutrition's daily log has always been localStorage ONLY —
+// nutSaveState() writes to the browser and nowhere else. Recipes mirror to
+// profiles.nut_recipes; the DAY never did. So nothing outside Jon's phone could
+// answer "did he eat to plan today", and an external accountability app had no
+// route to it: only code running inside his own PWA can read his localStorage.
+//
+// SUMMARY ONLY. Totals and the day's targets — not meals, not components, not
+// food names. The question downstream is "did he hit his numbers", and a
+// per-meal mirror is a far larger surface for no extra answer.
+//
+// THE TARGET IS THE ADJUSTED ONE, AND THAT IS THE WHOLE TRAP HERE.
+// nutAdjustForDay() moves the day's targets: a rest day is -120 kcal / -30g
+// carbs, days 2 and 4 are +160 kcal / +40g carbs. Mirroring ns.targets (the
+// BASE) would make every rest day read as under-eating when he hit his actual
+// number exactly, and every day 2 read as over. The base and the day's target
+// are two different facts and only one of them answers the question.
+//
+// Its own function, NOT inside the debounce: setTimeout is a no-op in the test
+// sandbox, which is how _nutRecipesWriteNow came to have a guard asserting
+// behaviour that had never once executed (v4.9.195).
+//
+// NEEDS supabase/sql/2026-11-09_nutrition_daily.sql APPLIED. Until Jon runs it
+// every write fails with 42P01 and lands in Settings -> Diagnostic naming the
+// file. That is deliberate: a mirror that silently does nothing is the class of
+// bug this app has shipped most often.
+function _nutDailyRow(dateKey){
+  var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  if(!ns || !ns.daily) return null;
+  var day = ns.daily[dateKey];
+  if(!day) return null;
+  var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
+  if(!uid) return null;
+  var got = _nutDayTotals(day);
+  // The day's REAL target, training-adjusted. Null targets stay null — "not set
+  // up" and "a target of zero" are different facts and zero would read as a
+  // failed day downstream.
+  var tgt = (ns.targets && typeof nutAdjustForDay === 'function')
+    ? nutAdjustForDay(ns.targets, dateKey) : null;
+  return {
+    user_id: uid,
+    date: dateKey,
+    kcal: got.kcal, protein_g: got.protein_g, carbs_g: got.carbs_g, fat_g: got.fat_g,
+    target_kcal:      tgt ? tgt.kcal      : null,
+    target_protein_g: tgt ? tgt.protein_g : null,
+    target_carbs_g:   tgt ? tgt.carbs_g   : null,
+    target_fat_g:     tgt ? tgt.fat_g     : null,
+    updated_at: new Date().toISOString()
+  };
+}
+
+// Shape only — no food names, no component values. Matches the provider
+// guarantee in _phxRecordWriteError: the redaction is enforced here, not by
+// caller discipline.
+function _nutDailyErrorSummary(row){
+  return { date: !!(row && row.date), has_targets: !!(row && row.target_kcal !== null) };
+}
+
+// Writes ONE day. Returns the thenable so a test can await the outcome.
+function _nutMirrorDayNow(dateKey){
+  try {
+    if(typeof sb === 'undefined' || !sb) return null;
+    var row = _nutDailyRow(dateKey);
+    if(!row) return null;
+    var summary = _nutDailyErrorSummary(row);
+    // UPSERT on (user_id,date) so re-saving a day overwrites — never appends.
+    return sb.from('nutrition_daily').upsert(row, {onConflict: 'user_id,date'}).then(
+      function(res){
+        if(res && res.error && typeof _phxRecordWriteError === 'function'){
+          _phxRecordWriteError('nutDailyMirror', res.error, summary);
+        }
+        return res;
+      },
+      function(e){
+        if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('nutDailyMirror.rejected', e, summary);
+      }
+    );
+  } catch(e){
+    if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('nutDailyMirror.threw', e, null);
+    return null;
+  }
+}
+
+// Backfill, called once per app open. Catches edits to earlier days, which the
+// save-path mirror does not see because it only ever writes the day that changed.
+// RECORDS ONCE WITH TOTALS, not once per day: the error ring coalesces by
+// context, and a count tells Jon a thing failed N times while "4 of 7 days did
+// not reach the cloud" tells him how much is missing. Coalescing preserves
+// frequency, never magnitude (COMMS_PROTOCOL).
+function _nutMirrorRecentDays(days){
+  var n = days || 7;
+  var out = { attempted: 0, failed: 0, first_code: null };
+  try {
+    if(typeof sb === 'undefined' || !sb) return Promise.resolve(out);
+    var keys = [];
+    for(var i = 0; i < n; i++){
+      var d = new Date(); d.setDate(d.getDate() - i);
+      keys.push(_phxLocalISO(d));            // LOCAL day keys, never toISOString
+    }
+    var rows = keys.map(_nutDailyRow).filter(function(r){ return !!r; });
+    if(!rows.length) return Promise.resolve(out);
+    out.attempted = rows.length;
+    return sb.from('nutrition_daily').upsert(rows, {onConflict: 'user_id,date'}).then(
+      function(res){
+        if(res && res.error){
+          out.failed = rows.length;
+          out.first_code = res.error.code || null;
+          if(typeof _phxRecordWriteError === 'function'){
+            _phxRecordWriteError('nutDailyBackfill', res.error, out);
+          }
+        }
+        return out;
+      },
+      function(e){
+        out.failed = rows.length;
+        if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('nutDailyBackfill.rejected', e, out);
+        return out;
+      }
+    );
+  } catch(e){
+    if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('nutDailyBackfill.threw', e, out);
+    return Promise.resolve(out);
+  }
 }
 
 // Render Today nutrition tile (replaces placeholder)

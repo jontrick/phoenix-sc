@@ -334,7 +334,48 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
-has("var APP_VERSION='4.9.388'", 'version is 4.9.388');
+// ── NUTDAILY — THE DAILY NUTRITION MIRROR (PM, v4.9.389) ──────────────────────
+// Nutrition's daily log was localStorage-only for the app's whole life, so nothing
+// outside Jon's phone could answer "did he eat to plan". Label is NUTDAILY, not
+// MIRROR, because MIRROR: already belongs to the recipes mirror and two guards
+// answering to one name is how a failure gets read as someone else's.
+{
+  const src = phxStripComments(html);
+
+  // THE TARGET MUST BE THE TRAINING-ADJUSTED ONE. nutAdjustForDay moves the day:
+  // a rest day is -120 kcal / -30g carbs. Mirroring the BASE would make a rest day
+  // he hit exactly read as 120 under — and both numbers are the same shape, so
+  // nothing downstream could detect it. Behaviour driven in tests/nutrition.mjs.
+  has('nutAdjustForDay(ns.targets, dateKey)',
+      'NUTDAILY: the day target is TRAINING-ADJUSTED, not the base');
+
+  // Local write first — the mirror must never be able to break the save.
+  has('function _nutMirrorDayNow(dateKey){', 'NUTDAILY: the day write is independently callable');
+  has('function _nutMirrorRecentDays(days){', 'NUTDAILY: the backfill is independently callable');
+
+  // Rule 8. Until the SQL is applied this is the LIVE path, not an edge case.
+  has("_phxRecordWriteError('nutDailyMirror'", 'NUTDAILY: a failed day write is recorded');
+  has("_phxRecordWriteError('nutDailyBackfill'", 'NUTDAILY: a failed backfill is recorded');
+
+  // The backfill must carry MAGNITUDE. The ring coalesces by context, so frequency
+  // survives and quantity does not: a bulk path reports its own totals or Jon
+  // learns it failed without learning how much is missing.
+  has('out.failed = rows.length;', 'NUTDAILY: the backfill records how many days failed');
+  has("upsert(rows, {onConflict: 'user_id,date'})",
+      'NUTDAILY: the backfill is ONE round trip, not one per day');
+
+  // LOCAL day keys. A UTC key filed every 04:30 session under yesterday.
+  const blk = (src.match(/function _nutMirrorRecentDays[\s\S]*?\n\}/) || [''])[0];
+  blk && !/toISOString\(\)\.slice|toISOString\(\)\.split/.test(blk)
+    ? ok('NUTDAILY: the backfill builds LOCAL day keys, not UTC')
+    : bad('NUTDAILY: the backfill derives a day key from toISOString — that is UTC, and Jon trains at 04:30 in UTC+10.');
+
+  // A failing write points at the file that fixes it.
+  has('2026-11-09_nutrition_daily.sql', 'NUTDAILY: the source names the SQL that must be applied');
+}
+
+
+has("var APP_VERSION='4.9.389'", 'version is 4.9.389');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

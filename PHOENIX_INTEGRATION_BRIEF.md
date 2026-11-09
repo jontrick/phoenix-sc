@@ -8,6 +8,88 @@ weigh-ins, lifts, food plan. **Peptides and all health/pathology data excluded.*
 
 ---
 
+## 0. ⭐ THE WHOLE MECHANISM — ONE VIEW, ONE ROW PER DAY
+
+**Read this and you can stop. Everything below is supporting detail.**
+
+```js
+const { data } = await supabase
+  .from('accountability_day')
+  .select('*')
+  .gte('date', '2026-11-01')
+  .order('date', { ascending: false });
+```
+
+One row per calendar day for the last 180 days. Jon signs into your app with his Phoenix
+account; row security scopes it to him automatically. **There is nothing else to read, and
+no other table you should touch.**
+
+| column | type | meaning |
+|---|---|---|
+| `date` | date | **LOCAL day** (Australia/Brisbane, UTC+10, no DST) |
+| `trained` | bool | a session was COMPLETED that day |
+| `session_name` `session_type` | text | what he did |
+| `duration_seconds` `distance_m` | int | seconds, metres |
+| `sets_logged` | int | sets recorded that day |
+| `volume_kg` | numeric | Σ weight × reps |
+| `weighed_in` | bool | he weighed in |
+| `weight_kg` | numeric | kilograms, or NULL |
+| `scored` | bool | a WOD/Core score was logged |
+| `wod_name` | text | which one |
+| `kcal` `protein_g` | numeric | what he ate — **NULL today, see below** |
+| `target_kcal` `target_protein_g` | numeric | **that day's** target, training-adjusted |
+| `kcal_delta` | int | `kcal − target_kcal`. Negative = under. |
+
+### THE FOUR RULES THAT ARE ALREADY APPLIED FOR YOU
+
+These are encoded in the view, server-side, so you cannot get them wrong. They are listed
+so you do not re-implement them:
+
+1. **`trained` is not "a session row exists".** Phoenix writes a row the moment a session
+   STARTS. The view requires `status = 'completed'` AND a non-null `completed_at`.
+2. **Day boundaries are LOCAL, not UTC.** Jon trains at 04:30, which is 18:30 the
+   *previous* day in UTC. Phoenix has already shipped this bug once — a UTC day key filed
+   every morning's work under yesterday. The view converts with an explicit timezone.
+3. **`sets_logged` arrives LATE.** Sets flush from an on-device outbox, minutes or hours
+   after the session closes. **A day can be `trained: true` with `sets_logged: 0` and then
+   climb.** Never infer "he did not lift" from a zero on a day he trained.
+4. **`weight_kg` NULL means he did not weigh in.** Never carry the previous day forward.
+
+### THE TWO THINGS THAT WILL CATCH YOU ANYWAY
+
+**`trained: false` means two different things.** On a past day it means he did not train. On
+**today** it only means *not yet* — the day is still open. **Rendering today's `false` as a
+missed day is wrong every morning.** Treat today as provisional until it is over.
+
+**NUTRITION IS NULL RIGHT NOW, AND NULL IS NOT ZERO.** Jon is rebuilding the nutrition
+domain, so `kcal`, `target_kcal` and `kcal_delta` are NULL for every day. **Render that as
+"no data" — never as 0 kcal, never as a missed target.** A zero reads as *"he ate nothing
+today"*, which is a far worse wrong answer than an empty cell, and it will be wrong every
+single day until he has rebuilt and logged. The plumbing is live and tested; it starts
+returning numbers the day he logs a meal, with no change on your side.
+
+**`kcal_delta` is deliberately not a boolean.** "Ate to plan" is a judgement — is 800 kcal
+*under* target compliant? — and the view will not hand you a verdict dressed as a fact.
+Pick your own threshold.
+
+### WHAT YOU NEED FROM JON
+
+1. The Supabase **project URL** and **`anon` key**. Both are already public in the shipped
+   PWA, so they are not secrets and grant nothing on their own.
+2. He signs into your app with his Phoenix account. **No shared secret, nothing to rotate.**
+
+**Never ask for the `service_role` key.** It bypasses row security entirely and would expose
+the pathology and peptide data this view exists to keep out.
+
+### WHAT CANNOT REACH YOU, BY CONSTRUCTION
+
+No peptide protocol, no blood panels, no pathology photographs, no body photographs, no GPS
+tracks, no injury notes, no coaching chat, no food names. Not by the app choosing not to ask
+— **those columns are not in the view**, so a `select('*')` cannot reach them. Revoking the
+whole integration is one line: `drop view accountability_day;`
+
+---
+
 ## 1. ⛔ READ THIS BEFORE PLANNING ANYTHING
 
 **THREE OF THE FOUR THINGS WANTED ARE IN THE CLOUD. THE DAILY FOOD DATA IS NOT.**

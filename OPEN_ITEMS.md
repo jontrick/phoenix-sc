@@ -63,7 +63,25 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
 - [ ] TRAINING — Draft test/result blocks are standard_sets, so they show a kg/reps row
       above the "Log result" box. Works; reads oddly. A result-only block would be cleaner.
 
-## ⭐ WAITING ON JON — ONE SQL FILE, OR THE NUTRITION MIRROR DOES NOTHING
+## ⭐ WAITING ON JON — ONE MORE SQL FILE FOR THE EXTERNAL APP
+
+- [ ] **JON — run `supabase/sql/2026-11-10_accountability_day.sql`.** Creates
+      `accountability_day`: ONE view, one row per local day, and the entire read surface for
+      the external work-accountability app. Requires the 2026-11-09 file first (already
+      run). Closes when `select * from accountability_day where date = current_date` returns
+      a row. **Nothing in Phoenix depends on it** — it is read-only and outbound, so a
+      failure here cannot affect the app.
+- [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
+      re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
+      further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start
+      writing the day he logs a meal. **Whoever rebuilds must keep `ns.daily[date]` and
+      `ns.targets` readable, or the mirror silently produces NULL rows.** Three mirror
+      tests in `tests/nutrition.mjs` under `MIRROR` pin the shape; if a rebuild breaks them
+      that is the signal, not a nuisance.
+      **The external app shows nutrition as "no data" until then — NOT zero.** Specified in
+      PHOENIX_INTEGRATION_BRIEF §0, because a zero reads as "he ate nothing today".
+
+## ✅ DONE — nutrition mirror SQL
 
 - [ ] **JON — run `supabase/sql/2026-11-09_nutrition_daily.sql`** in the Supabase dashboard
       (SQL editor). It creates `nutrition_daily` + RLS, and the six `accountability_*`

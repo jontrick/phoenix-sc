@@ -63,24 +63,30 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
 - [ ] TRAINING — Draft test/result blocks are standard_sets, so they show a kg/reps row
       above the "Log result" box. Works; reads oddly. A result-only block would be cleaner.
 
-## ⭐ SECURITY GATE — RUN RLS_CHECK BEFORE SHARING SUPABASE KEYS
+## ✅ CLEARED — the external integration is live and the security gate passed
 
-- [ ] **JON — run `supabase/sql/RLS_CHECK.sql` and send the result.** It prints whether Row
-      Level Security is ON for each table. **The repo only contains DDL proving RLS for
-      `wod_scores`, `blood_panels` and `nutrition_daily`.** `sessions`, `set_logs`,
-      `daily_weigh_ins` and `weekly_checkins` were created outside the repo, so their RLS
-      status is recorded NOWHERE. If any shows `false`, **a signed-in client can read every
-      user's rows from that table** — and the database has at least three users (the view
-      returned three rows per day in the editor, where RLS is bypassed).
-      **This is a gate on sharing the anon key, not a nice-to-have.** Closes when every
-      table reports `rls_enabled = true` with at least one policy.
+- [x] **RLS GATE PASSED, 2026-11-10.** All 8 tables have RLS enabled, and every SELECT/ALL
+      policy is scoped `auth.uid() = user_id` (`profiles` uses `auth.uid() = id`). The three
+      null `using_expression` rows are INSERT policies, which use `WITH CHECK` not `USING` —
+      a blank USING there is correct, not a hole. **The database has at least three users
+      and they cannot see each other's rows.** Cleared to share the anon key.
+- [x] **The mechanism works, verified against live data:** `2026-11-10 | trained true |
+      Upper — Max Effort | 22 sets | weighed_in true | 111.4 | kcal null`. Authoritative
+      file `supabase/sql/2026-11-10d_accountability_day.sql`.
+      Four corrections to get there: a `sessions.session_id` column that does not exist, a
+      UTC day spine that deleted the current Brisbane day until 10:00 local, `auth.uid()`
+      being NULL in the SQL Editor (so it tested empty while the data was present), and a
+      caller filter added as defence in depth.
 
-- [x] **DONE — the external read mechanism works.** 2026-11-10, verified against live data:
-      `2026-11-10 | trained true | Upper — Max Effort | 22 sets | weighed_in true | 111.4 |
-      kcal null`. Took four corrections: a non-existent `session_id` column, a UTC day
-      spine that dropped today entirely, `auth.uid()` being NULL in the SQL Editor, and a
-      caller filter added as defence in depth. Authoritative file:
-      `supabase/sql/2026-11-10d_accountability_day.sql`.
+- [ ] **??? — LOW: the INSERT policies' `WITH CHECK` clauses were never inspected.** I
+      queried `qual` only, so I know the USING side is right and have **not** verified that
+      an INSERT is constrained to the caller's own `user_id`. If any INSERT policy has no
+      check, a signed-in client could write rows attributed to another user. **Does not
+      affect the external integration** — it reads one view and writes nothing — and only
+      Phoenix writes to these tables today. One query closes it:
+      `select tablename, policyname, with_check from pg_policies where schemaname='public';`
+      Recorded rather than chased because a count of policies is not a check of policies,
+      and I would rather name what I did not look at than imply I had.
 
 ## ✅ DONE — nutrition mirror SQL (superseded; see above)
 

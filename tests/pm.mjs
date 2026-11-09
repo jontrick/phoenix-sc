@@ -348,4 +348,34 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         'a non-restorable tab must not overwrite the last restorable one, or he loses both');
     } finally { app.showScreen = realShow; }
   });
+
+  test('ENTRY Clear write errors clears BOTH stores, not just the latest', async () => {
+    // The button cleared phx_last_write_error and left the RING, which has been on screen
+    // since v4.9.240. So "All recent write errors" still listed the failure after a clear
+    // and read as though nothing had been fixed. Found while giving Jon a way to confirm
+    // the nutrition mirror had started working — he would have cleared it, seen the old
+    // entry, and concluded the SQL had not taken.
+    reset(); signIn('u-clear');
+    app._phxRecordWriteError('nutDailyMirror', { code: '42P01', message: 'relation does not exist' }, {});
+    app._phxRecordWriteError('pm.weighIn', { code: '42703', message: 'no column' }, {});
+    assert.ok(read('phx_last_write_error'), 'precondition: a latest error exists');
+    const ringBefore = read('phx_write_errors');
+    assert.ok(ringBefore && ringBefore.length >= 2, 'precondition: the ring has entries, got ' + JSON.stringify(ringBefore && ringBefore.length));
+
+    app._phxClearWriteErrors();
+
+    assert.ok(!read('phx_last_write_error'), 'the latest error is gone');
+    const ringAfter = read('phx_write_errors');
+    assert.ok(!ringAfter || ringAfter.length === 0,
+      'THE RING MUST BE GONE TOO — a clear that leaves half the evidence is worse than none: ' + JSON.stringify(ringAfter));
+  });
+
+  test('ENTRY the Diagnostic clear button is not a dead button', () => {
+    // Rule 4's cousin: a control that is present and calls nothing does nothing and says
+    // nothing, and Jon cannot tell it from a slow one. The markup must name a handler that
+    // actually exists on window.
+    const src = app.__src || '';
+    assert.equal(typeof app._phxClearWriteErrors, 'function',
+      'the handler the button names must exist');
+  });
 }

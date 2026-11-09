@@ -334,6 +334,16 @@ const codeSrc = () => (_codeSrcCache ??= phxStripComments(html));
 const hasCode    = (needle, label) => codeSrc().includes(needle) ? ok(label) : bad(`MISSING: ${label}`);
 const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : bad(`SHOULD BE GONE: ${label}`);
 
+// ── DIAG: THE CLEAR MUST CLEAR BOTH STORES (PM, v4.9.392) ─────────────────────
+// The button cleared phx_last_write_error and left the ring, which has been displayed
+// since v4.9.240. A clear that leaves half the evidence is worse than no clear button:
+// the user trusts it and then misreads what remains.
+has("window._phxClearWriteErrors = function()", 'DIAG: the clear handler exists');
+has("removeItem('phx_write_errors')",            'DIAG: the clear removes the RING too');
+has('onclick="_phxClearWriteErrors()"',          'DIAG: the button calls the handler');
+hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
+           'DIAG: the old latest-only inline clear is gone');
+
 // ── NUTDAILY — THE DAILY NUTRITION MIRROR (PM, v4.9.389) ──────────────────────
 // Nutrition's daily log was localStorage-only for the app's whole life, so nothing
 // outside Jon's phone could answer "did he eat to plan". Label is NUTDAILY, not
@@ -375,7 +385,7 @@ const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : 
 }
 
 
-has("var APP_VERSION='4.9.391'", 'version is 4.9.391');
+has("var APP_VERSION='4.9.392'", 'version is 4.9.392');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

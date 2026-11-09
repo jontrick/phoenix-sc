@@ -2869,7 +2869,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   <pre id="diag-test-result" style="display:none;background:#0d0a08;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 12px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;"></pre>
 
   <button onclick="_phxOpenDiagnostic()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:8px;">Refresh snapshot</button>
-  <button onclick="try{localStorage.removeItem('phx_last_write_error');_phxOpenDiagnostic();}catch(e){}" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:24px;">Clear last write error</button>
+  <button onclick="_phxClearWriteErrors()" class="btn-secondary" style="width:100%;padding:12px;margin-bottom:24px;">Clear write errors</button>
 
   <div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;">Developer Shortcuts</div>
   <button onclick="_phxDevForceSaveToSupabase()" class="btn-primary" style="width:100%;padding:14px;margin-bottom:8px;background:#2a6;color:#fff;">Force Save to Supabase (fixes Safari)</button>
@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.391';
+var APP_VERSION='4.9.392';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -10794,6 +10794,22 @@ window._phxConfirm = function(title, message, yesLabel, danger){
       document.body.appendChild(ov);
     } catch(_e){ resolve(false); }
   });
+};
+
+// v4.9.392 [PM]: CLEAR BOTH STORES. The button cleared phx_last_write_error and left the
+// RING, which has been displayed since v4.9.240 — so after clearing, "All recent write
+// errors" still listed the failure and read as though nothing had been fixed. Found while
+// giving Jon a way to confirm the nutrition mirror had started working: he would have
+// cleared the error, seen the old entry still sitting there, and concluded the SQL had not
+// taken.
+//
+// A CLEAR THAT LEAVES HALF THE EVIDENCE IS WORSE THAN NO CLEAR BUTTON, because the user
+// trusts it and then misreads what remains. Same family as the ring that was collected for
+// 60+ versions and never shown: I added the display and never the reset.
+window._phxClearWriteErrors = function(){
+  try { localStorage.removeItem('phx_last_write_error'); } catch(_e){}
+  try { localStorage.removeItem('phx_write_errors'); } catch(_e){}
+  try { if(typeof _phxOpenDiagnostic === 'function') _phxOpenDiagnostic(); } catch(_e){}
 };
 
 // ====== v4.9.239 SHARED DOM NOTICE (PM-owned) ======

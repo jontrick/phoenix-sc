@@ -10,12 +10,7 @@ weigh-ins, lifts, food plan. **Peptides and all health/pathology data excluded.*
 
 ## 1. ⛔ READ THIS BEFORE PLANNING ANYTHING
 
-**THREE OF THE FOUR THINGS WANTED ARE IN THE CLOUD. THE FOOD PLAN IS NOT.**
-
-Phoenix's nutrition domain — meals, recipes, macro targets, the food plan, the whole
-eating side — is `localStorage` only. `nutSaveState()` is two lines and writes to the
-browser. **There is no cloud mirror and therefore nothing to read.** No credential, key or
-permission changes that.
+**THREE OF THE FOUR THINGS WANTED ARE IN THE CLOUD. THE DAILY FOOD DATA IS NOT.**
 
 | wanted | where it lives | readable externally? |
 |---|---|---|
@@ -23,12 +18,29 @@ permission changes that.
 | **Lifts (per set)** | `set_logs` table | ✅ yes |
 | **Weigh-ins** | `daily_weigh_ins` table | ✅ yes |
 | **WOD / Core scores** | `wod_scores` table | ✅ yes |
-| **Food plan / meals / macros** | `localStorage['phx_nut_v1_{uid}']` | ❌ **NOT IN THE CLOUD** |
+| **Recipes** | `profiles.nut_recipes` (mirrored from `phx_recipes_v1_{uid}`) | ⚠️ yes, but see below |
+| **What he actually ATE, daily totals, macro targets, adherence** | `localStorage['phx_nut_v1_{uid}']` | ❌ **NOT IN THE CLOUD** |
 
-**So the food plan needs Phoenix-side work first** — a mirror that writes a daily nutrition
-summary to a table. That is a Phoenix job, not an integration job, because only code running
-in Jon's own PWA can read his `localStorage`. **Do not design around reading it; it is not
-there.** §5 is the recommended shape.
+**Be precise about this, because the halves differ.** Nutrition is split across two stores:
+
+- **Recipes ARE mirrored** to `profiles.nut_recipes`. So the cloud knows what dishes exist.
+- **The daily log is not.** `nutSaveState()` is two lines and writes only to
+  `localStorage['phx_nut_v1_{uid}']` — meals eaten, daily macro totals, targets, adherence.
+  **There is no cloud mirror and therefore nothing to read.**
+
+**For daily accountability it is the missing half that matters.** Knowing his recipe library
+does not answer *"did he eat to plan today"*. No credential, key or permission change fixes
+it, because **only code running inside Jon's own PWA can read his `localStorage`.**
+
+**So the daily food data needs Phoenix-side work first** — a mirror that writes a daily
+nutrition summary to a table. That is a Phoenix job, not an integration job. **Do not design
+around reading it; it is not there.** §5 is the recommended shape.
+
+**A note on how this brief was written, which is also a warning about using it.** The first
+draft said "nutrition is localStorage only, no cloud mirror". That was too broad — recipes
+are mirrored, and the claim was corrected before this file was finished. **If a figure or a
+location here matters to a decision, re-derive it from the source rather than trusting the
+prose.** Phoenix ships several times a day.
 
 ---
 
@@ -90,9 +102,15 @@ create view accountability_scores with (security_invoker = true) as
 **bypasses the caller's RLS** — it would hand every user's rows to anyone who asks. With it,
 the existing row policies still apply and each caller sees only their own.
 
-**There is deliberately no view over `profiles`.** That is the row carrying `peptide_state`.
-If the work app needs programme-week context, expose a view selecting `blab_state` alone —
-never the row.
+**There is deliberately no view over `profiles`.** That is the row carrying
+`peptide_state` — **and `nut_recipes`, which is a reason someone might reach for it.** If
+the work app needs programme-week context or the recipe library, expose a view selecting
+exactly those columns and nothing else. Never the row:
+
+```sql
+create view accountability_programme with (security_invoker = true) as
+  select id as user_id, blab_state from profiles;   -- NOT select *
+```
 
 **Grant nothing else.** No `service_role` key leaves Phoenix, ever: it bypasses RLS entirely
 and would expose the pathology tables regardless of any view.

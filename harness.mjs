@@ -375,7 +375,7 @@ const hasNotCode = (needle, label) => !codeSrc().includes(needle) ? ok(label) : 
 }
 
 
-has("var APP_VERSION='4.9.390'", 'version is 4.9.390');
+has("var APP_VERSION='4.9.391'", 'version is 4.9.391');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

@@ -6386,4 +6386,16 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(app.window._draftReschedule1109(), false, 'dead after Wednesday');
     } finally { app._phxLocalISO = realToday; }
   });
+
+  test('NORINGS: no ring movement anywhere in the programme (Jon, 10 Nov)', () => {
+    startDraft();
+    let fin = 0;
+    for (let w = 1; w <= 6; w++) for (let d = 1; d <= 6; d++) {
+      const x = app.blabGetSessionData(w, d); if (!x) continue;
+      const j = JSON.stringify(x);
+      assert.ok(!/\bRing (Dip|Row|Push|Muscle)/i.test(j), `W${w}D${d} has a ring movement`);
+      if (/Bench Dips \(feet on floor\)/.test(j)) fin++;
+    }
+    assert.ok(fin >= 2, 'positive control: the dips finisher is still programmed (' + fin + ')');
+  });
 }

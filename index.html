@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.390';
+var APP_VERSION='4.9.391';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8266,6 +8266,8 @@ window.draftGetSessionData = function(week, day, s){
   }
   // v4.9.360 — Jon 2 Nov: no chin-ups in the finishers "for now". DB renegade rows hold
   // the pull. Finishers only — the weighted pull-up and the Saturday pair are unchanged.
+  // v4.9.391 — Jon 10 Nov: no rings (no access, not at ring-dip level yet). Bench dips
+  // with feet on the floor and a barbell inverted row (bar in the rack) replace them.
   function afap(name, sets, rest, movs, note){
     return { name:name, format:'afap', sets:sets, rest:rest, has_load:false, suggested_load:0, movements:movs,
              _timeRecordKey:name + '_time', prev_best:(s.records && s.records[name + '_time']) || 0, note:note || '' };
@@ -8530,9 +8532,9 @@ window.draftGetSessionData = function(week, day, s){
     var pw = [null, 'Med Ball Chest Pass', 'Plyo Push-Up', 'Med Ball Chest Pass', 'Plyo Push-Up'][t];
     var fin = [null,
       afap('Finisher — Pull / Push / Slam', 3, 60, [{name:'DB Renegade Rows (alternating)', reps:10, kg:true},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10, kg:true}], 'CrossFit Football style. 3 rounds for time, 60 s rest between. Skip it if you are under-recovered.'),
-      afap('Finisher — Dips / Rows / Slams', 3, 60, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10, kg:true}], '3 rounds for time. Skip it if you are under-recovered.'),
+      afap('Finisher — Dips / Rows / Slams', 3, 60, [{name:'Bench Dips (feet on floor)', reps:10},{name:'Barbell Inverted Row', reps:10},{name:'Ball Slams', reps:10, kg:true}], '3 rounds for time. Skip it if you are under-recovered.'),
       afap('Finisher — Pull / Push / Slam', 4, 45, [{name:'DB Renegade Rows (alternating)', reps:10, kg:true},{name:'Push-Ups', reps:10},{name:'Ball Slams', reps:10, kg:true}], 'Same as Week 1, one more round, shorter rest. Beat your time.'),
-      afap('Finisher — Dips / Rows / Slams', 3, 45, [{name:'Ring Dips', reps:8},{name:'Ring Rows', reps:10},{name:'Ball Slams', reps:10, kg:true}], 'Beat your Week 2 time.')
+      afap('Finisher — Dips / Rows / Slams', 3, 45, [{name:'Bench Dips (feet on floor)', reps:10},{name:'Barbell Inverted Row', reps:10},{name:'Ball Slams', reps:10, kg:true}], 'Beat your Week 2 time.')
     ][t];
     return sess('Upper — Max Effort', 70, [
       // v4.9.361 — Jon 3 Nov: "Med ball press isn't body weight it used a med ball". Med-ball

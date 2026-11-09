@@ -56,10 +56,10 @@ create policy nutrition_daily_own on public.nutrition_daily
 
 -- TRAINING — sessions. No `coords`: that is GPS of outdoor runs and walks.
 create or replace view public.accountability_training with (security_invoker = true) as
-  select user_id, session_id, session_name, session_type, mode,
+  select user_id, id as session_id, session_name, session_type,
          started_at, completed_at, duration_seconds, status,
-         programme_week, total_distance_m
-  from public.sessions;
+         programme_week, total_distance_m, total_volume_kg, rpe_session
+  from public.sessions;        -- `id` is the PK; there is NO session_id and NO mode column
 
 -- LIFTS — per set. rpe may be NULL: not recorded, not zero.
 create or replace view public.accountability_lifts with (security_invoker = true) as
@@ -74,8 +74,8 @@ create or replace view public.accountability_weight with (security_invoker = tru
 
 -- SCORES — WOD / Core.
 create or replace view public.accountability_scores with (security_invoker = true) as
-  select user_id, wod_name, score, score_type, date, tier
-  from public.wod_scores;
+  select user_id, wod_id, score, score_type, date, is_pb
+  from public.wod_scores;      -- per migrations/20260716000000: no wod_name, no tier
 
 -- NUTRITION — the mirror from PART 1.
 create or replace view public.accountability_nutrition with (security_invoker = true) as

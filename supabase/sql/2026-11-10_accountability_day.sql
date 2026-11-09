@@ -51,12 +51,18 @@ lifted as (
          count(l.*)                      as sets_logged,
          round(sum(l.weight_kg * l.reps)::numeric, 0) as volume_kg
   from public.sessions s
-  join public.set_logs l on l.session_id = s.session_id and l.user_id = s.user_id
+  join public.set_logs l on l.session_id = s.id and l.user_id = s.user_id
   where s.status = 'completed' and s.completed_at is not null
   group by 1, 2
 ),
 scored as (
-  select user_id, date, count(*) as scores_logged, min(wod_name) as wod_name
+  -- wod_scores.date is a TIMESTAMPTZ (see migrations/20260716000000_create_wod_scores.sql),
+  -- not a date, so it must be converted to a LOCAL day like everything else.
+  -- There is no wod_name column and no tier column — wod_id is the identifier.
+  select user_id,
+         (date at time zone 'Australia/Brisbane')::date as date,
+         count(*)        as scores_logged,
+         min(wod_id)     as wod_id
   from public.wod_scores
   group by 1, 2
 )
@@ -84,7 +90,7 @@ select
 
   -- SCORES
   coalesce(sc.scores_logged, 0) > 0                as scored,
-  sc.wod_name,
+  sc.wod_id,
 
   -- NUTRITION. NULL across the board means NO DATA, and that is the state TODAY:
   -- the nutrition domain is being rebuilt and nothing is logged yet.

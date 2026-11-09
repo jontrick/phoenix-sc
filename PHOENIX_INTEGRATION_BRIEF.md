@@ -159,7 +159,7 @@ allowed to see"** — and today the answer is *everything, including peptides*.
 **Do this instead. One Postgres view per concern, each exposing only allowed columns:**
 
 **The full, runnable version of everything below is in the repo at
-`supabase/sql/2026-11-09_nutrition_daily.sql`** — one file, table and views together. It is
+`supabase/sql/2026-11-10_accountability.sql`** — one file, table and views together. It is
 the authoritative copy; the excerpt here is for reading.
 
 ```sql
@@ -253,7 +253,7 @@ as a failed day. **Absent and zero are different facts. Render absent as absent.
 **Summary only.** No meals, no food names, no components. The question is whether he hit his
 numbers, and a per-meal mirror is a much larger surface for no extra answer.
 
-**IT WILL NOT WORK UNTIL JON RUNS THE SQL** — `supabase/sql/2026-11-09_nutrition_daily.sql`
+**IT WILL NOT WORK UNTIL JON RUNS THE SQL** — `supabase/sql/2026-11-10_accountability.sql`
 in the Supabase dashboard. Until then every write fails with `42P01` and lands in
 Settings → Diagnostic as `nutDailyMirror`, naming that file. Deliberate: a mirror that
 silently does nothing is the failure this app has shipped most often.
@@ -268,11 +268,9 @@ one request. **So a correction to Tuesday may take until he next opens Phoenix t
 1. **This file.** It is self-contained and names the real tables, columns and meanings.
 2. The Supabase **project URL and `anon` key** — already public in the shipped app, so this
    grants nothing on its own. Jon can lift both from the live site.
-3. **The view names, not the table names** — if they code against `sessions` directly they
-   will eventually `select('*')` it. After the SQL is applied they are:
-   `accountability_training` · `accountability_lifts` · `accountability_weight` ·
-   `accountability_scores` · `accountability_nutrition` · `accountability_programme`.
-   **Everything they need is in those six. There is no reason to touch a base table.**
+3. **One view name: `accountability_day`.** That is the entire surface — there is no
+   reason to touch a base table, and doing so means re-deriving rules the view already
+   applies (see §0).
 
 **Never send:**
 - The **`service_role` key**. It bypasses RLS and would expose the pathology tables.

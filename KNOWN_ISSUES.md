@@ -220,6 +220,32 @@ Neither chat was careless; both read the source and took the first claim.
 A stale handoff is worse than none, because it gets followed. A stale *rules* file is worse
 again, because it gets copied into handoffs and then followed at one remove.
 
+## Grepping the app for a column name does not prove the column exists
+
+2026-11-10. Four columns in a hand-written SQL view did not exist, and the editor runs a
+script as ONE transaction, so the whole thing rolled back and a table Jon believed he had
+created never existed — silently, because "Success" had been reported on an earlier attempt
+that also rolled back.
+
+    sessions.session_id    the PK is `id`; session_id is a key inside the details jsonb
+    sessions.mode          NOT A COLUMN. 21 grep hits, all `mode: 'cors'` on fetch calls
+    wod_scores.wod_name    the identifier is wod_id
+    wod_scores.tier        77 grep hits, all session-library and subscription tiers
+
+And `wod_scores.date` is a **timestamptz**, not a date, so joining it to a day would have
+shifted every boundary by up to ten hours — the UTC-day bug, reintroduced inside the view
+written to prevent it.
+
+**The method was the defect.** Each column was "verified" by grepping `index.html` and
+counting hits, which proves a STRING appears somewhere in 2.5MB. The app's code shows what
+it **sends**; only the database knows what it **has**, and the two diverge freely.
+
+> **THE AUTHORITY FOR A SCHEMA IS THE DATABASE.** Asking the code is asking a second
+> derivation of the same guess — and it was wrong in the same direction four times running.
+
+Settled in one read-only query against `information_schema.columns`, which also revealed
+`weight_logs` does not exist at all while the weekly check-in still reads it.
+
 ## An instrument reports on its proxy, not its subject
 
 - **A version number agreeing is not a record agreeing.**

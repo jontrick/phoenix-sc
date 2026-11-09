@@ -63,7 +63,25 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
 - [ ] TRAINING — Draft test/result blocks are standard_sets, so they show a kg/reps row
       above the "Log result" box. Works; reads oddly. A result-only block would be cleaner.
 
-## ⭐ WAITING ON JON — ONE MORE SQL FILE FOR THE EXTERNAL APP
+## ⭐ WAITING ON JON — ONE SQL FILE (the two earlier ones were broken and rolled back)
+
+- [ ] **JON — run `supabase/sql/2026-11-10_accountability.sql`.** Supersedes and replaces
+      both earlier files, which are deleted. Creates `nutrition_daily` + RLS and the single
+      `accountability_day` view. Every column verified against `information_schema`, not
+      inferred. Closes when `select * from accountability_day where date = current_date`
+      returns a row.
+
+- [ ] **TRAINING — `weight_logs` DOES NOT EXIST, and the weekly check-in reads it.**
+      Found 2026-11-10 by a schema dump. `index.html:36219` and `:36228` select
+      `logged_at,weight_kg` from `weight_logs`; the table is absent, so `res.data` is null,
+      `logs` is `[]`, and `#wci-weight-analysis` sets `display:none` and hides itself.
+      **The weight-analysis panel in the weekly check-in has therefore never once rendered.**
+      A READ failure — an empty screen, not data loss — which is why nothing surfaced it.
+      Closes when Training either creates the table, repoints the read at
+      `daily_weigh_ins` (which has `date` + `weight_kg` and is populated), or removes the
+      panel. **`daily_weigh_ins` is the obvious target and needs no new table.**
+
+
 
 - [ ] **JON — run `supabase/sql/2026-11-10_accountability_day.sql`.** Creates
       `accountability_day`: ONE view, one row per local day, and the entire read surface for

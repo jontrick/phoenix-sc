@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.401';
+var APP_VERSION='4.9.402';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9552,10 +9552,32 @@ window.draftOpenConditioning = function(week, day, sess){
     if(a === 'close'){ close(); if(typeof navTo === 'function') navTo('today'); return; }
     if(a === 'complete'){
       var r = parseInt((document.getElementById('dc-rpe') || {}).value, 10) || 0;
-      close();
-      if(dry){ if(typeof window._blabExitAuditSession === 'function') window._blabExitAuditSession(); return; }
-      if(engineName && r && typeof window.draftRecordRpe === 'function') window.draftRecordRpe(engineName, r);
-      window.blabCompleteSession(week, day);
+      var finish = function(){
+        close();
+        if(dry){ if(typeof window._blabExitAuditSession === 'function') window._blabExitAuditSession(); return; }
+        if(engineName && r && typeof window.draftRecordRpe === 'function') window.draftRecordRpe(engineName, r);
+        window.blabCompleteSession(week, day);
+      };
+      // v4.9.402 — Jon 11 Nov 05:28: the Bronco was logged complete when he had only tested the
+      // timer. One tap here finished the whole session with 0 / 3 parts done. Unfinished parts
+      // now ask first (DOM modal — native confirm() is suppressed in the iOS PWA).
+      var left = window.draftConditioningStatus(parts, _draftChecks(week, day))
+        .map(function(x, k){ return x.done ? null : parts[k].title; }).filter(Boolean);
+      if(!left.length){ finish(); return; }
+      var m = document.createElement('div');
+      m.id = 'dc-confirm';
+      m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9800;display:flex;align-items:center;justify-content:center;padding:24px;';
+      m.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:22px;max-width:360px;width:100%;text-align:center;">' +
+        '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);">Not finished yet</div>' +
+        '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin:10px 0 16px;">Still to do: ' + left.map(_esc).join(', ') + '. Complete the session anyway?</div>' +
+        '<button data-dcc="keep" style="width:100%;padding:14px;background:var(--gold);border:none;color:#000;font-size:13px;' + B + '">Keep going</button>' +
+        '<button data-dcc="done" style="width:100%;margin-top:10px;padding:12px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;' + B + '">Complete anyway</button></div>';
+      document.body.appendChild(m);
+      m.addEventListener('click', function(ev){
+        var c = ev.target.closest ? ev.target.closest('[data-dcc]') : null; if(!c) return;
+        m.remove();
+        if(c.getAttribute('data-dcc') === 'done') finish();
+      });
     }
   });
   paint(true);

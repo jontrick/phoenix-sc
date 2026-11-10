@@ -427,3 +427,9 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   v4.9.401 runs it ONCE (`s._repairWed11Done`); a clean first load arms the flag as well.
 - **v4.9.400 shipped with the harness RED** (blabCalGet count 26 → 27 from the repair, MINE not
   updated). Fixed in v4.9.401 (MINE 27). Its Pages deploy also failed (GitHub OIDC 503).
+- **v4.9.402 — browser repro (Playwright, 390 px):** Start timer → Finish → Save Score → Done leaves
+  W3 D1 **pending**. The ONLY tap that completed it was the conditioning screen's **Complete
+  session ✓** — with 0 / 3 parts done, no confirmation. Exact tap on his phone still ??? (button
+  positions did not overlap at 390 px; keyboard/scroll on iPhone may differ). Fix: Complete session
+  with any part not done now opens a DOM confirm ("Still to do: …" · Keep going / Complete anyway).
+  Verified in the browser only — no functional test drives this overlay's click handler yet (open).

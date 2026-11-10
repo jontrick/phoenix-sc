@@ -177,7 +177,12 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       flagged here); null while AFCD is unloaded and the day holds library foods.** Search fix: words
       must start a word, and typed cooked/raw match the food's state ("cooked" had found uncooked rice).
       Legacy screen + tests/nutrition.mjs now archivable (stage 3 replaced the day view) — not yet done.
-      Next: stage 4 copy meal / day / week.
+      Stage 4 shipped v4.9.398 (below).
+- [ ] **NUTRITION REBUILD — STAGE 4 SHIPPED v4.9.398 (copy).** Per-feed Copy → tick days (next 14);
+      replaces the same-named feed (else same time, else adds it), arrives un-ticked. COPY DAY replaces
+      whole days. COPY WEEK copies the Mon–Sun week's PLANNED days onto the next 1–4 weeks (an
+      unplanned source day leaves the target alone). No app toast helper exists → inline confirmation
+      in the plan tab. Next: stage 5 shopping list.
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
       further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start

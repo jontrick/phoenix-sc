@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.397';
+var APP_VERSION='4.9.398';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22717,7 +22717,7 @@ function _nut2Rows(list){
 
 function _nut2Click(e){
   if(_nut2Tab === 'plan' && e.target.closest){
-    var pt = e.target.closest('[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd]');
+    var pt = e.target.closest('[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd],[data-n2-fcopy],[data-n2-dcopy],[data-n2-wcopy]');
     if(pt && _nut2PlanClick(pt)) return;
   }
   var t = e.target.closest ? e.target.closest('[data-n2-tab],[data-n2-filter],[data-n2-food],[data-n2-add],[data-n2-newrec],[data-n2-rec]') : null;
@@ -23269,6 +23269,7 @@ function _nut2PlanTab(){
     '<div style="flex:1;text-align:center;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;color:var(--text);">' + (date === today ? 'TODAY &middot; ' : '') + _nut2DateLabel(date).toUpperCase() + '</div>' +
     (date !== today ? '<button data-n2-day="0" style="padding:8px 10px;border-radius:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;font-family:var(--font-d);font-weight:900;">TODAY</button>' : '') +
     '<button data-n2-day="1" style="padding:8px 14px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text);font-size:16px;">&rsaquo;</button></div>';
+  if(_nut2Flash){ h += '<div data-n2-flash style="padding:10px 12px;margin-bottom:10px;border-radius:10px;border:1px solid #6fcf8f;color:#6fcf8f;font-size:13px;">' + _nut2Esc(_nut2Flash) + '</div>'; _nut2Flash = ''; }
   h += _nut2CounterHTML(date, ns);
   day.feeds.forEach(function(fd){
     var t = nut2FeedTotals(fd, ns);
@@ -23289,9 +23290,12 @@ function _nut2PlanTab(){
     });
     h += '<div style="display:flex;gap:8px;margin-top:8px;padding-left:36px;">' +
       '<button data-n2-iadd="' + fd.id + '" style="flex:1;padding:9px;border-radius:8px;background:transparent;border:1px dashed var(--border2);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;">+ ADD FOOD</button>' +
+      '<button data-n2-fcopy="' + fd.id + '" style="padding:9px 10px;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);font-size:11px;">Copy</button>' +
       '<button data-n2-fdel="' + fd.id + '" style="padding:9px 10px;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text3);font-size:11px;">Remove</button></div></div>';
   });
   h += '<button data-n2-fadd style="width:100%;padding:12px;border-radius:10px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1.5px;">+ ADD FEED</button>';
+  var cb = 'flex:1;padding:12px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1.5px;';
+  h += '<div style="display:flex;gap:8px;margin-top:10px;"><button data-n2-dcopy style="' + cb + '">COPY DAY</button><button data-n2-wcopy style="' + cb + '">COPY WEEK</button></div>';
   return h;
 }
 // Live numbers without a re-render, so the box he is typing in keeps focus.
@@ -23327,6 +23331,9 @@ function _nut2PlanClick(t){
     _nut2FdelArm = null; nut2DelFeed(date, a); nut2Render(); return true;
   }
   if(t.hasAttribute('data-n2-fadd')){ nut2AddFeed(date); nut2Render(); return true; }
+  if((a = t.getAttribute('data-n2-fcopy')) !== null){ nut2OpenCopy('feed', a); return true; }
+  if(t.hasAttribute('data-n2-dcopy')){ nut2OpenCopy('day'); return true; }
+  if(t.hasAttribute('data-n2-wcopy')){ nut2OpenCopy('week'); return true; }
   return false;
 }
 function _nut2PlanInput(t){
@@ -23339,6 +23346,87 @@ function _nut2PlanChange(t){
   var a = t.getAttribute && t.getAttribute('data-n2-time');
   if(a === null || a === undefined) return false;
   nut2SetFeed(_nut2PlanDate || _nutToday(), a, { time: t.value }); nut2Render(); return true;
+}
+
+// ── STAGE 4 (v4.9.398) — copy a meal across days, a day across days, a week across weeks ──
+// A copy REPLACES what is there (the same feed's food, or the whole day) and arrives un-ticked.
+// A feed is matched on the target day by name, then by time; no match → it is added.
+function _nut2CloneItems(items){ return (items || []).map(function(it){ return it.serves != null ? { ref: it.ref, serves: it.serves } : { ref: it.ref, g: it.g }; }); }
+function _nut2CloneDay(day){
+  return { feeds: (day.feeds || []).map(function(f){ return { id: _nut2NewId('F'), name: f.name, time: f.time, drinks: !!f.drinks, eaten: false, items: _nut2CloneItems(f.items) }; }) };
+}
+function nut2CopyFeed(fromDate, feedId, toDates){
+  var ns = _nut2State(), src = nut2Day(fromDate, ns).feeds.filter(function(f){ return f.id === feedId; })[0];
+  if(!src) return 0;
+  var n = 0;
+  (toDates || []).forEach(function(d){
+    if(d === fromDate) return;
+    var day = _nut2DayForEdit(ns, d);
+    var tgt = day.feeds.filter(function(f){ return String(f.name).toLowerCase() === String(src.name).toLowerCase(); })[0] ||
+              day.feeds.filter(function(f){ return f.time === src.time; })[0];
+    if(!tgt){ tgt = { id: _nut2NewId('F'), name: src.name, time: src.time, drinks: !!src.drinks, items: [] }; day.feeds.push(tgt); }
+    tgt.items = _nut2CloneItems(src.items); tgt.eaten = false;
+    _nut2SortFeeds(day); n++;
+  });
+  _nut2Save(ns); return n;
+}
+function nut2CopyDay(fromDate, toDates){
+  var ns = _nut2State(), src = nut2Day(fromDate, ns), n = 0;
+  (toDates || []).forEach(function(d){ if(d === fromDate) return; ns.v2.days[d] = _nut2CloneDay(src); n++; });
+  _nut2Save(ns); return n;
+}
+// The Mon–Sun week holding fromDate, onto the next `weeks` weeks. Only days he has planned are
+// copied; an unplanned source day leaves the target day alone.
+function _nut2Monday(iso){ var p = iso.split('-'), dt = new Date(+p[0], +p[1] - 1, +p[2]); return _nut2ShiftDate(iso, -((dt.getDay() + 6) % 7)); }
+function nut2CopyWeek(fromDate, weeks){
+  var ns = _nut2State(), mon = _nut2Monday(fromDate), n = 0;
+  weeks = Math.max(1, Math.min(8, parseInt(weeks, 10) || 1));
+  for(var i = 0; i < 7; i++){
+    var sd = _nut2ShiftDate(mon, i), src = ns.v2.days[sd]; if(!src) continue;
+    for(var w = 1; w <= weeks; w++){ ns.v2.days[_nut2ShiftDate(sd, 7 * w)] = _nut2CloneDay(src); n++; }
+  }
+  _nut2Save(ns); return n;
+}
+function _nut2DayHasFood(d, ns){ var day = (ns || _nut2State()).v2.days[d]; return !!(day && day.feeds.some(function(f){ return (f.items || []).length; })); }
+
+// The sheet: pick days (next 14 from the plan day), or weeks for a week copy.
+var _nut2Flash = '';
+function nut2OpenCopy(kind, feedId){
+  var from = _nut2PlanDate || _nutToday(), ns = _nut2State();
+  var feed = feedId ? nut2Day(from, ns).feeds.filter(function(f){ return f.id === feedId; })[0] : null;
+  var title = kind === 'week' ? 'Copy this week' : (kind === 'feed' ? 'Copy ' + (feed ? feed.name : 'meal') : 'Copy this day');
+  var btn = 'padding:9px 10px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;';
+  var h = '<div style="display:flex;align-items:center;margin-bottom:6px;"><div style="flex:1;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">' + _nut2Esc(title) + '</div>' +
+    '<button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>';
+  if(kind === 'week'){
+    var mon = _nut2Monday(from);
+    h += '<div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Week of ' + _nut2DateLabel(mon) + '. Planned days replace the same days in the weeks after.</div>' +
+      '<div style="display:flex;gap:8px;">' + [1, 2, 3, 4].map(function(w){ return '<button data-n2c-weeks="' + w + '" style="flex:1;' + btn + 'font-family:var(--font-d);font-weight:900;">' + w + ' WK' + (w > 1 ? 'S' : '') + '</button>'; }).join('') + '</div>';
+  } else {
+    h += '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">From ' + _nut2DateLabel(from) + '. ' + (kind === 'feed' ? 'Replaces that meal on each day you tick.' : 'Replaces the whole day on each day you tick.') + '</div>';
+    for(var i = 1; i <= 14; i++){
+      var d = _nut2ShiftDate(from, i), has = _nut2DayHasFood(d, ns);
+      h += '<label style="display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border);font-size:14px;color:var(--text);">' +
+        '<input type="checkbox" data-n2c-date="' + d + '" style="width:20px;height:20px;accent-color:var(--gold);">' +
+        '<span style="flex:1;">' + _nut2DateLabel(d) + '</span>' + (has ? '<span style="font-size:10px;color:#e0b04a;">has food</span>' : '') + '</label>';
+    }
+    h += '<div style="display:flex;gap:8px;margin-top:10px;"><button data-n2c-next="6" style="flex:1;' + btn + '">Next 6 days</button><button data-n2c-next="0" style="flex:1;' + btn + '">Clear</button></div>' +
+      '<button id="n2c-go" style="width:100%;margin-top:12px;padding:13px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:2px;">COPY</button>' +
+      '<div id="n2c-msg" style="font-size:12px;color:#e07a7a;margin-top:8px;min-height:14px;"></div>';
+  }
+  var ov = _nut2Sheet(h);
+  var done = function(n){ _nut2Flash = 'Copied to ' + n + ' day' + (n === 1 ? '' : 's') + '.'; _nut2CloseSheet(); nut2Render(); };
+  Array.prototype.forEach.call(ov.querySelectorAll('[data-n2c-weeks]'), function(b){ b.addEventListener('click', function(){ done(nut2CopyWeek(from, +b.getAttribute('data-n2c-weeks'))); }); });
+  Array.prototype.forEach.call(ov.querySelectorAll('[data-n2c-next]'), function(b){ b.addEventListener('click', function(){
+    var k = +b.getAttribute('data-n2c-next');
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-n2c-date]'), function(c, i){ c.checked = i < k; });
+  }); });
+  var go = ov.querySelector('#n2c-go');
+  if(go) go.addEventListener('click', function(){
+    var dates = Array.prototype.filter.call(ov.querySelectorAll('[data-n2c-date]'), function(c){ return c.checked; }).map(function(c){ return c.getAttribute('data-n2c-date'); });
+    if(!dates.length){ ov.querySelector('#n2c-msg').textContent = 'Tick at least one day.'; return; }
+    done(kind === 'feed' ? nut2CopyFeed(from, feedId, dates) : nut2CopyDay(from, dates));
+  });
 }
 
 // v4.9.396 — the cut target, assessed from his latest weigh-in (Jon 2026-11-10: "assess current

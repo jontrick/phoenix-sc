@@ -270,4 +270,46 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(r.every((f) => !/uncooked/i.test(f.name)), r.slice(0, 4).map((f) => f.name).join(' | '));
     assert.ok(app.nut2Search('chick breast', 'all').length > 0, 'a word prefix still matches');
   });
+
+  // ── STAGE 4 — copy ──
+  test('COPY meal: replaces the same-named feed on each target day, un-ticked; source untouched', () => {
+    const { d, egg } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i, '150'); app.nut2SetFeed(d, 'F1', { eaten: true });
+    const d1 = app._nut2ShiftDate(d, 1), d2 = app._nut2ShiftDate(d, 2);
+    const j = app.nut2AddItem(d1, 'F1', egg.id); app.nut2SetItemQty(d1, 'F1', j, '999');
+    assert.equal(app.nut2CopyFeed(d, 'F1', [d1, d2, d]), 2, 'never onto itself');
+    [d1, d2].forEach((x) => {
+      const b = app.nut2Day(x).feeds.find((f) => f.name === 'Breakfast');
+      assert.deepEqual(b.items.map((it) => it.g), [150], x + ' replaced, not appended');
+      assert.equal(b.eaten, false);
+    });
+    assert.equal(app.nut2Day(d).feeds[1].eaten, true);
+  });
+  test('COPY day: the whole day is replaced, recipe serves carried', () => {
+    const { d, egg, pid } = plan();
+    const i = app.nut2AddItem(d, 'F4', pid); app.nut2SetItemQty(d, 'F4', i, '2');
+    app.nut2SetFeed(d, 'F4', { name: 'Curry dinner' });
+    const d3 = app._nut2ShiftDate(d, 3);
+    assert.equal(app.nut2CopyDay(d, [d3]), 1);
+    const f = app.nut2Day(d3).feeds.find((x) => x.name === 'Curry dinner');
+    assert.ok(f && f.items[0].serves === 2 && f.items[0].ref === pid);
+    assert.equal(app.nut2DayTotals(d3).planned.kcal, app.nut2DayTotals(d).planned.kcal);
+  });
+  test('COPY week: Monday-based; unplanned days in the source leave the target alone', () => {
+    start({ setup_done: true, daily: {} });
+    const egg = findOne('egg chicken whole raw');
+    const mon = '2026-11-09', tue = '2026-11-10', nextTue = '2026-11-17', nextWed = '2026-11-18';
+    const i = app.nut2AddItem(tue, 'F1', egg.id); app.nut2SetItemQty(tue, 'F1', i, '100');
+    const k = app.nut2AddItem(nextWed, 'F1', egg.id); app.nut2SetItemQty(nextWed, 'F1', k, '55');
+    assert.equal(app._nut2Monday('2026-11-15'), mon, 'Sunday belongs to the week that began Monday');
+    assert.equal(app.nut2CopyWeek('2026-11-12', 1), 1);
+    assert.deepEqual(app.nut2Day(nextTue).feeds[1].items.map((x) => x.g), [100]);
+    assert.deepEqual(app.nut2Day(nextWed).feeds[1].items.map((x) => x.g), [55], 'untouched');
+  });
+  test('COPY screen: every feed has Copy, the day has COPY DAY / COPY WEEK', () => {
+    plan();
+    const h = app._nut2PlanTab();
+    assert.equal((h.match(/data-n2-fcopy=/g) || []).length, 6);
+    assert.ok(h.includes('data-n2-dcopy') && h.includes('data-n2-wcopy'));
+  });
 }

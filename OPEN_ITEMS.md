@@ -129,6 +129,21 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       run). Closes when `select * from accountability_day where date = current_date` returns
       a row. **Nothing in Phoenix depends on it** — it is read-only and outbound, so a
       failure here cannot affect the app.
+- [ ] **NUTRITION REBUILD — SPEC + RULINGS (Jon, 2026-11-10, taken by the Training chat).**
+      Spec: (1) library of raw + cooked ingredients and generic compound foods (hummus, dips);
+      (2) recipe builder from the library or label-added items, two kinds — SERVES (e.g. pancakes
+      makes 8) and BATCH-BY-WEIGHT (e.g. sauce 400 g, portion in grams per meal); (3) meal builder
+      from ingredients + recipes, macros from per-100 g data × grams; (4) macro counter vs targets,
+      flag over / under; (5) copy meal → day, day → days/weeks; days built to N feeds with times;
+      (6) shopping list in RAW quantities for selected days. Claude guidance is a later nice-to-have.
+      Rulings: library source = **FSANZ AFCD Release 3** (Jon attaches the Excel — the sandbox
+      cannot reach foodstandards.gov.au); weighing = **depends**: raw inside batch recipes
+      (casserole), cooked for individually cooked items (chicken breast) — so each item needs raw
+      AND cooked forms with a yield to convert back to raw for shopping; clear-out = **wipe custom
+      foods / recipes / templates / food logs, KEEP `daily[].weight_kg` and `targets`** (mirror +
+      Training read them); default day = **5 feeds** (07:00 breakfast, 12:00 lunch, 15:30 snack,
+      18:30 dinner, 20:00 greens shake) + morning drinks. Build order: library → recipes → meals /
+      days + counter → copy → shopping list → guidance. Owner: Training chat until handed back.
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
       further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start

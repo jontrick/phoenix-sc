@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.398';
+var APP_VERSION='4.9.399';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22633,16 +22633,16 @@ function nut2Render(){
   }).join('') + '</div>';
   if(_nut2Tab === 'library') h += _nut2LibraryShell();
   else if(_nut2Tab === 'recipes') h += _nut2RecipesTab();
+  else if(_nut2Tab === 'shop') h += (typeof window !== 'undefined' && window.NUT_AFCD) ? _nut2ShopTab() : '<div style="padding:16px;color:var(--text3);font-size:13px;">Loading your foods&hellip;</div>';
   else if(_nut2Tab === 'plan') h += (typeof window !== 'undefined' && window.NUT_AFCD) ? _nut2PlanTab() : '<div style="padding:16px;color:var(--text3);font-size:13px;">Loading your foods&hellip;</div>';
-  else h += _nut2ComingCard(_nut2Tab);
   body.innerHTML = h;
   if(!body._n2wired){
     body._n2wired = true;
     body.addEventListener('click', _nut2Click);
     body.addEventListener('input', _nut2Input);
-    body.addEventListener('change', function(e){ if(_nut2Tab === 'plan' && e.target) _nut2PlanChange(e.target); });
+    body.addEventListener('change', function(e){ if(!e.target) return; if(_nut2Tab === 'plan') _nut2PlanChange(e.target); else if(_nut2Tab === 'shop') _nut2ShopChange(e.target); });
   }
-  if(_nut2Tab === 'plan' && !(typeof window !== 'undefined' && window.NUT_AFCD)){
+  if((_nut2Tab === 'plan' || _nut2Tab === 'shop') && !(typeof window !== 'undefined' && window.NUT_AFCD)){
     _nut2LoadAfcd(function(ok){
       if(ok){ _nut2BuildIndex(); nut2Render(); return; }
       var b = document.getElementById('nut2-body'); if(b) b.innerHTML = b.innerHTML.replace('Loading your foods&hellip;', 'The food database could not load. Check your connection and reopen Nutrition.');
@@ -22657,14 +22657,6 @@ function nut2Render(){
   }
 }
 
-function _nut2ComingCard(tab){
-  var what = { plan: ['Stage 3', 'Days built to your feeds and times, meals from foods and recipes, the macro counter against your cut targets.'],
-               recipes: ['Stage 2', 'Recipes from the library — "makes N serves" (pancakes) or "batch by weight" (a 400 g sauce, grams per meal).'],
-               shop: ['Stage 5', 'Tick the days, get the raw quantities to buy.'] }[tab] || ['', ''];
-  return '<div style="padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);">' +
-    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:6px;">Coming next &middot; ' + what[0] + '</div>' +
-    '<div style="font-size:14px;color:var(--text2);line-height:1.5;">' + what[1] + '</div></div>';
-}
 
 function _nut2LibraryShell(){
   var chips = [['all','All'],['raw','Raw'],['cooked','Cooked'],['mine','My foods']];
@@ -22719,6 +22711,10 @@ function _nut2Click(e){
   if(_nut2Tab === 'plan' && e.target.closest){
     var pt = e.target.closest('[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd],[data-n2-fcopy],[data-n2-dcopy],[data-n2-wcopy]');
     if(pt && _nut2PlanClick(pt)) return;
+  }
+  if(_nut2Tab === 'shop' && e.target.closest){
+    var st = e.target.closest('[data-n2s-date],[data-n2s-preset],[data-n2s-tick]');
+    if(st && _nut2ShopClick(st)) return;
   }
   var t = e.target.closest ? e.target.closest('[data-n2-tab],[data-n2-filter],[data-n2-food],[data-n2-add],[data-n2-newrec],[data-n2-rec]') : null;
   if(!t) return;
@@ -23427,6 +23423,130 @@ function nut2OpenCopy(kind, feedId){
     if(!dates.length){ ov.querySelector('#n2c-msg').textContent = 'Tick at least one day.'; return; }
     done(kind === 'feed' ? nut2CopyFeed(from, feedId, dates) : nut2CopyDay(from, dates));
   });
+}
+
+// ── STAGE 5 (v4.9.399) — the shopping list ─────────────────────────────────
+// Tick days → every planned item, recipes expanded to their ingredients, cooked weights turned
+// back to RAW (AFCD yield). Recipes are bought as WHOLE BATCHES by default — he cooks the
+// whole curry, not 1.75 of it — and that can be switched off for exact quantities.
+// Selection + ticks persist in ns.v2.shop so the list survives the app closing in the shop.
+function _nut2ShopState(ns){
+  ns = ns || _nut2State();
+  if(!ns.v2.shop) ns.v2.shop = { dates: null, ticks: {}, wholeBatches: true };
+  if(!ns.v2.shop.ticks) ns.v2.shop.ticks = {};
+  return ns.v2.shop;
+}
+function _nut2ShopDefaultDates(){ var t = _nutToday(), out = []; for(var i = 0; i < 7; i++) out.push(_nut2ShiftDate(t, i)); return out; }
+// Adds the raw ingredients of `frac` of a whole recipe into acc.
+function _nut2ExpandRecipe(ref, frac, ns, acc, depth){
+  var rec = ns.v2.recipes[ref];
+  if(!rec || depth > 4){ acc.missing++; return; }
+  (rec.items || []).forEach(function(it){
+    var g = (parseFloat(it.g) || 0) * frac; if(!(g > 0)) return;
+    if(it.ref && it.ref.indexOf('R:') === 0){
+      var sub = ns.v2.recipes[it.ref]; if(!sub){ acc.missing++; return; }
+      var w = nut2RecipeWeight(sub, ns, depth + 1).g; if(!(w > 0)){ acc.missing++; return; }
+      _nut2ExpandRecipe(it.ref, g / w, ns, acc, depth + 1); return;
+    }
+    _nut2AddRaw(it.ref, g, ns, acc);
+  });
+}
+// Same rule as nut2RawEquivalent, unrounded so many small amounts add up exactly.
+function _nut2AddRaw(ref, g, ns, acc){
+  var f = nut2Food(ref, ns);
+  if(!f){ acc.missing++; return; }
+  if(f.cooked && f.rawRef && f.yield > 0) acc.items[f.rawRef] = (acc.items[f.rawRef] || 0) + g / f.yield;
+  else acc.items[ref] = (acc.items[ref] || 0) + g;
+}
+// null = never chosen (default: the next 7 days); [] = he cleared it.
+function _nut2ShopDates(sh){
+  if(!Array.isArray(sh.dates)) return _nut2ShopDefaultDates();
+  var t = _nutToday(); return sh.dates.filter(function(d){ return d >= t; });
+}
+// The list for a set of days. Returns { items:[{ref,name,g}], cook:[{ref,name,need,batches}], missing }.
+function nut2ShopList(dates, opts, ns){
+  ns = ns || _nut2State(); opts = opts || {};
+  var whole = opts.wholeBatches !== false;
+  var acc = { items: {}, missing: 0 }, recFrac = {};
+  (dates || []).forEach(function(d){
+    var day = ns.v2.days[d]; if(!day) return;
+    day.feeds.forEach(function(fd){
+      (fd.items || []).forEach(function(it){
+        if(!it || !it.ref){ acc.missing++; return; }
+        if(it.ref.indexOf('R:') === 0){
+          var rec = ns.v2.recipes[it.ref]; if(!rec){ acc.missing++; return; }
+          var frac;
+          if(it.serves != null && rec.kind === 'serves') frac = (parseFloat(it.serves) || 0) / Math.max(1, rec.serves);
+          else { var w = nut2RecipeWeight(rec, ns).g; frac = w > 0 ? (parseFloat(it.g) || 0) / w : 0; }
+          if(frac > 0) recFrac[it.ref] = (recFrac[it.ref] || 0) + frac;
+          return;
+        }
+        var g = parseFloat(it.g) || 0; if(g > 0) _nut2AddRaw(it.ref, g, ns, acc);
+      });
+    });
+  });
+  var cook = Object.keys(recFrac).map(function(ref){
+    var need = recFrac[ref], b = whole ? Math.ceil(need - 1e-6) : need;
+    _nut2ExpandRecipe(ref, b, ns, acc, 0);
+    return { ref: ref, name: ns.v2.recipes[ref].name, need: Math.round(need * 100) / 100, batches: Math.round(b * 100) / 100 };
+  }).sort(function(a, b){ return a.name.localeCompare(b.name); });
+  var items = Object.keys(acc.items).map(function(ref){ return { ref: ref, name: _nut2RefName(ref, ns), g: Math.round(acc.items[ref]) }; })
+    .filter(function(x){ return x.g > 0; }).sort(function(a, b){ return a.name.localeCompare(b.name); });
+  return { items: items, cook: cook, missing: acc.missing };
+}
+function _nut2FmtG(g){ return g >= 1000 ? (Math.round(g / 100) / 10) + ' kg' : g + ' g'; }
+
+function _nut2ShopTab(){
+  var ns = _nut2State(), sh = _nut2ShopState(ns), today = _nutToday();
+  var dates = _nut2ShopDates(sh);
+  var on = {}; dates.forEach(function(d){ on[d] = true; });
+  var chip = function(d){ var a = !!on[d], has = _nut2DayHasFood(d, ns);
+    return '<button data-n2s-date="' + d + '" style="padding:7px 8px;border-radius:8px;font-size:12px;background:' + (a ? 'var(--gold)' : 'transparent') + ';color:' + (a ? '#000' : (has ? 'var(--text)' : 'var(--text3)')) + ';border:1px solid ' + (a ? 'var(--gold)' : 'var(--border2)') + ';">' + _nut2DateLabel(d).replace(/ \w+$/, '') + '</button>'; };
+  var h = '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;">Shop for</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;">';
+  for(var i = 0; i < 14; i++) h += chip(_nut2ShiftDate(today, i));
+  h += '</div><div style="display:flex;gap:8px;margin:8px 0 12px;align-items:center;">' +
+    '<button data-n2s-preset="7" style="padding:8px 10px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;">Next 7 days</button>' +
+    '<button data-n2s-preset="0" style="padding:8px 10px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;">Clear</button>' +
+    '<label style="margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text2);"><input type="checkbox" data-n2s-whole ' + (sh.wholeBatches !== false ? 'checked' : '') + ' style="accent-color:var(--gold);width:18px;height:18px;">Whole batches</label></div>';
+  var L = nut2ShopList(dates, { wholeBatches: sh.wholeBatches !== false }, ns);
+  if(!dates.length) return h + '<div style="color:var(--text3);font-size:13px;padding:8px 2px;">Tick the days you are shopping for.</div>';
+  if(!L.items.length && !L.cook.length) return h + '<div style="color:var(--text3);font-size:13px;padding:8px 2px;">Nothing planned on those days yet — build them on the Plan tab.</div>';
+  if(L.cook.length){
+    h += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:4px 0 6px;">Cook</div>';
+    L.cook.forEach(function(c){
+      h += '<div data-n2s-cook="' + _nut2Esc(c.ref) + '" style="display:flex;justify-content:space-between;padding:8px 2px;border-bottom:1px solid var(--border);font-size:14px;color:var(--text);"><span>' + _nut2Esc(c.name) + '</span>' +
+        '<span style="color:var(--text2);">' + (sh.wholeBatches !== false ? c.batches + ' batch' + (c.batches === 1 ? '' : 'es') + (c.need !== c.batches ? ' <span style="font-size:11px;color:var(--text3);">(' + c.need + ' eaten)</span>' : '') : c.need + ' of the recipe') + '</span></div>';
+    });
+  }
+  var left = L.items.filter(function(x){ return !sh.ticks[x.ref]; }).length;
+  h += '<div style="display:flex;align-items:center;margin:14px 0 6px;"><div style="flex:1;font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;">Buy &middot; raw weights</div>' +
+    '<div style="font-size:11px;color:var(--text3);">' + left + ' of ' + L.items.length + ' left</div></div>';
+  L.items.forEach(function(x){
+    var t = !!sh.ticks[x.ref];
+    h += '<div data-n2s-tick="' + _nut2Esc(x.ref) + '" style="display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--border);cursor:pointer;">' +
+      '<div style="width:22px;height:22px;flex-shrink:0;border-radius:6px;border:2px solid ' + (t ? 'var(--gold)' : 'var(--border2)') + ';background:' + (t ? 'var(--gold)' : 'transparent') + ';color:#000;font-size:13px;font-weight:900;text-align:center;line-height:18px;">' + (t ? '&#10003;' : '') + '</div>' +
+      '<div style="flex:1;min-width:0;font-size:14px;color:' + (t ? 'var(--text3)' : 'var(--text)') + ';' + (t ? 'text-decoration:line-through;' : '') + '">' + _nut2Esc(x.name) + '</div>' +
+      '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:' + (t ? 'var(--text3)' : 'var(--text)') + ';white-space:nowrap;">' + _nut2FmtG(x.g) + '</div></div>';
+  });
+  if(L.missing) h += '<div style="font-size:11px;color:#e07a7a;margin-top:8px;">' + L.missing + ' item' + (L.missing > 1 ? 's' : '') + ' could not be listed — no longer in your library.</div>';
+  h += '<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5;">Cooked foods are listed as the raw weight to buy. Weights are edible weight — allow for bones, skins and peel.</div>';
+  return h;
+}
+function _nut2ShopClick(t){
+  var ns = _nut2State(), sh = _nut2ShopState(ns), a;
+  var cur = _nut2ShopDates(sh);
+  if((a = t.getAttribute('data-n2s-date')) !== null){
+    var i = cur.indexOf(a); if(i >= 0) cur.splice(i, 1); else cur.push(a);
+    sh.dates = cur.sort(); sh.ticks = {}; _nut2Save(ns); nut2Render(); return true;
+  }
+  if((a = t.getAttribute('data-n2s-preset')) !== null){ sh.dates = +a ? _nut2ShopDefaultDates() : []; sh.ticks = {}; _nut2Save(ns); nut2Render(); return true; }
+  if((a = t.getAttribute('data-n2s-tick')) !== null){ if(sh.ticks[a]) delete sh.ticks[a]; else sh.ticks[a] = true; _nut2Save(ns); nut2Render(); return true; }
+  return false;
+}
+function _nut2ShopChange(t){
+  if(!t.hasAttribute || !t.hasAttribute('data-n2s-whole')) return false;
+  var ns = _nut2State(), sh = _nut2ShopState(ns); sh.wholeBatches = !!t.checked; sh.ticks = {}; _nut2Save(ns); nut2Render(); return true;
 }
 
 // v4.9.396 — the cut target, assessed from his latest weigh-in (Jon 2026-11-10: "assess current

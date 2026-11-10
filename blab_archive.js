@@ -835,3 +835,13 @@ if(typeof document !== 'undefined' && document.addEventListener){
     if(t && t.getAttribute && t.getAttribute('data-box-in') !== null) window._phxBoxInSet(t.getAttribute('data-box-in'), t.value);
   });
 }
+
+// ── archived v4.9.399 — Nutrition v2 'coming next' placeholder; every tab (plan/library/recipes/shop) is now built ──
+function _nut2ComingCard(tab){
+  var what = { plan: ['Stage 3', 'Days built to your feeds and times, meals from foods and recipes, the macro counter against your cut targets.'],
+               recipes: ['Stage 2', 'Recipes from the library — "makes N serves" (pancakes) or "batch by weight" (a 400 g sauce, grams per meal).'],
+               shop: ['Stage 5', 'Tick the days, get the raw quantities to buy.'] }[tab] || ['', ''];
+  return '<div style="padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);">' +
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:6px;">Coming next &middot; ' + what[0] + '</div>' +
+    '<div style="font-size:14px;color:var(--text2);line-height:1.5;">' + what[1] + '</div></div>';
+}

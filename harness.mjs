@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.398'", 'version is 4.9.398');
+has("var APP_VERSION='4.9.399'", 'version is 4.9.399');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

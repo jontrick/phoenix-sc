@@ -182,7 +182,13 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       replaces the same-named feed (else same time, else adds it), arrives un-ticked. COPY DAY replaces
       whole days. COPY WEEK copies the Mon–Sun week's PLANNED days onto the next 1–4 weeks (an
       unplanned source day leaves the target alone). No app toast helper exists → inline confirmation
-      in the plan tab. Next: stage 5 shopping list.
+      in the plan tab. Stage 5 shipped v4.9.399 (below).
+- [ ] **NUTRITION REBUILD — STAGE 5 SHIPPED v4.9.399 (shopping list).** Shop tab: tick days (next 14,
+      default next 7). Recipes expand to ingredients (nested ones too), cooked foods convert to RAW by
+      the AFCD yield, same foods add up. **Whole batches ON by default** (eats 1.25 of a curry → buys 2
+      batches); untick for exact. Selection, ticks and the toggle persist in `ns.v2.shop`; changing the
+      days or the toggle clears ticks. Weights are edible weight, no waste factor (stated on screen).
+      `_nut2ComingCard` archived. Next: stage 6 Claude guidance (Jon: later; working system first).
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
       further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start

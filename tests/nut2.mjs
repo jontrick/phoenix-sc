@@ -312,4 +312,48 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal((h.match(/data-n2-fcopy=/g) || []).length, 6);
     assert.ok(h.includes('data-n2-dcopy') && h.includes('data-n2-wcopy'));
   });
+
+  // ── STAGE 5 — shopping list ──
+  test('SHOP: cooked food is bought as RAW by yield; same food across days adds up', () => {
+    const { d } = plan();
+    const ck = app.nut2Search('chicken breast grilled', 'cooked')[0];
+    const d1 = app._nut2ShiftDate(d, 1);
+    [d, d1].forEach((x) => { const i = app.nut2AddItem(x, 'F3', ck.id); app.nut2SetItemQty(x, 'F3', i, '150'); });
+    const L = app.nut2ShopList([d, d1]);
+    const row = L.items.find((x) => x.ref === ck.rawRef);
+    assert.ok(row, 'listed under the raw food: ' + JSON.stringify(L.items));
+    assert.equal(row.g, Math.round(300 / ck.yield));
+    assert.ok(!L.items.find((x) => x.ref === ck.id), 'never the cooked one');
+  });
+  test('SHOP: recipes expand to ingredients; whole batches round UP, exact mode does not', () => {
+    const { d, egg, pid } = plan();   // pancakes: 4 serves from 400 g egg
+    const i = app.nut2AddItem(d, 'F1', pid); app.nut2SetItemQty(d, 'F1', i, '1');
+    const d1 = app._nut2ShiftDate(d, 1); const j = app.nut2AddItem(d1, 'F1', pid); app.nut2SetItemQty(d1, 'F1', j, '2');
+    const W = app.nut2ShopList([d, d1]);
+    assert.deepEqual([W.cook[0].need, W.cook[0].batches], [0.75, 1]);
+    assert.equal(W.items.find((x) => x.ref === egg.id).g, 400, 'one whole batch of egg');
+    const X = app.nut2ShopList([d, d1], { wholeBatches: false });
+    assert.equal(X.items.find((x) => x.ref === egg.id).g, 300, '3 of 4 serves');
+  });
+  test('SHOP: a batch eaten by weight and a recipe nested in a recipe expand through', () => {
+    start({ setup_done: true, daily: {} });
+    const egg = findOne('egg chicken whole raw'), d = app._nutToday();
+    const sauce = app.nut2SaveRecipe({ name: 'Sauce', kind: 'batch', finishedG: 200, items: [{ ref: egg.id, g: 400 }] });
+    const dish = app.nut2SaveRecipe({ name: 'Dish', kind: 'batch', finishedG: 400, items: [{ ref: sauce, g: 100 }, { ref: egg.id, g: 100 }] });
+    const i = app.nut2AddItem(d, 'F4', dish); app.nut2SetItemQty(d, 'F4', i, '400');
+    const L = app.nut2ShopList([d], { wholeBatches: false });
+    assert.equal(L.items.find((x) => x.ref === egg.id).g, 300, '100 g sauce = half the 200 g batch = 200 g egg, + 100 g');
+  });
+  test('SHOP screen: the tab draws Cook + Buy with raw weights, and ticks persist', () => {
+    const { d, egg, pid } = plan();
+    const i = app.nut2AddItem(d, 'F1', pid); app.nut2SetItemQty(d, 'F1', i, '1');
+    const k = app.nut2AddItem(d, 'F2', egg.id); app.nut2SetItemQty(d, 'F2', k, '1200');
+    let h = app._nut2ShopTab();
+    assert.ok(/>Cook</.test(h) && h.includes('Pancakes') && /Buy &middot; raw weights/.test(h), h.slice(0, 200));
+    assert.ok(h.includes('1.6 kg'), '400 g + 1200 g egg = 1.6 kg');
+    assert.equal(app._nut2ShopClick({ getAttribute: (a) => a === 'data-n2s-tick' ? egg.id : null }), true);
+    assert.equal(read(KEY).v2.shop.ticks[egg.id], true, 'tick saved');
+    h = app._nut2ShopTab();
+    assert.ok(/0 of 1 left/.test(h));
+  });
 }

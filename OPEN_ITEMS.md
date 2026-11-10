@@ -150,8 +150,15 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       State `ns.v2` inside `phx_nut_v1_{uid}`; first open runs the clear-out (keeps weight_kg,
       feeling, targets). `navTo('nutrition')` → `screen-nut2`; the legacy screen + its 647 tests
       stay (tests/nutrition.mjs sets `_nut2Enabled=false`) — **archive both once stage 3 replaces the
-      day view.** New tests: `tests/nut2.mjs`. Next: stage 2 recipes. **The mirror's `_nutDayTotals`
+      day view.** New tests: `tests/nut2.mjs`. Stage 2 recipes shipped v4.9.394 (below). **The mirror's `_nutDayTotals`
       must learn `ns.v2.days` in stage 3** or the external app keeps reading "no data".
+- [ ] **NUTRITION REBUILD — STAGE 2 SHIPPED v4.9.394 (recipes).** Two kinds: `serves` (makes N,
+      per-serve = total/N) and `batch` (per-100 g from the finished weight he weighs, else the sum of
+      ingredients, flagged unweighed). Recipes nest (depth ≤ 4, cycles bounded); a deleted ingredient
+      is COUNTED as missing, never silently zeroed. Gram boxes start empty + focused (a prefilled
+      100 produced 100800 g in the browser run). State `ns.v2.recipes`. **Still localStorage-only —
+      cloud backup of `ns.v2` is an open decision for Jon (may need a schema change).** Next: stage 3
+      day planner + macro counter.
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
       further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start

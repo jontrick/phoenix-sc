@@ -102,4 +102,62 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     finally { app.showScreen = realShow; app.window._nut2Enabled = undefined; }
     assert.deepEqual(shown, ['screen-nut2', 'screen-nutrition']);
   });
+
+  // ── STAGE 2: recipes ──
+  const findOne = (q, filt) => app.nut2Search(q, filt || 'all')[0];
+
+  test('RECIPE serves: pancakes make 8 — per-serve macros are the whole divided by 8', () => {
+    start();
+    const oats = findOne('oats rolled uncooked'), egg = findOne('egg chicken whole raw');
+    const id = app.nut2SaveRecipe({ name: 'Protein pancakes', kind: 'serves', serves: 8, items: [{ ref: oats.id, g: 200 }, { ref: egg.id, g: 300 }] });
+    const tot = app.nut2RecipeTotals(app._nut2State().v2.recipes[id]);
+    assert.equal(tot.g, 500);
+    assert.equal(tot.kcal, Math.round(oats.kcal * 2 + egg.kcal * 3), 'whole recipe = sum of grams x per-100 g');
+    const ps = app.nut2RecipePerServe(id);
+    assert.equal(ps.kcal, Math.round(tot.kcal / 8));
+    assert.equal(ps.g, Math.round(500 / 8), 'serve weight falls back to ingredients / serves');
+    assert.equal(ps.weighed, false, 'and says it was not weighed');
+  });
+
+  test('RECIPE batch: a 400 g finished sauce — per 100 g uses the FINISHED weight, not the ingredients', () => {
+    start();
+    const tom = findOne('tomato raw'), oil = findOne('oil olive');
+    const id = app.nut2SaveRecipe({ name: 'Tomato sauce', kind: 'batch', finishedG: 400, items: [{ ref: tom.id, g: 600 }, { ref: oil.id, g: 20 }] });
+    const tot = app.nut2RecipeTotals(app._nut2State().v2.recipes[id]);
+    const p100 = app.nut2RecipePer100(id);
+    assert.equal(p100.kcal, Math.round(tot.kcal * 100 / 400), '620 g of ingredients cooked down to 400 g');
+    assert.ok(p100.kcal > Math.round(tot.kcal * 100 / 620), 'denser than the raw mix');
+  });
+
+  test('RECIPE nesting: the sauce goes into a dish; cycles and missing refs never crash', () => {
+    start();
+    const tom = findOne('tomato raw'), mince = findOne('beef mince lower fat raw');
+    const sauce = app.nut2SaveRecipe({ name: 'Sauce', kind: 'batch', finishedG: 400, items: [{ ref: tom.id, g: 600 }] });
+    const dish = app.nut2SaveRecipe({ name: 'Bolognese', kind: 'serves', serves: 4, items: [{ ref: mince.id, g: 500 }, { ref: sauce, g: 200 }] });
+    const t = app.nut2RecipeTotals(app._nut2State().v2.recipes[dish]);
+    assert.equal(t.kcal, Math.round(mince.kcal * 5 + app.nut2RecipePer100(sauce).kcal * 2));
+    assert.deepEqual(app.nut2RecipeUsedBy(sauce), ['Bolognese'], 'deleting the sauce warns');
+    const ns = app._nut2State(); ns.v2.recipes[sauce].items.push({ ref: dish, g: 10 }); app._nut2Save(ns);   // a cycle
+    assert.ok(app.nut2RecipeTotals(app._nut2State().v2.recipes[dish]).kcal > 0, 'cycle bounded');
+    app.nut2DeleteRecipe(sauce);
+    assert.equal(app.nut2RecipeTotals(app._nut2State().v2.recipes[dish]).missing, 1, 'a deleted sauce is counted missing, not zeroed silently');
+  });
+
+  test('RECIPE save rules: needs a name, a kind, serves >= 1 and a weighed ingredient', () => {
+    start();
+    const egg = findOne('egg chicken whole raw');
+    const id = app.nut2SaveRecipe({ name: '  Eggs  ', kind: 'serves', serves: 0, items: [{ ref: egg.id, g: 0 }, { ref: egg.id, g: 120 }] });
+    const r = app._nut2State().v2.recipes[id];
+    assert.equal(r.name, 'Eggs'); assert.equal(r.serves, 1, 'serves floor 1');
+    assert.equal(r.items.length, 1, 'a zero-gram line is dropped');
+  });
+
+  test('RECIPE screen: the tab lists recipes with the right line for each kind', () => {
+    start();
+    const egg = findOne('egg chicken whole raw');
+    app.nut2SaveRecipe({ name: 'A pancakes', kind: 'serves', serves: 8, items: [{ ref: egg.id, g: 400 }] });
+    app.nut2SaveRecipe({ name: 'B sauce', kind: 'batch', finishedG: 300, items: [{ ref: egg.id, g: 400 }] });
+    const h = app._nut2RecipesTab();
+    assert.ok(/Makes 8 &middot; per serve/.test(h) && /300 g batch &middot; per 100 g/.test(h), h.slice(0, 300));
+  });
 }

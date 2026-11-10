@@ -168,6 +168,16 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       `ns.daily[].weight_kg`: 18.5 kcal / 1.8 g P / 0.65 g F per kg, carbs remainder (112 kg → 2070).
       Stage 3's counter must use `nut2Targets`, not `ns.targets` (2703) or the programme table (2050). Test: nut2 TODAY (fired red
       with the guard removed).
+- [ ] **NUTRITION REBUILD — STAGE 3 SHIPPED v4.9.397 (day planner + counter).** Plan tab is the
+      default. `ns.v2.days[date].feeds[]` (default: 06:00 Morning drinks, 07:00 Breakfast, 12:00 Lunch,
+      15:30 Snack, 18:30 Dinner, 20:00 Greens shake); an untouched day is NOT stored. Items are grams,
+      or serves for a 'serves' recipe. Counter: planned vs `nut2Targets`, flags kcal ±5% / macros ±10%,
+      eaten (ticked feeds) and without-morning-drinks lines. Today card = eaten / target + planned + next
+      feed. **Mirror: `_nutDailyRow` now returns the v2 EATEN day vs the weight target (PM's area —
+      flagged here); null while AFCD is unloaded and the day holds library foods.** Search fix: words
+      must start a word, and typed cooked/raw match the food's state ("cooked" had found uncooked rice).
+      Legacy screen + tests/nutrition.mjs now archivable (stage 3 replaced the day view) — not yet done.
+      Next: stage 4 copy meal / day / week.
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
       further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start

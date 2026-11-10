@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.400';
+var APP_VERSION='4.9.401';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8759,9 +8759,13 @@ window._draftRepairWed11 = function(){
   try {
     var s = window.blabGetState(); if(!s || s.programme !== 'draft') return false;
     if(_phxLocalISO() !== '2026-11-11') return false;
+    // v4.9.401 — ONCE. v4.9.400 ran on every load today, so his REAL Bronco completion later
+    // this morning would have been reset too. The first load of this build clears the false
+    // stamp (05:28, timer test) and arms the flag; after that a completion stands.
+    if(s._repairWed11Done) return false;
     var cal = window.blabCalGet(); if(!cal || !Array.isArray(cal.sessions)) return false;
     var b = cal.sessions.filter(function(e){ return e && e.blabWeek === 3 && e.blabDay === 1 && e.scheduledDate === '2026-11-11' && e.status === 'completed'; })[0];
-    if(!b) return false;
+    if(!b){ s._repairWed11Done = true; window.blabSaveState(s); return false; }
     var when = b.completedDate || '';
     b.status = 'pending'; delete b.completedDate;
     if(when === '2026-11-10'){
@@ -8771,6 +8775,7 @@ window._draftRepairWed11 = function(){
     if(Array.isArray(s.log)) s.log = s.log.filter(function(r){ return !(r && r.week === 3 && r.day === 1 && r.date && _phxLocalISO(new Date(r.date)) === when); });
     var d3 = (s.log || []).filter(function(r){ return r && r.week === 3; }).map(function(r){ return r.day; });
     if(s.last_completed_day === 1) s.last_completed_day = d3.length ? Math.max.apply(null, d3) : 0;
+    s._repairWed11Done = true;
     window.blabSaveState(s);
     window.blabCalSave(cal);
     if(typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){}

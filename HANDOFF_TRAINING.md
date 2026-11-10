@@ -418,3 +418,12 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
 - Shipped `_draftRepairWed11` (one-off, today only): W3 D1 back to pending, its log entry removed,
   last_completed_day restored; a Tuesday-dated stamp moves to W3 D2. `draftAfterSession` level
   changes from a wrong completion are NOT reverted. Archive after 11 Nov. Test: REPAIRWED11.
+- **v4.9.401 (05:40)** — Jon 05:28: *"I just tested the start timer system and logged as a whole
+  session even though didn't commit it."* So the trigger is the Bronco's **Start** (lib timer,
+  `draftOpenConditioning` → `_phxStartSession('draft-bronco')`), not a stale state. Exact line
+  still ??? — only two paths call `blabCompleteSession`: the conditioning "Complete session" button
+  and the `openTodaySession` finish callback. **Next: reproduce Start → timer → back in the browser.**
+- v4.9.400's repair ran on EVERY load today, so it would have reset his REAL completion too.
+  v4.9.401 runs it ONCE (`s._repairWed11Done`); a clean first load arms the flag as well.
+- **v4.9.400 shipped with the harness RED** (blabCalGet count 26 → 27 from the repair, MINE not
+  updated). Fixed in v4.9.401 (MINE 27). Its Pages deploy also failed (GitHub OIDC 503).

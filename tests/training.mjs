@@ -6402,11 +6402,18 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         assert.equal(at(3, 1).status, 'pending'); assert.equal(at(3, 1).scheduledDate, '2026-11-11');
         assert.equal(app._blabTodayStatus(at(3, 1)), 'todo');
         assert.equal(app.window._draftRepairWed11(), false, 'second run changes nothing');
+        app._blabCalTodayISO = () => '2026-11-11'; app.blabCompleteSession(3, 1); app._blabCalTodayISO = realCal;
+        assert.equal(app.window._draftRepairWed11(), false, 'ONCE: his real completion later today is not reset');
+        assert.equal(at(3, 1).status, 'completed');
         return at;
       };
       run('2026-11-11');
       const at = run('2026-11-10');
       assert.equal(at(3, 2).status, 'completed', 'a Tuesday stamp is moved to Tuesday');
+      startDraft(); app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-11';
+      assert.equal(app.window._draftRepairWed11(), false, 'nothing to repair arms the flag too');
+      app._blabCalTodayISO = () => '2026-11-11'; app.blabCompleteSession(3, 1); app._blabCalTodayISO = realCal;
+      assert.equal(app.window._draftRepairWed11(), false, 'a real completion after a clean first load stands');
       app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-12';
       assert.equal(app.window._draftRepairWed11(), false, 'dead after Wednesday');
     } finally { app._phxLocalISO = realToday; }

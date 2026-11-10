@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.400'", 'version is 4.9.400');
+has("var APP_VERSION='4.9.401'", 'version is 4.9.401');
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');
@@ -2531,7 +2531,7 @@ has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped s
   // blabCalMarkCompleted, which had only ever stamped BLAB sessions.
   // v4.9.341: +2 — draftStart and draftReturnToBlab (Training) swap the calendar's
   // BLAB sessions for Draft's and back.
-  const MINE = 26;   // v4.9.378: +1 draftReconcileCustoms; v4.9.382: +1 _draftRepairSat7; v4.9.390: +1 _draftReschedule1109 (Training)
+  const MINE = 27;   // v4.9.378: +1 draftReconcileCustoms; v4.9.382: +1 _draftRepairSat7; v4.9.390: +1 _draftReschedule1109 (Training)
   if (n === MINE) ok('CONTRACT: blabCalGet has only its ' + MINE + ' Training call sites');
   else bad(`CONTRACT: blabCalGet is invoked ${n}× in code, expected ${MINE} (all Training's). ` +
            `If you added one, update the count. If a peer added one, that is my internal storage ` +

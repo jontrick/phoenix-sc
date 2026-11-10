@@ -144,6 +144,14 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       Training read them); default day = **5 feeds** (07:00 breakfast, 12:00 lunch, 15:30 snack,
       18:30 dinner, 20:00 greens shake) + morning drinks. Build order: library → recipes → meals /
       days + counter → copy → shopping list → guidance. Owner: Training chat until handed back.
+- [ ] **NUTRITION REBUILD — STAGE 1 SHIPPED v4.9.393 (library).** `NUTRITION v2 — BEGIN/END` in
+      index.html; data `nut_afcd.js` (AFCD R3, 1,588 foods, 376 raw↔cooked yields — yield from the
+      AFCD recipe file, else from the conserved macro: protein for meat/fish, carb for grains).
+      State `ns.v2` inside `phx_nut_v1_{uid}`; first open runs the clear-out (keeps weight_kg,
+      feeling, targets). `navTo('nutrition')` → `screen-nut2`; the legacy screen + its 647 tests
+      stay (tests/nutrition.mjs sets `_nut2Enabled=false`) — **archive both once stage 3 replaces the
+      day view.** New tests: `tests/nut2.mjs`. Next: stage 2 recipes. **The mirror's `_nutDayTotals`
+      must learn `ns.v2.days` in stage 3** or the external app keeps reading "no data".
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
       further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start

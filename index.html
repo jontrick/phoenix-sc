@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.392';
+var APP_VERSION='4.9.393';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -11824,12 +11824,16 @@ function navTo(tab){
     'agoge-intro':'screen-agoge-intro',
     // v4.9.132: nutrition screen
     'nutrition':'screen-nutrition',
+    'nut2':'screen-nut2',
     'peptide':'screen-peptide',
     // v4.9.141: BLAB training calendar
     'blab-calendar':'screen-blab-calendar'};
   // v4.9.165: with BLAB running, Programme means the training calendar. The AI
   // programme screen has nothing to show — it renders "No Programme Yet" — so the
   // tab was a dead end. Non-BLAB athletes keep the original screen.
+  // v4.9.393 — the nutrition rebuild. Every route into nutrition lands on v2; the
+  // legacy screen stays reachable only for its own tests (they set the flag false).
+  if(tab === 'nutrition' && (typeof window === 'undefined' || window._nut2Enabled !== false)) tab = 'nut2';
   if(tab === 'programme' && typeof blabIsActive === 'function' && blabIsActive()){
     document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
     document.querySelectorAll('[id^="nav-programme"]').forEach(function(n){n.classList.add('active');});
@@ -11851,6 +11855,7 @@ function navTo(tab){
   if(tab==='records') renderRecords();
   if(tab==='blab-calendar'){ if(typeof _blabCalRender==='function') _blabCalRender(); }
   if(tab==='nutrition'){ if(typeof _nutRestoreView==='function') _nutRestoreView(); if(typeof nutRenderScreen==='function') nutRenderScreen(); }
+  if(tab==='nut2'){ if(typeof nut2Render==='function') nut2Render(); }
   // v4.9.212: was _pepTab='today' unconditionally, so every entry to the portal
   // — including the .206 boot restore after a screen lock — landed Jon on TODAY
   // whatever tab he had been on. The .206 work restores the SCREEN; this
@@ -20754,6 +20759,18 @@ function setupSplashButtons(){
   </div>
 </div>
 
+<!-- NUTRITION v2 SCREEN (v4.9.393) — the rebuild; navTo('nutrition') opens this -->
+<div id="screen-nut2" class="screen">
+  <div class="app-header">
+    <button onclick="navTo('today')" style="background:none;border:none;color:var(--text2);padding:8px 6px 8px 0;cursor:pointer;display:flex;align-items:center;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="header-logo">PHOENIX <span>NUTRITION</span></div>
+    <div style="width:32px;"></div>
+  </div>
+  <div id="nut2-body" style="padding:12px 16px 120px;"></div>
+</div>
+
 <!-- NUTRITION SCREEN (v4.9.132) -->
 <div id="screen-nutrition" class="screen">
   <div class="app-header">
@@ -22406,6 +22423,425 @@ function _nutRestoreView(){
 function _nutTabExists(tab){
   return ['today','recipes','week','meals','prep','shopping','programme'].indexOf(tab) >= 0;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NUTRITION v2 — BEGIN  (v4.9.393, Jon 10 Nov 2026: "clear it out and almost start
+// from scratch"). Spec + rulings: OPEN_ITEMS "NUTRITION REBUILD — SPEC + RULINGS".
+//
+// Stage 1 (this build): the LIBRARY.
+//   · 1,588 foods from FSANZ AFCD Release 3 (nut_afcd.js, loaded on first open,
+//     cached by the service worker), per 100 g.
+//   · raw <-> cooked pairs with a YIELD (cooked grams per 1 g raw), from the AFCD
+//     recipe file where it exists, else from the conserved macro (protein for
+//     meat/fish, carbohydrate for grains). The shopping list (stage 5) uses it to
+//     turn "150 g grilled chicken" back into raw chicken to buy.
+//   · his own foods: typed in, or read off a label (nutOpenLabelScanner).
+//
+// STORAGE: ns.v2 inside the SAME localStorage record (phx_nut_v1_{uid}), so the
+// daily mirror and the cut targets keep reading ns.daily / ns.targets untouched.
+//   ns.v2 = { created, foods:{ 'U:<id>': {id,name,kcal,p,c,f,fib,cooked,rawRef,yield,
+//             serving_g,source} }, recipes:{}, days:{} }
+// Food references: 'A:<AFCD key>' or 'U:<id>'. Macros are ALWAYS per 100 g.
+//
+// The legacy screen and its 647 tests are untouched; navTo('nutrition') opens this
+// screen unless window._nut2Enabled === false (the legacy tests set that).
+// ═══════════════════════════════════════════════════════════════════════════
+var _nut2Tab = 'library';
+var _nut2Filter = 'all';
+var _nut2Query = '';
+var _nut2Index = null;   // built once from NUT_AFCD
+
+function _nut2State(){
+  var ns = (typeof nutGetState === 'function' && nutGetState()) || {};
+  if(!ns.v2){
+    // FIRST OPEN — Jon's clear-out ruling: old foods, recipes, templates and food
+    // logs go; weigh-ins (daily[].weight_kg), feelings and targets STAY — Training
+    // and the external accountability mirror read them.
+    ns.v2 = { created: new Date().toISOString(), foods: {}, recipes: {}, days: {} };
+    ns.customFoods = []; ns.recipes = []; ns.weekTemplates = [];
+    if(ns.daily && typeof ns.daily === 'object'){
+      Object.keys(ns.daily).forEach(function(d){
+        var day = ns.daily[d]; if(!day) return;
+        delete day.meals; delete day.supplements;
+      });
+    }
+    if(typeof nutSaveState === 'function') nutSaveState(ns);
+  }
+  if(!ns.v2.foods) ns.v2.foods = {};
+  if(!ns.v2.recipes) ns.v2.recipes = {};
+  if(!ns.v2.days) ns.v2.days = {};
+  return ns;
+}
+function _nut2Save(ns){ if(typeof nutSaveState === 'function') nutSaveState(ns); }
+
+function _nut2LoadAfcd(cb){
+  if(typeof window !== 'undefined' && window.NUT_AFCD){ cb(true); return; }
+  if(typeof document === 'undefined' || !document.createElement){ cb(false); return; }
+  if(window._nut2AfcdLoading){ window._nut2AfcdLoading.push(cb); return; }
+  window._nut2AfcdLoading = [cb];
+  var sc = document.createElement('script');
+  sc.src = 'nut_afcd.js?v=' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '1');
+  sc.onload = function(){ var q = window._nut2AfcdLoading || []; window._nut2AfcdLoading = null; q.forEach(function(f){ f(!!window.NUT_AFCD); }); };
+  sc.onerror = function(){ var q = window._nut2AfcdLoading || []; window._nut2AfcdLoading = null; q.forEach(function(f){ f(false); }); };
+  document.head.appendChild(sc);
+}
+
+var _NUT2_COOKED_RX = /\b(grilled|baked|boiled|fried|pan-fried|roasted|stewed|steamed|cooked|poached|microwaved|barbecued|braised|casseroled|simmered|stir-fried|toasted)\b/i;
+var _NUT2_RAW_RX = /,\s*(raw|uncooked|dry)\b/i;
+
+// One shape for every food, AFCD or his own.
+function _nut2BuildIndex(){
+  var A = (typeof window !== 'undefined' && window.NUT_AFCD) || { foods: [], cooked: {} };
+  var byKey = {}, list = [];
+  A.foods.forEach(function(r){
+    var f = { id: 'A:' + r[0], key: r[0], name: r[1], kcal: r[2], p: r[3], c: r[4], f: r[5], fib: r[6], src: 'AFCD' };
+    f.raw = _NUT2_RAW_RX.test(r[1]);
+    f.cooked = !f.raw && _NUT2_COOKED_RX.test(r[1]);
+    var pr = A.cooked[r[0]];
+    if(pr){ f.cooked = true; f.rawRef = 'A:' + pr[0]; f.yield = pr[1]; f.yieldBasis = pr[2]; }
+    f.lc = r[1].toLowerCase();
+    byKey[f.id] = f; list.push(f);
+  });
+  // raw -> its cooked forms
+  list.forEach(function(f){ if(f.rawRef && byKey[f.rawRef]){ (byKey[f.rawRef].cookedForms = byKey[f.rawRef].cookedForms || []).push(f.id); } });
+  _nut2Index = { byKey: byKey, list: list, version: A.v || '' };
+  return _nut2Index;
+}
+
+function _nut2UserFoods(ns){
+  ns = ns || _nut2State();
+  return Object.keys(ns.v2.foods).map(function(id){
+    var u = ns.v2.foods[id];
+    return { id: id, name: u.name, kcal: +u.kcal || 0, p: +u.p || 0, c: +u.c || 0, f: +u.f || 0, fib: +u.fib || 0,
+             src: u.source === 'label' ? 'Label' : 'Mine', mine: true, cooked: !!u.cooked, raw: !u.cooked && !!u.raw,
+             rawRef: u.rawRef || null, yield: +u.yield || null, yieldBasis: u.yield ? 'entered' : null,
+             serving_g: +u.serving_g || 0, lc: String(u.name || '').toLowerCase() };
+  });
+}
+
+// Any reference -> food (AFCD or his). Null if unknown.
+function nut2Food(ref, ns){
+  if(!ref) return null;
+  if(ref.indexOf('U:') === 0){
+    var mine = _nut2UserFoods(ns).filter(function(f){ return f.id === ref; })[0];
+    return mine || null;
+  }
+  if(!_nut2Index) _nut2BuildIndex();
+  return _nut2Index.byKey[ref] || null;
+}
+
+// Search: every word typed must appear; names starting with the first word rank
+// first, then shorter (more generic) names. His own foods always lead.
+var _NUT2_SYN = { hummus: 'hummus', hommus: 'hummus', houmous: 'hummus', yogurt: 'yoghurt', chickpeas: 'chickpea', mince: 'mince', prawns: 'prawn', eggs: 'egg' };
+function nut2Search(q, filter, ns){
+  if(!_nut2Index) _nut2BuildIndex();
+  var words = String(q || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).map(function(w){ return _NUT2_SYN[w] || w.replace(/s$/, ''); });
+  var pool = _nut2UserFoods(ns).concat(_nut2Index.list);
+  var out = pool.filter(function(f){
+    if(filter === 'raw' && !f.raw) return false;
+    if(filter === 'cooked' && !f.cooked) return false;
+    if(filter === 'mine' && !f.mine) return false;
+    return words.every(function(w){ return f.lc.indexOf(w) >= 0; });
+  });
+  out.sort(function(a, b){
+    if(!!a.mine !== !!b.mine) return a.mine ? -1 : 1;
+    var w0 = words[0] || '';
+    var as = a.lc.indexOf(w0) === 0, bs = b.lc.indexOf(w0) === 0;
+    if(as !== bs) return as ? -1 : 1;
+    return a.name.length - b.name.length;
+  });
+  return out;
+}
+
+// Grams of RAW to buy for a weight of this food as eaten. Used by the shopping list.
+function nut2RawEquivalent(ref, grams, ns){
+  var f = nut2Food(ref, ns);
+  if(!f || !(grams > 0)) return null;
+  if(f.cooked && f.rawRef && f.yield > 0) return { ref: f.rawRef, g: Math.round(grams / f.yield) };
+  return { ref: ref, g: Math.round(grams) };
+}
+
+function nut2SaveUserFood(food){
+  var ns = _nut2State();
+  var id = food.id && String(food.id).indexOf('U:') === 0 ? food.id : ('U:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+  var num = function(v){ var n = parseFloat(v); return (n >= 0) ? Math.round(n * 10) / 10 : 0; };
+  ns.v2.foods[id] = {
+    name: String(food.name || '').trim().slice(0, 80) || 'Unnamed food',
+    kcal: Math.round(parseFloat(food.kcal) || 0), p: num(food.p), c: num(food.c), f: num(food.f), fib: num(food.fib),
+    cooked: !!food.cooked, raw: !!food.raw, rawRef: food.cooked ? (food.rawRef || null) : null,
+    yield: (food.cooked && parseFloat(food.yield) > 0) ? Math.round(parseFloat(food.yield) * 1000) / 1000 : null,
+    serving_g: num(food.serving_g), source: food.source || 'typed', saved: new Date().toISOString()
+  };
+  _nut2Save(ns);
+  return id;
+}
+function nut2DeleteUserFood(id){
+  var ns = _nut2State();
+  if(!ns.v2.foods[id]) return false;
+  delete ns.v2.foods[id]; _nut2Save(ns); return true;
+}
+
+// Per-serving label values -> per 100 g. Refuses rather than guesses (same rule as
+// the label scanner's _nutLabelToPer100): a per-serve figure with no serve weight
+// cannot be converted.
+function nut2Per100(vals, basis, serveG){
+  if(basis === 'per100') return { ok: true, kcal: +vals.kcal || 0, p: +vals.p || 0, c: +vals.c || 0, f: +vals.f || 0, fib: +vals.fib || 0 };
+  if(basis !== 'serve') return { ok: false, reason: 'basis_unknown' };
+  var g = parseFloat(serveG);
+  if(!(g > 0)) return { ok: false, reason: 'serving_size_missing' };
+  var k = 100 / g, r = function(v){ return Math.round((parseFloat(v) || 0) * k * 10) / 10; };
+  return { ok: true, kcal: Math.round((parseFloat(vals.kcal) || 0) * k), p: r(vals.p), c: r(vals.c), f: r(vals.f), fib: r(vals.fib) };
+}
+
+// ── screen ─────────────────────────────────────────────────────────────────
+function _nut2Esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function nut2Render(){
+  var body = document.getElementById('nut2-body');
+  if(!body) return;
+  var tabs = [['plan','Plan'],['library','Library'],['recipes','Recipes'],['shop','Shop']];
+  var h = '<div style="display:flex;gap:6px;margin:4px 0 14px;">' + tabs.map(function(t){
+    var on = _nut2Tab === t[0];
+    return '<button data-n2-tab="' + t[0] + '" style="flex:1;padding:10px 4px;border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;' +
+      'background:' + (on ? 'var(--gold)' : 'transparent') + ';color:' + (on ? '#000' : 'var(--text2)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';">' + t[1] + '</button>';
+  }).join('') + '</div>';
+  if(_nut2Tab === 'library') h += _nut2LibraryShell();
+  else h += _nut2ComingCard(_nut2Tab);
+  body.innerHTML = h;
+  if(!body._n2wired){
+    body._n2wired = true;
+    body.addEventListener('click', _nut2Click);
+    body.addEventListener('input', _nut2Input);
+  }
+  if(_nut2Tab === 'library'){
+    _nut2LoadAfcd(function(ok){
+      if(!ok){ var l = document.getElementById('nut2-results'); if(l) l.innerHTML = '<div style="padding:16px;color:var(--text3);font-size:13px;">The food database could not load. Check your connection and reopen Nutrition — it is saved for offline use after the first load.</div>'; return; }
+      _nut2BuildIndex(); _nut2RenderResults();
+    });
+  }
+}
+
+function _nut2ComingCard(tab){
+  var what = { plan: ['Stage 3', 'Days built to your feeds and times, meals from foods and recipes, the macro counter against your cut targets.'],
+               recipes: ['Stage 2', 'Recipes from the library — "makes N serves" (pancakes) or "batch by weight" (a 400 g sauce, grams per meal).'],
+               shop: ['Stage 5', 'Tick the days, get the raw quantities to buy.'] }[tab] || ['', ''];
+  return '<div style="padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);">' +
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:6px;">Coming next &middot; ' + what[0] + '</div>' +
+    '<div style="font-size:14px;color:var(--text2);line-height:1.5;">' + what[1] + '</div></div>';
+}
+
+function _nut2LibraryShell(){
+  var chips = [['all','All'],['raw','Raw'],['cooked','Cooked'],['mine','My foods']];
+  return '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
+      '<input id="nut2-search" data-n2-search type="search" value="' + _nut2Esc(_nut2Query) + '" placeholder="Search 1,600 foods — e.g. chicken breast grilled" autocomplete="off" ' +
+        'style="flex:1;min-width:0;padding:12px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;outline:none;">' +
+      '<button data-n2-add style="padding:0 14px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:12px;letter-spacing:1px;">+ ADD</button>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:12px;">' + chips.map(function(c){
+      var on = _nut2Filter === c[0];
+      return '<button data-n2-filter="' + c[0] + '" style="padding:7px 12px;border-radius:16px;font-size:12px;font-weight:700;background:' + (on ? 'var(--bg3)' : 'transparent') + ';color:' + (on ? 'var(--gold)' : 'var(--text3)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';">' + c[1] + '</button>';
+    }).join('') + '</div>' +
+    '<div id="nut2-results"><div style="padding:16px;color:var(--text3);font-size:13px;">Loading the food database&hellip;</div></div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-top:14px;line-height:1.5;">Per 100 g. Source: Food Standards Australia New Zealand, Australian Food Composition Database &ndash; Release 3.</div>';
+}
+
+function _nut2Badge(f){
+  if(f.mine) return '<span style="font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:4px;border:1px solid var(--gold);color:var(--gold);">' + (f.src === 'Label' ? 'LABEL' : 'MINE') + '</span>';
+  if(f.cooked) return '<span style="font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:4px;border:1px solid #c0703a;color:#e09a62;">COOKED</span>';
+  if(f.raw) return '<span style="font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:4px;border:1px solid #3a7d44;color:#7fd18b;">RAW</span>';
+  return '';
+}
+
+function _nut2RenderResults(){
+  var el = document.getElementById('nut2-results'); if(!el) return;
+  var ns = _nut2State();
+  if(!_nut2Query && _nut2Filter !== 'mine'){
+    var mine = _nut2UserFoods(ns);
+    el.innerHTML = (mine.length ? _nut2Rows(mine.slice(0, 30)) : '') +
+      '<div style="padding:12px 4px;color:var(--text3);font-size:13px;line-height:1.5;">Type to search. Meat, fish and grains come in <b style="color:#7fd18b;">RAW</b> and <b style="color:#e09a62;">COOKED</b> forms &mdash; pick the one you weighed.</div>';
+    return;
+  }
+  var res = nut2Search(_nut2Query, _nut2Filter, ns);
+  el.innerHTML = res.length ? (_nut2Rows(res.slice(0, 60)) + (res.length > 60 ? '<div style="padding:10px 4px;color:var(--text3);font-size:12px;">' + (res.length - 60) + ' more &mdash; add another word to narrow it.</div>' : ''))
+    : '<div style="padding:16px 4px;color:var(--text3);font-size:13px;">Nothing matches. Try fewer words, or <a data-n2-add style="color:var(--gold);">add it yourself</a>.</div>';
+}
+
+function _nut2Rows(list){
+  return list.map(function(f){
+    return '<div data-n2-food="' + _nut2Esc(f.id) + '" style="padding:11px 4px;border-bottom:1px solid var(--border);cursor:pointer;">' +
+      '<div style="display:flex;align-items:flex-start;gap:8px;">' +
+        '<div style="flex:1;min-width:0;font-size:14px;color:var(--text);line-height:1.35;">' + _nut2Esc(f.name) + '</div>' +
+        '<div style="font-family:var(--font-d);font-size:15px;font-weight:900;color:var(--gold);white-space:nowrap;">' + f.kcal + '<span style="font-size:10px;color:var(--text3);font-weight:400;"> kcal</span></div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-top:4px;font-size:11px;color:var(--text3);">' +
+        _nut2Badge(f) + '<span>P ' + f.p + '</span><span>C ' + f.c + '</span><span>F ' + f.f + '</span>' +
+      '</div></div>';
+  }).join('');
+}
+
+function _nut2Click(e){
+  var t = e.target.closest ? e.target.closest('[data-n2-tab],[data-n2-filter],[data-n2-food],[data-n2-add]') : null;
+  if(!t) return;
+  if(t.hasAttribute('data-n2-tab')){ _nut2Tab = t.getAttribute('data-n2-tab'); nut2Render(); return; }
+  if(t.hasAttribute('data-n2-filter')){ _nut2Filter = t.getAttribute('data-n2-filter'); nut2Render(); return; }
+  if(t.hasAttribute('data-n2-food')){ nut2OpenFood(t.getAttribute('data-n2-food')); return; }
+  if(t.hasAttribute('data-n2-add')){ nut2OpenAddFood(); return; }
+}
+function _nut2Input(e){
+  var t = e.target;
+  if(t && t.hasAttribute && t.hasAttribute('data-n2-search')){ _nut2Query = t.value; _nut2RenderResults(); }
+}
+
+// ── sheets ─────────────────────────────────────────────────────────────────
+function _nut2Sheet(html){
+  var ov = document.getElementById('nut2-sheet');
+  if(!ov){
+    ov = document.createElement('div'); ov.id = 'nut2-sheet';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.72);display:flex;align-items:flex-end;justify-content:center;';
+    ov.addEventListener('click', function(ev){ if(ev.target === ov || (ev.target.closest && ev.target.closest('[data-n2-close]'))) _nut2CloseSheet(); });
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = '<div style="width:100%;max-width:520px;max-height:100%;overflow-y:auto;background:var(--bg);border-top:1px solid var(--border2);border-radius:16px 16px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));box-sizing:border-box;">' + html + '</div>';
+  ov.style.display = 'flex';
+  if(typeof _phxKeyboardSafe === 'function') try { _phxKeyboardSafe(ov); } catch(_k){}
+  return ov;
+}
+function _nut2CloseSheet(){ var ov = document.getElementById('nut2-sheet'); if(ov) ov.style.display = 'none'; }
+
+function _nut2MacroGrid(f){
+  var cell = function(l, v, u){ return '<div style="flex:1;padding:10px 4px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:20px;font-weight:900;color:var(--text);">' + v + '<span style="font-size:11px;color:var(--text3);">' + u + '</span></div>' +
+    '<div style="font-size:10px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;">' + l + '</div></div>'; };
+  return '<div style="display:flex;gap:6px;">' + cell('kcal', f.kcal, '') + cell('Protein', f.p, 'g') + cell('Carbs', f.c, 'g') + cell('Fat', f.f, 'g') + '</div>' +
+    (f.fib ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">Fibre ' + f.fib + ' g</div>' : '');
+}
+
+function nut2OpenFood(ref){
+  var f = nut2Food(ref); if(!f) return;
+  var h = '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;">' +
+      '<div style="flex:1;font-size:17px;font-weight:700;color:var(--text);line-height:1.3;">' + _nut2Esc(f.name) + '</div>' +
+      '<button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;padding:0 4px;">&times;</button></div>' +
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">' + _nut2Badge(f) + '<span style="font-size:11px;color:var(--text3);">' + (f.mine ? 'Your food' : 'AFCD &middot; ' + f.key) + ' &middot; per 100 g</span></div>' +
+    _nut2MacroGrid(f);
+  if(f.cooked && f.rawRef){
+    var r = nut2Food(f.rawRef);
+    h += '<div style="margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;">' +
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Raw form</div>' +
+      '<div data-n2-swap="' + _nut2Esc(f.rawRef) + '" style="font-size:14px;color:var(--gold);cursor:pointer;">' + _nut2Esc(r ? r.name : f.rawRef) + ' &rsaquo;</div>' +
+      (f.yield ? '<div style="font-size:12px;color:var(--text2);margin-top:6px;">100 g cooked &asymp; <b>' + Math.round(100 / f.yield) + ' g raw</b>' +
+        ' <span style="color:var(--text3);">(' + ({ recipe:'measured weight change', protein:'from protein, which cooking keeps', carb:'from carbohydrate, which cooking keeps', entered:'you entered this' }[f.yieldBasis] || '') + ')</span></div>' : '') +
+      '</div>';
+  }
+  if(f.cookedForms && f.cookedForms.length){
+    h += '<div style="margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Cooked forms</div>' +
+      f.cookedForms.map(function(cid){ var c = nut2Food(cid); return c ? '<div data-n2-swap="' + _nut2Esc(cid) + '" style="font-size:13px;color:var(--gold);padding:5px 0;cursor:pointer;">' + _nut2Esc(c.name) +
+        (c.yield ? ' <span style="color:var(--text3);">&middot; 100 g raw &rarr; ' + Math.round(100 * c.yield) + ' g</span>' : '') + '</div>' : ''; }).join('') + '</div>';
+  }
+  if(f.mine){
+    h += '<div style="display:flex;gap:8px;margin-top:16px;">' +
+      '<button data-n2-edit="' + _nut2Esc(f.id) + '" style="flex:1;padding:12px;border-radius:10px;background:transparent;border:1px solid var(--border2);color:var(--text);font-family:var(--font-d);font-weight:900;letter-spacing:1px;">EDIT</button>' +
+      '<button data-n2-del="' + _nut2Esc(f.id) + '" style="flex:1;padding:12px;border-radius:10px;background:transparent;border:1px solid #7a2c2c;color:#e07a7a;font-family:var(--font-d);font-weight:900;letter-spacing:1px;">DELETE</button></div>';
+  }
+  var ov = _nut2Sheet(h);
+  ov.onclick = null;
+  Array.prototype.forEach.call(ov.querySelectorAll('[data-n2-swap]'), function(b){ b.addEventListener('click', function(){ nut2OpenFood(b.getAttribute('data-n2-swap')); }); });
+  var ed = ov.querySelector('[data-n2-edit]'); if(ed) ed.addEventListener('click', function(){ nut2OpenAddFood(ed.getAttribute('data-n2-edit')); });
+  var dl = ov.querySelector('[data-n2-del]');
+  if(dl) dl.addEventListener('click', function(){
+    if(dl.getAttribute('data-armed') !== '1'){ dl.setAttribute('data-armed', '1'); dl.textContent = 'TAP AGAIN TO DELETE'; return; }
+    nut2DeleteUserFood(dl.getAttribute('data-n2-del')); _nut2CloseSheet(); _nut2RenderResults();
+  });
+}
+
+// Add or edit one of his foods. Basis has NO default — a per-serve label saved as
+// per-100 g is the one error nothing downstream can detect.
+function nut2OpenAddFood(editId, prefill){
+  var ns = _nut2State();
+  var cur = editId ? (ns.v2.foods[editId] || {}) : (prefill || {});
+  var basis = editId ? 'per100' : (prefill && prefill.basis) || '';
+  var inp = function(id, label, val, mode){ return '<label style="display:block;flex:1;min-width:0;"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;">' + label + '</div>' +
+    '<input id="n2f-' + id + '" ' + (mode === 'text' ? 'type="text"' : 'type="number" inputmode="decimal" step="any"') + ' value="' + _nut2Esc(val == null ? '' : val) + '" ' +
+    'style="width:100%;box-sizing:border-box;padding:11px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;outline:none;"></label>'; };
+  var rawName = cur.rawRef ? ((nut2Food(cur.rawRef) || {}).name || '') : '';
+  var h = '<div style="display:flex;align-items:center;margin-bottom:12px;"><div style="flex:1;font-family:var(--font-d);font-size:16px;font-weight:900;letter-spacing:1px;color:var(--text);text-transform:uppercase;">' + (editId ? 'Edit food' : 'Add a food') + '</div>' +
+      '<button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>' +
+    (editId ? '' : '<button id="n2f-label" style="width:100%;padding:12px;margin-bottom:12px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-weight:900;letter-spacing:1px;">READ IT OFF A LABEL PHOTO</button>') +
+    inp('name', 'Name', cur.name, 'text') +
+    '<div style="font-size:11px;color:var(--text3);margin:12px 0 6px;">The numbers below are&hellip;</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:10px;">' +
+      '<button data-basis="per100" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;">per 100 g</button>' +
+      '<button data-basis="serve" style="flex:1;padding:10px;border-radius:8px;font-size:12px;font-weight:700;">per serve</button></div>' +
+    '<div id="n2f-serve-wrap" style="display:none;margin-bottom:10px;">' + inp('serve', 'Serve size (g)', cur.serving_g || '') + '</div>' +
+    '<div style="display:flex;gap:6px;">' + inp('kcal', 'kcal', cur.kcal) + inp('p', 'Protein g', cur.p) + '</div>' +
+    '<div style="display:flex;gap:6px;margin-top:6px;">' + inp('c', 'Carbs g', cur.c) + inp('f', 'Fat g', cur.f) + inp('fib', 'Fibre g', cur.fib) + '</div>' +
+    '<label style="display:flex;align-items:center;gap:10px;margin:14px 0 6px;font-size:13px;color:var(--text2);"><input id="n2f-cooked" type="checkbox" ' + (cur.cooked ? 'checked' : '') + ' style="width:20px;height:20px;accent-color:var(--gold);"> These numbers are for the COOKED food</label>' +
+    '<div id="n2f-cooked-wrap" style="display:' + (cur.cooked ? 'block' : 'none') + ';padding:10px;border:1px solid var(--border);border-radius:10px;">' +
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Raw form (for the shopping list) &mdash; optional</div>' +
+      '<input id="n2f-rawq" type="search" value="' + _nut2Esc(rawName) + '" placeholder="search the raw food" style="width:100%;box-sizing:border-box;padding:10px 8px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;outline:none;">' +
+      '<div id="n2f-rawres"></div>' +
+      '<div style="margin-top:8px;">' + inp('yield', 'Cooked grams from 100 g raw', cur.yield ? Math.round(cur.yield * 100) : '') + '</div></div>' +
+    '<div id="n2f-preview" style="font-size:12px;color:var(--text2);margin-top:12px;min-height:16px;"></div>' +
+    '<div id="n2f-err" style="font-size:12px;color:#e07a7a;margin-top:6px;min-height:14px;"></div>' +
+    '<button id="n2f-save" style="width:100%;padding:14px;margin-top:8px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:14px;letter-spacing:2px;">SAVE FOOD</button>';
+  var ov = _nut2Sheet(h);
+  var rawRef = cur.rawRef || null;
+  var $ = function(id){ return ov.querySelector('#n2f-' + id); };
+  var paintBasis = function(){
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-basis]'), function(b){
+      var on = b.getAttribute('data-basis') === basis;
+      b.style.background = on ? 'var(--gold)' : 'transparent'; b.style.color = on ? '#000' : 'var(--text2)'; b.style.border = '1px solid ' + (on ? 'var(--gold)' : 'var(--border2)');
+    });
+    $('serve-wrap').style.display = basis === 'serve' ? 'block' : 'none';
+    preview();
+  };
+  var vals = function(){ return { kcal: $('kcal').value, p: $('p').value, c: $('c').value, f: $('f').value, fib: $('fib').value }; };
+  var preview = function(){
+    var pv = $('preview'); if(!pv) return;
+    if(basis !== 'serve'){ pv.textContent = ''; return; }
+    var r = nut2Per100(vals(), 'serve', $('serve').value);
+    pv.innerHTML = r.ok ? 'Saved per 100 g as: <b>' + r.kcal + ' kcal &middot; P ' + r.p + ' &middot; C ' + r.c + ' &middot; F ' + r.f + '</b>' : 'Enter the serve size in grams to convert.';
+  };
+  Array.prototype.forEach.call(ov.querySelectorAll('[data-basis]'), function(b){ b.addEventListener('click', function(){ basis = b.getAttribute('data-basis'); paintBasis(); }); });
+  ['kcal','p','c','f','fib','serve'].forEach(function(k){ $(k).addEventListener('input', preview); });
+  $('cooked').addEventListener('change', function(){ $('cooked-wrap').style.display = $('cooked').checked ? 'block' : 'none'; });
+  $('rawq').addEventListener('input', function(){
+    rawRef = null;
+    var q = $('rawq').value, box = $('rawres');
+    if(String(q).trim().length < 2){ box.innerHTML = ''; return; }
+    _nut2LoadAfcd(function(){
+      if(!_nut2Index) _nut2BuildIndex();
+      var res = nut2Search(q, 'raw').slice(0, 8);
+      box.innerHTML = res.map(function(r){ return '<div data-raw="' + _nut2Esc(r.id) + '" style="padding:8px 2px;font-size:13px;color:var(--text2);border-bottom:1px solid var(--border);cursor:pointer;">' + _nut2Esc(r.name) + '</div>'; }).join('');
+      Array.prototype.forEach.call(box.querySelectorAll('[data-raw]'), function(d){ d.addEventListener('click', function(){ rawRef = d.getAttribute('data-raw'); $('rawq').value = d.textContent; box.innerHTML = ''; }); });
+    });
+  });
+  var lb = $('label');
+  if(lb) lb.addEventListener('click', function(){
+    if(typeof nutOpenLabelScanner !== 'function'){ $('err').textContent = 'The label reader is not available on this version.'; return; }
+    _nut2CloseSheet();
+    nutOpenLabelScanner(null, null, function(food){
+      // The scanner hands back per-100 g (it refuses a per-serve label with no weight).
+      nut2OpenAddFood(null, { name: food.n, kcal: food.k, p: food.p, c: food.c, f: food.f, fib: food.fib || '', serving_g: food.serving_g || '', basis: 'per100', source: 'label' });
+    });
+  });
+  $('save').addEventListener('click', function(){
+    var err = $('err'); err.textContent = '';
+    if(!String($('name').value).trim()){ err.textContent = 'Give it a name.'; return; }
+    if(!basis){ err.textContent = 'Choose whether the numbers are per 100 g or per serve.'; return; }
+    var r = nut2Per100(vals(), basis, $('serve').value);
+    if(!r.ok){ err.textContent = r.reason === 'serving_size_missing' ? 'Enter the serve size in grams.' : 'Choose per 100 g or per serve.'; return; }
+    var y = parseFloat($('yield').value);
+    var id = nut2SaveUserFood({ id: editId, name: $('name').value, kcal: r.kcal, p: r.p, c: r.c, f: r.f, fib: r.fib,
+      cooked: $('cooked').checked, rawRef: rawRef, yield: (y > 0 ? y / 100 : null),
+      serving_g: basis === 'serve' ? $('serve').value : (cur.serving_g || ''), source: (prefill && prefill.source) || (editId ? (ns.v2.foods[editId] || {}).source : 'typed') });
+    _nut2CloseSheet();
+    _nut2Filter = 'mine'; _nut2Query = ''; nut2Render();
+    return id;
+  });
+  paintBasis();
+}
+// NUTRITION v2 — END
+// ═══════════════════════════════════════════════════════════════════════════
 
 function nutRenderScreen(){
   var body = document.getElementById('nut-screen-body');

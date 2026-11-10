@@ -22,6 +22,10 @@ const rec = (name) => ({
 const env = (ts, name) => (ts ? { _ts: ts, recipes: [rec(name)] } : { recipes: [rec(name)] });
 
 export default function ({ test, assert, app, signIn, seed, read, reset }) {
+  // v4.9.393 — these test the LEGACY nutrition screen. navTo('nutrition') now opens the
+  // rebuild (tests/nut2.mjs) unless this flag is false.
+  app.window._nut2Enabled = false;
+
 
   // The app derives the recipe key from the signed-in user. Both identity
   // sources are set here so the tests exercise the real key, not the guest one.

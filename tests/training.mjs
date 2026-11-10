@@ -1834,7 +1834,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const r = routeRecorder();
     try {
       ['nutrition', 'records', 'peptide'].forEach((t) => app.navTo(t));
-      assert.ok(r.shown.includes('screen-nutrition'), 'nutrition still routes');
+      assert.ok(r.shown.includes('screen-nut2'), 'nutrition still routes (to the v4.9.393 rebuild)');
       assert.ok(r.shown.includes('screen-records'), 'records still routes');
       assert.ok(r.shown.includes('screen-peptide'), 'peptide still routes');
     } finally { r.restore(); }

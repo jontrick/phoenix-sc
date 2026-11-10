@@ -189,4 +189,85 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nut2TodayTile(tile);
     assert.ok(/Log a weigh-in/.test(tile.innerHTML), tile.innerHTML.slice(0, 200));
   });
+
+  // ── STAGE 3 — day planner + counter ──
+  const plan = () => {
+    start({ setup_done: true, daily: { '2026-11-09': { weight_kg: 112 } } });
+    const d = app._nutToday();
+    const egg = findOne('egg chicken whole raw');
+    const pid = app.nut2SaveRecipe({ name: 'Pancakes', kind: 'serves', serves: 4, items: [{ ref: egg.id, g: 400 }] });
+    return { d, egg, pid };
+  };
+  test('PLAN defaults: 5 feeds at his times plus the morning drinks; an untouched day is not stored', () => {
+    const { d } = plan();
+    const day = app.nut2Day(d);
+    assert.deepEqual(day.feeds.map((f) => f.time + ' ' + f.name), ['06:00 Morning drinks', '07:00 Breakfast', '12:00 Lunch', '15:30 Snack', '18:30 Dinner', '20:00 Greens shake']);
+    assert.equal(read(KEY).v2.days[d], undefined, 'viewing a day writes nothing');
+  });
+  test('PLAN totals: grams for foods, serves for a serves recipe; eaten = ticked feeds; without drinks excludes them', () => {
+    const { d, egg, pid } = plan();
+    const i1 = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i1, '200');
+    const i2 = app.nut2AddItem(d, 'F1', pid);
+    assert.equal(app.nut2Day(d).feeds[1].items[i2].serves, 1, 'a serves recipe is added as 1 serve');
+    app.nut2SetItemQty(d, 'F1', i2, '2');
+    const i3 = app.nut2AddItem(d, 'F0', egg.id); app.nut2SetItemQty(d, 'F0', i3, '100');
+    const T = app.nut2DayTotals(d);
+    const eggK = egg.kcal;
+    assert.equal(T.planned.kcal, Math.round(eggK * 2 + eggK * 2 + eggK * 1), 'pancakes: 2 of 4 serves of 400 g egg = 200 g egg');
+    assert.equal(T.noDrinks.kcal, Math.round(eggK * 4));
+    assert.equal(T.eaten.kcal, 0);
+    app.nut2SetFeed(d, 'F1', { eaten: true });
+    assert.equal(app.nut2DayTotals(d).eaten.kcal, Math.round(eggK * 4));
+  });
+  test('PLAN flags: over / under / on against the weight-based target', () => {
+    assert.equal(app.nut2Flag(2300, 2070, 'kcal').state, 'over');
+    assert.equal(app.nut2Flag(2070, 2070, 'kcal').state, 'on');
+    assert.equal(app.nut2Flag(150, 202, 'p').state, 'under');
+    assert.equal(app.nut2Flag(150, 202, 'p').diff, -52);
+    assert.equal(app.nut2Flag(5, 0, 'p').state, 'none');
+  });
+  test('PLAN feeds: retime re-sorts; add and remove a feed; a deleted recipe is counted missing, not zero', () => {
+    const { d, pid } = plan();
+    app.nut2SetFeed(d, 'F5', { time: '05:30' });
+    assert.equal(app.nut2Day(d).feeds[0].name, 'Greens shake');
+    const nf = app.nut2AddFeed(d);
+    assert.equal(app.nut2Day(d).feeds.length, 7);
+    assert.ok(app.nut2DelFeed(d, nf)); assert.equal(app.nut2Day(d).feeds.length, 6);
+    app.nut2AddItem(d, 'F2', pid); app.nut2DeleteRecipe(pid);
+    assert.equal(app.nut2DayTotals(d).planned.missing, 1);
+  });
+  test('PLAN screen: the plan tab draws the counter with flags and every feed', () => {
+    const { d, egg } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i, '300');
+    const h = app._nut2PlanTab();
+    assert.ok(/id="n2-counter"/.test(h) && /data-n2-flag="kcal" data-state="under"/.test(h), 'counter with kcal flag');
+    assert.ok(/data-n2-flag="p" data-state="under"/.test(h));
+    ['Morning drinks', 'Breakfast', 'Lunch', 'Snack', 'Dinner', 'Greens shake'].forEach((n) => assert.ok(h.includes('value="' + n + '"'), n));
+    assert.ok(h.includes('data-n2-qty="F1:0"') && h.includes('value="300"'));
+  });
+  test('PLAN Today card: eaten / target and planned, from the real tile entry point', () => {
+    const { d, egg } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i, '200'); app.nut2SetFeed(d, 'F1', { eaten: true });
+    const tile = { innerHTML: '', querySelector: () => ({ addEventListener(){} }) };
+    app._nut2TodayTile(tile);
+    assert.ok(tile.innerHTML.includes(Math.round(egg.kcal * 2) + ' <span') && /\/ 2070 kcal eaten/.test(tile.innerHTML), tile.innerHTML.slice(0, 300));
+    assert.ok(/Planned \d+ kcal/.test(tile.innerHTML));
+  });
+  test('PLAN mirror: the daily row is the EATEN v2 day against the weight target; null while foods are unloaded', () => {
+    const { d, egg } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i, '200'); app.nut2SetFeed(d, 'F1', { eaten: true });
+    const row = app._nutDailyRow(d);
+    assert.equal(row.kcal, Math.round(egg.kcal * 2)); assert.equal(row.target_kcal, 2070);
+    app.window.NUT_AFCD = undefined;
+    assert.equal(app._nutDailyRow(d), null, 'unknown must not be written as a low day');
+    app.window.NUT_AFCD = AFCD;
+  });
+
+  test('SEARCH: a word must start a word — "rice white cooked" never returns uncooked rice', () => {
+    start();
+    const r = app.nut2Search('rice white cooked', 'all');
+    assert.ok(r.length, 'some cooked white rice');
+    assert.ok(r.every((f) => !/uncooked/i.test(f.name)), r.slice(0, 4).map((f) => f.name).join(' | '));
+    assert.ok(app.nut2Search('chick breast', 'all').length > 0, 'a word prefix still matches');
+  });
 }

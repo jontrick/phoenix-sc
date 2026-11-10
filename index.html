@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.396';
+var APP_VERSION='4.9.397';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22207,6 +22207,7 @@ function _nutDayTotals(dayData){
 // bug this app has shipped most often.
 function _nutDailyRow(dateKey){
   var ns = (typeof nutGetState === 'function') ? nutGetState() : null;
+  if(ns && ns.v2 && (typeof window === 'undefined' || window._nut2Enabled !== false)) return _nut2DailyRow(ns, dateKey);
   if(!ns || !ns.daily) return null;
   var day = ns.daily[dateKey];
   if(!day) return null;
@@ -22228,6 +22229,22 @@ function _nutDailyRow(dateKey){
     target_fat_g:     tgt ? tgt.fat_g     : null,
     updated_at: new Date().toISOString()
   };
+}
+
+// v4.9.397 — the v2 day. EATEN (ticked feeds) against the weight-based target. A day with
+// library foods while the food data has not loaded returns null: unknown must not be
+// written as a low-calorie day.
+function _nut2DailyRow(ns, dateKey){
+  var day = ns.v2.days && ns.v2.days[dateKey]; if(!day) return null;
+  var uid = (typeof currentSession !== 'undefined' && currentSession && currentSession.user) ? currentSession.user.id : null;
+  if(!uid) return null;
+  var needsA = (day.feeds || []).some(function(f){ return (f.items || []).some(function(it){ return it.ref && it.ref.indexOf('A:') === 0; }); });
+  if(needsA && !(typeof window !== 'undefined' && window.NUT_AFCD)) return null;
+  var e = nut2DayTotals(dateKey, ns).eaten, tg = nut2Targets(ns);
+  return { user_id: uid, date: dateKey, kcal: e.kcal, protein_g: e.p, carbs_g: e.c, fat_g: e.f,
+    target_kcal: tg ? tg.kcal : null, target_protein_g: tg ? tg.protein_g : null,
+    target_carbs_g: tg ? tg.carbs_g : null, target_fat_g: tg ? tg.fat_g : null,
+    updated_at: new Date().toISOString() };
 }
 
 // Shape only — no food names, no component values. Matches the provider
@@ -22448,7 +22465,7 @@ function _nutTabExists(tab){
 // The legacy screen and its 647 tests are untouched; navTo('nutrition') opens this
 // screen unless window._nut2Enabled === false (the legacy tests set that).
 // ═══════════════════════════════════════════════════════════════════════════
-var _nut2Tab = 'library';
+var _nut2Tab = 'plan';
 var _nut2Filter = 'all';
 var _nut2Query = '';
 var _nut2Index = null;   // built once from NUT_AFCD
@@ -22528,7 +22545,7 @@ function nut2Food(ref, ns){
     var mine = _nut2UserFoods(ns).filter(function(f){ return f.id === ref; })[0];
     return mine || null;
   }
-  if(!_nut2Index) _nut2BuildIndex();
+  if(!_nut2Index || (!_nut2Index.list.length && typeof window !== 'undefined' && window.NUT_AFCD)) _nut2BuildIndex();
   return _nut2Index.byKey[ref] || null;
 }
 
@@ -22536,14 +22553,21 @@ function nut2Food(ref, ns){
 // first, then shorter (more generic) names. His own foods always lead.
 var _NUT2_SYN = { hummus: 'hummus', hommus: 'hummus', houmous: 'hummus', yogurt: 'yoghurt', chickpeas: 'chickpea', mince: 'mince', prawns: 'prawn', eggs: 'egg' };
 function nut2Search(q, filter, ns){
-  if(!_nut2Index) _nut2BuildIndex();
+  if(!_nut2Index || (!_nut2Index.list.length && typeof window !== 'undefined' && window.NUT_AFCD)) _nut2BuildIndex();
   var words = String(q || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).map(function(w){ return _NUT2_SYN[w] || w.replace(/s$/, ''); });
   var pool = _nut2UserFoods(ns).concat(_nut2Index.list);
   var out = pool.filter(function(f){
     if(filter === 'raw' && !f.raw) return false;
     if(filter === 'cooked' && !f.cooked) return false;
     if(filter === 'mine' && !f.mine) return false;
-    return words.every(function(w){ return f.lc.indexOf(w) >= 0; });
+    // v4.9.397: each word must START a word — "cooked" found "uncooked" rice (340 kcal/100 g).
+    // AFCD says "boiled", "grilled"…, rarely "cooked": typed cooked/raw match the food's state.
+    var lw = ' ' + f.lc.replace(/[^a-z0-9]/g, ' ');
+    return words.every(function(w){
+      if(w === 'cooked') return !!f.cooked || lw.indexOf(' cooked') >= 0;
+      if(w === 'raw' || w === 'uncooked') return !!f.raw || lw.indexOf(' raw') >= 0;
+      return lw.indexOf(' ' + w) >= 0;
+    });
   });
   out.sort(function(a, b){
     if(!!a.mine !== !!b.mine) return a.mine ? -1 : 1;
@@ -22609,12 +22633,20 @@ function nut2Render(){
   }).join('') + '</div>';
   if(_nut2Tab === 'library') h += _nut2LibraryShell();
   else if(_nut2Tab === 'recipes') h += _nut2RecipesTab();
+  else if(_nut2Tab === 'plan') h += (typeof window !== 'undefined' && window.NUT_AFCD) ? _nut2PlanTab() : '<div style="padding:16px;color:var(--text3);font-size:13px;">Loading your foods&hellip;</div>';
   else h += _nut2ComingCard(_nut2Tab);
   body.innerHTML = h;
   if(!body._n2wired){
     body._n2wired = true;
     body.addEventListener('click', _nut2Click);
     body.addEventListener('input', _nut2Input);
+    body.addEventListener('change', function(e){ if(_nut2Tab === 'plan' && e.target) _nut2PlanChange(e.target); });
+  }
+  if(_nut2Tab === 'plan' && !(typeof window !== 'undefined' && window.NUT_AFCD)){
+    _nut2LoadAfcd(function(ok){
+      if(ok){ _nut2BuildIndex(); nut2Render(); return; }
+      var b = document.getElementById('nut2-body'); if(b) b.innerHTML = b.innerHTML.replace('Loading your foods&hellip;', 'The food database could not load. Check your connection and reopen Nutrition.');
+    });
   }
   if(_nut2Tab === 'recipes'){ _nut2LoadAfcd(function(ok){ if(ok && !_nut2Index){ _nut2BuildIndex(); nut2Render(); } }); }
   if(_nut2Tab === 'library'){
@@ -22684,6 +22716,10 @@ function _nut2Rows(list){
 }
 
 function _nut2Click(e){
+  if(_nut2Tab === 'plan' && e.target.closest){
+    var pt = e.target.closest('[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd]');
+    if(pt && _nut2PlanClick(pt)) return;
+  }
   var t = e.target.closest ? e.target.closest('[data-n2-tab],[data-n2-filter],[data-n2-food],[data-n2-add],[data-n2-newrec],[data-n2-rec]') : null;
   if(!t) return;
   if(t.hasAttribute('data-n2-newrec')){ _nut2RecDraft = null; nut2OpenRecipe(null); return; }
@@ -22695,6 +22731,7 @@ function _nut2Click(e){
 }
 function _nut2Input(e){
   var t = e.target;
+  if(_nut2Tab === 'plan' && t && t.getAttribute && _nut2PlanInput(t)) return;
   if(t && t.hasAttribute && t.hasAttribute('data-n2-search')){ _nut2Query = t.value; _nut2RenderResults(); }
 }
 
@@ -23083,6 +23120,227 @@ function _nut2PaintRecipe(){
   });
   paintTot();
 }
+// ── STAGE 3 (v4.9.397) — the day planner + macro counter ───────────────────
+// Jon's ruling: 5 feeds by default (07:00 breakfast, 12:00 lunch, 15:30 snack, 18:30 dinner,
+// 20:00 greens shake) plus the morning drinks. A day is ns.v2.days[date] =
+// { feeds:[{id,name,time,drinks?,eaten?,items:[{ref,g}|{ref,serves}]}] }. A day he has not touched
+// is NOT stored — it is shown from the defaults and written the moment he edits it.
+var NUT2_DEFAULT_FEEDS = [
+  { name: 'Morning drinks', time: '06:00', drinks: true },
+  { name: 'Breakfast', time: '07:00' }, { name: 'Lunch', time: '12:00' },
+  { name: 'Snack', time: '15:30' }, { name: 'Dinner', time: '18:30' },
+  { name: 'Greens shake', time: '20:00' }
+];
+var _nut2PlanDate = null;
+function _nut2NewId(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function _nut2DefaultDay(){
+  return { feeds: NUT2_DEFAULT_FEEDS.map(function(f, i){ return { id: 'F' + i, name: f.name, time: f.time, drinks: !!f.drinks, eaten: false, items: [] }; }) };
+}
+function nut2Day(date, ns){
+  ns = ns || _nut2State();
+  return ns.v2.days[date] || _nut2DefaultDay();
+}
+// The stored day, created from the defaults on first edit.
+function _nut2DayForEdit(ns, date){
+  if(!ns.v2.days[date]) ns.v2.days[date] = _nut2DefaultDay();
+  return ns.v2.days[date];
+}
+function _nut2SortFeeds(day){ day.feeds.sort(function(a, b){ return String(a.time || '99').localeCompare(String(b.time || '99')); }); }
+
+// Macros for one item. A 'serves' recipe is eaten by the serve; everything else by the gram.
+function nut2ItemMacros(it, ns){
+  ns = ns || _nut2State();
+  var z = { kcal: 0, p: 0, c: 0, f: 0, g: 0, missing: false };
+  if(!it || !it.ref){ z.missing = true; return z; }
+  var isRec = it.ref.indexOf('R:') === 0, rec = isRec ? ns.v2.recipes[it.ref] : null;
+  if(isRec && rec && rec.kind === 'serves' && it.serves != null){
+    var ps = nut2RecipePerServe(it.ref, ns), n = parseFloat(it.serves) || 0;
+    if(!ps){ z.missing = true; return z; }
+    return { kcal: ps.kcal * n, p: ps.p * n, c: ps.c * n, f: ps.f * n, g: ps.g * n, missing: false };
+  }
+  var per = isRec ? nut2RecipePer100(it.ref, ns) : nut2Food(it.ref, ns);
+  if(!per){ z.missing = true; return z; }
+  var k = (parseFloat(it.g) || 0) / 100;
+  return { kcal: per.kcal * k, p: per.p * k, c: per.c * k, f: per.f * k, g: parseFloat(it.g) || 0, missing: false };
+}
+function _nut2Round(t){ return { kcal: Math.round(t.kcal), p: Math.round(t.p * 10) / 10, c: Math.round(t.c * 10) / 10, f: Math.round(t.f * 10) / 10, missing: t.missing || 0 }; }
+function nut2FeedTotals(feed, ns){
+  var t = { kcal: 0, p: 0, c: 0, f: 0, missing: 0 };
+  (feed.items || []).forEach(function(it){ var m = nut2ItemMacros(it, ns); if(m.missing) t.missing++; t.kcal += m.kcal; t.p += m.p; t.c += m.c; t.f += m.f; });
+  return _nut2Round(t);
+}
+// planned = everything on the day; eaten = ticked feeds; noDrinks = planned without the morning drinks.
+function nut2DayTotals(date, ns){
+  ns = ns || _nut2State();
+  var day = nut2Day(date, ns), z = function(){ return { kcal: 0, p: 0, c: 0, f: 0, missing: 0 }; };
+  var out = { planned: z(), eaten: z(), noDrinks: z() };
+  day.feeds.forEach(function(fd){
+    var t = nut2FeedTotals(fd, ns);
+    [['planned', true], ['eaten', !!fd.eaten], ['noDrinks', !fd.drinks]].forEach(function(b){
+      if(!b[1]) return; var o = out[b[0]]; o.kcal += t.kcal; o.p += t.p; o.c += t.c; o.f += t.f; o.missing += t.missing;
+    });
+  });
+  out.planned = _nut2Round(out.planned); out.eaten = _nut2Round(out.eaten); out.noDrinks = _nut2Round(out.noDrinks);
+  return out;
+}
+// Over / under against the target. kcal is held tighter (±5%) than the macros (±10%).
+function nut2Flag(got, want, key){
+  if(!(want > 0)) return { state: 'none', diff: 0 };
+  var tol = key === 'kcal' ? 0.05 : 0.10, r = got / want, diff = Math.round((got - want) * (key === 'kcal' ? 1 : 10)) / (key === 'kcal' ? 1 : 10);
+  return { state: r > 1 + tol ? 'over' : (r < 1 - tol ? 'under' : 'on'), diff: diff };
+}
+
+// ── mutations ──
+function nut2AddItem(date, feedId, ref){
+  var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
+  var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd) return -1;
+  var rec = ref.indexOf('R:') === 0 ? ns.v2.recipes[ref] : null;
+  fd.items.push(rec && rec.kind === 'serves' ? { ref: ref, serves: 1 } : { ref: ref, g: '' });
+  _nut2Save(ns); return fd.items.length - 1;
+}
+function nut2SetItemQty(date, feedId, idx, val){
+  var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
+  var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd || !fd.items[idx]) return false;
+  var it = fd.items[idx];
+  if(it.serves != null) it.serves = val === '' ? '' : Math.max(0, parseFloat(val) || 0); else it.g = val === '' ? '' : Math.max(0, parseFloat(val) || 0);
+  _nut2Save(ns); return true;
+}
+function nut2DelItem(date, feedId, idx){
+  var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
+  var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd) return false;
+  fd.items.splice(idx, 1); _nut2Save(ns); return true;
+}
+function nut2SetFeed(date, feedId, patch){
+  var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
+  var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd) return false;
+  if('name' in patch) fd.name = String(patch.name || '').slice(0, 40) || 'Feed';
+  if('time' in patch && /^\d\d:\d\d$/.test(patch.time)) fd.time = patch.time;
+  if('eaten' in patch) fd.eaten = !!patch.eaten;
+  _nut2SortFeeds(day); _nut2Save(ns); return true;
+}
+function nut2AddFeed(date){
+  var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
+  var last = day.feeds.length ? day.feeds[day.feeds.length - 1].time : '12:00';
+  var h = Math.min(23, (parseInt(last, 10) || 12) + 1);
+  var fd = { id: _nut2NewId('F'), name: 'Feed', time: (h < 10 ? '0' : '') + h + ':00', eaten: false, items: [] };
+  day.feeds.push(fd); _nut2SortFeeds(day); _nut2Save(ns); return fd.id;
+}
+function nut2DelFeed(date, feedId){
+  var ns = _nut2State(), day = _nut2DayForEdit(ns, date), n = day.feeds.length;
+  day.feeds = day.feeds.filter(function(f){ return f.id !== feedId; });
+  _nut2Save(ns); return day.feeds.length < n;
+}
+
+// ── dates ──
+function _nut2ShiftDate(iso, d){
+  var p = iso.split('-'), dt = new Date(+p[0], +p[1] - 1, +p[2] + d);
+  return dt.getFullYear() + '-' + ('0' + (dt.getMonth() + 1)).slice(-2) + '-' + ('0' + dt.getDate()).slice(-2);
+}
+function _nut2DateLabel(iso){
+  var p = iso.split('-'), dt = new Date(+p[0], +p[1] - 1, +p[2]);
+  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()] + ' ' + dt.getDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
+}
+
+// ── plan tab ──
+var _NUT2_FLAG_COL = { on: '#6fcf8f', under: '#e0b04a', over: '#e07a7a', none: 'var(--text3)' };
+function _nut2CounterHTML(date, ns){
+  var tg = nut2Targets(ns), T = nut2DayTotals(date, ns);
+  if(!tg) return '<div style="padding:14px;border:1px dashed var(--gold);border-radius:12px;margin-bottom:12px;color:var(--text2);font-size:13px;">Log a weigh-in on Today to set your daily target.</div>';
+  var P = T.planned, E = T.eaten;
+  var bar = function(lbl, key, got, want, unit){
+    var fl = nut2Flag(got, want, key), pct = Math.min(100, want > 0 ? Math.round(got / want * 100) : 0);
+    var u2 = unit || ' kcal', word = fl.state === 'on' ? 'on target' : (fl.state === 'over' ? '+' + fl.diff + u2 + ' over' : Math.abs(fl.diff) + u2 + ' under');
+    return '<div data-n2-flag="' + key + '" data-state="' + fl.state + '" style="margin-top:8px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);"><span>' + lbl + ' ' + got + ' / ' + want + unit + '</span><span style="color:' + _NUT2_FLAG_COL[fl.state] + ';">' + word + '</span></div>' +
+      '<div style="height:5px;border-radius:3px;background:var(--border);margin-top:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + _NUT2_FLAG_COL[fl.state] + ';"></div></div></div>';
+  };
+  return '<div id="n2-counter" style="padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg2);margin-bottom:12px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-end;"><div><div style="font-family:var(--font-d);font-size:30px;font-weight:900;line-height:1;color:var(--text);">' + P.kcal + '<span style="font-size:13px;font-weight:400;color:var(--text3);"> / ' + tg.kcal + ' kcal planned</span></div>' +
+    '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Eaten so far ' + E.kcal + ' kcal &middot; without morning drinks ' + T.noDrinks.kcal + ' kcal</div></div></div>' +
+    bar('Calories', 'kcal', P.kcal, tg.kcal, '') + bar('Protein', 'p', P.p, tg.protein_g, 'g') + bar('Carbs', 'c', P.c, tg.carbs_g, 'g') + bar('Fat', 'f', P.f, tg.fat_g, 'g') +
+    (P.missing ? '<div style="font-size:11px;color:#e07a7a;margin-top:8px;">' + P.missing + ' item' + (P.missing > 1 ? 's' : '') + ' no longer in your library — not counted.</div>' : '') +
+    '<div style="font-size:10px;color:var(--text3);margin-top:8px;">Target from ' + tg.fromKg + ' kg (' + _nut2DateLabel(tg.fromDate) + ')</div></div>';
+}
+function _nut2PlanTab(){
+  var ns = _nut2State(), today = _nutToday();
+  var date = _nut2PlanDate || today, day = nut2Day(date, ns);
+  var inp = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;outline:none;';
+  var h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+    '<button data-n2-day="-1" style="padding:8px 14px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text);font-size:16px;">&lsaquo;</button>' +
+    '<div style="flex:1;text-align:center;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;color:var(--text);">' + (date === today ? 'TODAY &middot; ' : '') + _nut2DateLabel(date).toUpperCase() + '</div>' +
+    (date !== today ? '<button data-n2-day="0" style="padding:8px 10px;border-radius:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:11px;font-family:var(--font-d);font-weight:900;">TODAY</button>' : '') +
+    '<button data-n2-day="1" style="padding:8px 14px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text);font-size:16px;">&rsaquo;</button></div>';
+  h += _nut2CounterHTML(date, ns);
+  day.feeds.forEach(function(fd){
+    var t = nut2FeedTotals(fd, ns);
+    h += '<div data-feed="' + fd.id + '" style="border:1px solid ' + (fd.eaten ? 'var(--gold)' : 'var(--border)') + ';border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--bg2);">' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<button data-n2-eat="' + fd.id + '" aria-pressed="' + (fd.eaten ? 'true' : 'false') + '" style="width:28px;height:28px;flex-shrink:0;border-radius:7px;padding:0;background:' + (fd.eaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (fd.eaten ? 'var(--gold)' : 'var(--border2)') + ';color:#000;font-weight:900;">' + (fd.eaten ? '&#10003;' : '') + '</button>' +
+      '<input data-n2-time="' + fd.id + '" type="time" value="' + _nut2Esc(fd.time) + '" style="' + inp + 'width:118px;flex-shrink:0;padding:6px 4px;color:var(--gold);font-size:14px;">' +
+      '<input data-n2-fname="' + fd.id + '" value="' + _nut2Esc(fd.name) + '" style="' + inp + 'flex:1;min-width:0;padding:6px 8px;font-size:15px;font-weight:700;border-color:transparent;background:transparent;">' +
+      '<div data-n2-fkc="' + fd.id + '" style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;">' + t.kcal + '</div></div>';
+    fd.items.forEach(function(it, i){
+      var m = nut2ItemMacros(it, ns), serves = it.serves != null;
+      h += '<div style="display:flex;align-items:center;gap:6px;padding:7px 0 0 36px;">' +
+        '<div style="flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.3;">' + _nut2Esc(_nut2RefName(it.ref, ns)) + (m.missing ? ' <span style="color:#e07a7a;">(missing)</span>' : '') +
+        '<div data-n2-ikc="' + fd.id + ':' + i + '" style="font-size:10px;color:var(--text3);">' + Math.round(m.kcal) + ' kcal &middot; P ' + Math.round(m.p * 10) / 10 + '</div></div>' +
+        '<input data-n2-qty="' + fd.id + ':' + i + '" type="number" inputmode="decimal" step="' + (serves ? '0.5' : '1') + '" placeholder="' + (serves ? 'serves' : 'g') + '" value="' + (serves ? it.serves : (it.g || '')) + '" style="' + inp + 'width:66px;padding:8px 4px;text-align:center;font-family:var(--font-d);font-weight:700;">' +
+        '<span style="font-size:11px;color:var(--text3);width:30px;">' + (serves ? 'serve' : 'g') + '</span>' +
+        '<button data-n2-idel="' + fd.id + ':' + i + '" style="background:none;border:none;color:var(--text3);font-size:20px;padding:0 2px;">&times;</button></div>';
+    });
+    h += '<div style="display:flex;gap:8px;margin-top:8px;padding-left:36px;">' +
+      '<button data-n2-iadd="' + fd.id + '" style="flex:1;padding:9px;border-radius:8px;background:transparent;border:1px dashed var(--border2);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;">+ ADD FOOD</button>' +
+      '<button data-n2-fdel="' + fd.id + '" style="padding:9px 10px;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text3);font-size:11px;">Remove</button></div></div>';
+  });
+  h += '<button data-n2-fadd style="width:100%;padding:12px;border-radius:10px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1.5px;">+ ADD FEED</button>';
+  return h;
+}
+// Live numbers without a re-render, so the box he is typing in keeps focus.
+function _nut2PaintCounter(){
+  var date = _nut2PlanDate || _nutToday(), ns = _nut2State();
+  var c = document.getElementById('n2-counter');
+  if(c){ var w = document.createElement('div'); w.innerHTML = _nut2CounterHTML(date, ns); if(w.firstChild) c.parentNode.replaceChild(w.firstChild, c); }
+  var day = nut2Day(date, ns), body = document.getElementById('nut2-body'); if(!body) return;
+  day.feeds.forEach(function(fd){
+    var k = body.querySelector('[data-n2-fkc="' + fd.id + '"]'); if(k) k.textContent = nut2FeedTotals(fd, ns).kcal;
+    fd.items.forEach(function(it, i){
+      var el = body.querySelector('[data-n2-ikc="' + fd.id + ':' + i + '"]'); if(!el) return;
+      var m = nut2ItemMacros(it, ns); el.innerHTML = Math.round(m.kcal) + ' kcal &middot; P ' + Math.round(m.p * 10) / 10;
+    });
+  });
+}
+var _nut2FdelArm = null;
+function _nut2PlanClick(t){
+  var date = _nut2PlanDate || _nutToday(), a;
+  if((a = t.getAttribute('data-n2-day')) !== null){ _nut2PlanDate = a === '0' ? null : _nut2ShiftDate(date, +a); if(_nut2PlanDate === _nutToday()) _nut2PlanDate = null; nut2Render(); return true; }
+  if((a = t.getAttribute('data-n2-eat')) !== null){ var fd = nut2Day(date).feeds.filter(function(f){ return f.id === a; })[0]; nut2SetFeed(date, a, { eaten: !(fd && fd.eaten) }); nut2Render(); return true; }
+  if((a = t.getAttribute('data-n2-idel')) !== null){ var p = a.split(':'); nut2DelItem(date, p[0], +p[1]); nut2Render(); return true; }
+  if((a = t.getAttribute('data-n2-iadd')) !== null){
+    var fid = a;
+    nut2OpenPicker('Add to ' + ((nut2Day(date).feeds.filter(function(f){ return f.id === fid; })[0] || {}).name || 'feed'), function(ref){
+      var idx = nut2AddItem(date, fid, ref); _nut2CloseSheet(); nut2Render();
+      setTimeout(function(){ var el = document.querySelector('[data-n2-qty="' + fid + ':' + idx + '"]'); if(el){ try { el.focus(); if(el.select) el.select(); } catch(_f){} } }, 60);
+    });
+    return true;
+  }
+  if((a = t.getAttribute('data-n2-fdel')) !== null){
+    if(_nut2FdelArm !== a){ _nut2FdelArm = a; t.textContent = 'Tap again'; t.style.color = '#e07a7a'; t.style.borderColor = '#e07a7a'; return true; }
+    _nut2FdelArm = null; nut2DelFeed(date, a); nut2Render(); return true;
+  }
+  if(t.hasAttribute('data-n2-fadd')){ nut2AddFeed(date); nut2Render(); return true; }
+  return false;
+}
+function _nut2PlanInput(t){
+  var date = _nut2PlanDate || _nutToday(), a;
+  if((a = t.getAttribute('data-n2-qty')) !== null){ var p = a.split(':'); nut2SetItemQty(date, p[0], +p[1], t.value); _nut2PaintCounter(); return true; }
+  if((a = t.getAttribute('data-n2-fname')) !== null){ nut2SetFeed(date, a, { name: t.value }); return true; }
+  return false;
+}
+function _nut2PlanChange(t){
+  var a = t.getAttribute && t.getAttribute('data-n2-time');
+  if(a === null || a === undefined) return false;
+  nut2SetFeed(_nut2PlanDate || _nutToday(), a, { time: t.value }); nut2Render(); return true;
+}
+
 // v4.9.396 — the cut target, assessed from his latest weigh-in (Jon 2026-11-10: "assess current
 // weight but should have been the one closer to 2000"). Per kg: 18.5 kcal, 1.8 g protein, 0.65 g
 // fat; carbs take the remainder. At 112 kg → 2070 kcal · P202 · C151 · F73. No weigh-in → null
@@ -23114,13 +23372,19 @@ function _nut2TodayTile(tile){
     (function(){
       var t = nut2Targets();
       if(!t) return '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Log a weigh-in to set your daily target.</div>';
-      return '<div><div style="font-family:var(--font-d);font-size:28px;font-weight:900;line-height:1;color:var(--text);">' + t.kcal + ' <span style="font-size:12px;font-weight:400;color:var(--text3);">kcal target</span></div>' +
-        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">P' + t.protein_g + 'g &middot; C' + t.carbs_g + 'g &middot; F' + t.fat_g + 'g &middot; from ' + t.fromKg + ' kg</div></div>';
+      var A = (typeof window !== 'undefined' && window.NUT_AFCD), d = _nutToday(), T = A ? nut2DayTotals(d) : null;
+      var nx = A ? nut2Day(d).feeds.filter(function(f){ return !f.eaten && (f.items || []).length; })[0] : null;
+      return '<div><div style="font-family:var(--font-d);font-size:28px;font-weight:900;line-height:1;color:var(--text);">' + (T ? T.eaten.kcal : '&hellip;') + ' <span style="font-size:12px;font-weight:400;color:var(--text3);">/ ' + t.kcal + ' kcal eaten</span></div>' +
+        (T ? '<div data-n2-today-plan style="font-size:11px;color:var(--text3);margin-top:4px;">Planned ' + T.planned.kcal + ' kcal &middot; P ' + T.planned.p + ' / ' + t.protein_g + 'g' + (nx ? ' &middot; next ' + _nut2Esc(nx.time) + ' ' + _nut2Esc(nx.name) : '') + '</div>' : '') + '</div>';
     })() +
     '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">OPEN ›</div>' +
     '</div></div>';
   var el = tile.querySelector('[data-n2-today]');
   if(el) el.addEventListener('click', function(){ if(typeof navTo === 'function') navTo('nutrition'); });
+  if(typeof window !== 'undefined' && !window.NUT_AFCD && !tile._n2waiting){
+    tile._n2waiting = true;
+    _nut2LoadAfcd(function(ok){ tile._n2waiting = false; if(ok){ _nut2BuildIndex(); _nut2TodayTile(tile); } });
+  }
 }
 // NUTRITION v2 — END
 // ═══════════════════════════════════════════════════════════════════════════

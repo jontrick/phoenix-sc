@@ -404,3 +404,17 @@ a 3 s "Get set" count-in when a timed step comes next. Use this for every simila
 the sequence); bike calories entered per block during the spin (`entry.per:'block'`).
 Verified in Chromium: burpee held 20 s without advancing → Done → Get set 3 → sprint 8;
 end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
+
+## v4.9.400 — Wed 11 Nov: Bronco showed COMPLETED, Jon had not done it (05:23)
+- Jon: "I never completed today's session and says completed". The Today card's green Completed
+  pill reads the calendar entry's `status === 'completed'` (`_blabTodayStatus`), so W3 D1 (Bronco,
+  moved to 11 Nov by `_draftReschedule1109`) was stamped completed by SOMETHING.
+- **ROOT CAUSE ???** Not reproduced: a sandbox replay (W1–W2 done, W2 D6 skipped, reschedule,
+  Tue W3 D2 completed) leaves the Bronco pending. Supabase unreachable from the sandbox; asked Jon
+  for a screenshot. Noted while tracing: `s.week` stays 2 because W2 D6 was skipped, never
+  completed, so the week never advanced. `_phxShouldReopenSession` / `_blabUnfinishedToday`
+  compare `s.week === w`, which is wrong while the programme week is date-driven. Suspect, not
+  proven.
+- Shipped `_draftRepairWed11` (one-off, today only): W3 D1 back to pending, its log entry removed,
+  last_completed_day restored; a Tuesday-dated stamp moves to W3 D2. `draftAfterSession` level
+  changes from a wrong completion are NOT reverted. Archive after 11 Nov. Test: REPAIRWED11.

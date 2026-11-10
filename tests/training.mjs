@@ -6387,6 +6387,31 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     } finally { app._phxLocalISO = realToday; }
   });
 
+  test('REPAIRWED11: a Bronco wrongly marked done on Wed 11 Nov goes back to pending (Jon 05:23)', () => {
+    const realToday = app._phxLocalISO;
+    const realCal = app._blabCalTodayISO;
+    try {
+      const run = (stampDate) => {
+        startDraft();
+        app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-09'; app.window._draftReschedule1109();
+        app._phxLocalISO = (d) => d ? realToday(d) : stampDate; app._blabCalTodayISO = () => stampDate; app.blabCompleteSession(3, 1); app._blabCalTodayISO = realCal;
+        app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-11';
+        const at = (w, d) => app.blabCalGet().sessions.find((e) => e.blabWeek === w && e.blabDay === d);
+        assert.equal(at(3, 1).status, 'completed', 'positive control: the bad state reproduced');
+        assert.equal(app.window._draftRepairWed11(), true);
+        assert.equal(at(3, 1).status, 'pending'); assert.equal(at(3, 1).scheduledDate, '2026-11-11');
+        assert.equal(app._blabTodayStatus(at(3, 1)), 'todo');
+        assert.equal(app.window._draftRepairWed11(), false, 'second run changes nothing');
+        return at;
+      };
+      run('2026-11-11');
+      const at = run('2026-11-10');
+      assert.equal(at(3, 2).status, 'completed', 'a Tuesday stamp is moved to Tuesday');
+      app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-12';
+      assert.equal(app.window._draftRepairWed11(), false, 'dead after Wednesday');
+    } finally { app._phxLocalISO = realToday; }
+  });
+
   test('NORINGS: no ring movement anywhere in the programme (Jon, 10 Nov)', () => {
     startDraft();
     let fin = 0;

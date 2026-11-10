@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.399';
+var APP_VERSION='4.9.400';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8750,6 +8750,34 @@ window._draftReschedule1109 = function(){
   } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.reschedule1109', _e, {}); return false; }
 };
 
+// v4.9.400 — ONE-OFF REPAIR, Wed 11 Nov only. Jon 05:23: "I never completed today's session and
+// says completed". The Bronco (W3 D1, moved to today) is put back to pending and its completion
+// is taken out of the log. Root cause ??? — recorded in HANDOFF_TRAINING.md. If the stamp is
+// dated Tuesday and Tuesday (W3 D2) is not marked done, the stamp belonged to Tuesday's session
+// and is moved there. Archive after 11 Nov.
+window._draftRepairWed11 = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft') return false;
+    if(_phxLocalISO() !== '2026-11-11') return false;
+    var cal = window.blabCalGet(); if(!cal || !Array.isArray(cal.sessions)) return false;
+    var b = cal.sessions.filter(function(e){ return e && e.blabWeek === 3 && e.blabDay === 1 && e.scheduledDate === '2026-11-11' && e.status === 'completed'; })[0];
+    if(!b) return false;
+    var when = b.completedDate || '';
+    b.status = 'pending'; delete b.completedDate;
+    if(when === '2026-11-10'){
+      var tue = cal.sessions.filter(function(e){ return e && e.blabWeek === 3 && e.blabDay === 2; })[0];
+      if(tue && tue.status !== 'completed'){ tue.status = 'completed'; tue.completedDate = '2026-11-10'; }
+    }
+    if(Array.isArray(s.log)) s.log = s.log.filter(function(r){ return !(r && r.week === 3 && r.day === 1 && r.date && _phxLocalISO(new Date(r.date)) === when); });
+    var d3 = (s.log || []).filter(function(r){ return r && r.week === 3; }).map(function(r){ return r.day; });
+    if(s.last_completed_day === 1) s.last_completed_day = d3.length ? Math.max.apply(null, d3) : 0;
+    window.blabSaveState(s);
+    window.blabCalSave(cal);
+    if(typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){}
+    return true;
+  } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.repairWed11', _e, {}); return false; }
+};
+
 // An already-built Draft calendar predates the split: bring its PENDING Draft add-ons into
 // line with draftSchedule, from today on. Completed entries, past entries and anything he
 // added himself are never touched.
@@ -8777,7 +8805,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);

@@ -176,4 +176,17 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(els['today-meals-tile'].innerHTML, '');
     } finally { app.document.getElementById = orig; }
   });
+
+  test('TARGET: assessed from the LATEST weigh-in; none logged → no target, never a default', () => {
+    signIn('u-tgt'); reset();
+    seed('phx_nut_v1_u-tgt', { setup_done: true, daily: { '2026-11-01': { weight_kg: 114 }, '2026-11-09': { weight_kg: 112 }, '2026-11-10': { feeling: 4 } } });
+    const t = app.nut2Targets();
+    assert.equal(t.fromKg, 112); assert.equal(t.kcal, 2070);
+    assert.equal(t.protein_g, 202); assert.equal(t.fat_g, 73); assert.equal(t.carbs_g, 151);
+    seed('phx_nut_v1_u-tgt', { setup_done: true, daily: {} });
+    assert.equal(app.nut2Targets(), null);
+    const tile = { innerHTML: '', querySelector: () => ({ addEventListener(){} }) };
+    app._nut2TodayTile(tile);
+    assert.ok(/Log a weigh-in/.test(tile.innerHTML), tile.innerHTML.slice(0, 200));
+  });
 }

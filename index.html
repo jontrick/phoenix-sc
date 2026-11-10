@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.395';
+var APP_VERSION='4.9.396';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23083,6 +23083,27 @@ function _nut2PaintRecipe(){
   });
   paintTot();
 }
+// v4.9.396 — the cut target, assessed from his latest weigh-in (Jon 2026-11-10: "assess current
+// weight but should have been the one closer to 2000"). Per kg: 18.5 kcal, 1.8 g protein, 0.65 g
+// fat; carbs take the remainder. At 112 kg → 2070 kcal · P202 · C151 · F73. No weigh-in → null
+// (the card asks for one); a target is never invented.
+var NUT2_PER_KG = { kcal: 18.5, p: 1.8, f: 0.65 };
+function nut2LatestWeight(ns){
+  ns = ns || nutGetState(); var d = (ns && ns.daily) || {};
+  var keys = Object.keys(d).sort();
+  for(var i = keys.length - 1; i >= 0; i--){
+    var w = parseFloat(d[keys[i]] && d[keys[i]].weight_kg);
+    if(w >= 40 && w <= 250) return { kg: w, date: keys[i] };
+  }
+  return null;
+}
+function nut2Targets(ns){
+  var lw = nut2LatestWeight(ns); if(!lw) return null;
+  var kcal = Math.round(lw.kg * NUT2_PER_KG.kcal / 10) * 10;
+  var p = Math.round(lw.kg * NUT2_PER_KG.p), f = Math.round(lw.kg * NUT2_PER_KG.f);
+  var c = Math.max(0, Math.round((kcal - p * 4 - f * 9) / 4));
+  return { kcal: kcal, protein_g: p, carbs_g: c, fat_g: f, fromKg: lw.kg, fromDate: lw.date };
+}
 // v4.9.395 — the Today card. Replaces the legacy kcal tile AND the generated meals tile
 // (both showed an old plan and two conflicting targets). Stage 3 puts the planned day here.
 function _nut2TodayTile(tile){
@@ -23090,7 +23111,12 @@ function _nut2TodayTile(tile){
     '<div data-n2-today style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;">' +
     '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Nutrition</div>' +
     '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-    '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Your food library and recipes. Day planner coming next.</div>' +
+    (function(){
+      var t = nut2Targets();
+      if(!t) return '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Log a weigh-in to set your daily target.</div>';
+      return '<div><div style="font-family:var(--font-d);font-size:28px;font-weight:900;line-height:1;color:var(--text);">' + t.kcal + ' <span style="font-size:12px;font-weight:400;color:var(--text3);">kcal target</span></div>' +
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">P' + t.protein_g + 'g &middot; C' + t.carbs_g + 'g &middot; F' + t.fat_g + 'g &middot; from ' + t.fromKg + ' kg</div></div>';
+    })() +
     '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">OPEN ›</div>' +
     '</div></div>';
   var el = tile.querySelector('[data-n2-today]');

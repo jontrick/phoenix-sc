@@ -163,8 +163,10 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       still here and wrong"). `nutRenderTile` drew old targets (2703); `nutRenderMealsTile` drew the
       old GENERATED programme plan (oats/whey…, "Week 9", 2050) from `nutProgTargetsOn` — the
       stage-1 clear-out wiped `ns.daily` but that plan is generated, not stored, so it survived. Both
-      now defer to `_nut2TodayTile` when v2 is on. **Two conflicting targets (2703 vs 2050) — which is
-      his real cut target is ??? — ask Jon before stage 3's counter.** Test: nut2 TODAY (fired red
+      now defer to `_nut2TodayTile` when v2 is on. Target RULED (Jon 2026-11-10: "assess current
+      weight but should have been the one closer to 2000") → v4.9.396 `nut2Targets()` from the latest
+      `ns.daily[].weight_kg`: 18.5 kcal / 1.8 g P / 0.65 g F per kg, carbs remainder (112 kg → 2070).
+      Stage 3's counter must use `nut2Targets`, not `ns.targets` (2703) or the programme table (2050). Test: nut2 TODAY (fired red
       with the guard removed).
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no

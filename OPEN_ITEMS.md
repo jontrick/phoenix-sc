@@ -159,6 +159,13 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       100 produced 100800 g in the browser run). State `ns.v2.recipes`. **Still localStorage-only —
       cloud backup of `ns.v2` is an open decision for Jon (may need a schema change).** Next: stage 3
       day planner + macro counter.
+- [ ] **v4.9.395 — Today's two legacy nutrition cards replaced** (Jon, screenshot 2026-11-10: "all
+      still here and wrong"). `nutRenderTile` drew old targets (2703); `nutRenderMealsTile` drew the
+      old GENERATED programme plan (oats/whey…, "Week 9", 2050) from `nutProgTargetsOn` — the
+      stage-1 clear-out wiped `ns.daily` but that plan is generated, not stored, so it survived. Both
+      now defer to `_nut2TodayTile` when v2 is on. **Two conflicting targets (2703 vs 2050) — which is
+      his real cut target is ??? — ask Jon before stage 3's counter.** Test: nut2 TODAY (fired red
+      with the guard removed).
 - [ ] **NUTRITION — the domain is being REBUILT (Jon, 2026-11-10: "i havnt logged need to
       re build nutrition").** The daily mirror (v4.9.389) is live and tested and needs no
       further work: `_nutDailyRow` / `_nutMirrorDayNow` / `_nutMirrorRecentDays` start

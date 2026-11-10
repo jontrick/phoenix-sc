@@ -160,4 +160,20 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const h = app._nut2RecipesTab();
     assert.ok(/Makes 8 &middot; per serve/.test(h) && /300 g batch &middot; per 100 g/.test(h), h.slice(0, 300));
   });
+
+  test('TODAY: old kcal tile and generated meals tile are replaced by one v2 card (entry points, not helpers)', () => {
+    signIn('u-today'); reset();
+    seed('phx_nut_v1_u-today', { setup_done: true, targets: { kcal: 2703, protein_g: 246, carbs_g: 270, fat_g: 71 }, daily: {} });
+    const els = {};
+    const mk = id => ({ id, innerHTML: 'OLD', querySelector: () => ({ addEventListener(){} }), querySelectorAll: () => [] });
+    els['today-nutrition-tile'] = mk('today-nutrition-tile'); els['today-meals-tile'] = mk('today-meals-tile');
+    const orig = app.document.getElementById;
+    app.document.getElementById = id => els[id] || (orig ? orig.call(app.document, id) : null);
+    try {
+      app.nutRenderTile(); app.nutRenderMealsTile();
+      assert.ok(/data-n2-today/.test(els['today-nutrition-tile'].innerHTML), els['today-nutrition-tile'].innerHTML.slice(0, 200));
+      assert.ok(!/kcal remaining/.test(els['today-nutrition-tile'].innerHTML), 'legacy kcal tile still drawn');
+      assert.equal(els['today-meals-tile'].innerHTML, '');
+    } finally { app.document.getElementById = orig; }
+  });
 }

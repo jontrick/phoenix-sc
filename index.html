@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.403';
+var APP_VERSION='4.9.404';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8811,7 +8811,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);
@@ -9437,6 +9437,7 @@ window.draftOpenConditioning = function(week, day, sess){
     h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-top:10px;">' +
          ((typeof window.trnEyebrow === 'function') ? window.trnEyebrow(week) : 'Week ' + week) + (dry ? ' &middot; preview' : '') + '</div>';
     h += '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.05;margin:4px 0 14px;">' + _esc(sess.name) + '</div>';
+    if(!dry && typeof window._phxSessionNotesCard === 'function') h += window._phxSessionNotesCard(sess.name);
     parts.forEach(function(p, i){
       var s = st[i];
       var edge = s.done ? '#3a7d44' : 'var(--border)';
@@ -9660,6 +9661,91 @@ window.draftOpenSetup = function(){
     if(typeof renderTodayScreen === 'function') renderTodayScreen();
     if(typeof navTo === 'function') navTo('today');
   };
+};
+// ── v4.9.404 — SESSION NOTES ────────────────────────────────────────────────
+// Jon 11 Nov: "All notes should be at top of every like for like session". A note box sits at
+// the top of every programme session (gym screen + conditioning screen); earlier notes for the
+// SAME session (same programme + same session name, e.g. every 'Lower — Max Effort') show above
+// it. Stored in blab state s.sessionNotes[key] = [{date, text}] — mirrored to the cloud with
+// the rest of blab_state. Timed library sessions keep their score notes (wod_scores) and show
+// the past ones at the top of the timer screen.
+window._phxNoteKey = function(sessName){
+  var s = window.blabGetState && window.blabGetState();
+  return ((s && s.programme) || 'blab') + ':' + String(sessName || '').trim();
+};
+window._phxNotesGet = function(key){
+  var s = window.blabGetState && window.blabGetState();
+  var a = (s && s.sessionNotes && s.sessionNotes[key]) || [];
+  return a.slice().sort(function(x, y){ return String(y.date).localeCompare(String(x.date)); });
+};
+window._phxNoteSet = function(key, date, text){
+  var s = window.blabGetState && window.blabGetState(); if(!s || !key) return false;
+  if(!s.sessionNotes) s.sessionNotes = {};
+  var a = (s.sessionNotes[key] || []).filter(function(n){ return n && n.date !== date; });
+  text = String(text || '').slice(0, 1000);
+  if(text.trim()) a.push({ date: date, text: text });
+  if(a.length) s.sessionNotes[key] = a; else delete s.sessionNotes[key];
+  window.blabSaveState(s); return true;
+};
+function _phxNoteDate(iso){
+  var p = String(iso).split('-'); if(p.length !== 3) return iso;
+  var dt = new Date(+p[0], +p[1] - 1, +p[2]);
+  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()] + ' ' + dt.getDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
+}
+function _phxNoteEsc(t){ return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+// past: [{date,text}] newest first. editKey: null → read-only (library sessions).
+window._phxNotesCardHTML = function(past, editKey, todayText){
+  past = (past || []).slice(0, 3);
+  if(!past.length && !editKey) return '';
+  var h = '<div data-phx-notes style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin:0 0 12px;">' +
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">' + (past.length ? 'Notes from last time' : 'Notes') + '</div>';
+  past.forEach(function(n){
+    h += '<div style="font-size:13px;color:var(--text);line-height:1.45;margin-bottom:6px;"><span style="color:var(--text3);font-size:11px;">' + _phxNoteDate(n.date) + ' &mdash; </span>' + _phxNoteEsc(n.text) + '</div>';
+  });
+  if(editKey) h += '<textarea data-phx-note-key="' + _phxNoteEsc(editKey) + '" rows="2" placeholder="Note for next time &mdash; swaps, kit, how it felt" style="width:100%;margin-top:4px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;font-family:inherit;resize:vertical;">' + _phxNoteEsc(todayText || '') + '</textarea>';
+  return h + '</div>';
+};
+// The card for a programme session: past notes for this session + today's box.
+window._phxSessionNotesCard = function(sessName){
+  var key = window._phxNoteKey(sessName), today = _phxLocalISO();
+  var all = window._phxNotesGet(key), mine = all.filter(function(n){ return n.date === today; })[0];
+  return window._phxNotesCardHTML(all.filter(function(n){ return n.date !== today; }), key, mine ? mine.text : '');
+};
+if(typeof document !== 'undefined' && document.addEventListener && !window._phxNotesWired){
+  window._phxNotesWired = true;
+  document.addEventListener('input', function(e){
+    var t = e.target; if(!t || !t.getAttribute) return;
+    var k = t.getAttribute('data-phx-note-key'); if(!k) return;
+    window._phxNoteSet(k, _phxLocalISO(), t.value);
+  });
+}
+// Timed library sessions: past score notes, read-only, under the header.
+window._phxInjectPastNotes = function(s){
+  try {
+    var o = document.getElementById('phx-lib-run'); if(!o || !s || typeof _phxHistoryFor !== 'function') return;
+    var past = _phxHistoryFor(s.id).filter(function(r){ return r && r.notes && String(r.notes).trim(); })
+      .map(function(r){
+        // wod_scores dates are UTC timestamps — a 6 am Brisbane score is "yesterday" in UTC.
+        var d = String(r.date || ''), dt = d.length > 10 ? new Date(d) : null;
+        return { date: (dt && !isNaN(dt)) ? _phxLocalISO(dt) : d.slice(0, 10), text: r.notes }; });
+    var html = window._phxNotesCardHTML(past, null); if(!html) return;
+    var w = document.createElement('div'); w.style.cssText = 'padding:12px 18px 0;'; w.innerHTML = html;
+    var first = o.firstElementChild;
+    if(first && first.nextSibling) o.insertBefore(w, first.nextSibling); else o.appendChild(w);
+  } catch(_e){}
+};
+// One-off (archive after 12 Nov): today's swap, as Jon asked it logged.
+window._draftSeedNote1112 = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft' || s._seedNote1112) return false;
+    if(_phxLocalISO() < '2026-11-12') return false;
+    var key = 'draft:Lower — Max Effort';
+    var have = (s.sessionNotes && s.sessionNotes[key]) || [];
+    if(!have.some(function(n){ return n.date === '2026-11-12'; }))
+      window._phxNoteSet(key, '2026-11-12', 'Forgot the ab wheel: did leg raises instead of ab wheel roll-outs in the leg curl superset.');
+    s = window.blabGetState(); s._seedNote1112 = true; window.blabSaveState(s);
+    return true;
+  } catch(_e){ return false; }
 };
 // ══ DRAFT PROGRAMME — END ═════════════════════════════════════════════════════
 
@@ -43231,6 +43317,7 @@ function _phxStartSession(id, dryRun){
   else if(r==='emom') _phxRenderEmom(s);
   else if(r==='intervals') _phxRenderIntervals(s);
   else _phxRenderCore(s);
+  if(!dryRun && typeof window._phxInjectPastNotes === 'function') window._phxInjectPastNotes(s);
 }
 function _phxRunOverlay(s){
   var o = _phxLibOverlay('phx-lib-run',9560);
@@ -45802,6 +45889,13 @@ function openTodaySession(){
     '<div class="sh-name">'+(sess.session_type||'Training')+customisedBadgeHTML+'</div>'+
     '<div class="sh-detail">'+(sess.exercises||[]).length+' exercises &middot; '+(sess.duration_min||45)+'min</div>';
   body.appendChild(hero);
+  // v4.9.404 — notes at the top of every like-for-like programme session.
+  var _bcs = window._blabCurrentSession;
+  if(_bcs && _bcs.data && _bcs.data.name && !window._blabDryRun && typeof window._phxSessionNotesCard === 'function'){
+    var _nc = document.createElement('div'); _nc.style.cssText = 'padding:12px 16px 0;';
+    _nc.innerHTML = window._phxSessionNotesCard(_bcs.part === 'f' ? 'Field Tests' : _bcs.data.name);
+    body.appendChild(_nc);
+  }
   // Apply swaps + inject superset partners before rendering the exercise blocks.
   var exercises = _phxApplyCustomisations(sess.exercises||[], _customs);
   window._blabPhxExercises = exercises; // needed by BLAB block builders

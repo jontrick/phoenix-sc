@@ -6441,4 +6441,33 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     }
     assert.ok(thu >= 4, 'positive control: the leg raise is programmed on Thursdays (' + thu + ')');
   });
+  test('NOTES: saved per session per day; past notes shown, today in the box; like-for-like only', () => {
+    startDraft();
+    const T = app._phxLocalISO;
+    const k = app.window._phxNoteKey('Lower — Max Effort');
+    assert.equal(k, 'draft:Lower — Max Effort');
+    app.window._phxNoteSet(k, '2026-11-05', 'Box squat felt high');
+    app.window._phxNoteSet(k, T(), 'Today <b>note</b>');
+    app.window._phxNoteSet(app.window._phxNoteKey('Speed Upper'), '2026-11-07', 'Other session');
+    const h = app.window._phxSessionNotesCard('Lower — Max Effort');
+    assert.ok(h.includes('Notes from last time') && h.includes('Box squat felt high'), h.slice(0, 300));
+    assert.ok(!h.includes('Other session'), 'another session\'s note never shows');
+    assert.ok(h.includes('Today &lt;b&gt;note&lt;/b&gt;</textarea>'), 'today in the box, escaped');
+    app.window._phxNoteSet(k, T(), '   ');
+    assert.equal(app.window._phxNotesGet(k).length, 1, 'clearing the box removes today\'s note');
+    assert.ok(app.window._phxSessionNotesCard('Brand New Session').includes('data-phx-note-key'), 'a box even with no history');
+  });
+  test('NOTES seed: today\'s ab wheel swap is logged once on Lower — Max Effort', () => {
+    startDraft();
+    const real = app._phxLocalISO;
+    app._phxLocalISO = (d) => d ? real(d) : '2026-11-12';
+    try {
+      assert.equal(app.window._draftSeedNote1112(), true);
+      const n = app.window._phxNotesGet('draft:Lower — Max Effort');
+      assert.equal(n.length, 1); assert.equal(n[0].date, '2026-11-12'); assert.ok(/leg raises instead of ab wheel/.test(n[0].text));
+      assert.equal(app.window._draftSeedNote1112(), false, 'once');
+      app.window._phxNoteSet('draft:Lower — Max Effort', '2026-11-12', 'edited by Jon');
+      assert.equal(app.window._phxNotesGet('draft:Lower — Max Effort')[0].text, 'edited by Jon', 'his edit stands');
+    } finally { app._phxLocalISO = real; }
+  });
 }

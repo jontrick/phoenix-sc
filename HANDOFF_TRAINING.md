@@ -436,3 +436,11 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
 - **v4.9.403 (12 Nov)** — Thursday Lower ME superset is now **Lying Leg Curl / BOSU Ab Chair Leg
   Raise** (was Ab Wheel Rollout). Jon: forgot the ab wheel, did leg raises; wants them here from now
   on. Records keyed by the old name ('Ab Wheel Rollout') stay as history. Test: NOABWHEEL.
+- **v4.9.404 (12 Nov) — SESSION NOTES.** Jon: "All notes should be at top of every like for like
+  session". Programme sessions had NO notes at all (only lib-timer score notes existed, shown only
+  in library history). Now: `s.sessionNotes['<programme>:<session name>'] = [{date,text}]` in blab
+  state (cloud-mirrored). Card at the top of the gym screen (`openTodaySession`, after the hero) and
+  the conditioning screen: up to 3 past notes for the SAME session + today's box (saves on input,
+  empty box deletes today's note). Lib timers show past `wod_scores` notes read-only under the
+  header (UTC timestamps converted to local date). One-off `_draftSeedNote1112` logs today's ab
+  wheel → leg raise swap on 'draft:Lower — Max Effort' — archive after 12 Nov. Tests: NOTES ×2.

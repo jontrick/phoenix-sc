@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.407'", 'version is 4.9.407');
+has("var APP_VERSION='4.9.408'", 'version is 4.9.408');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -393,6 +393,13 @@ has("var APP_VERSION='4.9.407'", 'version is 4.9.407');
 hasCode("} else if(window._phxOpenProgrammeKey && document.getElementById('draft-cond')){", 'REOPENCOND: the hide-time marker covers the conditioning screen');
 hasCode("window._phxOpenProgrammeKey = dry ? null : ('blab:' + week + ':' + day + ':' + _phxLocalISO());", 'REOPENCOND: opening conditioning records its identity (never in a dry run)');
 hasCode("    window._phxOpenProgrammeKey = null;\n    if(typeof window._phxClearSessionScreenOpen === 'function') window._phxClearSessionScreenOpen();", 'REOPENCOND: Back / Complete clears it, so a left session never reopens');
+
+// ── TRAINING — a running chipper timer survives the app being killed (v4.9.408) ─
+// Browser-proven: start Bronco → tick a set → kill → relaunch: clock continues (dead time counted),
+// set still ticked, no count-in. Finish / Back clear the saved run.
+hasCode("    window._phxTimerStart = resume.start;\n    go();", 'RUNRESUME: a resumed timer reuses the saved wall-clock start, no count-in');
+hasCode("document.getElementById('phx-run-finish').onclick=function(){ _phxRunClear();", 'RUNRESUME: Finish clears the saved run');
+hasCode("o.querySelector('.phx-lib-back').onclick=function(){ _phxRunClear();", 'RUNRESUME: Back clears the saved run');
 
 // ── SHARED — an update never reloads the app mid-session (v4.9.406) ─────────
 // Jon lost his Bronco time to a mid-session update reload (11 Nov). The functional sandbox has
@@ -1064,7 +1071,9 @@ hasNotCode('st.afapCountdown', 'FIX3: BLAB afap inline 5→0 countdown removed')
 hasNotCode('id="afap-countdown"', 'FIX3: afap-countdown element removed');
 [
   ["showCountIn(function(){\n      // The user may have backed out of the runner during the count-in", 'BLAB runner (complex/run/interval/tabata)'],
-  ["showCountIn(function(){\n    if(!document.body.contains(o)) return; // left the runner during the count-in\n    requestWakeLock();\n    _phxStampTimerStart();\n    paintTime();", 'WOD count-up'],
+  // v4.9.408 (Training): restructured so a RESUMED run (app killed mid-timer) skips the count-in —
+  // the clock was already running. A fresh start still stamps only inside the count-in callback.
+  ["showCountIn(function(){\n      if(!document.body.contains(o)) return; // left the runner during the count-in\n      _phxStampTimerStart();\n      _phxRunSave(s, steps, cur);\n      go();", 'WOD count-up'],
   ["paintAmrap();\n    window._phxLibTick=setInterval(paintAmrap,1000);", 'WOD AMRAP'],
   ["minStart=_phxStampTimerStart();", 'WOD EMOM'],
   ["_phxStampTimerStart();\n    startWork();", 'WOD sprint intervals'],

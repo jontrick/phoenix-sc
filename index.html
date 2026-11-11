@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.407';
+var APP_VERSION='4.9.408';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -43396,12 +43396,38 @@ function _phxParseMoveDetail(d){
 
 // 1) TIME / AFAP / CHIPPER — per-movement blocks (load chip + rep counter), tick in order,
 //    count-up timer throughout, total time logged on finish.
+// v4.9.408 — a running TIME/chipper timer survives the app being killed. Jon lost his Bronco
+// time on 11 Nov when the app reloaded mid-test: the start stamp lived only in memory. Saved on
+// start and on every tick-off; same session, same day, under 4 h → the relaunch puts the clock
+// back where it was (the stamp is wall-clock, so the time the app was dead is counted).
+var PHX_RUN_KEY = 'phx_run_v1';
+function _phxRunSave(s, steps, cur){
+  if(window._phxDryRun || !window._phxTimerStart) return;
+  try { localStorage.setItem(PHX_RUN_KEY, JSON.stringify({ id: s.id, start: window._phxTimerStart, day: _phxLocalISO(), cur: cur,
+    steps: steps.map(function(st){ return [st.done ? 1 : 0, st.reps || 0]; }) })); } catch(_e){}
+}
+function _phxRunClear(){ try { localStorage.removeItem(PHX_RUN_KEY); } catch(_e){} }
+window._phxRunPending = function(){
+  try {
+    var r = JSON.parse(localStorage.getItem(PHX_RUN_KEY) || 'null');
+    if(!r || !r.id || !(r.start > 0)) return null;
+    if(r.day !== _phxLocalISO() || Date.now() - r.start > 4 * 3600 * 1000 || Date.now() < r.start){ _phxRunClear(); return null; }
+    return r;
+  } catch(_e){ return null; }
+};
 function _phxRenderTime(s){
   var o=_phxRunOverlay(s), plan=phxBuildSessionPlan(s), elapsed=0;
+  var resume = (window._phxResumeRunFor === s.id) ? window._phxRunPending() : null;
+  window._phxResumeRunFor = null;
+  if(resume && resume.id !== s.id) resume = null;
   var rounds=plan.rounds||1;
   var steps=[];
   for(var rd=0; rd<rounds; rd++){ plan.steps.forEach(function(m){ steps.push({ mv:m, parsed:_phxParseMoveDetail(m.detail), round:rd, reps:0, done:false }); }); }
   var cur=0;
+  if(resume && Array.isArray(resume.steps) && resume.steps.length === steps.length){
+    resume.steps.forEach(function(x, i){ steps[i].done = !!x[0]; steps[i].reps = x[1] || 0; });
+    cur = Math.max(0, Math.min(steps.length, resume.cur || 0));
+  }
   function stepHtml(st, i){
     var p=st.parsed, active=(i===cur), completed=st.done;
     var loadChip = p.load ? '<span style="font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:1px;color:var(--gold);border:1px solid var(--gold);padding:2px 8px;border-radius:10px;white-space:nowrap;">'+p.load+'</span>' : '';
@@ -43438,28 +43464,44 @@ function _phxRenderTime(s){
     var block=document.querySelector('.phx-step[data-idx="'+cur+'"]'); if(!block) return;
     var st=steps[cur], cnt=block.querySelector('.phx-tt-count');
     var plusB=block.querySelector('.phx-tt-plus'), minusB=block.querySelector('.phx-tt-minus'), doneB=block.querySelector('.phx-step-done');
-    if(plusB) plusB.onclick=function(){ st.reps++; if(cnt) cnt.textContent=st.reps; };
-    if(minusB) minusB.onclick=function(){ if(st.reps>0) st.reps--; if(cnt) cnt.textContent=st.reps; };
-    if(doneB) doneB.onclick=function(){ st.done=true; if(st.parsed.reps!=null && st.reps===0) st.reps=st.parsed.reps; cur++; render();
+    if(plusB) plusB.onclick=function(){ st.reps++; if(cnt) cnt.textContent=st.reps; _phxRunSave(s, steps, cur); };
+    if(minusB) minusB.onclick=function(){ if(st.reps>0) st.reps--; if(cnt) cnt.textContent=st.reps; _phxRunSave(s, steps, cur); };
+    if(doneB) doneB.onclick=function(){ st.done=true; if(st.parsed.reps!=null && st.reps===0) st.reps=st.parsed.reps; cur++; _phxRunSave(s, steps, cur); render();
       var next=document.querySelector('.phx-step[data-idx="'+cur+'"]'); if(next && next.scrollIntoView) next.scrollIntoView({behavior:'smooth',block:'center'}); };
   }
   o.innerHTML=_phxLibHeader(s.format, s.name, null)+_phxClockBox('phx-run-clock','Elapsed')+
     '<div id="phx-time-list" style="padding:4px 16px 16px;flex:1;"></div>'+
     '<div style="padding:12px 16px 28px;background:var(--bg2);border-top:1px solid var(--border);position:sticky;bottom:0;">'+_phxFinishBtn('Finish — Log Time')+'</div>';
-  o.querySelector('.phx-lib-back').onclick=function(){ _phxClearTick(); o.remove(); _phxOpenSessionDetail(s.id); };
+  o.querySelector('.phx-lib-back').onclick=function(){ _phxRunClear(); _phxClearTick(); o.remove(); _phxOpenSessionDetail(s.id); };
   render();
   // v4.9.118 FIX 3: 5-4-3-2-1-GO! first; FIX 1: the count-up clock is then derived from the
   // start timestamp, so time spent with the screen locked is still counted correctly.
   function paintTime(){ elapsed=_phxElapsedSince(); var el=document.getElementById('phx-run-clock'); if(el) el.textContent=phxFmtTime(elapsed); }
-  showCountIn(function(){
-    if(!document.body.contains(o)) return; // left the runner during the count-in
+  function go(){
     requestWakeLock();
-    _phxStampTimerStart();
     paintTime();
     window._phxLibTick=setInterval(paintTime,1000);
     _phxRegisterTimer(paintTime);
-  });
-  document.getElementById('phx-run-finish').onclick=function(){ paintTime(); _phxClearTick(); o.remove();
+  }
+  if(resume){
+    // No count-in: the clock was already running when the app died.
+    window._phxTimerStart = resume.start;
+    go();
+    var rb = document.createElement('div');
+    rb.id = 'phx-run-resumed';
+    rb.style.cssText = 'margin:0 16px 8px;padding:9px 12px;border:1px solid var(--gold);border-radius:var(--radius);color:var(--gold);font-size:12px;text-align:center;';
+    rb.textContent = 'Timer resumed — the app closed, the clock kept counting.';
+    var clk = document.getElementById('phx-run-clock'); var box = clk && clk.parentNode;
+    if(box && box.parentNode) box.parentNode.insertBefore(rb, box.nextSibling);
+  } else {
+    showCountIn(function(){
+      if(!document.body.contains(o)) return; // left the runner during the count-in
+      _phxStampTimerStart();
+      _phxRunSave(s, steps, cur);
+      go();
+    });
+  }
+  document.getElementById('phx-run-finish').onclick=function(){ _phxRunClear(); paintTime(); _phxClearTick(); o.remove();
     var logged=steps.filter(function(st){ return st.parsed.reps!=null && st.reps>0; }).map(function(st){ return st.mv.name+' '+st.reps; });
     _phxOpenScoreEntry(s, elapsed, { summary: logged.length? logged.join(', ') : '' });
   };
@@ -48505,6 +48547,12 @@ function _phxBootRestoreApply(){
     // shared list keeps meaning exactly what it says and this stays Training's decision
     // about Training's data.
     var _reopen = (typeof window._phxShouldReopenSession === 'function') ? window._phxShouldReopenSession() : null;
+    // v4.9.408 — a timer that was running when the app died comes back on top of its session.
+    var _run = (typeof window._phxRunPending === 'function') ? window._phxRunPending() : null;
+    if(_run && typeof _phxStartSession === 'function'){
+      setTimeout(function(){ try { window._phxResumeRunFor = _run.id; _phxStartSession(_run.id); } catch(_re){ window._phxResumeRunFor = null; } }, _reopen ? 400 : 0);
+      if(!_reopen) return;
+    }
     if(_reopen && _reopen.part === 'f' && typeof window.draftOpenFieldTests === 'function'){
       console.log('[PHX] reopening field tests');   // v4.9.382
       window.draftOpenFieldTests();

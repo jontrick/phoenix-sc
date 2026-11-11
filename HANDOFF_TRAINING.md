@@ -459,3 +459,12 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   then kill → Today. **The gym-session case Jon also describes did not reproduce** — reopen works
   in the browser; cause on his phone ??? (candidate: a preview/dry-run open, which is never marked).
   Harness: REOPENCOND.
+- **v4.9.408 (12 Nov) — A RUNNING TIMER SURVIVES THE APP BEING KILLED.** TIME/chipper renderer
+  (`_phxRenderTime`: Bronco, field chippers, any lib count-up) saves `phx_run_v1` {id, wall-clock
+  start, day, ticked steps, cur} on start and every tick-off; boot restore reopens the session,
+  then the timer with the saved start (no count-in, "Timer resumed" note). Discarded if another
+  day, older than 4 h, or start in the future; cleared on Finish and Back. Browser-proven (kill at
+  00:04 → relaunch shows 00:07, set still ticked). **NOT covered: AMRAP / EMOM / intervals /
+  Core timers (countdowns, different state)** — still lost if the app dies mid-run. Harness FIX3
+  WOD count-up needle updated for the restructure (fresh start still stamps inside the count-in).
+  Tests: RUNRESUME (functional + harness).

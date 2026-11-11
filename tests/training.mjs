@@ -6485,4 +6485,21 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(app.window._phxSessionKit(null), []);
     assert.deepEqual(app.window._phxSessionKit({ libId: 'no-such-session' }), [], 'unknown session: no reminder');
   });
+  test('RUNRESUME: a saved timer resumes only same session-day, under 4 h; otherwise it is discarded', () => {
+    startDraft();
+    const T = app._phxLocalISO();
+    const put = (o) => seed('phx_run_v1', o);
+    put({ id: 'draft-bronco', start: Date.now() - 60000, day: T, cur: 1, steps: [[1, 0]] });
+    const r = app.window._phxRunPending();
+    assert.ok(r && r.id === 'draft-bronco' && r.cur === 1, JSON.stringify(r));
+    put({ id: 'draft-bronco', start: Date.now() - 5 * 3600 * 1000, day: T, cur: 0, steps: [] });
+    assert.equal(app.window._phxRunPending(), null, 'over 4 h: gone');
+    assert.equal(read('phx_run_v1'), null, 'and cleared');
+    put({ id: 'draft-bronco', start: Date.now() - 60000, day: '2026-01-01', cur: 0, steps: [] });
+    assert.equal(app.window._phxRunPending(), null, 'another day: gone');
+    put({ id: 'draft-bronco', start: Date.now() + 600000, day: T, cur: 0, steps: [] });
+    assert.equal(app.window._phxRunPending(), null, 'a start in the future (clock change): gone');
+    seed('phx_run_v1', null);
+    assert.equal(app.window._phxRunPending(), null);
+  });
 }

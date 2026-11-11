@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.406';
+var APP_VERSION='4.9.407';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9419,6 +9419,11 @@ window.draftOpenConditioning = function(week, day, sess){
     'padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);';
   document.body.appendChild(ov);
   var dry = !!window._blabDryRun;
+  // v4.9.407 — Jon 12 Nov: "the screen times out and then reverts back to the main day
+  // screen". Only #screen-session was ever marked for reopening; this overlay never was, so
+  // when iOS killed the app on Mon/Wed he always landed on Today. Same key format as the gym
+  // session, so _phxShouldReopenSession / boot restore need nothing new.
+  window._phxOpenProgrammeKey = dry ? null : ('blab:' + week + ':' + day + ':' + _phxLocalISO());
   var engineName = parts.some(function(p){ return p.title === 'Repeated-Effort Bouts'; }) ? 'Repeated-Effort Bouts'
                  : (parts.some(function(p){ return p.title === 'Acceleration Sprints'; }) ? 'Acceleration Sprints' : null);
   var lastSig = '';
@@ -9511,6 +9516,9 @@ window.draftOpenConditioning = function(week, day, sess){
   function close(){
     if(window._draftCondTick){ clearInterval(window._draftCondTick); window._draftCondTick = null; }
     var o = document.getElementById('draft-cond'); if(o) o.remove();
+    // Leaving (Back or Complete) is a choice: never reopen it on the next launch.
+    window._phxOpenProgrammeKey = null;
+    if(typeof window._phxClearSessionScreenOpen === 'function') window._phxClearSessionScreenOpen();
   }
   ov.addEventListener('click', function(e){
     if(e.target && e.target.hasAttribute && (e.target.hasAttribute('data-dc-kg') || e.target.hasAttribute('data-dc-reps') || e.target.hasAttribute('data-dc-in'))) return;   // typing in a kg / in / reps box
@@ -48413,6 +48421,10 @@ function _phxMarkSessionScreenOpen(){
     var onIt = !!(el && el.classList && el.classList.contains('active'));
     if(onIt && window._phxActiveSessionKey){
       localStorage.setItem(PHX_SESSION_OPEN_KEY, String(window._phxActiveSessionKey));
+    } else if(window._phxOpenProgrammeKey && document.getElementById('draft-cond')){
+      // v4.9.407 — the Draft conditioning screen (and a timer launched from it, which sits
+      // on top of it) reopens the same way.
+      localStorage.setItem(PHX_SESSION_OPEN_KEY, String(window._phxOpenProgrammeKey));
     }
   } catch(_e){}
 }

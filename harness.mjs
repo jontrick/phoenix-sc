@@ -385,7 +385,14 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.406'", 'version is 4.9.406');
+has("var APP_VERSION='4.9.407'", 'version is 4.9.407');
+
+// ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
+// Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
+// Back first → relaunch stays on Today. Pinned statically (needs a real DOM + reload).
+hasCode("} else if(window._phxOpenProgrammeKey && document.getElementById('draft-cond')){", 'REOPENCOND: the hide-time marker covers the conditioning screen');
+hasCode("window._phxOpenProgrammeKey = dry ? null : ('blab:' + week + ':' + day + ':' + _phxLocalISO());", 'REOPENCOND: opening conditioning records its identity (never in a dry run)');
+hasCode("    window._phxOpenProgrammeKey = null;\n    if(typeof window._phxClearSessionScreenOpen === 'function') window._phxClearSessionScreenOpen();", 'REOPENCOND: Back / Complete clears it, so a left session never reopens');
 
 // ── SHARED — an update never reloads the app mid-session (v4.9.406) ─────────
 // Jon lost his Bronco time to a mid-session update reload (11 Nov). The functional sandbox has

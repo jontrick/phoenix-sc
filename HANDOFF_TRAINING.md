@@ -450,3 +450,12 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   plan today: Tue = Dip belt, Sat/Sun speed = Bands; the Sat 21 Nov PHX Core session = Ab wheel.
   **Not covered:** general warm-ups (`WU_DYNAMIC`, chosen separately) — a band pull-apart there
   does not raise the reminder. Test: KIT.
+- **v4.9.407 (12 Nov) — CONDITIONING REOPENS AFTER iOS KILLS THE APP.** Jon: reading a session /
+  warming up, the screen times out and the app reverts to Today, "even mid session occasionally".
+  Browser repro (hidden + pagehide → relaunch): gym session (#screen-session) DID reopen; Draft
+  conditioning (#draft-cond, Mon/Wed incl. its Warm-up part) and a timer launched from it did NOT —
+  the marker only ever covered #screen-session. Fixed: `_phxOpenProgrammeKey` set on open, marked
+  on hide, cleared on Back/Complete. After: conditioning + timer relaunch to #draft-cond; Back
+  then kill → Today. **The gym-session case Jon also describes did not reproduce** — reopen works
+  in the browser; cause on his phone ??? (candidate: a preview/dry-run open, which is never marked).
+  Harness: REOPENCOND.

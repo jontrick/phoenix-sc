@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.404';
+var APP_VERSION='4.9.405';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22032,6 +22032,7 @@ function _blabRenderTodayFromCalendar(card, inner, weekNum){
       h += '<span style="flex-shrink:0;background:rgba(200,150,62,0.16);border:1px solid var(--gold);border-radius:20px;padding:4px 10px;font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);">In progress</span>';
     }
     h += '</div>';
+    if(st !== 'completed') h += _phxKitLine(window._phxSessionKit(e), false);
 
     if(st === 'completed'){
       // Nothing to press. A finished session that still offers a button is the
@@ -22088,6 +22089,35 @@ function _blabCalAfterChange(){
 // The row under the Today card: the next few days that actually have sessions, dated.
 // Replaces the sequential "remaining days of the programme week" list while the
 // calendar is in use.
+// v4.9.405 — kit to bring. Jon 12 Nov: forgot the ab wheel; "if something requires ab wheel or
+// weighted dips/pull ups / bands can you add a note on the today screen for that session".
+// Read from the session's own content (names, notes, cues), so a swap that removes the kit
+// removes the reminder too. Unknown session → [] (no reminder rather than a wrong one).
+var _PHX_KIT = [
+  { label: 'Ab wheel',  rx: /\bab wheel\b/i },
+  { label: 'Dip belt',  rx: /\bweighted (pull-?ups?|chin-?ups?|dips?)\b/i },
+  { label: 'Bands',     rx: /\bband(s|ed)?\b/i }
+];
+window._phxKitForText = function(txt){
+  txt = String(txt || '');
+  return _PHX_KIT.filter(function(k){ return k.rx.test(txt); }).map(function(k){ return k.label; });
+};
+window._phxSessionKit = function(e){
+  try {
+    if(!e) return [];
+    var data = null;
+    if(e.libId === 'draft-field-tests' && typeof window.draftGetSessionData === 'function') data = window.draftGetSessionData(2, 'field');
+    else if(e.libId && typeof phxSessionById === 'function') data = phxSessionById(e.libId);
+    else if(e.blabWeek && e.blabDay && typeof window.blabGetSessionData === 'function') data = window.blabGetSessionData(e.blabWeek, e.blabDay);
+    return data ? window._phxKitForText(JSON.stringify(data)) : [];
+  } catch(_e){ return []; }
+};
+function _phxKitLine(kit, small){
+  if(!kit || !kit.length) return '';
+  return small
+    ? '<div style="font-size:9px;color:var(--gold);margin-top:4px;line-height:1.3;">Bring: ' + kit.join(', ') + '</div>'
+    : '<div data-phx-kit style="font-size:12px;color:var(--gold);margin-top:7px;line-height:1.4;">&#127890; Bring: ' + kit.join(' &middot; ') + '</div>';
+}
 function _renderTodayNextDays(){
   var row = document.getElementById('today-remaining-row');
   if(!row) return;
@@ -22105,6 +22135,8 @@ function _renderTodayNextDays(){
     h += '<div style="font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + d.label.slice(0,3) + ' ' + _blabCalFmtShort(d.date) + '</div>';
     h += '<div style="font-family:var(--font-d);font-size:12px;font-weight:700;color:' + (first && first.rest ? 'var(--text2)' : 'var(--text)') + ';line-height:1.25;">' + (first ? first.title : '') + '</div>';
     if(views.length > 1) h += '<div style="font-size:9px;color:var(--text3);margin-top:3px;letter-spacing:0.5px;">+' + (views.length - 1) + ' more</div>';
+    var dayKit = []; d.entries.forEach(function(e){ window._phxSessionKit(e).forEach(function(k){ if(dayKit.indexOf(k) < 0) dayKit.push(k); }); });
+    h += _phxKitLine(dayKit, true);
     h += '</div>';
   });
   h += '</div>';

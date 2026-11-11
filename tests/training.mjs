@@ -6470,4 +6470,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(app.window._phxNotesGet('draft:Lower — Max Effort')[0].text, 'edited by Jon', 'his edit stands');
     } finally { app._phxLocalISO = real; }
   });
+  test('KIT: Today reminds to bring the ab wheel / dip belt / bands, read from the session itself', () => {
+    startDraft();
+    const K = app.window._phxKitForText;
+    assert.deepEqual(K('Ab Wheel Rollout'), ['Ab wheel']);
+    assert.deepEqual(K('Weighted Pull-Up 3 × 3'), ['Dip belt']);
+    assert.deepEqual(K('Weighted Dips'), ['Dip belt']);
+    assert.deepEqual(K('Speed Bench (bands)'), ['Bands']);
+    assert.deepEqual(K('Banded Box Squat'), ['Bands']);
+    assert.deepEqual(K('Strict Pull-Up Test · Abandon · Bodyweight Dips'), [], 'no false alarms');
+    assert.deepEqual(app.window._phxSessionKit({ blabWeek: 3, blabDay: 2 }), ['Dip belt'], 'Tuesday: weighted pull-up');
+    assert.deepEqual(app.window._phxSessionKit({ blabWeek: 3, blabDay: 4 }), [], 'Thursday: no ab wheel any more');
+    assert.ok(app.window._phxSessionKit({ blabWeek: 3, blabDay: 5 }).includes('Bands'));
+    assert.deepEqual(app.window._phxSessionKit(null), []);
+    assert.deepEqual(app.window._phxSessionKit({ libId: 'no-such-session' }), [], 'unknown session: no reminder');
+  });
 }

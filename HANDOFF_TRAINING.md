@@ -444,3 +444,9 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   empty box deletes today's note). Lib timers show past `wod_scores` notes read-only under the
   header (UTC timestamps converted to local date). One-off `_draftSeedNote1112` logs today's ab
   wheel → leg raise swap on 'draft:Lower — Max Effort' — archive after 12 Nov. Tests: NOTES ×2.
+- **v4.9.405 (12 Nov) — KIT REMINDER.** Today card (not when completed) shows "Bring: …" and each
+  Coming Up tile shows the day's kit, read from the session's OWN content (`_phxSessionKit`): ab
+  wheel → Ab wheel; weighted pull-up/chin-up/dip → Dip belt; band/bands/banded → Bands. Draft
+  plan today: Tue = Dip belt, Sat/Sun speed = Bands; the Sat 21 Nov PHX Core session = Ab wheel.
+  **Not covered:** general warm-ups (`WU_DYNAMIC`, chosen separately) — a band pull-apart there
+  does not raise the reminder. Test: KIT.

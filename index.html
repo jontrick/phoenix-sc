@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.405';
+var APP_VERSION='4.9.406';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -48704,8 +48704,26 @@ async function _phxRestoreSessionVisualState(){
     } catch(_e){ return false; }
   }
   var _deferredFor = 0;
+  // v4.9.406 — Jon 11 Nov 05:42: an update reloaded the app half-way through the Bronco and
+  // the time was lost. While a session, timer, rest timer or count-in is open the reload
+  // waits — with NO cap: losing a live session is worse than running an old build for an
+  // hour. It applies as soon as he is back out of the session.
+  window._phxSessionOpen = function(){
+    try {
+      if(document.querySelector('#phx-lib-run, #draft-cond, #count-in-overlay, #rest-overlay.active, #screen-session.active')) return true;
+      var wo = document.getElementById('blab-workout-overlay');
+      if(wo && wo.style.display && wo.style.display !== 'none') return true;
+      if(window._phxLibTick) return true;
+      return false;
+    } catch(_e){ return true; }   // unknown must not resolve to "safe to reload"
+  };
   function reloadOnce(){
     if(reloading) return;
+    if(window._phxSessionOpen()){
+      console.log('[PHX] update reload deferred — a session is open');
+      setTimeout(reloadOnce, 15000);
+      return;
+    }
     if(_phxBusyEntering() && _deferredFor < 300000){
       _deferredFor += 15000;
       console.log('[PHX] update reload deferred — user is mid-entry');
@@ -48740,7 +48758,7 @@ async function _phxRestoreSessionVisualState(){
         var banner = document.createElement('div');
         banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--gold,#C89630);color:#000;font-family:var(--font-d,"Arial");font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:10px;cursor:pointer;';
         banner.textContent = 'Phoenix updated — reloading...';
-        document.body.appendChild(banner);
+        if(!window._phxSessionOpen()) document.body.appendChild(banner);   // v4.9.406: never over a live session
         setTimeout(function(){ reloadOnce(); }, 1500);
       } else {
         console.log('[PHX] SW_UPDATED ignored — same version or already reloading');
@@ -48762,7 +48780,7 @@ async function _phxRestoreSessionVisualState(){
           banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--gold,#C89630);color:#000;font-family:var(--font-d,"Arial");font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-align:center;padding:8px;cursor:pointer;';
           banner.textContent = 'Phoenix updated — tap to reload';
           banner.addEventListener('click', function(){ window.location.reload(); });
-          document.body.appendChild(banner);
+          if(!window._phxSessionOpen()) document.body.appendChild(banner);   // v4.9.406
           // Auto reload after 3 seconds
           setTimeout(function(){ reloadOnce(); }, 3000);
         }

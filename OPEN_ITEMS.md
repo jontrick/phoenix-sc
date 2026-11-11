@@ -189,16 +189,24 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       batches); untick for exact. Selection, ticks and the toggle persist in `ns.v2.shop`; changing the
       days or the toggle clears ticks. Weights are edible weight, no waste factor (stated on screen).
       `_nut2ComingCard` archived. Next: stage 6 Claude guidance (Jon: later; working system first).
+- [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
+      timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
+      tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED
+      mid-session → 0 reloads, applied on leaving; guard removed → reload. Harness: SWRELOAD.
+      **Still open (2): timer start stamp is memory-only — if iOS kills the app mid-timer the
+      time is lost.** Needs a resume flow (ticked movements + start stamp), not built.
 - [ ] **UPDATE RELOADED THE APP MID-SESSION (Jon, Wed 11 Nov 05:42 — lost his Bronco time).** I
       pushed v4.9.402 after telling him to go train; SW_UPDATED reloaded the PWA during the test and
       the lib timer's start stamp (`window._phxTimerStart`, memory only) was lost. Two fixes, NOT yet
       built: (1) SW_UPDATED must defer the reload while a session/timer overlay is open (apply on
       the next Today render); (2) persist the timer start stamp so a reload resumes the clock.
       **Process rule: no pushes during his training window once he has been told to go train.**
+- [x] **Checked 12 Nov:** run never executed (still `queued` 35 h later); v4.9.402–406 deployed after it.
 - [ ] **STALE DEPLOY RUN 42885366454 (v4.9.400 rerun)** — API reports `queued` while `gh run cancel`
       says completed. If it ever executes it deploys v4.9.400 over v4.9.402 (his app ignores an
       older SW, so no reload — but fresh loads would get 400). Live version unverified (Pages API
       and the site are not reachable from the sandbox). Check after his session; any push fixes it.
+- [x] **Shipped v4.9.404** (see HANDOFF_TRAINING) — programme sessions + conditioning + lib timers.
 - [ ] **NOTES AT THE TOP OF LIKE-FOR-LIKE SESSIONS (Jon 05:47: "All notes should be at top of every
       like for like session").** Score notes (`phx-sc-notes`) are saved but shown only in the
       library history / session detail, not when the session opens from the programme. Build after

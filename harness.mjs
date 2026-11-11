@@ -385,7 +385,19 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.405'", 'version is 4.9.405');
+has("var APP_VERSION='4.9.406'", 'version is 4.9.406');
+
+// ── SHARED — an update never reloads the app mid-session (v4.9.406) ─────────
+// Jon lost his Bronco time to a mid-session update reload (11 Nov). The functional sandbox has
+// no service worker, so this is pinned statically; the behaviour was proven in a browser
+// (SW_UPDATED dispatched mid-session → 0 reloads; guard removed → 1 reload).
+{
+  const m = html.match(/function reloadOnce\(\)\{([\s\S]{0,600})/);
+  (m && /if\(reloading\) return;\s*if\(window\._phxSessionOpen\(\)\)\{[^}]*setTimeout\(reloadOnce/.test(m[1]))
+    ? ok('SWRELOAD: reloadOnce defers while a session is open, before any reload')
+    : bad('SWRELOAD: reloadOnce no longer checks _phxSessionOpen first — an update can kill a live session');
+  hasCode("document.querySelector('#phx-lib-run, #draft-cond, #count-in-overlay, #rest-overlay.active, #screen-session.active')", 'SWRELOAD: session detection covers timer, conditioning, count-in, rest and the session screen');
+}
 
 // ── Nordic Planks timed holds (v4.9.131) ─────────────────────────────────────
 has('hold_secs:20', 'NP: W1 hold_secs:20');

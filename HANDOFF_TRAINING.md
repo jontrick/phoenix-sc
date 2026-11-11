@@ -433,3 +433,6 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   positions did not overlap at 390 px; keyboard/scroll on iPhone may differ). Fix: Complete session
   with any part not done now opens a DOM confirm ("Still to do: …" · Keep going / Complete anyway).
   Verified in the browser only — no functional test drives this overlay's click handler yet (open).
+- **v4.9.403 (12 Nov)** — Thursday Lower ME superset is now **Lying Leg Curl / BOSU Ab Chair Leg
+  Raise** (was Ab Wheel Rollout). Jon: forgot the ab wheel, did leg raises; wants them here from now
+  on. Records keyed by the old name ('Ab Wheel Rollout') stay as history. Test: NOABWHEEL.

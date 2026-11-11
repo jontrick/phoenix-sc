@@ -6430,4 +6430,15 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     }
     assert.ok(fin >= 2, 'positive control: the dips finisher is still programmed (' + fin + ')');
   });
+  test('NOABWHEEL: the Thursday superset is leg curl + BOSU ab chair leg raise, every week (Jon, 12 Nov)', () => {
+    startDraft();
+    let thu = 0;
+    for (let w = 1; w <= 6; w++) {
+      const x = app.blabGetSessionData(w, 4); if (!x) continue;
+      const j = JSON.stringify(x);
+      assert.ok(!/Ab Wheel/i.test(j), `W${w} Thursday still has the ab wheel`);
+      if (/BOSU Ab Chair Leg Raise/.test(j)) thu++;
+    }
+    assert.ok(thu >= 4, 'positive control: the leg raise is programmed on Thursdays (' + thu + ')');
+  });
 }

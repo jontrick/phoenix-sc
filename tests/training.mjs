@@ -6502,4 +6502,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     seed('phx_run_v1', null);
     assert.equal(app.window._phxRunPending(), null);
   });
+  test('CORES1: S1 — Med Ball Power ends with the med ball Russian twist, not the dead bug (Jon, 12 Nov)', () => {
+    const c = app.phxSessionById('core-s1');
+    const names = c.movements.map((m) => m.name);
+    assert.ok(!names.includes('Dead Bug'), names.join(', '));
+    const rt = c.movements.find((m) => m.name === 'Med Ball Russian Twist');
+    assert.ok(rt && /3 × 12 each side/.test(rt.detail || ''), JSON.stringify(rt));
+    assert.equal(names.length, 5, 'still five movements');
+  });
 }

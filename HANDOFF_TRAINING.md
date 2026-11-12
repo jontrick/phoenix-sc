@@ -468,3 +468,6 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   Core timers (countdowns, different state)** — still lost if the app dies mid-run. Harness FIX3
   WOD count-up needle updated for the restructure (fresh start still stamps inside the count-in).
   Tests: RUNRESUME (functional + harness).
+- **v4.9.409 (12 Nov)** — Core library `core-s1` (S1 — Med Ball Power): Dead Bug 3 × 10/side →
+  **Med Ball Russian Twist 3 × 12/side** (Jon chose from 4 options). Library session — changes it
+  everywhere it is scheduled. Ab Wheel Rollout still in it (kit reminder shows "Ab wheel"). Test: CORES1.

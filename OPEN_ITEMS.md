@@ -197,6 +197,8 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       are derived (recipes, plan, shop, copy). Size = his `ns.v2.unitG[ref]` else a default (egg 50 g,
       AU large edible) else null → 0 g and save refuses — never guessed. g ⇄ each button on foods
       (not recipes), "1 each = [50] g" editable. Tests: nut2 EACH ×4.
+- [x] **v4.9.412** — recipe "Finished weight / weigh the pot" relabelled "Cooked weight of the batch (g) ·
+      food only, no pot" (Jon asked what it meant). Method box font fixed.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

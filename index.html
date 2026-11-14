@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.411';
+var APP_VERSION='4.9.412';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23261,13 +23261,13 @@ function _nut2PaintRecipe(){
     '<div style="display:flex;gap:6px;">' + kindBtn('serves', 'MAKES SERVES', 'e.g. pancakes, makes 8') + kindBtn('batch', 'BY WEIGHT', 'e.g. sauce, grams per meal') + '</div>' +
     '<div style="display:flex;gap:6px;margin-top:10px;">' +
       (d.kind === 'serves' ? '<label style="flex:1;"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Makes (serves)</div><input id="n2r-serves" type="number" inputmode="numeric" value="' + (d.serves || '') + '" style="' + box + '"></label>' : '') +
-      (d.kind ? '<label style="flex:1;"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Finished weight (g)' + (d.kind === 'serves' ? ' &mdash; optional' : '') + '</div><input id="n2r-fin" type="number" inputmode="decimal" placeholder="weigh the pot" value="' + (d.finishedG || '') + '" style="' + box + '"></label>' : '') +
+      (d.kind ? '<label style="flex:1;"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Cooked weight of the batch (g)' + (d.kind === 'serves' ? ' &mdash; optional' : '') + '</div><input id="n2r-fin" type="number" inputmode="decimal" placeholder="food only, no pot" value="' + (d.finishedG || '') + '" style="' + box + '"></label>' : '') +
     '</div>' +
     '<div style="font-size:11px;color:var(--text3);margin:14px 0 2px;">Ingredients &middot; weigh them <b>raw</b> as they go in</div>' +
     (rows || '<div style="padding:10px 0;font-size:12px;color:var(--text3);">None yet.</div>') +
     '<button id="n2r-additem" style="width:100%;padding:11px;margin-top:8px;border-radius:10px;background:transparent;border:1px dashed var(--border2);color:var(--gold);font-family:var(--font-d);font-weight:900;letter-spacing:1px;">+ ADD INGREDIENT</button>' +
     '<div id="n2r-tot" style="margin-top:14px;"></div>' +
-    '<textarea id="n2r-method" placeholder="Method / notes (optional)" style="' + box + 'min-height:70px;margin-top:12px;font-size:14px;">' + _nut2Esc(d.method) + '</textarea>' +
+    '<textarea id="n2r-method" placeholder="Method / notes (optional)" style="' + box + 'min-height:70px;margin-top:12px;font-size:16px;font-family:inherit;">' + _nut2Esc(d.method) + '</textarea>' +
     '<div id="n2r-err" style="font-size:12px;color:#e07a7a;margin-top:8px;min-height:14px;"></div>' +
     '<div style="display:flex;gap:8px;margin-top:6px;">' +
       (d.id ? '<button id="n2r-del" style="flex:1;padding:14px;border-radius:10px;background:transparent;border:1px solid #7a2c2c;color:#e07a7a;font-family:var(--font-d);font-weight:900;letter-spacing:1px;">DELETE</button>' : '') +
@@ -23281,6 +23281,8 @@ function _nut2PaintRecipe(){
     if($('serves')) d.serves = $('serves').value;
     if($('fin')) d.finishedG = $('fin').value;
   };
+  // v4.9.412 — Jon 14 Nov asked what "weigh the pot" meant: it is the COOKED weight of the whole
+  // batch, food only. Label and hint now say so.
   var paintTot = function(){
     grab();
     var tmp = { kind: d.kind, serves: d.serves, finishedG: d.finishedG, items: d.items };
@@ -23295,7 +23297,7 @@ function _nut2PaintRecipe(){
       var k = 100 / w.g, r2 = function(v){ return Math.round(v * k * 10) / 10; };
       h2 += line('Per 100 g finished', { kcal: Math.round(tot.kcal * k), p: r2(tot.p), c: r2(tot.c), f: r2(tot.f) });
     }
-    if(d.kind && !w.weighed && tot.g > 0) h2 += '<div style="font-size:11px;color:#e0b062;margin-top:6px;line-height:1.4;">No finished weight yet, so the ingredients’ ' + tot.g + ' g stands in. Weigh the pot once cooked — water lost or added changes the per-gram numbers.</div>';
+    if(d.kind && !w.weighed && tot.g > 0) h2 += '<div style="font-size:11px;color:#e0b062;margin-top:6px;line-height:1.4;">No cooked weight yet, so the raw ingredients’ ' + tot.g + ' g stands in. Once it’s cooked, weigh the whole batch — the food only, so take off the pot’s own weight. Cooking loses or adds water, which changes the per-gram numbers.</div>';
     $('tot').innerHTML = h2 + '</div>';
   };
   Array.prototype.forEach.call(ov.querySelectorAll('[data-kind]'), function(b){ b.addEventListener('click', function(){ grab(); d.kind = b.getAttribute('data-kind'); _nut2PaintRecipe(); }); });

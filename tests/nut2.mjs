@@ -454,4 +454,34 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     try { app.nut2OpenPicker('Add to Breakfast', () => {}); } finally { app._nut2Sheet = orig; }
     assert.ok(/id="n2p-new"[^>]*>\+ NEW FOOD/.test(html), html.slice(0, 400));
   });
+
+  // ── v4.9.416 — import foods from a CSV file ──
+  test('CSV: headings found in any order; quoted names with commas; kJ-only converts; bad rows skipped with a reason', () => {
+    const csv = '﻿Food,Protein (g),Fat,Carbohydrate,Sugars,Fibre,Energy kJ\n"Muesli, toasted",10.5,12,60,20,8,1800\nBad row,abc,1,2,,,500\nToo much,150,1,1,,,100\n';
+    const P = app.nut2ParseFoodsCsv(csv);
+    assert.deepEqual(P.missing, []); assert.equal(P.kj, true);
+    assert.deepEqual([P.rows[0].name, P.rows[0].kcal, P.rows[0].p, P.rows[0].c, P.rows[0].f, P.rows[0].fib, P.rows[0].ok], ['Muesli, toasted', 430, 10.5, 60, 12, 8, true], 'carbs not sugars; kJ ÷ 4.184');
+    assert.equal(P.rows[1].ok, false); assert.ok(/protein/.test(P.rows[1].why));
+    assert.equal(P.rows[2].ok, false); assert.ok(/over 100/.test(P.rows[2].why));
+  });
+  test('CSV: semicolon / tab files; wrong headings name what is missing', () => {
+    assert.equal(app.nut2ParseFoodsCsv('Name;kcal;Protein;Carbs;Fat\nOats;379;13,2;60;7\n').rows[0].p, 13.2, 'semicolon + decimal comma');
+    assert.equal(app.nut2ParseFoodsCsv('Name\tCalories\tProtein\tCarbs\tFat\nRice\t130\t2.7\t28\t0.3\n').rows[0].kcal, 130);
+    assert.deepEqual(app.nut2ParseFoodsCsv('Item,Price\nMilk,2\n').missing, ['kcal (or kJ)', 'protein', 'carbs', 'fat']);
+  });
+  test('CSV import: adds new foods, UPDATES a same-named one (keeps its cooked link), never duplicates', () => {
+    start({ setup_done: true, daily: {} });
+    const raw = findOne('beef mince raw');
+    const old = app.nut2SaveUserFood({ name: 'Mince patty', kcal: 200, p: 20, c: 0, f: 12, cooked: true, rawRef: raw.id, yield: 0.7 });
+    const P = app.nut2ParseFoodsCsv('Name,kcal,Protein,Carbs,Fat\nmince patty,220,22,1,13\nGreek yoghurt,60,10,4,0.2\n');
+    assert.deepEqual(app.nut2ImportFoods(P.rows), { added: 1, updated: 1 });
+    const foods = read(KEY).v2.foods;
+    assert.equal(Object.keys(foods).length, 2);
+    assert.deepEqual([foods[old].kcal, foods[old].cooked, foods[old].rawRef, foods[old].yield, foods[old].source], [220, true, raw.id, 0.7, 'import']);
+  });
+  test('CSV screen: the Library has an IMPORT FILE picker for CSV', () => {
+    start({ setup_done: true, daily: {} });
+    const h = app._nut2LibraryShell();
+    assert.ok(/IMPORT FILE<input data-n2-import type="file" accept="\.csv/.test(h), h.slice(0, 300));
+  });
 }

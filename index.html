@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.415';
+var APP_VERSION='4.9.416';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22783,6 +22783,120 @@ function nut2SaveUserFood(food){
   _nut2Save(ns);
   return id;
 }
+// ── v4.9.416 — IMPORT FOODS FROM A FILE ─────────────────────────────────────
+// Jon 14 Nov: "Can I have an import doc/file". A spreadsheet saved as CSV (Numbers / Excel /
+// Google Sheets all export it): one row per food, numbers per 100 g. Columns are found by
+// their header words, in any order. Every row is shown before anything is saved; a food with
+// the same name as one of his is UPDATED, never duplicated.
+function _nut2CsvSplit(text){
+  text = String(text || '').replace(/^﻿/, '');
+  var first = text.split(/\r?\n/)[0] || '';
+  var cnt = function(ch){ return first.split(ch).length - 1; };
+  var delim = cnt('\t') > cnt(',') && cnt('\t') >= cnt(';') ? '\t' : (cnt(';') > cnt(',') ? ';' : ',');
+  var rows = [], row = [], cell = '', q = false;
+  for(var i = 0; i < text.length; i++){
+    var ch = text[i];
+    if(q){
+      if(ch === '"'){ if(text[i + 1] === '"'){ cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if(ch === '"') q = true;
+    else if(ch === delim){ row.push(cell); cell = ''; }
+    else if(ch === '\n' || ch === '\r'){ if(ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if(cell !== '' || row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(function(r){ return r.some(function(c){ return String(c).trim() !== ''; }); });
+}
+// → { rows:[{name,kcal,p,c,f,fib,ok,why}], missing:[column names], kj:bool }
+function nut2ParseFoodsCsv(text){
+  var rows = _nut2CsvSplit(text);
+  if(!rows.length) return { rows: [], missing: ['name', 'kcal', 'protein', 'carbs', 'fat'] };
+  var head = rows[0].map(function(h){ return String(h).toLowerCase().trim(); });
+  var find = function(rx, not){ for(var i = 0; i < head.length; i++) if(rx.test(head[i]) && !(not && not.test(head[i]))) return i; return -1; };
+  var col = {
+    name: find(/name|food|product|item|description/),
+    kcal: find(/kcal|calorie|\bcal\b/),
+    kj:   find(/kj|kilojoule|energy/),
+    p:    find(/protein/),
+    c:    find(/carb/, /sugar/),
+    f:    find(/fat/, /sat|trans|mono|poly/),
+    fib:  find(/fib(re|er)/)
+  };
+  var missing = [];
+  if(col.name < 0) missing.push('name');
+  if(col.kcal < 0 && col.kj < 0) missing.push('kcal (or kJ)');
+  if(col.p < 0) missing.push('protein');
+  if(col.c < 0) missing.push('carbs');
+  if(col.f < 0) missing.push('fat');
+  var useKj = col.kcal < 0;
+  var num = function(r, i){ if(i < 0) return null; var v = String(r[i] == null ? '' : r[i]).replace(/[^0-9.,\-]/g, '').replace(',', '.'); return v === '' ? null : parseFloat(v); };
+  var out = rows.slice(1).map(function(r){
+    var o = { name: col.name >= 0 ? String(r[col.name] || '').trim() : '' };
+    var e = num(r, useKj ? col.kj : col.kcal);
+    o.kcal = e == null ? null : Math.round(useKj ? e / 4.184 : e);
+    o.p = num(r, col.p); o.c = num(r, col.c); o.f = num(r, col.f); o.fib = num(r, col.fib);
+    var bad = [];
+    if(!o.name) bad.push('no name');
+    ['kcal', 'p', 'c', 'f'].forEach(function(k){ if(o[k] == null || isNaN(o[k]) || o[k] < 0) bad.push('no ' + ({ kcal: 'kcal', p: 'protein', c: 'carbs', f: 'fat' })[k]); });
+    ['p', 'c', 'f', 'fib'].forEach(function(k){ if(o[k] > 100) bad.push(k + ' over 100 g per 100 g'); });
+    o.ok = !bad.length; o.why = bad.join(', ');
+    return o;
+  });
+  return { rows: out, missing: missing, kj: useKj };
+}
+function nut2ImportFoods(rows){
+  var ns = _nut2State(), byName = {}, added = 0, updated = 0;
+  Object.keys(ns.v2.foods).forEach(function(id){ byName[String(ns.v2.foods[id].name).toLowerCase()] = id; });
+  rows.filter(function(r){ return r.ok; }).forEach(function(r){
+    var id = byName[r.name.toLowerCase()];
+    var old = id ? ns.v2.foods[id] : null;
+    nut2SaveUserFood({ id: id, name: r.name, kcal: r.kcal, p: r.p, c: r.c, f: r.f, fib: r.fib || 0,
+      cooked: old ? old.cooked : false, rawRef: old ? old.rawRef : null, yield: old ? old.yield : null,
+      serving_g: old ? old.serving_g : '', source: 'import' });
+    if(id) updated++; else added++;
+    ns = _nut2State();
+    if(!id) Object.keys(ns.v2.foods).forEach(function(k){ byName[String(ns.v2.foods[k].name).toLowerCase()] = k; });
+  });
+  return { added: added, updated: updated };
+}
+function nut2OpenImport(text, fileName){
+  var P = nut2ParseFoodsCsv(text), ns = _nut2State();
+  var have = {}; Object.keys(ns.v2.foods).forEach(function(id){ have[String(ns.v2.foods[id].name).toLowerCase()] = true; });
+  var good = P.rows.filter(function(r){ return r.ok; });
+  var h = '<div style="display:flex;align-items:center;margin-bottom:10px;"><div style="flex:1;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">Import foods</div>' +
+    '<button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">' + _nut2Esc(fileName || 'file') + ' &middot; numbers read as <b>per 100 g</b>' + (P.kj ? ' &middot; energy in kJ, converted to kcal' : '') + '</div>';
+  if(P.missing.length){
+    h += '<div style="padding:12px;border:1px solid #e07a7a;border-radius:10px;color:#e07a7a;font-size:13px;line-height:1.5;">Couldn’t find these columns: <b>' + P.missing.join(', ') + '</b>.<br>' +
+      'The first row needs headings like:<br><span style="color:var(--text);font-family:monospace;font-size:12px;">Name, kcal, Protein, Carbs, Fat, Fibre</span><br>One food per row, numbers per 100 g. Save the sheet as CSV.</div>';
+    _nut2Sheet(h); return;
+  }
+  h += P.rows.map(function(r){
+    return '<div style="display:flex;gap:8px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--border);">' +
+      '<div style="flex:1;min-width:0;"><div style="font-size:13px;color:' + (r.ok ? 'var(--text)' : 'var(--text3)') + ';">' + _nut2Esc(r.name || '(no name)') +
+      (r.ok && have[r.name.toLowerCase()] ? ' <span style="font-size:9px;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:1px 5px;">UPDATE</span>' : '') + '</div>' +
+      '<div style="font-size:11px;color:' + (r.ok ? 'var(--text3)' : '#e07a7a') + ';">' + (r.ok ? r.kcal + ' kcal &middot; P ' + r.p + ' C ' + r.c + ' F ' + r.f + (r.fib ? ' Fib ' + r.fib : '') : 'Skipped: ' + _nut2Esc(r.why)) + '</div></div></div>';
+  }).join('');
+  h += '<button id="n2i-go" ' + (good.length ? '' : 'disabled ') + 'style="width:100%;margin-top:12px;padding:14px;border-radius:10px;background:' + (good.length ? 'var(--gold)' : 'var(--bg3)') + ';color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:2px;">IMPORT ' + good.length + ' FOOD' + (good.length === 1 ? '' : 'S') + '</button>';
+  var ov = _nut2Sheet(h);
+  var go = ov.querySelector('#n2i-go');
+  if(go && good.length) go.addEventListener('click', function(){
+    var res = nut2ImportFoods(P.rows);
+    _nut2CloseSheet(); _nut2Filter = 'mine'; _nut2Query = ''; nut2Render();
+    var b = document.getElementById('nut2-body');
+    if(b){ var m = document.createElement('div'); m.style.cssText = 'padding:10px 12px;margin-bottom:10px;border-radius:10px;border:1px solid #6fcf8f;color:#6fcf8f;font-size:13px;';
+      m.textContent = 'Imported ' + res.added + ' new food' + (res.added === 1 ? '' : 's') + (res.updated ? ', updated ' + res.updated : '') + '.'; b.insertBefore(m, b.firstChild); }
+  });
+}
+function _nut2ImportPicked(inp){
+  var file = inp.files && inp.files[0]; inp.value = '';
+  if(!file) return;
+  if(/^image\//.test(file.type)){ nut2OpenAddFood(); return; }   // a label photo belongs in Add Food
+  var rd = new FileReader();
+  rd.onload = function(){ nut2OpenImport(String(rd.result || ''), file.name); };
+  rd.onerror = function(){ nut2OpenImport('', file.name); };
+  rd.readAsText(file);
+}
 function nut2DeleteUserFood(id){
   var ns = _nut2State();
   if(!ns.v2.foods[id]) return false;
@@ -22822,7 +22936,7 @@ function nut2Render(){
     body._n2wired = true;
     body.addEventListener('click', _nut2Click);
     body.addEventListener('input', _nut2Input);
-    body.addEventListener('change', function(e){ if(!e.target) return; if(_nut2Tab === 'plan') _nut2PlanChange(e.target); else if(_nut2Tab === 'shop') _nut2ShopChange(e.target); });
+    body.addEventListener('change', function(e){ if(!e.target) return; if(e.target.hasAttribute && e.target.hasAttribute('data-n2-import')){ _nut2ImportPicked(e.target); return; } if(_nut2Tab === 'plan') _nut2PlanChange(e.target); else if(_nut2Tab === 'shop') _nut2ShopChange(e.target); });
   }
   if((_nut2Tab === 'plan' || _nut2Tab === 'shop') && !(typeof window !== 'undefined' && window.NUT_AFCD)){
     _nut2LoadAfcd(function(ok){
@@ -22847,10 +22961,11 @@ function _nut2LibraryShell(){
         'style="flex:1;min-width:0;padding:12px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;outline:none;">' +
       '<button data-n2-add style="padding:0 14px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:12px;letter-spacing:1px;">+ ADD</button>' +
     '</div>' +
-    '<div style="display:flex;gap:6px;margin-bottom:12px;">' + chips.map(function(c){
+    '<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center;">' + chips.map(function(c){
       var on = _nut2Filter === c[0];
       return '<button data-n2-filter="' + c[0] + '" style="padding:7px 12px;border-radius:16px;font-size:12px;font-weight:700;background:' + (on ? 'var(--bg3)' : 'transparent') + ';color:' + (on ? 'var(--gold)' : 'var(--text3)') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border)') + ';">' + c[1] + '</button>';
-    }).join('') + '</div>' +
+    }).join('') +
+      '<label style="margin-left:auto;padding:7px 10px;border-radius:16px;font-size:11px;font-weight:700;color:var(--gold);border:1px solid var(--gold);cursor:pointer;white-space:nowrap;">IMPORT FILE<input data-n2-import type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" style="display:none;"></label>' + '</div>' +
     '<div id="nut2-results"><div style="padding:16px;color:var(--text3);font-size:13px;">Loading the food database&hellip;</div></div>' +
     '<div style="font-size:10px;color:var(--text3);margin-top:14px;line-height:1.5;">Per 100 g. Source: Food Standards Australia New Zealand, Australian Food Composition Database &ndash; Release 3.</div>';
 }

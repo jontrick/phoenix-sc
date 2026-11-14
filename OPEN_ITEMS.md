@@ -212,6 +212,10 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       **v4.9.414 was pushed with PICKNEW red** (the test's DOM stub lacked querySelectorAll; app code
       fine — browser-proven). My push command did not gate on the functional check. Fixed in v4.9.415;
       pushes are now chained `gates && push`.
+- [x] **v4.9.416 — IMPORT FILE (CSV) in the Library.** Headings found by word in any order (name / kcal
+      or kJ / protein / carbs-not-sugars / fat-not-saturated / fibre); comma, semicolon or tab;
+      quoted names; preview with per-row skip reasons; same-name food UPDATED (cooked link kept), never
+      duplicated. An image picked here goes to Add Food. Tests: nut2 CSV ×4. Browser-proven.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

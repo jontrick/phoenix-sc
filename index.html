@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.412';
+var APP_VERSION='4.9.413';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22976,6 +22976,151 @@ function nut2OpenFood(ref){
 
 // Add or edit one of his foods. Basis has NO default — a per-serve label saved as
 // per-100 g is the one error nothing downstream can detect.
+// ── v4.9.413 — READ A NUTRITION LABEL ON THE PHONE (Tesseract.js, no server) ──
+// Jon 14 Nov: "a label image taker attached to the camera" + import from an image file. He chose
+// on-phone reading over an AI service. The text reader runs in the browser; the first use
+// downloads its engine + English data (~10 MB, cached after). What it reads is ALWAYS shown in
+// the Add Food boxes for him to check before saving — a misread digit must never save silently.
+var NUT2_OCR = {
+  lib:  'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
+  worker: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+  core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
+  lang: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int'
+};
+// Australian / NZ Nutrition Information Panel → per 100 g. Pure (no DOM) so it is testable.
+// AU column order is "per serving | per 100 g" (a %DI column may sit between) → the LAST
+// non-% number on a row is per 100 g. A panel with no per-100 column comes back basis 'serve'.
+function _nut2NipNums(line){
+  var out = [], re = /(<\s*)?(\d+(?:\.\d+)?)\s*(kj|kcal|cal|mg|g|%)?/gi, m;
+  while((m = re.exec(line))){
+    var u = (m[3] || '').toLowerCase(); if(u === '%') continue;
+    var v = parseFloat(m[2]); if(m[1]) v = v / 2;        // "<1 g" → 0.5
+    out.push({ v: v, u: u, s: m[2], lt: !!m[1] });
+  }
+  return out;
+}
+// The reader often sees the unit "g" as a "9" glued to the number: "20.4g" → "20.49",
+// "60g" → "609". For gram nutrients per 100 g: a unit-less number with 2 decimals ending in 9,
+// or any value over 100 (impossible per 100 g) ending in 9, loses that 9.
+function _nut2FixG(nums){
+  return nums.map(function(n){
+    if(n.u || !/9$/.test(n.s)) return n;
+    if(/^\d+\.\d9$/.test(n.s) || n.v > 100){ var s2 = n.s.slice(0, -1).replace(/\.$/, ''); var v2 = parseFloat(s2); return { v: n.lt ? v2 / 2 : v2, u: 'g', s: s2 }; }
+    return n;
+  });
+}
+function _nut2ParseNIP(text){
+  var raw = String(text || '');
+  var lines = raw.split(/\r?\n/).map(function(l){
+    return l.replace(/[|]/g, ' ').replace(/(\d)\s*,\s*(\d)/g, '$1.$2').replace(/(\d)\s+\.\s*(\d)/g, '$1.$2')
+            .replace(/\b[Oo](?=\.\d)/g, '0').replace(/(\d)\s*[¢€]/g, '$1g').replace(/(\d)\s*c+\s*(?=cal)/gi, '$1')
+            .replace(/\s+/g, ' ').trim();
+  }).filter(Boolean);
+  var all = lines.join(' ').toLowerCase();
+  var has100 = /per\s*100\s*(g|ml|m1|9)\b|100\s*(g|ml)\b/.test(all);
+  var serveM = all.match(/serving size[^0-9]{0,12}(\d+(?:\.\d+)?)\s*(g|ml)/);
+  var pick = function(nums){ if(!nums.length) return null; return has100 ? nums[nums.length - 1].v : nums[0].v; };
+  var row = function(test, skip){
+    for(var i = 0; i < lines.length; i++){
+      var l = lines[i].toLowerCase();
+      if(!test.test(l) || (skip && skip.test(l))) continue;
+      var nums = _nut2NipNums(lines[i].replace(/^[^0-9<]*/, ''));
+      if(!nums.length && lines[i + 1] && !/[a-z]{4,}/i.test(lines[i + 1])) nums = _nut2NipNums(lines[i + 1]);
+      return nums;
+    }
+    return [];
+  };
+  var r = {};
+  // Energy: prefer a Cal/kcal figure; else kJ ÷ 4.184. May wrap onto the next line.
+  var en = [];
+  for(var i = 0; i < lines.length; i++){
+    if(!/energy/i.test(lines[i])) continue;
+    en = _nut2NipNums(lines[i].replace(/^[^0-9<]*/, ''));
+    if(lines[i + 1] && /cal/i.test(lines[i + 1]) && !/[a-z]{5,}/i.test(lines[i + 1].replace(/cal|kcal/ig, ''))) en = en.concat(_nut2NipNums(lines[i + 1]));
+    break;
+  }
+  var cal = en.filter(function(n){ return n.u === 'cal' || n.u === 'kcal'; });
+  var kj = en.filter(function(n){ return n.u === 'kj'; });
+  if(!kj.length) kj = en.filter(function(n){ return n.u === ''; });
+  if(cal.length) r.kcal = Math.round(pick(cal));
+  else if(kj.length) r.kcal = Math.round(pick(kj) / 4.184);
+  var p = pick(_nut2FixG(row(/protein/))); if(p != null) r.p = p;
+  var f = pick(_nut2FixG(row(/\bfat\b/, /saturat|trans|mono|poly/))); if(f != null) r.f = f;
+  var c = pick(_nut2FixG(row(/carbohydrate/, /sugar/))); if(c != null) r.c = c;
+  var fib = pick(_nut2FixG(row(/fibre|fiber/))); if(fib != null) r.fib = fib;
+  var na = row(/sodium/); if(na.length) r.sodium_mg = pick(na);
+  var found = ['kcal', 'p', 'f', 'c'].filter(function(k){ return r[k] != null; }).length;
+  r.basis = has100 ? 'per100' : 'serve';
+  if(serveM) r.serving_g = parseFloat(serveM[1]);
+  r.found = found;
+  r.ok = found >= 3;
+  // A sanity check against the label's own maths — Atwater, fibre at 2 kcal/g.
+  if(r.kcal != null && r.p != null && r.c != null && r.f != null){
+    var est = 4 * r.p + 4 * r.c + 9 * r.f + 2 * (r.fib || 0);
+    r.mismatch = r.kcal > 20 && Math.abs(est - r.kcal) / r.kcal > 0.15;
+  }
+  return r;
+}
+var _nut2OcrWorker = null;
+function _nut2OcrLoad(cb){
+  if(typeof window === 'undefined') return cb(null);
+  var go = function(){
+    if(_nut2OcrWorker) return cb(_nut2OcrWorker);
+    try {
+      _nut2OcrWorker = window.Tesseract.createWorker('eng', 1, { workerPath: NUT2_OCR.worker, corePath: NUT2_OCR.core, langPath: NUT2_OCR.lang });
+      Promise.resolve(_nut2OcrWorker).then(function(w){ _nut2OcrWorker = w; cb(w); }, function(e){ _nut2OcrWorker = null; console.error('[PHX] OCR worker', e); cb(null); });
+    } catch(e){ _nut2OcrWorker = null; cb(null); }
+  };
+  if(window.Tesseract) return go();
+  var s = document.createElement('script'); s.src = NUT2_OCR.lib; s.async = true;
+  s.onload = go; s.onerror = function(){ cb(null); };
+  document.head.appendChild(s);
+}
+// Grey + contrast stretch + cap the size: phone photos read far better that way.
+function _nut2OcrPrep(dataUrl, cb){
+  var img = new Image();
+  img.onload = function(){
+    var max = 2000, k = Math.min(1, max / Math.max(img.width, img.height));
+    var w = Math.round(img.width * k), h = Math.round(img.height * k);
+    var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    var cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, w, h);
+    try {
+      var d = cx.getImageData(0, 0, w, h), px = d.data, lo = 255, hi = 0, i, g;
+      for(i = 0; i < px.length; i += 4){ g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; px[i] = g; if(g < lo) lo = g; if(g > hi) hi = g; }
+      var span = Math.max(1, hi - lo);
+      for(i = 0; i < px.length; i += 4){ g = (px[i] - lo) * 255 / span; px[i] = px[i + 1] = px[i + 2] = g; }
+      cx.putImageData(d, 0, 0);
+    } catch(_e){}
+    cb(cv.toDataURL('image/png'));
+  };
+  img.onerror = function(){ cb(null); };
+  img.src = dataUrl;
+}
+// file → { ok, ...per100 } | { ok:false, error }. onStatus gets progress text.
+function nut2ReadLabelFile(file, onStatus, cb){
+  if(!file){ cb({ ok: false, error: 'No photo.' }); return; }
+  onStatus('Opening the photo&hellip;');
+  var rd = new FileReader();
+  rd.onerror = function(){ cb({ ok: false, error: 'Could not open that file.' }); };
+  rd.onload = function(){
+    _nut2OcrPrep(String(rd.result), function(prepped){
+      if(!prepped){ cb({ ok: false, error: 'That file is not an image the phone can read.' }); return; }
+      onStatus('Loading the label reader&hellip; (first time only: ~10 MB)');
+      _nut2OcrLoad(function(w){
+        if(!w){ cb({ ok: false, error: 'The label reader could not load. Check your connection and try again.' }); return; }
+        onStatus('Reading the label&hellip;');
+        w.recognize(prepped).then(function(res){
+          var r = _nut2ParseNIP(res && res.data && res.data.text);
+          r.text = res && res.data ? res.data.text : '';
+          if(!r.ok) r.error = 'Could not read the nutrition panel clearly. Try a straighter, closer photo of just the panel, in good light.';
+          cb(r);
+        }, function(e){ console.error('[PHX] OCR', e); cb({ ok: false, error: 'Reading failed. Try again.' }); });
+      });
+    });
+  };
+  rd.readAsDataURL(file);
+}
+
 function nut2OpenAddFood(editId, prefill){
   var ns = _nut2State();
   var cur = editId ? (ns.v2.foods[editId] || {}) : (prefill || {});
@@ -22986,7 +23131,11 @@ function nut2OpenAddFood(editId, prefill){
   var rawName = cur.rawRef ? ((nut2Food(cur.rawRef) || {}).name || '') : '';
   var h = '<div style="display:flex;align-items:center;margin-bottom:12px;"><div style="flex:1;font-family:var(--font-d);font-size:16px;font-weight:900;letter-spacing:1px;color:var(--text);text-transform:uppercase;">' + (editId ? 'Edit food' : 'Add a food') + '</div>' +
       '<button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>' +
-    (editId ? '' : '<button id="n2f-label" style="width:100%;padding:12px;margin-bottom:12px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-weight:900;letter-spacing:1px;">READ IT OFF A LABEL PHOTO</button>') +
+    (editId ? '' :
+      '<div style="display:flex;gap:6px;">' +
+        '<label style="flex:1;padding:12px 6px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-weight:900;font-size:12px;letter-spacing:1px;text-align:center;cursor:pointer;">&#128247; SCAN LABEL<input id="n2f-cam" type="file" accept="image/*" capture="environment" style="display:none;"></label>' +
+        '<label style="flex:1;padding:12px 6px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-weight:900;font-size:12px;letter-spacing:1px;text-align:center;cursor:pointer;">FROM A PHOTO<input id="n2f-pic" type="file" accept="image/*" style="display:none;"></label></div>' +
+      '<div id="n2f-ocr" style="font-size:12px;color:var(--text2);line-height:1.45;margin:8px 0 12px;min-height:14px;"></div>') +
     inp('name', 'Name', cur.name, 'text') +
     '<div style="font-size:11px;color:var(--text3);margin:12px 0 6px;">The numbers below are&hellip;</div>' +
     '<div style="display:flex;gap:6px;margin-bottom:10px;">' +
@@ -23036,15 +23185,27 @@ function nut2OpenAddFood(editId, prefill){
       Array.prototype.forEach.call(box.querySelectorAll('[data-raw]'), function(d){ d.addEventListener('click', function(){ rawRef = d.getAttribute('data-raw'); $('rawq').value = d.textContent; box.innerHTML = ''; }); });
     });
   });
-  var lb = $('label');
-  if(lb) lb.addEventListener('click', function(){
-    if(typeof nutOpenLabelScanner !== 'function'){ $('err').textContent = 'The label reader is not available on this version.'; return; }
-    _nut2CloseSheet();
-    nutOpenLabelScanner(null, null, function(food){
-      // The scanner hands back per-100 g (it refuses a per-serve label with no weight).
-      nut2OpenAddFood(null, { name: food.n, kcal: food.k, p: food.p, c: food.c, f: food.f, fib: food.fib || '', serving_g: food.serving_g || '', basis: 'per100', source: 'label' });
+  // v4.9.413 — read the label on the phone; fill the boxes; he checks before saving.
+  var ocrUse = function(inpEl){
+    var file = inpEl.files && inpEl.files[0]; inpEl.value = '';
+    var st = $('ocr'); if(!st || !file) return;
+    st.style.color = 'var(--text2)';
+    nut2ReadLabelFile(file, function(msg){ st.innerHTML = msg; }, function(r){
+      if(!r.ok){ st.style.color = '#e07a7a'; st.textContent = r.error || 'Could not read the label.'; return; }
+      ['kcal','p','c','f','fib'].forEach(function(k){ if(r[k] != null) $(k).value = r[k]; else if(k === 'fib') $(k).value = ''; });
+      basis = r.basis;
+      if(r.basis === 'serve' && r.serving_g) $('serve').value = r.serving_g;
+      if(prefill === undefined || prefill === null) prefill = {};
+      prefill.source = 'label';
+      paintBasis();
+      st.style.color = r.mismatch ? '#e0b062' : '#6fcf8f';
+      st.innerHTML = 'Read ' + (r.basis === 'per100' ? 'the per 100 g column' : 'per serve (no per 100 g column found)') + '. <b>Check each number against the label</b>, then add a name.' +
+        (r.mismatch ? '<br>These numbers don’t add up to the calories &mdash; one is probably misread.' : '') +
+        (r.found < 4 ? '<br>Some values could not be read &mdash; fill the empty boxes.' : '');
+      var nm = $('name'); if(nm && !nm.value) setTimeout(function(){ try { nm.focus(); } catch(_f){} }, 50);
     });
-  });
+  };
+  ['cam', 'pic'].forEach(function(k){ var el = $(k); if(el) el.addEventListener('change', function(){ ocrUse(el); }); });
   $('save').addEventListener('click', function(){
     var err = $('err'); err.textContent = '';
     if(!String($('name').value).trim()){ err.textContent = 'Give it a name.'; return; }

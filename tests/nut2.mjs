@@ -419,4 +419,30 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(!h.includes('data-n2-unit="F1:1"'), 'a recipe has no unit button');
     assert.ok(h.includes('data-n2-ug="F1:0"') && h.includes('value="50"'), '1 each = 50 g row');
   });
+
+  // ── v4.9.413 — label reading. Inputs are the ACTUAL text Tesseract produced from test panels. ──
+  test('NIP: per-100 g column, g-read-as-9 repaired, wrapped Cal line, %DI column skipped', () => {
+    const wrap = 'NUTRITION INFORMATION\nServing size: 30g\nPer Serve Per 100g\nEnergy 481kJ 1600kJ\n(115Cal) (382cCal)\nProtein 3.99 13.09\nFat - Total 2.49 8.09\n- Saturated 0.5¢ 1.69\nCarbohydrate 18.0g 60.09\n- Sugars 0.39 1.09\nDietary Fibre 3.09 10.09\nSodium <5mg <5mg';
+    const r = app._nut2ParseNIP(wrap);
+    assert.deepEqual([r.kcal, r.p, r.f, r.c, r.fib, r.basis, r.serving_g, r.ok, r.mismatch], [382, 13, 8, 60, 10, 'per100', 30, true, false]);
+    const di = 'Avg Qty per Serving  % Daily Intake* per Serving Avg Qty per 100g\nEnergy 612kJ 7% 360kJ\nProtein 15.39 31% 9.09\nFat, total 0.39 0.4% 0.29\n- saturated 0.29 1% 0.19\nCarbohydrate 10.29 3% 6.09\n- sugars 7.09 8% 4.19\nSodium 75mg 3% 44mg';
+    const d = app._nut2ParseNIP(di);
+    assert.deepEqual([d.kcal, d.p, d.f, d.c, d.sodium_mg], [86, 9, 0.2, 6, 44], 'kJ ÷ 4.184; % column ignored; saturated / sugars rows never taken');
+  });
+  test('NIP: impossible >100 g per 100 g loses the misread 9; per-serve-only panel is flagged serve; junk fails', () => {
+    const r = app._nut2ParseNIP('Per 100g\nEnergy 1500kJ\nProtein 129\nFat, total 5g\nCarbohydrate 609');
+    assert.equal(r.p, 12); assert.equal(r.c, 60);
+    const s = app._nut2ParseNIP('Serving size: 40g\nQuantity per serving\nEnergy 600kJ\nProtein 8.0g\nFat, total 4.0g\nCarbohydrate 20.0g');
+    assert.equal(s.basis, 'serve'); assert.equal(s.serving_g, 40); assert.equal(s.p, 8);
+    const bad = app._nut2ParseNIP('A blurry photo of a cat');
+    assert.equal(bad.ok, false);
+  });
+  test('NIP screen: Add Food offers SCAN LABEL (camera) and FROM A PHOTO (library)', () => {
+    start({ setup_done: true, daily: {} });
+    let html = ''; const orig = app._nut2Sheet;
+    app._nut2Sheet = (h) => { html = h; return { querySelector: () => null, querySelectorAll: () => [] }; };
+    try { try { app.nut2OpenAddFood(); } catch (_e) {} } finally { app._nut2Sheet = orig; }
+    assert.ok(/id="n2f-cam" type="file" accept="image\/\*" capture="environment"/.test(html), 'camera input');
+    assert.ok(/id="n2f-pic" type="file" accept="image\/\*" style/.test(html), 'photo-library input, no capture');
+  });
 }

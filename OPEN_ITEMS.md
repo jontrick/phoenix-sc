@@ -199,6 +199,12 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       (not recipes), "1 each = [50] g" editable. Tests: nut2 EACH ×4.
 - [x] **v4.9.412** — recipe "Finished weight / weigh the pot" relabelled "Cooked weight of the batch (g) ·
       food only, no pot" (Jon asked what it meant). Method box font fixed.
+- [x] **v4.9.413 — on-phone label reading** (Jon chose this over an AI service). Add Food: SCAN LABEL
+      (camera) / FROM A PHOTO. Tesseract.js 5.1.1 + eng data lazy-loaded from jsdelivr (~10 MB first
+      use, cached in IndexedDB by Tesseract). `_nut2ParseNIP`: last non-% number = per 100 g; g-read-as-9
+      repair; kJ÷4.184 unless Cal shown; Atwater cross-check warns. Boxes filled, NEVER auto-saved.
+      Proven on 4 rendered panels incl. a blurred/rotated JPEG + in-app end to end. **Unproven: real
+      iPhone photos and Safari WASM speed** — first real label is the test. Tests: nut2 NIP ×3.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

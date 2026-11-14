@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.409';
+var APP_VERSION='4.9.410';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23755,22 +23755,49 @@ function nut2Targets(ns){
 // v4.9.395 — the Today card. Replaces the legacy kcal tile AND the generated meals tile
 // (both showed an old plan and two conflicting targets). Stage 3 puts the planned day here.
 function _nut2TodayTile(tile){
-  tile.innerHTML =
-    '<div data-n2-today style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;">' +
-    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Nutrition</div>' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-    (function(){
-      var t = nut2Targets();
-      if(!t) return '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Log a weigh-in to set your daily target.</div>';
-      var A = (typeof window !== 'undefined' && window.NUT_AFCD), d = _nutToday(), T = A ? nut2DayTotals(d) : null;
-      var nx = A ? nut2Day(d).feeds.filter(function(f){ return !f.eaten && (f.items || []).length; })[0] : null;
-      return '<div><div style="font-family:var(--font-d);font-size:28px;font-weight:900;line-height:1;color:var(--text);">' + (T ? T.eaten.kcal : '&hellip;') + ' <span style="font-size:12px;font-weight:400;color:var(--text3);">/ ' + t.kcal + ' kcal eaten</span></div>' +
-        (T ? '<div data-n2-today-plan style="font-size:11px;color:var(--text3);margin-top:4px;">Planned ' + T.planned.kcal + ' kcal &middot; P ' + T.planned.p + ' / ' + t.protein_g + 'g' + (nx ? ' &middot; next ' + _nut2Esc(nx.time) + ' ' + _nut2Esc(nx.name) : '') + '</div>' : '') + '</div>';
-    })() +
-    '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;white-space:nowrap;margin-left:12px;">OPEN ›</div>' +
-    '</div></div>';
-  var el = tile.querySelector('[data-n2-today]');
-  if(el) el.addEventListener('click', function(){ if(typeof navTo === 'function') navTo('nutrition'); });
+  // v4.9.410 — Jon 14 Nov: "Can the proposed day in the plan section show on the today page - so
+  // can tick off from there". The planned feeds are listed with a tick box (same state as the
+  // Plan tab's tick); the rest of the card still opens Nutrition.
+  var A = (typeof window !== 'undefined' && window.NUT_AFCD), t = nut2Targets(), d = _nutToday();
+  var T = (A && t) ? nut2DayTotals(d) : null;
+  var h = '<div data-n2-today style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">' +
+    '<div data-n2t-open style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">' +
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--text3);">Nutrition</div>' +
+    '<div style="font-family:var(--font-d);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;">OPEN &rsaquo;</div></div>';
+  if(!t){
+    h += '<div data-n2t-open style="font-size:13px;color:var(--text2);line-height:1.5;margin-top:6px;cursor:pointer;">Log a weigh-in to set your daily target.</div>';
+  } else if(!T){
+    h += '<div style="font-size:13px;color:var(--text3);margin-top:6px;">Loading&hellip;</div>';
+  } else {
+    h += '<div data-n2t-open style="cursor:pointer;margin-top:6px;"><div style="font-family:var(--font-d);font-size:28px;font-weight:900;line-height:1;color:var(--text);">' + T.eaten.kcal + ' <span style="font-size:12px;font-weight:400;color:var(--text3);">/ ' + t.kcal + ' kcal eaten</span></div>' +
+      '<div data-n2-today-plan style="font-size:11px;color:var(--text3);margin-top:4px;">Planned ' + T.planned.kcal + ' kcal &middot; P ' + T.eaten.p + ' / ' + t.protein_g + 'g eaten</div></div>';
+    var ns = _nut2State(), feeds = nut2Day(d, ns).feeds.filter(function(f){ return (f.items || []).length; });
+    if(!feeds.length){
+      h += '<div data-n2t-open style="font-size:12px;color:var(--text2);margin-top:10px;cursor:pointer;">Nothing planned today &mdash; tap to plan your day.</div>';
+    } else {
+      h += '<div style="margin-top:10px;border-top:1px solid var(--border);">';
+      feeds.forEach(function(f){
+        var ft = nut2FeedTotals(f, ns), names = f.items.map(function(it){ return _nut2RefName(it.ref, ns); }).join(', ');
+        h += '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">' +
+          '<button data-n2t-eat="' + _nut2Esc(f.id) + '" aria-pressed="' + (f.eaten ? 'true' : 'false') + '" aria-label="Eaten: ' + _nut2Esc(f.name) + '" style="width:30px;height:30px;flex-shrink:0;border-radius:7px;padding:0;background:' + (f.eaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (f.eaten ? 'var(--gold)' : 'var(--border2)') + ';color:#000;font-weight:900;">' + (f.eaten ? '&#10003;' : '') + '</button>' +
+          '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:14px;color:' + (f.eaten ? 'var(--text3)' : 'var(--text)') + ';"><span style="color:var(--gold);font-size:12px;">' + _nut2Esc(f.time) + '</span> ' + _nut2Esc(f.name) + '</div>' +
+          '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _nut2Esc(names) + '</div></div>' +
+          '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:' + (f.eaten ? 'var(--text3)' : 'var(--text)') + ';">' + ft.kcal + '</div></div>';
+      });
+      h += '</div>';
+    }
+  }
+  tile.innerHTML = h + '</div>';
+  var card = tile.querySelector('[data-n2-today]');
+  if(card) card.addEventListener('click', function(e){
+    var b = e.target && e.target.closest ? e.target.closest('[data-n2t-eat]') : null;
+    if(b){
+      var id = b.getAttribute('data-n2t-eat'), f = nut2Day(d).feeds.filter(function(x){ return x.id === id; })[0];
+      nut2SetFeed(d, id, { eaten: !(f && f.eaten) }); _nut2TodayTile(tile); return;
+    }
+    if(e.target && e.target.closest && e.target.closest('[data-n2t-open]') && typeof navTo === 'function') navTo('nutrition');
+  });
   if(typeof window !== 'undefined' && !window.NUT_AFCD && !tile._n2waiting){
     tile._n2waiting = true;
     _nut2LoadAfcd(function(ok){ tile._n2waiting = false; if(ok){ _nut2BuildIndex(); _nut2TodayTile(tile); } });

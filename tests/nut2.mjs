@@ -356,4 +356,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     h = app._nut2ShopTab();
     assert.ok(/0 of 1 left/.test(h));
   });
+
+  test('TODAYFEEDS: the Today card lists only planned feeds, each with a tick that reflects eaten', () => {
+    const { d, egg } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i, '150');
+    const k = app.nut2AddItem(d, 'F4', egg.id); app.nut2SetItemQty(d, 'F4', k, '100');
+    app.nut2SetFeed(d, 'F1', { eaten: true });
+    const tile = { innerHTML: '', querySelector: () => ({ addEventListener(){} }) };
+    app._nut2TodayTile(tile);
+    const ticks = tile.innerHTML.match(/data-n2t-eat="[^"]+" aria-pressed="(true|false)"/g) || [];
+    assert.deepEqual(ticks.map((x) => x.replace(/.*eat="([^"]+)" aria-pressed="(\w+)"/, '$1:$2')), ['F1:true', 'F4:false']);
+    assert.ok(tile.innerHTML.includes('Breakfast') && tile.innerHTML.includes('Dinner') && !tile.innerHTML.includes('Greens shake'), 'empty feeds hidden');
+    start({ setup_done: true, daily: { '2026-11-09': { weight_kg: 112 } } });
+    app._nut2TodayTile(tile);
+    assert.ok(/Nothing planned today/.test(tile.innerHTML));
+  });
 }

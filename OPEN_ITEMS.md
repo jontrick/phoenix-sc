@@ -189,6 +189,9 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       batches); untick for exact. Selection, ticks and the toggle persist in `ns.v2.shop`; changing the
       days or the toggle clears ticks. Weights are edible weight, no waste factor (stated on screen).
       `_nut2ComingCard` archived. Next: stage 6 Claude guidance (Jon: later; working system first).
+- [x] **v4.9.410 — Today card lists today's planned feeds with a tick** (Jon 14 Nov: "show on the
+      today page - so can tick off from there"). Same `eaten` flag as the Plan tab; only feeds with
+      food are listed; the header / numbers still open Nutrition. Test: nut2 TODAYFEEDS.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

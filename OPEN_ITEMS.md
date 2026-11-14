@@ -222,6 +222,14 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       kJ fallback. **Unverified from here: the live API response and its CORS on his phone** (sandbox
       cannot reach OFF; browser test used a stand-in). Failure says so — never fills wrong numbers.
       Woolworths links show "needs a one-time server set-up" until task #28 lands. Tests: nut2 OFF ×3.
+- [ ] **JON — deploy `supabase/functions/woolies-product` (Woolworths links, v4.9.418).** Supabase dashboard
+      → Edge Functions → Deploy a new function → Via editor → name `woolies-product` → paste
+      `supabase/functions/woolies-product/index.ts` → Deploy. Until then the app says "needs the one-time
+      server set-up". **UNVERIFIED: Woolworths' endpoint `/apis/ui/product/detail/<stockcode>` and whether
+      its bot protection admits a server request** — first real link after deploy is the test. App reads
+      the reply defensively (any Name/Value or key path containing "100 g"; serve rows never used), falls
+      back to the product's barcode → Open Food Facts, else a plain message. Only digits reach the
+      function; it only calls www.woolworths.com.au. Tests: nut2 WOOLIES ×2; browser: 404 / ok / 403.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

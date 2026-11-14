@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.417';
+var APP_VERSION='4.9.418';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23301,6 +23301,85 @@ function nut2ReadBarcodeFile(file, onStatus, cb){
   };
   rd.readAsDataURL(file);
 }
+// ── v4.9.418 — WOOLWORTHS LINK → FOOD (via the woolies-product server function) ──
+// Jon chose "Both": Open Food Facts now, Woolworths pages via a server. The function source is
+// supabase/functions/woolies-product/index.ts; Jon deploys it once. The reply's exact shape is
+// UNVERIFIED, so it is read defensively: every Name/Value pair and key/value anywhere in the
+// JSON (including JSON held inside strings) is collected, and only rows that say "100 g" are
+// used. No per-100 g panel → if the product carries a barcode, Open Food Facts is tried; else
+// a plain message. Never a guessed number.
+function nut2WooliesCode(url){
+  var m = String(url || '').match(/woolworths\.com\.au\/shop\/productdetails\/(\d{1,10})/i) || String(url || '').match(/[?&]stockcode=(\d{1,10})/i);
+  return m ? m[1] : null;
+}
+// Every (label, value) in the reply. A label is the key PATH ("nutritionPer100g.proteinG"), or the
+// Name of a {Name, Value} row — so "per 100 g" is seen whether it sits on the row or a parent.
+function _nut2Pairs(node, out, depth, path){
+  out = out || []; depth = depth || 0; path = path || ''; if(depth > 12 || node == null) return out;
+  if(typeof node === 'string'){
+    var t = node.trim();
+    // char codes, not '{' literals: harness.mjs finds function ends by counting braces.
+    var c0 = t.charCodeAt(0);
+    if((c0 === 123 || c0 === 91) && t.length < 200000){ try { _nut2Pairs(JSON.parse(t), out, depth + 1, path); } catch(_e){} }
+    return out;
+  }
+  if(Array.isArray(node)){ node.forEach(function(x){ _nut2Pairs(x, out, depth + 1, path); }); return out; }
+  if(typeof node === 'object'){
+    var nk = Object.keys(node).filter(function(k){ return /^name$/i.test(k); })[0], vk = Object.keys(node).filter(function(k){ return /^value$/i.test(k); })[0];
+    if(nk && vk && typeof node[nk] === 'string') out.push([(path ? path + '.' : '') + node[nk], node[vk]]);
+    Object.keys(node).forEach(function(k){
+      var v = node[k], kp = (path ? path + '.' : '') + k;
+      if(v != null && typeof v !== 'object' && !(nk && vk && (k === nk || k === vk))) out.push([kp, v]);
+      _nut2Pairs(v, out, depth + 1, kp);
+    });
+  }
+  return out;
+}
+function nut2FromWoolies(body){
+  if(!body || typeof body !== 'object') return null;
+  var pairs = _nut2Pairs(body);
+  var per100 = pairs.filter(function(p){ return /100\s*(g|ml)|per\s*100|100g/i.test(String(p[0])); });
+  var val = function(rx, not){
+    var hit = per100.filter(function(p){ var k = String(p[0]); return rx.test(k) && !(not && not.test(k)); })[0];
+    if(!hit) return null;
+    var s = String(hit[1]), n = parseFloat(s.replace(/[^0-9.]/g, ''));
+    return isNaN(n) ? null : { v: n, s: s.toLowerCase(), k: String(hit[0]).toLowerCase() };
+  };
+  var e = val(/energy/i), out = {};
+  if(e) out.kcal = Math.round(/cal/.test(e.s) || /cal/.test(e.k) ? e.v : e.v / 4.184);
+  var p = val(/protein/i), f = val(/fat/i, /sat|trans|mono|poly/i), c = val(/carb/i, /sugar/i), fib = val(/fib(re|er)/i);
+  if(p) out.p = p.v; if(f) out.f = f.v; if(c) out.c = c.v; if(fib) out.fib = fib.v;
+  var leaf = function(k){ return String(k).split('.').pop(); };
+  var nameP = pairs.filter(function(p){ return /^(displayname|name|productname)$/i.test(leaf(p[0])) && String(p[0]).split('.').length <= 2 && typeof p[1] === 'string'; })[0];
+  out.name = nameP ? String(nameP[1]).trim() : '';
+  var bc = pairs.filter(function(p){ return /barcode|gtin|\bean\b/i.test(leaf(p[0])); }).map(function(p){ return nut2BarcodeFrom(String(p[1])); }).filter(Boolean)[0];
+  out.barcode = bc || null;
+  out.ok = ['kcal', 'p', 'c', 'f'].filter(function(k){ return out[k] != null; }).length >= 3;
+  return out;
+}
+window.nut2LookupWoolies = function(url, $, st, fill){
+  var code = nut2WooliesCode(url);
+  st.style.color = 'var(--text2)';
+  if(!code){ st.style.color = '#e07a7a'; st.textContent = 'That Woolworths link has no product number. Open the product page and copy its link.'; return; }
+  st.innerHTML = 'Fetching Woolworths product ' + code + '&hellip;';
+  var tok = (typeof currentSession !== 'undefined' && currentSession && currentSession.access_token) || (typeof SUPABASE_KEY === 'string' ? SUPABASE_KEY : '');
+  fetch(SUPABASE_URL + '/functions/v1/woolies-product?stockcode=' + code, { headers: { apikey: (typeof SUPABASE_KEY === 'string' ? SUPABASE_KEY : ''), Authorization: 'Bearer ' + tok } })
+    .then(function(r){ if(r.status === 404) return { notDeployed: true }; return r.json(); })
+    .then(function(j){
+      if(j.notDeployed){ st.style.color = '#e0b062'; st.textContent = 'Woolworths links need the one-time server set-up (see the instructions). For now, type the barcode from the pack, or scan the label.'; return; }
+      var f = j && j.ok ? nut2FromWoolies(j.body) : null;
+      if(f && f.ok){
+        fill(f); st.style.color = '#6fcf8f';
+        st.innerHTML = 'From Woolworths, per 100 g. <b>Check it against the pack</b>.'; return;
+      }
+      if(f && f.barcode){ st.innerHTML = 'Woolworths had no nutrition panel &mdash; trying barcode ' + f.barcode + ' on Open Food Facts&hellip;';
+        nut2LookupOFF(f.barcode, function(r){ if(r.ok){ if(f.name) r.food.name = f.name; fill(r.food); st.style.color = '#6fcf8f'; st.innerHTML = 'From Open Food Facts (via the Woolworths barcode), per 100 g. <b>Check it against the pack</b>.'; } else { st.style.color = '#e07a7a'; st.textContent = r.error; } });
+        return; }
+      st.style.color = '#e07a7a';
+      st.textContent = (j && j.status === 403) ? 'Woolworths blocked the request. Type the barcode from the pack, or scan the label.' : 'Couldn’t find the nutrition panel for that product. Type the barcode from the pack, or scan the label.';
+    })
+    .catch(function(e){ console.error('[PHX] woolies', e); st.style.color = '#e07a7a'; st.textContent = 'Couldn’t reach the server. Check your connection, or scan the label.'; });
+};
 // onSaved(id) — v4.9.414: when opened from a meal / recipe picker, the new food goes back there.
 // v4.9.415 — no app change: re-ship after v4.9.414 went out with its own new test red (test stub bug).
 function nut2OpenAddFood(editId, prefill, onSaved){
@@ -23398,6 +23477,7 @@ function nut2OpenAddFood(editId, prefill, onSaved){
     nut2LookupOFF(code, function(r){
       if(!r.ok){ st.style.color = '#e07a7a'; st.textContent = r.error; return; }
       var f = r.food;
+      if(prefill === undefined || prefill === null) prefill = {};
       if(!$('name').value) $('name').value = f.name;
       ['kcal','p','c','f','fib'].forEach(function(k){ $(k).value = f[k] == null ? '' : f[k]; });
       basis = 'per100';
@@ -23418,7 +23498,8 @@ function nut2OpenAddFood(editId, prefill, onSaved){
     if(!code){ st.style.color = '#e07a7a'; st.textContent = 'That isn’t an Open Food Facts link or a valid barcode. Check the digits under the barcode on the pack.'; return; }
     offFill(code);
   });
-  var offFillFood = function(f){ if(!$('name').value) $('name').value = f.name || ''; ['kcal','p','c','f','fib'].forEach(function(k){ $(k).value = f[k] == null ? '' : f[k]; }); basis = 'per100'; paintBasis(); };
+  var offFillFood = function(f){ if(!$('name').value) $('name').value = f.name || ''; ['kcal','p','c','f','fib'].forEach(function(k){ $(k).value = f[k] == null ? '' : f[k]; }); basis = 'per100';
+    if(prefill === undefined || prefill === null) prefill = {}; prefill.source = 'woolworths'; paintBasis(); };
   var bar = $('bar');
   if(bar) bar.addEventListener('change', function(){
     var file = bar.files && bar.files[0]; bar.value = ''; var st = $('ocr'); if(!file) return;

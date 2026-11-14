@@ -518,4 +518,25 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       const off = await done(); assert.ok(/Could not reach/.test(off.error));
     } finally { app.fetch = real; }
   });
+
+  // ── v4.9.418 — Woolworths link (server reply shape UNVERIFIED — two plausible shapes tested) ──
+  test('WOOLIES: product number from the link; only digits ever reach the server', () => {
+    assert.equal(app.nut2WooliesCode('https://www.woolworths.com.au/shop/productdetails/36059/sanitarium-weet-bix'), '36059');
+    assert.equal(app.nut2WooliesCode('https://www.woolworths.com.au/shop/productdetails/abc/x'), null);
+    assert.equal(app.nut2WooliesCode('https://evil.example/shop/productdetails/1'), null);
+  });
+  test('WOOLIES parse: Name/Value rows held in a JSON string, AND a nested per-100 g object; serve rows never used', () => {
+    const A = { Product: { DisplayName: 'Sanitarium Weet-Bix', Barcode: '9300652010015' }, AdditionalAttributes: { nutritionalinformation: JSON.stringify({ Attributes: [
+      { Name: 'Energy Per Serve', Value: '455kJ' }, { Name: 'Energy Per 100g', Value: '1515kJ' }, { Name: 'Protein Per 100g', Value: '12.1g' },
+      { Name: 'Fat Total Per 100g', Value: '1.4g' }, { Name: 'Fat Saturated Per 100g', Value: '0.3g' }, { Name: 'Carbohydrate Per 100g', Value: '66.9g' },
+      { Name: 'Sugars Per 100g', Value: '2.8g' }, { Name: 'Dietary Fibre Per 100g', Value: '11g' }, { Name: 'Protein Per Serve', Value: '3.6g' } ] }) } };
+    const a = app.nut2FromWoolies(A);
+    assert.deepEqual([a.ok, a.kcal, a.p, a.f, a.c, a.fib, a.name, a.barcode], [true, 362, 12.1, 1.4, 66.9, 11, 'Sanitarium Weet-Bix', '9300652010015']);
+    const B = { name: 'Pauls Plus Protein Milk', nutritionPerServe: { energyKj: 849, proteinG: 18 }, nutritionPer100g: { energyKj: 283, proteinG: 6, fatTotalG: 1.3, fatSaturatedG: 0.9, carbohydrateG: 7.2, sugarsG: 7.2 } };
+    const b = app.nut2FromWoolies(B);
+    assert.deepEqual([b.ok, b.kcal, b.p, b.f, b.c], [true, 68, 6, 1.3, 7.2]);
+    const C = app.nut2FromWoolies({ Product: { Name: 'Bananas', Barcode: '9300652010015' } });
+    assert.equal(C.ok, false); assert.equal(C.barcode, '9300652010015', 'no panel → barcode kept for the Open Food Facts fallback');
+    assert.equal(app.nut2FromWoolies(null), null);
+  });
 }

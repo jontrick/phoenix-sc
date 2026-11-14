@@ -192,6 +192,11 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
 - [x] **v4.9.410 — Today card lists today's planned feeds with a tick** (Jon 14 Nov: "show on the
       today page - so can tick off from there"). Same `eaten` flag as the Plan tab; only feeds with
       food are listed; the header / numbers still open Nutrition. Test: nut2 TODAYFEEDS.
+- [x] **v4.9.411 — "each" amounts** (Jon: "may just check 3 [eggs] in a recipe with no weight? Can
+      this be each or g option?"). Items are {ref,g} or {ref,n}; `_nut2ItemG` is the ONE place grams
+      are derived (recipes, plan, shop, copy). Size = his `ns.v2.unitG[ref]` else a default (egg 50 g,
+      AU large edible) else null → 0 g and save refuses — never guessed. g ⇄ each button on foods
+      (not recipes), "1 each = [50] g" editable. Tests: nut2 EACH ×4.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

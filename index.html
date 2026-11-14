@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.410';
+var APP_VERSION='4.9.411';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22891,7 +22891,7 @@ function _nut2Rows(list){
 
 function _nut2Click(e){
   if(_nut2Tab === 'plan' && e.target.closest){
-    var pt = e.target.closest('[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd],[data-n2-fcopy],[data-n2-dcopy],[data-n2-wcopy]');
+    var pt = e.target.closest('[data-n2-unit],[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd],[data-n2-fcopy],[data-n2-dcopy],[data-n2-wcopy]');
     if(pt && _nut2PlanClick(pt)) return;
   }
   if(_nut2Tab === 'shop' && e.target.closest){
@@ -23077,13 +23077,52 @@ function _nut2RecipeList(ns){
     .sort(function(a, b){ return String(a.name).localeCompare(String(b.name)); });
 }
 
+// v4.9.411 — "each" amounts. Jon 14 Nov: "adding egg is by weight but may just check 3 in a
+// recipe with no weight? Can this be each or g option?" An item is either {ref, g} or
+// {ref, n} (a count). A count needs grams-per-each: his own value (ns.v2.unitG[ref]) or a
+// default for the few foods that have a standard size. No value → the item counts as 0 g and
+// save asks for it — never a guessed weight.
+var NUT2_UNIT_DEFAULTS = [ { rx: /^egg, chicken, whole/i, g: 50 } ];   // AU large egg, edible part
+function nut2UnitG(ref, ns){
+  ns = ns || _nut2State(); if(!ref || ref.indexOf('R:') === 0) return null;
+  var u = ns.v2.unitG && parseFloat(ns.v2.unitG[ref]); if(u > 0) return u;
+  var f = nut2Food(ref, ns); if(!f) return null;
+  for(var i = 0; i < NUT2_UNIT_DEFAULTS.length; i++) if(NUT2_UNIT_DEFAULTS[i].rx.test(f.name)) return NUT2_UNIT_DEFAULTS[i].g;
+  return null;
+}
+function nut2SetUnitG(ref, g){
+  var ns = _nut2State(); g = parseFloat(g);
+  if(!ns.v2.unitG) ns.v2.unitG = {};
+  if(g > 0) ns.v2.unitG[ref] = Math.round(g * 10) / 10; else delete ns.v2.unitG[ref];
+  _nut2Save(ns);
+}
+function _nut2IsEach(it){ return !!it && it.n != null; }
+function _nut2ItemG(it, ns){
+  if(!it) return 0;
+  if(_nut2IsEach(it)){ var u = nut2UnitG(it.ref, ns); return u ? (parseFloat(it.n) || 0) * u : 0; }
+  return parseFloat(it.g) || 0;
+}
+// g ⇄ each on one item, converting the amount when the size is known.
+function _nut2ToggleUnit(it, ns){
+  var u = nut2UnitG(it.ref, ns);
+  if(_nut2IsEach(it)){ var n = parseFloat(it.n); it.g = (n > 0 && u) ? Math.round(n * u) : ''; delete it.n; }
+  else { var g = parseFloat(it.g); it.n = (g > 0 && u) ? Math.round(g / u * 2) / 2 : ''; delete it.g; }
+  return it;
+}
+// "1 each = [ 50 ] g" under an each-amount. Empty when no size is known — he must fill it.
+function _nut2UnitRow(attr, u){
+  return '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:5px;font-size:11px;color:' + (u ? 'var(--text3)' : '#e0b062') + ';">' + (u ? '' : 'How heavy is one? ') + '1 each =' +
+    '<input ' + attr + ' type="number" inputmode="decimal" placeholder="g" value="' + (u || '') + '" style="width:56px;padding:5px 4px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:16px;text-align:center;">g</div>';
+}
+function _nut2CopyItem(it){ return _nut2IsEach(it) ? { ref: it.ref, n: it.n } : (it.serves != null ? { ref: it.ref, serves: it.serves } : { ref: it.ref, g: it.g }); }
+
 // Totals for the whole recipe. Unknown refs are counted, not silently zeroed.
 function nut2RecipeTotals(rec, ns, _depth){
   ns = ns || _nut2State(); _depth = _depth || 0;
   var t = { kcal: 0, p: 0, c: 0, f: 0, fib: 0, g: 0, missing: 0 };
   if(!rec || _depth > 4) return t;
   (rec.items || []).forEach(function(it){
-    var g = parseFloat(it.g) || 0;
+    var g = _nut2ItemG(it, ns);
     var per = (it.ref && it.ref.indexOf('R:') === 0) ? nut2RecipePer100(it.ref, ns, _depth + 1) : nut2Food(it.ref, ns);
     if(!per){ t.missing++; return; }
     var k = g / 100;
@@ -23120,8 +23159,8 @@ function nut2RecipePerServe(ref, ns){
 function nut2SaveRecipe(rec){
   var ns = _nut2State();
   var id = rec.id && String(rec.id).indexOf('R:') === 0 ? rec.id : ('R:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
-  var items = (rec.items || []).filter(function(it){ return it && it.ref && parseFloat(it.g) > 0 && it.ref !== id; })
-    .map(function(it){ return { ref: it.ref, g: Math.round(parseFloat(it.g) * 10) / 10 }; });
+  var items = (rec.items || []).filter(function(it){ return it && it.ref && _nut2ItemG(it, ns) > 0 && it.ref !== id; })
+    .map(function(it){ return _nut2IsEach(it) ? { ref: it.ref, n: Math.round(parseFloat(it.n) * 10) / 10 } : { ref: it.ref, g: Math.round(parseFloat(it.g) * 10) / 10 }; });
   ns.v2.recipes[id] = {
     name: String(rec.name || '').trim().slice(0, 80) || 'Untitled recipe',
     kind: rec.kind === 'batch' ? 'batch' : 'serves',
@@ -23194,7 +23233,7 @@ function nut2OpenPicker(title, onPick, excludeRef){
 var _nut2RecDraft = null;
 function nut2OpenRecipe(id){
   var ns = _nut2State();
-  if(id && ns.v2.recipes[id]){ var r = ns.v2.recipes[id]; _nut2RecDraft = { id: id, name: r.name, kind: r.kind, serves: r.serves, finishedG: r.finishedG, items: (r.items || []).map(function(it){ return { ref: it.ref, g: it.g }; }), method: r.method || '' }; }
+  if(id && ns.v2.recipes[id]){ var r = ns.v2.recipes[id]; _nut2RecDraft = { id: id, name: r.name, kind: r.kind, serves: r.serves, finishedG: r.finishedG, items: (r.items || []).map(_nut2CopyItem), method: r.method || '' }; }
   else if(!id || !_nut2RecDraft) _nut2RecDraft = { id: null, name: '', kind: '', serves: '', finishedG: '', items: [], method: '' };
   _nut2PaintRecipe();
 }
@@ -23206,12 +23245,14 @@ function _nut2PaintRecipe(){
       '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:1px;">' + label + '</div><div style="font-size:10px;opacity:.8;margin-top:2px;">' + sub + '</div></button>'; };
   var rows = d.items.map(function(it, i){
     var per = (it.ref.indexOf('R:') === 0) ? nut2RecipePer100(it.ref, ns) : nut2Food(it.ref, ns);
-    var kc = per ? Math.round(per.kcal * (parseFloat(it.g) || 0) / 100) : 0;
-    return '<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);">' +
+    var kc = per ? Math.round(per.kcal * _nut2ItemG(it, ns) / 100) : 0, each = _nut2IsEach(it), isRec = it.ref.indexOf('R:') === 0;
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);"><div style="display:flex;align-items:center;gap:6px;">' +
       '<div style="flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.3;">' + _nut2Esc(_nut2RefName(it.ref, ns)) + (per ? '' : ' <span style="color:#e07a7a;">(missing)</span>') + '<div data-item-kc="' + i + '" data-per="' + (per ? per.kcal : 0) + '" style="font-size:10px;color:var(--text3);">' + kc + ' kcal</div></div>' +
-      '<input data-item-g="' + i + '" type="number" inputmode="decimal" placeholder="g" value="' + (it.g || '') + '" style="width:72px;padding:9px 4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;">' +
-      '<span style="font-size:11px;color:var(--text3);">g</span>' +
-      '<button data-item-del="' + i + '" style="background:none;border:none;color:var(--text3);font-size:20px;padding:0 4px;">&times;</button></div>';
+      '<input data-item-g="' + i + '" type="number" inputmode="decimal" placeholder="' + (each ? 'no.' : 'g') + '" value="' + (each ? (it.n === '' ? '' : it.n) : (it.g || '')) + '" style="width:64px;padding:9px 4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;">' +
+      (isRec ? '<span style="font-size:11px;color:var(--text3);width:38px;">g</span>'
+             : '<button data-item-unit="' + i + '" style="width:42px;padding:8px 0;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--gold);font-size:11px;font-weight:700;">' + (each ? 'each' : 'g') + '</button>') +
+      '<button data-item-del="' + i + '" style="background:none;border:none;color:var(--text3);font-size:20px;padding:0 4px;">&times;</button></div>' +
+      (each ? _nut2UnitRow('data-item-ug="' + i + '"', nut2UnitG(it.ref, ns)) : '') + '</div>';
   }).join('');
   var h = '<div style="display:flex;align-items:center;margin-bottom:12px;"><div style="flex:1;font-family:var(--font-d);font-size:16px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">' + (d.id ? 'Edit recipe' : 'New recipe') + '</div>' +
       '<button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>' +
@@ -23233,6 +23274,8 @@ function _nut2PaintRecipe(){
       '<button id="n2r-save" style="flex:2;padding:14px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:14px;letter-spacing:2px;">SAVE RECIPE</button></div>';
   var ov = _nut2Sheet(h);
   var $ = function(id){ return ov.querySelector('#n2r-' + id); };
+  Array.prototype.forEach.call(ov.querySelectorAll('[data-item-unit]'), function(b){ b.addEventListener('click', function(){ grab(); _nut2ToggleUnit(d.items[+b.getAttribute('data-item-unit')], ns); _nut2PaintRecipe(); }); });
+  Array.prototype.forEach.call(ov.querySelectorAll('[data-item-ug]'), function(inp){ inp.addEventListener('change', function(){ grab(); nut2SetUnitG(d.items[+inp.getAttribute('data-item-ug')].ref, inp.value); _nut2PaintRecipe(); }); });
   var grab = function(){
     d.name = $('name').value; d.method = $('method').value;
     if($('serves')) d.serves = $('serves').value;
@@ -23258,9 +23301,9 @@ function _nut2PaintRecipe(){
   Array.prototype.forEach.call(ov.querySelectorAll('[data-kind]'), function(b){ b.addEventListener('click', function(){ grab(); d.kind = b.getAttribute('data-kind'); _nut2PaintRecipe(); }); });
   ['name','method','serves','fin'].forEach(function(k){ if($(k)) $(k).addEventListener('input', paintTot); });
   Array.prototype.forEach.call(ov.querySelectorAll('[data-item-g]'), function(inp){ inp.addEventListener('input', function(){
-    var i = +inp.getAttribute('data-item-g'); d.items[i].g = inp.value;
+    var i = +inp.getAttribute('data-item-g'); if(_nut2IsEach(d.items[i])) d.items[i].n = inp.value; else d.items[i].g = inp.value;
     var lab = ov.querySelector('[data-item-kc="' + i + '"]');
-    if(lab) lab.textContent = Math.round((+lab.getAttribute('data-per') || 0) * (parseFloat(inp.value) || 0) / 100) + ' kcal';
+    if(lab) lab.textContent = Math.round((+lab.getAttribute('data-per') || 0) * _nut2ItemG(d.items[i], ns) / 100) + ' kcal';
     paintTot(); }); });
   Array.prototype.forEach.call(ov.querySelectorAll('[data-item-del]'), function(b){ b.addEventListener('click', function(){ grab(); d.items.splice(+b.getAttribute('data-item-del'), 1); _nut2PaintRecipe(); }); });
   $('additem').addEventListener('click', function(){
@@ -23281,8 +23324,10 @@ function _nut2PaintRecipe(){
     if(!d.kind){ err.textContent = 'Choose how it is eaten: makes serves, or by weight.'; return; }
     if(d.kind === 'serves' && !(parseFloat(d.serves) >= 1)){ err.textContent = 'How many serves does it make?'; return; }
     if(!d.items.length){ err.textContent = 'Add at least one ingredient.'; return; }
-    var noG = d.items.filter(function(it){ return !(parseFloat(it.g) > 0); });
-    if(noG.length){ err.textContent = 'Enter the grams for ' + _nut2RefName(noG[0].ref, ns) + (noG.length > 1 ? ' and ' + (noG.length - 1) + ' more' : '') + '.'; return; }
+    var noG = d.items.filter(function(it){ return !(_nut2ItemG(it, ns) > 0); });
+    if(noG.length){
+      var it0 = noG[0], what = (_nut2IsEach(it0) && parseFloat(it0.n) > 0) ? 'the grams per each for ' : (_nut2IsEach(it0) ? 'how many ' : 'the grams for ');
+      err.textContent = 'Enter ' + what + _nut2RefName(it0.ref, ns) + (noG.length > 1 ? ' (and ' + (noG.length - 1) + ' more)' : '') + '.'; return; }
     nut2SaveRecipe(d); _nut2RecDraft = null; _nut2CloseSheet(); _nut2Tab = 'recipes'; nut2Render();
   });
   var del = $('del');
@@ -23338,8 +23383,8 @@ function nut2ItemMacros(it, ns){
   }
   var per = isRec ? nut2RecipePer100(it.ref, ns) : nut2Food(it.ref, ns);
   if(!per){ z.missing = true; return z; }
-  var k = (parseFloat(it.g) || 0) / 100;
-  return { kcal: per.kcal * k, p: per.p * k, c: per.c * k, f: per.f * k, g: parseFloat(it.g) || 0, missing: false };
+  var gg = _nut2ItemG(it, ns), k = gg / 100;
+  return { kcal: per.kcal * k, p: per.p * k, c: per.c * k, f: per.f * k, g: gg, missing: false };
 }
 function _nut2Round(t){ return { kcal: Math.round(t.kcal), p: Math.round(t.p * 10) / 10, c: Math.round(t.c * 10) / 10, f: Math.round(t.f * 10) / 10, missing: t.missing || 0 }; }
 function nut2FeedTotals(feed, ns){
@@ -23380,8 +23425,14 @@ function nut2SetItemQty(date, feedId, idx, val){
   var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
   var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd || !fd.items[idx]) return false;
   var it = fd.items[idx];
-  if(it.serves != null) it.serves = val === '' ? '' : Math.max(0, parseFloat(val) || 0); else it.g = val === '' ? '' : Math.max(0, parseFloat(val) || 0);
+  var v = val === '' ? '' : Math.max(0, parseFloat(val) || 0);
+  if(it.serves != null) it.serves = v; else if(_nut2IsEach(it)) it.n = v; else it.g = v;
   _nut2Save(ns); return true;
+}
+function nut2SetItemUnit(date, feedId, idx){
+  var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
+  var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd || !fd.items[idx] || fd.items[idx].serves != null) return false;
+  _nut2ToggleUnit(fd.items[idx], ns); _nut2Save(ns); return true;
 }
 function nut2DelItem(date, feedId, idx){
   var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
@@ -23458,13 +23509,15 @@ function _nut2PlanTab(){
       '<input data-n2-fname="' + fd.id + '" value="' + _nut2Esc(fd.name) + '" style="' + inp + 'flex:1;min-width:0;padding:6px 8px;font-size:15px;font-weight:700;border-color:transparent;background:transparent;">' +
       '<div data-n2-fkc="' + fd.id + '" style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;">' + t.kcal + '</div></div>';
     fd.items.forEach(function(it, i){
-      var m = nut2ItemMacros(it, ns), serves = it.serves != null;
+      var m = nut2ItemMacros(it, ns), serves = it.serves != null, each = _nut2IsEach(it), isRecI = it.ref.indexOf('R:') === 0;
       h += '<div style="display:flex;align-items:center;gap:6px;padding:7px 0 0 36px;">' +
         '<div style="flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.3;">' + _nut2Esc(_nut2RefName(it.ref, ns)) + (m.missing ? ' <span style="color:#e07a7a;">(missing)</span>' : '') +
         '<div data-n2-ikc="' + fd.id + ':' + i + '" style="font-size:10px;color:var(--text3);">' + Math.round(m.kcal) + ' kcal &middot; P ' + Math.round(m.p * 10) / 10 + '</div></div>' +
-        '<input data-n2-qty="' + fd.id + ':' + i + '" type="number" inputmode="decimal" step="' + (serves ? '0.5' : '1') + '" placeholder="' + (serves ? 'serves' : 'g') + '" value="' + (serves ? it.serves : (it.g || '')) + '" style="' + inp + 'width:66px;padding:8px 4px;text-align:center;font-family:var(--font-d);font-weight:700;">' +
-        '<span style="font-size:11px;color:var(--text3);width:30px;">' + (serves ? 'serve' : 'g') + '</span>' +
-        '<button data-n2-idel="' + fd.id + ':' + i + '" style="background:none;border:none;color:var(--text3);font-size:20px;padding:0 2px;">&times;</button></div>';
+        '<input data-n2-qty="' + fd.id + ':' + i + '" type="number" inputmode="decimal" step="' + (serves || each ? '0.5' : '1') + '" placeholder="' + (serves ? 'serves' : (each ? 'no.' : 'g')) + '" value="' + (serves ? it.serves : (each ? (it.n === '' ? '' : it.n) : (it.g || ''))) + '" style="' + inp + 'width:62px;padding:8px 4px;text-align:center;font-family:var(--font-d);font-weight:700;">' +
+        ((serves || isRecI) ? '<span style="font-size:11px;color:var(--text3);width:38px;">' + (serves ? 'serve' : 'g') + '</span>'
+          : '<button data-n2-unit="' + fd.id + ':' + i + '" style="width:40px;padding:7px 0;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--gold);font-size:11px;font-weight:700;">' + (each ? 'each' : 'g') + '</button>') +
+        '<button data-n2-idel="' + fd.id + ':' + i + '" style="background:none;border:none;color:var(--text3);font-size:20px;padding:0 2px;">&times;</button></div>' +
+        (each ? '<div style="padding-left:36px;">' + _nut2UnitRow('data-n2-ug="' + fd.id + ':' + i + '"', nut2UnitG(it.ref, ns)) + '</div>' : '');
     });
     h += '<div style="display:flex;gap:8px;margin-top:8px;padding-left:36px;">' +
       '<button data-n2-iadd="' + fd.id + '" style="flex:1;padding:9px;border-radius:8px;background:transparent;border:1px dashed var(--border2);color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;">+ ADD FOOD</button>' +
@@ -23496,6 +23549,7 @@ function _nut2PlanClick(t){
   if((a = t.getAttribute('data-n2-day')) !== null){ _nut2PlanDate = a === '0' ? null : _nut2ShiftDate(date, +a); if(_nut2PlanDate === _nutToday()) _nut2PlanDate = null; nut2Render(); return true; }
   if((a = t.getAttribute('data-n2-eat')) !== null){ var fd = nut2Day(date).feeds.filter(function(f){ return f.id === a; })[0]; nut2SetFeed(date, a, { eaten: !(fd && fd.eaten) }); nut2Render(); return true; }
   if((a = t.getAttribute('data-n2-idel')) !== null){ var p = a.split(':'); nut2DelItem(date, p[0], +p[1]); nut2Render(); return true; }
+  if((a = t.getAttribute('data-n2-unit')) !== null){ var pu = a.split(':'); nut2SetItemUnit(date, pu[0], +pu[1]); nut2Render(); return true; }
   if((a = t.getAttribute('data-n2-iadd')) !== null){
     var fid = a;
     nut2OpenPicker('Add to ' + ((nut2Day(date).feeds.filter(function(f){ return f.id === fid; })[0] || {}).name || 'feed'), function(ref){
@@ -23521,6 +23575,9 @@ function _nut2PlanInput(t){
   return false;
 }
 function _nut2PlanChange(t){
+  var ug = t.getAttribute && t.getAttribute('data-n2-ug');
+  if(ug){ var pp = ug.split(':'), fd = nut2Day(_nut2PlanDate || _nutToday()).feeds.filter(function(f){ return f.id === pp[0]; })[0];
+    if(fd && fd.items[+pp[1]]) nut2SetUnitG(fd.items[+pp[1]].ref, t.value); nut2Render(); return true; }
   var a = t.getAttribute && t.getAttribute('data-n2-time');
   if(a === null || a === undefined) return false;
   nut2SetFeed(_nut2PlanDate || _nutToday(), a, { time: t.value }); nut2Render(); return true;
@@ -23529,7 +23586,7 @@ function _nut2PlanChange(t){
 // ── STAGE 4 (v4.9.398) — copy a meal across days, a day across days, a week across weeks ──
 // A copy REPLACES what is there (the same feed's food, or the whole day) and arrives un-ticked.
 // A feed is matched on the target day by name, then by time; no match → it is added.
-function _nut2CloneItems(items){ return (items || []).map(function(it){ return it.serves != null ? { ref: it.ref, serves: it.serves } : { ref: it.ref, g: it.g }; }); }
+function _nut2CloneItems(items){ return (items || []).map(_nut2CopyItem); }
 function _nut2CloneDay(day){
   return { feeds: (day.feeds || []).map(function(f){ return { id: _nut2NewId('F'), name: f.name, time: f.time, drinks: !!f.drinks, eaten: false, items: _nut2CloneItems(f.items) }; }) };
 }
@@ -23624,7 +23681,7 @@ function _nut2ExpandRecipe(ref, frac, ns, acc, depth){
   var rec = ns.v2.recipes[ref];
   if(!rec || depth > 4){ acc.missing++; return; }
   (rec.items || []).forEach(function(it){
-    var g = (parseFloat(it.g) || 0) * frac; if(!(g > 0)) return;
+    var g = _nut2ItemG(it, ns) * frac; if(!(g > 0)) return;
     if(it.ref && it.ref.indexOf('R:') === 0){
       var sub = ns.v2.recipes[it.ref]; if(!sub){ acc.missing++; return; }
       var w = nut2RecipeWeight(sub, ns, depth + 1).g; if(!(w > 0)){ acc.missing++; return; }
@@ -23663,7 +23720,7 @@ function nut2ShopList(dates, opts, ns){
           if(frac > 0) recFrac[it.ref] = (recFrac[it.ref] || 0) + frac;
           return;
         }
-        var g = parseFloat(it.g) || 0; if(g > 0) _nut2AddRaw(it.ref, g, ns, acc);
+        var g = _nut2ItemG(it, ns); if(g > 0) _nut2AddRaw(it.ref, g, ns, acc);
       });
     });
   });

@@ -371,4 +371,52 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app._nut2TodayTile(tile);
     assert.ok(/Nothing planned today/.test(tile.innerHTML));
   });
+
+  // ── v4.9.411 — "each" amounts ──
+  test('EACH: 3 eggs in a recipe = 150 g; a meal counts eggs by number; the shop list buys the grams', () => {
+    const { d, egg } = plan();
+    assert.equal(app.nut2UnitG(egg.id), 50, 'standard egg');
+    const rid = app.nut2SaveRecipe({ name: 'Omelette', kind: 'serves', serves: 1, items: [{ ref: egg.id, n: 3 }] });
+    const r = read(KEY).v2.recipes[rid];
+    assert.deepEqual(r.items, [{ ref: egg.id, n: 3 }], 'stored as a count, not converted');
+    assert.equal(app.nut2RecipeTotals(r).g, 150);
+    assert.equal(app.nut2RecipeTotals(r).kcal, Math.round(egg.kcal * 1.5));
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemUnit(d, 'F1', i); app.nut2SetItemQty(d, 'F1', i, '2');
+    assert.deepEqual(app.nut2Day(d).feeds[1].items[i], { ref: egg.id, n: 2 });
+    assert.equal(app.nut2DayTotals(d).planned.kcal, Math.round(egg.kcal));
+    assert.equal(app.nut2ShopList([d]).items.find((x) => x.ref === egg.id).g, 100);
+  });
+  test('EACH toggle: g ⇄ each converts with the size; his own size wins; copies keep the count', () => {
+    const { d, egg } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i, '150');
+    app.nut2SetItemUnit(d, 'F1', i);
+    assert.deepEqual(app.nut2Day(d).feeds[1].items[i], { ref: egg.id, n: 3 });
+    app.nut2SetUnitG(egg.id, 60);
+    assert.equal(app.nut2DayTotals(d).planned.kcal, Math.round(egg.kcal * 1.8), '3 × 60 g');
+    app.nut2SetItemUnit(d, 'F1', i);
+    assert.deepEqual(app.nut2Day(d).feeds[1].items[i], { ref: egg.id, g: 180 });
+    app.nut2SetItemUnit(d, 'F1', i);
+    const d1 = app._nut2ShiftDate(d, 1); app.nut2CopyFeed(d, 'F1', [d1]);
+    assert.deepEqual(app.nut2Day(d1).feeds.find((f) => f.name === 'Breakfast').items, [{ ref: egg.id, n: 3 }]);
+  });
+  test('EACH unknown size: counts as 0 g (never guessed), save refuses until the size is set', () => {
+    start({ setup_done: true, daily: {} });
+    const mince = findOne('beef mince raw');
+    assert.equal(app.nut2UnitG(mince.id), null);
+    assert.equal(app.nut2RecipeTotals({ items: [{ ref: mince.id, n: 2 }] }).g, 0);
+    app.nut2SaveRecipe({ name: 'Bad', kind: 'serves', serves: 1, items: [{ ref: mince.id, n: 2 }] });
+    const saved = Object.values(read(KEY).v2.recipes).find((r) => r.name === 'Bad');
+    assert.deepEqual(saved.items, [], 'an each with no size is dropped like a zero-gram line');
+    app.nut2SetUnitG(mince.id, 125);
+    assert.equal(app.nut2RecipeTotals({ items: [{ ref: mince.id, n: 2 }] }).g, 250);
+  });
+  test('EACH screens: the unit button shows on foods, never on recipes; the size row appears for each', () => {
+    const { d, egg, pid } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemUnit(d, 'F1', i); app.nut2SetItemQty(d, 'F1', i, '2');
+    app.nut2AddItem(d, 'F1', pid);
+    const h = app._nut2PlanTab();
+    assert.ok(h.includes('data-n2-unit="F1:0"') && />each<\/button>/.test(h), 'egg has an each button');
+    assert.ok(!h.includes('data-n2-unit="F1:1"'), 'a recipe has no unit button');
+    assert.ok(h.includes('data-n2-ug="F1:0"') && h.includes('value="50"'), '1 each = 50 g row');
+  });
 }

@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.413';
+var APP_VERSION='4.9.414';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23121,7 +23121,8 @@ function nut2ReadLabelFile(file, onStatus, cb){
   rd.readAsDataURL(file);
 }
 
-function nut2OpenAddFood(editId, prefill){
+// onSaved(id) — v4.9.414: when opened from a meal / recipe picker, the new food goes back there.
+function nut2OpenAddFood(editId, prefill, onSaved){
   var ns = _nut2State();
   var cur = editId ? (ns.v2.foods[editId] || {}) : (prefill || {});
   var basis = editId ? 'per100' : (prefill && prefill.basis) || '';
@@ -23216,6 +23217,7 @@ function nut2OpenAddFood(editId, prefill){
     var id = nut2SaveUserFood({ id: editId, name: $('name').value, kcal: r.kcal, p: r.p, c: r.c, f: r.f, fib: r.fib,
       cooked: $('cooked').checked, rawRef: rawRef, yield: (y > 0 ? y / 100 : null),
       serving_g: basis === 'serve' ? $('serve').value : (cur.serving_g || ''), source: (prefill && prefill.source) || (editId ? (ns.v2.foods[editId] || {}).source : 'typed') });
+    if(typeof onSaved === 'function'){ _nut2CloseSheet(); onSaved(id); return id; }
     _nut2CloseSheet();
     _nut2Filter = 'mine'; _nut2Query = ''; nut2Render();
     return id;
@@ -23370,6 +23372,9 @@ function nut2OpenPicker(title, onPick, excludeRef){
   var h = '<div style="display:flex;align-items:center;margin-bottom:10px;"><div style="flex:1;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">' + _nut2Esc(title) + '</div>' +
       '<button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>' +
     '<input id="n2p-q" type="search" placeholder="Search foods and your recipes" autocomplete="off" style="width:100%;box-sizing:border-box;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;outline:none;">' +
+    // v4.9.414 — Jon 14 Nov: the label scan / photo should work "on the meal planner area" too.
+    // A new food made here is saved to the library AND handed straight back to this meal / recipe.
+    '<button id="n2p-new" style="width:100%;margin-top:8px;padding:11px;border-radius:10px;background:transparent;border:1px dashed var(--gold);color:var(--gold);font-family:var(--font-d);font-weight:900;font-size:12px;letter-spacing:1px;">+ NEW FOOD &mdash; SCAN, PHOTO OR TYPE</button>' +
     '<div id="n2p-res" style="margin-top:8px;"></div>';
   var ov = _nut2Sheet(h);
   var q = ov.querySelector('#n2p-q'), box = ov.querySelector('#n2p-res');
@@ -23385,6 +23390,10 @@ function nut2OpenPicker(title, onPick, excludeRef){
     Array.prototype.forEach.call(box.querySelectorAll('[data-pick]'), function(d){ d.addEventListener('click', function(){ onPick(d.getAttribute('data-pick')); }); });
   };
   q.addEventListener('input', paint);
+  ov.querySelector('#n2p-new').addEventListener('click', function(){
+    var typed = String(q.value || '').trim();
+    nut2OpenAddFood(null, typed ? { name: typed } : null, function(id){ onPick(id); });
+  });
   _nut2LoadAfcd(function(){ if(!_nut2Index) _nut2BuildIndex(); paint(); });
   setTimeout(function(){ try { q.focus(); } catch(_f){} }, 50);
 }

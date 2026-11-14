@@ -205,6 +205,10 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       repair; kJ÷4.184 unless Cal shown; Atwater cross-check warns. Boxes filled, NEVER auto-saved.
       Proven on 4 rendered panels incl. a blurred/rotated JPEG + in-app end to end. **Unproven: real
       iPhone photos and Safari WASM speed** — first real label is the test. Tests: nut2 NIP ×3.
+- [x] **v4.9.414 — + NEW FOOD inside the meal / recipe picker** (Jon: "can these functions work on the
+      meal planner area"). Opens Add Food (scan / photo / type, name prefilled from the search);
+      `nut2OpenAddFood(…, onSaved)` saves to the library AND hands the id back to the meal / recipe.
+      Browser-proven both paths. Test: nut2 PICKNEW.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

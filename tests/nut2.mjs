@@ -445,4 +445,12 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/id="n2f-cam" type="file" accept="image\/\*" capture="environment"/.test(html), 'camera input');
     assert.ok(/id="n2f-pic" type="file" accept="image\/\*" style/.test(html), 'photo-library input, no capture');
   });
+
+  test('PICKNEW: the meal / recipe food picker offers + NEW FOOD (scan, photo or type)', () => {
+    start({ setup_done: true, daily: {} });
+    let html = ''; const orig = app._nut2Sheet;
+    app._nut2Sheet = (h) => { html = h; return { querySelector: () => ({ addEventListener(){}, focus(){} }), querySelectorAll: () => [] }; };
+    try { app.nut2OpenPicker('Add to Breakfast', () => {}); } finally { app._nut2Sheet = orig; }
+    assert.ok(/id="n2p-new"[^>]*>\+ NEW FOOD/.test(html), html.slice(0, 400));
+  });
 }

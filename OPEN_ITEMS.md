@@ -209,6 +209,9 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       meal planner area"). Opens Add Food (scan / photo / type, name prefilled from the search);
       `nut2OpenAddFood(…, onSaved)` saves to the library AND hands the id back to the meal / recipe.
       Browser-proven both paths. Test: nut2 PICKNEW.
+      **v4.9.414 was pushed with PICKNEW red** (the test's DOM stub lacked querySelectorAll; app code
+      fine — browser-proven). My push command did not gate on the functional check. Fixed in v4.9.415;
+      pushes are now chained `gates && push`.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

@@ -449,7 +449,8 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
   test('PICKNEW: the meal / recipe food picker offers + NEW FOOD (scan, photo or type)', () => {
     start({ setup_done: true, daily: {} });
     let html = ''; const orig = app._nut2Sheet;
-    app._nut2Sheet = (h) => { html = h; return { querySelector: () => ({ addEventListener(){}, focus(){} }), querySelectorAll: () => [] }; };
+    const el = () => ({ addEventListener(){}, focus(){}, querySelectorAll: () => [], value: '', innerHTML: '' });
+    app._nut2Sheet = (h) => { html = h; return { querySelector: el, querySelectorAll: () => [] }; };
     try { app.nut2OpenPicker('Add to Breakfast', () => {}); } finally { app._nut2Sheet = orig; }
     assert.ok(/id="n2p-new"[^>]*>\+ NEW FOOD/.test(html), html.slice(0, 400));
   });

@@ -484,4 +484,38 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const h = app._nut2LibraryShell();
     assert.ok(/IMPORT FILE<input data-n2-import type="file" accept="\.csv/.test(h), h.slice(0, 300));
   });
+
+  // ── v4.9.417 — Open Food Facts link / barcode ──
+  test('OFF barcode: check digit validated; pulled from a pasted link or loose text; a misread digit is refused', () => {
+    assert.equal(app.nut2ValidBarcode('9300652010015'), true);
+    assert.equal(app.nut2ValidBarcode('9300652010016'), false, 'one digit off');
+    assert.equal(app.nut2ValidBarcode('4006381333931'), true);
+    assert.equal(app.nut2BarcodeFrom('https://au.openfoodfacts.org/product/9300652010015/weet-bix-sanitarium'), '9300652010015');
+    assert.equal(app.nut2BarcodeFrom('https://world.openfoodfacts.org/cgi/x/product/4006381333931'), '4006381333931');
+    assert.equal(app.nut2BarcodeFrom('9 300652 010015'), '9300652010015', 'spaced as printed under the bars');
+    assert.equal(app.nut2BarcodeFrom('9300652010016'), null);
+    assert.equal(app.nut2BarcodeFrom('https://www.woolworths.com.au/shop/productdetails/12345/weet-bix'), null);
+  });
+  test('OFF mapping: per-100 g fields; kJ-only converts; brand prefixed once; no panel → null', () => {
+    const f = app.nut2FromOFF({ status: 1, code: '9300652010015', product: { product_name: 'Weet-Bix', brands: 'Sanitarium,Weet-Bix', serving_quantity: '30',
+      nutriments: { 'energy-kcal_100g': 362, proteins_100g: 12.1, carbohydrates_100g: 66.9, fat_100g: 1.4, fiber_100g: 11 } } });
+    assert.deepEqual([f.name, f.kcal, f.p, f.c, f.f, f.fib, f.serving_g], ['Sanitarium Weet-Bix', 362, 12.1, 66.9, 1.4, 11, 30]);
+    assert.equal(app.nut2FromOFF({ status: 1, product: { product_name: 'X', nutriments: { energy_100g: 1515, proteins_100g: 1, carbohydrates_100g: 2, fat_100g: 3 } } }).kcal, 362);
+    assert.equal(app.nut2FromOFF({ status: 1, product: { product_name: 'Water', nutriments: {} } }), null);
+    assert.equal(app.nut2FromOFF({ status: 0 }), null);
+  });
+  test('OFF lookup: calls the v2 product endpoint; not found and offline give plain messages', async () => {
+    const real = app.fetch; let url = '';
+    const done = (fn) => new Promise((res) => app.nut2LookupOFF('9300652010015', res));
+    try {
+      app.fetch = (u) => { url = u; return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ status: 1, code: '9300652010015', product: { product_name: 'Weet-Bix', nutriments: { 'energy-kcal_100g': 362, proteins_100g: 12, carbohydrates_100g: 67, fat_100g: 1.4 } } }) }); };
+      const ok = await done();
+      assert.ok(/^https:\/\/world\.openfoodfacts\.org\/api\/v2\/product\/9300652010015\.json\?fields=/.test(url), url);
+      assert.equal(ok.ok, true); assert.equal(ok.food.kcal, 362);
+      app.fetch = () => Promise.resolve({ ok: false, status: 404 });
+      const nf = await done(); assert.equal(nf.ok, false); assert.ok(/not in Open Food Facts/.test(nf.error));
+      app.fetch = () => Promise.reject(new Error('offline'));
+      const off = await done(); assert.ok(/Could not reach/.test(off.error));
+    } finally { app.fetch = real; }
+  });
 }

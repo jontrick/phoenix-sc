@@ -216,6 +216,12 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       or kJ / protein / carbs-not-sugars / fat-not-saturated / fibre); comma, semicolon or tab;
       quoted names; preview with per-row skip reasons; same-name food UPDATED (cooked link kept), never
       duplicated. An image picked here goes to Add Food. Tests: nut2 CSV ×4. Browser-proven.
+- [x] **v4.9.417 — Open Food Facts link / barcode in Add Food.** Paste an OFF link or barcode, or SCAN
+      BARCODE (photo of the printed digits → Tesseract → EAN/UPC check digit must pass — iOS Safari
+      has no BarcodeDetector). `world.openfoodfacts.org/api/v2/product/<code>.json`, per-100 g fields,
+      kJ fallback. **Unverified from here: the live API response and its CORS on his phone** (sandbox
+      cannot reach OFF; browser test used a stand-in). Failure says so — never fills wrong numbers.
+      Woolworths links show "needs a one-time server set-up" until task #28 lands. Tests: nut2 OFF ×3.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

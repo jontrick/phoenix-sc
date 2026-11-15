@@ -616,4 +616,54 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.nut2ScaleRecipe(b, 2.5); assert.deepEqual([b.finishedG, b.items[0].g], [1000, 300]);
     assert.equal(app.nut2ScaleRecipe(b, 0), 0); assert.equal(app.nut2ScaleRecipe(b, 'x'), 0);
   });
+
+  // ── v4.9.425 — recipe from a web link ──
+  test('RECIPELINK parse: g / kg / cups / spoons / brackets / fractions / ranges / counts / to-taste', () => {
+    const P = (l, au = true) => app.nut2ParseIngredient(l, { au });
+    assert.deepEqual([P('1 kg beef chuck, cut into 4cm cubes').g, P('1 kg beef chuck').name], [1000, 'beef chuck']);
+    assert.equal(P('1 can (400g) diced tomatoes').g, 400, 'a bracketed weight wins');
+    assert.equal(P('1 1/2 cups basmati rice, uncooked').g, 300, '1.5 × 250 ml × 0.8 g/ml rice (AU cup)');
+    assert.equal(P('1 1/2 cups basmati rice', false).g, 288, 'non-AU site: 240 ml cup');
+    assert.equal(P('2 tbsp butter').g, 38, 'AU tablespoon 20 ml × 0.95');
+    assert.equal(P('½ cup plain flour').g, 75);
+    assert.equal(P('2-3 eggs').n, 2.5, 'a range takes the middle');
+    assert.equal(P('3 garlic cloves, minced').n, 3);
+    assert.equal(P('Salt and pepper, to taste').skip, true);
+    assert.equal(P('1 tbsp olive oil').approx, true, 'spoon / cup amounts are flagged to check');
+  });
+  test('RECIPELINK match: main word first, liquid for volumes, no infant / plant-based / spice mix-ups', () => {
+    const M = (l) => { const p = app.nut2ParseIngredient(l, { au: true }); const r = app.nut2MatchIngredient(p.name, p.volume); return r ? app._nut2RefName(r) : null; };
+    start({ setup_done: true, daily: {} });
+    const want = { '2 tbsp vegetable oil': /^Oil, vegetable/, '1 cup milk': /^Milk, cow, fluid, regular/, '400 ml coconut milk': /^Coconut, milk/, '1 cup almond milk': /^Almond beverage/,
+      '1 cup (250ml) beef stock': /^Stock, liquid/, '2 eggs': /^Egg, chicken, whole, raw/, '3 garlic cloves, minced': /^Garlic/, '1 tsp salt': /^Salt, table/, '100g feta': /fetta/,
+      '250g Greek yoghurt': /^Yoghurt, natural, regular/, '1 tbsp light mayonnaise': /^Mayonnaise, low fat/, '1 1/2 cups basmati rice, uncooked': /^Rice, white, uncooked/, '½ cup plain flour': /^Flour, wheat, white, plain$/ };
+    for (const [l, rx] of Object.entries(want)) assert.ok(rx.test(M(l) || ''), l + ' → ' + M(l));
+    assert.equal(M('1 tbsp unicorn dust'), null, 'nothing plausible → unmatched, never a guess');
+  });
+  test('RECIPELINK draft: serves from yield, counts get standard sizes, skipped and unmatched listed; editor shows the source line', () => {
+    start({ setup_done: true, daily: {} });
+    const d = app.nut2DraftFromRecipeData({ name: 'Beef curry', yield: '6 servings', source: 'www.recipetineats.com', url: 'https://www.recipetineats.com/x',
+      ingredients: ['1 kg beef chuck', '1 brown onion, finely chopped', '400 ml coconut milk', 'Fresh coriander, to serve', '1 tbsp unicorn dust'] });
+    assert.equal(d.serves, 6); assert.equal(d.kind, 'serves');
+    assert.equal(d.items.length, 3);
+    assert.equal(app.nut2UnitG(d.items[1].ref), 150, 'an onion = 150 g until he says otherwise');
+    assert.deepEqual(d.skipped, ['Fresh coriander, to serve']); assert.deepEqual(d.unmatched, ['1 tbsp unicorn dust']);
+    assert.ok(/recipetineats/.test(d.method));
+  });
+  test('RECIPELINK fetch: calls recipe-import with the URL; not deployed / no recipe data give plain messages', async () => {
+    start({ setup_done: true, daily: {} });
+    const real = app.fetch; let url = ''; const msgs = []; let draft = null;
+    const run = (u) => new Promise((res) => { app.nut2ImportRecipeUrl(u, (m, bad) => { msgs.push((bad ? '!' : '') + m); if (bad) res(); }, (d) => { draft = d; res(); }); setTimeout(res, 200); });
+    try {
+      app.fetch = (u) => { url = u; return Promise.resolve({ status: 200, json: () => Promise.resolve({ ok: true, name: 'Curry', yield: '4', ingredients: ['500g chicken thigh fillets'], source: 'example.com' }) }); };
+      await run('https://example.com/curry');
+      assert.ok(/\/functions\/v1\/recipe-import\?url=https%3A%2F%2Fexample\.com%2Fcurry$/.test(url), url);
+      assert.equal(draft.name, 'Curry'); assert.equal(draft.items.length, 1);
+      app.fetch = () => Promise.resolve({ status: 404 });
+      msgs.length = 0; await run('https://example.com/x'); assert.ok(msgs.some((m) => /one-time server set-up/.test(m)), msgs.join('|'));
+      app.fetch = () => Promise.resolve({ status: 200, json: () => Promise.resolve({ ok: false, error: 'no_recipe_data' }) });
+      msgs.length = 0; await run('https://example.com/y'); assert.ok(msgs.some((m) => /no recipe data/.test(m)));
+      msgs.length = 0; await run('http://insecure.com'); assert.ok(msgs.some((m) => /full https/.test(m)));
+    } finally { app.fetch = real; }
+  });
 }

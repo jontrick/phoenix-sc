@@ -262,6 +262,16 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       Training-day detection goes through `blabTrainingStateOn` (harness CONTRACT refused a direct blabCalGet).
 - [x] **v4.9.424 — scale a recipe** ("make [N] serves" / "× the batch" → SCALE). Every amount (g and each),
       cooked weight and serves move together; per-serve / per-100 g unchanged. Test: nut2 SCALE.
+- [ ] **JON — deploy `supabase/functions/recipe-import` (recipe from a web link, v4.9.425).** Same steps as
+      woolies-product: Edge Functions → Deploy a new function → Via editor → name `recipe-import` → paste
+      → Deploy. Returns ONLY the page's schema.org Recipe data (name, yield, ingredient lines); https only,
+      no IP / local hosts, 10 s, 3 MB. App: Recipes → FROM A LINK → each line → grams (AU 20 ml tbsp /
+      250 ml cup on .au sites, else 15 / 240; density table for cups/spoons, marked "≈ check") or a count
+      (standard sizes: onion 150 g, garlic clove 5 g, carrot 120 g…), matched by a scoring matcher (main
+      word = first AFCD segment, liquid for volumes, missing words cost, no infant / plant-based / spice
+      mix-ups; first-hit search had matched "vegetable oil" → puff pastry, "milk" → human breast milk).
+      Opens in the recipe editor with the source line under each item; unmatched / skipped listed.
+      **Unverified: real sites through the deployed function.** Tests: nut2 RECIPELINK ×4.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

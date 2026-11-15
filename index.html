@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.424';
+var APP_VERSION='4.9.425';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23032,9 +23032,10 @@ function _nut2Click(e){
     var st = e.target.closest('[data-n2s-date],[data-n2s-preset],[data-n2s-tick]');
     if(st && _nut2ShopClick(st)) return;
   }
-  var t = e.target.closest ? e.target.closest('[data-n2-tab],[data-n2-filter],[data-n2-food],[data-n2-add],[data-n2-newrec],[data-n2-rec]') : null;
+  var t = e.target.closest ? e.target.closest('[data-n2-tab],[data-n2-filter],[data-n2-food],[data-n2-add],[data-n2-newrec],[data-n2-reclink],[data-n2-rec]') : null;
   if(!t) return;
   if(t.hasAttribute('data-n2-newrec')){ _nut2RecDraft = null; nut2OpenRecipe(null); return; }
+  if(t.hasAttribute('data-n2-reclink')){ _nut2LoadAfcd(function(){}); nut2OpenRecipeLink(); return; }
   if(t.hasAttribute('data-n2-rec')){ nut2OpenRecipe(t.getAttribute('data-n2-rec')); return; }
   if(t.hasAttribute('data-n2-tab')){ _nut2Tab = t.getAttribute('data-n2-tab'); nut2Render(); return; }
   if(t.hasAttribute('data-n2-filter')){ _nut2Filter = t.getAttribute('data-n2-filter'); nut2Render(); return; }
@@ -23624,7 +23625,12 @@ function _nut2RecipeList(ns){
 // {ref, n} (a count). A count needs grams-per-each: his own value (ns.v2.unitG[ref]) or a
 // default for the few foods that have a standard size. No value → the item counts as 0 g and
 // save asks for it — never a guessed weight.
-var NUT2_UNIT_DEFAULTS = [ { rx: /^egg, chicken, whole/i, g: 50 } ];   // AU large egg, edible part
+// Typical edible weight of one, for counts in recipes ("1 onion", "3 garlic cloves"). Always
+// shown as "1 each = N g" for him to correct. (Egg: AU large; the rest: common medium sizes.)
+var NUT2_UNIT_DEFAULTS = [ { rx: /^egg, chicken, whole/i, g: 50 }, { rx: /^onion,/i, g: 150 }, { rx: /^garlic/i, g: 5 },
+  { rx: /^carrot, mature/i, g: 120 }, { rx: /^carrot, baby/i, g: 15 }, { rx: /^tomato, common/i, g: 120 }, { rx: /^potato, /i, g: 200 },
+  { rx: /^lemon/i, g: 100 }, { rx: /^lime/i, g: 60 }, { rx: /^apple,/i, g: 150 }, { rx: /^banana,/i, g: 120 },
+  { rx: /^avocado/i, g: 150 }, { rx: /^capsicum/i, g: 160 }, { rx: /^zucchini/i, g: 200 }, { rx: /^celery/i, g: 40 } ];
 function nut2UnitG(ref, ns){
   ns = ns || _nut2State(); if(!ref || ref.indexOf('R:') === 0) return null;
   var u = ns.v2.unitG && parseFloat(ns.v2.unitG[ref]); if(u > 0) return u;
@@ -23749,7 +23755,8 @@ function _nut2RefName(ref, ns){
 // ── recipes tab ────────────────────────────────────────────────────────────
 function _nut2RecipesTab(){
   var ns = _nut2State(), list = _nut2RecipeList(ns);
-  var h = '<button data-n2-newrec style="width:100%;padding:13px;margin-bottom:12px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:2px;">+ NEW RECIPE</button>';
+  var h = '<div style="display:flex;gap:8px;margin-bottom:12px;"><button data-n2-newrec style="flex:1;padding:13px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:2px;">+ NEW RECIPE</button>' +
+    '<button data-n2-reclink style="flex:0 0 auto;padding:13px 12px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-weight:900;font-size:12px;letter-spacing:1px;">FROM A LINK</button></div>';
   if(!list.length) return h + '<div style="padding:14px 4px;color:var(--text3);font-size:13px;line-height:1.5;">No recipes yet. A recipe either <b style="color:var(--text2);">makes a number of serves</b> (pancakes, makes 8) or is a <b style="color:var(--text2);">batch you portion by weight</b> (a 400 g sauce, so many grams per meal).</div>';
   return h + list.map(function(r){
     var line;
@@ -23796,6 +23803,144 @@ function nut2OpenPicker(title, onPick, excludeRef){
 
 // ── recipe editor ─────────────────────────────────────────────────────────
 // The draft lives outside the sheet so the picker can replace the sheet and come back.
+// ── v4.9.425 — A RECIPE FROM A WEB LINK ─────────────────────────────────────
+// Jon 15 Nov: "if I shared a link for a url with a recipe I want to try can you turn this into
+// nutrition information". The recipe-import server function returns the site's own recipe data
+// (name, yield, ingredient lines). Each line is turned into an amount (grams, or a count like
+// "2 eggs") and matched to a food; the result opens in the ordinary recipe editor with the
+// original line under each ingredient, cup/spoon conversions marked "≈ check", and lines that
+// could not be matched listed — nothing is saved until he saves it.
+var _NUT2_FRAC = { '½': .5, '¼': .25, '¾': .75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': .125, '⅜': .375, '⅝': .625, '⅞': .875 };
+// g per ml for cup / spoon measures; anything not listed is taken as 1 g/ml and marked approximate.
+var _NUT2_DENSITY = [[/flour/, .6], [/brown sugar/, .9], [/sugar/, .85], [/\brice\b/, .8], [/oat/, .4], [/butter(?! ?milk)/, .95], [/peanut butter|nut butter/, 1.1],
+  [/\boil\b/, .92], [/honey|maple|syrup/, 1.4], [/cheese/, .4], [/cocoa/, .45], [/breadcrumb|panko/, .45], [/almond|cashew|walnut|nut\b|nuts\b/, .6], [/milk|yoghurt|yogurt|cream|stock|broth|water|juice|sauce/, 1.03]];
+function nut2ParseIngredient(line, opts){
+  opts = opts || {};
+  var raw = String(line || '').trim(), s = raw.toLowerCase();
+  Object.keys(_NUT2_FRAC).forEach(function(f){ s = s.split(f).join(' ' + _NUT2_FRAC[f] + ' '); });
+  s = s.replace(/(\d+)\s+(\d+)\/(\d+)/g, function(_, a, b, c){ return String(+a + b / c); }).replace(/(\d+)\/(\d+)/g, function(_, b, c){ return String(b / c); });
+  s = s.replace(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)/g, function(_, a, b){ return String((+a + +b) / 2); }).replace(/\s+/g, ' ').trim();
+  var out = { raw: raw, skip: false, approx: false };
+  if(/to taste|for serving|to serve|optional|pinch|dash|a few|handful|spray/.test(s) && !/\d+\s*(g|kg|ml)\b/.test(s)){ out.skip = true; return out; }
+  // A weight in brackets wins: "1 can (400g) chickpeas".
+  var br = s.match(/\((\d+(?:\.\d+)?)\s*(g|kg|ml|l)\b[^)]*\)/);
+  var U = '(kg|g|grams?|ml|millilit(?:re|er)s?|l|lit(?:re|er)s?|tsp|teaspoons?|tbsp|tablespoons?|cups?|oz|ounces?|lbs?|pounds?|cans?|tins?|cloves?|slices?|rashers?|bunch(?:es)?|sprigs?)';
+  var m = s.match(new RegExp('^(\\d+(?:\\.\\d+)?)\\s*' + U + '\\b\\.?\\s*(?:of\\s+)?(.*)$')) || s.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+  var qty = m ? parseFloat(m[1]) : null, unit = (m && m.length === 4) ? m[2] : '', rest = m ? (m.length === 4 ? m[3] : m[2]) : s;
+  var tbsp = opts.au === false ? 15 : 20, cup = opts.au === false ? 240 : 250;
+  var ml = { tsp: 5, teaspoon: 5, tbsp: tbsp, tablespoon: tbsp, cup: cup };
+  var name = rest.replace(/\([^)]*\)/g, ' ').split(',')[0]
+    .replace(/\b(finely|roughly|thinly|freshly|chopped|diced|sliced|minced|crushed|grated|shredded|peeled|trimmed|drained|rinsed|softened|melted|beaten|large|small|medium|fresh|packed|heaped|level|raw|cooked|uncooked|dry|dried|boneless|skinless|about|approx|plus extra|extra|cut|into|pieces?|cubes?|\d+\s*cm)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  out.name = name;
+  var u = unit.replace(/s$/, '').replace(/^(gram|millilitre|milliliter|litre|liter|ounce|pound|teaspoon|tablespoon)$/, function(x){ return { gram: 'g', millilitre: 'ml', milliliter: 'ml', litre: 'l', liter: 'l', ounce: 'oz', pound: 'lb', teaspoon: 'tsp', tablespoon: 'tbsp' }[x]; });
+  if(br){ out.g = parseFloat(br[1]) * (br[2] === 'kg' || br[2] === 'l' ? 1000 : 1); out.approx = br[2] === 'ml' || br[2] === 'l'; out.volume = out.approx || /cup|tbsp|tsp/.test(u); }
+  else if(qty == null){ out.g = null; }
+  else if(u === 'g') out.g = qty;
+  else if(u === 'kg') out.g = qty * 1000;
+  else if(u === 'ml' || u === 'l'){ out.g = qty * (u === 'l' ? 1000 : 1); out.approx = !/water|stock|broth|milk/.test(name); out.volume = true; }
+  else if(u === 'oz') out.g = qty * 28.35;
+  else if(u === 'lb' || u === 'lbs') out.g = qty * 453.6;
+  else if(ml[u]){
+    var dens = 1, hit = _NUT2_DENSITY.filter(function(x){ return x[0].test(name); })[0];
+    if(hit) dens = hit[1];
+    out.g = qty * ml[u] * dens; out.approx = true; out.volume = true;
+  }
+  else if(!u) out.n = qty;                       // "2 eggs", "1 onion" — a count
+  else { out.n = qty; out.approx = true; }       // can / clove / slice … — a count, size unknown
+  if(out.g != null) out.g = Math.round(out.g * 10) / 10;
+  return out;
+}
+// Best library match for an ingredient name. AFCD names lead with the food itself ("Oil,
+// vegetable", "Stock, liquid…", "Flour, wheat, white, plain"), and an English ingredient's main
+// word is its LAST ("vegetable oil", "beef stock", "plain flour") — so a food whose first segment
+// is that word wins. Raw / uncooked wins ties (recipes are weighed raw). Yolk / egg white /
+// gluten-free only when asked for. First-hit search had picked puff pastry for "vegetable oil".
+// The everyday default when a recipe just says "rice", "salt", "carrots"…
+var _NUT2_PREFER = { mayonnaise: /traditional/, beverage: /no added sugar/, rice: /white, uncooked/, salt: /table/, carrot: /mature/, tomato: /common/, yoghurt: /natural|greek|plain/, milk: /fluid, regular/, onion: /brown/, potato: /peeled, raw/, stock: /liquid/, oil: /olive|vegetable|canola/ };
+function nut2MatchIngredient(name, volume){
+  if(!name) return null;
+  name = String(name).replace(/\b(cloves?|fillets?|pieces?|sticks?|sprigs?|leaves|knobs?)\s*$/i, '').trim() || name;
+  var sing = function(w){ return w.replace(/(ies)$/, 'y').replace(/(oes)$/, 'o').replace(/([^s])s$/, '$1'); };
+  var words = name.toLowerCase().replace(/\bfeta\b/g, 'fetta').replace(/\byogurt\b/g, 'yoghurt')
+    .replace(/\b(almond|soy|oat|rice|coconut) milk\b/g, function(m, a){ return a === 'coconut' ? m : a + ' beverage'; }).split(/\s+/).filter(function(w){ return w.length > 1 && !/^(and|or|of|the|a|for|with|in)$/.test(w); }).map(sing);
+  if(!words.length) return null;
+  var head = words[words.length - 1], seen = {}, cands = [];
+  [words.join(' '), head, words.slice(-2).join(' '), words[0]].forEach(function(q){
+    nut2Search(q, 'all').slice(0, 40).forEach(function(f){ if(!seen[f.id]){ seen[f.id] = 1; cands.push(f); } });
+  });
+  var qs = ' ' + words.join(' ') + ' ';
+  var best = null, bestS = -1e9;
+  cands.forEach(function(f){
+    var nm = String(f.name).toLowerCase(), segs = nm.split(',').map(function(x){ return x.trim(); });
+    var first = sing(segs[0].split(' ').pop()), firstAll = segs[0].split(' ').map(sing);
+    var sc = 0;
+    if(first === head || firstAll.indexOf(head) >= 0) sc += 6;
+    else if(words.some(function(w){ return firstAll.indexOf(w) >= 0; })) sc += 3;
+    words.forEach(function(w){ if(nm.indexOf(w) >= 0) sc += 2; else sc -= 3; });   // a missing word ("coconut" milk) costs
+    if(words.length > 1 && words.every(function(w){ return nm.indexOf(w) >= 0; })) sc += 4;
+    if(_NUT2_PREFER[head] && _NUT2_PREFER[head].test(nm)) sc += 2;
+    if(volume && /fluid|liquid/.test(nm)) sc += 2;
+    if(volume && /powder|dry|cube/.test(nm)) sc -= 3;
+    if(/substitute|sheep|goat|buffalo/.test(nm) && !/substitute|sheep|goat|buffalo/.test(qs)) sc -= 4;
+    if(/\braw\b|uncooked/.test(nm)) sc += 2;
+    if(/yolk/.test(nm) && qs.indexOf(' yolk') < 0) sc -= 6;
+    if(/^egg, chicken, white/.test(nm) && qs.indexOf(' white') < 0) sc -= 6;
+    if(/\b(light|lite|low fat|skim)\b/.test(qs) && /low fat|reduced|skim|lite/.test(nm)) sc += 4;
+    if((/gluten free|reduced|low fat|omega|added vitamin/.test(nm) || /\([A-Z]/.test(f.name)) && !/gluten|reduced|light|lite/.test(qs)) sc -= 2;
+    if(/human|breast|infant|formula|toddler|almond based|soy based|coconut based|oat based|rice based/.test(nm) && !/almond|soy|oat|coconut|rice milk|infant|baby formula/.test(qs)) sc -= 8;
+    if(/^potato crisp|^pastry/.test(nm) && !/crisp|chip|pastry/.test(qs)) sc -= 4;
+    sc -= segs.length * 0.3;
+    if(sc > bestS){ bestS = sc; best = f; }
+  });
+  // Accept when the main word is actually in the food's name (a one-word "feta" scores low but is right).
+  return best && (bestS >= 4 || (bestS >= 1 && String(best.name).toLowerCase().indexOf(head) >= 0)) ? best.id : null;
+}
+function nut2DraftFromRecipeData(data){
+  var au = /\.au$/i.test(String(data.source || ''));
+  var items = [], unmatched = [], skipped = [];
+  (data.ingredients || []).forEach(function(line){
+    var p = nut2ParseIngredient(line, { au: au });
+    if(p.skip){ skipped.push(line); return; }
+    var ref = nut2MatchIngredient(p.name, p.volume);
+    if(!ref || (p.g == null && p.n == null)){ unmatched.push(line); return; }
+    var it = p.n != null ? { ref: ref, n: p.n } : { ref: ref, g: p.g };
+    it.src = line; it.approx = p.approx;
+    items.push(it);
+  });
+  var y = parseFloat(String(data.yield || '').replace(/[^0-9.]/g, ' ').trim().split(' ')[0]);
+  return { id: null, name: String(data.name || 'Imported recipe').slice(0, 80), kind: 'serves', serves: y > 0 ? y : '', finishedG: '', items: items,
+    method: 'From ' + (data.url || data.source || 'the web'), unmatched: unmatched, skipped: skipped };
+}
+function nut2ImportRecipeUrl(url, st, done){
+  var u = String(url || '').trim();
+  if(!/^https:\/\/[^\s]+$/i.test(u)){ st('Paste the full https:// link to the recipe page.', true); return; }
+  st('Fetching the recipe&hellip;');
+  var tok = (typeof currentSession !== 'undefined' && currentSession && currentSession.access_token) || (typeof SUPABASE_KEY === 'string' ? SUPABASE_KEY : '');
+  var go = function(){
+    fetch(SUPABASE_URL + '/functions/v1/recipe-import?url=' + encodeURIComponent(u), { headers: { apikey: (typeof SUPABASE_KEY === 'string' ? SUPABASE_KEY : ''), Authorization: 'Bearer ' + tok } })
+      .then(function(r){ if(r.status === 404) return { notDeployed: true }; return r.json(); })
+      .then(function(j){
+        if(j.notDeployed){ st('Recipe links need the one-time server set-up (the recipe-import function). Until then, build it with + NEW RECIPE.', true); return; }
+        if(!j.ok){ st(j.error === 'no_recipe_data' ? 'That page has no recipe data Phoenix can read. Try the recipe’s own page, or build it with + NEW RECIPE.' : 'Couldn’t fetch that page. Check the link and try again.', true); return; }
+        j.url = u; done(nut2DraftFromRecipeData(j));
+      })
+      .catch(function(e){ console.error('[PHX] recipe import', e); st('Couldn’t reach the server. Check your connection.', true); });
+  };
+  if(typeof window !== 'undefined' && window.NUT_AFCD) go(); else _nut2LoadAfcd(function(){ _nut2BuildIndex(); go(); });
+}
+function nut2OpenRecipeLink(){
+  var h = '<div style="display:flex;align-items:center;margin-bottom:10px;"><div style="flex:1;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">Recipe from a link</div><button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;line-height:1.45;">Paste the link to a recipe page. Phoenix reads its ingredients, matches them to foods and works out the nutrition &mdash; you check it before saving.</div>' +
+    '<input id="n2u-url" type="url" inputmode="url" autocomplete="off" placeholder="https://…" style="width:100%;box-sizing:border-box;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;outline:none;">' +
+    '<button id="n2u-go" style="width:100%;margin-top:10px;padding:13px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:2px;">GET RECIPE</button>' +
+    '<div id="n2u-st" style="font-size:12px;color:var(--text2);margin-top:10px;min-height:14px;line-height:1.45;"></div>';
+  var ov = _nut2Sheet(h);
+  var st = function(msg, bad){ var el = ov.querySelector('#n2u-st'); if(el){ el.style.color = bad ? '#e07a7a' : 'var(--text2)'; el.innerHTML = msg; } };
+  ov.querySelector('#n2u-go').addEventListener('click', function(){
+    nut2ImportRecipeUrl(ov.querySelector('#n2u-url').value, st, function(draft){ _nut2RecDraft = draft; _nut2PaintRecipe(); });
+  });
+}
 var _nut2RecDraft = null;
 function nut2OpenRecipe(id){
   var ns = _nut2State();
@@ -23813,7 +23958,8 @@ function _nut2PaintRecipe(){
     var per = (it.ref.indexOf('R:') === 0) ? nut2RecipePer100(it.ref, ns) : nut2Food(it.ref, ns);
     var kc = per ? Math.round(per.kcal * _nut2ItemG(it, ns) / 100) : 0, each = _nut2IsEach(it), isRec = it.ref.indexOf('R:') === 0;
     return '<div style="padding:8px 0;border-bottom:1px solid var(--border);"><div style="display:flex;align-items:center;gap:6px;">' +
-      '<div style="flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.3;">' + _nut2Esc(_nut2RefName(it.ref, ns)) + (per ? '' : ' <span style="color:#e07a7a;">(missing)</span>') + '<div data-item-kc="' + i + '" data-per="' + (per ? per.kcal : 0) + '" style="font-size:10px;color:var(--text3);">' + kc + ' kcal</div></div>' +
+      '<div style="flex:1;min-width:0;font-size:13px;color:var(--text);line-height:1.3;">' + _nut2Esc(_nut2RefName(it.ref, ns)) + (per ? '' : ' <span style="color:#e07a7a;">(missing)</span>') + '<div data-item-kc="' + i + '" data-per="' + (per ? per.kcal : 0) + '" style="font-size:10px;color:var(--text3);">' + kc + ' kcal' + (it.approx ? ' &middot; <span style="color:#e0b062;">&asymp; check amount</span>' : '') + '</div>' +
+        (it.src ? '<div style="font-size:10px;color:var(--text3);font-style:italic;margin-top:2px;">&ldquo;' + _nut2Esc(it.src) + '&rdquo;</div>' : '') + '</div>' +
       '<input data-item-g="' + i + '" type="number" inputmode="decimal" placeholder="' + (each ? 'no.' : 'g') + '" value="' + (each ? (it.n === '' ? '' : it.n) : (it.g || '')) + '" style="width:64px;padding:9px 4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font-d);font-size:16px;font-weight:700;text-align:center;outline:none;">' +
       (isRec ? '<span style="font-size:11px;color:var(--text3);width:38px;">g</span>'
              : '<button data-item-unit="' + i + '" style="width:42px;padding:8px 0;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--gold);font-size:11px;font-weight:700;">' + (each ? 'each' : 'g') + '</button>') +
@@ -23835,6 +23981,8 @@ function _nut2PaintRecipe(){
       '<input id="n2r-scale" type="number" inputmode="decimal" placeholder="' + (d.kind === 'serves' ? (d.serves || '') : '2') + '" style="width:64px;padding:7px 4px;background:var(--bg);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:16px;text-align:center;">' +
       (d.kind === 'serves' ? 'serves' : '&times; the batch') +
       '<button id="n2r-scalego" style="margin-left:auto;padding:8px 12px;border-radius:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-d);font-weight:900;font-size:11px;letter-spacing:1px;">SCALE</button></div>' : '') +
+    ((d.unmatched && d.unmatched.length) ? '<div style="margin-top:12px;padding:10px 12px;border:1px solid #e0b062;border-radius:10px;font-size:12px;color:#e0b062;line-height:1.45;"><b>Not matched &mdash; add these with + ADD INGREDIENT:</b><br>' + d.unmatched.map(_nut2Esc).join('<br>') + '</div>' : '') +
+    ((d.skipped && d.skipped.length) ? '<div style="margin-top:6px;font-size:11px;color:var(--text3);">Left out (to taste / garnish): ' + d.skipped.map(_nut2Esc).join(' &middot; ') + '</div>' : '') +
     '<div style="font-size:11px;color:var(--text3);margin:14px 0 2px;">Ingredients &middot; weigh them <b>raw</b> as they go in</div>' +
     (rows || '<div style="padding:10px 0;font-size:12px;color:var(--text3);">None yet.</div>') +
     '<button id="n2r-additem" style="width:100%;padding:11px;margin-top:8px;border-radius:10px;background:transparent;border:1px dashed var(--border2);color:var(--gold);font-family:var(--font-d);font-weight:900;letter-spacing:1px;">+ ADD INGREDIENT</button>' +

@@ -602,4 +602,18 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     start({ setup_done: true, daily: {} });
     assert.ok(/set your own numbers/.test(app._nut2CounterHTML(app._nutToday())));
   });
+
+  test('SCALE: halving a makes-8 recipe halves every amount (g and each) and keeps per-serve numbers', () => {
+    start({ setup_done: true, daily: {} });
+    const egg = findOne('egg chicken whole raw'), oats = findOne('oats rolled');
+    const d = { name: 'Pancakes', kind: 'serves', serves: 8, finishedG: 800, items: [{ ref: egg.id, n: 4 }, { ref: oats.id, g: 300 }] };
+    const before = app.nut2RecipePerServe(app.nut2SaveRecipe(JSON.parse(JSON.stringify(d))));
+    assert.equal(app.nut2ScaleRecipe(d, 4 / 8), 0.5);
+    assert.deepEqual([d.serves, d.finishedG, d.items[0].n, d.items[1].g], [4, 400, 2, 150]);
+    const after = app.nut2RecipePerServe(app.nut2SaveRecipe(d));
+    assert.equal(after.kcal, before.kcal, 'per serve unchanged');
+    const b = { kind: 'batch', finishedG: 400, items: [{ ref: oats.id, g: 120 }] };
+    app.nut2ScaleRecipe(b, 2.5); assert.deepEqual([b.finishedG, b.items[0].g], [1000, 300]);
+    assert.equal(app.nut2ScaleRecipe(b, 0), 0); assert.equal(app.nut2ScaleRecipe(b, 'x'), 0);
+  });
 }

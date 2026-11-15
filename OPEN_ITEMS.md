@@ -259,6 +259,9 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       weigh-in needed). Optional training-day carbs from the calendar (+train on a session day, −rest on
       none; skipped ≠ training; no calendar → no change). Mirror + Today use the date's target.
       `ns.v2.targets`. Tests: nut2 TARGETS ×3. Browser-proven.
+      Training-day detection goes through `blabTrainingStateOn` (harness CONTRACT refused a direct blabCalGet).
+- [x] **v4.9.424 — scale a recipe** ("make [N] serves" / "× the batch" → SCALE). Every amount (g and each),
+      cooked weight and serves move together; per-serve / per-100 g unchanged. Test: nut2 SCALE.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

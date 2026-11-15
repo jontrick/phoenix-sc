@@ -253,6 +253,12 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       fallback reads the printed number ONLY in its 1+6+6 layout. Browser: a real EAN-13 on a tilted,
       blurred JPEG pack shot decodes in 0.14 s at every rotation; 0 false codes across all junk images.
       Tiny / heavily blurred barcodes still fail → message tells him to fill the frame. Test: nut2 BARCODE.
+- [x] **v4.9.423 — targets he can change** (Plan → counter → CHANGE). Modes: Phoenix cut (unchanged
+      default); Muscle-sparing cut after Helms, Aragon & Fitschen 2014 (protein 2.7 g/kg lean mass with a
+      body-fat %, else 2.2 g/kg BW; fat 25% kcal; carbs rest; same 18.5 kcal/kg); his own numbers (no
+      weigh-in needed). Optional training-day carbs from the calendar (+train on a session day, −rest on
+      none; skipped ≠ training; no calendar → no change). Mirror + Today use the date's target.
+      `ns.v2.targets`. Tests: nut2 TARGETS ×3. Browser-proven.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

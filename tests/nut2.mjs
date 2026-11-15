@@ -565,4 +565,41 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(app._nut2PrintedEan('9 9 5 0 3 969 4 116 96 5001 6022 1 1019202 0 906 18 18 21049 152 3 00'), null);
     assert.equal(app._nut2PrintedEan('9 310055 536372'), null, 'bad check digit');
   });
+
+  // ── v4.9.423 — targets he can change ──
+  test('TARGETS modes: Phoenix cut unchanged; Helms from bodyweight or lean mass; custom needs no weigh-in', () => {
+    start({ setup_done: true, daily: { '2026-11-13': { weight_kg: 111.2 } } });
+    const ph = app.nut2Targets();
+    assert.deepEqual([ph.kcal, ph.protein_g, ph.carbs_g, ph.fat_g, ph.mode], [2060, 200, 153, 72, 'phoenix'], 'matches his screen: 2060 · P200 · C153 · F72');
+    app.nut2SaveTargets({ mode: 'helms' });
+    const h = app.nut2Targets();
+    assert.deepEqual([h.kcal, h.protein_g, h.fat_g, h.carbs_g], [2060, 245, 57, Math.round((2060 - 245 * 4 - 57 * 9) / 4)], '2.2 g/kg bodyweight, fat 25% kcal');
+    app.nut2SaveTargets({ mode: 'helms', bf: 22 });
+    assert.equal(app.nut2Targets().protein_g, Math.round(111.2 * 0.78 * 2.7), '2.7 g/kg lean mass');
+    start({ setup_done: true, daily: {} });
+    assert.equal(app.nut2Targets(), null, 'no weigh-in, weight-based modes: no target');
+    app.nut2SaveTargets({ mode: 'custom', custom: { kcal: null, p: 210, c: 180, f: 65 } });
+    const c = app.nut2Targets();
+    assert.deepEqual([c.kcal, c.protein_g, c.carbs_g, c.fat_g], [210 * 4 + 180 * 4 + 65 * 9, 210, 180, 65], 'custom: blank kcal comes from the macros');
+  });
+  test('TARGETS training-day carbs: + on a calendar session day, − on a rest day, none without a calendar', () => {
+    start({ setup_done: true, daily: { '2026-11-13': { weight_kg: 111.2 } } });
+    app.nut2SaveTargets({ mode: 'phoenix', cycle: { on: true, train: 40, rest: 30 } });
+    const realCal = app.window.blabTrainingStateOn;
+    try {
+      app.window.blabTrainingStateOn = (d) => ({ state: d === '2026-11-17' ? 'due' : (d === '2026-11-19' ? 'skipped' : 'none'), sessions: d === '2026-11-17' ? 1 : 0 });
+      const tr = app.nut2Targets(undefined, '2026-11-17'), re = app.nut2Targets(undefined, '2026-11-20'), sk = app.nut2Targets(undefined, '2026-11-19');
+      assert.deepEqual([tr.carbs_g, tr.kcal, tr.dayKind], [193, 2220, 'train']);
+      assert.deepEqual([re.carbs_g, re.kcal, re.dayKind], [123, 1940, 'rest']);
+      assert.equal(sk.dayKind, 'rest', 'a skipped session is not a training day');
+      app.window.blabTrainingStateOn = undefined;
+      assert.equal(app.nut2Targets(undefined, '2026-11-17').carbs_g, 153, 'no calendar → base target');
+    } finally { app.window.blabTrainingStateOn = realCal; }
+  });
+  test('TARGETS screen: the counter shows the mode and a CHANGE button; no weigh-in still offers own numbers', () => {
+    const { d } = plan();
+    assert.ok(/Phoenix cut &middot; from 112 kg/.test(app._nut2CounterHTML(d)) && /data-n2-targets/.test(app._nut2CounterHTML(d)));
+    start({ setup_done: true, daily: {} });
+    assert.ok(/set your own numbers/.test(app._nut2CounterHTML(app._nutToday())));
+  });
 }

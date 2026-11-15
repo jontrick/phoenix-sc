@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.422';
+var APP_VERSION='4.9.423';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -22441,7 +22441,7 @@ function _nut2DailyRow(ns, dateKey){
   if(!uid) return null;
   var needsA = (day.feeds || []).some(function(f){ return (f.items || []).some(function(it){ return it.ref && it.ref.indexOf('A:') === 0; }); });
   if(needsA && !(typeof window !== 'undefined' && window.NUT_AFCD)) return null;
-  var e = nut2DayTotals(dateKey, ns).eaten, tg = nut2Targets(ns);
+  var e = nut2DayTotals(dateKey, ns).eaten, tg = nut2Targets(ns, dateKey);
   return { user_id: uid, date: dateKey, kcal: e.kcal, protein_g: e.p, carbs_g: e.c, fat_g: e.f,
     target_kcal: tg ? tg.kcal : null, target_protein_g: tg ? tg.protein_g : null,
     target_carbs_g: tg ? tg.carbs_g : null, target_fat_g: tg ? tg.fat_g : null,
@@ -23025,7 +23025,7 @@ function _nut2Rows(list){
 
 function _nut2Click(e){
   if(_nut2Tab === 'plan' && e.target.closest){
-    var pt = e.target.closest('[data-n2-unit],[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd],[data-n2-fcopy],[data-n2-dcopy],[data-n2-wcopy]');
+    var pt = e.target.closest('[data-n2-targets],[data-n2-unit],[data-n2-day],[data-n2-eat],[data-n2-idel],[data-n2-iadd],[data-n2-fdel],[data-n2-fadd],[data-n2-fcopy],[data-n2-dcopy],[data-n2-wcopy]');
     if(pt && _nut2PlanClick(pt)) return;
   }
   if(_nut2Tab === 'shop' && e.target.closest){
@@ -24030,8 +24030,8 @@ function _nut2DateLabel(iso){
 // ── plan tab ──
 var _NUT2_FLAG_COL = { on: '#6fcf8f', under: '#e0b04a', over: '#e07a7a', none: 'var(--text3)' };
 function _nut2CounterHTML(date, ns){
-  var tg = nut2Targets(ns), T = nut2DayTotals(date, ns);
-  if(!tg) return '<div style="padding:14px;border:1px dashed var(--gold);border-radius:12px;margin-bottom:12px;color:var(--text2);font-size:13px;">Log a weigh-in on Today to set your daily target.</div>';
+  var tg = nut2Targets(ns, date), T = nut2DayTotals(date, ns);
+  if(!tg) return '<div style="padding:14px;border:1px dashed var(--gold);border-radius:12px;margin-bottom:12px;color:var(--text2);font-size:13px;">Log a weigh-in on Today to set your daily target, or <button data-n2-targets style="background:none;border:none;color:var(--gold);font-size:13px;padding:0;text-decoration:underline;">set your own numbers</button>.</div>';
   var P = T.planned, E = T.eaten;
   var bar = function(lbl, key, got, want, unit){
     var fl = nut2Flag(got, want, key), pct = Math.min(100, want > 0 ? Math.round(got / want * 100) : 0);
@@ -24044,7 +24044,11 @@ function _nut2CounterHTML(date, ns){
     '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Eaten so far ' + E.kcal + ' kcal &middot; without morning drinks ' + T.noDrinks.kcal + ' kcal</div></div></div>' +
     bar('Calories', 'kcal', P.kcal, tg.kcal, '') + bar('Protein', 'p', P.p, tg.protein_g, 'g') + bar('Carbs', 'c', P.c, tg.carbs_g, 'g') + bar('Fat', 'f', P.f, tg.fat_g, 'g') +
     (P.missing ? '<div style="font-size:11px;color:#e07a7a;margin-top:8px;">' + P.missing + ' item' + (P.missing > 1 ? 's' : '') + ' no longer in your library — not counted.</div>' : '') +
-    '<div style="font-size:10px;color:var(--text3);margin-top:8px;">Target from ' + tg.fromKg + ' kg (' + _nut2DateLabel(tg.fromDate) + ')</div></div>';
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;"><div style="font-size:10px;color:var(--text3);">' +
+      ({ phoenix: 'Phoenix cut', helms: 'Muscle-sparing cut', custom: 'Your numbers' })[tg.mode || 'phoenix'] +
+      (tg.fromKg ? ' &middot; from ' + tg.fromKg + ' kg (' + _nut2DateLabel(tg.fromDate) + ')' : '') +
+      (tg.dayCarbs ? ' &middot; ' + (tg.dayKind === 'train' ? 'training day +' : 'rest day ') + tg.dayCarbs + 'g carbs' : '') + '</div>' +
+      '<button data-n2-targets style="padding:5px 10px;border-radius:7px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:10px;font-weight:700;letter-spacing:1px;">CHANGE</button></div></div>';
 }
 function _nut2PlanTab(){
   var ns = _nut2State(), today = _nutToday();
@@ -24106,6 +24110,7 @@ function _nut2PlanClick(t){
   if((a = t.getAttribute('data-n2-day')) !== null){ _nut2PlanDate = a === '0' ? null : _nut2ShiftDate(date, +a); if(_nut2PlanDate === _nutToday()) _nut2PlanDate = null; nut2Render(); return true; }
   if((a = t.getAttribute('data-n2-eat')) !== null){ var fd = nut2Day(date).feeds.filter(function(f){ return f.id === a; })[0]; nut2SetFeed(date, a, { eaten: !(fd && fd.eaten) }); nut2Render(); return true; }
   if((a = t.getAttribute('data-n2-idel')) !== null){ var p = a.split(':'); nut2DelItem(date, p[0], +p[1]); nut2Render(); return true; }
+  if(t.hasAttribute('data-n2-targets')){ nut2OpenTargets(); return true; }
   if((a = t.getAttribute('data-n2-unit')) !== null){ var pu = a.split(':'); nut2SetItemUnit(date, pu[0], +pu[1]); nut2Render(); return true; }
   if((a = t.getAttribute('data-n2-iadd')) !== null){
     var fid = a;
@@ -24349,7 +24354,23 @@ function _nut2ShopChange(t){
 // weight but should have been the one closer to 2000"). Per kg: 18.5 kcal, 1.8 g protein, 0.65 g
 // fat; carbs take the remainder. At 112 kg → 2070 kcal · P202 · C151 · F73. No weigh-in → null
 // (the card asks for one); a target is never invented.
+// v4.9.423 — TARGETS HE CAN CHANGE. Jon 15 Nov: "I need the ability to change my macro targets
+// somewhere - for them to be smart and aligning with training plans/diets/prominent trainers".
+// Three ways, picked on the Plan tab (counter → CHANGE):
+//   phoenix — the weight-based cut (18.5 kcal · 1.8 g P · 0.65 g F per kg, carbs the rest)
+//   helms   — Helms, Aragon & Fitschen 2014 (natural lifters cutting): protein 2.3–3.1 g/kg of
+//             LEAN mass → 2.7 g/kg LBM when he gives a body-fat %, else 2.2 g/kg bodyweight;
+//             fat 25% of calories (their range 15–30%); carbs the rest. Same 18.5 kcal/kg.
+//   custom  — his own numbers.
+// Optional training-day carbs: on a day with a session in his calendar, +train g carbs; on a
+// day with none, −rest g. Calories follow the carbs (4 kcal/g). No calendar → no change.
+// Every mode still needs a weigh-in except custom, so nothing is ever invented.
 var NUT2_PER_KG = { kcal: 18.5, p: 1.8, f: 0.65 };
+function _nut2TgtCfg(ns){
+  ns = ns || nutGetState(); var c = (ns && ns.v2 && ns.v2.targets) || {};
+  return { mode: c.mode || 'phoenix', bf: parseFloat(c.bf) > 0 ? parseFloat(c.bf) : null,
+    custom: c.custom || {}, cycle: { on: !!(c.cycle && c.cycle.on), train: c.cycle && c.cycle.train != null ? +c.cycle.train : 40, rest: c.cycle && c.cycle.rest != null ? +c.cycle.rest : 40 } };
+}
 function nut2LatestWeight(ns){
   ns = ns || nutGetState(); var d = (ns && ns.daily) || {};
   var keys = Object.keys(d).sort();
@@ -24359,12 +24380,84 @@ function nut2LatestWeight(ns){
   }
   return null;
 }
-function nut2Targets(ns){
+// 'train' | 'rest' | null (no calendar to say).
+function nut2DayKind(date){
+  try {
+    // Training's public read (never its calendar storage — harness CONTRACT).
+    if(typeof window === 'undefined' || typeof window.blabTrainingStateOn !== 'function') return null;
+    var st = window.blabTrainingStateOn(date);
+    return (st && (st.state === 'due' || st.state === 'trained')) ? 'train' : 'rest';
+  } catch(_e){ return null; }
+}
+function nut2BaseTargets(ns, cfg){
+  cfg = cfg || _nut2TgtCfg(ns);
+  if(cfg.mode === 'custom'){
+    var cu = cfg.custom, p = +cu.p || 0, c = +cu.c || 0, f = +cu.f || 0;
+    var kcal = +cu.kcal > 0 ? Math.round(+cu.kcal) : Math.round(p * 4 + c * 4 + f * 9);
+    if(!(kcal > 0)) return null;
+    return { kcal: kcal, protein_g: Math.round(p), carbs_g: Math.round(c), fat_g: Math.round(f), mode: 'custom' };
+  }
   var lw = nut2LatestWeight(ns); if(!lw) return null;
-  var kcal = Math.round(lw.kg * NUT2_PER_KG.kcal / 10) * 10;
-  var p = Math.round(lw.kg * NUT2_PER_KG.p), f = Math.round(lw.kg * NUT2_PER_KG.f);
-  var c = Math.max(0, Math.round((kcal - p * 4 - f * 9) / 4));
-  return { kcal: kcal, protein_g: p, carbs_g: c, fat_g: f, fromKg: lw.kg, fromDate: lw.date };
+  var kcal2 = Math.round(lw.kg * NUT2_PER_KG.kcal / 10) * 10, P, F;
+  if(cfg.mode === 'helms'){
+    P = Math.round(cfg.bf ? lw.kg * (1 - cfg.bf / 100) * 2.7 : lw.kg * 2.2);
+    F = Math.round(kcal2 * 0.25 / 9);
+  } else { P = Math.round(lw.kg * NUT2_PER_KG.p); F = Math.round(lw.kg * NUT2_PER_KG.f); }
+  var C = Math.max(0, Math.round((kcal2 - P * 4 - F * 9) / 4));
+  return { kcal: kcal2, protein_g: P, carbs_g: C, fat_g: F, fromKg: lw.kg, fromDate: lw.date, mode: cfg.mode };
+}
+function nut2Targets(ns, date){
+  var cfg = _nut2TgtCfg(ns), t = nut2BaseTargets(ns, cfg); if(!t) return null;
+  if(cfg.cycle.on){
+    var kind = nut2DayKind(date || _nutToday());
+    var dc = kind === 'train' ? cfg.cycle.train : (kind === 'rest' ? -cfg.cycle.rest : 0);
+    if(dc){ var nc = Math.max(0, t.carbs_g + dc); t.kcal += (nc - t.carbs_g) * 4; t.carbs_g = nc; t.dayKind = kind; t.dayCarbs = dc; }
+  }
+  return t;
+}
+function nut2SaveTargets(cfg){
+  var ns = _nut2State(); ns.v2.targets = cfg; _nut2Save(ns);
+}
+function nut2OpenTargets(){
+  var ns = _nut2State(), cfg = _nut2TgtCfg(ns), lw = nut2LatestWeight(ns);
+  var d = JSON.parse(JSON.stringify(cfg));
+  var paint = function(){
+    var prev = nut2BaseTargets(ns, d);
+    var modeBtn = function(m, title, sub){ var on = d.mode === m;
+      return '<button data-tm="' + m + '" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:11px 12px;border-radius:10px;background:' + (on ? 'rgba(212,166,74,0.12)' : 'transparent') + ';border:1px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';color:var(--text);">' +
+        '<div style="font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:1px;color:' + (on ? 'var(--gold)' : 'var(--text)') + ';">' + title + '</div><div style="font-size:11px;color:var(--text3);line-height:1.4;margin-top:3px;">' + sub + '</div></button>'; };
+    var inp = 'width:100%;box-sizing:border-box;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;';
+    var h = '<div style="display:flex;align-items:center;margin-bottom:10px;"><div style="flex:1;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">Daily targets</div><button data-n2-close style="background:none;border:none;color:var(--text3);font-size:22px;">&times;</button></div>' +
+      modeBtn('phoenix', 'Phoenix cut', 'From your weight: 18.5 kcal, 1.8 g protein, 0.65 g fat per kg; carbs fill the rest.') +
+      modeBtn('helms', 'Muscle-sparing cut (Helms et al.)', 'For lifters cutting: high protein (2.7 g/kg lean mass, or 2.2 g/kg bodyweight), fat 25% of calories, carbs the rest.') +
+      modeBtn('custom', 'My own numbers', 'Set calories and grams yourself.');
+    if(d.mode === 'helms') h += '<div style="font-size:11px;color:var(--text3);margin:2px 0 4px;">Body fat % (optional — makes protein from lean mass)</div><input id="tg-bf" type="number" inputmode="decimal" placeholder="e.g. 22" value="' + (d.bf || '') + '" style="' + inp + '">';
+    if(d.mode === 'custom'){
+      var cu = d.custom || {};
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + [['kcal','kcal (blank = from macros)'],['p','Protein g'],['c','Carbs g'],['f','Fat g']].map(function(x){
+        return '<label style="font-size:11px;color:var(--text3);">' + x[1] + '<input data-tg-c="' + x[0] + '" type="number" inputmode="decimal" value="' + (cu[x[0]] != null ? cu[x[0]] : '') + '" style="' + inp + 'margin-top:3px;"></label>'; }).join('') + '</div>';
+    }
+    h += '<label style="display:flex;gap:10px;align-items:center;margin:14px 0 6px;font-size:14px;color:var(--text);"><input id="tg-cyc" type="checkbox" ' + (d.cycle.on ? 'checked' : '') + ' style="width:20px;height:20px;accent-color:var(--gold);">Training-day carbs</label>' +
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">More carbs on days with a session in your calendar, fewer on rest days. Calories move with the carbs.</div>';
+    if(d.cycle.on) h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><label style="font-size:11px;color:var(--text3);">Training day + g<input id="tg-tr" type="number" inputmode="numeric" value="' + d.cycle.train + '" style="' + inp + 'margin-top:3px;"></label><label style="font-size:11px;color:var(--text3);">Rest day − g<input id="tg-re" type="number" inputmode="numeric" value="' + d.cycle.rest + '" style="' + inp + 'margin-top:3px;"></label></div>';
+    h += '<div id="tg-prev" style="margin-top:14px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text);">' +
+      (prev ? '<b>' + prev.kcal + ' kcal</b> &middot; P ' + prev.protein_g + 'g &middot; C ' + prev.carbs_g + 'g &middot; F ' + prev.fat_g + 'g' + (prev.fromKg ? '<div style="font-size:11px;color:var(--text3);margin-top:3px;">From ' + prev.fromKg + ' kg' + (d.cycle.on ? ' &middot; before training-day carbs' : '') + '</div>' : '')
+            : '<span style="color:#e0b062;">' + (d.mode === 'custom' ? 'Enter your numbers.' : 'Log a weigh-in on Today first.') + '</span>') + '</div>' +
+      '<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.4;">Aim to lose about 0.5–1% of bodyweight a week; if you’re losing faster or stalling for two weeks, adjust.</div>' +
+      '<button id="tg-save" style="width:100%;margin-top:12px;padding:14px;border-radius:10px;background:var(--gold);color:#000;border:none;font-family:var(--font-d);font-weight:900;font-size:13px;letter-spacing:2px;">SAVE TARGETS</button>';
+    var ov = _nut2Sheet(h);
+    var grab = function(){
+      var bf = ov.querySelector('#tg-bf'); if(bf) d.bf = parseFloat(bf.value) > 0 ? parseFloat(bf.value) : null;
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-tg-c]'), function(x){ d.custom = d.custom || {}; d.custom[x.getAttribute('data-tg-c')] = x.value === '' ? null : parseFloat(x.value); });
+      var tr = ov.querySelector('#tg-tr'), re = ov.querySelector('#tg-re');
+      if(tr) d.cycle.train = Math.max(0, parseFloat(tr.value) || 0); if(re) d.cycle.rest = Math.max(0, parseFloat(re.value) || 0);
+    };
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-tm]'), function(b){ b.addEventListener('click', function(){ grab(); d.mode = b.getAttribute('data-tm'); paint(); }); });
+    var cyc = ov.querySelector('#tg-cyc'); if(cyc) cyc.addEventListener('change', function(){ grab(); d.cycle.on = cyc.checked; paint(); });
+    Array.prototype.forEach.call(ov.querySelectorAll('input[type=number]'), function(x){ x.addEventListener('change', function(){ grab(); var p = nut2BaseTargets(ns, d), el = ov.querySelector('#tg-prev'); if(el && p) el.firstChild && (el.innerHTML = '<b>' + p.kcal + ' kcal</b> &middot; P ' + p.protein_g + 'g &middot; C ' + p.carbs_g + 'g &middot; F ' + p.fat_g + 'g'); }); });
+    ov.querySelector('#tg-save').addEventListener('click', function(){ grab(); nut2SaveTargets(d); _nut2CloseSheet(); nut2Render(); });
+  };
+  paint();
 }
 // v4.9.395 — the Today card. Replaces the legacy kcal tile AND the generated meals tile
 // (both showed an old plan and two conflicting targets). Stage 3 puts the planned day here.

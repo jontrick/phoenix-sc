@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.419';
+var APP_VERSION='4.9.420';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -13796,6 +13796,24 @@ document.addEventListener('visibilitychange', function(){
 });
 requestWakeLock(); // persistent: hold screen wake lock for entire PWA session
 
+// v4.9.420 — Jon 15 Nov: "the screen keeps locking ... when trying to prep the meal ... can the
+// screen always be on when in nutrition area - same with the peptides". The lock above is
+// asked for once at load (no tap — iOS may refuse) and on returning to the app; any session
+// end releases it and nothing asked again. On Nutrition and Peptides it is now asked for on
+// arrival and re-asked on every tap there (a tap is when iOS reliably grants it). Leaving
+// them does not release it: timers manage their own, and holding it longer is harmless.
+var _PHX_AWAKE_SCREENS = ['screen-nut2', 'screen-nutrition', 'screen-peptide'];
+function _phxOnAwakeScreen(){
+  try { var a = document.querySelector('.screen.active'); return !!(a && _PHX_AWAKE_SCREENS.indexOf(a.id) >= 0); } catch(_e){ return false; }
+}
+function _phxKeepAwakeHere(){
+  if(!_phxOnAwakeScreen()) return;
+  if(typeof wakeLock !== 'undefined' && wakeLock && !wakeLock.released) return;
+  requestWakeLock();
+}
+if(typeof document !== 'undefined' && document.addEventListener){
+  document.addEventListener('pointerdown', _phxKeepAwakeHere, true);
+}
 
 // v4.7.10: cancellable count-in.
 // showCountIn now publishes its interval handle + overlay node + callback to window._countInState
@@ -48935,6 +48953,7 @@ if(typeof navTo==='function'){
       window._phxBootRouted = true;   // v4.9.419: routing has landed — the restore may now run
       return _r;
     }
+    if(tab === 'nutrition' || tab === 'nut2' || tab === 'peptide'){ setTimeout(function(){ try { _phxKeepAwakeHere(); } catch(_w){} }, 0); }   // v4.9.420
     // v4.7.10: any tab change cancels an in-flight count-in. The user is leaving the WOD context,
     // so we must not let a 5-second-old start tap fire startWODTimer against whatever screen they land on.
     if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();

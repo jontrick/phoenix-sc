@@ -237,6 +237,11 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       key null). Now waits for boot routing to reach Today (intercept sets `_phxBootRouted`), 30 s cap,
       never restores without a session. Proven at 0 / 1.5 / 4 / 9 s (×2 — boot checks the session twice)
       for nutrition + peptide; Today stays Today. Harness: BOOTWAIT.
+- [x] **v4.9.420 — screen stays on in Nutrition and Peptides.** The global wake lock was asked for once
+      at load (no gesture — iOS may refuse) and on visibility; session ends released it and nothing
+      re-asked. Now asked on arrival and on every tap there. Browser-proven with a counting stub
+      (headless Chromium always refuses the real API). **On his iPhone it only works if iOS grants it**
+      — Settings → Diagnostic shows "screen wake lock: held / REFUSED / UNSUPPORTED". Harness: AWAKE.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

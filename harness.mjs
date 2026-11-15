@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.419'", 'version is 4.9.419');
+has("var APP_VERSION='4.9.420'", 'version is 4.9.420');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -407,6 +407,12 @@ hasCode("window._phxBootRouted = true;", 'BOOTWAIT: the boot-routing navTo(today
 hasCode("if(window._phxBootRouted || waited >= 30000){ setTimeout(_phxBootRestoreApply, window._phxBootRouted ? 120 : 0); return; }", 'BOOTWAIT: the restore waits for that mark (30 s cap) instead of a fixed timer');
 hasCode("if(!(typeof currentSession !== 'undefined' && currentSession)) return;", 'BOOTWAIT: never restores a signed-in screen without a session');
 hasNotCode("setTimeout(_phxBootRestoreApply, 450);", 'BOOTWAIT: the fixed 450 ms restore is gone');
+
+// ── SHARED — screen stays on in Nutrition and Peptides (v4.9.420) ──────────
+// Browser (wake lock stubbed to count requests): arrive Nutrition → 1, released + tap → 2,
+// tap on Today → still 2, arrive Peptides → 3.
+hasCode("var _PHX_AWAKE_SCREENS = ['screen-nut2', 'screen-nutrition', 'screen-peptide'];", 'AWAKE: Nutrition and Peptides are the keep-awake screens');
+hasCode("document.addEventListener('pointerdown', _phxKeepAwakeHere, true);", 'AWAKE: a tap there re-asks iOS for the wake lock');
 
 // ── SHARED — an update never reloads the app mid-session (v4.9.406) ─────────
 // Jon lost his Bronco time to a mid-session update reload (11 Nov). The functional sandbox has

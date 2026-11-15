@@ -242,6 +242,10 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       re-asked. Now asked on arrival and on every tap there. Browser-proven with a counting stub
       (headless Chromium always refuses the real API). **On his iPhone it only works if iOS grants it**
       — Settings → Diagnostic shows "screen wake lock: held / REFUSED / UNSUPPORTED". Harness: AWAKE.
+- [x] **v4.9.421 — a food with a serve size counts by the serve** (Jon: Helga's wraps "saved as per serve /
+      1 wrap but wants g?" — it showed 0 kcal: added by grams with an empty box). `nut2UnitG` now uses the
+      food's `serving_g`; meals and recipes add such foods as {n:1}; g ⇄ each converts; an empty gram box
+      switched to each starts at 1. Test: nut2 SERVE.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

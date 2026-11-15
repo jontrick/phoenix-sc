@@ -539,4 +539,20 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(C.ok, false); assert.equal(C.barcode, '9300652010015', 'no panel → barcode kept for the Open Food Facts fallback');
     assert.equal(app.nut2FromWoolies(null), null);
   });
+
+  test('SERVE: a food saved with a serve size (1 wrap = 42 g) goes into a meal as 1 each, and counts', () => {
+    const { d } = plan();
+    const wrap = app.nut2SaveUserFood({ name: "Helga's Mixed Grain Wraps", kcal: 290, p: 9, c: 45, f: 6, serving_g: 42, source: 'label' });
+    assert.equal(app.nut2UnitG(wrap), 42, 'its serve weight is its "each"');
+    const i = app.nut2AddItem(d, 'F3', wrap);
+    assert.deepEqual(app.nut2Day(d).feeds[3].items[i], { ref: wrap, n: 1 });
+    assert.equal(app.nut2DayTotals(d).planned.kcal, Math.round(290 * 0.42));
+    app.nut2SetItemUnit(d, 'F3', i);
+    assert.deepEqual(app.nut2Day(d).feeds[3].items[i], { ref: wrap, g: 42 }, 'g ⇄ each converts');
+    const plain = app.nut2SaveUserFood({ name: 'Plain mince', kcal: 200, p: 20, c: 0, f: 12 });
+    const k = app.nut2AddItem(d, 'F3', plain);
+    assert.deepEqual(app.nut2Day(d).feeds[3].items[k], { ref: plain, g: '' }, 'no serve size → by grams as before');
+    app.nut2SetItemUnit(d, 'F3', k);
+    assert.deepEqual(app.nut2Day(d).feeds[3].items[k], { ref: plain, n: 1 }, 'switching an empty gram box to each starts at 1');
+  });
 }

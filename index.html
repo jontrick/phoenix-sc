@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.420';
+var APP_VERSION='4.9.421';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23571,6 +23571,9 @@ function nut2UnitG(ref, ns){
   ns = ns || _nut2State(); if(!ref || ref.indexOf('R:') === 0) return null;
   var u = ns.v2.unitG && parseFloat(ns.v2.unitG[ref]); if(u > 0) return u;
   var f = nut2Food(ref, ns); if(!f) return null;
+  // v4.9.421 — Jon 15 Nov: Helga's wraps "saved as a per serve/1 wrap but wants g?". A food that
+  // carries a serve size (his label / per-serve entry, or Open Food Facts) is counted by the serve.
+  if(parseFloat(f.serving_g) > 0) return parseFloat(f.serving_g);
   for(var i = 0; i < NUT2_UNIT_DEFAULTS.length; i++) if(NUT2_UNIT_DEFAULTS[i].rx.test(f.name)) return NUT2_UNIT_DEFAULTS[i].g;
   return null;
 }
@@ -23590,7 +23593,7 @@ function _nut2ItemG(it, ns){
 function _nut2ToggleUnit(it, ns){
   var u = nut2UnitG(it.ref, ns);
   if(_nut2IsEach(it)){ var n = parseFloat(it.n); it.g = (n > 0 && u) ? Math.round(n * u) : ''; delete it.n; }
-  else { var g = parseFloat(it.g); it.n = (g > 0 && u) ? Math.round(g / u * 2) / 2 : ''; delete it.g; }
+  else { var g = parseFloat(it.g); it.n = (g > 0 && u) ? Math.round(g / u * 2) / 2 : (g > 0 ? '' : 1); delete it.g; }
   return it;
 }
 // "1 each = [ 50 ] g" under an each-amount. Empty when no size is known — he must fill it.
@@ -23803,7 +23806,8 @@ function _nut2PaintRecipe(){
     grab();
     nut2OpenPicker('Add ingredient', function(ref){
       // Grams start EMPTY and focused: a prefilled 100 that he types after becomes 100800.
-      d.items.push({ ref: ref, g: '' });
+      var sf = ref.indexOf('R:') !== 0 ? nut2Food(ref, ns) : null;   // v4.9.421: a serve-size food goes in as 1 serve
+      d.items.push(sf && parseFloat(sf.serving_g) > 0 ? { ref: ref, n: 1 } : { ref: ref, g: '' });
       _nut2PaintRecipe();
       var boxes = document.querySelectorAll('#nut2-sheet [data-item-g]');
       var last = boxes[boxes.length - 1];
@@ -23911,7 +23915,9 @@ function nut2AddItem(date, feedId, ref){
   var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
   var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd) return -1;
   var rec = ref.indexOf('R:') === 0 ? ns.v2.recipes[ref] : null;
-  fd.items.push(rec && rec.kind === 'serves' ? { ref: ref, serves: 1 } : { ref: ref, g: '' });
+  // A food with a serve size goes in as 1 serve (each); everything else by grams.
+  var byServe = !rec && ref.indexOf('R:') !== 0 && (function(){ var f = nut2Food(ref, ns); return f && parseFloat(f.serving_g) > 0; })();
+  fd.items.push(rec && rec.kind === 'serves' ? { ref: ref, serves: 1 } : (byServe ? { ref: ref, n: 1 } : { ref: ref, g: '' }));
   _nut2Save(ns); return fd.items.length - 1;
 }
 function nut2SetItemQty(date, feedId, idx, val){

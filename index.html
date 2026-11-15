@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.426';
+var APP_VERSION='4.9.427';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -24249,6 +24249,11 @@ function _nut2CounterHTML(date, ns){
       (tg.dayCarbs ? ' &middot; ' + (tg.dayKind === 'train' ? 'training day +' : 'rest day ') + tg.dayCarbs + 'g carbs' : '') + '</div>' +
       '<button data-n2-targets style="padding:5px 10px;border-radius:7px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:10px;font-weight:700;letter-spacing:1px;">CHANGE</button></div></div>';
 }
+// "P 40.6g · C 12g · F 8.3g" for one meal.
+function _nut2MacLine(t){
+  var r = function(v){ return Math.round((+v || 0) * 10) / 10; };
+  return '<span style="color:#7fb3e0;">P ' + r(t.p) + 'g</span> &middot; <span style="color:#e0b062;">C ' + r(t.c) + 'g</span> &middot; <span style="color:#d98c8c;">F ' + r(t.f) + 'g</span>';
+}
 function _nut2PlanTab(){
   var ns = _nut2State(), today = _nutToday();
   var date = _nut2PlanDate || today, day = nut2Day(date, ns);
@@ -24267,7 +24272,9 @@ function _nut2PlanTab(){
       '<button data-n2-eat="' + fd.id + '" aria-pressed="' + (fd.eaten ? 'true' : 'false') + '" style="width:28px;height:28px;flex-shrink:0;border-radius:7px;padding:0;background:' + (fd.eaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (fd.eaten ? 'var(--gold)' : 'var(--border2)') + ';color:#000;font-weight:900;">' + (fd.eaten ? '&#10003;' : '') + '</button>' +
       '<input data-n2-time="' + fd.id + '" type="time" value="' + _nut2Esc(fd.time) + '" style="' + inp + 'width:118px;flex-shrink:0;padding:6px 4px;color:var(--gold);font-size:14px;">' +
       '<input data-n2-fname="' + fd.id + '" value="' + _nut2Esc(fd.name) + '" style="' + inp + 'flex:1;min-width:0;padding:6px 8px;font-size:15px;font-weight:700;border-color:transparent;background:transparent;">' +
-      '<div data-n2-fkc="' + fd.id + '" style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;">' + t.kcal + '</div></div>';
+      '<div data-n2-fkc="' + fd.id + '" style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;">' + t.kcal + '</div></div>' +
+      // v4.9.427 — Jon 15 Nov: "good if can see the full macro breakdown each meal on plan and today screen".
+      ((fd.items || []).length ? '<div data-n2-fmac="' + fd.id + '" style="padding-left:36px;margin-top:3px;font-size:12px;color:var(--text2);">' + _nut2MacLine(t) + '</div>' : '');
     fd.items.forEach(function(it, i){
       var m = nut2ItemMacros(it, ns), serves = it.serves != null, each = _nut2IsEach(it), isRecI = it.ref.indexOf('R:') === 0;
       h += '<div style="display:flex;align-items:center;gap:6px;padding:7px 0 0 36px;">' +
@@ -24296,7 +24303,9 @@ function _nut2PaintCounter(){
   if(c){ var w = document.createElement('div'); w.innerHTML = _nut2CounterHTML(date, ns); if(w.firstChild) c.parentNode.replaceChild(w.firstChild, c); }
   var day = nut2Day(date, ns), body = document.getElementById('nut2-body'); if(!body) return;
   day.feeds.forEach(function(fd){
-    var k = body.querySelector('[data-n2-fkc="' + fd.id + '"]'); if(k) k.textContent = nut2FeedTotals(fd, ns).kcal;
+    var ftt = nut2FeedTotals(fd, ns);
+    var k = body.querySelector('[data-n2-fkc="' + fd.id + '"]'); if(k) k.textContent = ftt.kcal;
+    var fm = body.querySelector('[data-n2-fmac="' + fd.id + '"]'); if(fm) fm.innerHTML = _nut2MacLine(ftt);
     fd.items.forEach(function(it, i){
       var el = body.querySelector('[data-n2-ikc="' + fd.id + ':' + i + '"]'); if(!el) return;
       var m = nut2ItemMacros(it, ns); el.innerHTML = Math.round(m.kcal) + ' kcal &middot; P ' + Math.round(m.p * 10) / 10;
@@ -24676,7 +24685,7 @@ function _nut2TodayTile(tile){
     h += '<div style="font-size:13px;color:var(--text3);margin-top:6px;">Loading&hellip;</div>';
   } else {
     h += '<div data-n2t-open style="cursor:pointer;margin-top:6px;"><div style="font-family:var(--font-d);font-size:28px;font-weight:900;line-height:1;color:var(--text);">' + T.eaten.kcal + ' <span style="font-size:12px;font-weight:400;color:var(--text3);">/ ' + t.kcal + ' kcal eaten</span></div>' +
-      '<div data-n2-today-plan style="font-size:11px;color:var(--text3);margin-top:4px;">Planned ' + T.planned.kcal + ' kcal &middot; P ' + T.eaten.p + ' / ' + t.protein_g + 'g eaten</div></div>';
+      '<div data-n2-today-plan style="font-size:11px;color:var(--text3);margin-top:4px;">Eaten P ' + Math.round(T.eaten.p) + '/' + t.protein_g + ' &middot; C ' + Math.round(T.eaten.c) + '/' + t.carbs_g + ' &middot; F ' + Math.round(T.eaten.f) + '/' + t.fat_g + 'g &middot; planned ' + T.planned.kcal + ' kcal</div></div>';
     var ns = _nut2State(), feeds = nut2Day(d, ns).feeds.filter(function(f){ return (f.items || []).length; });
     if(!feeds.length){
       h += '<div data-n2t-open style="font-size:12px;color:var(--text2);margin-top:10px;cursor:pointer;">Nothing planned today &mdash; tap to plan your day.</div>';
@@ -24688,7 +24697,8 @@ function _nut2TodayTile(tile){
           '<button data-n2t-eat="' + _nut2Esc(f.id) + '" aria-pressed="' + (f.eaten ? 'true' : 'false') + '" aria-label="Eaten: ' + _nut2Esc(f.name) + '" style="width:30px;height:30px;flex-shrink:0;border-radius:7px;padding:0;background:' + (f.eaten ? 'var(--gold)' : 'transparent') + ';border:2px solid ' + (f.eaten ? 'var(--gold)' : 'var(--border2)') + ';color:#000;font-weight:900;">' + (f.eaten ? '&#10003;' : '') + '</button>' +
           '<div style="flex:1;min-width:0;">' +
           '<div style="font-size:14px;color:' + (f.eaten ? 'var(--text3)' : 'var(--text)') + ';"><span style="color:var(--gold);font-size:12px;">' + _nut2Esc(f.time) + '</span> ' + _nut2Esc(f.name) + '</div>' +
-          '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _nut2Esc(names) + '</div></div>' +
+          '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _nut2Esc(names) + '</div>' +
+          '<div data-n2t-mac style="font-size:11px;color:' + (f.eaten ? 'var(--text3)' : 'var(--text2)') + ';margin-top:2px;">' + _nut2MacLine(ft) + '</div></div>' +
           '<div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:' + (f.eaten ? 'var(--text3)' : 'var(--text)') + ';">' + ft.kcal + '</div></div>';
       });
       h += '</div>';

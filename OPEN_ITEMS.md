@@ -272,6 +272,8 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       mix-ups; first-hit search had matched "vegetable oil" → puff pastry, "milk" → human breast milk).
       Opens in the recipe editor with the source line under each item; unmatched / skipped listed.
       **Unverified: real sites through the deployed function.** Tests: nut2 RECIPELINK ×4.
+- [x] **v4.9.427 — P / C / F per meal** on the Plan tab (under each meal, live as he types grams) and the
+      Today card (each meal + the day's eaten P/C/F against target). Test: nut2 MEALMACROS.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

@@ -251,7 +251,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const tile = { innerHTML: '', querySelector: () => ({ addEventListener(){} }) };
     app._nut2TodayTile(tile);
     assert.ok(tile.innerHTML.includes(Math.round(egg.kcal * 2) + ' <span') && /\/ 2070 kcal eaten/.test(tile.innerHTML), tile.innerHTML.slice(0, 300));
-    assert.ok(/Planned \d+ kcal/.test(tile.innerHTML));
+    assert.ok(/planned \d+ kcal/.test(tile.innerHTML) && /Eaten P \d+\/\d+ &middot; C \d+\/\d+ &middot; F \d+\/\d+g/.test(tile.innerHTML), tile.innerHTML.slice(0, 600));
   });
   test('PLAN mirror: the daily row is the EATEN v2 day against the weight target; null while foods are unloaded', () => {
     const { d, egg } = plan();
@@ -665,5 +665,18 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       msgs.length = 0; await run('https://example.com/y'); assert.ok(msgs.some((m) => /no recipe data/.test(m)));
       msgs.length = 0; await run('http://insecure.com'); assert.ok(msgs.some((m) => /full https/.test(m)));
     } finally { app.fetch = real; }
+  });
+
+  test('MEALMACROS: each planned meal shows P / C / F on the Plan tab and the Today card', () => {
+    const { d, egg } = plan();
+    const i = app.nut2AddItem(d, 'F1', egg.id); app.nut2SetItemQty(d, 'F1', i, '100');
+    const P = Math.round(egg.p * 10) / 10, C = Math.round(egg.c * 10) / 10, F = Math.round(egg.f * 10) / 10;
+    const want = 'P ' + P + 'g</span> &middot; <span style="color:#e0b062;">C ' + C + 'g</span> &middot; <span style="color:#d98c8c;">F ' + F + 'g';
+    const h = app._nut2PlanTab();
+    assert.ok(h.includes('data-n2-fmac="F1"') && h.includes(want), h.slice(0, 200));
+    assert.ok(!h.includes('data-n2-fmac="F2"'), 'an empty meal has no macro line');
+    const tile = { innerHTML: '', querySelector: () => ({ addEventListener(){} }) };
+    app._nut2TodayTile(tile);
+    assert.ok(tile.innerHTML.includes('data-n2t-mac') && tile.innerHTML.includes(want));
   });
 }

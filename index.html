@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.418';
+var APP_VERSION='4.9.419';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -13795,6 +13795,7 @@ document.addEventListener('visibilitychange', function(){
   if(fn){ try{ fn(); }catch(e){ console.warn('[PHX] timer resync failed:', e); } }
 });
 requestWakeLock(); // persistent: hold screen wake lock for entire PWA session
+
 
 // v4.7.10: cancellable count-in.
 // showCountIn now publishes its interval handle + overlay node + callback to window._countInState
@@ -48930,7 +48931,9 @@ if(typeof navTo==='function'){
     // tap on Today means "forget where I was".
     if(window._phxBooting && tab === 'today'){
       if(typeof _phxCancelCountIn==='function') _phxCancelCountIn();
-      return _origNavTo.apply(this, arguments);
+      var _r = _origNavTo.apply(this, arguments);
+      window._phxBootRouted = true;   // v4.9.419: routing has landed — the restore may now run
+      return _r;
     }
     // v4.7.10: any tab change cancels an in-flight count-in. The user is leaving the WOD context,
     // so we must not let a 5-second-old start tap fire startWODTimer against whatever screen they land on.
@@ -49089,10 +49092,20 @@ function _phxBootRestoreBegin(){
     var tab = null;
     try { tab = localStorage.getItem('phx_lastTab_v1'); } catch(_e){}
     window._phxBootRestoreTab = (tab && _safeRestoreTabs.indexOf(tab) >= 0) ? tab : null;
-    // Fires after routing settles, whichever branch it took. Boot mode ends here
-    // too — and it ends even when there is nothing to restore, which is the case
-    // that would otherwise leave the app permanently unable to forget a screen.
-    setTimeout(_phxBootRestoreApply, 450);
+    // v4.9.419 — Jon 15 Nov: Nutrition / Peptides "when go off screen it reverts back to main
+    // screen". The fixed 450 ms ran out BEFORE routing whenever sb.auth.getSession() was slow
+    // (a phone waking refreshes its token over the network): the restore fired too early, boot
+    // mode ended, and the app's own navTo('today') then counted as HIS choice and wiped the
+    // saved tab. Reproduced with getSession delayed 1.5 s → Today, phx_lastTab_v1 null.
+    // Now the restore waits for boot routing to actually reach Today (the intercept flags it),
+    // checking every 150 ms, and gives up after 30 s (boot checks the session TWICE, so a slow
+    // token refresh doubles). Boot mode still always ends.
+    window._phxBootRouted = false;
+    var waited = 0;
+    (function wait(){
+      if(window._phxBootRouted || waited >= 30000){ setTimeout(_phxBootRestoreApply, window._phxBootRouted ? 120 : 0); return; }
+      waited += 150; setTimeout(wait, 150);
+    })();
   } catch(_e){ window._phxBooting = false; }
 }
 
@@ -49123,6 +49136,8 @@ function _phxBootRestoreApply(){
       return;
     }
     if(!tab) return;
+    // v4.9.419: never restore a signed-in screen over landing / sign-in (the 30 s give-up path).
+    if(!(typeof currentSession !== 'undefined' && currentSession)) return;
     // Re-assert the key: a branch may have cleared it before the boot flag was
     // honoured, and without this the restore would work exactly once.
     try { localStorage.setItem('phx_lastTab_v1', tab); } catch(_e){}

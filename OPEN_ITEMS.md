@@ -230,6 +230,13 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       the reply defensively (any Name/Value or key path containing "100 g"; serve rows never used), falls
       back to the product's barcode → Open Food Facts, else a plain message. Only digits reach the
       function; it only calls www.woolworths.com.au. Tests: nut2 WOOLIES ×2; browser: 404 / ok / 403.
+- [x] **v4.9.419 — Nutrition / Peptides no longer revert to Today after the phone sleeps.** Cause: the
+      boot restore fired on a FIXED 450 ms, started before `getSession()`. A waking phone refreshing its
+      token is slower → restore ran first, boot mode ended, the app's own navTo('today') then counted as
+      his choice and wiped `phx_lastTab_v1`. Reproduced (real boot path, getSession delayed 1.5 s → Today,
+      key null). Now waits for boot routing to reach Today (intercept sets `_phxBootRouted`), 30 s cap,
+      never restores without a session. Proven at 0 / 1.5 / 4 / 9 s (×2 — boot checks the session twice)
+      for nutrition + peptide; Today stays Today. Harness: BOOTWAIT.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

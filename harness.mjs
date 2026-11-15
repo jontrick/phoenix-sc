@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.418'", 'version is 4.9.418');
+has("var APP_VERSION='4.9.419'", 'version is 4.9.419');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -400,6 +400,13 @@ hasCode("    window._phxOpenProgrammeKey = null;\n    if(typeof window._phxClear
 hasCode("    window._phxTimerStart = resume.start;\n    go();", 'RUNRESUME: a resumed timer reuses the saved wall-clock start, no count-in');
 hasCode("document.getElementById('phx-run-finish').onclick=function(){ _phxRunClear();", 'RUNRESUME: Finish clears the saved run');
 hasCode("o.querySelector('.phx-lib-back').onclick=function(){ _phxRunClear();", 'RUNRESUME: Back clears the saved run');
+
+// ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─
+// Reproduced in a real boot with getSession delayed 1.5 s: the fixed timer lost and the tab was wiped.
+hasCode("window._phxBootRouted = true;", 'BOOTWAIT: the boot-routing navTo(today) marks routing as landed');
+hasCode("if(window._phxBootRouted || waited >= 30000){ setTimeout(_phxBootRestoreApply, window._phxBootRouted ? 120 : 0); return; }", 'BOOTWAIT: the restore waits for that mark (30 s cap) instead of a fixed timer');
+hasCode("if(!(typeof currentSession !== 'undefined' && currentSession)) return;", 'BOOTWAIT: never restores a signed-in screen without a session');
+hasNotCode("setTimeout(_phxBootRestoreApply, 450);", 'BOOTWAIT: the fixed 450 ms restore is gone');
 
 // ── SHARED — an update never reloads the app mid-session (v4.9.406) ─────────
 // Jon lost his Bronco time to a mid-session update reload (11 Nov). The functional sandbox has

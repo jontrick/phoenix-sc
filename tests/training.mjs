@@ -6510,4 +6510,22 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(rt && /3 × 12 each side/.test(rt.detail || ''), JSON.stringify(rt));
     assert.equal(names.length, 5, 'still five movements');
   });
+  test('RESCHED1115: Sun 15 skipped (gym + WOD), Mon 16 conditioning → Wed 18, Wed 18 sprint & power → Fri 20 (Jon, calf)', () => {
+    startDraft();
+    const realToday = app._phxLocalISO;
+    try {
+      app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-15';
+      const at = (w, d) => app.blabCalGet().sessions.find((e) => e.blabWeek === w && e.blabDay === d);
+      const ham = () => app.blabCalGet().customs.find((c) => c.libId === 'wod-hammerfall');
+      assert.deepEqual([at(4, 1).scheduledDate, at(4, 3).scheduledDate], ['2026-11-16', '2026-11-18'], 'positive control');
+      assert.equal(app.window._draftReschedule1115(), true);
+      assert.equal(at(3, 6).status, 'skipped'); assert.equal(ham().status, 'skipped');
+      assert.equal(at(4, 1).scheduledDate, '2026-11-18'); assert.equal(at(4, 3).scheduledDate, '2026-11-20');
+      assert.deepEqual([at(4, 2).scheduledDate, at(4, 4).scheduledDate, at(4, 5).scheduledDate], ['2026-11-17', '2026-11-19', '2026-11-21'], 'the rest untouched');
+      assert.equal(app.window._draftReschedule1115(), false, 'second run changes nothing — the moved sessions are not moved again');
+      assert.equal(app.window.blabTrainingStateOn('2026-11-16').state === 'due' || app.window.blabTrainingStateOn('2026-11-16').state === 'trained', false, 'Monday is now a rest day');
+      app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-21';
+      assert.equal(app.window._draftReschedule1115(), false, 'dead after Friday');
+    } finally { app._phxLocalISO = realToday; }
+  });
 }

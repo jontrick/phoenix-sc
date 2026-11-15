@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.425';
+var APP_VERSION='4.9.426';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8751,6 +8751,29 @@ window._draftReschedule1109 = function(){
   } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.reschedule1109', _e, {}); return false; }
 };
 
+// v4.9.426 — ONE-OFF RESCHEDULE, Jon 15 Nov: "missed Sunday and Monday due to calf and resting -
+// want to push Monday to Wednesday and Wednesday to Friday this week".
+//   Sun 15 Nov  Speed Lower (W3 D6) + Hammerfall WOD   -> skipped
+//   Mon 16 Nov  Conditioning (W4 D1)                    -> Wed 18 Nov
+//   Wed 18 Nov  Sprint & Power (W4 D3)                  -> Fri 20 Nov
+// Only entries still pending on their original date; nothing after 20 Nov. Archive after 20 Nov.
+window._draftReschedule1115 = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft') return false;
+    if(_phxLocalISO() > '2026-11-20') return false;
+    var cal = window.blabCalGet(); if(!cal || !Array.isArray(cal.sessions)) return false;
+    var changed = false;
+    var find = function(w, d, iso){ return cal.sessions.filter(function(e){ return e && e.blabWeek === w && e.blabDay === d && e.scheduledDate === iso && e.status !== 'completed'; })[0]; };
+    var sun = find(3, 6, '2026-11-15'); if(sun && sun.status !== 'skipped'){ sun.status = 'skipped'; changed = true; }
+    (cal.customs || []).forEach(function(c){ if(c && c.scheduledDate === '2026-11-15' && c.libId === 'wod-hammerfall' && c.status !== 'completed' && c.status !== 'skipped'){ c.status = 'skipped'; changed = true; } });
+    // Wednesday first, so Monday's session never shares the day with it.
+    var wed = find(4, 3, '2026-11-18'); if(wed){ wed.scheduledDate = '2026-11-20'; if(wed.status === 'skipped') wed.status = 'pending'; changed = true; }
+    var mon = find(4, 1, '2026-11-16'); if(mon){ mon.scheduledDate = '2026-11-18'; if(mon.status === 'skipped') mon.status = 'pending'; changed = true; }
+    if(changed){ window.blabCalSave(cal); if(typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){} }
+    return changed;
+  } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.reschedule1115', _e, {}); return false; }
+};
+
 // v4.9.400 — ONE-OFF REPAIR, Wed 11 Nov only. Jon 05:23: "I never completed today's session and
 // says completed". The Bronco (W3 D1, moved to today) is put back to pending and its completion
 // is taken out of the log. Root cause ??? — recorded in HANDOFF_TRAINING.md. If the stamp is
@@ -8811,7 +8834,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); window._draftReschedule1115(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);

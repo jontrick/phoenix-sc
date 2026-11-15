@@ -555,4 +555,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     app.nut2SetItemUnit(d, 'F3', k);
     assert.deepEqual(app.nut2Day(d).feeds[3].items[k], { ref: plain, n: 1 }, 'switching an empty gram box to each starts at 1');
   });
+
+  test('BARCODE fallback is strict: only the printed 1+6+6 layout counts, never digits stitched from other text', () => {
+    assert.equal(app._nut2PrintedEan('9 310055 536371'), '9310055536371');
+    assert.equal(app._nut2PrintedEan('Lot 4471 2209\n9 310055 536371\n6 wraps 360g'), '9310055536371');
+    // The ACTUAL digit soup the text reader produced from a sideways pack photo — two runs of it
+    // passed the check digit by chance under the old loose matcher.
+    assert.equal(app._nut2PrintedEan('609 158 0 0 369 0 0 10110 795 00 6 6022 107 9202 3 01010 1506 2 1 009'), null);
+    assert.equal(app._nut2PrintedEan('9 9 5 0 3 969 4 116 96 5001 6022 1 1019202 0 906 18 18 21049 152 3 00'), null);
+    assert.equal(app._nut2PrintedEan('9 310055 536372'), null, 'bad check digit');
+  });
 }

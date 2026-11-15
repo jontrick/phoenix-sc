@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.421';
+var APP_VERSION='4.9.422';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23302,7 +23302,38 @@ function nut2LookupOFF(code, cb){
     })
     .catch(function(e){ console.error('[PHX] OFF', e); cb({ ok: false, error: 'Could not reach Open Food Facts. Check your connection, or scan the label instead.' }); });
 }
-// A photo of the barcode → read its printed digits with the label reader → validated code.
+// v4.9.422 — Jon 15 Nov: the barcode photo "kept coming up not being able to read". Reading the
+// PRINTED DIGITS with the text reader was the wrong tool: on a pack-style photo it found nothing,
+// and turned sideways it produced digit soup that passed the check digit by chance (1 in 10) —
+// i.e. it could look up the WRONG product. Now the BARS are decoded (ZXing, as a checkout
+// scanner does), tried as shot and turned 90° each way. Only if that fails is the printed number
+// read — and then ONLY in its printed EAN-13 layout (1 + 6 + 6 digits), never digits stitched
+// together from other text. The check digit must pass either way.
+var NUT2_ZXING = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+function _nut2ZxLoad(cb){
+  if(typeof window === 'undefined') return cb(null);
+  if(window.ZXing) return cb(window.ZXing);
+  var s = document.createElement('script'); s.src = NUT2_ZXING; s.async = true;
+  s.onload = function(){ cb(window.ZXing || null); }; s.onerror = function(){ cb(null); };
+  document.head.appendChild(s);
+}
+// The printed number under an EAN-13 barcode, laid out as printed. Strict on purpose.
+function _nut2PrintedEan(text){
+  var re = /(?:^|[^0-9])(\d)\s?(\d{6})\s?(\d{6})(?![0-9])/g, m;
+  while((m = re.exec(String(text || '')))){ var c = m[1] + m[2] + m[3]; if(nut2ValidBarcode(c)) return c; }
+  return null;
+}
+function _nut2OcrRotate(dataUrl, deg, cb){
+  if(!deg){ cb(dataUrl); return; }
+  var img = new Image();
+  img.onload = function(){
+    var cv = document.createElement('canvas'); cv.width = img.height; cv.height = img.width;
+    var cx = cv.getContext('2d'); cx.translate(cv.width / 2, cv.height / 2); cx.rotate(deg * Math.PI / 180);
+    cx.drawImage(img, -img.width / 2, -img.height / 2); cb(cv.toDataURL('image/png'));
+  };
+  img.onerror = function(){ cb(null); };
+  img.src = dataUrl;
+}
 function nut2ReadBarcodeFile(file, onStatus, cb){
   if(!file){ cb(null); return; }
   var rd = new FileReader();
@@ -23310,11 +23341,38 @@ function nut2ReadBarcodeFile(file, onStatus, cb){
   rd.onload = function(){
     _nut2OcrPrep(String(rd.result), function(prepped){
       if(!prepped){ cb(null); return; }
-      onStatus('Loading the reader&hellip; (first time only: ~10 MB)');
-      _nut2OcrLoad(function(w){
-        if(!w){ cb(null); return; }
-        onStatus('Reading the barcode digits&hellip;');
-        w.recognize(prepped).then(function(res){ cb(nut2BarcodeFrom(res && res.data && res.data.text)); }, function(){ cb(null); });
+      onStatus('Reading the barcode&hellip;');
+      _nut2ZxLoad(function(ZX){
+        var tryOcr = function(){
+          onStatus('Reading the number under the barcode&hellip;');
+          _nut2OcrLoad(function(w){
+            if(!w){ cb(null); return; }
+            var done = function(c){ try { Promise.resolve(w.setParameters({ tessedit_char_whitelist: '' })).then(function(){ cb(c); }, function(){ cb(c); }); } catch(_e){ cb(c); } };
+            Promise.resolve(w.setParameters({ tessedit_char_whitelist: '0123456789 ' })).then(function(){
+              return w.recognize(prepped);
+            }).then(function(res){ done(_nut2PrintedEan(res && res.data && res.data.text)); }, function(){ done(null); });
+          });
+        };
+        if(!ZX){ tryOcr(); return; }
+        var hints = new Map();
+        try {
+          hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A, ZX.BarcodeFormat.UPC_E]);
+          hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+        } catch(_h){}
+        var reader = new ZX.BrowserMultiFormatReader(hints);
+        var angles = [0, 90, 270];
+        var next = function(n){
+          if(n >= angles.length){ tryOcr(); return; }
+          _nut2OcrRotate(prepped, angles[n], function(img){
+            if(!img){ next(n + 1); return; }
+            reader.decodeFromImageUrl(img).then(function(r){
+              var t = r && (r.getText ? r.getText() : r.text);
+              if(t && t.length === 12 && /^\d+$/.test(t) && nut2ValidBarcode('0' + t)) t = '0' + t;
+              if(t && nut2ValidBarcode(t)) cb(t); else next(n + 1);
+            }, function(){ next(n + 1); });
+          });
+        };
+        next(0);
       });
     });
   };
@@ -23524,7 +23582,7 @@ function nut2OpenAddFood(editId, prefill, onSaved){
     var file = bar.files && bar.files[0]; bar.value = ''; var st = $('ocr'); if(!file) return;
     st.style.color = 'var(--text2)';
     nut2ReadBarcodeFile(file, function(m){ st.innerHTML = m; }, function(code){
-      if(!code){ st.style.color = '#e07a7a'; st.textContent = 'Couldn’t read the barcode digits. Get the numbers under the barcode sharp and close, or type them in.'; return; }
+      if(!code){ st.style.color = '#e07a7a'; st.textContent = 'Couldn’t read the barcode. Hold the phone close so the barcode fills most of the photo, in good light — or type the number under it.'; return; }
       $('link').value = code; offFill(code);
     });
   });

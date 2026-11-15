@@ -246,6 +246,13 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       1 wrap but wants g?" — it showed 0 kcal: added by grams with an empty box). `nut2UnitG` now uses the
       food's `serving_g`; meals and recipes add such foods as {n:1}; g ⇄ each converts; an empty gram box
       switched to each starts at 1. Test: nut2 SERVE.
+- [x] **v4.9.422 — barcode photos decode the BARS (ZXing 0.21.3, lazy from jsdelivr).** Jon: the photo
+      "kept coming up not being able to read". Reading the printed digits with Tesseract failed on a
+      pack-style photo AND, turned sideways, produced digit soup that passed the check digit by chance
+      (could look up the WRONG product). Now ZXing (TRY_HARDER, EAN/UPC) on the photo and turned ±90°;
+      fallback reads the printed number ONLY in its 1+6+6 layout. Browser: a real EAN-13 on a tilted,
+      blurred JPEG pack shot decodes in 0.14 s at every rotation; 0 false codes across all junk images.
+      Tiny / heavily blurred barcodes still fail → message tells him to fill the frame. Test: nut2 BARCODE.
 - [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
       timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
       tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED

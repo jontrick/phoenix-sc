@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.436'", 'version is 4.9.436');
+has("var APP_VERSION='4.9.437'", 'version is 4.9.437');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -407,6 +407,7 @@ hasCode("window.draftBullets(p.presc).map(", 'BULLETS: conditioning cards render
 hasCode("window._phxNoteBoxHTML(sess.name, 'Why did you stop? (saved with this session)')", 'COMPLETENOTE: the not-finished modal asks for a note');
 hasCode("_nb.innerHTML = window._phxNoteBoxHTML(", 'COMPLETENOTE: the gym complete modal has the note box');
 hasCode("window.draftRestBrief(parts[nx]);", 'RESTBRIEF: the between-drills rest shows the next drill as bullets');
+hasCode("if(a === 'cones'){ window.draftOpenConesFull(sess); return; }", 'CONEMAP: tapping the diagram opens it full screen');
 hasCode("var _rtDrill=document.getElementById('rt-drill'); if(_rtDrill) _rtDrill.remove();", 'RESTBRIEF: any other rest clears the drill brief');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─

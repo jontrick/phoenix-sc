@@ -6652,6 +6652,19 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(f(), false, 'cleared stays cleared'); assert.ok(!app.window.blabGetState().draftCalf);
     } finally { app._phxLocalISO = orig; }
   });
+  test('CONEMAP: the diagram draws the same cones as the list — one lane cone per distance, agility layout, phone (Jon, 18 Nov)', () => {
+    startDraft();
+    const st = app.window.blabGetState(); delete st.draftCalf; app.window.blabSaveState(st);
+    for (const [w, d] of [[4, 1], [4, 3], [5, 3], [6, 3], [6, 1]]) {
+      const x = app.blabGetSessionData(w, d); assert.ok(x.coneMap, `W${w}D${d} has a cone map`);
+      for (const c of x.coneMap.lane) assert.ok(x.cones.join(' ').includes(c.m + ' m'), `W${w}D${d}: ${c.m} m is in the list too`);
+      const svg = app.window.draftConeSVG(x.coneMap, false);
+      const ag = (x.coneMap.agility || []).reduce((n, a) => n + (a === '5-10-5' ? 2 : 3), 0);
+      assert.equal((svg.match(/<polygon /g) || []).length, x.coneMap.lane.length + ag, `W${w}D${d}: one triangle per cone`);
+      assert.ok(/Phone · start/.test(svg), 'the phone is drawn');
+    }
+    assert.equal(app.window.draftConeSVG(null), '');
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

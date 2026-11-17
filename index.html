@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.436';
+var APP_VERSION='4.9.437';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8393,11 +8393,12 @@ window._draftGetSessionRaw = function(week, day, s, calf){
   function part(title, presc, spec, alt){ return { kind: spec ? 'timed' : 'check', title:title, presc:presc, spec:spec || null, alt:alt || null }; }
   // v4.9.359 — bodyweight sets: one tick per set, each tick starts the rest countdown.
   function bwPart(title, presc, sets, rest){ return { kind:'sets', title:title, presc:presc, sets:sets, rest:rest, spec:null, alt:null }; }
-  function partsSess(name, mins, parts, cones){
+  function partsSess(name, mins, parts, cones, coneMap){
     var exs = parts.map(function(p){ return std(p.title, 1, p.spec ? (p.spec.config.efforts ? p.spec.config.efforts + ' efforts' : 'For time') : 'Do it', p.presc); });
     var o = sess(name, mins, exs);
     o.conditioning = parts;
     if(cones && cones.length) o.cones = cones;
+    if(coneMap) o.coneMap = coneMap;   // v4.9.437 — drawn as a diagram (draftConeSVG)
     return o;
   }
   // v4.9.432 — Jon 18 Nov: "at the beginning of each of those pitch sessions ... lay out what the cone
@@ -8409,7 +8410,7 @@ window._draftGetSessionRaw = function(week, day, s, calf){
   function coneAgility(which){
     return which === '5-10-5 Shuttle'
       ? '5-10-5: a cone ' + CONE_YD5 + ' m (5 yd) to the LEFT and RIGHT of the phone, along the start line. You start and finish at the phone.'
-      : '3-Cone: start cone at the phone, cone 2 ' + CONE_YD5 + ' m (5 yd) straight out, cone 3 ' + CONE_YD5 + ' m to the side of cone 2 (an L). Put it beside the sprint lane, not in it.';
+      : '3-Cone: start cone on the start line about 2 m left of the phone, cone 2 ' + CONE_YD5 + ' m (5 yd) straight out from it, cone 3 ' + CONE_YD5 + ' m to the left of cone 2 (an L), clear of the sprint lane.';
   }
   function bronco(isRetest){
     if(calf){
@@ -8432,7 +8433,8 @@ window._draftGetSessionRaw = function(week, day, s, calf){
         libSpec('draft-row2k', '2 km Row Test', 'time', 'time', '2 km row time', 'FOR TIME · 2000 m',
           'Wet-weather option only. Damper 5-6.', [['Row', '2000 m']], { chipper:true })),
       part('Cool-down', '8 min easy jog or bike, then hips and calves.')
-    ], ['Phone on the start line (0 m).', 'Cones at 20 m, 40 m and 60 m, all in one straight line from the phone.']);
+    ], ['Phone on the start line (0 m).', 'Cones at 20 m, 40 m and 60 m, all in one straight line from the phone.'],
+       { lane: [{ m:20, label:'Bronco' }, { m:40, label:'Bronco' }, { m:60, label:'Bronco' }] });
   }
   if(day === 1){
     if(t === 2) return bronco(false);
@@ -8496,7 +8498,8 @@ window._draftGetSessionRaw = function(week, day, s, calf){
     return partsSess(gymC ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts,
       gymC ? null : [CONE_PHONE,
         'Cone A at 20 m: Repeated-Effort Bouts (sprint out, up-down, sprint back).',
-        'Cone B at ' + ivHalf + ' m, same line past Cone A: 15/15 runs out and back. Use it for the warm-up build-ups too.']);
+        'Cone B at ' + ivHalf + ' m, same line past Cone A: 15/15 runs out and back. Use it for the warm-up build-ups too.'],
+      gymC ? null : { lane: [{ m:20, label:'A \u00b7 Bouts' }, { m:ivHalf, label:'B \u00b7 15/15' }] });
   }
 
   if(day === 3){
@@ -8572,7 +8575,8 @@ window._draftGetSessionRaw = function(week, day, s, calf){
         part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups.'),
         part('Acceleration Sprints', '4 × 20 m at 90%, walk back to the phone. Smooth and fast, nothing to prove today.', accField, accGym),
         part('Agility Rehearsal', 'One 5-10-5 and one 3-cone, smooth, to rehearse Saturday. Not timed.')
-      ], [CONE_PHONE, 'Cone at 20 m straight out: acceleration sprints.', coneAgility('5-10-5 Shuttle'), coneAgility('3-Cone Drill')]);
+      ], [CONE_PHONE, 'Cone at 20 m straight out: acceleration sprints.', coneAgility('5-10-5 Shuttle'), coneAgility('3-Cone Drill')],
+         { lane: [{ m:20, label:'Sprints' }], agility: ['5-10-5', '3-cone'] });
     }
     if(t === 1){
       return partsSess('Sprint & Power (Gym)', 45, [
@@ -8610,7 +8614,9 @@ window._draftGetSessionRaw = function(week, day, s, calf){
         ? ['Cone at 15 m straight out: acceleration sprints and up-down starts.']
         : (accDist < 15 ? ['Cone at ' + accDist + ' m straight out: acceleration sprints.', 'Cone at 15 m, same line: up-down starts.']
                         : ['Cone at 15 m straight out: up-down starts.', 'Cone at ' + accDist + ' m, same line: acceleration sprints. Use it for the warm-up build-ups too.']))
-      .concat([coneAgility(agilName)]));
+      .concat([coneAgility(agilName)]),
+      { lane: (accDist === 15 ? [{ m:15, label:'Sprints + up-downs' }] : [{ m:15, label:'Up-downs' }, { m:accDist, label:'Sprints' }]),
+        agility: [agilName === '5-10-5 Shuttle' ? '5-10-5' : '3-cone'] });
   }
 
   // ════ TUE — UPPER, MAX EFFORT ═══════════════════════════════════════════════
@@ -9632,6 +9638,53 @@ window.draftRestBrief = function(p){
   cue.parentNode.insertBefore(d, cue.nextSibling);
   return true;
 };
+// v4.9.437 — Jon 18 Nov: "diagram out the cones on the cone layout area than can be tapped on then
+// expands to full screen". Phone at the bottom on the start line, the lane runs up the screen to
+// scale, agility layouts at the start (5-10-5 across the line, 3-cone L beside the lane).
+window.draftConeSVG = function(map, big){
+  if(!map) return '';
+  var lane = (map.lane || []).slice().sort(function(a, b){ return a.m - b.m; });
+  var ag = map.agility || [];
+  var W = 320, H = big ? 520 : 230, y0 = H - 34, top = 26, px = 150;
+  var maxM = Math.max(10, lane.length ? lane[lane.length - 1].m : 10);
+  var k = (y0 - top) / maxM;                       // px per metre along the lane
+  var kx = Math.min(k, 9);                          // across the line: same scale, capped so 5 yd fits
+  var fs = big ? 13 : 11;
+  var cone = function(x, y, r){ return '<polygon points="' + x + ',' + (y - r * 1.4) + ' ' + (x - r) + ',' + (y + r * 0.6) + ' ' + (x + r) + ',' + (y + r * 0.6) + '" fill="#f08a24" stroke="#000" stroke-width="0.6"/>'; };
+  var txt = function(x, y, t, anchor, col){ return '<text x="' + x + '" y="' + y + '" font-size="' + fs + '" fill="' + (col || 'var(--text2)') + '" text-anchor="' + (anchor || 'start') + '" font-family="inherit">' + _esc(t) + '</text>'; };
+  var h = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;max-height:' + (big ? '70vh' : '230px') + ';" role="img" aria-label="Cone layout">';
+  h += '<line x1="20" y1="' + y0 + '" x2="' + (W - 20) + '" y2="' + y0 + '" stroke="var(--border2)" stroke-width="1.5"/>';
+  if(lane.length) h += '<line x1="' + px + '" y1="' + y0 + '" x2="' + px + '" y2="' + (y0 - maxM * k) + '" stroke="var(--border2)" stroke-dasharray="5 5"/>';
+  lane.forEach(function(c){ var y = y0 - c.m * k; h += cone(px, y, big ? 8 : 6) + txt(px + 14, y + 4, c.m + ' m \u00b7 ' + c.label, 'start', 'var(--text)'); });
+  if(ag.indexOf('5-10-5') >= 0){
+    var d = 4.57 * kx;
+    h += cone(px - d, y0, big ? 7 : 5) + cone(px + d, y0, big ? 7 : 5) + txt(px + d + 8, y0 - 10, '5-10-5 (5 yd)', 'start');
+  }
+  if(ag.indexOf('3-cone') >= 0){
+    var d3 = 4.57 * kx, bx = px - Math.max(22, (ag.indexOf('5-10-5') >= 0 ? 7 : 2) * kx);
+    h += '<polyline points="' + bx + ',' + y0 + ' ' + bx + ',' + (y0 - d3) + ' ' + (bx - d3) + ',' + (y0 - d3) + '" fill="none" stroke="var(--border2)" stroke-dasharray="3 3"/>';
+    h += cone(bx, y0, big ? 7 : 5) + cone(bx, y0 - d3, big ? 7 : 5) + cone(bx - d3, y0 - d3, big ? 7 : 5) + txt(bx - d3 - 4, y0 - d3 - 12, '3-cone (5 yd)', 'start');
+  }
+  // the phone, on the start line
+  h += '<rect x="' + (px - 7) + '" y="' + (y0 + 4) + '" width="14" height="22" rx="3" fill="var(--gold)"/>' + txt(px + 14, y0 + 20, 'Phone \u00b7 start', 'start', 'var(--gold)');
+  return h + '</svg>';
+};
+window.draftOpenConesFull = function(sess){
+  if(!sess || !sess.coneMap) return false;
+  var old = document.getElementById('draft-cones-full'); if(old) old.remove();
+  var o = document.createElement('div');
+  o.id = 'draft-cones-full';
+  o.style.cssText = 'position:fixed;inset:0;z-index:9650;background:var(--bg);overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 20px);';
+  o.innerHTML = '<div style="max-width:560px;margin:0 auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+    '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">Cone setup</div>' +
+    '<button data-dcf="x" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 14px;font-family:var(--font-d);font-size:12px;color:var(--text2);">Close</button></div>' +
+    window.draftConeSVG(sess.coneMap, true) +
+    (sess.cones || []).map(function(c, i){ return '<div style="display:flex;gap:10px;font-size:14px;color:var(--text);line-height:1.45;padding:5px 0;"><div style="font-family:var(--font-d);font-weight:900;color:var(--gold);min-width:14px;">' + (i + 1) + '</div><div>' + _esc(c) + '</div></div>'; }).join('') +
+    '</div>';
+  o.addEventListener('click', function(e){ if(e.target.closest && e.target.closest('[data-dcf]')) o.remove(); });
+  document.body.appendChild(o);
+  return true;
+};
 window.draftNextTimedPart = function(parts, fromIdx, st){
   for(var k = fromIdx + 1; k < parts.length; k++){
     if(parts[k] && parts[k].kind === 'timed' && !(st && st[k] && st[k].done)) return k;
@@ -9678,6 +9731,8 @@ window.draftOpenConditioning = function(week, day, sess){
       h += '<div id="draft-cones" style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:13px 14px;margin-bottom:12px;">' +
            '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Cone setup &middot; do it all first</div>' +
            sess.cones.map(function(c, k){ return '<div style="display:flex;gap:10px;font-size:13px;color:var(--text);line-height:1.45;padding:4px 0;"><div style="font-family:var(--font-d);font-weight:900;color:var(--gold);min-width:14px;">' + (k + 1) + '</div><div>' + _esc(c) + '</div></div>'; }).join('') +
+           (sess.coneMap ? '<div data-dc="cones" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;cursor:pointer;">' + window.draftConeSVG(sess.coneMap, false) +
+             '<div style="text-align:center;font-size:11px;color:var(--text3);margin-top:4px;">Tap to enlarge</div></div>' : '') +
            '</div>';
     }
     if(!dry && typeof window._phxSessionNotesCard === 'function') h += window._phxSessionNotesCard(sess.name);
@@ -9810,6 +9865,7 @@ window.draftOpenConditioning = function(week, day, sess){
     }
     var a = t.getAttribute('data-dc');
     if(a === 'close'){ close(); if(typeof navTo === 'function') navTo('today'); return; }
+    if(a === 'cones'){ window.draftOpenConesFull(sess); return; }
     if(a === 'complete'){
       var r = parseInt((document.getElementById('dc-rpe') || {}).value, 10) || 0;
       var finish = function(){

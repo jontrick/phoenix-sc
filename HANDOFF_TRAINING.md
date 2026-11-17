@@ -546,3 +546,10 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   (W4/W5 D6). Moving days: already supported — calendar entry → Move to Another Day (14 days, Draft moves
   freely). Tests: CALF (every W4-6 session text; fires red with _draftCalfOn forced false), CALF seed.
   **To end calf mode early:** delete `s.draftCalf` (no UI yet — OPEN).
+- **v4.9.437 (18 Nov) — cone DIAGRAM, tap to enlarge.** Jon: "diagram out the cones on the cone layout area
+  than can be tapped on then expands to full screen". `sess.coneMap = {lane:[{m,label}], agility:[...]}`
+  beside `sess.cones`; `draftConeSVG(map, big)` draws phone + start line + lane to scale + 5-10-5 / 3-cone;
+  thumbnail in `#draft-cones`, tap → `draftOpenConesFull` (#draft-cones-full, list underneath). 3-cone text now
+  says "start cone ~2 m left of the phone, clear of the sprint lane" to match the drawing. Pitch only (calf
+  weeks 4-6 are gym, so first seen after the calf block). Test CONEMAP; harness ×1. Browser-rendered 5 sessions.
+  Seen in the browser: the boot one-shot `_draftCalf1118` seeded calf mode on a fresh signed-in state.

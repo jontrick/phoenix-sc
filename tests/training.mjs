@@ -6610,6 +6610,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(h.includes('data-phx-note-key="' + k.replace(/"/g, '&quot;') + '"'), h);
     assert.ok(h.includes('>Calf tight, stopped after bouts</textarea>'), 'prefilled with today\'s note');
   });
+  test('RESTBRIEF: the rest screen brief is the card\'s own title, format and bullets (Jon, 18 Nov)', () => {
+    startDraft();
+    const p = app.blabGetSessionData(4, 1).conditioning.find((x) => x.title === '15/15 Intervals');
+    const h = app.window.draftRestBriefHTML(p);
+    assert.ok(h.includes('15/15 Intervals') && h.includes(p.spec.format.replace(/×/g, '×')), h.slice(0, 200));
+    assert.equal((h.match(/<li /g) || []).length, app.window.draftBullets(p.presc).length);
+    assert.ok(/font-size:13px;color:var\(--text2\);line-height:1.5/.test(h), 'same size / colour as the card');
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.434'", 'version is 4.9.434');
+has("var APP_VERSION='4.9.435'", 'version is 4.9.435');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -406,6 +406,8 @@ hasCode("startRestTimer(DRAFT_BETWEEN_DRILLS_SEC, 'Next: ' + parts[nx].title", '
 hasCode("window.draftBullets(p.presc).map(", 'BULLETS: conditioning cards render the prescription as bullets');
 hasCode("window._phxNoteBoxHTML(sess.name, 'Why did you stop? (saved with this session)')", 'COMPLETENOTE: the not-finished modal asks for a note');
 hasCode("_nb.innerHTML = window._phxNoteBoxHTML(", 'COMPLETENOTE: the gym complete modal has the note box');
+hasCode("window.draftRestBrief(parts[nx]);", 'RESTBRIEF: the between-drills rest shows the next drill as bullets');
+hasCode("var _rtDrill=document.getElementById('rt-drill'); if(_rtDrill) _rtDrill.remove();", 'RESTBRIEF: any other rest clears the drill brief');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─
 // Reproduced in a real boot with getSession delayed 1.5 s: the fixed timer lost and the tab was wiped.

@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.434';
+var APP_VERSION='4.9.435';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9527,6 +9527,26 @@ window.draftBullets = function(text){
 // the 15/15". After a timed drill is SAVED, if another timed drill is still to do, the rest overlay
 // runs before it. 3 min — the same walk the 15/15 blocks use between them.
 var DRAFT_BETWEEN_DRILLS_SEC = 180;
+// v4.9.435 — Jon 18 Nov: "In the rest part between drills can the same bullet point description be
+// used on that timer screen in the same font and size to prep for it better". The next drill's
+// format line + bullets, exactly as its card draws them, under the rest clock.
+window.draftRestBriefHTML = function(p){
+  if(!p) return '';
+  return '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text);">' + _esc(p.title) + '</div>' +
+    (p.spec ? '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--gold);margin-top:3px;">' + _esc(p.spec.format) + '</div>' : '') +
+    '<ul class="draft-bul" style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.5;">' +
+    window.draftBullets(p.presc).map(function(b){ return '<li style="margin:2px 0;">' + _esc(b) + '</li>'; }).join('') + '</ul>';
+};
+window.draftRestBrief = function(p){
+  var cue = document.getElementById('rt-cue'); if(!cue || !p) return false;
+  var old = document.getElementById('rt-drill'); if(old) old.remove();
+  var d = document.createElement('div');
+  d.id = 'rt-drill';
+  d.style.cssText = 'text-align:left;background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--radius);padding:12px 14px;margin:0 16px 12px;max-width:360px;width:calc(100% - 32px);box-sizing:border-box;';
+  d.innerHTML = window.draftRestBriefHTML(p);
+  cue.parentNode.insertBefore(d, cue.nextSibling);
+  return true;
+};
 window.draftNextTimedPart = function(parts, fromIdx, st){
   for(var k = fromIdx + 1; k < parts.length; k++){
     if(parts[k] && parts[k].kind === 'timed' && !(st && st[k] && st[k].done)) return k;
@@ -9674,7 +9694,10 @@ window.draftOpenConditioning = function(week, day, sess){
         paint(true);
         var nx = window.draftNextTimedPart(parts, _pi, window.draftConditioningStatus(parts, _draftChecks(week, day)));
         if(nx >= 0 && typeof startRestTimer === 'function'){
-          try { startRestTimer(DRAFT_BETWEEN_DRILLS_SEC, 'Next: ' + parts[nx].title, '', '', 'Walk it off, set up for the next drill', true); } catch(_rt){}
+          try {
+            startRestTimer(DRAFT_BETWEEN_DRILLS_SEC, 'Next: ' + parts[nx].title, '', '', 'Walk it off, set up for the next drill', true);
+            window.draftRestBrief(parts[nx]);
+          } catch(_rt){}
         }
       });
       else if(typeof _phxStartSession === 'function') _phxStartSession(spec.id, dry);
@@ -14057,6 +14080,8 @@ window._phxCancelCountIn = _phxCancelCountIn;
 // v4.7.15 FIX 3: hide ad slots + upgrade link for Pro accounts.
 // v4.7.16 FIX 3: isPrescribed=true → show only "+30 sec" control. false → show full 2/3/4/5/6m selector.
 function startRestTimer(secs,nextLabel,nextKg,nextReps,cue,isPrescribed,onDone){
+  // v4.9.435 — a drill brief shown by the between-drills rest belongs to that rest only.
+  var _rtDrill=document.getElementById('rt-drill'); if(_rtDrill) _rtDrill.remove();
   rtTotal=secs;
   rtEndTime=Date.now()+(secs*1000);
   // v4.9.97: store (or clear) the completion callback. Callers that don't pass one — e.g. the

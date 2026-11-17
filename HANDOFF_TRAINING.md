@@ -529,3 +529,7 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   notes section when go to complete". `window._phxNoteBoxHTML(sessName)` (same key/day as the top Notes card)
   in: the conditioning Complete card, the "Not finished yet" modal ("Why did you stop?"), and the gym
   `#phx-complete-confirm` modal. All boxes with one key stay in step. Test COMPLETENOTE; harness ×2.
+- **v4.9.435 (18 Nov) — next drill's bullets on the between-drills rest screen.** Jon: "can the same bullet
+  point description be used on that timer screen in the same font and size". `draftRestBrief(part)` inserts
+  `#rt-drill` (title, format, bullets — `draftRestBriefHTML`, same styles as the card) under `#rt-cue`;
+  `startRestTimer` removes it on every start so it never leaks onto a set rest. Test RESTBRIEF; harness ×2.

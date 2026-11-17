@@ -525,3 +525,7 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   not start it. Only the guided path (all Mon/Wed pitch + gym drills); the Bronco (non-guided) is the only
   timed part in its session anyway. (2) `window.draftBullets(presc)`: one bullet per sentence; a lone
   "10 min: a, b, c" becomes its items. Tests: BULLETS, BETWEEN; harness ×2. Browser-proven on W4 Mon.
+- **v4.9.434 (18 Nov) — note box where you complete.** Jon: "Couldn't complete full session due to calf but no
+  notes section when go to complete". `window._phxNoteBoxHTML(sessName)` (same key/day as the top Notes card)
+  in: the conditioning Complete card, the "Not finished yet" modal ("Why did you stop?"), and the gym
+  `#phx-complete-confirm` modal. All boxes with one key stay in step. Test COMPLETENOTE; harness ×2.

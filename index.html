@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.433';
+var APP_VERSION='4.9.434';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9639,6 +9639,7 @@ window.draftOpenConditioning = function(week, day, sess){
          '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;"><input id="dc-rpe" type="range" min="1" max="10" step="1" value="7" style="flex:1;accent-color:var(--gold);">' +
          '<div id="dc-rpe-v" style="font-family:var(--font-d);font-size:28px;font-weight:900;color:var(--gold);min-width:32px;text-align:right;">7</div></div>' +
          '<div style="font-size:11px;color:var(--text3);margin-top:4px;">6 or less moves you up a level next week. 9 or more moves you down.</div>' +
+         (!dry && typeof window._phxNoteBoxHTML === 'function' ? window._phxNoteBoxHTML(sess.name) : '') +
          '<button data-dc="complete" style="width:100%;margin-top:12px;padding:16px;background:var(--gold);border:none;color:#000;font-size:14px;' + B + '">Complete session &#10003;</button></div>';
     h += '</div>';
     var keep = document.getElementById('dc-rpe'); var rv = keep ? keep.value : null;
@@ -9720,7 +9721,8 @@ window.draftOpenConditioning = function(week, day, sess){
       m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:9800;display:flex;align-items:center;justify-content:center;padding:24px;';
       m.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:22px;max-width:360px;width:100%;text-align:center;">' +
         '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;color:var(--text);">Not finished yet</div>' +
-        '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin:10px 0 16px;">Still to do: ' + left.map(_esc).join(', ') + '. Complete the session anyway?</div>' +
+        '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin:10px 0 ' + (dry ? '16' : '6') + 'px;">Still to do: ' + left.map(_esc).join(', ') + '. Complete the session anyway?</div>' +
+        (!dry && typeof window._phxNoteBoxHTML === 'function' ? '<div style="margin-bottom:14px;">' + window._phxNoteBoxHTML(sess.name, 'Why did you stop? (saved with this session)') + '</div>' : '') +
         '<button data-dcc="keep" style="width:100%;padding:14px;background:var(--gold);border:none;color:#000;font-size:13px;' + B + '">Keep going</button>' +
         '<button data-dcc="done" style="width:100%;margin-top:10px;padding:12px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;' + B + '">Complete anyway</button></div>';
       document.body.appendChild(m);
@@ -9860,12 +9862,23 @@ window._phxSessionNotesCard = function(sessName){
   var all = window._phxNotesGet(key), mine = all.filter(function(n){ return n.date === today; })[0];
   return window._phxNotesCardHTML(all.filter(function(n){ return n.date !== today; }), key, mine ? mine.text : '');
 };
+// v4.9.434 — Jon 18 Nov: "Couldn't complete full session due to calf but no notes section when go to
+// complete". The same note (same key, same day) is also offered where he completes the session. Every
+// box with the key writes the one note and is kept in step with the others.
+window._phxNoteBoxHTML = function(sessName, placeholder){
+  var key = window._phxNoteKey(sessName), today = _phxLocalISO();
+  var mine = window._phxNotesGet(key).filter(function(n){ return n.date === today; })[0];
+  return '<textarea data-phx-note-key="' + _phxNoteEsc(key) + '" rows="2" placeholder="' + _phxNoteEsc(placeholder || 'Notes \u2014 how it went, anything cut short') + '" style="width:100%;box-sizing:border-box;margin-top:8px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;font-family:inherit;resize:vertical;text-align:left;">' + _phxNoteEsc(mine ? mine.text : '') + '</textarea>';
+};
 if(typeof document !== 'undefined' && document.addEventListener && !window._phxNotesWired){
   window._phxNotesWired = true;
   document.addEventListener('input', function(e){
     var t = e.target; if(!t || !t.getAttribute) return;
     var k = t.getAttribute('data-phx-note-key'); if(!k) return;
     window._phxNoteSet(k, _phxLocalISO(), t.value);
+    Array.prototype.forEach.call(document.querySelectorAll('textarea[data-phx-note-key]'), function(o){
+      if(o !== t && o.getAttribute('data-phx-note-key') === k) o.value = t.value;
+    });
   });
 }
 // Timed library sessions: past score notes, read-only, under the header.
@@ -47506,7 +47519,15 @@ function openTodaySession(){
     _cancelBtn.textContent='Cancel';
     _cancelBtn.style.cssText='width:100%;padding:14px;background:transparent;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--text2);cursor:pointer;';
     _cancelBtn.addEventListener('click',function(){ _ov.remove(); });
-    _box.appendChild(_eb); _box.appendChild(_nm); _box.appendChild(_sub); _box.appendChild(_confirmBtn); _box.appendChild(_cancelBtn);
+    _box.appendChild(_eb); _box.appendChild(_nm); _box.appendChild(_sub);
+    // v4.9.434 — the session note, here too (same box as the top of the session).
+    var _bcs2 = window._blabCurrentSession;
+    if(_bcs2 && _bcs2.data && _bcs2.data.name && !window._blabDryRun && typeof window._phxNoteBoxHTML === 'function'){
+      var _nb = document.createElement('div'); _nb.style.cssText = 'margin:-8px 0 16px;';
+      _nb.innerHTML = window._phxNoteBoxHTML(_bcs2.part === 'f' ? 'Field Tests' : _bcs2.data.name);
+      _box.appendChild(_nb);
+    }
+    _box.appendChild(_confirmBtn); _box.appendChild(_cancelBtn);
     _ov.appendChild(_box);
     document.body.appendChild(_ov);
   });

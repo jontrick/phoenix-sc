@@ -6602,6 +6602,14 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const st = parts.map((p, k) => ({ done: k === i15 }));
     assert.equal(nx(parts, iB, st), -1, '15/15 already done → no rest');
   });
+  test('COMPLETENOTE: the complete step offers the same session note — same key, today\'s text (Jon, 18 Nov)', () => {
+    startDraft();
+    const k = app.window._phxNoteKey('Conditioning — Repeated Efforts');
+    app.window._phxNoteSet(k, app._phxLocalISO(), 'Calf tight, stopped after bouts');
+    const h = app.window._phxNoteBoxHTML('Conditioning — Repeated Efforts');
+    assert.ok(h.includes('data-phx-note-key="' + k.replace(/"/g, '&quot;') + '"'), h);
+    assert.ok(h.includes('>Calf tight, stopped after bouts</textarea>'), 'prefilled with today\'s note');
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

@@ -518,3 +518,10 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   Notes in `draftOpenConditioning`. Gym sessions: none. Field-test Saturday is a lift-style session, so its
   setup went at the front of the Combine Warm-up note instead. Test: CONES (every distance named in a pitch
   drill appears in that session's setup; fires red with the 15/15 cone moved). Browser-rendered W4 Mon/Wed.
+- **v4.9.433 (18 Nov) — rest between drills + bullet-point drill text.** Jon: "is there a timer for between
+  each drill block? ... between repeat efforts and the 15/15" and "make the drill explanation bullet points".
+  (1) After a guided timed drill is SAVED, if another timed drill is still undone, `startRestTimer(180,
+  'Next: <drill>')` runs (DRAFT_BETWEEN_DRILLS_SEC; skip / +30 s on the overlay). Close-without-saving does
+  not start it. Only the guided path (all Mon/Wed pitch + gym drills); the Bronco (non-guided) is the only
+  timed part in its session anyway. (2) `window.draftBullets(presc)`: one bullet per sentence; a lone
+  "10 min: a, b, c" becomes its items. Tests: BULLETS, BETWEEN; harness ×2. Browser-proven on W4 Mon.

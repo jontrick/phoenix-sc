@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.432'", 'version is 4.9.432');
+has("var APP_VERSION='4.9.433'", 'version is 4.9.433');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -402,6 +402,8 @@ hasCode("document.getElementById('phx-run-finish').onclick=function(){ _phxRunCl
 hasCode("o.querySelector('.phx-lib-back').onclick=function(){ _phxRunClear();", 'RUNRESUME: Back clears the saved run');
 hasCode("if(a === 'done' && cyc && seq[idx] && seq[idx].kind === 'work'){ _dgCycleLog(", 'CYCLE: Done on a cycle rep logs the time and moves on');
 hasCode("endsAt = pendingCycleEnd; pendingCycleEnd = 0;", 'CYCLE: the rest after a rep runs to the end of the fixed cycle (early = more rest, late = less)');
+hasCode("startRestTimer(DRAFT_BETWEEN_DRILLS_SEC, 'Next: ' + parts[nx].title", 'BETWEEN: saving a timed drill starts the rest before the next one');
+hasCode("window.draftBullets(p.presc).map(", 'BULLETS: conditioning cards render the prescription as bullets');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─
 // Reproduced in a real boot with getSession delayed 1.5 s: the fixed timer lost and the tab was wiped.

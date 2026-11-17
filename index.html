@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.432';
+var APP_VERSION='4.9.433';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -9511,6 +9511,28 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
   return seq.length;
 };
 
+// v4.9.433 — Jon 18 Nov: "make the drill explanation bullet points ... it's hard to read through".
+// A prescription becomes one bullet per sentence; a lone "10 min: a, b, c" list becomes its items.
+// Decimals ("4.57 m") never split: a break needs a full stop, a space and a capital / digit / "(".
+window.draftBullets = function(text){
+  var t = String(text || '').trim(); if(!t) return [];
+  var out = t.replace(/\.\s+(?=[A-Z0-9(])/g, '.\n').split('\n').map(function(x){ return x.trim().replace(/\.$/, ''); }).filter(Boolean);
+  if(out.length === 1){
+    var m = out[0].match(/^([^:,]{1,16}):\s*(.+)$/);
+    if(m && (m[2].match(/,/g) || []).length >= 2) return [m[1]].concat(m[2].split(/,\s*/).map(function(x){ return x.charAt(0).toUpperCase() + x.slice(1); }));
+  }
+  return out;
+};
+// v4.9.433 — Jon 18 Nov: "is there a timer for between each drill block? ... between repeat efforts and
+// the 15/15". After a timed drill is SAVED, if another timed drill is still to do, the rest overlay
+// runs before it. 3 min — the same walk the 15/15 blocks use between them.
+var DRAFT_BETWEEN_DRILLS_SEC = 180;
+window.draftNextTimedPart = function(parts, fromIdx, st){
+  for(var k = fromIdx + 1; k < parts.length; k++){
+    if(parts[k] && parts[k].kind === 'timed' && !(st && st[k] && st[k].done)) return k;
+  }
+  return -1;
+};
 window.draftOpenConditioning = function(week, day, sess){
   window._draftOpenWD = [week, day];   // v4.9.373 — the reps listener needs to know which session
   sess = sess || window.blabGetSessionData(week, day);
@@ -9562,7 +9584,8 @@ window.draftOpenConditioning = function(week, day, sess){
            '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text);">' + _esc(p.title) + '</div>' +
            (s.done ? '<div style="font-family:var(--font-d);font-size:12px;font-weight:900;color:#7fd18b;white-space:nowrap;">&#10003; ' + (s.score ? _esc(s.score) : 'Done') + '</div>' : '') + '</div>';
       if(p.spec) h += '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--gold);margin-top:3px;">' + _esc(p.spec.format) + '</div>';
-      h += '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-top:5px;">' + _esc(p.presc) + '</div>';
+      h += '<ul class="draft-bul" style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.5;">' +
+           window.draftBullets(p.presc).map(function(b){ return '<li style="margin:2px 0;">' + _esc(b) + '</li>'; }).join('') + '</ul>';
       if(p.kind === 'timed'){
         // v4.9.370 — a loaded effort (prowler, sled) takes its kg HERE, before Start,
         // prefilled from the last time; it is saved with the score.
@@ -9645,7 +9668,14 @@ window.draftOpenConditioning = function(week, day, sess){
         spec = Object.assign({}, spec, { _loadKg: _kv });
       }
       _draftRegisterParts([p]);
-      if(spec.guided) window.draftRunGuided(spec, dry, function(){ paint(true); });
+      var _pi = parts.indexOf(p);
+      if(spec.guided) window.draftRunGuided(spec, dry, function(){
+        paint(true);
+        var nx = window.draftNextTimedPart(parts, _pi, window.draftConditioningStatus(parts, _draftChecks(week, day)));
+        if(nx >= 0 && typeof startRestTimer === 'function'){
+          try { startRestTimer(DRAFT_BETWEEN_DRILLS_SEC, 'Next: ' + parts[nx].title, '', '', 'Walk it off, set up for the next drill', true); } catch(_rt){}
+        }
+      });
       else if(typeof _phxStartSession === 'function') _phxStartSession(spec.id, dry);
       return;
     }

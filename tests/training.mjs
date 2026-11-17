@@ -6582,6 +6582,26 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.deepEqual(mon.cones.length, 3, JSON.stringify(mon.cones));
     assert.ok(/Cone A at 20 m/.test(mon.cones[1]) && /Cone B at 30 m/.test(mon.cones[2]), JSON.stringify(mon.cones));
   });
+  test('BULLETS: drill prescriptions read as bullet points; decimals never split (Jon, 18 Nov)', () => {
+    const b = app.window.draftBullets || app.draftBullets;
+    assert.deepEqual(b('7 bouts, 95 s rest between. FIELD: sprint 20 m out, up-down. Gym version listed too. Level 2 of 5.'),
+      ['7 bouts, 95 s rest between', 'FIELD: sprint 20 m out, up-down', 'Gym version listed too', 'Level 2 of 5']);
+    assert.deepEqual(b('10 min: jog, dynamic mobility, 3 build-up runs out and back, 2 practice up-downs.'),
+      ['10 min', 'Jog', 'Dynamic mobility', '3 build-up runs out and back', '2 practice up-downs']);
+    assert.deepEqual(b('Cone 4.57 m out. Then back.'), ['Cone 4.57 m out', 'Then back']);
+    assert.deepEqual(b('5 min easy, hips, calves.'), ['5 min easy, hips, calves'], 'no colon → one bullet');
+    assert.deepEqual(b(''), []);
+  });
+  test('BETWEEN: after a timed drill is saved the next unfinished timed drill gets a rest first; none after the last (Jon, 18 Nov)', () => {
+    startDraft();
+    const parts = app.blabGetSessionData(4, 1).conditioning;
+    const nx = app.window.draftNextTimedPart || app.draftNextTimedPart;
+    const iB = parts.findIndex((p) => p.title === 'Repeated-Effort Bouts'), i15 = parts.findIndex((p) => p.title === '15/15 Intervals');
+    assert.equal(nx(parts, iB, []), i15, 'bouts → 15/15');
+    assert.equal(nx(parts, i15, []), -1, 'nothing timed after the 15/15 (cool-down is a tick)');
+    const st = parts.map((p, k) => ({ done: k === i15 }));
+    assert.equal(nx(parts, iB, st), -1, '15/15 already done → no rest');
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

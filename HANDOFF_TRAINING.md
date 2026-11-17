@@ -503,5 +503,7 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   Browser-proven (10.1 s → 20 s rest; 18.4 s → 12 s rest; untapped → missed; save payload). Tests: CYCLE
   (fires red with cycle removed from the 15/15), harness CYCLE ×2.
   **Caveat:** the 15/15 used to save "reps reached the line" under the same wod_id; it now saves average
-  rep time (lower = better). Older 15/15 Records entries are a different unit. ???: whether Records'
-  PB logic mixes them — not checked.
+  rep time (lower = better). Older 15/15 Records entries are a different unit. Checked: `_phxSaveScore`
+  compares against every past score for the wod_id with the NEW scoreType, so the first timed 15/15 will
+  show a false "New PB" (avg secs < old rep counts); after that old entries never block a PB. Agility and
+  RHIE were already avg_split — no mix. Live 18 Nov 04:45 (Jon asked, before his session).

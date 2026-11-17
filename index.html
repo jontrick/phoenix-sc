@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.435';
+var APP_VERSION='4.9.436';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8225,9 +8225,42 @@ window.draftSchedule = function(startMonday){
 // ── the session generator ────────────────────────────────────────────────────
 // Returns the BLAB session shape: {name, week, day, duration_min, exercises:[...]},
 // or null for a day with no session (test week Mon-Thu, anything out of range).
+// v4.9.436 — CALF MODE. Jon 18 Nov: "for next 3 weeks no running or jumping and will be conditioning and
+// 'sprint' in the gyms". He chose: Mon/Wed → gym versions, jumps out of the lift days, prowler / sled out
+// too (burpees stay), Bronco retest → 2 km row, Field Combine postponed out of this block.
+// s.draftCalf = { fromWeek, toWeek } — weeks of the Draft block it covers. Applied in the generator
+// (conditioning) and in _draftCalfSwap (lift days), so every screen that builds a session agrees.
+window._draftCalfOn = function(s, week){
+  var c = s && s.draftCalf; week = parseInt(week, 10);
+  return !!(c && week >= (c.fromWeek || 0) && week <= (c.toWeek || 0));
+};
+var _DRAFT_CALF_JUMP = /^(Box Jump|Broad Jump|Depth Jump.*|Single-Leg Bounds|Hurdle Hops.*|Bounds|Lateral Bound|Seated Box Jump)$/i;
+var _DRAFT_CALF_PUSH = /^(Prowler Push|Prowler Pull|Sled Drag|Heavy Sled|Prowler Push \+ Pull)$/i;
+window._draftCalfSwap = function(o){
+  if(!o || !Array.isArray(o.exercises)) return o;
+  o.exercises = o.exercises.map(function(ex){
+    if(!ex || !ex.name) return ex;
+    if(_DRAFT_CALF_JUMP.test(ex.name)){
+      return { name:'KB Swing \u2014 Explosive', format:'standard_sets', sets:ex.sets || 3, reps:8, rest:90,
+               note:'CALF: replaces ' + ex.name + '. Feet flat, snap the hips, every rep fast. 90 s rest.' };
+    }
+    if(_DRAFT_CALF_PUSH.test(ex.name)){
+      return { name:'Assault Bike Sprint', format:'standard_sets', sets:ex.sets || 5, reps:'10 s', rest:60, bodyweight:true,
+               note:'CALF: replaces the ' + ex.name.toLowerCase() + '. All out for 10 s, 60 s easy spin.' };
+    }
+    return ex;
+  });
+  o.calf = true;
+  return o;
+};
 window.draftGetSessionData = function(week, day, s){
   s = s || window.blabGetState();
   if(!s) return null;
+  var calf = window._draftCalfOn(s, (day === 'field') ? 2 : week);
+  var o = window._draftGetSessionRaw(week, day, s, calf);
+  return calf ? window._draftCalfSwap(o) : o;
+};
+window._draftGetSessionRaw = function(week, day, s, calf){
   var _field = (day === 'field');          // v4.9.378 — the split-off field-test session
   week = parseInt(week, 10); day = _field ? 5 : parseInt(day, 10);
   if(!(week >= 1 && week <= 6 && day >= 1 && day <= 6)) return null;
@@ -8334,6 +8367,9 @@ window.draftGetSessionData = function(week, day, s){
   if(week === 1 && day === 5) return sess(window.draftDayLabel(week, day), 75, liftsA());
   if((week === 1 || week === 6) && day === 6) return sess(window.draftDayLabel(week, day), 100, liftsB());
   if(week === 5 && day === 5) return sess(window.draftDayLabel(week, day), 75, liftsA());
+  if(week === 6 && day === 5 && calf) return sess('Field Combine \u2014 Postponed (calf)', 10, [
+    std('Field Combine postponed', 1, 'Rest', 'Calf: the combine tests wait until it is right. Rest day, or move a gym session here.')
+  ]);
   if(week === 6 && day === 5) return sess(window.draftDayLabel(week, day), 60, fieldTests());
   if(_field) return sess('Field Tests', 60, fieldTests());   // v4.9.378 — the split-off Saturday session
   if(week === 1) return null;            // test week Mon-Thu: nothing scheduled
@@ -8376,6 +8412,16 @@ window.draftGetSessionData = function(week, day, s){
       : '3-Cone: start cone at the phone, cone 2 ' + CONE_YD5 + ' m (5 yd) straight out, cone 3 ' + CONE_YD5 + ' m to the side of cone 2 (an L). Put it beside the sprint lane, not in it.';
   }
   function bronco(isRetest){
+    if(calf){
+      // v4.9.436 — calf: the 2 km row (the Bronco's wet-weather test) is the test this time.
+      return partsSess('Conditioning \u2014 2 km Row ' + (isRetest ? 'Retest' : 'Test') + ' (calf)', 40, [
+        part('Warm-up', '10 min: easy row, then 3 \u00d7 20 strokes building to race pace. Damper 5-6.'),
+        part('2 km Row Test', '2000 m for time. Damper 5-6. Even splits: do not go out too hard.',
+          libSpec('draft-row2k', '2 km Row Test', 'time', 'time', '2 km row time', 'FOR TIME \u00b7 2000 m',
+            'Replaces the Bronco while the calf settles. Damper 5-6.', [['Row', '2000 m']], { chipper:true })),
+        part('Cool-down', '8 min easy bike, then hips and calves.')
+      ]);
+    }
     return partsSess('Conditioning — Bronco ' + (isRetest ? 'Retest' : 'Baseline'), 40, [
       part('Warm-up', '12 min: jog, dynamic mobility, 3 build-up runs.'),
       part('Bronco Test', 'Cones at 0, 20, 40 and 60 m. One set = run to 20 m and back, 40 m and back, 60 m and back (240 m). Five sets non-stop = 1200 m. Tap a movement as each set finishes; your time is the score.',
@@ -8398,7 +8444,8 @@ window.draftGetSessionData = function(week, day, s){
     var ivMins = [null, 5, 6, 6, 7, 8][LC];
     var ivReps = ivMins * 2;
     var ivDist = [null, 55, 60, 65, 70, 75][LC];
-    var gymBoutTxt = '8 s all-out bike sprint, 1 burpee, 8 s all-out bike sprint' + (effortsPerBout === 3 ? ', 10 m prowler push' : '');
+    var gymC = (t === 1) || calf;   // v4.9.436 — the calf weeks run the gym versions
+    var gymBoutTxt = '8 s all-out bike sprint, 1 burpee, 8 s all-out bike sprint' + (effortsPerBout === 3 ? (calf ? ', 5 med ball slams' : ', 10 m prowler push') : '');
     // v4.9.428 — Jon 17 Nov: pitch sessions are running + up-downs / bodyweight only (no sled, no
     // bags), and every run ends back at the start, where the phone is: "60m should be 30m return".
     var fieldBoutTxt = (effortsPerBout === 2)
@@ -8425,7 +8472,7 @@ window.draftGetSessionData = function(week, day, s){
       [['15 s run', ivHalf + ' m out & back']], { efforts:ivReps, work:'Run ' + ivHalf + ' m out & back', workSec:15, restSec:15, countReps:true, countLabel:'Back inside 15 s? Tap + once' });
     // v4.9.356 — hands-free guided timings (phone runs the clock, bike counts calories)
     var gymSteps = [{label:'Bike sprint', secs:8, sub:'All out'}, {label:'Burpee', tap:true, sub:'1 burpee, back on the bike, tap Done'}, {label:'Bike sprint', secs:8, sub:'All out'}];
-    if(effortsPerBout === 3) gymSteps.push({label:'Prowler push', tap:true, sub:'10 m, drive, tap Done'});
+    if(effortsPerBout === 3) gymSteps.push(calf ? {label:'Med ball slams', tap:true, sub:'5 slams, tap Done'} : {label:'Prowler push', tap:true, sub:'10 m, drive, tap Done'});
     rhieGym.guided = { rounds:bouts, steps:gymSteps, restSec:restRHIE,
       entry:{ per:'round', label:'Bike calories this bout', unit:'cal', endLabel:'Total bike calories' } };
     rhieField.scoreType = 'reps'; rhieField.scoreLabel = 'Bouts finished in the window';
@@ -8438,16 +8485,16 @@ window.draftGetSessionData = function(week, day, s){
       blockRest:180, blockRestLabel:'Walk 3 min',
       entry:{ per:'end', endLabel:'Reps you reached the line (all blocks)', prefillRounds:true } };
     b1515.format = r1515.format = ivSets + ' BLOCKS \u00d7 ' + ivReps + ' \u00d7 15/15 \u00b7 3 MIN EASY BETWEEN';
-    var cParts = [part('Warm-up', t === 1 ? '10 min: easy bike or row, dynamic mobility, 2 practice burpees.' : '10 min: jog, dynamic mobility, 3 build-up runs out and back, 2 practice up-downs.')];
+    var cParts = [part('Warm-up', gymC ? '10 min: easy bike or row, dynamic mobility, 2 practice burpees.' : '10 min: jog, dynamic mobility, 3 build-up runs out and back, 2 practice up-downs.')];
     cParts.push(part('Repeated-Effort Bouts',
-      bouts + ' bouts, ' + restRHIE + ' s rest between. ' + (t === 1 ? 'GYM: ' + gymBoutTxt + '.' : 'FIELD: ' + fieldBoutTxt + '. Gym version listed too.') + ' Level ' + LC + ' of 5.',
-      t === 1 ? rhieGym : rhieField, t === 1 ? null : rhieGym));
+      bouts + ' bouts, ' + restRHIE + ' s rest between. ' + (gymC ? 'GYM: ' + gymBoutTxt + '.' : 'FIELD: ' + fieldBoutTxt + '. Gym version listed too.') + ' Level ' + LC + ' of 5.',
+      gymC ? rhieGym : rhieField, gymC ? null : rhieGym));
     cParts.push(part('15/15 Intervals',
-      ivSets + ' blocks of ' + ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min each, 3 min easy between. ' + (t === 1 ? '' : 'Run ' + ivHalf + ' m out and back to the phone, rest at the start. ') + 'One timer runs it all.',
-      t === 1 ? b1515 : r1515, t === 1 ? null : b1515));
+      ivSets + ' blocks of ' + ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min each, 3 min easy between. ' + (gymC ? 'Assault bike. ' : 'Run ' + ivHalf + ' m out and back to the phone, rest at the start. ') + 'One timer runs it all.',
+      gymC ? b1515 : r1515, gymC ? null : b1515));
     cParts.push(part('Cool-down', '5 min easy, hips, calves.'));
-    return partsSess(t === 1 ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts,
-      t === 1 ? null : [CONE_PHONE,
+    return partsSess(gymC ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts,
+      gymC ? null : [CONE_PHONE,
         'Cone A at 20 m: Repeated-Effort Bouts (sprint out, up-down, sprint back).',
         'Cone B at ' + ivHalf + ' m, same line past Cone A: 15/15 runs out and back. Use it for the warm-up build-ups too.']);
   }
@@ -8497,6 +8544,29 @@ window.draftGetSessionData = function(week, day, s){
     sledGym.scoreType = 'reps'; sledGym.scoreLabel = 'Reps done'; sledGym.loadKg = true;
     sledGym.guided = { rounds:sledN, steps:[{label:'Heavy prowler', secs:12, sub:'15 m \u2014 go on the beep'}], restSec:120,
       entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
+    if(calf){
+      // v4.9.436 — calf weeks: no running, no jumping, no prowler / sled. Power from the bike, the
+      // rower and the med ball, feet planted.
+      var bikeAcc = libSpec('draft-accel-bike', 'Bike Accelerations \u2014 6 s', 'intervals', 'reps', 'Sprints done',
+        accReps + ' \u00d7 6 s \u00b7 REST 90 s',
+        'Assault bike or Wattbike. From near standstill, all out for 6 s on the beep, easy spin in the rest. Stay seated if the calf complains.',
+        [['Bike sprint', '6 s']], { efforts:accReps, work:'Bike sprint 6 s', restSec:90 });
+      bikeAcc.guided = { rounds:accReps, steps:[{label:'Bike sprint', secs:6, sub:'All out from near standstill'}], restSec:90,
+        entry:{ per:'end', endLabel:'Sprints done', prefillRounds:true } };
+      var rowStart = libSpec('draft-row-starts', 'Row Power Starts', 'intervals', 'reps', 'Starts done',
+        sledN + ' \u00d7 5 STROKES \u00b7 REST 90 s',
+        'Rower, damper 8-10. From a dead stop: 5 max-power strokes, then ease off. Drive through the heels.',
+        [['Row start', '5 strokes']], { efforts:sledN, work:'Row start', restSec:90 });
+      rowStart.guided = { rounds:sledN, steps:[{label:'Row start', secs:10, sub:'5 max-power strokes from a dead stop'}], restSec:90,
+        entry:{ per:'end', endLabel:'Starts done', prefillRounds:true } };
+      return partsSess('Sprint & Power \u2014 Gym (calf)', 40, [
+        part('Warm-up', '10 min: easy bike, hips, t-spine, 3 progressive 5 s bike efforts.'),
+        part('Bike Accelerations', accReps + ' \u00d7 6 s all-out bike sprints, 90 s easy spin between. Level ' + LS + ' of 5.', bikeAcc),
+        part('Row Power Starts', sledN + ' \u00d7 5 max-power strokes from a dead stop, 90 s rest.', rowStart),
+        bwPart('Med Ball Rotational Throw', '3 \u00d7 4 each side. Feet planted, throw into a wall.', 3, 60),
+        bwPart('Med Ball Chest Pass', '3 \u00d7 5. Explosive, feet planted.', 3, 60)
+      ]);
+    }
     if(taper){
       return partsSess('Sprint & Power — Taper', 30, [
         part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups.'),
@@ -8784,6 +8854,21 @@ window._draftReschedule1109 = function(){
   } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.reschedule1109', _e, {}); return false; }
 };
 
+// v4.9.436 — ONE-SHOT, Jon 18 Nov (calf): weeks 4-6 of the Draft block run calf-safe (see _draftCalfOn).
+// Seeds the flag once; it lives in blab state (cloud-mirrored), so a reinstall keeps it. Never re-seeds
+// after it has run, so clearing s.draftCalf later turns calf mode off for good. Archive after 9 Dec.
+window._draftCalf1118 = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft' || s.draftCalfSeeded) return false;
+    var d = _phxLocalISO(); if(d < '2026-11-18' || d > '2026-12-09') return false;
+    s.draftCalf = { fromWeek: 4, toWeek: 6, set: d };
+    s.draftCalfSeeded = true;
+    window.blabSaveState(s);
+    if(typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){}
+    return true;
+  } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.calf1118', _e, {}); return false; }
+};
+
 // v4.9.426 — ONE-OFF RESCHEDULE, Jon 15 Nov: "missed Sunday and Monday due to calf and resting -
 // want to push Monday to Wednesday and Wednesday to Friday this week".
 //   Sun 15 Nov  Speed Lower (W3 D6) + Hammerfall WOD   -> skipped
@@ -8867,7 +8952,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); window._draftReschedule1115(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); window._draftReschedule1115(); window._draftCalf1118(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);

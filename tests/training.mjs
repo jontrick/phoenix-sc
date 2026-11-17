@@ -6618,6 +6618,40 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal((h.match(/<li /g) || []).length, app.window.draftBullets(p.presc).length);
     assert.ok(/font-size:13px;color:var\(--text2\);line-height:1.5/.test(h), 'same size / colour as the card');
   });
+  test('CALF: weeks 4-6 — no running, jumping, prowler or sled anywhere; Mon/Wed in the gym; Bronco → 2 km row; combine postponed (Jon, 18 Nov)', () => {
+    startDraft();
+    const st = app.window.blabGetState(); st.draftCalf = { fromWeek: 4, toWeek: 6 }; app.window.blabSaveState(st);
+    const BAD = /\bsprint \d+ m\b|\brun\b|\bjog\b|box jump|broad jump|depth jump|bound|hurdle hop|prowler|\bsled\b|up-down|shuttle|3-cone|40-yd|bronco/i;
+    let n = 0;
+    for (let w = 4; w <= 6; w++) for (let d = 1; d <= 6; d++) {
+      const x = app.blabGetSessionData(w, d); if (!x) continue; n++;
+      const txt = JSON.stringify(x.exercises.map((e) => [e.name, e.note, e.movements])) + JSON.stringify((x.conditioning || []).map((p) => [p.title, p.presc, p.spec && [p.spec.name, p.spec.note, p.spec.guided], p.alt && p.alt.name]));
+      const hit = txt.replace(/(CALF: r|R)eplaces[^"]*/g, '').match(BAD);
+      assert.ok(!hit, `W${w}D${d} ${x.name}: "${hit && hit[0]}" in a calf week`);
+      assert.ok(!x.cones, `W${w}D${d}: no cone setup in the gym`);
+    }
+    assert.ok(n >= 15, 'positive control: ' + n + ' sessions checked');
+    assert.ok(/\(Gym\)/.test(app.blabGetSessionData(4, 1).name), 'Mon is the gym version');
+    assert.ok(/Gym \(calf\)/.test(app.blabGetSessionData(5, 3).name), 'Wed is the calf gym version');
+    assert.ok(/2 km Row Retest/.test(app.blabGetSessionData(6, 1).name), app.blabGetSessionData(6, 1).name);
+    assert.ok(/Postponed/.test(app.blabGetSessionData(6, 5).name), 'combine postponed');
+    assert.ok(app.blabGetSessionData(4, 4).exercises.some((e) => /KB Swing/.test(e.name)) && app.blabGetSessionData(4, 4).exercises.some((e) => e.name === 'Assault Bike Sprint'), 'lower day swaps');
+    const b = app.blabGetSessionData(5, 1).conditioning.find((p) => p.title === 'Repeated-Effort Bouts').spec.guided.steps.map((x) => x.label);
+    assert.ok(b.includes('Burpee') && !b.some((l) => /prowler/i.test(l)), 'burpees stay, prowler out: ' + b);
+    st.draftCalf = { fromWeek: 5, toWeek: 6 }; app.window.blabSaveState(st);
+    assert.ok(/Bronco|Repeated Efforts$/.test(app.blabGetSessionData(4, 1).name) && !/Gym/.test(app.blabGetSessionData(4, 1).name), 'outside the range: unchanged');
+  });
+  test('CALF seed: one shot, inside its dates only, never re-seeds after being cleared', () => {
+    startDraft();
+    const f = app.window._draftCalf1118, orig = app._phxLocalISO;
+    try {
+      app._phxLocalISO = () => '2026-12-10'; assert.equal(f(), false, 'after the window: nothing');
+      app._phxLocalISO = () => '2026-11-18'; assert.equal(f(), true);
+      assert.deepEqual([app.window.blabGetState().draftCalf.fromWeek, app.window.blabGetState().draftCalf.toWeek], [4, 6]);
+      const st = app.window.blabGetState(); delete st.draftCalf; app.window.blabSaveState(st);
+      assert.equal(f(), false, 'cleared stays cleared'); assert.ok(!app.window.blabGetState().draftCalf);
+    } finally { app._phxLocalISO = orig; }
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

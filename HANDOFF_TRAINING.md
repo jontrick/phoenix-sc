@@ -533,3 +533,16 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   point description be used on that timer screen in the same font and size". `draftRestBrief(part)` inserts
   `#rt-drill` (title, format, bullets — `draftRestBriefHTML`, same styles as the card) under `#rt-cue`;
   `startRestTimer` removes it on every start so it never leaks onto a set rest. Test RESTBRIEF; harness ×2.
+- **v4.9.436 (18 Nov) — CALF MODE, weeks 4-6.** Jon: "for next 3 weeks no running or jumping and will be
+  conditioning and 'sprint' in the gyms". His picks (AskUserQuestion): Mon/Wed → gym versions; jumps out of
+  lift days; prowler / sled out; burpees STAY; Bronco retest → 2 km row; Field Combine postponed.
+  `s.draftCalf = {fromWeek, toWeek}` (blab state, cloud-mirrored), seeded once by `_draftCalf1118` (boot,
+  18 Nov–9 Dec, `draftCalfSeeded` so clearing it is permanent). `draftGetSessionData` is now a wrapper:
+  `_draftGetSessionRaw(week, day, s, calf)` + `_draftCalfSwap` (Box/Broad/Depth Jump, Bounds, Hurdle Hops →
+  KB Swing — Explosive; Prowler/Sled → Assault Bike Sprint 10 s). Mon: `gymC` = bike RHIE (prowler step →
+  5 med ball slams) + 15/15 bike. Wed: new "Sprint & Power — Gym (calf)": Bike Accelerations 6 s, Row Power
+  Starts, MB Rotational Throw, MB Chest Pass. W6 D1 → 2 km Row Retest; W6 D5 → "Field Combine — Postponed".
+  NOT changed (not asked): Power Clean (W4 D6, W5 D5/D6 — has a jump in the catch), Standing Calf Raise
+  (W4/W5 D6). Moving days: already supported — calendar entry → Move to Another Day (14 days, Draft moves
+  freely). Tests: CALF (every W4-6 session text; fires red with _draftCalfOn forced false), CALF seed.
+  **To end calf mode early:** delete `s.draftCalf` (no UI yet — OPEN).

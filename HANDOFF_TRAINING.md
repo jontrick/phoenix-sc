@@ -476,3 +476,14 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   Lower (W3 D6) + Hammerfall WOD → skipped; Mon 16 Conditioning (W4 D1) → Wed 18; Wed 18 Sprint & Power
   (W4 D3) → Fri 20. Pending-only, dead after 20 Nov, idempotent. Archive after 20 Nov with the other
   one-offs. Test: RESCHED1115.
+- **v4.9.428 (17 Nov) — PITCH SESSIONS: bodyweight only, every run ends at the phone.** Jon: "For pitch
+  sessions - no sled or bags only running and up downs or body weight stuff ... the running part to be out
+  and return as the phone will be at the start - so 60m should be 30m return, please make sure all sessions
+  for pitch are built like this". Mon conditioning (field): bouts = sprint 20 m out, up-down, sprint 20 m
+  back (+3 up-downs from week 3; was a 5 s sled/bag drive); 15/15 run = half the distance out and back
+  inside 15 s, rest at the start (was "run 55–75 m, walk back in 15 s" — impossible). Wed sprint & power
+  (field): accelerations = half the distance out & back; "Resisted Sprints" (sled or hill) → **Up-Down
+  Starts** 10 m out & back from lying down, 90 s. Agility drills already finish at the start. Gym versions
+  unchanged. NOT changed: field TESTS (40-yd dash etc. stay straight-line — they are the Combine tests) and
+  the Bronco (already from the start line). Test: PITCH (checks every pitch part's text + spec, fires red
+  with the sled restored); SPLIT / WETDAY updated for the new wording.

@@ -5862,7 +5862,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(wed.exercises.some((e) => e.name === 'Acceleration Sprints'), 'and so does the sprint day');
     assert.ok(app.blabGetSessionData(3, 1).exercises.some((e) => e.name === 'Bronco Test'), 'Bronco baseline Mon 9 Nov');
     assert.ok(app.blabGetSessionData(6, 1).exercises.some((e) => e.name === 'Bronco Test'), 'retest Mon 30 Nov');
-    assert.ok(/drop and get up, sprint 20 m, 5 s/.test(app.blabGetSessionData(4, 1).conditioning.find((p) => p.title === 'Repeated-Effort Bouts').spec.note), 'Week 3 moves to 3-effort bouts');
+    assert.ok(/up-down, sprint 20 m back, 3 fast up-downs/.test(app.blabGetSessionData(4, 1).conditioning.find((p) => p.title === 'Repeated-Effort Bouts').spec.note), 'Week 3 moves to 3-effort bouts (v4.9.428: up-downs, not a sled / bag drive)');
   });
 
   test('ATTEMPTS: test lifts and max-effort lifts offer extra attempts; speed work does not', () => {
@@ -6328,7 +6328,7 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     }
     assert.ok(n >= 8, 'positive control: timed parts exist (' + n + ')');
     const wed = app.blabGetSessionData(3, 3).conditioning;
-    assert.equal(wed.find((p) => p.title === 'Resisted Sprints').alt.loadKg, true, 'heavy prowler takes a kg');
+    assert.equal(wed.find((p) => p.title === 'Up-Down Starts').alt.loadKg, true, 'its gym version (heavy prowler) takes a kg');
   });
 
   test('SPEEDREST: speed bench 60 s, speed box squat and speed deadlift 90 s — and the timer uses it (Jon, 7 Nov)', () => {
@@ -6527,5 +6527,24 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app._phxLocalISO = (d) => d ? realToday(d) : '2026-11-21';
       assert.equal(app.window._draftReschedule1115(), false, 'dead after Friday');
     } finally { app._phxLocalISO = realToday; }
+  });
+  test('PITCH: every pitch (field) Mon / Wed part is running + up-downs / bodyweight, and every run ends at the start (Jon, 17 Nov)', () => {
+    startDraft();
+    let checked = 0;
+    for (let w = 2; w <= 6; w++) for (const d of [1, 3]) {
+      const x = app.blabGetSessionData(w, d); if (!x || !x.conditioning) continue;
+      if (/\(Gym\)/.test(x.name)) continue;                       // week-1 gym sessions are not pitch sessions
+      for (const p of x.conditioning) {
+        const sp = p.spec; if (!sp) continue;                      // the PITCH version is the main spec; p.alt is the gym version
+        const txt = [sp.name, sp.note, sp.format, JSON.stringify(sp.movements || []), JSON.stringify(sp.guided || {}), p.title, p.presc].join(' ');
+        if (/Bronco/i.test(txt)) continue;                         // the Bronco is a test, run from the start line already
+        checked++;
+        assert.ok(!/\bsled\b|\bbag\b|prowler|sandbag/i.test(txt), `W${w}D${d} ${p.title}: no sled / bag / prowler on the pitch → ${txt.slice(0, 160)}`);
+        if (/sprint|run\b|\d+ m\b/i.test(txt) && !/shuttle|3-cone/i.test(txt)) assert.ok(/out (&|and) back|back to the start|back through the start|and back|m back\b/i.test(txt), `W${w}D${d} ${p.title}: the run ends at the phone → ${txt.slice(0, 200)}`);
+      }
+    }
+    assert.ok(checked >= 8, 'positive control: pitch parts were checked (' + checked + ')');
+    const run = app.blabGetSessionData(4, 1).conditioning.find((p) => p.title === '15/15 Intervals').spec;
+    assert.ok(/Mark a line \d+ m from the phone\. Run out to it and back \(\d+ m\)/.test(run.note), run.note);
   });
 }

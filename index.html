@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.427';
+var APP_VERSION='4.9.428';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8387,9 +8387,11 @@ window.draftGetSessionData = function(week, day, s){
     var ivReps = ivMins * 2;
     var ivDist = [null, 55, 60, 65, 70, 75][LC];
     var gymBoutTxt = '8 s all-out bike sprint, 1 burpee, 8 s all-out bike sprint' + (effortsPerBout === 3 ? ', 10 m prowler push' : '');
+    // v4.9.428 — Jon 17 Nov: pitch sessions are running + up-downs / bodyweight only (no sled, no
+    // bags), and every run ends back at the start, where the phone is: "60m should be 30m return".
     var fieldBoutTxt = (effortsPerBout === 2)
-      ? 'sprint 20 m, drop to the ground and get up, sprint 20 m'
-      : 'sprint 20 m, drop and get up, sprint 20 m, 5 s sled or bag drive';
+      ? 'sprint 20 m out, up-down, sprint 20 m back to the start'
+      : 'sprint 20 m out, up-down, sprint 20 m back, 3 fast up-downs at the start';
     var lbl = function(n, txt){ var a = []; for(var k = 1; k <= n; k++) a.push('Bout ' + k + ' · ' + txt); return a; };
     var rhieGym = libSpec('draft-rhie-gym', 'Repeated Efforts — Bike', 'intervals', 'calories', 'Total calories',
       bouts + ' BOUTS · REST ' + restRHIE + ' s',
@@ -8403,10 +8405,11 @@ window.draftGetSessionData = function(week, day, s){
       ivReps + ' × 15 s ON / 15 s OFF',
       'Assault bike. 15 s hard, 15 s easy pedal, ' + ivReps + ' times (' + ivMins + ' min). Reset the bike display first; enter its calorie total at the end.',
       [['15 s hard', 'calories']], { efforts:ivReps, work:'15 s hard', workSec:15, restSec:15, countReps:true, countLabel:'Calories this 15 s' });
+    var ivHalf = Math.round(ivDist / 2);   // same total distance, out and back
     var r1515 = libSpec('draft-1515-run', '15/15 Run', 'intervals', 'reps', 'Reps on target',
       ivReps + ' × 15 s ON / 15 s OFF',
-      'Mark a line ' + ivDist + ' m out. Run it in 15 s, walk back in 15 s, ' + ivReps + ' times. Tap + if you reached the line, then Log Round.',
-      [['15 s run', ivDist + ' m']], { efforts:ivReps, work:'Run ' + ivDist + ' m', workSec:15, restSec:15, countReps:true, countLabel:'Reached the line? Tap + once' });
+      'Mark a line ' + ivHalf + ' m from the phone. Run out to it and back (' + (ivHalf * 2) + ' m) inside 15 s, rest 15 s at the start, ' + ivReps + ' times. Tap + if you were back in time, then Log Round.',
+      [['15 s run', ivHalf + ' m out & back']], { efforts:ivReps, work:'Run ' + ivHalf + ' m out & back', workSec:15, restSec:15, countReps:true, countLabel:'Back inside 15 s? Tap + once' });
     // v4.9.356 — hands-free guided timings (phone runs the clock, bike counts calories)
     var gymSteps = [{label:'Bike sprint', secs:8, sub:'All out'}, {label:'Burpee', tap:true, sub:'1 burpee, back on the bike, tap Done'}, {label:'Bike sprint', secs:8, sub:'All out'}];
     if(effortsPerBout === 3) gymSteps.push({label:'Prowler push', tap:true, sub:'10 m, drive, tap Done'});
@@ -8418,16 +8421,16 @@ window.draftGetSessionData = function(week, day, s){
     b1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Hard', secs:15, sub:'Assault bike, all out'}], restSec:15,
       blockRest:180, blockRestLabel:'Easy spin 3 min',
       entry:{ per:'block', label:'Bike calories for the block', unit:'cal', endLabel:'Total calories, all blocks' } };
-    r1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Run', secs:15, sub:'Reach the ' + ivDist + ' m line'}], restSec:15,
+    r1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Run', secs:15, sub:'To the ' + ivHalf + ' m line and back'}], restSec:15,
       blockRest:180, blockRestLabel:'Walk 3 min',
       entry:{ per:'end', endLabel:'Reps you reached the line (all blocks)', prefillRounds:true } };
     b1515.format = r1515.format = ivSets + ' BLOCKS \u00d7 ' + ivReps + ' \u00d7 15/15 \u00b7 3 MIN EASY BETWEEN';
-    var cParts = [part('Warm-up', t === 1 ? '10 min: easy bike or row, dynamic mobility, 2 practice burpees.' : '10 min: jog, dynamic mobility, 3 build-up runs, 2 practice drop-and-get-ups.')];
+    var cParts = [part('Warm-up', t === 1 ? '10 min: easy bike or row, dynamic mobility, 2 practice burpees.' : '10 min: jog, dynamic mobility, 3 build-up runs out and back, 2 practice up-downs.')];
     cParts.push(part('Repeated-Effort Bouts',
       bouts + ' bouts, ' + restRHIE + ' s rest between. ' + (t === 1 ? 'GYM: ' + gymBoutTxt + '.' : 'FIELD: ' + fieldBoutTxt + '. Gym version listed too.') + ' Level ' + LC + ' of 5.',
       t === 1 ? rhieGym : rhieField, t === 1 ? null : rhieGym));
     cParts.push(part('15/15 Intervals',
-      ivSets + ' blocks of ' + ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min each, 3 min easy between. One timer runs it all.',
+      ivSets + ' blocks of ' + ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min each, 3 min easy between. ' + (t === 1 ? '' : 'Run ' + ivHalf + ' m out and back to the phone, rest at the start. ') + 'One timer runs it all.',
       t === 1 ? b1515 : r1515, t === 1 ? null : b1515));
     cParts.push(part('Cool-down', '5 min easy, hips, calves.'));
     return partsSess(t === 1 ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts);
@@ -8437,10 +8440,11 @@ window.draftGetSessionData = function(week, day, s){
     var accReps = taper ? 4 : [null, 5, 6, 6, 7, 8][LS];
     var accDist = taper ? 20 : ((t <= 2) ? 10 : 20);
     var sledN = (t === 4) ? 4 : [null, 4, 5, 5, 6, 6][LS];
-    var accField = libSpec('draft-accel-field', 'Acceleration Sprints — ' + accDist + ' m', 'intervals', 'avg_split', 'Average sprint time',
-      accReps + ' × ' + accDist + ' m · REST 90 s',
-      (taper ? 'At 90%, smooth. ' : 'Max intent. ') + '3-point or falling start. Tap Log Split as you cross the line, or type the time from your phone or video timer.',
-      [['Sprint', accDist + ' m']], { efforts:accReps, work:'Sprint ' + accDist + ' m', restSec:90 });
+    var accHalf = accDist / 2;   // v4.9.428: out and back, finishing at the phone
+    var accField = libSpec('draft-accel-field', 'Acceleration Sprints — ' + accHalf + ' m out & back', 'intervals', 'avg_split', 'Average sprint time',
+      accReps + ' × ' + accHalf + ' m OUT & BACK · REST 90 s',
+      (taper ? 'At 90%, smooth. ' : 'Max intent. ') + '3-point or falling start at the phone. Sprint to the ' + accHalf + ' m cone, plant, sprint back through the start. Tap Log Split as you pass the phone.',
+      [['Sprint', accHalf + ' m out & back']], { efforts:accReps, work:'Sprint ' + accHalf + ' m out & back', restSec:90 });
     var accGym = libSpec('draft-accel-gym', 'Acceleration — Prowler 10 m', 'intervals', 'avg_split', 'Average sprint time',
       accReps + ' × 10 m · REST 90 s',
       'Prowler light enough to run, heavy enough to drive. Tap Log Split at the line.',
@@ -8449,8 +8453,16 @@ window.draftGetSessionData = function(week, day, s){
       sledN + ' × 15 m · REST 120 s',
       'Heavy sled push or drag, about half your sprint speed (or a hill sprint). Tap Log Split at 15 m.',
       [['Heavy sled', '15 m']], { efforts:sledN, work:'Sled 15 m', restSec:120 });
+    // v4.9.428 — the pitch has no sled or bags: the hard start comes from the ground instead.
+    var upStart = libSpec('draft-updown-start', 'Up-Down Starts — 10 m out & back', 'intervals', 'avg_split', 'Average time',
+      sledN + ' × 10 m OUT & BACK · REST 90 s',
+      'Lie face down at the phone. On the beep: up, sprint to the 10 m cone, plant, sprint back through the start. Bodyweight only.',
+      [['Up-down start', '10 m out & back']], { efforts:sledN, work:'Up-down start 10 m out & back', restSec:90 });
+    upStart.scoreType = 'reps'; upStart.scoreLabel = 'Reps done';
+    upStart.guided = { rounds:sledN, steps:[{label:'Up-down start', secs:8, sub:'Up, 10 m out & back'}], restSec:90,
+      entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     accField.scoreType = 'reps'; accField.scoreLabel = 'Sprints done';
-    accField.guided = { rounds:accReps, steps:[{label:'Sprint', secs:6, sub:accDist + ' m \u2014 go on the beep'}], restSec:90,
+    accField.guided = { rounds:accReps, steps:[{label:'Sprint', secs:8, sub:accHalf + ' m out & back \u2014 go on the beep'}], restSec:90,
       entry:{ per:'end', endLabel:'Sprints done', prefillRounds:true } };
     accGym.scoreType = 'reps'; accGym.scoreLabel = 'Sprints done';
     accGym.guided = { rounds:accReps, steps:[{label:'Prowler sprint', secs:8, sub:'10 m \u2014 go on the beep'}], restSec:90,
@@ -8471,7 +8483,7 @@ window.draftGetSessionData = function(week, day, s){
     if(taper){
       return partsSess('Sprint & Power — Taper', 30, [
         part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups.'),
-        part('Acceleration Sprints', '4 × 20 m at 90%, full walk-back rest. Smooth and fast, nothing to prove today.', accField, accGym),
+        part('Acceleration Sprints', '4 × 10 m out & back at 90%, walk-around rest. Smooth and fast, nothing to prove today.', accField, accGym),
         part('Agility Rehearsal', 'One 5-10-5 and one 3-cone, smooth, to rehearse Saturday. Not timed.')
       ]);
     }
@@ -8502,10 +8514,10 @@ window.draftGetSessionData = function(week, day, s){
       entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     var plyo = [null, null, ['Hurdle Hops (low)', '3 × 5'], ['Single-Leg Bounds', '3 × 4 / leg'], ['Depth Jump to Broad', '3 × 3']][t] || ['Bounds', '3 × 5'];
     return partsSess('Sprint & Power', 45, [
-      part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups to 90%.'),
-      part('Acceleration Sprints', accReps + ' × ' + accDist + ' m, 90 s rest. Level ' + LS + ' of 5. Gym version listed too.', accField, accGym),
-      part('Resisted Sprints', sledN + ' × 15 m sled or hill, 2 min rest. Gym version listed too.', sled, sledGym),
-      part(agilName, '4 reps, 60 s rest, alternate directions. Gym version listed too.', agil, agilGym),
+      part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups to 90% out and back.'),
+      part('Acceleration Sprints', accReps + ' × ' + accHalf + ' m out & back, 90 s rest. Level ' + LS + ' of 5. Gym version listed too.', accField, accGym),
+      part('Up-Down Starts', sledN + ' × 10 m out & back from lying down, 90 s rest. Gym version listed too.', upStart, sledGym),
+      part(agilName, '4 reps, 60 s rest, alternate directions. Starts and finishes at the phone. Gym version listed too.', agil, agilGym),
       bwPart(plyo[0], plyo[1] + '. Stick every landing.', parseInt(plyo[1], 10) || 3, 60)
     ]);
   }

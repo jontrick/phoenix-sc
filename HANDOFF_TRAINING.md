@@ -507,3 +507,6 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   compares against every past score for the wod_id with the NEW scoreType, so the first timed 15/15 will
   show a false "New PB" (avg secs < old rep counts); after that old entries never block a PB. Agility and
   RHIE were already avg_split — no mix. Live 18 Nov 04:45 (Jon asked, before his session).
+- **v4.9.431 (18 Nov)** — the written notes on the three cycle drills (pitch RHIE bouts, 15/15 run, agility)
+  still said "Log Split" / "Tap + then Log Round" from the old runner. Now say "tap Done at the phone; early
+  adds to rest, late takes from it". Text only.

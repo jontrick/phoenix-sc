@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.430';
+var APP_VERSION='4.9.431';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8399,16 +8399,17 @@ window.draftGetSessionData = function(week, day, s){
       [['Bout', gymBoutTxt]], { efforts:bouts, work:'Bout', restSec:restRHIE, countReps:true, countLabel:'Bike calories this bout', labels:lbl(bouts, 'sprint · burpee · sprint') });
     var rhieField = libSpec('draft-rhie-field', 'Repeated Efforts — Field', 'intervals', 'avg_split', 'Average bout time',
       bouts + ' BOUTS · REST ' + restRHIE + ' s',
-      'Each bout: ' + fieldBoutTxt + '. Tap Log Split the moment you finish; rest runs automatically. Score is your average bout time.',
+      'Each bout: ' + fieldBoutTxt + '. Tap Done the moment you are back at the phone: time you save is added to your rest, time over comes off it. Score is your average bout time.',
       [['Bout', fieldBoutTxt]], { efforts:bouts, work:'Bout', restSec:restRHIE, labels:lbl(bouts, fieldBoutTxt) });
     var b1515 = libSpec('draft-1515-bike', '15/15 Bike', 'intervals', 'calories', 'Calories for the block',
       ivReps + ' × 15 s ON / 15 s OFF',
       'Assault bike. 15 s hard, 15 s easy pedal, ' + ivReps + ' times (' + ivMins + ' min). Reset the bike display first; enter its calorie total at the end.',
       [['15 s hard', 'calories']], { efforts:ivReps, work:'15 s hard', workSec:15, restSec:15, countReps:true, countLabel:'Calories this 15 s' });
     var ivHalf = Math.round(ivDist / 2);   // same total distance, out and back
+    // v4.9.431 — the three cycle drills' notes say "tap Done at the phone" (were Log Split / Tap +).
     var r1515 = libSpec('draft-1515-run', '15/15 Run', 'intervals', 'reps', 'Reps on target',
       ivReps + ' × 15 s ON / 15 s OFF',
-      'Mark a line ' + ivHalf + ' m from the phone. Run out to it and back (' + (ivHalf * 2) + ' m) inside 15 s, rest 15 s at the start, ' + ivReps + ' times. Tap + if you were back in time, then Log Round.',
+      'Mark a line ' + ivHalf + ' m from the phone. Run out to it and back (' + (ivHalf * 2) + ' m) inside 15 s, rest 15 s at the start, ' + ivReps + ' times. Tap Done when you are back at the phone: early adds to your rest, late takes from it. Every rep time is kept.',
       [['15 s run', ivHalf + ' m out & back']], { efforts:ivReps, work:'Run ' + ivHalf + ' m out & back', workSec:15, restSec:15, countReps:true, countLabel:'Back inside 15 s? Tap + once' });
     // v4.9.356 — hands-free guided timings (phone runs the clock, bike counts calories)
     var gymSteps = [{label:'Bike sprint', secs:8, sub:'All out'}, {label:'Burpee', tap:true, sub:'1 burpee, back on the bike, tap Done'}, {label:'Bike sprint', secs:8, sub:'All out'}];
@@ -8499,7 +8500,7 @@ window.draftGetSessionData = function(week, day, s){
     }
     var agilName = (t % 2 === 1) ? '5-10-5 Shuttle' : '3-Cone Drill';
     var agil = libSpec((t % 2 === 1) ? 'draft-shuttle' : 'draft-3cone', agilName, 'intervals', 'avg_split', 'Average time',
-      '4 REPS · REST 60 s', 'Alternate directions. Clean cuts, low hips. Tap Log Split at the finish, or type the video time.',
+      '4 REPS · REST 60 s', 'Alternate directions. Clean cuts, low hips. Tap Done as you finish at the phone; every rep time is kept.',
       [[agilName, '1 rep']], { efforts:4, work:agilName, restSec:60 });
     agil.scoreType = 'reps'; agil.scoreLabel = 'Reps done';
     agil.guided = { cycle:true, rounds:4, steps:[{label:agilName, secs:8, sub:'Go on the beep, alternate directions, tap Done at the phone'}], restSec:60,

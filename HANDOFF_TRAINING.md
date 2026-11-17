@@ -510,3 +510,11 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
 - **v4.9.431 (18 Nov)** — the written notes on the three cycle drills (pitch RHIE bouts, 15/15 run, agility)
   still said "Log Split" / "Tap + then Log Round" from the old runner. Now say "tap Done at the phone; early
   adds to rest, late takes from it". Text only.
+- **v4.9.432 (18 Nov) — CONE SETUP card at the top of every pitch session.** Jon: "at the beginning of each
+  of those pitch sessions ... lay out what the cone setups are for all of them ... then I can have it all set
+  up and not have to worry about setting up the next one". `sess.cones` (array of lines) built in
+  `partsSess(..., cones)` from the same variables the drills use (20 m bout cone, ivHalf 15/15 cone,
+  accDist / 15 m sprint cones, 5-10-5 or 3-cone layout, Bronco 20/40/60). Rendered as `#draft-cones` above
+  Notes in `draftOpenConditioning`. Gym sessions: none. Field-test Saturday is a lift-style session, so its
+  setup went at the front of the Combine Warm-up note instead. Test: CONES (every distance named in a pitch
+  drill appears in that session's setup; fires red with the 15/15 cone moved). Browser-rendered W4 Mon/Wed.

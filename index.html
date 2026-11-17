@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.431';
+var APP_VERSION='4.9.432';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8281,7 +8281,7 @@ window.draftGetSessionData = function(week, day, s){
   // v4.9.379 — Jon 7 Nov, on the field: distances in metres, first thing in each note.
   function fieldTests(){
     return [
-      std('Combine Warm-up', 1, '15 min', 'Jog, dynamic mobility, A-skips, 4 build-up runs to 90%. Jumps and sprints FIRST, while you are fresh.'),
+      std('Combine Warm-up', 1, '15 min', 'CONE SETUP FIRST (v4.9.432): 40-yd: start line + a cone at 36.6 m. 5-10-5: three lines 4.57 m apart. 3-Cone: an L of 3 cones, 4.57 m apart. Then jog, dynamic mobility, A-skips, 4 build-up runs to 90%. Jumps and sprints FIRST, while you are fresh.'),
       result('Vertical Jump (cm)', 'cm', 'Record best of 3. Jump touch minus standing reach. NFL linebacker average is about 86 cm.'),
       result('Broad Jump (cm)', 'cm', 'Record best of 3. Two-foot take-off, landing must be held. Linebacker average is about 297 cm.'),
       result('40-yd Dash (sec)', 'sec', 'MARK OUT 36.6 m (40 yd). Record best of 2 from a 3-point start, full rest between. Linebacker average 4.75 s.'),
@@ -8357,11 +8357,23 @@ window.draftGetSessionData = function(week, day, s){
   function part(title, presc, spec, alt){ return { kind: spec ? 'timed' : 'check', title:title, presc:presc, spec:spec || null, alt:alt || null }; }
   // v4.9.359 — bodyweight sets: one tick per set, each tick starts the rest countdown.
   function bwPart(title, presc, sets, rest){ return { kind:'sets', title:title, presc:presc, sets:sets, rest:rest, spec:null, alt:null }; }
-  function partsSess(name, mins, parts){
+  function partsSess(name, mins, parts, cones){
     var exs = parts.map(function(p){ return std(p.title, 1, p.spec ? (p.spec.config.efforts ? p.spec.config.efforts + ' efforts' : 'For time') : 'Do it', p.presc); });
     var o = sess(name, mins, exs);
     o.conditioning = parts;
+    if(cones && cones.length) o.cones = cones;
     return o;
+  }
+  // v4.9.432 — Jon 18 Nov: "at the beginning of each of those pitch sessions ... lay out what the cone
+  // setups are for all of them ... then I can have it all set up and not have to worry about setting up
+  // the next one". One list per pitch session, built from the same distances the drills use, shown
+  // as its own card at the top of the session. The phone is always on the start line.
+  var CONE_PHONE = 'Phone on the start line. Every drill starts and finishes there.';
+  var CONE_YD5 = 4.57;
+  function coneAgility(which){
+    return which === '5-10-5 Shuttle'
+      ? '5-10-5: a cone ' + CONE_YD5 + ' m (5 yd) to the LEFT and RIGHT of the phone, along the start line. You start and finish at the phone.'
+      : '3-Cone: start cone at the phone, cone 2 ' + CONE_YD5 + ' m (5 yd) straight out, cone 3 ' + CONE_YD5 + ' m to the side of cone 2 (an L). Put it beside the sprint lane, not in it.';
   }
   function bronco(isRetest){
     return partsSess('Conditioning — Bronco ' + (isRetest ? 'Retest' : 'Baseline'), 40, [
@@ -8374,7 +8386,7 @@ window.draftGetSessionData = function(week, day, s){
         libSpec('draft-row2k', '2 km Row Test', 'time', 'time', '2 km row time', 'FOR TIME · 2000 m',
           'Wet-weather option only. Damper 5-6.', [['Row', '2000 m']], { chipper:true })),
       part('Cool-down', '8 min easy jog or bike, then hips and calves.')
-    ]);
+    ], ['Phone on the start line (0 m).', 'Cones at 20 m, 40 m and 60 m, all in one straight line from the phone.']);
   }
   if(day === 1){
     if(t === 2) return bronco(false);
@@ -8434,7 +8446,10 @@ window.draftGetSessionData = function(week, day, s){
       ivSets + ' blocks of ' + ivReps + ' × (15 s hard / 15 s easy) = ' + ivMins + ' min each, 3 min easy between. ' + (t === 1 ? '' : 'Run ' + ivHalf + ' m out and back to the phone, rest at the start. ') + 'One timer runs it all.',
       t === 1 ? b1515 : r1515, t === 1 ? null : b1515));
     cParts.push(part('Cool-down', '5 min easy, hips, calves.'));
-    return partsSess(t === 1 ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts);
+    return partsSess(t === 1 ? 'Conditioning — Repeated Efforts (Gym)' : 'Conditioning — Repeated Efforts', 45, cParts,
+      t === 1 ? null : [CONE_PHONE,
+        'Cone A at 20 m: Repeated-Effort Bouts (sprint out, up-down, sprint back).',
+        'Cone B at ' + ivHalf + ' m, same line past Cone A: 15/15 runs out and back. Use it for the warm-up build-ups too.']);
   }
 
   if(day === 3){
@@ -8487,7 +8502,7 @@ window.draftGetSessionData = function(week, day, s){
         part('Sprint Warm-up', '12 min: A-skips, B-skips, wall drills, 3 build-ups.'),
         part('Acceleration Sprints', '4 × 20 m at 90%, walk back to the phone. Smooth and fast, nothing to prove today.', accField, accGym),
         part('Agility Rehearsal', 'One 5-10-5 and one 3-cone, smooth, to rehearse Saturday. Not timed.')
-      ]);
+      ], [CONE_PHONE, 'Cone at 20 m straight out: acceleration sprints.', coneAgility('5-10-5 Shuttle'), coneAgility('3-Cone Drill')]);
     }
     if(t === 1){
       return partsSess('Sprint & Power (Gym)', 45, [
@@ -8521,7 +8536,11 @@ window.draftGetSessionData = function(week, day, s){
       part('Up-Down Starts', sledN + ' × 15 m from lying down, walk back to the phone, 90 s rest. Gym version listed too.', upStart, sledGym),
       part(agilName, '4 reps, 60 s rest, alternate directions. Starts and finishes at the phone. Gym version listed too.', agil, agilGym),
       bwPart(plyo[0], plyo[1] + '. Stick every landing.', parseInt(plyo[1], 10) || 3, 60)
-    ]);
+    ], [CONE_PHONE].concat(accDist === 15
+        ? ['Cone at 15 m straight out: acceleration sprints and up-down starts.']
+        : (accDist < 15 ? ['Cone at ' + accDist + ' m straight out: acceleration sprints.', 'Cone at 15 m, same line: up-down starts.']
+                        : ['Cone at 15 m straight out: up-down starts.', 'Cone at ' + accDist + ' m, same line: acceleration sprints. Use it for the warm-up build-ups too.']))
+      .concat([coneAgility(agilName)]));
   }
 
   // ════ TUE — UPPER, MAX EFFORT ═══════════════════════════════════════════════
@@ -9528,6 +9547,12 @@ window.draftOpenConditioning = function(week, day, sess){
     h += '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-top:10px;">' +
          ((typeof window.trnEyebrow === 'function') ? window.trnEyebrow(week) : 'Week ' + week) + (dry ? ' &middot; preview' : '') + '</div>';
     h += '<div style="font-family:var(--font-d);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--text);line-height:1.05;margin:4px 0 14px;">' + _esc(sess.name) + '</div>';
+    if(sess.cones && sess.cones.length){
+      h += '<div id="draft-cones" style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:13px 14px;margin-bottom:12px;">' +
+           '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Cone setup &middot; do it all first</div>' +
+           sess.cones.map(function(c, k){ return '<div style="display:flex;gap:10px;font-size:13px;color:var(--text);line-height:1.45;padding:4px 0;"><div style="font-family:var(--font-d);font-weight:900;color:var(--gold);min-width:14px;">' + (k + 1) + '</div><div>' + _esc(c) + '</div></div>'; }).join('') +
+           '</div>';
+    }
     if(!dry && typeof window._phxSessionNotesCard === 'function') h += window._phxSessionNotesCard(sess.name);
     parts.forEach(function(p, i){
       var s = st[i];

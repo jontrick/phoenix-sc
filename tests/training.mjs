@@ -6557,6 +6557,31 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/sprint 20 m out, up-down, sprint 20 m back/.test(mon.find((p) => p.title === 'Repeated-Effort Bouts').presc), 'the bout\'s return is part of the drill');
     assert.ok(/out and back/.test(mon.find((p) => p.title === '15/15 Intervals').presc), '15/15 still turns — there is no time to walk back');
   });
+  test('CONES: every pitch Mon / Wed session opens with one cone setup covering every drill distance; gym sessions have none (Jon, 18 Nov)', () => {
+    startDraft();
+    let checked = 0;
+    for (let w = 1; w <= 6; w++) for (const d of [1, 3]) {
+      const x = app.blabGetSessionData(w, d); if (!x || !x.conditioning) continue;
+      if (/\(Gym\)/.test(x.name)) { assert.ok(!x.cones, x.name + ': gym session has no cone setup'); continue; }
+      checked++;
+      assert.ok(Array.isArray(x.cones) && x.cones.length >= 2, `W${w}D${d} ${x.name}: has a cone setup → ${JSON.stringify(x.cones)}`);
+      const cones = x.cones.join(' ');
+      for (const p of x.conditioning) {
+        const g = p.spec && p.spec.guided; const txt = (p.spec ? p.spec.note + ' ' + p.spec.format : '') + ' ' + p.presc;
+        if (/Bronco/.test(p.title)) { assert.ok(/20 m, 40 m and 60 m/.test(cones), cones); continue; }
+        for (const m of (txt.match(/\b(\d+) m\b/g) || [])) {
+          const n = parseInt(m, 10); if (n === 60 && /15\/15/.test(p.title)) continue;   // 60 m is the 15/15 round trip, not a cone
+          if (/15\/15/.test(p.title) && n === 2 * parseInt((cones.match(/Cone B at (\d+) m/) || [])[1], 10)) continue;
+          assert.ok(new RegExp('\\b' + n + ' m\\b').test(cones), `W${w}D${d} ${p.title}: ${n} m is in the cone setup → ${cones}`);
+        }
+        if (/5-10-5|3-Cone/.test(p.title)) assert.ok(cones.includes(p.title.split(' ')[0]), p.title + ' setup listed');
+      }
+    }
+    assert.ok(checked >= 8, 'positive control (' + checked + ')');
+    const mon = app.blabGetSessionData(4, 1);
+    assert.deepEqual(mon.cones.length, 3, JSON.stringify(mon.cones));
+    assert.ok(/Cone A at 20 m/.test(mon.cones[1]) && /Cone B at 30 m/.test(mon.cones[2]), JSON.stringify(mon.cones));
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

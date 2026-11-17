@@ -487,3 +487,7 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   unchanged. NOT changed: field TESTS (40-yd dash etc. stay straight-line — they are the Combine tests) and
   the Bronco (already from the start line). Test: PITCH (checks every pitch part's text + spec, fires red
   with the sled restored); SPLIT / WETDAY updated for the new wording.
+- **v4.9.429 (18 Nov)** — Jon: "For acceleration and sprints happy with walk back rather than turn unless the
+  turn is part of a session". Pitch accelerations back to full distance (20 m) with a walk back to the phone;
+  Up-Down Starts 15 m + walk back. Turns kept where they are the drill: repeated-effort bouts, 15/15 runs
+  (no time to walk back), 5-10-5 / 3-cone. Test: PITCH sprints.

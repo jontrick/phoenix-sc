@@ -6540,11 +6540,21 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         if (/Bronco/i.test(txt)) continue;                         // the Bronco is a test, run from the start line already
         checked++;
         assert.ok(!/\bsled\b|\bbag\b|prowler|sandbag/i.test(txt), `W${w}D${d} ${p.title}: no sled / bag / prowler on the pitch → ${txt.slice(0, 160)}`);
-        if (/sprint|run\b|\d+ m\b/i.test(txt) && !/shuttle|3-cone/i.test(txt)) assert.ok(/out (&|and) back|back to the start|back through the start|and back|m back\b/i.test(txt), `W${w}D${d} ${p.title}: the run ends at the phone → ${txt.slice(0, 200)}`);
+        if (/sprint|run\b|\d+ m\b/i.test(txt) && !/shuttle|3-cone/i.test(txt)) assert.ok(/out (&|and) back|back to the start|back through the start|and back|m back\b|walk back/i.test(txt), `W${w}D${d} ${p.title}: the run ends at the phone → ${txt.slice(0, 200)}`);
       }
     }
     assert.ok(checked >= 8, 'positive control: pitch parts were checked (' + checked + ')');
     const run = app.blabGetSessionData(4, 1).conditioning.find((p) => p.title === '15/15 Intervals').spec;
     assert.ok(/Mark a line \d+ m from the phone\. Run out to it and back \(\d+ m\)/.test(run.note), run.note);
+  });
+  test('PITCH sprints: accelerations and up-down starts are straight sprints with a walk back; drills with a turn keep it (Jon, 18 Nov)', () => {
+    startDraft();
+    const wed = app.blabGetSessionData(4, 3).conditioning;
+    const acc = wed.find((p) => p.title === 'Acceleration Sprints'), up = wed.find((p) => p.title === 'Up-Down Starts');
+    assert.ok(/× 20 m, walk back to the phone/.test(acc.presc) && !/out & back/.test(acc.presc + acc.spec.note), acc.presc);
+    assert.ok(/× 15 m from lying down, walk back/.test(up.presc) && !/out & back/.test(up.presc + up.spec.note), up.presc);
+    const mon = app.blabGetSessionData(4, 1).conditioning;
+    assert.ok(/sprint 20 m out, up-down, sprint 20 m back/.test(mon.find((p) => p.title === 'Repeated-Effort Bouts').presc), 'the bout\'s return is part of the drill');
+    assert.ok(/out and back/.test(mon.find((p) => p.title === '15/15 Intervals').presc), '15/15 still turns — there is no time to walk back');
   });
 }

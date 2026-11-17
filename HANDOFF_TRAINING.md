@@ -491,3 +491,17 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   turn is part of a session". Pitch accelerations back to full distance (20 m) with a walk back to the phone;
   Up-Down Starts 15 m + walk back. Turns kept where they are the drill: repeated-effort bouts, 15/15 runs
   (no time to walk back), 5-10-5 / 3-cone. Test: PITCH sprints.
+- **v4.9.430 (18 Nov) — CYCLE MODE for drills that finish back at the phone.** Jon: "can I mark when I
+  complete a set then that adds to the rest time ... if do it in 10 those 5 extra go to the rest and it keeps
+  the score of the set? Also works opposite if miss the time it reduces the rest? ... then I can see actual
+  scores not just beating a clock". `guided.cycle:true` in `draftRunGuided`: work + the rest after it are ONE
+  fixed cycle. Work phase shows a big **Done ✓**; the tap time is the rep's score; the rest runs to the end
+  of the cycle (early → longer rest, late → shorter; overrun counts up in red). A rep still running when the
+  whole cycle is gone is logged **missed** and the next starts. Last rep of a block gets the same full cycle.
+  Finish shows best · n inside the window · every rep time; saves avg time as `avg_split` with all rep times
+  in the note. On: pitch 15/15 runs, repeated-effort bouts, pitch agility. Gym versions unchanged.
+  Browser-proven (10.1 s → 20 s rest; 18.4 s → 12 s rest; untapped → missed; save payload). Tests: CYCLE
+  (fires red with cycle removed from the 15/15), harness CYCLE ×2.
+  **Caveat:** the 15/15 used to save "reps reached the line" under the same wod_id; it now saves average
+  rep time (lower = better). Older 15/15 Records entries are a different unit. ???: whether Records'
+  PB logic mixes them — not checked.

@@ -6557,4 +6557,20 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/sprint 20 m out, up-down, sprint 20 m back/.test(mon.find((p) => p.title === 'Repeated-Effort Bouts').presc), 'the bout\'s return is part of the drill');
     assert.ok(/out and back/.test(mon.find((p) => p.title === '15/15 Intervals').presc), '15/15 still turns — there is no time to walk back');
   });
+  test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
+    startDraft();
+    const cyc = [], plain = [];
+    for (let w = 2; w <= 6; w++) for (const d of [1, 3]) {
+      const x = app.blabGetSessionData(w, d); if (!x || !x.conditioning || /\(Gym\)/.test(x.name)) continue;
+      for (const p of x.conditioning) {
+        const g = p.spec && p.spec.guided; if (!g) continue;
+        (g.cycle ? cyc : plain).push(p.title);
+        if (p.alt && p.alt.guided) assert.ok(!p.alt.guided.cycle, p.title + ': the gym version keeps its normal clock');
+      }
+    }
+    for (const t of ['15/15 Intervals', 'Repeated-Effort Bouts']) assert.ok(cyc.includes(t), t + ' is a cycle drill → ' + JSON.stringify(cyc));
+    assert.ok(!cyc.includes('Acceleration Sprints'), 'walk-back sprints are not cycles (no return to time)');
+    const run = app.blabGetSessionData(4, 1).conditioning.find((p) => p.title === '15/15 Intervals').spec.guided;
+    assert.ok(run.restSec > 0 && run.steps[0].secs === 15, 'a cycle needs a window and a rest to give back to');
+  });
 }

@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.429'", 'version is 4.9.429');
+has("var APP_VERSION='4.9.430'", 'version is 4.9.430');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -400,6 +400,8 @@ hasCode("    window._phxOpenProgrammeKey = null;\n    if(typeof window._phxClear
 hasCode("    window._phxTimerStart = resume.start;\n    go();", 'RUNRESUME: a resumed timer reuses the saved wall-clock start, no count-in');
 hasCode("document.getElementById('phx-run-finish').onclick=function(){ _phxRunClear();", 'RUNRESUME: Finish clears the saved run');
 hasCode("o.querySelector('.phx-lib-back').onclick=function(){ _phxRunClear();", 'RUNRESUME: Back clears the saved run');
+hasCode("if(a === 'done' && cyc && seq[idx] && seq[idx].kind === 'work'){ _dgCycleLog(", 'CYCLE: Done on a cycle rep logs the time and moves on');
+hasCode("endsAt = pendingCycleEnd; pendingCycleEnd = 0;", 'CYCLE: the rest after a rep runs to the end of the fixed cycle (early = more rest, late = less)');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─
 // Reproduced in a real boot with getSession delayed 1.5 s: the fixed timer lost and the tab was wiped.

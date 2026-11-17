@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.429';
+var APP_VERSION='4.9.430';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8416,12 +8416,12 @@ window.draftGetSessionData = function(week, day, s){
     rhieGym.guided = { rounds:bouts, steps:gymSteps, restSec:restRHIE,
       entry:{ per:'round', label:'Bike calories this bout', unit:'cal', endLabel:'Total bike calories' } };
     rhieField.scoreType = 'reps'; rhieField.scoreLabel = 'Bouts finished in the window';
-    rhieField.guided = { rounds:bouts, steps:[{label:'Bout', secs:(effortsPerBout === 3 ? 25 : 20), sub:fieldBoutTxt}], restSec:restRHIE,
+    rhieField.guided = { cycle:true, rounds:bouts, steps:[{label:'Bout', secs:(effortsPerBout === 3 ? 25 : 20), sub:fieldBoutTxt}], restSec:restRHIE,
       entry:{ per:'end', endLabel:'Bouts you finished inside the window', prefillRounds:true } };
     b1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Hard', secs:15, sub:'Assault bike, all out'}], restSec:15,
       blockRest:180, blockRestLabel:'Easy spin 3 min',
       entry:{ per:'block', label:'Bike calories for the block', unit:'cal', endLabel:'Total calories, all blocks' } };
-    r1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Run', secs:15, sub:'To the ' + ivHalf + ' m line and back'}], restSec:15,
+    r1515.guided = { cycle:true, blocks:ivSets, rounds:ivReps, steps:[{label:'Run', secs:15, sub:'To the ' + ivHalf + ' m line and back \u2014 tap Done at the phone'}], restSec:15,
       blockRest:180, blockRestLabel:'Walk 3 min',
       entry:{ per:'end', endLabel:'Reps you reached the line (all blocks)', prefillRounds:true } };
     b1515.format = r1515.format = ivSets + ' BLOCKS \u00d7 ' + ivReps + ' \u00d7 15/15 \u00b7 3 MIN EASY BETWEEN';
@@ -8502,7 +8502,7 @@ window.draftGetSessionData = function(week, day, s){
       '4 REPS · REST 60 s', 'Alternate directions. Clean cuts, low hips. Tap Log Split at the finish, or type the video time.',
       [[agilName, '1 rep']], { efforts:4, work:agilName, restSec:60 });
     agil.scoreType = 'reps'; agil.scoreLabel = 'Reps done';
-    agil.guided = { rounds:4, steps:[{label:agilName, secs:8, sub:'Go on the beep, alternate directions'}], restSec:60,
+    agil.guided = { cycle:true, rounds:4, steps:[{label:agilName, secs:8, sub:'Go on the beep, alternate directions, tap Done at the phone'}], restSec:60,
       entry:{ per:'end', endLabel:'Reps done', prefillRounds:true } };
     // v4.9.385 — gym version: the same drill on the gym floor if there is room (about
     // 10 x 5 m), otherwise a lateral cone shuffle that trains the same cut.
@@ -9296,6 +9296,13 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
   document.body.appendChild(ov);
   _dgBeep(660, 60);   // unlocks audio on iOS: this runs inside the Start tap
   var idx = -1, endsAt = 0, startedAt = 0, tick = null, lastWhole = null, entries = [], ended = false;
+  // v4.9.430 — CYCLE MODE (g.cycle). Jon 18 Nov: "can I mark when I complete a set then that adds to
+  // the rest time ... if do it in 10 those 5 extra go to the rest and it keeps the score of the set?
+  // Also works opposite if miss the time it reduces the rest?" Work + the rest after it are ONE fixed
+  // cycle. He taps DONE back at the phone: that time is the rep's score, and the rest runs to the end
+  // of the cycle — finish early, rest longer; run over the window, the rest shrinks (never below 0;
+  // a rep still running when the whole cycle is gone is logged as missed and the next one starts).
+  var cyc = !!g.cycle, cycleEnd = 0, pendingCycleEnd = 0, times = [], lastRep = null;
   var B = 'font-family:var(--font-d);font-weight:900;text-transform:uppercase;letter-spacing:1px;border-radius:var(--radius);cursor:pointer;';
   ov.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 6px;">' +
@@ -9345,8 +9352,11 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     var nx = seq[idx + 1];
     $('dg-next').textContent = nx ? 'Next: ' + nx.label + (nx.kind === 'tap' ? '' : (nx.secs ? ' ' + nx.secs + ' s' : '')) : 'Last one';
     $('dg-entry').innerHTML = (cur.kind === 'rest') ? entryHTML(cur) : '';
-    $('dg-foot').innerHTML = (cur.kind === 'tap')
-      ? '<button data-dg="skip" style="flex:1;padding:34px 14px;background:var(--gold);border:none;color:#000;font-size:20px;' + B + '">Done &#10003;</button>'
+    if(cyc && cur.kind === 'rest' && !cur.blockEnd && lastRep){
+      $('dg-sub').textContent = lastRep.t == null ? 'Last rep: missed the window' : 'Last rep ' + lastRep.t.toFixed(1) + ' s \u00b7 ' + (lastRep.diff >= 0 ? '+' + lastRep.diff.toFixed(1) + ' s rest' : lastRep.diff.toFixed(1) + ' s off your rest');
+    }
+    $('dg-foot').innerHTML = (cur.kind === 'tap' || (cyc && cur.kind === 'work'))
+      ? '<button data-dg="' + (cur.kind === 'tap' ? 'skip' : 'done') + '" style="flex:1;padding:34px 14px;background:var(--gold);border:none;color:#000;font-size:20px;' + B + '">Done &#10003;</button>'
       : (cur.kind === 'rest')
       ? '<button data-dg="plus" style="flex:1;padding:14px;background:none;border:1px solid #444;color:#ddd;font-size:12px;' + B + '">+15 s</button>' +
         '<button data-dg="skip" style="flex:1.4;padding:14px;background:#7fd18b;border:none;color:#000;font-size:12px;' + B + '">Skip rest</button>'
@@ -9358,6 +9368,16 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     if(idx >= seq.length){ finish(); return; }
     startedAt = Date.now();
     endsAt = (seq[idx].kind === 'tap') ? 0 : Date.now() + seq[idx].secs * 1000;
+    if(cyc && seq[idx].kind === 'work'){
+      // The last rep of a block / the session has no rest after it: give it the same full cycle so
+      // a slow last rep is still timed rather than logged missed the moment the window closes.
+      var rAfter = (seq[idx + 1] && seq[idx + 1].kind === 'rest' && !seq[idx + 1].blockEnd) ? seq[idx + 1].secs : (g.restSec || 0);
+      cycleEnd = startedAt + (seq[idx].secs + rAfter) * 1000;
+    }
+    if(cyc && seq[idx].kind === 'rest' && !seq[idx].blockEnd && pendingCycleEnd){
+      endsAt = pendingCycleEnd; pendingCycleEnd = 0;
+      if(endsAt <= Date.now()){ next(); return; }   // he used the whole rest — straight into the next rep
+    }
     lastWhole = null;
     _dgBeep((seq[idx].kind === 'work' || seq[idx].kind === 'tap') ? 1046 : 523, (seq[idx].kind === 'set') ? 150 : 450);
     paintPhase();
@@ -9370,13 +9390,26 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
       var c0 = $('dg-clock'); if(c0){ c0.textContent = '\u00a0'; }
       return;
     }
-    var cc = $('dg-clock'); if(cc) cc.style.opacity = '1';
+    var cc = $('dg-clock'); if(cc){ cc.style.opacity = '1'; cc.style.color = ''; }
+    if(cyc && seq[idx] && seq[idx].kind === 'work' && Date.now() >= endsAt){
+      // Over the window: count the overrun up in red; his rest is shrinking. Whole cycle gone → missed.
+      if(cc){ cc.textContent = '+' + Math.floor((Date.now() - endsAt) / 1000); cc.style.color = '#e07a7a'; }
+      if(Date.now() >= cycleEnd){ _dgCycleLog(null); }
+      return;
+    }
     var left = (endsAt - Date.now()) / 1000;
     var whole = Math.ceil(left);
     var c = $('dg-clock'); if(c) c.textContent = fmt(left);
     if(whole !== lastWhole && whole >= 1 && whole <= 3) _dgBeep(880, 120);
     lastWhole = whole;
     if(left <= 0) next();
+  }
+  function _dgCycleLog(t){
+    var cur = seq[idx], win = cur.secs;
+    lastRep = { block: cur.block, round: cur.round, t: t, diff: t == null ? null : Math.round((win - t) * 10) / 10 };
+    times.push(lastRep);
+    pendingCycleEnd = cycleEnd;
+    next();
   }
   function stopClock(){ if(tick){ clearInterval(tick); tick = null; } if(typeof releaseWakeLock === 'function'){ try { releaseWakeLock(); } catch(_r){} } }
   function close(){ stopClock(); var o = $('dg-run'); if(o) o.remove(); }
@@ -9387,12 +9420,23 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     entries.forEach(function(v){ if(v != null && !isNaN(v)){ sum += v; any = true; } });
     var pre = any ? sum : (g.entry && g.entry.prefillRounds ? g.rounds * (g.blocks || 1) : '');
     var lab = (g.entry && g.entry.endLabel) || 'Score';
+    var cycStats = null;
+    if(cyc && times.length){
+      var done = times.filter(function(x){ return x.t != null; }), win0 = (seq.filter(function(x){ return x.kind === 'work'; })[0] || {}).secs || 0;
+      if(done.length){
+        var avg = Math.round(done.reduce(function(a, x){ return a + x.t; }, 0) / done.length * 10) / 10;
+        cycStats = { avg: avg, best: Math.min.apply(null, done.map(function(x){ return x.t; })), inWin: done.filter(function(x){ return x.t <= win0; }).length, n: times.length, win: win0 };
+        pre = avg; lab = 'Average rep time (s)';
+      }
+    }
     ov.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;max-width:360px;margin:0 auto;width:100%;">' +
       '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">Done</div>' +
       '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;margin:6px 0 18px;">' + _esc(spec.name) + '</div>' +
       '<div style="font-size:13px;opacity:0.85;margin-bottom:8px;">' + _esc(lab) + '</div>' +
-      '<input id="dg-total" type="number" inputmode="numeric" value="' + pre + '" style="width:100%;padding:16px;text-align:center;font-family:var(--font-d);font-size:40px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;box-sizing:border-box;">' +
+      '<input id="dg-total" type="number" ' + (cycStats ? 'step="any" inputmode="decimal"' : 'inputmode="numeric"') + ' value="' + pre + '" style="width:100%;padding:16px;text-align:center;font-family:var(--font-d);font-size:40px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;box-sizing:border-box;">' +
       (any ? '<div style="font-size:11px;opacity:0.6;margin-top:6px;">Sum of the rounds you entered. Change it if the bike says different.</div>' : '') +
+      (cycStats ? '<div id="dg-cyc" style="font-size:12px;opacity:0.85;margin-top:10px;line-height:1.5;">Best ' + cycStats.best.toFixed(1) + ' s &middot; ' + cycStats.inWin + ' of ' + cycStats.n + ' inside ' + cycStats.win + ' s<br><span style="opacity:0.7;">' +
+        times.map(function(x){ return x.t == null ? '&ndash;' : x.t.toFixed(1); }).join(' &middot; ') + '</span></div>' : '') +
       '<button id="dg-save" style="width:100%;margin-top:16px;padding:16px;background:var(--gold);border:none;color:#000;font-size:14px;' + B + '">Save</button>' +
       '<button id="dg-nosave" style="width:100%;margin-top:10px;padding:12px;background:none;border:1px solid #444;color:#bbb;font-size:11px;' + B + '">Close without saving</button></div>';
     $('dg-save').onclick = function(){
@@ -9401,6 +9445,10 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
       if(typeof _phxSaveScore === 'function' && !dryRun){
         var s2 = Object.assign({}, spec); delete s2.guided;
         var _note = entries.filter(function(x){ return x != null; }).length ? 'rounds: ' + entries.map(function(x){ return x == null ? '-' : x; }).join(', ') : '';
+        if(cycStats){
+          s2.scoreType = 'avg_split'; s2.scoreLabel = 'Average rep time';
+          _note = 'best ' + cycStats.best.toFixed(1) + ' s · ' + cycStats.inWin + '/' + cycStats.n + ' inside ' + cycStats.win + ' s · reps: ' + times.map(function(x){ return x.t == null ? 'missed' : x.t.toFixed(1); }).join(', ');
+        }
         if(spec._loadKg > 0){ _note = '@ ' + spec._loadKg + ' kg' + (_note ? ' \u00b7 ' + _note : ''); window._draftKgSet(spec.id, spec._loadKg); }
         _phxSaveScore(s2, v, _note);
       }
@@ -9419,6 +9467,7 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
       return;
     }
     var a = t.getAttribute('data-dg');
+    if(a === 'done' && cyc && seq[idx] && seq[idx].kind === 'work'){ _dgCycleLog(Math.round((Date.now() - startedAt) / 100) / 10); return; }
     if(a === 'skip'){ next(); return; }
     if(a === 'plus'){ endsAt += 15000; paint(); return; }
   });

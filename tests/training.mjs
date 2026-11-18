@@ -6689,6 +6689,37 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       app._phxHistoryFor = () => []; assert.equal(app.window.draftToBeat('x'), null);
     } finally { app._phxHistoryFor = orig; }
   });
+  test('CARRY: a skipped finisher moves to another session — added there with its own week\'s sets, gone from the source, movable again and back (Jon, 19 Nov)', () => {
+    startDraft();
+    const st = app.window.blabGetState(); st.draftCalf = { fromWeek: 4, toWeek: 6 }; app.window.blabSaveState(st);
+    const has = (w, d) => app.blabGetSessionData(w, d).exercises.filter((e) => e.name === 'Assault Bike Sprint');
+    assert.equal(has(4, 6).length, 0, 'Speed Lower has no bike before');
+    app.window.draftCarryAdd(4, 4, 'Assault Bike Sprint', 4, 6);
+    const moved = has(4, 6);
+    assert.equal(moved.length, 1, 'added to Speed Lower');
+    assert.equal(moved[0].sets, 8, 'W4 sets (not W4 D6 or W5)'); assert.ok(moved[0].guidedSpec, 'still runs in the runner');
+    assert.ok(/^Moved from Lower/.test(moved[0].note), moved[0].note);
+    assert.equal(has(4, 4).length, 0, 'out of the source');
+    app.window.draftCarryAdd(4, 6, 'Assault Bike Sprint', 5, 2);    // move again from where it now lives
+    assert.equal(has(4, 6).length, 0); assert.equal(has(5, 2).length, 1);
+    assert.equal(app.window.blabGetState().draftCarry.length, 1, 'one record, original source kept');
+    assert.deepEqual([app.window.blabGetState().draftCarry[0].fromW, app.window.blabGetState().draftCarry[0].fromD], [4, 4]);
+    app.window.draftCarryAdd(5, 2, 'Assault Bike Sprint', 4, 4);    // back home
+    assert.equal(has(4, 4).length, 1); assert.equal(has(5, 2).length, 0); assert.equal(app.window.blabGetState().draftCarry.length, 0);
+  });
+  test('CARRY 1119: one shot moves Thursday\'s bike to Speed Lower, once, only until 22 Nov', () => {
+    startDraft();
+    const st = app.window.blabGetState(); st.draftCalf = { fromWeek: 4, toWeek: 6 }; app.window.blabSaveState(st);
+    const orig = app._phxLocalISO;
+    try {
+      app._phxLocalISO = () => '2026-11-23'; assert.equal(app.window._draftCarry1119(), false);
+      app._phxLocalISO = () => '2026-11-19'; assert.equal(app.window._draftCarry1119(), true);
+      assert.equal(app.blabGetSessionData(4, 6).exercises.filter((e) => e.name === 'Assault Bike Sprint').length, 1);
+      app.window.draftCarryAdd(4, 6, 'Assault Bike Sprint', 4, 4);
+      assert.equal(app.window._draftCarry1119(), false, 'never again');
+      assert.equal(app.blabGetSessionData(4, 6).exercises.filter((e) => e.name === 'Assault Bike Sprint').length, 0);
+    } finally { app._phxLocalISO = orig; }
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

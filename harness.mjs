@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.438'", 'version is 4.9.438');
+has("var APP_VERSION='4.9.439'", 'version is 4.9.439');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -410,6 +410,7 @@ hasCode("window.draftRestBrief(parts[nx]);", 'RESTBRIEF: the between-drills rest
 hasCode("if(a === 'cones'){ window.draftOpenConesFull(sess); return; }", 'CONEMAP: tapping the diagram opens it full screen');
 hasCode("if(ex._guidedSpec && typeof window.draftGuidedBlock === 'function'){", 'BIKEFIN: a lift-day exercise with a guided spec gets the runner, not set rows');
 hasCode("var lastNeed = !!(g.entry && g.entry.per === 'round'", 'BIKEFIN: the last round entry is asked for at the finish');
+hasCode("return (day === 'field') ? o : window._draftApplyCarry(o, week, day, s);", 'CARRY: every Draft session applies moved finishers');
 hasCode("var _rtDrill=document.getElementById('rt-drill'); if(_rtDrill) _rtDrill.remove();", 'RESTBRIEF: any other rest clears the drill brief');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─
@@ -2583,7 +2584,7 @@ has('window.blabTrainingStateOn = function',        'CONTRACT: question-shaped s
   // blabCalMarkCompleted, which had only ever stamped BLAB sessions.
   // v4.9.341: +2 — draftStart and draftReturnToBlab (Training) swap the calendar's
   // BLAB sessions for Draft's and back.
-  const MINE = 28;   // v4.9.378: +1 draftReconcileCustoms; v4.9.382: +1 _draftRepairSat7; v4.9.390: +1 _draftReschedule1109 (Training)
+  const MINE = 29;   // v4.9.378: +1 draftReconcileCustoms; v4.9.382: +1 _draftRepairSat7; v4.9.390: +1 _draftReschedule1109; v4.9.439: +1 draftCarryTargets (Training)
   if (n === MINE) ok('CONTRACT: blabCalGet has only its ' + MINE + ' Training call sites');
   else bad(`CONTRACT: blabCalGet is invoked ${n}× in code, expected ${MINE} (all Training's). ` +
            `If you added one, update the count. If a peer added one, that is my internal storage ` +

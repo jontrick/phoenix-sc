@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.438';
+var APP_VERSION='4.9.439';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6326,6 +6326,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx._bodyweight = !!ex.bodyweight;
       if(ex.rest > 0) phxEx.rest_sec = ex.rest;
       if(ex.guidedSpec) phxEx._guidedSpec = ex.guidedSpec;   // v4.9.438 — runs in the guided runner
+      if(ex.carried) phxEx._carried = ex.carried;             // v4.9.439 — moved here from another session
       // v4.9.131: timed-hold exercises carry hold_secs through so the session renderer
       // can inject a countdown timer button (e.g. Copenhagen Planks).
       if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs; phxEx.reps = ex.hold_secs+'s'; }
@@ -8270,7 +8271,68 @@ window.draftGetSessionData = function(week, day, s){
   if(!s) return null;
   var calf = window._draftCalfOn(s, (day === 'field') ? 2 : week);
   var o = window._draftGetSessionRaw(week, day, s, calf);
-  return calf ? window._draftCalfSwap(o) : o;
+  if(calf) o = window._draftCalfSwap(o);
+  return (day === 'field') ? o : window._draftApplyCarry(o, week, day, s);
+};
+// v4.9.439 — CARRY A FINISHER TO ANOTHER SESSION. Jon 19 Nov: "I completed today with out doing the
+// assault bike can I add it to the lower power ... Is this possible as an option for finisher - add it
+// to a different day or session?" s.draftCarry = [{ fromW, fromD, name, toW, toD }]. The exercise is
+// regenerated from its source session (so it carries that week's sets and its guided spec), appended
+// to the target, and taken out of the source.
+window._draftApplyCarry = function(o, week, day, s){
+  var list = (s && Array.isArray(s.draftCarry)) ? s.draftCarry : [];
+  if(!o || !Array.isArray(o.exercises) || !list.length) return o;
+  week = parseInt(week, 10); day = parseInt(day, 10);
+  list.forEach(function(c){
+    if(c.fromW === week && c.fromD === day && !(c.toW === week && c.toD === day)){
+      o.exercises = o.exercises.filter(function(e){ return !(e && e.name === c.name); });
+    }
+  });
+  list.forEach(function(c){
+    if(c.toW !== week || c.toD !== day) return;
+    var calfF = window._draftCalfOn(s, c.fromW);
+    var src = window._draftGetSessionRaw(c.fromW, c.fromD, s, calfF);
+    if(calfF) src = window._draftCalfSwap(src);
+    var ex = src && Array.isArray(src.exercises) ? src.exercises.filter(function(e){ return e && e.name === c.name; })[0] : null;
+    if(!ex || o.exercises.some(function(e){ return e && e.name === c.name; })) return;
+    ex = JSON.parse(JSON.stringify(ex));
+    ex.carried = { fromW: c.fromW, fromD: c.fromD, fromName: src.name };
+    ex.note = 'Moved from ' + src.name + (ex.note ? '. ' + ex.note : '');
+    o.exercises.push(ex);
+  });
+  return o;
+};
+window.draftCarryAdd = function(fromW, fromD, name, toW, toD){
+  var s = window.blabGetState(); if(!s || !name) return false;
+  // a carried finisher moved again keeps its ORIGINAL source
+  var prev = (s.draftCarry || []).filter(function(c){ return c.name === name && c.toW === fromW && c.toD === fromD; })[0];
+  var src = prev ? { w: prev.fromW, d: prev.fromD } : { w: fromW, d: fromD };
+  s.draftCarry = (s.draftCarry || []).filter(function(c){ return !(c.name === name && c.fromW === src.w && c.fromD === src.d); });
+  if(!(toW === src.w && toD === src.d)) s.draftCarry.push({ fromW: src.w, fromD: src.d, name: name, toW: toW, toD: toD });
+  window.blabSaveState(s);
+  return true;
+};
+// Upcoming Draft sessions that are lift days (they have exercise rows) and not done yet.
+window.draftCarryTargets = function(fromW, fromD){
+  var cal = window.blabCalGet(), today = _phxLocalISO(), end = (typeof _nut2ShiftDate === 'function') ? _nut2ShiftDate(today, 14) : '9999';
+  if(!cal || !Array.isArray(cal.sessions)) return [];
+  return cal.sessions.filter(function(e){
+    return e && e.blabWeek && e.blabDay && e.status !== 'completed' && e.status !== 'skipped' &&
+      e.scheduledDate >= today && e.scheduledDate <= end && !(e.blabWeek === fromW && e.blabDay === fromD);
+  }).map(function(e){
+    var x = window.draftGetSessionData(e.blabWeek, e.blabDay);
+    return x && !x.conditioning && Array.isArray(x.exercises) && x.exercises.length ? { w: e.blabWeek, d: e.blabDay, date: e.scheduledDate, name: x.name } : null;
+  }).filter(Boolean).sort(function(a, b){ return a.date.localeCompare(b.date); });
+};
+// One-shot: the bike he skipped today (W4 D4, Thu 19 Nov) onto Speed Lower (W4 D6). Archive after 22 Nov.
+window._draftCarry1119 = function(){
+  try {
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft' || s.draftCarry1119) return false;
+    if(_phxLocalISO() > '2026-11-22') return false;
+    s.draftCarry1119 = true; window.blabSaveState(s);
+    window.draftCarryAdd(4, 4, 'Assault Bike Sprint', 4, 6);
+    return true;
+  } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.carry1119', _e, {}); return false; }
 };
 window._draftGetSessionRaw = function(week, day, s, calf){
   var _field = (day === 'field');          // v4.9.378 — the split-off field-test session
@@ -8970,7 +9032,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); window._draftReschedule1115(); window._draftCalf1118(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); window._draftReschedule1115(); window._draftCalf1118(); window._draftCarry1119(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);
@@ -9731,20 +9793,53 @@ window.draftGuidedBlock = function(ex, dry){
     var tb = window.draftToBeat(spec.id);
     b.innerHTML = '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text);">' + _esc(ex.name) + '</div>' +
       '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--gold);margin-top:3px;">' + _esc(spec.format) + '</div>' +
+      (ex._carried ? '<div style="font-size:12px;color:var(--text3);margin-top:4px;">Moved here from ' + _esc(ex._carried.fromName || 'another session') + '</div>' : '') +
       '<ul class="draft-bul" style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.5;">' +
         window.draftBullets(spec.note).map(function(x){ return '<li style="margin:2px 0;">' + _esc(x) + '</li>'; }).join('') + '</ul>' +
       (tb ? '<div id="dg-tobeat" style="font-size:12px;font-weight:700;color:var(--gold);margin-top:8px;">To beat: ' + tb.last + ' cal' +
             (tb.per.some(function(v){ return v != null; }) ? ' <span style="font-weight:400;color:var(--text3);">(' + tb.per.length + ' sprints: ' + tb.per.map(function(v){ return v == null ? '\u2013' : v; }).join(' \u00b7 ') + ')</span>' : '') +
             (tb.best != null && tb.best > tb.last ? ' &middot; best ' + tb.best : '') + '</div>' : '') +
       (savedV != null ? '<div style="font-size:13px;color:#7fd18b;font-weight:700;margin-top:8px;">Saved: ' + savedV + ' cal &#10003;</div>' : '') +
-      '<button data-gb="go" style="width:100%;margin-top:10px;padding:14px;background:' + (savedV != null ? 'transparent' : 'var(--gold)') + ';border:' + (savedV != null ? '1px solid var(--border2)' : 'none') + ';border-radius:var(--radius);color:' + (savedV != null ? 'var(--text2)' : '#000') + ';font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;">' + (savedV != null ? 'RUN AGAIN' : 'START') + '</button>';
+      '<button data-gb="go" style="width:100%;margin-top:10px;padding:14px;background:' + (savedV != null ? 'transparent' : 'var(--gold)') + ';border:' + (savedV != null ? '1px solid var(--border2)' : 'none') + ';border-radius:var(--radius);color:' + (savedV != null ? 'var(--text2)' : '#000') + ';font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;">' + (savedV != null ? 'RUN AGAIN' : 'START') + '</button>' +
+      (savedV == null && !dry ? '<button data-gb="move" style="width:100%;margin-top:8px;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:700;letter-spacing:2px;">DO IT IN ANOTHER SESSION</button>' : '');
   };
   paint(null);
   b.addEventListener('click', function(e){
+    if(e.target.closest && e.target.closest('[data-gb="move"]')){ window.draftOpenCarry(ex); return; }
     if(!(e.target.closest && e.target.closest('[data-gb="go"]'))) return;
     window.draftRunGuided(spec, dry, function(v){ paint(v); });
   });
   return b;
+};
+window.draftOpenCarry = function(ex){
+  var cur = window._blabCurrentSession || {};
+  var cr = ex._carried || ex.carried;
+  var fw = (cr && cr.fromW) || cur.week, fd = (cr && cr.fromD) || cur.day;
+  var list = window.draftCarryTargets(cur.week, cur.day);
+  var old = document.getElementById('draft-carry'); if(old) old.remove();
+  var o = document.createElement('div'); o.id = 'draft-carry';
+  o.style.cssText = 'position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,0.75);display:flex;align-items:flex-end;justify-content:center;';
+  var dl = function(iso){ try { var p = iso.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short' }); } catch(_d){ return iso; } };
+  o.innerHTML = '<div style="background:var(--bg2);border-top:1px solid var(--gold);border-radius:14px 14px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);width:100%;max-width:560px;max-height:75vh;overflow-y:auto;">' +
+    '<div style="font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">Do ' + _esc(ex.name) + ' in</div>' +
+    '<div style="font-size:12px;color:var(--text3);margin:4px 0 10px;">It is added to the end of that session and taken out of this one.</div>' +
+    (list.length ? list.map(function(t){ return '<button data-cy="' + t.w + ',' + t.d + '" style="display:flex;width:100%;text-align:left;gap:10px;padding:12px 4px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:14px;"><span style="min-width:96px;color:var(--gold);">' + _esc(dl(t.date)) + '</span><span>' + _esc(t.name) + '</span></button>'; }).join('')
+      : '<div style="font-size:13px;color:var(--text2);padding:8px 0;">No gym sessions in the next 14 days to add it to.</div>') +
+    (cr ? '<button data-cy="' + fw + ',' + fd + '" style="width:100%;margin-top:10px;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-size:12px;">Put it back where it came from</button>' : '') +
+    '<button data-cy="x" style="width:100%;margin-top:10px;padding:12px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;letter-spacing:2px;">CANCEL</button></div>';
+  o.addEventListener('click', function(e){
+    var t = e.target.closest ? e.target.closest('[data-cy]') : null;
+    if(!t && e.target !== o) return;
+    var v = t ? t.getAttribute('data-cy') : 'x';
+    o.remove();
+    if(v === 'x') return;
+    var p = v.split(',').map(Number);
+    window.draftCarryAdd(cur.week, cur.day, ex.name, p[0], p[1]);
+    if(typeof window._blabCalToast === 'function') try { window._blabCalToast('Moved'); } catch(_t){}
+    try { if(cur.week && cur.day) window.blabOpenSession(cur.week, cur.day); } catch(_r){}
+  });
+  document.body.appendChild(o);
+  return true;
 };
 window.draftNextTimedPart = function(parts, fromIdx, st){
   for(var k = fromIdx + 1; k < parts.length; k++){

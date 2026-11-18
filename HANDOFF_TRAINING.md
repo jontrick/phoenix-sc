@@ -564,3 +564,12 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   intervals session — keeps harness INTERVAL count at 3). Sets differ by week (W4 8, W5 5): totals are not
   like-for-like across weeks; the per-sprint split is. Tests BIKEFIN, TOBEAT; harness ×2. Browser-proven
   W4 D4 → save 94 → W5 D4 shows To beat + per-round Last time.
+- **v4.9.439 (19 Nov) — move a finisher to another session.** Jon: "I completed today with out doing the
+  assault bike can I add it to the lower power ... Is this possible as an option for finisher - add it to a
+  different day or session?" `s.draftCarry = [{fromW,fromD,name,toW,toD}]`; `draftGetSessionData` →
+  `_draftApplyCarry` regenerates the exercise from its SOURCE session (that week's sets + guided spec),
+  appends it to the target ("Moved here from …"), and removes it from the source. Guided finisher card has
+  DO IT IN ANOTHER SESSION → `draftOpenCarry` sheet (upcoming not-done lift days, 14 days, via
+  `draftCarryTargets` — MINE 29) + "Put it back". Moving again keeps the original source (one record).
+  One-shot `_draftCarry1119`: Thu 19 Nov's (W4 D4) bike → Speed Lower (W4 D6, Sun 22 Nov). Archive after
+  22 Nov. Only guided-spec exercises get the button (the calf bike finisher today). Tests CARRY, CARRY 1119.

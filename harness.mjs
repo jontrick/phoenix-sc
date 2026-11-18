@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.437'", 'version is 4.9.437');
+has("var APP_VERSION='4.9.438'", 'version is 4.9.438');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -408,6 +408,8 @@ hasCode("window._phxNoteBoxHTML(sess.name, 'Why did you stop? (saved with this s
 hasCode("_nb.innerHTML = window._phxNoteBoxHTML(", 'COMPLETENOTE: the gym complete modal has the note box');
 hasCode("window.draftRestBrief(parts[nx]);", 'RESTBRIEF: the between-drills rest shows the next drill as bullets');
 hasCode("if(a === 'cones'){ window.draftOpenConesFull(sess); return; }", 'CONEMAP: tapping the diagram opens it full screen');
+hasCode("if(ex._guidedSpec && typeof window.draftGuidedBlock === 'function'){", 'BIKEFIN: a lift-day exercise with a guided spec gets the runner, not set rows');
+hasCode("var lastNeed = !!(g.entry && g.entry.per === 'round'", 'BIKEFIN: the last round entry is asked for at the finish');
 hasCode("var _rtDrill=document.getElementById('rt-drill'); if(_rtDrill) _rtDrill.remove();", 'RESTBRIEF: any other rest clears the drill brief');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─

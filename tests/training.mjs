@@ -6665,6 +6665,30 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     }
     assert.equal(app.window.draftConeSVG(null), '');
   });
+  test('BIKEFIN: calf-week bike finisher — the bike times the work (tap step), phone rests 60 s, calories per sprint, total is the score (Jon, 19 Nov)', () => {
+    startDraft();
+    const st = app.window.blabGetState(); st.draftCalf = { fromWeek: 4, toWeek: 6 }; app.window.blabSaveState(st);
+    const ex = app.blabGetSessionData(4, 4).exercises.find((e) => e.name === 'Assault Bike Sprint');
+    const g = ex && ex.guidedSpec && ex.guidedSpec.guided;
+    assert.ok(g, 'has a guided spec');
+    assert.ok(g.steps.length === 1 && g.steps[0].tap, 'work is a TAP step — no phone clock on the work');
+    assert.equal(g.rounds, ex.sets); assert.equal(g.restSec, 60);
+    assert.deepEqual([g.entry.per, g.entry.unit], ['round', 'cal']);
+    const seq = app.window.draftGuidedSequence(g);
+    assert.equal(seq.filter((x) => x.kind === 'tap').length, ex.sets); assert.equal(seq.filter((x) => x.kind === 'rest').length, ex.sets - 1);
+    assert.ok(!seq.some((x) => x.kind === 'work'), 'no timed work phase');
+    const ph = app.blabToPhoenixSession(app.blabGetSessionData(4, 4), 4, 4).exercises.find((e) => e.name === 'Assault Bike Sprint');
+    assert.ok(ph && ph._guidedSpec && ph._guidedSpec.id === 'draft-calf-bike-sprint', 'reaches the gym screen');
+  });
+  test('TOBEAT: last total + per-sprint split come back from the saved note', () => {
+    const orig = app._phxHistoryFor;
+    try {
+      app._phxHistoryFor = () => [{ score: '94', notes: 'rounds: 14, 13, -, 12', date: '2026-11-19T07:00:00Z' }, { score: '99', notes: '' }];
+      const t = app.window.draftToBeat('x');
+      assert.deepEqual([t.last, t.per, t.best], [94, [14, 13, null, 12], 99]);
+      app._phxHistoryFor = () => []; assert.equal(app.window.draftToBeat('x'), null);
+    } finally { app._phxHistoryFor = orig; }
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

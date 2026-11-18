@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.437';
+var APP_VERSION='4.9.438';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6325,6 +6325,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx._blabFmt = 'standard_sets';
       phxEx._bodyweight = !!ex.bodyweight;
       if(ex.rest > 0) phxEx.rest_sec = ex.rest;
+      if(ex.guidedSpec) phxEx._guidedSpec = ex.guidedSpec;   // v4.9.438 — runs in the guided runner
       // v4.9.131: timed-hold exercises carry hold_secs through so the session renderer
       // can inject a countdown timer button (e.g. Copenhagen Planks).
       if(ex.hold_secs){ phxEx._holdSecs = ex.hold_secs; phxEx.reps = ex.hold_secs+'s'; }
@@ -8245,8 +8246,19 @@ window._draftCalfSwap = function(o){
                note:'CALF: replaces ' + ex.name + '. Feet flat, snap the hips, every rep fast. 90 s rest.' };
     }
     if(_DRAFT_CALF_PUSH.test(ex.name)){
-      return { name:'Assault Bike Sprint', format:'standard_sets', sets:ex.sets || 5, reps:'10 s', rest:60, bodyweight:true,
-               note:'CALF: replaces the ' + ex.name.toLowerCase() + '. All out for 10 s, 60 s easy spin.' };
+      // v4.9.438 — Jon 19 Nov: "hard to manage work load on the phone and bike - can I time the work on
+      // the bike then the phone does the rest but also need to add the cals ... each rep plus total to
+      // beat next time". The BIKE times the 10 s; he taps Done, the phone runs the 60 s rest and takes
+      // that sprint's calories; the total is the score, and last time's total + per-sprint are shown.
+      var _n = ex.sets || 5;
+      return { name:'Assault Bike Sprint', format:'standard_sets', sets:_n, reps:'10 s', rest:60, bodyweight:true,
+               note:'CALF: replaces the ' + ex.name.toLowerCase() + '. All out for 10 s, 60 s easy spin.',
+               guidedSpec: { id:'draft-calf-bike-sprint', name:'Assault Bike Sprints', cat:'WOD', tier:'DRAFT', hidden:true,
+                 renderer:'guided', scoreType:'reps', scoreLabel:'Total calories', format:_n + ' \u00d7 10 s \u00b7 REST 60 s',
+                 note:'Set the bike to 10 s, or watch its clock. Tap Done when it stops: the phone runs the 60 s rest. Enter that sprint\u2019s calories during the rest.',
+                 config:{ efforts:_n, work:'Bike sprint 10 s', restSec:60 }, movements:[{ name:'Assault bike sprint', detail:'10 s' }],
+                 guided:{ rounds:_n, steps:[{ label:'Bike sprint', tap:true, sub:'The bike times the 10 s \u2014 tap Done when it stops' }], restSec:60,
+                   entry:{ per:'round', label:'Calories this sprint', unit:'cal', endLabel:'Total calories' } } } };
     }
     return ex;
   });
@@ -9414,6 +9426,8 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
   // of the cycle — finish early, rest longer; run over the window, the rest shrinks (never below 0;
   // a rep still running when the whole cycle is gone is logged as missed and the next one starts).
   var cyc = !!g.cycle, cycleEnd = 0, pendingCycleEnd = 0, times = [], lastRep = null;
+  // v4.9.438 — last time's per-round split, shown beside each round's entry.
+  var _tb = (g.entry && g.entry.per === 'round' && !dryRun && typeof window.draftToBeat === 'function') ? window.draftToBeat(spec.id) : null;
   var B = 'font-family:var(--font-d);font-weight:900;text-transform:uppercase;letter-spacing:1px;border-radius:var(--radius);cursor:pointer;';
   ov.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 6px;">' +
@@ -9438,7 +9452,9 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     if(g.entry.per === 'block' && !cur.blockEnd) return '';
     if(g.entry.per !== 'round' && g.entry.per !== 'block') return '';
     var k = entryKey(cur), v = entries[k - 1];
+    var pv = _tb && _tb.per[k - 1] != null ? _tb.per[k - 1] : null;
     return '<div style="font-size:12px;opacity:0.85;margin-bottom:6px;">' + _esc(g.entry.label) + ' &middot; ' + (g.entry.per === 'block' ? 'block ' : 'round ') + k + ' <span style="opacity:0.6;">(optional)</span></div>' +
+      (pv != null ? '<div id="dg-prev" style="font-size:12px;color:var(--gold);margin-bottom:6px;">Last time: ' + pv + ' ' + _esc(g.entry.unit || '') + '</div>' : '') +
       '<div style="display:flex;align-items:center;justify-content:center;gap:10px;">' +
         '<button data-dg-adj="-1" style="width:52px;height:52px;border-radius:50%;background:#222;border:1px solid #444;color:#fff;font-size:26px;">&minus;</button>' +
         '<input id="dg-val" type="number" inputmode="numeric" value="' + (v != null ? v : '') + '" placeholder="' + _esc(g.entry.unit || '') + '" style="width:110px;padding:12px;text-align:center;font-family:var(--font-d);font-size:30px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;">' +
@@ -9532,6 +9548,8 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
     var pre = any ? sum : (g.entry && g.entry.prefillRounds ? g.rounds * (g.blocks || 1) : '');
     var lab = (g.entry && g.entry.endLabel) || 'Score';
     var cycStats = null;
+    // v4.9.438 — the last round has no rest after it, so its entry was never offered: ask here.
+    var lastNeed = !!(g.entry && g.entry.per === 'round' && (g.blocks || 1) === 1 && entries[g.rounds - 1] == null && idx >= seq.length - 1);
     if(cyc && times.length){
       var done = times.filter(function(x){ return x.t != null; }), win0 = (seq.filter(function(x){ return x.kind === 'work'; })[0] || {}).secs || 0;
       if(done.length){
@@ -9544,12 +9562,21 @@ window.draftRunGuided = function(spec, dryRun, onSaved){
       '<div style="font-family:var(--font-d);font-size:12px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">Done</div>' +
       '<div style="font-family:var(--font-d);font-size:24px;font-weight:900;text-transform:uppercase;margin:6px 0 18px;">' + _esc(spec.name) + '</div>' +
       '<div style="font-size:13px;opacity:0.85;margin-bottom:8px;">' + _esc(lab) + '</div>' +
+      (lastNeed ? '<div style="font-size:12px;opacity:0.85;margin-bottom:6px;">' + _esc(g.entry.label) + ' &middot; round ' + g.rounds + '</div>' +
+        '<input id="dg-last" type="number" inputmode="numeric" placeholder="' + _esc(g.entry.unit || '') + '" style="width:140px;padding:12px;text-align:center;font-family:var(--font-d);font-size:30px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;margin:0 auto 16px;display:block;">' : '') +
       '<input id="dg-total" type="number" ' + (cycStats ? 'step="any" inputmode="decimal"' : 'inputmode="numeric"') + ' value="' + pre + '" style="width:100%;padding:16px;text-align:center;font-family:var(--font-d);font-size:40px;font-weight:900;background:#111;border:1px solid var(--gold);border-radius:var(--radius);color:#fff;box-sizing:border-box;">' +
       (any ? '<div style="font-size:11px;opacity:0.6;margin-top:6px;">Sum of the rounds you entered. Change it if the bike says different.</div>' : '') +
       (cycStats ? '<div id="dg-cyc" style="font-size:12px;opacity:0.85;margin-top:10px;line-height:1.5;">Best ' + cycStats.best.toFixed(1) + ' s &middot; ' + cycStats.inWin + ' of ' + cycStats.n + ' inside ' + cycStats.win + ' s<br><span style="opacity:0.7;">' +
         times.map(function(x){ return x.t == null ? '&ndash;' : x.t.toFixed(1); }).join(' &middot; ') + '</span></div>' : '') +
       '<button id="dg-save" style="width:100%;margin-top:16px;padding:16px;background:var(--gold);border:none;color:#000;font-size:14px;' + B + '">Save</button>' +
       '<button id="dg-nosave" style="width:100%;margin-top:10px;padding:12px;background:none;border:1px solid #444;color:#bbb;font-size:11px;' + B + '">Close without saving</button></div>';
+    if(lastNeed && $('dg-last')){
+      var base = any ? sum : 0;
+      $('dg-last').addEventListener('input', function(){
+        var n = parseFloat(this.value); entries[g.rounds - 1] = isNaN(n) ? null : n;
+        $('dg-total').value = base + (isNaN(n) ? 0 : n);
+      });
+    }
     $('dg-save').onclick = function(){
       var v = parseFloat(($('dg-total') || {}).value);
       if(isNaN(v)){ if(typeof window._blabCalToast === 'function') window._blabCalToast('Enter a number, or close without saving', 'error'); return; }
@@ -9684,6 +9711,40 @@ window.draftOpenConesFull = function(sess){
   o.addEventListener('click', function(e){ if(e.target.closest && e.target.closest('[data-dcf]')) o.remove(); });
   document.body.appendChild(o);
   return true;
+};
+// v4.9.438 — what he has to beat: the last saved total for this drill and its per-round split
+// (the runner's note is "rounds: 12, 13, -, 14").
+window.draftToBeat = function(id){
+  var h = (typeof _phxHistoryFor === 'function') ? _phxHistoryFor(id) : [];
+  if(!h.length) return null;
+  var last = h[0], m = String(last.notes || '').match(/rounds:\s*([0-9.,\s-]+)/);
+  var per = m ? m[1].split(',').map(function(x){ x = x.trim(); return x === '-' || x === '' ? null : parseFloat(x); }) : [];
+  var best = h.reduce(function(b, r){ var v = parseFloat(r.score); return isNaN(v) ? b : Math.max(b, v); }, -Infinity);
+  return { last: parseFloat(last.score), per: per, best: best > -Infinity ? best : null, date: (last.date || '').slice(0, 10) };
+};
+window.draftGuidedBlock = function(ex, dry){
+  var spec = ex._guidedSpec; if(!spec || typeof document === 'undefined') return null;
+  var b = document.createElement('div');
+  b.className = 'ex-block';
+  b.style.cssText = 'margin:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;';
+  var paint = function(savedV){
+    var tb = window.draftToBeat(spec.id);
+    b.innerHTML = '<div style="font-family:var(--font-d);font-size:16px;font-weight:900;color:var(--text);">' + _esc(ex.name) + '</div>' +
+      '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:1px;color:var(--gold);margin-top:3px;">' + _esc(spec.format) + '</div>' +
+      '<ul class="draft-bul" style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.5;">' +
+        window.draftBullets(spec.note).map(function(x){ return '<li style="margin:2px 0;">' + _esc(x) + '</li>'; }).join('') + '</ul>' +
+      (tb ? '<div id="dg-tobeat" style="font-size:12px;font-weight:700;color:var(--gold);margin-top:8px;">To beat: ' + tb.last + ' cal' +
+            (tb.per.some(function(v){ return v != null; }) ? ' <span style="font-weight:400;color:var(--text3);">(' + tb.per.length + ' sprints: ' + tb.per.map(function(v){ return v == null ? '\u2013' : v; }).join(' \u00b7 ') + ')</span>' : '') +
+            (tb.best != null && tb.best > tb.last ? ' &middot; best ' + tb.best : '') + '</div>' : '') +
+      (savedV != null ? '<div style="font-size:13px;color:#7fd18b;font-weight:700;margin-top:8px;">Saved: ' + savedV + ' cal &#10003;</div>' : '') +
+      '<button data-gb="go" style="width:100%;margin-top:10px;padding:14px;background:' + (savedV != null ? 'transparent' : 'var(--gold)') + ';border:' + (savedV != null ? '1px solid var(--border2)' : 'none') + ';border-radius:var(--radius);color:' + (savedV != null ? 'var(--text2)' : '#000') + ';font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;">' + (savedV != null ? 'RUN AGAIN' : 'START') + '</button>';
+  };
+  paint(null);
+  b.addEventListener('click', function(e){
+    if(!(e.target.closest && e.target.closest('[data-gb="go"]'))) return;
+    window.draftRunGuided(spec, dry, function(v){ paint(v); });
+  });
+  return b;
 };
 window.draftNextTimedPart = function(parts, fromIdx, st){
   for(var k = fromIdx + 1; k < parts.length; k++){
@@ -47247,6 +47308,12 @@ function openTodaySession(){
     if(ex._blabFmt === 'interval' || ex._blabFmt === 'steady_state' || ex._blabFmt === 'tabata'){
       var runBlock = window._blabBuildRunBlock(ex, i);
       if(runBlock){ body.appendChild(runBlock); return; }
+    }
+    // v4.9.438 — a lift-day exercise that carries a guided spec (the calf-weeks bike finisher)
+    // runs in the same guided runner as the conditioning drills: tap Done, phone runs the rest.
+    if(ex._guidedSpec && typeof window.draftGuidedBlock === 'function'){
+      var gBlock = window.draftGuidedBlock(ex, !!window._blabDryRun);
+      if(gBlock){ body.appendChild(gBlock); return; }
     }
     var block=document.createElement('div');
     block.className='ex-block';

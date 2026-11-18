@@ -553,3 +553,14 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   says "start cone ~2 m left of the phone, clear of the sprint lane" to match the drawing. Pitch only (calf
   weeks 4-6 are gym, so first seen after the calf block). Test CONEMAP; harness ×1. Browser-rendered 5 sessions.
   Seen in the browser: the boot one-shot `_draftCalf1118` seeded calf mode on a fresh signed-in state.
+- **v4.9.438 (19 Nov) — calf-week Assault Bike finisher runs in the guided runner.** Jon: "hard to manage work
+  load on the phone and bike - can I time the work on the bike then the phone does the rest but also need to
+  add the cals too for target - each rep plus total to beat next time". `_draftCalfSwap` gives the bike
+  sprint a `guidedSpec` (id draft-calf-bike-sprint): one TAP step per sprint (the bike times the 10 s), 60 s
+  phone rest, calories per round entered during the rest, total = score. Gym screen: `ex._guidedSpec` →
+  `draftGuidedBlock` (START button, "To beat: N cal (k sprints: …)" via `draftToBeat`). Runner (all
+  per-round guided drills): rest entry shows "Last time: N" for that round; finish asks for the LAST round's
+  entry (it had no rest to enter it in) and adds it to the total. renderer:'guided' (not a PHX_LIB
+  intervals session — keeps harness INTERVAL count at 3). Sets differ by week (W4 8, W5 5): totals are not
+  like-for-like across weeks; the per-sprint split is. Tests BIKEFIN, TOBEAT; harness ×2. Browser-proven
+  W4 D4 → save 94 → W5 D4 shows To beat + per-round Last time.

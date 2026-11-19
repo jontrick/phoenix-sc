@@ -573,3 +573,13 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   `draftCarryTargets` — MINE 29) + "Put it back". Moving again keeps the original source (one record).
   One-shot `_draftCarry1119`: Thu 19 Nov's (W4 D4) bike → Speed Lower (W4 D6, Sun 22 Nov). Archive after
   22 Nov. Only guided-spec exercises get the button (the calf bike finisher today). Tests CARRY, CARRY 1119.
+- **v4.9.440 (20 Nov) — machine intervals are LOG-ONLY (no phone clock).** Jon: "For all the treadmill, bike
+  and row intervals on all sessions it's probably easier not to have the timer in the app just the cals/metres
+  for each rep/set/block total". `g.logOnly` → `draftRunLog`: one box per round (or per block for the 15/15
+  bike), "Last time N" beside each, running total, Save (score = total, note "rounds: …" so `draftToBeat`
+  reads it). Typed values kept in localStorage `phx_dl_<id>` for the day (iOS kill-safe), cleared on save.
+  On: gym RHIE bouts (bike cal per bout), 15/15 bike (per block), calf Bike Accelerations (cal per sprint,
+  was "sprints done"), Row Power Starts (metres per start, was "starts done"), calf bike finisher. Not
+  changed: 2 km row test (for time — a single entry already), PHX_LIB WOD interval sessions (Legionnaire /
+  Tartarus — own renderer; ??? whether Jon meant those too). No treadmill intervals exist in Draft. Test
+  LOGONLY (fires red with logOnly removed from Bike Accelerations); harness ×1.

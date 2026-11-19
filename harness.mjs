@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.439'", 'version is 4.9.439');
+has("var APP_VERSION='4.9.440'", 'version is 4.9.440');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -411,6 +411,7 @@ hasCode("if(a === 'cones'){ window.draftOpenConesFull(sess); return; }", 'CONEMA
 hasCode("if(ex._guidedSpec && typeof window.draftGuidedBlock === 'function'){", 'BIKEFIN: a lift-day exercise with a guided spec gets the runner, not set rows');
 hasCode("var lastNeed = !!(g.entry && g.entry.per === 'round'", 'BIKEFIN: the last round entry is asked for at the finish');
 hasCode("return (day === 'field') ? o : window._draftApplyCarry(o, week, day, s);", 'CARRY: every Draft session applies moved finishers');
+hasCode("if(spec && spec.guided && spec.guided.logOnly) return window.draftRunLog(spec, dryRun, onSaved);", 'LOGONLY: machine intervals open the log sheet, not the clock');
 hasCode("var _rtDrill=document.getElementById('rt-drill'); if(_rtDrill) _rtDrill.remove();", 'RESTBRIEF: any other rest clears the drill brief');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─

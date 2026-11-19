@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.439';
+var APP_VERSION='4.9.440';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8256,9 +8256,9 @@ window._draftCalfSwap = function(o){
                note:'CALF: replaces the ' + ex.name.toLowerCase() + '. All out for 10 s, 60 s easy spin.',
                guidedSpec: { id:'draft-calf-bike-sprint', name:'Assault Bike Sprints', cat:'WOD', tier:'DRAFT', hidden:true,
                  renderer:'guided', scoreType:'reps', scoreLabel:'Total calories', format:_n + ' \u00d7 10 s \u00b7 REST 60 s',
-                 note:'Set the bike to 10 s, or watch its clock. Tap Done when it stops: the phone runs the 60 s rest. Enter that sprint\u2019s calories during the rest.',
+                 note:'Run it on the bike\u2019s own interval timer: 10 s all out, 60 s easy. Log each sprint\u2019s calories.',
                  config:{ efforts:_n, work:'Bike sprint 10 s', restSec:60 }, movements:[{ name:'Assault bike sprint', detail:'10 s' }],
-                 guided:{ rounds:_n, steps:[{ label:'Bike sprint', tap:true, sub:'The bike times the 10 s \u2014 tap Done when it stops' }], restSec:60,
+                 guided:{ logOnly:true, rounds:_n, steps:[{ label:'Sprint', tap:true, sub:'The bike times the 10 s \u2014 tap Done when it stops' }], restSec:60,
                    entry:{ per:'round', label:'Calories this sprint', unit:'cal', endLabel:'Total calories' } } } };
     }
     return ex;
@@ -8549,12 +8549,12 @@ window._draftGetSessionRaw = function(week, day, s, calf){
     // v4.9.356 — hands-free guided timings (phone runs the clock, bike counts calories)
     var gymSteps = [{label:'Bike sprint', secs:8, sub:'All out'}, {label:'Burpee', tap:true, sub:'1 burpee, back on the bike, tap Done'}, {label:'Bike sprint', secs:8, sub:'All out'}];
     if(effortsPerBout === 3) gymSteps.push(calf ? {label:'Med ball slams', tap:true, sub:'5 slams, tap Done'} : {label:'Prowler push', tap:true, sub:'10 m, drive, tap Done'});
-    rhieGym.guided = { rounds:bouts, steps:gymSteps, restSec:restRHIE,
+    rhieGym.guided = { logOnly:true, rounds:bouts, steps:gymSteps, restSec:restRHIE,
       entry:{ per:'round', label:'Bike calories this bout', unit:'cal', endLabel:'Total bike calories' } };
     rhieField.scoreType = 'reps'; rhieField.scoreLabel = 'Bouts finished in the window';
     rhieField.guided = { cycle:true, rounds:bouts, steps:[{label:'Bout', secs:(effortsPerBout === 3 ? 25 : 20), sub:fieldBoutTxt}], restSec:restRHIE,
       entry:{ per:'end', endLabel:'Bouts you finished inside the window', prefillRounds:true } };
-    b1515.guided = { blocks:ivSets, rounds:ivReps, steps:[{label:'Hard', secs:15, sub:'Assault bike, all out'}], restSec:15,
+    b1515.guided = { logOnly:true, blocks:ivSets, rounds:ivReps, steps:[{label:'Hard', secs:15, sub:'Assault bike, all out'}], restSec:15,
       blockRest:180, blockRestLabel:'Easy spin 3 min',
       entry:{ per:'block', label:'Bike calories for the block', unit:'cal', endLabel:'Total calories, all blocks' } };
     r1515.guided = { cycle:true, blocks:ivSets, rounds:ivReps, steps:[{label:'Run', secs:15, sub:'To the ' + ivHalf + ' m line and back \u2014 tap Done at the phone'}], restSec:15,
@@ -8624,18 +8624,18 @@ window._draftGetSessionRaw = function(week, day, s, calf){
     if(calf){
       // v4.9.436 — calf weeks: no running, no jumping, no prowler / sled. Power from the bike, the
       // rower and the med ball, feet planted.
-      var bikeAcc = libSpec('draft-accel-bike', 'Bike Accelerations \u2014 6 s', 'intervals', 'reps', 'Sprints done',
+      var bikeAcc = libSpec('draft-accel-bike', 'Bike Accelerations \u2014 6 s', 'intervals', 'reps', 'Total calories',
         accReps + ' \u00d7 6 s \u00b7 REST 90 s',
-        'Assault bike or Wattbike. From near standstill, all out for 6 s on the beep, easy spin in the rest. Stay seated if the calf complains.',
+        'Assault bike or Wattbike, on its own interval timer. From near standstill, all out for 6 s, 90 s easy spin. Log each sprint\u2019s calories. Stay seated if the calf complains.',
         [['Bike sprint', '6 s']], { efforts:accReps, work:'Bike sprint 6 s', restSec:90 });
-      bikeAcc.guided = { rounds:accReps, steps:[{label:'Bike sprint', secs:6, sub:'All out from near standstill'}], restSec:90,
-        entry:{ per:'end', endLabel:'Sprints done', prefillRounds:true } };
-      var rowStart = libSpec('draft-row-starts', 'Row Power Starts', 'intervals', 'reps', 'Starts done',
+      bikeAcc.guided = { logOnly:true, rounds:accReps, steps:[{label:'Sprint', secs:6, sub:'All out from near standstill'}], restSec:90,
+        entry:{ per:'round', label:'Calories this sprint', unit:'cal', endLabel:'Total calories' } };
+      var rowStart = libSpec('draft-row-starts', 'Row Power Starts', 'intervals', 'reps', 'Total metres',
         sledN + ' \u00d7 5 STROKES \u00b7 REST 90 s',
-        'Rower, damper 8-10. From a dead stop: 5 max-power strokes, then ease off. Drive through the heels.',
+        'Rower, damper 8-10. From a dead stop: 5 max-power strokes, then ease off, 90 s rest. Log the metres for each start. Drive through the heels.',
         [['Row start', '5 strokes']], { efforts:sledN, work:'Row start', restSec:90 });
-      rowStart.guided = { rounds:sledN, steps:[{label:'Row start', secs:10, sub:'5 max-power strokes from a dead stop'}], restSec:90,
-        entry:{ per:'end', endLabel:'Starts done', prefillRounds:true } };
+      rowStart.guided = { logOnly:true, rounds:sledN, steps:[{label:'Start', secs:10, sub:'5 max-power strokes from a dead stop'}], restSec:90,
+        entry:{ per:'round', label:'Metres this start', unit:'m', endLabel:'Total metres' } };
       return partsSess('Sprint & Power \u2014 Gym (calf)', 40, [
         part('Warm-up', '10 min: easy bike, hips, t-spine, 3 progressive 5 s bike efforts.'),
         part('Bike Accelerations', accReps + ' \u00d7 6 s all-out bike sprints, 90 s easy spin between. Level ' + LS + ' of 5.', bikeAcc),
@@ -9471,7 +9471,74 @@ if(typeof document !== 'undefined' && document.addEventListener){
     }
   });
 }
+// v4.9.440 — LOG-ONLY machine intervals. Jon 20 Nov: "For all the treadmill, bike and row intervals on all
+// sessions it's probably easier not to have the timer in the app just the cals/metres for each rep/set/
+// block total". g.logOnly: no clock, no beeps — the machine runs the intervals. One box per round (or per
+// block), last time's number beside each, a running total, Save. Same score + note shape as the runner
+// ("rounds: a, b, -"), so draftToBeat reads it back.
+window.draftLogRows = function(g){
+  var per = (g.entry && g.entry.per) || 'round';
+  var n = per === 'block' ? (g.blocks || 1) : (g.rounds || 1) * (g.blocks || 1);
+  var lab = per === 'block' ? 'Block' : ((g.steps && g.steps[0] && g.steps[0].label) || 'Round');
+  var out = []; for(var i = 1; i <= n; i++) out.push(lab + ' ' + i);
+  return out;
+};
+window.draftRunLog = function(spec, dryRun, onSaved){
+  var g = spec.guided, rows = window.draftLogRows(g), unit = (g.entry && g.entry.unit) || '';
+  var tb = (!dryRun && typeof window.draftToBeat === 'function') ? window.draftToBeat(spec.id) : null;
+  var old = document.getElementById('dg-run'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'dg-run'; ov.setAttribute('data-log', '1');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9700;display:flex;flex-direction:column;background:#0b0b0b;color:#fff;overflow-y:auto;' +
+    'padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 16px);';
+  var B = 'font-family:var(--font-d);font-weight:900;text-transform:uppercase;letter-spacing:1px;border-radius:var(--radius);cursor:pointer;';
+  ov.innerHTML =
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">' + _esc(spec.format || '') + '</div>' +
+    '<div style="font-family:var(--font-d);font-size:18px;font-weight:900;text-transform:uppercase;margin-top:2px;">' + _esc(spec.name) + '</div>' +
+    '<div style="font-size:13px;color:#bbb;line-height:1.5;margin-top:6px;">Run it on the machine\u2019s own timer. Enter the ' + (unit === 'm' ? 'metres' : unit === 'cal' ? 'calories' : 'number') + ' for each ' + _esc(rows[0].replace(/ \d+$/, '').toLowerCase()) + ' as you go.</div>' +
+    (tb ? '<div style="font-size:12px;font-weight:700;color:var(--gold);margin-top:8px;">To beat: ' + tb.last + ' ' + _esc(unit) + (tb.best != null && tb.best > tb.last ? ' \u00b7 best ' + tb.best : '') + '</div>' : '') +
+    '<div style="margin-top:12px;">' + rows.map(function(r, i){
+      var pv = tb && tb.per[i] != null ? tb.per[i] : null;
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #222;">' +
+        '<div style="flex:1;font-family:var(--font-d);font-size:14px;font-weight:700;text-transform:uppercase;">' + _esc(r) +
+          (pv != null ? '<div style="font-family:inherit;font-size:11px;font-weight:400;color:var(--gold);text-transform:none;margin-top:2px;">Last time ' + pv + ' ' + _esc(unit) + '</div>' : '') + '</div>' +
+        '<input data-dl="' + i + '" type="number" inputmode="decimal" step="any" placeholder="' + _esc(unit) + '" style="width:110px;padding:12px;text-align:center;font-family:var(--font-d);font-size:22px;font-weight:900;background:#111;border:1px solid #444;border-radius:var(--radius);color:#fff;">' +
+      '</div>';
+    }).join('') + '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;"><div style="font-family:var(--font-d);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#bbb;">' + _esc((g.entry && g.entry.endLabel) || 'Total') + '</div>' +
+      '<div id="dl-total" style="font-family:var(--font-d);font-size:34px;font-weight:900;">0</div></div>' +
+    '<button id="dl-save" style="width:100%;margin-top:14px;padding:16px;background:var(--gold);border:none;color:#000;font-size:15px;' + B + '">Save</button>' +
+    '<button id="dl-x" style="width:100%;margin-top:10px;padding:13px;background:none;border:1px solid #444;color:#bbb;font-size:12px;' + B + '">Close without saving</button>';
+  document.body.appendChild(ov);
+  var vals = function(){ return Array.prototype.map.call(ov.querySelectorAll('[data-dl]'), function(el){ var v = parseFloat(el.value); return isNaN(v) ? null : v; }); };
+  var sum = function(){ return Math.round(vals().reduce(function(a, v){ return a + (v || 0); }, 0) * 10) / 10; };
+  // Typed numbers survive the app being closed mid-session (iOS kills it): kept per drill per day.
+  var dk = 'phx_dl_' + spec.id, today = _phxLocalISO();
+  try { var kept = JSON.parse(localStorage.getItem(dk) || 'null');
+    if(kept && kept.date === today && !dryRun) Array.prototype.forEach.call(ov.querySelectorAll('[data-dl]'), function(el, i){ if(kept.v[i] != null) el.value = kept.v[i]; });
+  } catch(_k){}
+  ov.querySelector('#dl-total').textContent = sum();
+  ov.addEventListener('input', function(){
+    ov.querySelector('#dl-total').textContent = sum();
+    if(!dryRun) try { localStorage.setItem(dk, JSON.stringify({ date: today, v: vals() })); } catch(_s){}
+  });
+  ov.querySelector('#dl-x').onclick = function(){ ov.remove(); };
+  ov.querySelector('#dl-save').onclick = function(){
+    var v = vals();
+    if(!v.some(function(x){ return x != null; })){ if(typeof window._blabCalToast === 'function') window._blabCalToast('Enter at least one ' + (unit || 'number') + ', or close without saving', 'error'); return; }
+    var total = sum();
+    if(typeof _phxSaveScore === 'function' && !dryRun){
+      var s2 = Object.assign({}, spec); delete s2.guided;
+      _phxSaveScore(s2, total, 'rounds: ' + v.map(function(x){ return x == null ? '-' : x; }).join(', '));
+      try { localStorage.removeItem(dk); } catch(_r){}
+    }
+    ov.remove();
+    if(typeof onSaved === 'function') onSaved(total);
+  };
+  return ov;
+};
 window.draftRunGuided = function(spec, dryRun, onSaved){
+  if(spec && spec.guided && spec.guided.logOnly) return window.draftRunLog(spec, dryRun, onSaved);
   var g = spec.guided, seq = window.draftGuidedSequence(g);
   var old = document.getElementById('dg-run'); if(old) old.remove();
   var ov = document.createElement('div');

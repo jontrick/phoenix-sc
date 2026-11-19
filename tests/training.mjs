@@ -6720,6 +6720,28 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.equal(app.blabGetSessionData(4, 6).exercises.filter((e) => e.name === 'Assault Bike Sprint').length, 0);
     } finally { app._phxLocalISO = orig; }
   });
+  test('LOGONLY: bike / row intervals have no phone clock — one box per round (or block) for cals / metres (Jon, 20 Nov)', () => {
+    startDraft();
+    const st = app.window.blabGetState(); st.draftCalf = { fromWeek: 4, toWeek: 6 }; app.window.blabSaveState(st);
+    const MACHINE = /\b(bike|row|rower|assault|wattbike|treadmill|ski)\b/i;
+    let n = 0;
+    for (let w = 1; w <= 6; w++) for (const d of [1, 3, 4]) {
+      const x = app.blabGetSessionData(w, d); if (!x) continue;
+      const specs = (x.conditioning || []).map((p) => p.spec).filter(Boolean).concat(x.exercises.map((e) => e.guidedSpec).filter(Boolean));
+      for (const sp of specs) {
+        if (!sp.guided || sp.renderer === 'time') continue;
+        const steps = sp.guided.steps.map((q) => q.label + ' ' + (q.sub || '')).join(' ') + ' ' + sp.name;
+        const machine = MACHINE.test(sp.name) || (/Bike sprint/.test(steps) && !/sprint \d+ m|prowler/i.test(steps));
+        if (!machine) continue;
+        n++;
+        assert.ok(sp.guided.logOnly, `W${w}D${d} ${sp.name}: machine interval is log-only`);
+        assert.ok(['round', 'block'].includes(sp.guided.entry.per) && ['cal', 'm'].includes(sp.guided.entry.unit), `${sp.name}: per-round/block cal or m → ${JSON.stringify(sp.guided.entry)}`);
+      }
+    }
+    assert.ok(n >= 6, 'positive control: ' + n);
+    assert.deepEqual(app.window.draftLogRows({ blocks: 2, rounds: 12, entry: { per: 'block' } }), ['Block 1', 'Block 2']);
+    assert.deepEqual(app.window.draftLogRows({ rounds: 3, steps: [{ label: 'Sprint' }], entry: { per: 'round' } }), ['Sprint 1', 'Sprint 2', 'Sprint 3']);
+  });
   test('CYCLE: drills that finish back at the phone run as fixed cycles — tap Done, the time is the score, the rest absorbs it (Jon, 18 Nov)', () => {
     startDraft();
     const cyc = [], plain = [];

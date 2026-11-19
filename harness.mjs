@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.441'", 'version is 4.9.441');
+has("var APP_VERSION='4.9.442'", 'version is 4.9.442');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -412,6 +412,8 @@ hasCode("if(ex._guidedSpec && typeof window.draftGuidedBlock === 'function'){", 
 hasCode("var lastNeed = !!(g.entry && g.entry.per === 'round'", 'BIKEFIN: the last round entry is asked for at the finish');
 hasCode("return (day === 'field') ? o : window._draftApplyCarry(o, week, day, s);", 'CARRY: every Draft session applies moved finishers');
 hasCode("if(spec && spec.guided && spec.guided.logOnly) return window.draftRunLog(spec, dryRun, onSaved);", 'LOGONLY: machine intervals open the log sheet, not the clock');
+hasCode("if(v){ var sc = _scroller(); sc.scrollTop += v; _move(lastX, lastY, null); }", 'CALDRAG: dragging a tile to the screen edge scrolls the calendar');
+hasCode("clearTimeout(asTimer); asTimer = null;", 'CALDRAG: auto-scroll stops when the drag ends');
 hasCode("var _rtDrill=document.getElementById('rt-drill'); if(_rtDrill) _rtDrill.remove();", 'RESTBRIEF: any other rest clears the drill brief');
 
 // ── SHARED — the boot restore waits for routing, not a fixed 450 ms (v4.9.419) ─

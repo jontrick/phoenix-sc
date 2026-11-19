@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.441';
+var APP_VERSION='4.9.442';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -42435,6 +42435,32 @@ function _blabCalWireGrid(){
   var srcEl = null, srcItem = null, ghostDX = 0, ghostDY = 0;
   var lastTile = null, blockedSet = {};
   var startX = 0, startY = 0;
+  // v4.9.442 — EDGE AUTO-SCROLL. Jon 20 Nov: "Can I also have the select and swipe the tile like before".
+  // Hold-and-drag worked, but only onto a day already on screen: a phone shows ~2 days, so tomorrow was
+  // often below the fold and could not be reached. Holding the dragged tile near the top or bottom edge
+  // now scrolls the calendar (faster the closer to the edge), and the day under the finger re-resolves.
+  var EDGE = 90, asTimer = null, lastX = 0, lastY = 0;
+  function _scroller(){
+    var el = scr;
+    while(el && el !== document.body){
+      var cs = window.getComputedStyle(el);
+      if(/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 2) return el;
+      el = el.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+  window._blabCalEdgeSpeed = function(y, h, edge){
+    edge = edge || EDGE;
+    if(y < edge) return -Math.ceil((edge - y) / edge * 18);
+    if(y > h - edge) return Math.ceil((y - (h - edge)) / edge * 18);
+    return 0;
+  };
+  function _autoScrollTick(){
+    if(!dragging){ asTimer = null; return; }
+    var v = window._blabCalEdgeSpeed(lastY, window.innerHeight);
+    if(v){ var sc = _scroller(); sc.scrollTop += v; _move(lastX, lastY, null); }
+    asTimer = setTimeout(_autoScrollTick, 16);
+  }
 
   function _clearHighlights(){
     Array.prototype.forEach.call(scr.querySelectorAll('[data-cal-date]'), function(el){
@@ -42452,6 +42478,7 @@ function _blabCalWireGrid(){
   }
   function _cleanup(){
     clearTimeout(holdTimer); holdTimer = null;
+    clearTimeout(asTimer); asTimer = null;
     dragging = false;
     if(ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
     ghost = null;
@@ -42498,6 +42525,8 @@ function _blabCalWireGrid(){
       return;
     }
     if(ev && ev.cancelable) ev.preventDefault();
+    lastX = x; lastY = y;
+    if(!asTimer) asTimer = setTimeout(_autoScrollTick, 16);
     if(ghost){ ghost.style.left = (x-ghostDX)+'px'; ghost.style.top = (y-ghostDY)+'px'; }
     _clearHighlights(); _paintBlocked();
     var tile = _tileAt(x, y);

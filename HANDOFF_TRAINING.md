@@ -583,3 +583,10 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   changed: 2 km row test (for time — a single entry already), PHX_LIB WOD interval sessions (Legionnaire /
   Tartarus — own renderer; ??? whether Jon meant those too). No treadmill intervals exist in Draft. Test
   LOGONLY (fires red with logOnly removed from Bike Accelerations); harness ×1.
+- **v4.9.442 (20 Nov) — Programme calendar drag: edge auto-scroll.** Jon: "Can I also have the select and swipe
+  the tile like before". Hold-and-drag (380 ms) still worked, but only onto a day already on screen — proved in
+  the browser: dragging W4 D3 to Sat 21 Nov (tile at y 866 in an 844 viewport) placed nothing; to Thu 19 (on
+  screen) it moved. A phone shows ~2 days, so "tomorrow" was often unreachable. Now holding the dragged tile
+  within 90 px of the top/bottom edge scrolls the calendar (speed by depth, `_blabCalEdgeSpeed`) and re-resolves
+  the day under the finger. Browser-proven: same drag now lands on Sat 21. Not proven: iOS touch (same `_move`
+  path, touchmove is non-passive during a drag). Tap → Move to Another Day unchanged.

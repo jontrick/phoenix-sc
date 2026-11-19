@@ -887,3 +887,12 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
 - **`_phxRepair1010` (v4.9.363) is one-off** — move to blab_archive.js after Jon confirms the superset Prev reads 10 (and set_logs shows 10). Owner: Training.
 - **Nutrition test clock pinned by Training (4 Nov)** — `the add sheet names the day it is writing to` assumed days[2] (Wednesday) is in the future; red every Wednesday. Pinned `_nutToday` to Mon 2027-01-04. Owner to review: Nutrition.
 - **`_draftRepairSat7` (v4.9.382) is one-off** — archive after Jon confirms Sat 7 Nov shows Field Tests done and Speed Upper to do. Owner: Training.
+
+- **v4.9.441 (20 Nov, Nutrition v2) — PREP mode on the Shop tab.** Jon: "where you select the days for a shop can
+  you also add a selection for prep - with individual weights for dry rice, chicken etc required but also the full
+  recipe for things like the pancake ... to make for that many days". SHOP | PREP toggle (`ns.v2.shop.mode`); own
+  days (`prepDates`, default next 4) + ticks (`prepTicks`). `nut2PrepList(dates)`: foods → portions as eaten
+  ("4 × 200 g"), total, and "Cook N g <raw>" when the food has rawRef + yield; recipes → made to the amount eaten
+  (serves rounded UP to whole serves; batch recipes by grams), every ingredient scaled (cooked ones also as raw),
+  method shown. Test PREP (tests/nut2.mjs). Browser-rendered. A cooked food with no raw match (e.g. an instant
+  rice) shows no "Cook" line — that is the library's pairing, not prep.

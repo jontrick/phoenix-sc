@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.440';
+var APP_VERSION='4.9.441';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -23572,7 +23572,7 @@ function _nut2Click(e){
     if(pt && _nut2PlanClick(pt)) return;
   }
   if(_nut2Tab === 'shop' && e.target.closest){
-    var st = e.target.closest('[data-n2s-date],[data-n2s-preset],[data-n2s-tick]');
+    var st = e.target.closest('[data-n2s-date],[data-n2s-preset],[data-n2s-tick],[data-n2s-mode],[data-n2p-date],[data-n2p-preset],[data-n2p-tick]');
     if(st && _nut2ShopClick(st)) return;
   }
   var t = e.target.closest ? e.target.closest('[data-n2-tab],[data-n2-filter],[data-n2-food],[data-n2-add],[data-n2-newrec],[data-n2-reclink],[data-n2-rec]') : null;
@@ -25025,7 +25025,128 @@ function nut2ShopList(dates, opts, ns){
 }
 function _nut2FmtG(g){ return g >= 1000 ? (Math.round(g / 100) / 10) + ' kg' : g + ' g'; }
 
+// ── v4.9.441 — PREP. Jon 20 Nov: "where you select the days for a shop can you also add a selection for
+// prep - with individual weights for dry rice, chicken etc required but also the full recipe for things
+// like the pancake I have as a recipe to make for that many days?" Own day selection (prep is often a
+// few days, the shop a week). Foods: the portions as eaten, the total, and — for cooked foods with a raw
+// match — the RAW / DRY weight to cook. Recipes: made to the amount eaten (serves rounded up to whole
+// serves), every ingredient scaled, cooked ingredients shown as raw too, and the method.
+function _nut2PrepRaw(ref, g, ns){
+  var f = nut2Food(ref, ns);
+  return (f && f.cooked && f.rawRef && f.yield > 0) ? { ref: f.rawRef, name: _nut2RefName(f.rawRef, ns), g: Math.round(g / f.yield) } : null;
+}
+function _nut2PrepDates(sh){
+  if(!Array.isArray(sh.prepDates)) { var t = _nutToday(), out = []; for(var i = 0; i < 4; i++) out.push(_nut2ShiftDate(t, i)); return out; }
+  var t2 = _nutToday(); return sh.prepDates.filter(function(d){ return d >= t2; });
+}
+function nut2PrepList(dates, ns){
+  ns = ns || _nut2State();
+  var foods = {}, recs = {}, missing = 0;
+  (dates || []).forEach(function(d){
+    var day = ns.v2.days[d]; if(!day) return;
+    day.feeds.forEach(function(fd){
+      (fd.items || []).forEach(function(it){
+        if(!it || !it.ref){ missing++; return; }
+        if(it.ref.indexOf('R:') === 0){
+          var rec = ns.v2.recipes[it.ref]; if(!rec){ missing++; return; }
+          var r = recs[it.ref] || (recs[it.ref] = { serves: 0, g: 0, uses: 0 });
+          if(it.serves != null && rec.kind === 'serves') r.serves += parseFloat(it.serves) || 0;
+          else r.g += parseFloat(it.g) || 0;
+          r.uses++;
+          return;
+        }
+        if(!nut2Food(it.ref, ns)){ missing++; return; }
+        var x = foods[it.ref] || (foods[it.ref] = { g: 0, n: 0, portions: {} });
+        if(_nut2IsEach(it)){ var n = parseFloat(it.n) || 0; x.n += n; x.g += _nut2ItemG(it, ns); x.portions['n' + n] = (x.portions['n' + n] || 0) + 1; }
+        else { var g = parseFloat(it.g) || 0; x.g += g; x.portions['g' + g] = (x.portions['g' + g] || 0) + 1; }
+      });
+    });
+  });
+  var foodList = Object.keys(foods).map(function(ref){
+    var x = foods[ref];
+    var portions = Object.keys(x.portions).map(function(k){ return { each: k.charAt(0) === 'n', amt: parseFloat(k.slice(1)), count: x.portions[k] }; })
+      .sort(function(a, b){ return b.count - a.count || b.amt - a.amt; });
+    return { ref: ref, name: _nut2RefName(ref, ns), g: Math.round(x.g), n: Math.round(x.n * 10) / 10, portions: portions, raw: x.g > 0 ? _nut2PrepRaw(ref, x.g, ns) : null };
+  }).filter(function(x){ return x.g > 0 || x.n > 0; }).sort(function(a, b){ return b.g - a.g; });
+  var recList = Object.keys(recs).map(function(ref){
+    var rec = ns.v2.recipes[ref], r = recs[ref], w = nut2RecipeWeight(rec, ns).g, frac, makes;
+    if(rec.kind === 'serves' && rec.serves > 0){
+      var perServeG = w > 0 ? w / rec.serves : 0;
+      var need = r.serves + (perServeG > 0 ? r.g / perServeG : 0);
+      var whole = Math.ceil(need - 1e-6);
+      frac = whole / rec.serves; makes = { serves: whole, eaten: Math.round(need * 10) / 10 };
+    } else {
+      frac = w > 0 ? r.g / w : 0; makes = { g: Math.round(r.g) };
+    }
+    var lines = (rec.items || []).map(function(it){
+      var g = _nut2ItemG(it, ns) * frac;
+      var line = { ref: it.ref, name: _nut2RefName(it.ref, ns), g: Math.round(g) };
+      if(_nut2IsEach(it)) line.n = Math.round((parseFloat(it.n) || 0) * frac * 10) / 10;
+      if(it.ref && it.ref.indexOf('R:') !== 0 && g > 0) line.raw = _nut2PrepRaw(it.ref, g, ns);
+      return line;
+    }).filter(function(l){ return l.g > 0 || l.n > 0; });
+    return { ref: ref, name: rec.name, kind: rec.kind, frac: Math.round(frac * 1000) / 1000, makes: makes, finishedG: w > 0 ? Math.round(w * frac) : null, lines: lines, method: String(rec.method || ''), uses: r.uses };
+  }).filter(function(r){ return r.frac > 0; }).sort(function(a, b){ return a.name.localeCompare(b.name); });
+  return { foods: foodList, recipes: recList, missing: missing };
+}
+function _nut2PrepTab(ns, sh){
+  var today = _nutToday(), dates = _nut2PrepDates(sh), on = {};
+  dates.forEach(function(d){ on[d] = true; });
+  var chip = function(d){ var a = !!on[d], has = _nut2DayHasFood(d, ns);
+    return '<button data-n2p-date="' + d + '" style="padding:7px 8px;border-radius:8px;font-size:12px;background:' + (a ? 'var(--gold)' : 'transparent') + ';color:' + (a ? '#000' : (has ? 'var(--text)' : 'var(--text3)')) + ';border:1px solid ' + (a ? 'var(--gold)' : 'var(--border2)') + ';">' + _nut2DateLabel(d).replace(/ \w+$/, '') + '</button>'; };
+  var H = function(t){ return '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:14px 0 6px;">' + t + '</div>'; };
+  var h = '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px;">Prep for</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;">';
+  for(var i = 0; i < 14; i++) h += chip(_nut2ShiftDate(today, i));
+  h += '</div><div style="display:flex;gap:8px;margin:8px 0 4px;">' +
+    '<button data-n2p-preset="3" style="padding:8px 10px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;">Next 3 days</button>' +
+    '<button data-n2p-preset="5" style="padding:8px 10px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;">Next 5 days</button>' +
+    '<button data-n2p-preset="0" style="padding:8px 10px;border-radius:8px;background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:12px;">Clear</button></div>';
+  if(!dates.length) return h + '<div style="color:var(--text3);font-size:13px;padding:8px 2px;">Tick the days you are prepping for.</div>';
+  var L = nut2PrepList(dates, ns), tk = sh.prepTicks || {};
+  if(!L.foods.length && !L.recipes.length) return h + '<div style="color:var(--text3);font-size:13px;padding:8px 2px;">Nothing planned on those days yet — build them on the Plan tab.</div>';
+  var tickBox = function(key, inner){
+    var t = !!tk[key];
+    return '<div data-n2p-tick="' + _nut2Esc(key) + '" style="display:flex;gap:10px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid var(--border);cursor:pointer;' + (t ? 'opacity:0.45;' : '') + '">' +
+      '<div style="width:22px;height:22px;flex-shrink:0;border-radius:6px;border:2px solid ' + (t ? 'var(--gold)' : 'var(--border2)') + ';background:' + (t ? 'var(--gold)' : 'transparent') + ';color:#000;font-size:13px;font-weight:900;text-align:center;line-height:18px;">' + (t ? '&#10003;' : '') + '</div>' +
+      '<div style="flex:1;min-width:0;">' + inner + '</div></div>';
+  };
+  if(L.foods.length){
+    h += H('Weigh out &middot; ' + dates.length + ' day' + (dates.length === 1 ? '' : 's'));
+    L.foods.forEach(function(x){
+      var por = x.portions.map(function(p){ return p.count + ' &times; ' + (p.each ? p.amt + ' each' : p.amt + ' g'); }).join(' + ');
+      var amt = x.n > 0 && x.portions.every(function(p){ return p.each; }) ? x.n + ' each' : _nut2FmtG(x.g);
+      h += tickBox('F:' + x.ref,
+        '<div style="display:flex;gap:8px;"><div style="flex:1;font-size:14px;color:var(--text);">' + _nut2Esc(x.name) + '</div><div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;">' + amt + '</div></div>' +
+        '<div style="font-size:12px;color:var(--text3);margin-top:2px;">' + por + '</div>' +
+        (x.raw ? '<div style="font-size:13px;color:var(--gold);margin-top:3px;">Cook <b>' + _nut2FmtG(x.raw.g) + '</b> ' + _nut2Esc(x.raw.name) + '</div>' : ''));
+    });
+  }
+  L.recipes.forEach(function(r){
+    var mk = r.makes.serves != null ? 'Make ' + r.makes.serves + ' serve' + (r.makes.serves === 1 ? '' : 's') + (r.makes.eaten !== r.makes.serves ? ' <span style="color:var(--text3);">(' + r.makes.eaten + ' eaten)</span>' : '')
+                                    : 'Make ' + _nut2FmtG(r.makes.g) + ' finished';
+    h += H(_nut2Esc(r.name)) + '<div style="font-size:13px;color:var(--text);margin-bottom:4px;">' + mk + (r.finishedG && r.makes.serves != null ? ' <span style="color:var(--text3);">&middot; about ' + _nut2FmtG(r.finishedG) + ' finished</span>' : '') + '</div>';
+    r.lines.forEach(function(l, k){
+      h += tickBox('R:' + r.ref + ':' + k,
+        '<div style="display:flex;gap:8px;"><div style="flex:1;font-size:14px;color:var(--text);">' + _nut2Esc(l.name) + '</div><div style="font-family:var(--font-d);font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;">' + (l.n != null ? l.n + ' each' : _nut2FmtG(l.g)) + '</div></div>' +
+        (l.raw ? '<div style="font-size:12px;color:var(--gold);margin-top:2px;">= ' + _nut2FmtG(l.raw.g) + ' ' + _nut2Esc(l.raw.name) + '</div>' : ''));
+    });
+    if(r.method.trim()) h += '<div style="font-size:13px;color:var(--text2);line-height:1.55;margin-top:8px;white-space:pre-wrap;">' + _nut2Esc(r.method.trim()) + '</div>';
+  });
+  if(L.missing) h += '<div style="font-size:11px;color:#e07a7a;margin-top:8px;">' + L.missing + ' item' + (L.missing > 1 ? 's' : '') + ' could not be listed — no longer in your library.</div>';
+  h += '<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5;">Portions are as eaten. "Cook" is the raw or dry weight that gives that much cooked.</div>';
+  return h;
+}
+function _nut2ShopModeBar(sh){
+  var b = function(m, t){ var a = (sh.mode || 'shop') === m;
+    return '<button data-n2s-mode="' + m + '" style="flex:1;padding:10px;border-radius:8px;font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;background:' + (a ? 'var(--gold)' : 'transparent') + ';color:' + (a ? '#000' : 'var(--text2)') + ';border:1px solid ' + (a ? 'var(--gold)' : 'var(--border2)') + ';">' + t + '</button>'; };
+  return '<div style="display:flex;gap:8px;margin-bottom:12px;">' + b('shop', 'SHOP') + b('prep', 'PREP') + '</div>';
+}
 function _nut2ShopTab(){
+  var ns0 = _nut2State(), sh0 = _nut2ShopState(ns0);
+  return _nut2ShopModeBar(sh0) + (sh0.mode === 'prep' ? _nut2PrepTab(ns0, sh0) : _nut2ShopTabShop());
+}
+function _nut2ShopTabShop(){
   var ns = _nut2State(), sh = _nut2ShopState(ns), today = _nutToday();
   var dates = _nut2ShopDates(sh);
   var on = {}; dates.forEach(function(d){ on[d] = true; });
@@ -25064,6 +25185,16 @@ function _nut2ShopTab(){
 }
 function _nut2ShopClick(t){
   var ns = _nut2State(), sh = _nut2ShopState(ns), a;
+  if((a = t.getAttribute('data-n2s-mode')) !== null){ sh.mode = a === 'prep' ? 'prep' : 'shop'; _nut2Save(ns); nut2Render(); return true; }
+  if((a = t.getAttribute('data-n2p-date')) !== null){
+    var pc = _nut2PrepDates(sh), pi = pc.indexOf(a); if(pi >= 0) pc.splice(pi, 1); else pc.push(a);
+    sh.prepDates = pc.sort(); sh.prepTicks = {}; _nut2Save(ns); nut2Render(); return true;
+  }
+  if((a = t.getAttribute('data-n2p-preset')) !== null){
+    var nd = +a, arr = []; for(var q = 0; q < nd; q++) arr.push(_nut2ShiftDate(_nutToday(), q));
+    sh.prepDates = arr; sh.prepTicks = {}; _nut2Save(ns); nut2Render(); return true;
+  }
+  if((a = t.getAttribute('data-n2p-tick')) !== null){ sh.prepTicks = sh.prepTicks || {}; if(sh.prepTicks[a]) delete sh.prepTicks[a]; else sh.prepTicks[a] = true; _nut2Save(ns); nut2Render(); return true; }
   var cur = _nut2ShopDates(sh);
   if((a = t.getAttribute('data-n2s-date')) !== null){
     var i = cur.indexOf(a); if(i >= 0) cur.splice(i, 1); else cur.push(a);

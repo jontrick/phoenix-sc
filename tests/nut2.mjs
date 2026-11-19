@@ -603,6 +603,28 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.ok(/set your own numbers/.test(app._nut2CounterHTML(app._nutToday())));
   });
 
+  test('PREP: weigh-out portions + raw/dry weight to cook; recipes made to the amount eaten, every ingredient scaled, method kept (Jon, 20 Nov)', () => {
+    start({ setup_done: true, daily: {} });
+    const cooked = app.nut2Search('chicken breast grilled', 'cooked')[0];
+    assert.ok(cooked, 'positive control: a cooked food with a raw match exists');
+    const egg = findOne('egg chicken whole raw'), oats = findOne('oats rolled');
+    const rid = app.nut2SaveRecipe({ name: 'Pancakes', kind: 'serves', serves: 4, finishedG: 400, items: [{ ref: egg.id, n: 4 }, { ref: oats.id, g: 200 }], method: 'Blend, rest 5 min, cook.' });
+    const ns2 = app._nut2State(), t = app._nutToday(), d2 = app._nut2ShiftDate(t, 1);
+    ns2.v2.days[t] = { feeds: [{ id: 'F1', name: 'Breakfast', items: [{ ref: rid, serves: 1 }] }, { id: 'F2', name: 'Lunch', items: [{ ref: cooked.id, g: 200 }] }] };
+    ns2.v2.days[d2] = { feeds: [{ id: 'F3', name: 'Breakfast', items: [{ ref: rid, serves: 1.5 }] }, { id: 'F4', name: 'Lunch', items: [{ ref: cooked.id, g: 200 }, { ref: egg.id, n: 2 }] }] };
+    app._nut2Save(ns2);
+    const L = app.nut2PrepList([t, d2]);
+    const c = L.foods.find((f) => f.ref === cooked.id);
+    assert.equal(c.g, 400); assert.deepEqual(c.portions, [{ each: false, amt: 200, count: 2 }]);
+    assert.equal(c.raw.g, Math.round(400 / cooked.yield), 'raw / dry weight to cook');
+    assert.equal(L.foods.find((f) => f.ref === egg.id).n, 2, 'each items counted');
+    const r = L.recipes.find((x) => x.ref === rid);
+    assert.deepEqual([r.makes.serves, r.makes.eaten], [3, 2.5], '2.5 serves eaten → make 3');
+    assert.equal(r.lines.find((l) => l.ref === egg.id).n, 3, '4 eggs × 3/4');
+    assert.equal(r.lines.find((l) => l.ref === oats.id).g, 150);
+    assert.equal(r.method, 'Blend, rest 5 min, cook.');
+    assert.equal(app.nut2PrepList([]).foods.length, 0);
+  });
   test('SCALE: halving a makes-8 recipe halves every amount (g and each) and keeps per-serve numbers', () => {
     start({ setup_done: true, daily: {} });
     const egg = findOne('egg chicken whole raw'), oats = findOne('oats rolled');

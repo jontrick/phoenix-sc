@@ -5775,6 +5775,62 @@ const settle = () => new Promise(r => setTimeout(r, 0));
     assert.equal(by['5amq'].awaitingStart, true, '5-Amino on hold');
   });
 
+  test('BLOCK: recovery block — TB-500 Mon+Thu inside the window, Mondays only before and after; dose override; survives a phase re-apply; End it now (Jon, 21 Nov)', () => {
+    reset(); signIn('jon');
+    const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
+    assert.equal(app.pepApplyPhase('phase3').ok, true);
+    const c = (id) => app._pepCompound(id);
+    const stack = (id) => app.pepGetState().stacks.find((x) => x.compoundId === id);
+    const due = (id, iso) => app._pepStackDueOn(stack(id), c(id), new Date(iso + 'T12:00:00')) !== null;
+    const dose = (id, iso) => { const dn = app._pepStackDueOn(stack(id), c(id), new Date(iso + 'T12:00:00')); return dn === null ? null : app._pepDoseOn(stack(id), c(id), dn); };
+    const r = app.pepSaveBlock({ name: 'Recovery', reason: 'calf + right pec', from: '2026-11-23', to: '2026-12-20', items: [{ compoundId: 'tb500', dose: 2, days: [1, 4] }, { compoundId: 'bpc157', dose: 0.5, days: 'daily' }] });
+    assert.equal(r.ok, true, JSON.stringify(r.problems || ''));
+    assert.ok(due('tb500', '2026-11-16') && !due('tb500', '2026-11-19'), 'before: Monday only');
+    assert.ok(due('tb500', '2026-11-23') && due('tb500', '2026-11-26') && !due('tb500', '2026-11-24'), 'inside: Mon + Thu');
+    assert.ok(due('tb500', '2026-12-17') && !due('tb500', '2026-12-24') && due('tb500', '2026-12-21'), 'after 20 Dec: back to Mondays by itself');
+    assert.equal(dose('tb500', '2026-11-26'), 2); assert.ok(due('bpc157', '2026-12-01'), 'BPC still daily');
+    // a dose override in the window
+    app.pepSaveBlock({ id: r.id, name: 'Recovery', from: '2026-11-23', to: '2026-12-20', items: [{ compoundId: 'tb500', dose: 2.5, days: [1, 4] }] });
+    assert.equal(dose('tb500', '2026-11-26'), 2.5, 'block dose'); assert.equal(dose('tb500', '2026-12-28'), 2, 'base dose after');
+    assert.equal(stack('tb500').blocks.length, 1, 're-saving replaces, not duplicates');
+    assert.ok(!stack('bpc157').blocks || !stack('bpc157').blocks.length, 'a compound dropped from the block loses it');
+    assert.equal(app.pepApplyPhase('phase3').ok, true);
+    assert.ok(due('tb500', '2026-11-26'), 'applying a phase keeps the block');
+    // validation
+    const bad = app.pepSaveBlock({ name: '', from: '2026-11-23', to: '2026-11-01', items: [{ compoundId: 'tb500', dose: 0, days: [] }] });
+    assert.equal(bad.ok, false); assert.ok(bad.problems.length >= 4, JSON.stringify(bad.problems));
+    // End it now
+    const realToday = app._pepToday;
+    try {
+      app._pepToday = () => '2026-12-01';
+      app.pepEndBlock(r.id);
+      assert.ok(due('tb500', '2026-11-26'), 'logged days inside stay in the block');
+      assert.ok(!due('tb500', '2026-12-03') && due('tb500', '2026-12-07'), 'from today: base plan');
+      assert.equal(app.pepGetState().blockMeta[0].to, '2026-11-30');
+    } finally { app._pepToday = realToday; }
+  });
+  test('BLOCK seed 1121: one shot, the Recovery block Jon asked for, never twice — and only on Jon\'s account', () => {
+    reset(); signIn('someone-else');
+    const o = app.pepGetState(); o.settings = {}; o.stacks = []; app.pepSaveState(o); app.pepApplyPhase('phase3');
+    assert.equal(app._pepSeedRecovery1121(), false); assert.ok(!(app.pepGetState().blockMeta || []).length, 'nobody else gets it');
+    reset(); signIn('df7fc046-0dd6-4416-b0ce-44b55fa2fb8e');
+    const st = app.pepGetState(); st.settings = {}; st.stacks = []; app.pepSaveState(st);
+    app.pepApplyPhase('phase3');
+    const realToday = app._pepToday;
+    try {
+      app._pepToday = () => '2026-11-21';
+      app._pepSeedRecovery1121();   // may already have run from the Today tile render inside pepApplyPhase
+      assert.equal(app.pepGetState().seedRecovery1121, true);
+      assert.equal(app._pepSeedRecovery1121(), false, 'once');
+      const m = app.pepGetState().blockMeta;
+      assert.equal(m.length, 1); assert.deepEqual([m[0].name, m[0].from, m[0].to], ['Recovery', '2026-11-23', '2026-12-20']);
+      const tb = m[0].items.find((x) => x.compoundId === 'tb500');
+      assert.deepEqual([tb.dose, tb.days], [2, [1, 4]]);
+      app.pepEndBlock(m[0].id);   // cancelled before it starts → gone, and the seed does not bring it back
+      assert.equal((app.pepGetState().blockMeta || []).length, 0);
+      assert.equal(app._pepSeedRecovery1121(), false);
+    } finally { app._pepToday = realToday; }
+  });
   test('PHASE3 applied days late, a paused compound is still paused', () => {
     const realToday = app._pepToday;
     try {

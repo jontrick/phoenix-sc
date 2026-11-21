@@ -3554,7 +3554,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.442';
+var APP_VERSION='4.9.443';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -33158,6 +33158,29 @@ function _pepToday(){
 // built on drifted rules would order the wrong quantities.
 // Returns the day-number into the protocol when a dose is due, else null.
 // Deliberately does NOT check stack.status — callers decide that.
+// ── v4.9.443 BLOCKS — time-boxed changes that switch back on their own ─────
+// Jon 21 Nov: "Can I make the peptide plan built in and smart and not from a file? I need to add a
+// recovery phase in to the BPC and tb500 - not just maintenance - have the calf thing and right pec
+// need to heal". A BLOCK is a window (from..to, inclusive) in which a compound runs a different dose
+// and/or different days. It lives ON THE STACK (stack.blocks) so every reader of the schedule —
+// Today, the calendar, stock forecasts, adherence — sees the same thing through _pepStackDueOn /
+// _pepDoseOn, and outside the window the base plan is simply back. Nothing has to "switch".
+// ps.blockMeta keeps the block's name / reason / dates for the screen.
+function _pepBlockOn(stack, iso){
+  var bl = stack && stack.blocks;
+  if(!Array.isArray(bl) || !bl.length || !iso) return null;
+  for(var i = 0; i < bl.length; i++){
+    var b = bl[i];
+    if(b && b.from && iso >= String(b.from) && (!b.to || iso <= String(b.to))) return b;
+  }
+  return null;
+}
+// days: "daily" or an array of weekday numbers (0 Sun .. 6 Sat).
+function _pepBlockDueDay(b, d){
+  if(!b) return false;
+  if(b.days === "daily" || b.days == null) return true;
+  return Array.isArray(b.days) && b.days.indexOf(d.getDay()) >= 0;
+}
 function _pepStackDueOn(stack, c, d){
   if(!stack || !c || !stack.startDate) return null;
   // v4.9.319: a planned start date arriving is not evidence that he started.
@@ -33167,6 +33190,8 @@ function _pepStackDueOn(stack, c, d){
   var startD = new Date(stack.startDate + "T12:00:00");
   var dayNum = Math.round((d - startD) / 86400000);
   if(dayNum < 0) return null;
+  var _blk = _pepBlockOn(stack, _pepISO(d));
+  if(_blk) return _pepBlockDueDay(_blk, d) ? dayNum : null;
 
   // Off-cycle check
   if(stack.cycleWeeks && !stack.continuous){
@@ -33450,6 +33475,11 @@ function _pepAddDays(iso, n){
 // protocol says — "week 5", "day 16" — and a date would silently be wrong the
 // moment a course start slips.
 function _pepDoseOn(stack, c, dayNum){
+  if(stack && Array.isArray(stack.blocks) && stack.blocks.length && stack.startDate && dayNum >= 0){
+    var _bd = new Date(new Date(stack.startDate + "T12:00:00").getTime() + dayNum * 86400000);
+    var _b = _pepBlockOn(stack, _pepISO(_bd));
+    if(_b && parseFloat(_b.dose) > 0) return parseFloat(_b.dose);
+  }
   var flat = (stack && stack.dose != null) ? parseFloat(stack.dose) : (c && c.dose);
   var steps = stack && stack.doseSteps;
   if(!Array.isArray(steps) || !steps.length || !(dayNum >= 0)) return flat;
@@ -34212,6 +34242,194 @@ function _pepWhenText(iso){
   var d = new Date(iso + "T12:00:00");
   return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] + " " + d.getDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
 }
+// def = { name, reason, from, to, items:[{ compoundId, dose, days }] }
+function pepSaveBlock(def){
+  var ps = pepGetState(), probs = [];
+  var nm = String(def && def.name || "").trim();
+  if(!nm) probs.push("Give the block a name.");
+  if(!def || !/^\d{4}-\d{2}-\d{2}$/.test(def.from || "")) probs.push("Pick a start date.");
+  if(!def || !/^\d{4}-\d{2}-\d{2}$/.test(def.to || "") || def.to < def.from) probs.push("Pick an end date on or after the start.");
+  var items = (def && def.items || []).filter(function(it){ return it && it.compoundId; });
+  if(!items.length) probs.push("Add at least one compound.");
+  var byId = {}; (ps.stacks || []).forEach(function(st){ if(st && st.compoundId) byId[st.compoundId] = st; });
+  items.forEach(function(it){
+    if(!byId[it.compoundId]) probs.push((_pepCompound(it.compoundId) || {name: it.compoundId}).name + " is not in your protocol.");
+    if(!(parseFloat(it.dose) > 0)) probs.push((_pepCompound(it.compoundId) || {name: it.compoundId}).name + ": enter a dose.");
+    if(it.days !== "daily" && !(Array.isArray(it.days) && it.days.length)) probs.push((_pepCompound(it.compoundId) || {name: it.compoundId}).name + ": pick at least one day.");
+  });
+  if(probs.length) return {ok:false, problems:probs};
+  var id = def.id || ("blk_" + nm.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") + "_" + def.from.replace(/-/g, ""));
+  // replace any earlier copy of this block on every stack
+  (ps.stacks || []).forEach(function(st){ if(Array.isArray(st.blocks)) st.blocks = st.blocks.filter(function(b){ return b && b.id !== id; }); });
+  items.forEach(function(it){
+    var st = byId[it.compoundId];
+    if(!Array.isArray(st.blocks)) st.blocks = [];
+    st.blocks.push({ id:id, name:nm, from:def.from, to:def.to, dose:parseFloat(it.dose), days:it.days === "daily" ? "daily" : it.days.slice().sort() });
+  });
+  ps.blockMeta = (ps.blockMeta || []).filter(function(b){ return b && b.id !== id; });
+  ps.blockMeta.push({ id:id, name:nm, reason:String(def.reason || "").trim() || null, from:def.from, to:def.to, created:_pepToday(),
+                      items: items.map(function(it){ return {compoundId:it.compoundId, dose:parseFloat(it.dose), days:it.days}; }) });
+  pepSaveState(ps);
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return {ok:true, id:id};
+}
+// End early: the block stops yesterday, so today is already back on the base plan. Doses logged
+// inside it stay logged.
+function pepEndBlock(id){
+  var ps = pepGetState(), y = _pepAddDays(_pepToday(), -1), hit = false;
+  (ps.stacks || []).forEach(function(st){
+    if(!Array.isArray(st.blocks)) return;
+    st.blocks = st.blocks.map(function(b){
+      if(!b || b.id !== id) return b; hit = true;
+      if(b.from > y) return null;                     // never started: remove it
+      return Object.assign({}, b, {to: y});
+    }).filter(Boolean);
+  });
+  (ps.blockMeta || []).forEach(function(m){ if(m && m.id === id){ if(m.from > y) m.removed = true; else m.to = y; } });
+  ps.blockMeta = (ps.blockMeta || []).filter(function(m){ return m && !m.removed; });
+  pepSaveState(ps);
+  if(typeof pepRenderTodayTile === "function") pepRenderTodayTile();
+  return hit;
+}
+// Stock check: run the real calendar (block included) over the window and say if a compound runs out
+// before the block ends. Reads the same simulator as the stock forecast.
+function _pepBlockStock(ps, meta){
+  var out = [];
+  (meta && meta.items || []).forEach(function(it){
+    var st = (ps.stacks || []).filter(function(x){ return x && x.compoundId === it.compoundId; })[0];
+    var c = st && _pepCompound(st.compoundId);
+    if(!st || !c) return;
+    var days = Math.max(1, Math.round((new Date(meta.to + "T12:00:00") - new Date(_pepToday() + "T12:00:00")) / 86400000) + 1);
+    var sim = _pepSimulate(ps, st, {horizonDays: days});
+    var mg = 0, dd = new Date(Math.max(new Date(meta.from + "T12:00:00").getTime(), new Date(_pepToday() + "T12:00:00").getTime()));
+    for(var k = 0; k < 400 && _pepISO(dd) <= meta.to; k++){
+      if(_pepStackDueOn(st, c, dd) !== null){
+        var dn = Math.round((dd - new Date(st.startDate + "T12:00:00")) / 86400000);
+        mg += _pepDoseOn(st, c, dn) || 0;
+      }
+      dd = new Date(dd.getTime() + 86400000);
+    }
+    out.push({ compoundId: it.compoundId, name: c.name, needMg: Math.round(mg * 100) / 100, unit: c.doseUnit,
+               unknown: !!(sim && sim.unknown), runsOut: sim && !sim.unknown && sim.depletionDate && sim.depletionDate <= meta.to ? sim.depletionDate : null });
+  });
+  return out;
+}
+function _pepNiceDate(iso){
+  try { return new Date(iso + "T12:00:00").toLocaleDateString("en-AU", {weekday:"short", day:"numeric", month:"short"}); } catch(_e){ return iso; }
+}
+function _pepDaysText(days){
+  if(days === "daily") return "daily";
+  var N = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  return (days || []).map(function(d){ return N[d]; }).join(" + ");
+}
+function _pepBlocksCard(ps){
+  var today = _pepToday();
+  var live = (ps.blockMeta || []).filter(function(m){ return m && m.to >= today; }).sort(function(a, b){ return a.from.localeCompare(b.from); });
+  var h = "<div id=\"pep-blocks\" style=\"background:var(--bg2);border:1px solid #7B68EE;border-radius:var(--radius);padding:14px;margin-bottom:14px;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:6px;\">Blocks</div>";
+  if(!live.length) h += "<div style=\"font-size:12px;color:var(--text3);margin-bottom:10px;\">A block changes a dose or its days for a set window (e.g. a recovery block), then the base plan comes back by itself.</div>";
+  live.forEach(function(m){
+    var on = m.from <= today;
+    var chk = _pepBlockStock(ps, m);
+    h += "<div style=\"border-top:1px solid var(--border);padding:10px 0;\">" +
+      "<div style=\"display:flex;justify-content:space-between;gap:8px;align-items:baseline;\"><div style=\"font-family:var(--font-d);font-size:15px;font-weight:900;color:var(--text);\">" + _esc(m.name) + "</div>" +
+      "<span style=\"font-family:var(--font-d);font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:" + (on ? "#7fd18b" : "var(--text3)") + ";\">" + (on ? "Running" : "Starts " + _esc(_pepNiceDate(m.from))) + "</span></div>" +
+      "<div style=\"font-size:12px;color:var(--text3);margin-top:2px;\">" + _esc(_pepNiceDate(m.from)) + " to " + _esc(_pepNiceDate(m.to)) + " &middot; then back to your base plan" + (m.reason ? " &middot; " + _esc(m.reason) : "") + "</div>" +
+      "<ul style=\"margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.5;\">" +
+      (m.items || []).map(function(it){ var c = _pepCompound(it.compoundId);
+        return "<li>" + _esc(c ? c.name : it.compoundId) + " " + _pepFmtDose(it.dose, c ? c.doseUnit : "mg") + " &middot; " + _esc(_pepDaysText(it.days)) + "</li>"; }).join("") + "</ul>" +
+      chk.map(function(x){
+        if(x.unknown) return "<div style=\"font-size:11px;color:var(--gold);margin-top:4px;\">" + _esc(x.name) + ": set its vial size and water to check stock.</div>";
+        return "<div style=\"font-size:11px;margin-top:4px;color:" + (x.runsOut ? "#e07a7a" : "var(--text3)") + ";\">" + _esc(x.name) + ": needs " + x.needMg + " " + _esc(x.unit) + " in the block" +
+          (x.runsOut ? " &middot; <b>runs out " + _esc(_pepNiceDate(x.runsOut)) + "</b>, before the block ends" : " &middot; stock covers it") + "</div>";
+      }).join("") +
+      "<button data-pep-blkend=\"" + _esc(m.id) + "\" style=\"margin-top:8px;background:none;border:1px solid var(--border2);border-radius:12px;color:var(--text2);font-family:var(--font-d);font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:6px 12px;\">" + (on ? "End it now" : "Cancel it") + "</button>" +
+      "</div>";
+  });
+  h += "<button data-pep-blknew=\"1\" style=\"width:100%;margin-top:8px;padding:12px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;\">+ New block</button></div>";
+  return h;
+}
+function pepOpenBlockBuilder(){
+  var ps = pepGetState(), today = _pepToday();
+  var rows = (ps.stacks || []).filter(function(st){ return st && (!st.status || st.status === "instock") && _pepCompound(st.compoundId); });
+  var N = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], ORDER = [1,2,3,4,5,6,0];
+  var inp = "padding:10px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;";
+  var ov = document.createElement("div");
+  ov.id = "pep-blk-sheet";
+  ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9600;display:flex;align-items:flex-end;";
+  ov.innerHTML = "<div style=\"width:100%;background:var(--bg);border-radius:12px 12px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);max-height:90%;overflow-y:auto;box-sizing:border-box;\">" +
+    "<div style=\"font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:#7B68EE;margin-bottom:10px;\">New block</div>" +
+    "<input id=\"pb-name\" placeholder=\"Name, e.g. Recovery\" style=\"width:100%;box-sizing:border-box;" + inp + "\">" +
+    "<input id=\"pb-why\" placeholder=\"Why (optional), e.g. calf + right pec\" style=\"width:100%;box-sizing:border-box;margin-top:8px;" + inp + "\">" +
+    "<div style=\"display:flex;gap:8px;margin-top:8px;align-items:center;\"><input id=\"pb-from\" type=\"date\" value=\"" + today + "\" style=\"flex:1;" + inp + "\">" +
+    "<select id=\"pb-weeks\" style=\"flex:1;" + inp + "\">" + [2,3,4,5,6,8,10,12].map(function(w){ return "<option value=\"" + w + "\"" + (w === 4 ? " selected" : "") + ">" + w + " weeks</option>"; }).join("") + "</select></div>" +
+    "<div style=\"font-size:12px;color:var(--text3);margin:12px 0 6px;\">Tick the compounds that change in this block. Untouched ones keep running as normal.</div>" +
+    rows.map(function(st){
+      var c = _pepCompound(st.compoundId);
+      return "<div data-pb-row=\"" + _esc(st.compoundId) + "\" style=\"border-top:1px solid var(--border);padding:10px 0;\">" +
+        "<label style=\"display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text);\"><input type=\"checkbox\" data-pb-on style=\"width:20px;height:20px;accent-color:#7B68EE;\">" + _esc(c.name) +
+        "<span style=\"font-size:11px;color:var(--text3);\">now " + _pepFmtDose(_pepDoseSize(st, c), c.doseUnit) + " &middot; " + _esc(st.intervalDays ? "every " + st.intervalDays + " days" : (st.freq || c.freq || "")) + "</span></label>" +
+        "<div data-pb-detail style=\"display:none;margin-top:8px;\"><div style=\"display:flex;gap:8px;align-items:center;\"><input data-pb-dose type=\"number\" inputmode=\"decimal\" step=\"any\" value=\"" + (_pepDoseSize(st, c) || "") + "\" style=\"width:90px;" + inp + "\"><span style=\"font-size:13px;color:var(--text2);\">" + _esc(c.doseUnit) + " per dose</span>" +
+        "<label style=\"margin-left:auto;font-size:12px;color:var(--text2);display:flex;gap:6px;align-items:center;\"><input type=\"checkbox\" data-pb-daily style=\"width:18px;height:18px;accent-color:#7B68EE;\">Daily</label></div>" +
+        "<div style=\"display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px;\">" + ORDER.map(function(d){ return "<button data-pb-day=\"" + d + "\" style=\"padding:8px 0;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;\">" + N[d] + "</button>"; }).join("") + "</div></div>" +
+      "</div>";
+    }).join("") +
+    "<div id=\"pb-msg\" style=\"font-size:12px;color:#e07a7a;line-height:1.5;margin:10px 0;min-height:14px;\"></div>" +
+    "<div style=\"display:flex;gap:10px;\"><button id=\"pb-cancel\" style=\"flex:1;padding:13px;background:none;border:1px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;\">Cancel</button>" +
+    "<button id=\"pb-save\" style=\"flex:1.4;padding:13px;background:#7B68EE;border:none;border-radius:var(--radius);color:#fff;font-family:var(--font-d);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;\">Save block</button></div></div>";
+  document.body.appendChild(ov);
+  if(typeof _phxKeyboardSafe === "function") _phxKeyboardSafe(ov);
+  var paintDays = function(row){
+    var daily = row.querySelector("[data-pb-daily]").checked;
+    Array.prototype.forEach.call(row.querySelectorAll("[data-pb-day]"), function(b){
+      var on = daily || b.getAttribute("data-on") === "1";
+      b.style.background = on ? "#7B68EE" : "transparent"; b.style.color = on ? "#fff" : "var(--text2)"; b.style.opacity = daily ? "0.5" : "1";
+    });
+  };
+  ov.addEventListener("click", function(e){
+    if(e.target === ov || e.target.id === "pb-cancel"){ ov.remove(); return; }
+    var dayB = e.target.closest && e.target.closest("[data-pb-day]");
+    if(dayB){ dayB.setAttribute("data-on", dayB.getAttribute("data-on") === "1" ? "0" : "1"); paintDays(dayB.closest("[data-pb-row]")); return; }
+    if(e.target.id === "pb-save"){
+      var from = ov.querySelector("#pb-from").value, wk = parseInt(ov.querySelector("#pb-weeks").value, 10) || 4;
+      var items = [];
+      Array.prototype.forEach.call(ov.querySelectorAll("[data-pb-row]"), function(row){
+        if(!row.querySelector("[data-pb-on]").checked) return;
+        var daily = row.querySelector("[data-pb-daily]").checked;
+        var days = daily ? "daily" : Array.prototype.filter.call(row.querySelectorAll("[data-pb-day]"), function(b){ return b.getAttribute("data-on") === "1"; }).map(function(b){ return +b.getAttribute("data-pb-day"); });
+        items.push({ compoundId: row.getAttribute("data-pb-row"), dose: row.querySelector("[data-pb-dose]").value, days: days });
+      });
+      var r = pepSaveBlock({ name: ov.querySelector("#pb-name").value, reason: ov.querySelector("#pb-why").value, from: from, to: from ? _pepAddDays(from, wk * 7 - 1) : "", items: items });
+      if(!r.ok){ ov.querySelector("#pb-msg").innerHTML = r.problems.map(_esc).join("<br>"); return; }
+      ov.remove(); _pepTab = "mine"; pepRenderScreen();
+    }
+  });
+  ov.addEventListener("change", function(e){
+    var row = e.target.closest && e.target.closest("[data-pb-row]"); if(!row) return;
+    if(e.target.hasAttribute("data-pb-on")) row.querySelector("[data-pb-detail]").style.display = e.target.checked ? "block" : "none";
+    if(e.target.hasAttribute("data-pb-daily")) paintDays(row);
+  });
+  return ov;
+}
+// One-shot, Jon 21 Nov: the recovery block he asked for. TB-500 at his original protocol's LOADING
+// figure (library note: "Loading 2mg 2x/wk") on Mon + Thu for 4 weeks; BPC-157 stays 0.5 mg daily —
+// his protocol has no higher BPC figure and he asked for none. Mon 23 Nov to Sun 20 Dec, then the
+// base plan (TB-500 2 mg Mondays) is back by itself. Archive after 20 Dec.
+function _pepSeedRecovery1121(){
+  try {
+    // Jon's account only: this is his recovery block, not a default for anyone else.
+    var _uid = currentSession && currentSession.user && currentSession.user.id;
+    if(_uid !== "df7fc046-0dd6-4416-b0ce-44b55fa2fb8e") return false;
+    var ps = pepGetState();
+    if(!ps || !(ps.stacks || []).length || ps.seedRecovery1121) return false;
+    if(_pepToday() > "2026-12-20") return false;
+    var has = function(id){ return (ps.stacks || []).some(function(st){ return st && st.compoundId === id; }); };
+    if(!has("tb500") || !has("bpc157")) return false;
+    ps.seedRecovery1121 = true; pepSaveState(ps);
+    return pepSaveBlock({ name: "Recovery", reason: "calf + right pec", from: "2026-11-23", to: "2026-12-20",
+      items: [{ compoundId: "tb500", dose: 2, days: [1, 4] }, { compoundId: "bpc157", dose: 0.5, days: "daily" }] }).ok;
+  } catch(_e){ if(typeof _phxRecordWriteError === "function") _phxRecordWriteError("pep.recovery1121", _e, {}); return false; }
+}
 function _pepTabMine(ps){
   var stacks = ps.stacks || [];
   if(!stacks.length){
@@ -34222,7 +34440,7 @@ function _pepTabMine(ps){
   var rows = stacks.map(function(st, i){ return {st:st, i:i, c:_pepCompound(st.compoundId)}; })
     .filter(function(r){ return !!r.c; })
     .sort(function(a, b){ return (order[a.st.status || "instock"] || 0) - (order[b.st.status || "instock"] || 0); });
-  var h = "<div style=\"font-size:12px;color:var(--text3);margin-bottom:12px;\">Everything about each compound in one place. Tap Edit to change the dose or schedule.</div>";
+  var h = _pepBlocksCard(ps) + "<div style=\"font-size:12px;color:var(--text3);margin-bottom:12px;\">Everything about each compound in one place. Tap Edit to change the dose or schedule.</div>";
   rows.forEach(function(r){
     var st = r.st, c = r.c;
     var active = !st.status || st.status === "instock";
@@ -34286,6 +34504,7 @@ function _pepTabMore(ps){
 }
 
 function pepRenderScreen(){
+  _pepSeedRecovery1121();
   var body = document.getElementById("pep-screen-body");
   if(!body) return;
   var ps = pepGetState();
@@ -34508,6 +34727,8 @@ function pepRenderScreen(){
       pepRenderScreen();
     });
   });
+  body.querySelectorAll("[data-pep-blknew]").forEach(function(b){ b.addEventListener("click", function(){ pepOpenBlockBuilder(); }); });
+  body.querySelectorAll("[data-pep-blkend]").forEach(function(b){ b.addEventListener("click", function(){ pepEndBlock(b.getAttribute("data-pep-blkend")); pepRenderScreen(); }); });
   [["data-pep-schedstart", pepStartToday],
    ["data-pep-schedrun",   pepRunUntilStopped],
    ["data-pep-schedstop",  pepStopFromToday],
@@ -34868,6 +35089,7 @@ function pepToggleDose(compoundId, dateISO){
 // Lives on screen-today under the nutrition tile. Shows every dose due today
 // with the mg/mcg amount AND the units/mL to draw from the current recon.
 function pepRenderTodayTile(){
+  _pepSeedRecovery1121();
   var tile = document.getElementById("today-peptide-tile");
   if(!tile) return;
   var ps = pepGetState();
@@ -37822,7 +38044,8 @@ function pepApplyPhase(id){
   // required". Found building Jon's 4 Nov reset. The stock COUNT stays gated on
   // stockCounted; what is dissolved in the fridge is not a count.
   var VIAL = ["openedDate","openVialMg","openWaterMl","openUsedAmt","openDosesUsed",
-              "actualVialMg","waterConfirmedAt"];
+              "actualVialMg","waterConfirmedAt",
+              "blocks"];   // v4.9.443 — a recovery block is his, not the phase's
   v.entries.forEach(function(st){
     var was = prior[st.compoundId];
     if(was) VIAL.forEach(function(k){ if(was[k] !== undefined && was[k] !== null) st[k] = was[k]; });

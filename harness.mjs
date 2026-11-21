@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.442'", 'version is 4.9.442');
+has("var APP_VERSION='4.9.443'", 'version is 4.9.443');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -1602,9 +1602,10 @@ function phxFnSpan(src, name) {
   // v4.9.256 raised this to 5 for pepOpenMakeUp, which has two typed fields.
   // v4.9.268 raised this to 8 for pepOpenStockTake — the widest form in the
   // domain, two number fields per compound down a scrolling panel.
-  kb === 8
-    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 8 creation sites')
-    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 8 (pepOpenEditStack, pepOpenCustomVial, pepOpenBloodPanel, pepOpenImport, pepOpenMakeUp, pepOpenSavePhase, pepOpenAddDose, pepOpenStockTake); the helper is NOT idempotent`);
+  // v4.9.443 raised this to 9 for pepOpenBlockBuilder (name, reason, date, a dose per compound).
+  kb === 9
+    ? ok('PEP: STRUCTURAL _phxKeyboardSafe armed at exactly 9 creation sites')
+    : bad(`PEP: STRUCTURAL _phxKeyboardSafe armed ${kb} times — expected 9 (pepOpenEditStack, pepOpenCustomVial, pepOpenBloodPanel, pepOpenImport, pepOpenMakeUp, pepOpenSavePhase, pepOpenAddDose, pepOpenStockTake, pepOpenBlockBuilder); the helper is NOT idempotent`);
   // v4.9.224: was 2, and the 2 came from a miscount I made and everyone
   // downstream inherited. The count pin is only as good as the enumeration
   // behind it, so the enumeration is now mechanical: every peptide overlay that

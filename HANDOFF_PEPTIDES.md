@@ -245,3 +245,24 @@ number moves under you.
 ---
 
 *Verified against origin/main at v4.9.263, 2026-09-01. Peptides domain.*
+
+> **v4.9.443 (21 Nov, from the Training chat at Jon's request) — BLOCKS: time-boxed changes built in the app.**
+> Jon: "Can I make the peptide plan built in and smart and not from a file? I need to add a recovery phase in to
+> the BPC and tb500 - not just maintenance - have the calf thing and right pec need to heal". He chose: build in
+> the app, auto-switch back, stock check, tie to injuries — "all of the above integrated". Doses: he asked if
+> research gives one; it does not (BPC-157: three small uncontrolled human pilots; no established human dose), so
+> he said "the loading phase will work" = his library's own TB-500 note ("Loading 2mg 2x/wk"). BPC unchanged
+> (0.5 mg daily — no other figure in his protocol). 4 weeks.
+> Model: `stack.blocks = [{id,name,from,to,dose,days}]` ("daily" or weekday numbers). `_pepStackDueOn` checks
+> `_pepBlockOn` first (inside the window the block's days ARE the schedule); `_pepDoseOn` returns the block dose
+> for a dayNum inside it. Every reader (Today, calendar, forecast, adherence) agrees; outside the window the base
+> plan is back with no switch. `ps.blockMeta` = name/reason/dates/items for the screen. `pepApplyPhase` carries
+> `blocks` (VIAL list). API: `pepSaveBlock(def)` (validates, replaces same id), `pepEndBlock(id)` (ends
+> yesterday; a not-yet-started block is removed), `_pepBlockStock` (simulator over the window → "runs out
+> before the block ends"), `pepOpenBlockBuilder` (MY PEPTIDES → Blocks card → + New block: name, why, start,
+> weeks, per compound dose + days). Seed `_pepSeedRecovery1121` (Jon's UID only, once): Recovery, calf + right
+> pec, Mon 23 Nov – Sun 20 Dec, TB-500 2 mg Mon + Thu, BPC-157 0.5 mg daily. Archive after 20 Dec.
+> Limits: `_pepSimulate` sizes vials from the stack's base dose, so a block that CHANGES the dose forecasts
+> stock at the base dose (TB-500 recovery keeps 2 mg, so exact). "Tie to training" is the reason text only —
+> no link to the Draft calf weeks yet (peptide code must not reference blab*). Tests: BLOCK, BLOCK seed 1121.
+> Harness keyboard-safe count 8 → 9.

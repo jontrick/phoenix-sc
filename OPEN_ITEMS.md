@@ -1,5 +1,11 @@
 # OPEN ITEMS — the single working list
 
+**ARCHIVED 2026-11-22.** 31 resolved threads moved to `OPEN_ITEMS_ARCHIVE.md`, 925 -> 765
+lines. **That did NOT reach the budget, and the reason matters:** the resolved items were
+never the bulk. 68 OPEN items at ~11 lines each ARE this file. Archiving more cannot fix
+that — only closing work or writing items shorter will. Flagged to Jon; not compressed
+unilaterally, because these are four domains' records and the detail is often the finding.
+
 **SIZE BUDGET: 300 lines.** `board_check.mjs` warns past it. When you cross it, ARCHIVE
 resolved threads out — do not leave them in place. A list nobody finishes reading is a
 list that lies about being read.
@@ -28,12 +34,6 @@ Shipped: water out (`fbPushWater` from `nutAddWater` / `nutUndoLastWater` /
 - [ ] JON — confirm on the phone: log water in 5 Brains, open Phoenix, the Water tile moves;
       weigh in on 5 Brains, Phoenix's morning card does not ask again. Proven only in the
       functional sandbox so far, not end to end.
-- [x] **PM RULING, 22 Nov: LEAVE THE PULLS WHERE THEY ARE.** Do not move `fbSyncOnOpen`
-      into `window._phxOnProfileFetched`. `renderTodayScreen` already runs on every open and
-      the visibilitychange listener covers resume, so the hook would be a third trigger
-      closing no gap — and it is the one piece of boot plumbing all four domains chain
-      through. Declining was the right call. Revisit only if a pull is ever shown to be
-      missed on a cold start.
 - [ ] NUTRITION — three one-line `fbPushWater` calls were added inside your water functions.
       Review; they are guarded with `typeof` and write nothing when signed out.
 - [x] **v4.9.445** coach chat (`sendCoachMessage` + `_mcGenerateOpeningMessage`) now gets
@@ -51,26 +51,6 @@ Jon: "buggy and annoying ... can't see a previous day ... app says 2ml but I add
 note it's one, the daily dosage still seems to think 2 ... haven't trusted the make ups."
 Reproduced against the real functions (bpc157, plan 10 mg / 2 mL, dose 0.5 mg):
 
-- [x] **DONE v4.9.350** (Jon's ruling: always confirm). "Made up" always opens the sheet,
-      prefilled from the open vial; "Correct the vial already open" (`pepCorrectOpenVial`)
-      fixes a wrong volume without touching stock; Protocol / Stock / panel / coach context
-      now draw from `_pepLiveRecon`. Edit-sheet water relabelled "for new vials".
-      Original finding: **Two water figures, and screens disagree.** "Made up today" one-tap stamps the PLAN
-      volume (2 mL) as the mixed vial. Correcting water in the edit sheet changes only the
-      PLAN. Result: TODAY (`_pepLiveRecon`) says 10 u, while PROTOCOL / STOCK / compound
-      panel / coach context (`_pepRecon`, plan) say 5 u. Only "log make-up" with 1 mL makes
-      them agree. Plan-recon callers: _pepTabProtocol, _pepPanelCompounds, _pepTabStock,
-      _pepBuildContext, _pepDosesPerVial, pepMarkMadeUpToday.
-- [x] **DONE v4.9.351** — TODAY tab ‹ › steps back up to 7 days (`pepShiftDay`, `_pepViewISO`); tick and skip take a date; add-dose and make-up stay today-only; the view resets at midnight; the main-screen tile still ticks today. Original finding: **No previous day.** `_pepTabToday` and `pepToggleDose` are hard-wired to `_pepToday()`,
-      though state (`checked{iso}`, `skipped{iso}`) and `_pepGetDoses(ps, date)` already
-      take a date. A missed tick cannot be fixed.
-- [x] **ADDED v4.9.352 (Jon's request)** — "Tonight · prep for tomorrow AM" on TODAY and the
-      main tile: tomorrow's morning + any-time doses with draw-ups, a "prepped" tick
-      (`ps.prepped[iso]`, consumes nothing), and "prepped last night" shown next morning.
-- [x] **DONE v4.9.353** — 3 tabs: TODAY · MY PEPTIDES (card per compound: dose, schedule,
-      next due, draw, doses left in the open vial, sealed, Made up / Edit) · MORE (list to
-      the five detail screens, which keep their keys and show "‹ More"). Six-tab pins in
-      harness + tests replaced with three-tab + reachable-from-MORE checks.
 - [ ] **Size.** Peptide block ~376 KB, 150 top-level functions, 6 tabs. Jon finds it hard
       to use and is open to starting again. Redesign options put to him 31 Oct — ???.
 
@@ -93,20 +73,7 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
 - [ ] TRAINING — Draft test/result blocks are standard_sets, so they show a kg/reps row
       above the "Log result" box. Works; reads oddly. A result-only block would be cleaner.
 
-## ✅ CLEARED — the external integration is live and the security gate passed
-
-- [x] **RLS GATE PASSED, 2026-11-10.** All 8 tables have RLS enabled, and every SELECT/ALL
-      policy is scoped `auth.uid() = user_id` (`profiles` uses `auth.uid() = id`). The three
-      null `using_expression` rows are INSERT policies, which use `WITH CHECK` not `USING` —
-      a blank USING there is correct, not a hole. **The database has at least three users
-      and they cannot see each other's rows.** Cleared to share the anon key.
-- [x] **The mechanism works, verified against live data:** `2026-11-10 | trained true |
-      Upper — Max Effort | 22 sets | weighed_in true | 111.4 | kcal null`. Authoritative
-      file `supabase/sql/2026-11-10d_accountability_day.sql`.
-      Four corrections to get there: a `sessions.session_id` column that does not exist, a
-      UTC day spine that deleted the current Brisbane day until 10:00 local, `auth.uid()`
-      being NULL in the SQL Editor (so it tested empty while the data was present), and a
-      caller filter added as defence in depth.
+## OPEN — SUPABASE / EXTERNAL INTEGRATION
 
 - [ ] **??? — LOW: the INSERT policies' `WITH CHECK` clauses were never inspected.** I
       queried `qual` only, so I know the USING side is right and have **not** verified that
@@ -118,13 +85,7 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       Recorded rather than chased because a count of policies is not a check of policies,
       and I would rather name what I did not look at than imply I had.
 
-## ✅ DONE — nutrition mirror SQL (superseded; see above)
-
-- [ ] **JON — run `supabase/sql/2026-11-10_accountability.sql`.** Supersedes and replaces
-      both earlier files, which are deleted. Creates `nutrition_daily` + RLS and the single
-      `accountability_day` view. Every column verified against `information_schema`, not
-      inferred. Closes when `select * from accountability_day where date = current_date`
-      returns a row.
+## OPEN — TRAINING DATA HYGIENE + SCHEMA FINDINGS (from the 10 Nov schema dump)
 
 - [ ] **TRAINING — 139 SESSIONS ARE STRANDED `in_progress`, NONE EVER COMPLETED.**
       Found 2026-11-10 in a schema-side count: `in_progress` 139 rows, **0 with
@@ -150,8 +111,6 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       Closes when Training either creates the table, repoints the read at
       `daily_weigh_ins` (which has `date` + `weight_kg` and is populated), or removes the
       panel. **`daily_weigh_ins` is the obvious target and needs no new table.**
-
-
 
 - [ ] **JON — run `supabase/sql/2026-11-10_accountability_day.sql`.** Creates
       `accountability_day`: ONE view, one row per local day, and the entire read surface for
@@ -219,39 +178,6 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       batches); untick for exact. Selection, ticks and the toggle persist in `ns.v2.shop`; changing the
       days or the toggle clears ticks. Weights are edible weight, no waste factor (stated on screen).
       `_nut2ComingCard` archived. Next: stage 6 Claude guidance (Jon: later; working system first).
-- [x] **v4.9.410 — Today card lists today's planned feeds with a tick** (Jon 14 Nov: "show on the
-      today page - so can tick off from there"). Same `eaten` flag as the Plan tab; only feeds with
-      food are listed; the header / numbers still open Nutrition. Test: nut2 TODAYFEEDS.
-- [x] **v4.9.411 — "each" amounts** (Jon: "may just check 3 [eggs] in a recipe with no weight? Can
-      this be each or g option?"). Items are {ref,g} or {ref,n}; `_nut2ItemG` is the ONE place grams
-      are derived (recipes, plan, shop, copy). Size = his `ns.v2.unitG[ref]` else a default (egg 50 g,
-      AU large edible) else null → 0 g and save refuses — never guessed. g ⇄ each button on foods
-      (not recipes), "1 each = [50] g" editable. Tests: nut2 EACH ×4.
-- [x] **v4.9.412** — recipe "Finished weight / weigh the pot" relabelled "Cooked weight of the batch (g) ·
-      food only, no pot" (Jon asked what it meant). Method box font fixed.
-- [x] **v4.9.413 — on-phone label reading** (Jon chose this over an AI service). Add Food: SCAN LABEL
-      (camera) / FROM A PHOTO. Tesseract.js 5.1.1 + eng data lazy-loaded from jsdelivr (~10 MB first
-      use, cached in IndexedDB by Tesseract). `_nut2ParseNIP`: last non-% number = per 100 g; g-read-as-9
-      repair; kJ÷4.184 unless Cal shown; Atwater cross-check warns. Boxes filled, NEVER auto-saved.
-      Proven on 4 rendered panels incl. a blurred/rotated JPEG + in-app end to end. **Unproven: real
-      iPhone photos and Safari WASM speed** — first real label is the test. Tests: nut2 NIP ×3.
-- [x] **v4.9.414 — + NEW FOOD inside the meal / recipe picker** (Jon: "can these functions work on the
-      meal planner area"). Opens Add Food (scan / photo / type, name prefilled from the search);
-      `nut2OpenAddFood(…, onSaved)` saves to the library AND hands the id back to the meal / recipe.
-      Browser-proven both paths. Test: nut2 PICKNEW.
-      **v4.9.414 was pushed with PICKNEW red** (the test's DOM stub lacked querySelectorAll; app code
-      fine — browser-proven). My push command did not gate on the functional check. Fixed in v4.9.415;
-      pushes are now chained `gates && push`.
-- [x] **v4.9.416 — IMPORT FILE (CSV) in the Library.** Headings found by word in any order (name / kcal
-      or kJ / protein / carbs-not-sugars / fat-not-saturated / fibre); comma, semicolon or tab;
-      quoted names; preview with per-row skip reasons; same-name food UPDATED (cooked link kept), never
-      duplicated. An image picked here goes to Add Food. Tests: nut2 CSV ×4. Browser-proven.
-- [x] **v4.9.417 — Open Food Facts link / barcode in Add Food.** Paste an OFF link or barcode, or SCAN
-      BARCODE (photo of the printed digits → Tesseract → EAN/UPC check digit must pass — iOS Safari
-      has no BarcodeDetector). `world.openfoodfacts.org/api/v2/product/<code>.json`, per-100 g fields,
-      kJ fallback. **Unverified from here: the live API response and its CORS on his phone** (sandbox
-      cannot reach OFF; browser test used a stand-in). Failure says so — never fills wrong numbers.
-      Woolworths links show "needs a one-time server set-up" until task #28 lands. Tests: nut2 OFF ×3.
 - [ ] **JON — deploy `supabase/functions/woolies-product` (Woolworths links, v4.9.418).** Supabase dashboard
       → Edge Functions → Deploy a new function → Via editor → name `woolies-product` → paste
       `supabase/functions/woolies-product/index.ts` → Deploy. Until then the app says "needs the one-time
@@ -260,38 +186,6 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       the reply defensively (any Name/Value or key path containing "100 g"; serve rows never used), falls
       back to the product's barcode → Open Food Facts, else a plain message. Only digits reach the
       function; it only calls www.woolworths.com.au. Tests: nut2 WOOLIES ×2; browser: 404 / ok / 403.
-- [x] **v4.9.419 — Nutrition / Peptides no longer revert to Today after the phone sleeps.** Cause: the
-      boot restore fired on a FIXED 450 ms, started before `getSession()`. A waking phone refreshing its
-      token is slower → restore ran first, boot mode ended, the app's own navTo('today') then counted as
-      his choice and wiped `phx_lastTab_v1`. Reproduced (real boot path, getSession delayed 1.5 s → Today,
-      key null). Now waits for boot routing to reach Today (intercept sets `_phxBootRouted`), 30 s cap,
-      never restores without a session. Proven at 0 / 1.5 / 4 / 9 s (×2 — boot checks the session twice)
-      for nutrition + peptide; Today stays Today. Harness: BOOTWAIT.
-- [x] **v4.9.420 — screen stays on in Nutrition and Peptides.** The global wake lock was asked for once
-      at load (no gesture — iOS may refuse) and on visibility; session ends released it and nothing
-      re-asked. Now asked on arrival and on every tap there. Browser-proven with a counting stub
-      (headless Chromium always refuses the real API). **On his iPhone it only works if iOS grants it**
-      — Settings → Diagnostic shows "screen wake lock: held / REFUSED / UNSUPPORTED". Harness: AWAKE.
-- [x] **v4.9.421 — a food with a serve size counts by the serve** (Jon: Helga's wraps "saved as per serve /
-      1 wrap but wants g?" — it showed 0 kcal: added by grams with an empty box). `nut2UnitG` now uses the
-      food's `serving_g`; meals and recipes add such foods as {n:1}; g ⇄ each converts; an empty gram box
-      switched to each starts at 1. Test: nut2 SERVE.
-- [x] **v4.9.422 — barcode photos decode the BARS (ZXing 0.21.3, lazy from jsdelivr).** Jon: the photo
-      "kept coming up not being able to read". Reading the printed digits with Tesseract failed on a
-      pack-style photo AND, turned sideways, produced digit soup that passed the check digit by chance
-      (could look up the WRONG product). Now ZXing (TRY_HARDER, EAN/UPC) on the photo and turned ±90°;
-      fallback reads the printed number ONLY in its 1+6+6 layout. Browser: a real EAN-13 on a tilted,
-      blurred JPEG pack shot decodes in 0.14 s at every rotation; 0 false codes across all junk images.
-      Tiny / heavily blurred barcodes still fail → message tells him to fill the frame. Test: nut2 BARCODE.
-- [x] **v4.9.423 — targets he can change** (Plan → counter → CHANGE). Modes: Phoenix cut (unchanged
-      default); Muscle-sparing cut after Helms, Aragon & Fitschen 2014 (protein 2.7 g/kg lean mass with a
-      body-fat %, else 2.2 g/kg BW; fat 25% kcal; carbs rest; same 18.5 kcal/kg); his own numbers (no
-      weigh-in needed). Optional training-day carbs from the calendar (+train on a session day, −rest on
-      none; skipped ≠ training; no calendar → no change). Mirror + Today use the date's target.
-      `ns.v2.targets`. Tests: nut2 TARGETS ×3. Browser-proven.
-      Training-day detection goes through `blabTrainingStateOn` (harness CONTRACT refused a direct blabCalGet).
-- [x] **v4.9.424 — scale a recipe** ("make [N] serves" / "× the batch" → SCALE). Every amount (g and each),
-      cooked weight and serves move together; per-serve / per-100 g unchanged. Test: nut2 SCALE.
 - [ ] **JON — deploy `supabase/functions/recipe-import` (recipe from a web link, v4.9.425).** Same steps as
       woolies-product: Edge Functions → Deploy a new function → Via editor → name `recipe-import` → paste
       → Deploy. Returns ONLY the page's schema.org Recipe data (name, yield, ingredient lines); https only,
@@ -302,26 +196,16 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       mix-ups; first-hit search had matched "vegetable oil" → puff pastry, "milk" → human breast milk).
       Opens in the recipe editor with the source line under each item; unmatched / skipped listed.
       **Unverified: real sites through the deployed function.** Tests: nut2 RECIPELINK ×4.
-- [x] **v4.9.427 — P / C / F per meal** on the Plan tab (under each meal, live as he types grams) and the
-      Today card (each meal + the day's eaten P/C/F against target). Test: nut2 MEALMACROS.
-- [x] **v4.9.406 — FIXED (1 of 2).** `reloadOnce` now waits, uncapped, while `_phxSessionOpen()` (lib
-      timer, conditioning, count-in, rest overlay, session screen, BLAB workout overlay, running lib
-      tick; unknown → open). No update banner over a live session. Browser-proven: SW_UPDATED
-      mid-session → 0 reloads, applied on leaving; guard removed → reload. Harness: SWRELOAD.
-      **Still open (2): timer start stamp is memory-only — if iOS kills the app mid-timer the
-      time is lost.** Needs a resume flow (ticked movements + start stamp), not built.
 - [ ] **UPDATE RELOADED THE APP MID-SESSION (Jon, Wed 11 Nov 05:42 — lost his Bronco time).** I
       pushed v4.9.402 after telling him to go train; SW_UPDATED reloaded the PWA during the test and
       the lib timer's start stamp (`window._phxTimerStart`, memory only) was lost. Two fixes, NOT yet
       built: (1) SW_UPDATED must defer the reload while a session/timer overlay is open (apply on
       the next Today render); (2) persist the timer start stamp so a reload resumes the clock.
       **Process rule: no pushes during his training window once he has been told to go train.**
-- [x] **Checked 12 Nov:** run never executed (still `queued` 35 h later); v4.9.402–406 deployed after it.
 - [ ] **STALE DEPLOY RUN 42885366454 (v4.9.400 rerun)** — API reports `queued` while `gh run cancel`
       says completed. If it ever executes it deploys v4.9.400 over v4.9.402 (his app ignores an
       older SW, so no reload — but fresh loads would get 400). Live version unverified (Pages API
       and the site are not reachable from the sandbox). Check after his session; any push fixes it.
-- [x] **Shipped v4.9.404** (see HANDOFF_TRAINING) — programme sessions + conditioning + lib timers.
 - [ ] **NOTES AT THE TOP OF LIKE-FOR-LIKE SESSIONS (Jon 05:47: "All notes should be at top of every
       like for like session").** Score notes (`phx-sc-notes`) are saved but shown only in the
       library history / session detail, not when the session opens from the programme. Build after
@@ -336,14 +220,8 @@ BLAB is parked in `blab_paused`, not deleted. Design + API: HANDOFF_TRAINING.md,
       **The external app shows nutrition as "no data" until then — NOT zero.** Specified in
       PHOENIX_INTEGRATION_BRIEF §0, because a zero reads as "he ate nothing today".
 
-## ✅ DONE — nutrition mirror SQL
+## OPEN — NUTRITION MIRROR FOLLOW-UPS
 
-- [ ] **JON — run `supabase/sql/2026-11-09_nutrition_daily.sql`** in the Supabase dashboard
-      (SQL editor). It creates `nutrition_daily` + RLS, and the six `accountability_*`
-      views for the external work app. **Until it runs, every nutrition mirror write fails
-      with `42P01`** and lands in Settings → Diagnostic as `nutDailyMirror`. The app is
-      otherwise unaffected — the local save is unconditional and happens first.
-      Closes when a row appears in `nutrition_daily`.
 - [ ] **PM — I EDITED NUTRITION'S AREA.** v4.9.389 added `_nutDailyRow`,
       `_nutDailyErrorSummary`, `_nutMirrorDayNow`, `_nutMirrorRecentDays` next to
       `_nutDayTotals`, and a mirror call inside `nutSaveState`. Jon asked the PM directly
@@ -370,10 +248,6 @@ design. The three open questions are CLOSED — do not reopen them, build to thi
       peptide tile move together. They do not scroll independently.
 - [ ] **TRAINING — render your Today surfaces for a GIVEN DATE, and make your write
       controls unreachable when that date is not today.**
-- [x] **NUTRITION — DONE v4.9.328.** No write control drawn off today; guard inside
-      `_nutProgTodayCard` so all three callers get it. The trap it surfaced — a handler
-      that hardcodes `_nutToday()` — is written up in `KNOWN_ISSUES.md`; **worth ten
-      minutes for TRAINING and PEPTIDES, whose Today surfaces have the same shape.**
 
 - [ ] **PEPTIDES — same.** Your read path needs NO new work: `_pepGetDoses(ps, dateStr)`
       has taken a date since v4.9.255 and the calendar already uses it.
@@ -419,7 +293,6 @@ surfaces a bug in it, that is a finding, not your build breaking.
 
 ---
 
-
 - [ ] TRAINING/PM — **The weekly-review and coach cluster still shows the AI programme's
       week to a BLAB user.** Same root cause as the badge fixed in v4.9.301, NOT fixed
       with it, and deliberately so. Sites: the Sunday "Week N Complete" card on Today
@@ -460,7 +333,7 @@ surfaces a bug in it, that is a finding, not your build breaking.
       **Why it matters more than one red row:** a gate that is red three days in seven
       teaches everyone to push through a red gate, and the next red will be a real one.
 
-## JON'S 2026-09-08 SESSION REPORT — ALL SEVEN SHIPPED (v4.9.320-325)
+## OPEN — FROM JON'S 8 SEP REPORT (those seven shipped; these are what came after)
 
 Condensed 2026-09-11; the file was 200 lines past budget and every item below is closed.
 The full diagnosis for each is in its own commit message and in the code comments at each
@@ -710,7 +583,6 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       Closes with a ruling on (a) — a muted affordance on every line, or a label on the ones
       with nothing to offer — and a rounding rule for display on (b).
 
-
 - [ ] NUTRITION — **The carb ladder runs out on LIFT DAYS at the bottom of the cut, and
       the guard cannot see it.** Measured on origin/main BEFORE v4.9.335, so pre-existing:
       the lowest phase serves 137.5 g of carbohydrate against a target of 130 on a lifting
@@ -736,7 +608,6 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       Low harm, visible on the eating screen, and he has already told us once that
       fractional counts of a thing you crack or unwrap read as wrong.
 
-
 - [ ] NUTRITION — **AN ACCEPTED REVIEW ADJUSTMENT MOVES THE TARGET AND NOT THE FOOD.**
       `nutProgSetAdjust(week, delta)` changes `nutProgTargetsOn().total` — measured, week 1
       at -3 blocks reads 2250 kcal / C188 / blocks 6.66 instead of 2550 / C263 / 9.66. The
@@ -755,7 +626,6 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       **Not folded into the week-1 restructure** — that one works, because it moves the
       PHASE and the food follows. Closes when the plate is sized from the adjusted carb
       target rather than from the phase index alone.
-
 
 - [ ] NUTRITION — **The free-form planner's meals tile is now shadowed for the whole
       cut.** v4.9.326 made the home tile render the programme's day (it had said "Nothing
@@ -826,11 +696,6 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       dot never shows for them. Closes either way, with the test pinned to a FIXED date so
       it stops depending on when it is run.
 
-
-- [x] TRAINING — Two disagreeing week numbers on Today. **DONE v4.9.301** (60deb54).
-      **Lesson:** they were never two derivations of one week — `athlete.currentWeek`
-      counts the AI programme and never moves on a BLAB account, `progWeek()` counts
-      calendar weeks. Three counters, three questions, one place that decides.
 - [ ] TRAINING + NUTRITION — **Nutrition decides "is today a lifting day" from its OWN
       static map** (`_NUT_PROG_SESSIONS`), not training state. Since v4.9.299 that map
       gates the 04:15 intra drink, so a divergence from Jon's real training days gives
@@ -878,15 +743,6 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
       outside the repo, they are a second copy of a thing that must have one. Closes when
       whoever maintains it either drops it or points it at the repo file.
 
-## RESOLVED SINCE THE LAST BOARD
-
-- **A phase's stock figures were being treated as a COUNT.** The importer sets
-  `stockCounted` from the presence of `sealedVials` — right for a paste where Jon typed his
-  own numbers, wrong for a phase where PEPTIDES transcribed them from a document. Applying
-  Phase 2 marked SIX of thirteen compounds counted that he had never counted, so the
-  readiness gate was partly satisfied by transcription. Fixed v4.9.266: a phase-supplied
-  figure never sets `stockCounted`.
-
 ## ??? — GAPS. Things nobody currently knows.
 
 - `???` What killed `.git`. No candidate identified.
@@ -903,15 +759,6 @@ than the exercise (#2), one PB slot for every circuit (#3), and the same shape a
   the other eleven are merely unconfirmed.
 
 ## ARCHIVE — closed, kept only where the closing evidence matters
-
-- [x] Auto-update after the zero-byte `sw.js` — **CONFIRMED WORKING** v4.9.252. Jon
-      confirmed the version moves on its own; closed a claim unverified since v4.9.208.
-- [x] **v4.9.265 SHIPPED** — `9ef505b`. **Lesson kept:** I reported the push failure as
-      "GitHub unreachable (DNS)". The DNS failures were real, but the LATER ones were a
-      plain non-fast-forward — origin had moved. Two causes wearing one symptom, and I
-      named the first for both. Read the actual error text.
-- [x] Coach-worker vision passthrough — **VERIFIED** 2026-08-22, synthetic report with
-      unguessable values, all four returned exactly.
 
 - **Pull-ups paused in Draft finishers (2 Nov, v4.9.360)** — renegade rows stand in. Ask Jon when to bring them back. Owner: Training. Weighted pull-up / Sat pair untouched.
 - **`_phxRepair1010` (v4.9.363) is one-off** — move to blab_archive.js after Jon confirms the superset Prev reads 10 (and set_logs shows 10). Owner: Training.

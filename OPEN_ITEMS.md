@@ -21,6 +21,35 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ---
 
+## 5 BRAINS — PM VERIFICATION OF .444 AND .445 (23 Nov)
+
+Both push-notices were checked claim by claim, not accepted. Everything stated held: gates
+re-run here match exactly, `_phxOnProfileFetched` is untouched, `VIS_EXPECTED` 6 matches 6
+real listeners, 24 tests in `tests/fivebrains.mjs` (16 + 8), and `brains_entry` is never
+queried — its guard is comment-aware, with the load-bearing assertion on `from('brains_entry`
+rather than a naive string ban.
+
+**The boundary I most wanted to check is intact: `accountability_day` contains no 5 Brains
+columns**, so the external work app still cannot see sleep, stress, energy or mood. Verified
+against the shipped SQL, 0 mentions.
+
+- [ ] **??? — LOW: two paths read `brains_wellbeing_day` and only one is defended by
+      construction.** The coach-context path (`:40260`) names its columns and then rebuilds
+      each row field by field in `fbCoachReadinessModel`, so a text column added to that
+      view later still cannot reach the worker. **The readiness-chip path (`:40145`) uses
+      `select('*')`** and parks the whole row in `_fbWellbeing.row`. Today that is harmless:
+      the only reader is `fbReadinessModel` at `:40179`, which takes four named numbers, and
+      it is Jon's own data on his own device. **The hazard is latent, not live** — if anyone
+      later passes `_fbWellbeing.row` to anything outbound, the field-by-field defence is
+      absent on that path and nothing would say so. Closes by naming the columns at `:40145`
+      too, which costs one line and removes the asymmetry.
+- [ ] **NOTED, not a defect: the readiness scores now have a second home.**
+      `_mcSaveMessage` writes the whole coach context to `coach_conversations.context_snapshot`,
+      so sleep/energy/mood/stress are stored there as well as in 5 Brains. Owner-RLS, and the
+      author flagged it deliberately rather than letting it be discovered. Recorded because
+      **a second copy of health-adjacent data is a thing Jon should know exists**, not because
+      it is wrong. No action unless he wants it stripped from the snapshot.
+
 ## 5 BRAINS LINK — v4.9.444 (22 Nov 2026, standalone Claude Code session at Jon's request)
 
 5 Brains is Jon's separate check-in / journal PWA (repo `jontrick/five-brains`, live at

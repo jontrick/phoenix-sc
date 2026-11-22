@@ -3556,7 +3556,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.444';
+var APP_VERSION='4.9.445';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -40203,6 +40203,71 @@ function fbSyncOnOpen(force){
   } catch(_e){}
 }
 
+// ── 4. Readiness → coach chat context (v4.9.445) ────────────────────────────────
+// Scores only, from the same view the chip reads. EXPLICIT column list, and every
+// row is rebuilt from it in fbCoachReadinessModel — so if the view ever grows a
+// free-text column it still cannot reach the coach (or coach_conversations, where
+// _mcSaveMessage stores the context snapshot). Capped so a slow query can never
+// hold up a coach reply: on timeout or error the coach simply gets no readiness.
+var _FB_COACH_FIELDS = ['sleep_hours','sleep_quality','energy_am','energy_pm','mood','stress','focus','perfect_day','five_brains'];
+var _FB_COACH_TIMEOUT_MS = 2500;
+
+// Pure: view rows → the object the coach sees, or null when there is nothing.
+function fbCoachReadinessModel(rows, today){
+  if(!Array.isArray(rows)) return null;
+  var days = [];
+  rows.forEach(function(r){
+    if(!r || !r.date) return;
+    var o = { date: String(r.date).slice(0, 10) }, any = false;
+    _FB_COACH_FIELDS.forEach(function(k){
+      var v = r[k];
+      if(k === 'five_brains'){
+        v = (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length) ? v : null;
+      } else if(k === 'perfect_day'){
+        v = (v === true || v === false) ? v : null;
+      } else {
+        v = _fbNum(v);
+      }
+      o[k] = v;
+      if(v !== null && k !== 'perfect_day') any = true;
+    });
+    if(any) days.push(o);
+  });
+  if(!days.length) return null;
+  days.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var t = null;
+  days.forEach(function(d){ if(d.date === today) t = d; });
+  var flags = [];
+  if(t && t.sleep_hours !== null && t.sleep_hours < 6) flags.push('slept under 6h');
+  if(t && t.energy_am !== null && t.energy_am <= 4) flags.push('morning energy ' + t.energy_am + '/10');
+  return {
+    source: '5 Brains daily check-in (Jon’s separate wellbeing app)',
+    how_to_read: 'mood/energy/focus/sleep_quality are 1-10, higher is better. stress is 1-10, higher is WORSE. ' +
+                 'sleep_hours is hours. five_brains = {red,orange,yellow,blue,pink} 1-10. ' +
+                 'A missing day or a null field means he has not checked in yet. It is NOT a low score; never treat it as one.',
+    today: t,
+    today_flags: flags,
+    last_7_days: days
+  };
+}
+
+function fbCoachReadiness(timeoutMs){
+  try {
+    if(!_fbSbReady() || !_fbUid()) return Promise.resolve(null);
+    var today = _phxLocalISO();
+    var d = new Date(); d.setDate(d.getDate() - 6);
+    var since = _phxLocalISO(d);                 // LOCAL day keys, never toISOString
+    var q = sb.from('brains_wellbeing_day').select('date,' + _FB_COACH_FIELDS.join(','))
+      .gte('date', since).lte('date', today).order('date', { ascending: true })
+      .then(function(res){
+        if(!res || res.error || !Array.isArray(res.data)) return null;
+        return fbCoachReadinessModel(res.data, today);
+      }, function(){ return null; });
+    var cap = new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, timeoutMs || _FB_COACH_TIMEOUT_MS); });
+    return Promise.race([q, cap]).catch(function(){ return null; });
+  } catch(_e){ return Promise.resolve(null); }
+}
+
 try {
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState === 'visible') fbSyncOnOpen(false);
@@ -46691,6 +46756,8 @@ async function sendCoachMessage(userMessage){
   var profile = {}; try { profile = JSON.parse(profileJson); } catch(e){ profile = {}; }
   var recent = await _mcLoadRecentDataForContext();
   var history = await _mcLoadHistory();
+  // v4.9.445: 5 Brains readiness (scores only). null = unavailable or not checked in.
+  var fbReady = (typeof fbCoachReadiness === 'function') ? await fbCoachReadiness() : null;
   var historyTrim = history.slice(-10); // last 10 messages for the prompt window
   var context = {
     athlete: profile.athlete || {},
@@ -46708,6 +46775,7 @@ async function sendCoachMessage(userMessage){
     timezone: 'Australia/Brisbane',
     current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]
   };
+  if(fbReady) context.five_brains_readiness = fbReady;   // v4.9.445
   // Compose the messages array: a single context preface + the running conversation + this user message.
   var contextPreface = 'CURRENT ATHLETE CONTEXT (read carefully):\n```json\n' + JSON.stringify(context, null, 2) + '\n```';
   var msgs = [{role:'user', content: contextPreface}];
@@ -46770,6 +46838,8 @@ async function _mcGenerateOpeningMessage(){
   var profileJson = (typeof buildAthleteProfile==='function') ? buildAthleteProfile('chat_opening') : '{}';
   var profile = {}; try { profile = JSON.parse(profileJson); } catch(e){ profile = {}; }
   var recent = await _mcLoadRecentDataForContext();
+  // v4.9.445: 5 Brains readiness (scores only), same as the chat context.
+  var fbReady = (typeof fbCoachReadiness === 'function') ? await fbCoachReadiness() : null;
   var context = {
     athlete: profile.athlete||{},
     programme: athlete && athlete.aiProgramme ? athlete.aiProgramme : null,
@@ -46784,6 +46854,7 @@ async function _mcGenerateOpeningMessage(){
     timezone: 'Australia/Brisbane',
     current_day_of_week: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]
   };
+  if(fbReady) context.five_brains_readiness = fbReady;   // v4.9.445
   var openingPrompt = "Generate a brief opening message to your athlete. Review their profile and current programme context. Acknowledge where they are in their programme, reference something specific from their data (recent RPE, weekly check-in, or a training note), and ask one specific question to start the coaching conversation. Keep it to 3 sentences maximum. Be warm but direct — this is a coaching relationship not a customer service interaction.\n\nCONTEXT:\n```json\n"+JSON.stringify(context, null, 2)+"\n```";
   try {
     var resp = await fetch('https://phoenix-coach.jon-d87.workers.dev', {

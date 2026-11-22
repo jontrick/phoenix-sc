@@ -24,7 +24,17 @@ function stubSb(answers) {
       const chain = {
         select(cols) { q.op = 'select'; q.cols = cols; return chain; },
         eq(k, v) { q.filters[k] = v; return chain; },
+        gte(k, v) { q.filters[k + '>='] = v; return chain; },
+        lte(k, v) { q.filters[k + '<='] = v; return chain; },
+        order(k, o) { q.order = [k, o]; return chain; },
         maybeSingle() { return Promise.resolve(answers[table] || { data: null, error: null }); },
+        // Awaited directly (list query): answers[table + ':list'], or a never-settling
+        // promise when the answer is the string 'hang'.
+        then(ok, bad) {
+          const a = answers[table + ':list'];
+          const p = a === 'hang' ? new Promise(() => {}) : Promise.resolve(a || { data: [], error: null });
+          return p.then(ok, bad);
+        },
         upsert(row, opts) {
           q.op = 'upsert'; q.row = row; q.opts = opts;
           return Promise.resolve(answers[table + ':upsert'] || { error: null });
@@ -210,6 +220,122 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
         const q = calls.find((c) => c.table === 'brains_wellbeing_day');
         assert.equal(q.filters.date, app._phxLocalISO(), 'today only');
       })).finally(() => { app.document.getElementById = realGet; });
+  });
+
+  // ── readiness → coach context (v4.9.445) ─────────────────────────────────────
+  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return app._phxLocalISO(d); };
+
+  test('COACH model keeps scores only — a text column on the view cannot reach the coach', () => {
+    const today = app._phxLocalISO();
+    const m = app.fbCoachReadinessModel([
+      { date: today, sleep_hours: 5.5, energy_am: 3, mood: 6, stress: 8, intention: 'PRIVATE', win: 'PRIVATE', user_id: 'x', water_ml: 900 },
+    ], today);
+    const txt = JSON.stringify(m);
+    assert.notIncludes(txt, 'PRIVATE', 'free text dropped');
+    assert.notIncludes(txt, 'user_id', 'ids dropped');
+    assert.notIncludes(txt, 'water_ml', 'only the listed fields survive');
+    assert.equal(m.today.sleep_hours, 5.5, 'today picked');
+    assert.deepEqual(m.today_flags, ['slept under 6h', 'morning energy 3/10'], 'flags computed for today');
+    assert.ok(/NOT a low score/.test(m.how_to_read), 'the coach is told null is not low');
+    assert.ok(/stress[^.]*higher is WORSE/.test(m.how_to_read), 'stress direction stated');
+  });
+
+  test('COACH model: nothing checked in = null; null days dropped; perfect_day alone is not a check-in', () => {
+    const today = app._phxLocalISO();
+    assert.equal(app.fbCoachReadinessModel([], today), null, 'empty');
+    assert.equal(app.fbCoachReadinessModel([{ date: today, sleep_hours: null, mood: null, perfect_day: false, five_brains: {} }], today), null, 'all-null row is no data');
+    const m = app.fbCoachReadinessModel([
+      { date: today, mood: 7 },
+      { date: daysAgo(2), sleep_hours: null },
+      { date: daysAgo(1), energy_am: 8 },
+    ], today);
+    assert.deepEqual(m.last_7_days.map((d) => d.date), [daysAgo(1), today], 'empty day dropped, sorted oldest first');
+    assert.equal(m.today.sleep_hours, null, 'unanswered field stays null, never 0');
+    assert.deepEqual(m.today_flags, [], 'null sleep does not raise a flag');
+  });
+
+  test('COACH no row today still sends the week, with today null', () => {
+    const today = app._phxLocalISO();
+    const m = app.fbCoachReadinessModel([{ date: daysAgo(1), sleep_hours: 7 }], today);
+    assert.equal(m.today, null, 'today null');
+    assert.equal(m.last_7_days.length, 1, 'history kept');
+  });
+
+  test('COACH fbCoachReadiness asks for an explicit 7-day, scores-only column list', () => {
+    reset(); signIn(UID);
+    const today = app._phxLocalISO();
+    return withSb({ 'brains_wellbeing_day:list': { data: [{ date: today, mood: 6 }], error: null } }, (calls) =>
+      app.fbCoachReadiness().then((m) => {
+        const q = calls.find((c) => c.table === 'brains_wellbeing_day');
+        assert.ok(q.cols && q.cols.indexOf('*') < 0, 'no select(*) — got ' + q.cols);
+        ['intention', 'win', 'gratitude', 'user_id'].forEach((c) => assert.ok(q.cols.indexOf(c) < 0, c + ' not requested'));
+        assert.equal(q.filters['date>='], daysAgo(6), '7 local days');
+        assert.equal(q.filters['date<='], today, 'up to today');
+        assert.equal(m.today.mood, 6, 'model built from the answer');
+      }));
+  });
+
+  test('COACH error, signed out, or a hung query all give null — never block the reply', () => {
+    reset(); signIn(UID);
+    const realST = app.setTimeout;
+    return withSb({ 'brains_wellbeing_day:list': { data: null, error: { code: '42P01', message: 'x' } } }, () =>
+      app.fbCoachReadiness().then((m) => assert.equal(m, null, 'error → null')))
+      .then(() => withSb({ 'brains_wellbeing_day:list': 'hang' }, () => {
+        app.setTimeout = (fn) => { fn(); return 0; };          // fire the cap at once
+        return app.fbCoachReadiness(10).then((m) => assert.equal(m, null, 'hung query → null via the cap'));
+      }))
+      .then(() => { signIn(null); return app.fbCoachReadiness().then((m) => assert.equal(m, null, 'signed out → null')); })
+      .finally(() => { app.setTimeout = realST; });
+  });
+
+  // Drive the REAL chat entry points and read what reaches the worker.
+  const driveCoach = (fn, listAnswer) => {
+    reset(); signIn(UID);
+    const saved = {};
+    const stubs = {
+      _mcLoadRecentDataForContext: async () => ({}),
+      _mcLoadHistory: async () => [],
+      _mcSaveMessage: () => {},
+      _phxUpdateMyCoachTilePreview: () => {},
+      buildAthleteProfile: () => '{}',
+    };
+    Object.keys(stubs).forEach((k) => { saved[k] = app[k]; app[k] = stubs[k]; });
+    const realFetch = app.fetch;
+    let body = null;
+    app.fetch = (url, opts) => { body = JSON.parse(opts.body); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ content: [{ text: 'ok' }] }) }); };
+    return withSb({ 'brains_wellbeing_day:list': listAnswer }, () => fn().then(() => body))
+      .finally(() => { app.fetch = realFetch; Object.keys(saved).forEach((k) => { app[k] = saved[k]; }); });
+  };
+  const ctxOf = (body) => {
+    const txt = body.messages[0].content;
+    return JSON.parse(txt.slice(txt.indexOf('```json') + 7, txt.lastIndexOf('```')));
+  };
+
+  test('COACH sendCoachMessage sends five_brains_readiness to the worker', () => {
+    const today = app._phxLocalISO();
+    return driveCoach(() => app.sendCoachMessage('how should I train today?'),
+      { data: [{ date: today, sleep_hours: 5, energy_am: 7 }], error: null }).then((body) => {
+      assert.ok(body, 'the worker was called');
+      const ctx = ctxOf(body);
+      assert.ok(ctx.five_brains_readiness, 'readiness present in the context preface');
+      assert.equal(ctx.five_brains_readiness.today.sleep_hours, 5, 'today’s sleep reaches the coach');
+      assert.deepEqual(ctx.five_brains_readiness.today_flags, ['slept under 6h'], 'flag reaches the coach');
+    });
+  });
+
+  test('COACH sendCoachMessage with no 5 Brains data omits the key entirely', () =>
+    driveCoach(() => app.sendCoachMessage('hi'), { data: [], error: null }).then((body) => {
+      assert.ok(body, 'the worker was still called');
+      assert.ok(!('five_brains_readiness' in ctxOf(body)), 'no key, not a null or empty block');
+    }));
+
+  test('COACH opening message carries the same readiness', () => {
+    const today = app._phxLocalISO();
+    return driveCoach(() => app._mcGenerateOpeningMessage(),
+      { data: [{ date: today, mood: 4 }], error: null }).then((body) => {
+      assert.ok(body, 'the worker was called');
+      assert.ok(body.messages[0].content.indexOf('five_brains_readiness') >= 0, 'readiness in the opening prompt');
+    });
   });
 
   // ── privacy + wiring (STRUCTURAL — the behaviour is proven by the cases above) ──

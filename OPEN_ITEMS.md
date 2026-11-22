@@ -36,8 +36,12 @@ Shipped: water out (`fbPushWater` from `nutAddWater` / `nutUndoLastWater` /
       missed on a cold start.
 - [ ] NUTRITION — three one-line `fbPushWater` calls were added inside your water functions.
       Review; they are guarded with `typeof` and write nothing when signed out.
-- [ ] ??? — coach chat does not yet receive the `brains_wellbeing_day` scores as context
-      (brief lists it as a suggested use). Not built.
+- [x] **v4.9.445** coach chat (`sendCoachMessage` + `_mcGenerateOpeningMessage`) now gets
+      `five_brains_readiness`: 7 local days, scores only, explicit column list, rebuilt
+      field-by-field so a future text column on the view cannot reach the coach. Capped at
+      2.5s; null = key omitted. NOTE: the context is also stored in
+      `coach_conversations.context_snapshot` via `_mcSaveMessage`, so these scores now live
+      there too (owner-RLS table). That is a second exit, recorded here on purpose.
 
 ---
 

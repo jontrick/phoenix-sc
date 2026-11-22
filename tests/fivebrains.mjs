@@ -353,4 +353,111 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     const src = String(app.renderTodayScreen);
     assert.ok(src.indexOf('fbSyncOnOpen') > 0, 'wired into the Today render');
   });
+
+  // ── meal ticks OUT (v4.9.446) — contract: five-brains PHOENIX_BRIEF_MEALS.md ──
+  const feeds = () => app.nut2Day(app._nutToday()).feeds;
+  const firstMeal = () => feeds().filter((f) => !f.drinks)[0];
+  const feedUps = (calls) => calls.filter((c) => c.table === 'feed_events' && c.op === 'upsert');
+
+  test('FEED OUT ticking a meal upserts feed_events with the tick time, through nut2SetFeed', () => {
+    setUp();
+    const d = app._nutToday(), m = firstMeal();
+    return withSb({}, (calls) => {
+      const before = Date.now();
+      app.nut2SetFeed(d, m.id, { eaten: true });
+      const ups = feedUps(calls);
+      assert.equal(ups.length, 1, 'one write per tick');
+      const r = ups[0].row;
+      assert.equal(r.feed_id, m.id, 'keyed on the feed id');
+      assert.equal(r.date, d, 'LOCAL day key');
+      assert.equal(r.user_id, UID, 'owner');
+      assert.equal(r.eaten, true, 'eaten');
+      assert.ok(Date.parse(r.eaten_at) >= before - 5, 'eaten_at is the tick moment');
+      assert.equal(r.name, m.name, 'name carried');
+      assert.equal(r.source, 'phoenix', 'writer tagged');
+      assert.equal(ups[0].opts && ups[0].opts.onConflict, 'user_id,date,feed_id', 'upsert, never append');
+      assert.ok(!('location' in r) && !('note' in r), '5 Brains-owned columns are never sent');
+    });
+  });
+
+  test('FEED OUT re-ticking an eaten meal sends nothing and keeps the original time', () => {
+    setUp();
+    const d = app._nutToday(), m = firstMeal();
+    return withSb({}, (calls) => {
+      app.nut2SetFeed(d, m.id, { eaten: true });
+      const t1 = feedUps(calls)[0].row.eaten_at;
+      app.nut2SetFeed(d, m.id, { eaten: true });
+      assert.equal(feedUps(calls).length, 1, 'no second write');
+      assert.equal(app.nut2Day(d).feeds.find((f) => f.id === m.id).eaten_at, t1, 'local stamp unchanged');
+    });
+  });
+
+  test('FEED OUT unticking sends eaten false and clears the time', () => {
+    setUp();
+    const d = app._nutToday(), m = firstMeal();
+    return withSb({}, (calls) => {
+      app.nut2SetFeed(d, m.id, { eaten: true });
+      app.nut2SetFeed(d, m.id, { eaten: false });
+      const ups = feedUps(calls);
+      assert.equal(ups.length, 2, 'untick is a write');
+      assert.equal(ups[1].row.eaten, false, 'not eaten');
+      assert.equal(ups[1].row.eaten_at, null, 'time cleared');
+    });
+  });
+
+  test('FEED OUT renaming or retiming a feed is not a tick and sends nothing', () => {
+    setUp();
+    const d = app._nutToday(), m = firstMeal();
+    return withSb({}, (calls) => {
+      app.nut2SetFeed(d, m.id, { name: 'Brekkie' });
+      app.nut2SetFeed(d, m.id, { time: '07:15' });
+      assert.equal(feedUps(calls).length, 0, 'no feed_events write');
+    });
+  });
+
+  test('FEED OUT morning drinks are not a meal and are never sent', () => {
+    setUp();
+    const d = app._nutToday(), dr = feeds().filter((f) => f.drinks)[0];
+    assert.ok(dr, 'fixture has a drinks feed');
+    return withSb({}, (calls) => {
+      app.nut2SetFeed(d, dr.id, { eaten: true });
+      assert.equal(feedUps(calls).length, 0, 'skipped');
+    });
+  });
+
+  test('FEED OUT an empty feed sends null macros — unknown is not zero', () => {
+    setUp();
+    const d = app._nutToday(), m = firstMeal();
+    return withSb({}, (calls) => {
+      app.nut2SetFeed(d, m.id, { eaten: true });
+      const r = feedUps(calls)[0].row;
+      assert.equal(r.kcal, null, 'kcal null');
+      assert.equal(r.protein_g, null, 'protein null');
+    });
+  });
+
+  test('FEED OUT a failed upsert lands in phx_last_write_error as fbFeed, no values', () => {
+    setUp();
+    app.localStorage.removeItem('phx_last_write_error');
+    const d = app._nutToday(), m = firstMeal();
+    return withSb({ 'feed_events:upsert': { error: { code: '42P01', message: 'relation "feed_events" does not exist' } } }, () => {
+      const p = app.fbPushFeed(d, Object.assign({}, m, { eaten: true }), null);
+      assert.ok(p && typeof p.then === 'function', 'returns a thenable');
+      return p.then(() => {
+        const raw = read('phx_last_write_error');
+        const snap = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        assert.ok(snap && String(snap.context) === 'fbFeed', 'context is fbFeed, got ' + (snap && snap.context));
+        assert.equal(snap.code, '42P01', 'code carried');
+        assert.notIncludes(JSON.stringify(snap.payload_shape), m.name, 'no meal name in the record');
+      });
+    });
+  });
+
+  test('FEED OUT signed out = no write; the tick still saves locally', () => {
+    setUp(); signIn(null);
+    return withSb({}, (calls) => {
+      assert.equal(app.fbPushFeed(app._nutToday(), { id: 'F1', name: 'Breakfast', eaten: true }, null), null, 'nothing sent');
+      assert.equal(calls.length, 0, 'no query');
+    });
+  });
 }

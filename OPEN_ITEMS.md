@@ -36,6 +36,16 @@ Shipped: water out (`fbPushWater` from `nutAddWater` / `nutUndoLastWater` /
       functional sandbox so far, not end to end.
 - [ ] NUTRITION — three one-line `fbPushWater` calls were added inside your water functions.
       Review; they are guarded with `typeof` and write nothing when signed out.
+- [ ] **v4.9.446 meal ticks → 5 Brains** (23 Nov, standalone chat at Jon's request). `nut2SetFeed`
+      stamps `fd.eaten_at` on false→true only and calls `fbPushFeed` → upsert `feed_events`
+      (feed_id, name, planned_time, eaten, eaten_at, kcal/protein_g or null). Never sends
+      location/note (5 Brains owns them). Drinks feeds skipped. Tests: `tests/fivebrains.mjs` FEED OUT ×8.
+- [ ] JON — apply `five-brains/supabase/2026-11-23_feed_events.sql` in the SQL Editor. Until then
+      every tick records `fbFeed` 42P01 in Settings → Diagnostic (harmless, tick still saves locally).
+- [ ] JON — confirm on the phone: tick Breakfast in Phoenix, open 5 Brains, it appears with the tick
+      time and asks where. Proven only in the functional sandbox, not end to end.
+- [ ] ??? — v1 `ns.daily[dk].eaten[slot]` ticks are NOT pushed (v2 only). Only matters if v2 is off.
+- [ ] NUTRITION — `nut2SetFeed` gained 5 lines (eaten_at stamp + guarded `fbPushFeed`). Review.
 - [x] **v4.9.445** coach chat (`sendCoachMessage` + `_mcGenerateOpeningMessage`) now gets
       `five_brains_readiness`: 7 local days, scores only, explicit column list, rebuilt
       field-by-field so a future text column on the view cannot reach the coach. Capped at

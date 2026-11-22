@@ -3556,7 +3556,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.445';
+var APP_VERSION='4.9.446';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -24727,8 +24727,16 @@ function nut2SetFeed(date, feedId, patch){
   var fd = day.feeds.filter(function(f){ return f.id === feedId; })[0]; if(!fd) return false;
   if('name' in patch) fd.name = String(patch.name || '').slice(0, 40) || 'Feed';
   if('time' in patch && /^\d\d:\d\d$/.test(patch.time)) fd.time = patch.time;
-  if('eaten' in patch) fd.eaten = !!patch.eaten;
-  _nut2SortFeeds(day); _nut2Save(ns); return true;
+  var wasEaten = !!fd.eaten;
+  if('eaten' in patch){
+    fd.eaten = !!patch.eaten;
+    // v4.9.446 5 BRAINS: stamp the real tick moment on false→true only; re-ticking never moves it.
+    if(fd.eaten && !wasEaten) fd.eaten_at = new Date().toISOString();
+    if(!fd.eaten) delete fd.eaten_at;
+  }
+  _nut2SortFeeds(day); _nut2Save(ns);
+  if('eaten' in patch && wasEaten !== fd.eaten && typeof fbPushFeed === 'function') fbPushFeed(date, fd, ns);
+  return true;
 }
 function nut2AddFeed(date){
   var ns = _nut2State(), day = _nut2DayForEdit(ns, date);
@@ -40060,6 +40068,49 @@ function fbPushWater(dateKey){
     );
   } catch(e){
     _phxRecordWriteError('fbWater.threw', e, row ? _fbWaterErrorSummary(row) : null);
+    return null;
+  }
+}
+
+// ── 1c. Meal ticks OUT (v4.9.446): one feed_events row per feed per day ──────────
+// Contract: five-brains repo PHOENIX_BRIEF_MEALS.md + supabase/2026-11-23_feed_events.sql.
+// Phoenix owns the tick (eaten, eaten_at, macros). 5 Brains owns location + note —
+// they are NEVER in this row, so a PostgREST upsert cannot overwrite them.
+// Morning drinks are skipped: they are not a meal and 5 Brains would ask where he ate them.
+// Macros are null, never 0, when the feed is empty or a food could not be resolved.
+function _fbFeedErrorSummary(row){ return { date: !!(row && row.date), feed: !!(row && row.feed_id), eaten: !!(row && row.eaten), has_kcal: !!(row && row.kcal != null) }; }
+
+function fbFeedRow(uid, dateKey, fd, ns){
+  var kcal = null, protein = null;
+  try {
+    if(fd.items && fd.items.length){
+      var t = nut2FeedTotals(fd, ns);
+      if(!t.missing){ kcal = t.kcal; protein = t.p; }
+    }
+  } catch(_e){ kcal = null; protein = null; }
+  return { user_id: uid, date: dateKey, feed_id: String(fd.id), name: fd.name || 'Feed', planned_time: fd.time || null,
+           eaten: !!fd.eaten, eaten_at: fd.eaten ? (fd.eaten_at || new Date().toISOString()) : null,
+           kcal: kcal, protein_g: protein, source: 'phoenix', updated_at: new Date().toISOString() };
+}
+
+function fbPushFeed(dateKey, fd, ns){
+  var row = null;
+  try {
+    if(!fd || fd.drinks) return null;
+    if(!_fbSbReady()) return null;
+    var uid = _fbUid();
+    if(!uid) return null;
+    row = fbFeedRow(uid, dateKey || _nutToday(), fd, ns);
+    var summary = _fbFeedErrorSummary(row);
+    return sb.from('feed_events').upsert(row, { onConflict: 'user_id,date,feed_id' }).then(
+      function(res){
+        if(res && res.error) _phxRecordWriteError('fbFeed', res.error, summary);
+        return res;
+      },
+      function(e){ _phxRecordWriteError('fbFeed.rejected', e, summary); }
+    );
+  } catch(e){
+    _phxRecordWriteError('fbFeed.threw', e, row ? _fbFeedErrorSummary(row) : null);
     return null;
   }
 }

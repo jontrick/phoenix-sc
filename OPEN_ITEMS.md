@@ -28,8 +28,12 @@ Shipped: water out (`fbPushWater` from `nutAddWater` / `nutUndoLastWater` /
 - [ ] JON — confirm on the phone: log water in 5 Brains, open Phoenix, the Water tile moves;
       weigh in on 5 Brains, Phoenix's morning card does not ask again. Proven only in the
       functional sandbox so far, not end to end.
-- [ ] PM — the pulls deliberately do NOT ride `window._phxOnProfileFetched` (PM-owned). If
-      the PM wants them there, move the `fbSyncOnOpen(true)` call in and drop the throttle.
+- [x] **PM RULING, 22 Nov: LEAVE THE PULLS WHERE THEY ARE.** Do not move `fbSyncOnOpen`
+      into `window._phxOnProfileFetched`. `renderTodayScreen` already runs on every open and
+      the visibilitychange listener covers resume, so the hook would be a third trigger
+      closing no gap — and it is the one piece of boot plumbing all four domains chain
+      through. Declining was the right call. Revisit only if a pull is ever shown to be
+      missed on a cold start.
 - [ ] NUTRITION — three one-line `fbPushWater` calls were added inside your water functions.
       Review; they are guarded with `typeof` and write nothing when signed out.
 - [ ] ??? — coach chat does not yet receive the `brains_wellbeing_day` scores as context

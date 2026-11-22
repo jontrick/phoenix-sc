@@ -385,7 +385,7 @@ hasNotCode("removeItem('phx_last_write_error');_phxOpenDiagnostic();",
 }
 
 
-has("var APP_VERSION='4.9.443'", 'version is 4.9.443');
+has("var APP_VERSION='4.9.444'", 'version is 4.9.444');
 
 // ── TRAINING — the conditioning screen reopens after iOS kills the app (v4.9.407) ─
 // Browser-proven: open Mon/Wed conditioning → hidden+pagehide → relaunch → #draft-cond back;
@@ -1508,7 +1508,7 @@ try {
   // with the CHECK. It previously said "the comment says three" in prose while comparing
   // against a literal 3 — two copies of one number, which is the same staleness this
   // guard exists to prevent, one level up. Whoever adds the fifth changes one thing.
-  const VIS_EXPECTED = 5;   // 4 -> 5: outbox flush on visible, v4.9.294
+  const VIS_EXPECTED = 6;   // 4 -> 5: outbox flush on visible, v4.9.294; 5 -> 6: 5 Brains pull on visible, v4.9.444
   n === VIS_EXPECTED
     ? ok(`SHARED: STRUCTURAL visibilitychange listener count matches the comment (${n})`)
     : bad(`SHARED: STRUCTURAL ${n} visibilitychange listeners but the comment at :16474 documents ${VIS_EXPECTED} — update the comment to name the new one, then this constant`);

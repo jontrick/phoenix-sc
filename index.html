@@ -1742,6 +1742,8 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
        left as a no-op div so any code that still queries '#weight-checkin-banner' is a no-op. -->
   <div id="weight-checkin-banner" style="display:none;"></div>
   <div style="padding:0 16px 100px;">
+    <!-- v4.9.444: 5 Brains readiness chip. Empty until he has checked in there today. -->
+    <div id="today-readiness-chip" style="margin-bottom:12px;"></div>
     <!-- NEXT SESSION — main tile, prominent gold border -->
     <div id="card-today-session" class="game-card" onclick="openTodaySession()" style="margin-bottom:12px;border:2px solid var(--gold);cursor:pointer;">
       <div class="game-card-inner" style="padding:20px;">
@@ -3554,7 +3556,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.443';
+var APP_VERSION='4.9.444';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -20925,6 +20927,9 @@ sb.auth.onAuthStateChange(function(event,session){
 //     :21637  peptide cloud flush on hidden        (added by Peptides, v4.9.154)
 //     ~40380  session-screen-open flag on hidden   (added by Training, v4.9.291)
 //     ~8800   outbox flush on visible               (added by Training, v4.9.294)
+
+//     ~40000  5 Brains pull on visible (water, weigh-in, readiness chip; v4.9.444)
+//             — reads and repaints only, throttled to once per 30s. Never routes.
 //
 // v4.9.291/294 [TRAINING]: the fourth AND fifth are mine, and the COUNT GUARD caught me
 // both times — the first time it has fired on real changes rather than an injection test.
@@ -22435,6 +22440,8 @@ function renderTodayScreen(){
   if(typeof nutRenderWaterTile==='function') nutRenderWaterTile();
   // v4.9.142: today's peptide doses in mg + units. No-op when no protocol is set up.
   if(typeof pepRenderTodayTile==='function') pepRenderTodayTile();
+  // v4.9.444: 5 Brains link — readiness chip + throttled water / weigh-in pulls.
+  if(typeof fbSyncOnOpen==='function') fbSyncOnOpen(false);
 }
 
 // ── Today screen helpers (Priority 2) ────────────────────────────
@@ -32277,6 +32284,7 @@ function nutAddWater(ml){
   day.water_log.push(amt);
   nutSaveState(ns);
   nutRenderWaterTile();
+  if(typeof fbPushWater === 'function') fbPushWater(today);   // v4.9.444: 5 Brains shared water
   return true;
 }
 
@@ -32299,6 +32307,7 @@ function nutUndoLastWater(){
   day.water_ml = next > 0 ? next : 0;
   nutSaveState(ns);
   nutRenderWaterTile();
+  if(typeof fbPushWater === 'function') fbPushWater(today);   // v4.9.444: 5 Brains shared water
   return true;
 }
 
@@ -32308,6 +32317,7 @@ function nutSetWaterTarget(ml){
   ns.water_target_ml = parseFloat(ml) || _NUT_WATER_TARGET_ML;
   nutSaveState(ns);
   nutRenderWaterTile();
+  if(typeof fbPushWater === 'function') fbPushWater();        // v4.9.444: 5 Brains shared water
 }
 
 // v4.9.199: pick the size instead of assuming a glass.
@@ -39984,6 +39994,220 @@ async function _phxLoadCoachWeeklyRecommendation(){
     card.style.display = 'none';
   }
 }
+
+// ====== v4.9.444 5 BRAINS LINK (water sync, weigh-in pull, readiness chip) ======
+// 5 Brains is Jon's separate check-in / journal PWA on the same Supabase project.
+// Contract: five-brains repo, PHOENIX_BRIEF.md + supabase/2026-11-22_five_brains.sql.
+//   daily_water           shared water total per LOCAL day, last write wins.
+//   daily_weigh_ins       5 Brains upserts {user_id,date,weight_kg,logged_at}.
+//   brains_wellbeing_day  scores only (sleep, energy, mood, stress, 5Brains, water).
+// Phoenix never reads brains_entry (journal text) — by design, not by omission.
+// NULL in the view means "not checked in yet", never a low score.
+//
+// Pulls run from the Today render and when the app returns to the foreground,
+// throttled so a burst of renders does not become a burst of queries. They do NOT
+// ride window._phxOnProfileFetched — that hook is PM-owned (COMMS_PROTOCOL).
+
+var _FB_SYNC_MIN_MS = 30000;
+var _fbLastPullAt = 0;
+var _fbWellbeing = { date: null, row: null };   // last fetched view row for Today
+
+function _fbUid(){
+  try { return (typeof currentSession !== 'undefined' && currentSession && currentSession.user && currentSession.user.id) || null; }
+  catch(_e){ return null; }
+}
+function _fbSbReady(){ return (typeof sb !== 'undefined' && !!sb); }
+
+// Postgres timestamptz carries microseconds; trim to ms so every engine parses it.
+function _fbTs(s){
+  if(!s) return 0;
+  var t = Date.parse(String(s).replace(/(\.\d{3})\d+/, '$1'));
+  return isFinite(t) ? t : 0;
+}
+
+function _fbWaterStampKey(uid){ return 'phx_fb_water_ts_' + uid; }
+function _fbReadWaterStamp(uid){
+  try { var s = JSON.parse(localStorage.getItem(_fbWaterStampKey(uid)) || 'null'); return (s && s.date) ? s : null; }
+  catch(_e){ return null; }
+}
+function _fbWriteWaterStamp(uid, dateKey, ts){
+  try { localStorage.setItem(_fbWaterStampKey(uid), JSON.stringify({ date: dateKey, ts: ts })); } catch(_e){}
+}
+
+// ── 1a. Water OUT: upsert today's total whenever Phoenix changes it ─────────────
+// Shape only for the error record — never the amounts.
+function _fbWaterErrorSummary(row){ return { date: !!(row && row.date), has_target: !!(row && row.target_ml) }; }
+
+function fbPushWater(dateKey){
+  var row = null;
+  try {
+    if(!_fbSbReady()) return null;
+    var uid = _fbUid();
+    if(!uid) return null;
+    var dk = dateKey || _nutToday();
+    var ns = nutGetState();
+    var ts = new Date().toISOString();
+    row = { user_id: uid, date: dk, water_ml: nutGetWaterMl(dk), target_ml: nutWaterTargetMl(ns),
+            source: 'phoenix', updated_at: ts };
+    _fbWriteWaterStamp(uid, dk, ts);
+    var summary = _fbWaterErrorSummary(row);
+    return sb.from('daily_water').upsert(row, { onConflict: 'user_id,date' }).then(
+      function(res){
+        if(res && res.error) _phxRecordWriteError('fbWater', res.error, summary);
+        return res;
+      },
+      function(e){ _phxRecordWriteError('fbWater.rejected', e, summary); }
+    );
+  } catch(e){
+    _phxRecordWriteError('fbWater.threw', e, row ? _fbWaterErrorSummary(row) : null);
+    return null;
+  }
+}
+
+// ── 1b. Water IN: adopt a newer 5 Brains total for today ────────────────────────
+// Only water_ml moves. water_log is left alone so Phoenix's undo reverses only
+// Phoenix's own taps.
+function fbPullWater(){
+  try {
+    if(!_fbSbReady()) return Promise.resolve(false);
+    var uid = _fbUid();
+    if(!uid) return Promise.resolve(false);
+    var today = _nutToday();
+    return sb.from('daily_water').select('water_ml,source,updated_at')
+      .eq('user_id', uid).eq('date', today).maybeSingle().then(function(res){
+        if(!res || res.error || !res.data) return false;
+        return fbApplyRemoteWater(uid, today, res.data);
+      }, function(){ return false; });
+  } catch(_e){ return Promise.resolve(false); }
+}
+
+function fbApplyRemoteWater(uid, today, r){
+  if(!r || r.source !== 'five-brains') return false;
+  var remoteTs = _fbTs(r.updated_at);
+  var stamp = _fbReadWaterStamp(uid);
+  if(stamp && stamp.date === today && _fbTs(stamp.ts) >= remoteTs) return false;
+  var ns = nutGetState();
+  if(!ns) return false;
+  if(!ns.daily) ns.daily = {};
+  if(!ns.daily[today]) ns.daily[today] = {};
+  var ml = parseFloat(r.water_ml);
+  ns.daily[today].water_ml = (ml > 0) ? ml : 0;
+  _fbWriteWaterStamp(uid, today, r.updated_at);
+  nutSaveState(ns);
+  if(typeof nutRenderWaterTile === 'function') nutRenderWaterTile();
+  return true;
+}
+
+// ── 2. Weigh-in IN: a 5 Brains weigh-in feeds the macro engine ──────────────────
+// Same two effects as _phxMorningSave's local side: nutRecordWeight + the
+// morning-card done flag, plus the phoenix_last_weighin cache it keeps.
+function fbPullWeighIn(){
+  try {
+    if(!_fbSbReady()) return Promise.resolve(false);
+    var uid = _fbUid();
+    if(!uid) return Promise.resolve(false);
+    var keys = _phxMorningKeys();
+    var ns = nutGetState();
+    var local = ns && ns.daily && ns.daily[keys.today] && parseFloat(ns.daily[keys.today].weight_kg);
+    if(local > 0) return Promise.resolve(false);
+    return sb.from('daily_weigh_ins').select('weight_kg')
+      .eq('user_id', uid).eq('date', keys.today).maybeSingle().then(function(res){
+        if(!res || res.error || !res.data) return false;
+        return fbApplyRemoteWeighIn(keys, res.data.weight_kg);
+      }, function(){ return false; });
+  } catch(_e){ return Promise.resolve(false); }
+}
+
+function fbApplyRemoteWeighIn(keys, kg){
+  var w = parseFloat(kg);
+  if(!(w > 0)) return false;
+  // Return ignored by contract: false = nutrition not set up yet, a normal state.
+  try { nutRecordWeight(w, keys.today); } catch(_e){}
+  try { localStorage.setItem(keys.doneKey, '1'); } catch(_e){}
+  try {
+    var lw = JSON.parse(localStorage.getItem('phoenix_last_weighin') || 'null');
+    if(!lw || String(lw.date || '') <= keys.today){
+      localStorage.setItem('phoenix_last_weighin', JSON.stringify({ date: keys.today, weight_kg: w }));
+    }
+  } catch(_e){}
+  var card = document.getElementById('morning-checkin-card');
+  if(card) card.style.display = 'none';
+  return true;
+}
+
+// ── 3. Readiness chip on Today ──────────────────────────────────────────────────
+function fbFetchWellbeing(){
+  try {
+    if(!_fbSbReady()) return Promise.resolve(null);
+    var uid = _fbUid();
+    if(!uid) return Promise.resolve(null);
+    var today = _phxLocalISO();
+    return sb.from('brains_wellbeing_day').select('*').eq('date', today).maybeSingle().then(function(res){
+      if(!res || res.error) return null;
+      _fbWellbeing = { date: today, row: res.data || null };
+      return _fbWellbeing.row;
+    }, function(){ return null; });
+  } catch(_e){ return Promise.resolve(null); }
+}
+
+function _fbNum(v){ var n = parseFloat(v); return isFinite(n) ? n : null; }
+
+// Pure: the view row (or null) + today's session name → chip model, or null to hide.
+function fbReadinessModel(row, sessionName){
+  if(!row) return null;
+  var sleep = _fbNum(row.sleep_hours), energy = _fbNum(row.energy_am),
+      mood = _fbNum(row.mood), stress = _fbNum(row.stress);
+  if(sleep === null && energy === null && mood === null && stress === null) return null;
+  var parts = [];
+  if(sleep !== null)  parts.push('Sleep ' + sleep + 'h');
+  if(energy !== null) parts.push('Energy ' + energy + '/10');
+  if(mood !== null)   parts.push('Mood ' + mood + '/10');
+  if(stress !== null) parts.push('Stress ' + stress + '/10');
+  var flags = [];
+  if(sleep !== null && sleep < 6)    flags.push('sleep under 6h');
+  if(energy !== null && energy <= 4) flags.push('morning energy ' + energy + '/10');
+  var low = flags.length > 0;
+  var maxEffort = /max effort/i.test(String(sessionName || ''));
+  var note = '';
+  if(low) note = (maxEffort ? 'Max Effort today with ' : 'Low readiness: ') + flags.join(', ') + '. Consider scaling the top sets.';
+  return { low: low, line: parts.join(' · '), note: note };
+}
+
+function fbRenderReadinessChip(){
+  var el = document.getElementById('today-readiness-chip');
+  if(!el) return;
+  var row = (_fbWellbeing.date === _phxLocalISO()) ? _fbWellbeing.row : null;
+  var nameEl = document.getElementById('today-session-name');
+  var m = fbReadinessModel(row, nameEl ? nameEl.textContent : '');
+  if(!m){ el.innerHTML = ''; return; }
+  var col = m.low ? 'var(--red,#d96a5e)' : 'var(--border)';
+  el.innerHTML =
+    '<div style="background:var(--bg2);border:1px solid ' + col + ';border-radius:var(--radius);padding:10px 14px;">' +
+      '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:' + (m.low ? col : 'var(--text3)') + ';margin-bottom:4px;">Readiness · 5 Brains</div>' +
+      '<div style="font-size:13px;color:var(--text2);">' + m.line + '</div>' +
+      (m.note ? '<div style="font-size:12px;color:var(--text);margin-top:6px;line-height:1.4;">' + m.note + '</div>' : '') +
+    '</div>';
+}
+
+// Called from renderTodayScreen and on return to foreground.
+function fbSyncOnOpen(force){
+  try {
+    fbRenderReadinessChip();               // instant, from the cached row
+    if(!_fbUid() || !_fbSbReady()) return;
+    var now = Date.now();
+    if(!force && (now - _fbLastPullAt) < _FB_SYNC_MIN_MS) return;
+    _fbLastPullAt = now;
+    fbPullWater();
+    fbPullWeighIn();
+    fbFetchWellbeing().then(function(){ fbRenderReadinessChip(); });
+  } catch(_e){}
+}
+
+try {
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') fbSyncOnOpen(false);
+  });
+} catch(_e){}
 
 // ====== v4.7.31 BUILD 1: MORNING WEIGHT + PHOTO CHECK-IN ======
 // Shown on Today between 5am and 10am Brisbane (UTC+10), once per day, when

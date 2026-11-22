@@ -15,6 +15,28 @@ Closing an item: delete the line, or move it under ARCHIVE with the version that
 
 ---
 
+## 5 BRAINS LINK — v4.9.444 (22 Nov 2026, standalone Claude Code session at Jon's request)
+
+5 Brains is Jon's separate check-in / journal PWA (repo `jontrick/five-brains`, live at
+jontrick.github.io/five-brains). Its SQL (`brains_day`, `brains_entry`, `daily_water`, view
+`brains_wellbeing_day`) was applied to production 22 Nov via `supabase db query --linked`;
+RLS on all three tables confirmed by querying `pg_class.relrowsecurity` afterwards.
+Shipped: water out (`fbPushWater` from `nutAddWater` / `nutUndoLastWater` /
+`nutSetWaterTarget`), water in + weigh-in pull + readiness chip (`fbSyncOnOpen`, from
+`renderTodayScreen` and a 6th visibilitychange listener). Tests: `tests/fivebrains.mjs`.
+
+- [ ] JON — confirm on the phone: log water in 5 Brains, open Phoenix, the Water tile moves;
+      weigh in on 5 Brains, Phoenix's morning card does not ask again. Proven only in the
+      functional sandbox so far, not end to end.
+- [ ] PM — the pulls deliberately do NOT ride `window._phxOnProfileFetched` (PM-owned). If
+      the PM wants them there, move the `fbSyncOnOpen(true)` call in and drop the throttle.
+- [ ] NUTRITION — three one-line `fbPushWater` calls were added inside your water functions.
+      Review; they are guarded with `typeof` and write nothing when signed out.
+- [ ] ??? — coach chat does not yet receive the `brains_wellbeing_day` scores as context
+      (brief lists it as a suggested use). Not built.
+
+---
+
 ## PEPTIDES AUDIT — 31 Oct 2026 (Training chat, at Jon's request; peptides owner please read)
 
 Jon: "buggy and annoying ... can't see a previous day ... app says 2ml but I add one and

@@ -590,3 +590,15 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   within 90 px of the top/bottom edge scrolls the calendar (speed by depth, `_blabCalEdgeSpeed`) and re-resolves
   the day under the finger. Browser-proven: same drag now lands on Sat 21. Not proven: iOS touch (same `_move`
   path, touchmove is non-passive during a drag). Tap → Move to Another Day unchanged.
+- **v4.9.447 (24 Nov) — weight sanity gate + repair of the 1200-odd kg pull-up.** Jon: "I logged a session today
+  and didn't realise one of my chin ups was at 1200 odd kg I need this to not happen and you to change to 12.5kg".
+  (1) GATE in `autoLogSet` (every set path): `_phxKgSuspect(kg, ref)` — over 400 kg, or > max(3× ref, ref+50)
+  where ref = the other sets in the block, else the prefilled load (`_phxKgRef`). A suspect set is NOT logged;
+  `_phxKgFix` asks "1250 kg? Did the decimal point go missing?" offering ÷10/÷100/÷1000 within reason
+  (`_phxKgGuesses`) or "Keep". Browser-proven: 1250 typed → nothing logged → tap 12.5 → logged 12.5.
+  (2) REPAIR `_phxRepairPull1124` (Jon's UID, once per device, archive after 8 Dec): every weight ≥ 500 kg
+  dated 24 Nov → 12.5 in set_logs (cloud), the sessions row details.sets + total_volume_kg, local
+  phoenix_session_logs / _sets, Weighted Pull-Up records, and draft.pullLoad / its change line (+2.5 kept if
+  it was earned). Cloud writes route errors via _phxRecordWriteError; flag set only after both land.
+  Tests KGGATE, REPAIRPULL, REPAIRPULL cloud. NOT proven: the real rows on Supabase (exact value unknown —
+  "1200 odd"; the ≥500 rule covers it).

@@ -3556,7 +3556,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.446';
+var APP_VERSION='4.9.447';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -11911,6 +11911,105 @@ window._phxRepair1010 = function(){
   if(typeof setTimeout === 'function') setTimeout(tick, 4000);
 })();
 
+// v4.9.447 — ONE-OFF REPAIR, Jon 24 Nov 2026: "one of my chin ups was at 1200 odd kg ... change to
+// 12.5kg". Scope: HIS account, sets logged 24 Nov (Brisbane), weight of 500 kg or more (his heaviest
+// lift is a 160 kg deadlift, so nothing real is touched) → 12.5. Fixed in every place the number
+// went: set_logs, the session row's details + total volume, the local session logs, his Weighted
+// Pull-Up records, and next week's suggested pull-up load. Once per device; a failed cloud write is
+// recorded and retried next open. Archive after 8 Dec.
+window._phxRepairPull1124 = function(){
+  try {
+    if(!currentSession || !currentSession.user) return false;
+    var uid = currentSession.user.id;
+    if(uid !== 'df7fc046-0dd6-4416-b0ce-44b55fa2fb8e') return false;
+    var flag = 'phx_fixpull1124_' + uid;
+    if(localStorage.getItem(flag) === 'done') return false;
+    var DAY = '2026-11-24', GOOD = 12.5, BAD = 500;
+    var bad = function(v){ return parseFloat(v) >= BAD; };
+    var changed = false, maxBad = 0;
+    // 1. records (Weighted Pull-Up keys) and next week's load
+    var bs = window.blabGetState && window.blabGetState();
+    if(bs && bs.records){
+      var fixObj = function(o){
+        if(!o || typeof o !== 'object') return;
+        Object.keys(o).forEach(function(k){
+          var v = o[k];
+          if(v && typeof v === 'object'){ fixObj(v); return; }
+          if(/^(wt|kg|weight|weight_kg|load)$/i.test(k) && bad(v)){ maxBad = Math.max(maxBad, parseFloat(v)); o[k] = typeof v === 'string' ? String(GOOD) : GOOD; changed = true; }
+        });
+      };
+      Object.keys(bs.records).forEach(function(k){
+        if(!/^Weighted Pull-Up/.test(k)) return;
+        var v = bs.records[k];
+        if(v && typeof v === 'object') fixObj(v);
+        else if(/_(wt|maxwt|kg|load)$/.test(k) && bad(v)){ maxBad = Math.max(maxBad, parseFloat(v)); bs.records[k] = GOOD; changed = true; }
+      });
+      var D = bs.draft;
+      if(D && bad(D.pullLoad)){
+        var nl = (maxBad && Math.abs(D.pullLoad - (maxBad + 2.5)) < 0.01) ? GOOD + 2.5 : GOOD;
+        D.pullLoad = nl; changed = true;
+        (D.changes || []).forEach(function(c){
+          if(c && /Weighted pull-up next week/.test(c.text || '') && /\+\s*\d{3,}/.test(c.text)) c.text = 'Weighted pull-up next week: +' + nl + ' kg';
+        });
+      }
+      if(changed) window.blabSaveState(bs);
+    }
+    // 2. local session logs
+    try {
+      var L = JSON.parse(localStorage.getItem('phoenix_session_logs') || '[]'), lc = false;
+      L.forEach(function(e){
+        if(!e || !e.sets || !String(e.date || '').length) return;
+        var d = (typeof e.date === 'string' && e.date.length > 10) ? new Date(e.date) : null;
+        var local = d ? (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : e.date;
+        if(local !== DAY) return;
+        Object.keys(e.sets).forEach(function(k){ (e.sets[k] || []).forEach(function(x){ if(x && bad(x.kg)){ x.kg = String(GOOD); lc = true; } }); });
+      });
+      if(lc){ localStorage.setItem('phoenix_session_logs', JSON.stringify(L)); changed = true; }
+      var S = JSON.parse(localStorage.getItem('phoenix_session_logs_sets') || '[]'), sc = false;
+      S.forEach(function(e){ if(e && e.date === DAY && bad(e.kg)){ e.kg = String(GOOD); sc = true; } });
+      if(sc){ localStorage.setItem('phoenix_session_logs_sets', JSON.stringify(S)); changed = true; }
+    } catch(_l){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repairPull1124_local', _l, {}); }
+    // 3. cloud: set_logs, then the session row
+    if(typeof sb === 'undefined' || !sb || !sb.from) return changed;
+    var FROM = '2026-11-23T14:00:00Z', TO = '2026-11-24T14:00:00Z';   // 24 Nov, Brisbane
+    var q1 = sb.from('set_logs').update({ weight_kg: GOOD }).eq('user_id', uid).gte('weight_kg', BAD)
+      .gte('logged_at', FROM).lt('logged_at', TO);
+    Promise.resolve(q1).then(function(res){
+      if(res && res.error){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repairPull1124_setlogs', res.error, { weight_kg: GOOD }); return null; }
+      return sb.from('sessions').select('id,details').eq('user_id', uid).gte('completed_at', FROM).lt('completed_at', TO);
+    }).then(function(res){
+      if(!res) return;
+      if(res.error){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repairPull1124_sessread', res.error, {}); return; }
+      var jobs = (res.data || []).map(function(row){
+        var det = row.details, hit = false;
+        if(!det || !det.sets) return null;
+        Object.keys(det.sets).forEach(function(k){ (det.sets[k] || []).forEach(function(x){ if(x && bad(x.kg)){ x.kg = String(GOOD); hit = true; } }); });
+        if(!hit) return null;
+        var m = computeSessionMetrics(det.sets), patch = { details: det, total_volume_kg: m.total_volume_kg };
+        return Promise.resolve(sb.from('sessions').update(patch).eq('id', row.id)).then(function(r2){
+          if(r2 && r2.error){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repairPull1124_session', r2.error, patch); throw r2.error; }
+        });
+      }).filter(Boolean);
+      return Promise.all(jobs).then(function(){ localStorage.setItem(flag, 'done'); });
+    }).catch(function(e){
+      if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repairPull1124_reject', e, {});
+    });
+    return changed;
+  } catch(e){
+    if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('repairPull1124', e, {});
+    return false;
+  }
+};
+(function(){
+  var tries = 0;
+  function tick(){
+    tries++;
+    try { if(currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window._phxRepairPull1124(); return; } } catch(_e){}
+    if(tries < 40) setTimeout(tick, 3000);
+  }
+  if(typeof setTimeout === 'function') setTimeout(tick, 4500);
+})();
+
 function supabaseLogSet(exerciseName,exerciseId,setNumber,weightKg,reps,opts){
   if(!currentSupabaseSessionId||!currentSession||!currentSession.user) return;
   var row={
@@ -14795,8 +14894,69 @@ function showExerciseBlockRPE(exIdx, ex){
   });
 }
 
+// v4.9.447 — WEIGHT SANITY GATE. Jon 24 Nov: "I logged a session today and didn't realise one of my
+// chin ups was at 1200 odd kg I need this to not happen". A dropped decimal point (12.5 → 1250) went
+// straight into set_logs, his records and next week's suggested load. Every set goes through
+// autoLogSet, so the gate is here: an implausible weight is NOT logged until he picks the number he
+// meant (the likely ones are offered) or confirms the one he typed.
+//   suspect when: over 400 kg, or more than 3× (and 50 kg over) the weight he is working with.
+window._phxKgSuspect = function(kg, ref){
+  kg = parseFloat(kg); ref = parseFloat(ref) || 0;
+  if(!(kg > 0)) return false;
+  if(kg > 400) return true;
+  return ref > 0 && kg > Math.max(ref * 3, ref + 50);
+};
+window._phxKgGuesses = function(kg, ref){
+  kg = parseFloat(kg); ref = parseFloat(ref) || 0;
+  var cap = ref > 0 ? Math.max(ref * 1.6, ref + 20) : 400, out = [];
+  [10, 100, 1000].forEach(function(d){
+    var v = Math.round(kg / d * 4) / 4;          // to the nearest 0.25 kg plate step
+    if(v > 0 && v <= cap && (!(ref > 0) || v >= ref * 0.5) && out.indexOf(v) < 0) out.push(v);
+  });
+  return out;
+};
+window._phxKgFix = function(kgEl, kg, ref, done){
+  var old = document.getElementById('phx-kg-fix'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'phx-kg-fix';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9900;display:flex;align-items:center;justify-content:center;padding:24px;';
+  var g = window._phxKgGuesses(kg, ref);
+  var btn = 'width:100%;margin-top:10px;padding:15px;border-radius:var(--radius);font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;';
+  ov.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:var(--radius);padding:22px;max-width:360px;width:100%;text-align:center;">' +
+    '<div style="font-family:var(--font-d);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);">Check the weight</div>' +
+    '<div style="font-family:var(--font-d);font-size:30px;font-weight:900;color:var(--text);margin:8px 0 4px;">' + kg + ' kg?</div>' +
+    '<div style="font-size:13px;color:var(--text3);margin-bottom:6px;">' + (ref > 0 ? 'You are working with about ' + ref + ' kg. ' : '') + 'Did the decimal point go missing?</div>' +
+    g.map(function(v){ return '<button data-kgfix="' + v + '" style="' + btn + 'background:var(--gold);border:none;color:#000;">' + v + ' kg</button>'; }).join('') +
+    '<button data-kgfix="keep" style="' + btn + 'background:none;border:1px solid var(--border2);color:var(--text2);font-size:12px;">Keep ' + kg + ' kg</button></div>';
+  ov.addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('[data-kgfix]') : null; if(!b) return;
+    var v = b.getAttribute('data-kgfix');
+    if(v !== 'keep' && kgEl){ kgEl.value = v; try { kgEl.dispatchEvent(new Event('input', { bubbles: true })); } catch(_i){} }
+    ov.remove();
+    if(typeof done === 'function') done();
+  });
+  document.body.appendChild(ov);
+  return ov;
+};
+// The weight he is working with on this exercise: the other sets in the block, else the prefilled load.
+window._phxKgRef = function(row, kgEl){
+  var block = row && ((typeof row.closest === 'function' && row.closest('.ex-block')) || row.parentElement), best = 0;
+  if(block && typeof block.querySelectorAll === 'function') Array.prototype.forEach.call(block.querySelectorAll('.set-input[id^="kg-"]'), function(el){
+    if(el === kgEl) return;
+    var v = parseFloat(el.value); if(v > 0 && v <= 400 && v > best) best = v;
+  });
+  if(!best && kgEl && typeof kgEl.getAttribute === 'function'){ var pv = parseFloat(kgEl.getAttribute('value')); if(pv > 0 && pv <= 400) best = pv; }
+  return best;
+};
 function autoLogSet(row){
   if(!row) return;
+  var _kgGate = (typeof row.querySelector === 'function') ? row.querySelector('.set-input[id^="kg-"]') : null;
+  if(_kgGate && !row._phxKgChecked && window._phxKgSuspect(_kgGate.value, window._phxKgRef(row, _kgGate))){
+    window._phxKgFix(_kgGate, parseFloat(_kgGate.value), window._phxKgRef(row, _kgGate), function(){
+      row._phxKgChecked = true; try { autoLogSet(row); } finally { row._phxKgChecked = false; }
+    });
+    return;
+  }
   var exId=row.getAttribute('data-exid')||'';
   var setIdx=parseInt(row.getAttribute('data-setidx'))||0;
   // Find exercise name from nearest ex-block-header

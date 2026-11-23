@@ -6077,6 +6077,67 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(r['Old_setlog'].sets[0].reps, 1010, 'another day is not touched');
   });
 
+  test('KGGATE: a dropped decimal is caught before it is logged, and the likely number is offered (Jon, 24 Nov)', () => {
+    const sus = app.window._phxKgSuspect, gu = app.window._phxKgGuesses;
+    assert.equal(sus(1250, 12.5), true, '1250 on a 12.5 kg pull-up');
+    assert.equal(sus(1250, 0), true, 'over 400 with nothing to compare');
+    assert.equal(sus(125, 12.5), true, '10x the working weight');
+    assert.equal(sus(15, 12.5), false, 'a normal jump');
+    assert.equal(sus(160, 150), false, 'a heavy deadlift is fine');
+    assert.equal(sus(250, 0), false, 'no reference and under 400: trusted');
+    assert.equal(sus('', 12.5), false);
+    assert.deepEqual(gu(1250, 12.5), [12.5], 'the decimal it lost');
+    assert.deepEqual(gu(1225, 0), [122.5, 12.25, 1.25], 'no reference: every shift under 400');
+    assert.deepEqual(gu(1600, 160), [160], 'a deadlift typo');
+  });
+
+  test('REPAIRPULL: the 24 Nov 1200-odd kg pull-up set goes back to 12.5 everywhere local, Jon only, nothing else touched', () => {
+    reset(); signIn('df7fc046-0dd6-4416-b0ce-44b55fa2fb8e');
+    app.draftStart({ bench: 125, squat: 150, deadlift: 160 }, '2026-10-26');
+    const st = app.blabGetState();
+    st.records = st.records || {};
+    st.records['Weighted Pull-Up_lastsets'] = { date: '2026-11-24', sets: [{ wt: 12.5, reps: 2 }, { wt: 1250, reps: 2 }] };
+    st.records['Weighted Pull-Up_wk'] = { '5': { wt: 1250, reps: 2 } };
+    st.records['Bench Press_wk'] = { '5': { wt: 110, reps: 1 } };          // control
+    st.draft.pullLoad = 1252.5; st.draft.changes = [{ date: '2026-11-24', text: 'Weighted pull-up next week: +1252.5 kg' }];
+    app.blabSaveState(st);
+    app.localStorage.setItem('phoenix_session_logs_sets', JSON.stringify([{ date: '2026-11-24', exerciseName: 'Weighted Pull-Up', kg: '1250' }, { date: '2026-11-23', kg: '900' }]));
+    const realSb = app.sb; app.sb = undefined;
+    try { assert.equal(app.window._phxRepairPull1124(), true); } finally { app.sb = realSb; }
+    const r = app.blabGetState().records;
+    assert.deepEqual(r['Weighted Pull-Up_lastsets'].sets.map((x) => x.wt), [12.5, 12.5]);
+    assert.equal(r['Weighted Pull-Up_wk']['5'].wt, 12.5);
+    assert.equal(r['Bench Press_wk']['5'].wt, 110, 'other lifts untouched');
+    assert.equal(app.blabGetState().draft.pullLoad, 15, 'he earned the +2.5: 12.5 + 2.5');
+    assert.equal(app.blabGetState().draft.changes[0].text, 'Weighted pull-up next week: +15 kg');
+    const S = JSON.parse(app.localStorage.getItem('phoenix_session_logs_sets'));
+    assert.deepEqual(S.map((x) => x.kg), ['12.5', '900'], 'only 24 Nov');
+    app.currentSession = { user: { id: 'someone' } };
+    assert.equal(app.window._phxRepairPull1124(), false, 'nobody else');
+  });
+
+  test('REPAIRPULL cloud: set_logs ≥500 kg on 24 Nov (Brisbane) → 12.5; the session row\'s sets + volume rewritten; flag only after both land', async () => {
+    reset(); signIn('df7fc046-0dd6-4416-b0ce-44b55fa2fb8e');
+    app.draftStart({ bench: 125, squat: 150, deadlift: 160 }, '2026-10-26');
+    const calls = [];
+    const chain = (table) => { const c = { table, ops: [] }; calls.push(c);
+      const api = new Proxy({}, { get: (_, k) => k === 'then'
+        ? (res, rej) => Promise.resolve(c.ops[0] && c.ops[0][0] === 'select'
+            ? { data: [{ id: 'S1', details: { sets: { 'ai-2': [{ kg: '12.5', reps: '2' }, { kg: '1250', reps: '2' }], 'ai-1': [{ kg: '100', reps: '1' }] } } }], error: null }
+            : { error: null }).then(res, rej)
+        : (...a) => { c.ops.push([k, ...a]); return api; } });
+      return api; };
+    const realSb = app.sb; app.sb = { from: chain };
+    try { app.window._phxRepairPull1124(); await new Promise((r) => setTimeout(r, 20)); } finally { app.sb = realSb; }
+    const up = calls.find((c) => c.table === 'set_logs');
+    assert.deepEqual(up.ops, [['update', { weight_kg: 12.5 }], ['eq', 'user_id', 'df7fc046-0dd6-4416-b0ce-44b55fa2fb8e'], ['gte', 'weight_kg', 500], ['gte', 'logged_at', '2026-11-23T14:00:00Z'], ['lt', 'logged_at', '2026-11-24T14:00:00Z']]);
+    const sw = calls.filter((c) => c.table === 'sessions' && c.ops[0][0] === 'update')[0];
+    assert.ok(sw, 'session row rewritten');
+    assert.deepEqual(sw.ops[0][1].details.sets['ai-2'].map((x) => x.kg), ['12.5', '12.5']);
+    assert.equal(sw.ops[0][1].total_volume_kg, 12.5 * 2 + 12.5 * 2 + 100, 'volume recomputed');
+    assert.equal(app.localStorage.getItem('phx_fixpull1124_df7fc046-0dd6-4416-b0ce-44b55fa2fb8e'), 'done');
+  });
+
   test('FINKG: finisher implements carry their own kg; body-weight moves do not (Jon, 3 Nov)', () => {
     startDraft();
     const fin = app.blabGetSessionData(2, 2).exercises.find((e) => /^Finisher/.test(e.name));

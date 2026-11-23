@@ -6077,6 +6077,48 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
     assert.equal(r['Old_setlog'].sets[0].reps, 1010, 'another day is not touched');
   });
 
+  test('PUSHTEST: push testing back 2 weeks — Week 5 repeats, Retest A / row retest / taper / Retest B move out 14 days, labels and length follow (Jon, 24 Nov)', () => {
+    startDraft();
+    const cal0 = app.window.blabCalGet();
+    const at = (w, d, c) => (c || app.window.blabCalGet()).sessions.find((e) => e.blabWeek === w && e.blabDay === d);
+    const retA0 = at(5, 5, cal0).scheduledDate, mon6 = at(6, 1, cal0).scheduledDate, retB0 = at(6, 6, cal0).scheduledDate;
+    const plan = app.window.draftPushTestsPlan(2);
+    assert.ok(plan.ok, JSON.stringify(plan));
+    assert.ok(plan.moving.some((m) => /Retest A/.test(m.name)) && plan.moving.some((m) => /Retest B/.test(m.name)), 'preview names the retests');
+    assert.equal(app.window.blabCalGet().sessions.length, cal0.sessions.length, 'the preview changes nothing');
+    const r = app.window.draftPushTests(2);
+    assert.ok(r.ok);
+    const add = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+    assert.equal(at(7, 5).scheduledDate, add(retA0, 14), 'Retest A two weeks later');
+    assert.equal(at(8, 1).scheduledDate, add(mon6, 14), 'row retest two weeks later');
+    assert.equal(at(8, 6).scheduledDate, add(retB0, 14), 'Retest B two weeks later');
+    assert.equal(at(5, 5).scheduledDate, retA0, 'this Saturday keeps its slot…');
+    assert.ok(!/Retest/.test(app.blabGetSessionData(5, 5).name), '…as a training session: ' + app.blabGetSessionData(5, 5).name);
+    assert.equal(app.blabGetSessionData(6, 2).name, app.blabGetSessionData(5, 2).name, 'week 6 repeats week 5');
+    assert.ok(/Retest A/.test(app.blabGetSessionData(7, 5).name) && /Retest A/.test(app.window.draftDayLabel(7, 5)));
+    assert.ok(/Retest B/.test(app.blabGetSessionData(8, 6).name));
+    assert.equal(app.window.trnProgramme().weeks, 8, 'the block is 8 weeks now');
+    assert.equal(at(9, 1), undefined, 'nothing past week 8');
+    assert.ok(app.window.draftPushTests(1).ok, 'can push again');
+    assert.equal(app.window.trnProgramme().weeks, 9); assert.ok(/Retest A/.test(app.blabGetSessionData(8, 5).name));
+    at(9, 1).status = 'completed'; const c = app.window.blabCalGet(); c.sessions.find((e) => e.blabWeek === 9 && e.blabDay === 1).status = 'completed'; app.window.blabCalSave(c);
+    assert.equal(app.window.draftPushTestsPlan(1).ok, false, 'not once testing has started');
+  });
+  test('PUSH 1124: one shot — 2 weeks, Speed Lower on Sat 28 Nov, Sat session to Sun, combine kept out; Jon only, once', () => {
+    reset(); signIn('df7fc046-0dd6-4416-b0ce-44b55fa2fb8e');
+    app.draftStart({ bench: 125, squat: 150, deadlift: 160 }, '2026-10-26');
+    const orig = app._phxLocalISO;
+    try {
+      app._phxLocalISO = () => '2026-11-24';
+      assert.equal(app.window._draftPush1124(), true);
+      assert.equal(app.window._draftPush1124(), false, 'once');
+      const at = (w, d) => app.window.blabCalGet().sessions.find((e) => e.blabWeek === w && e.blabDay === d);
+      assert.equal(at(5, 6).scheduledDate, '2026-11-28', 'Speed Lower this Saturday');
+      assert.equal(at(5, 5).scheduledDate, '2026-11-29');
+      assert.equal(at(7, 5).scheduledDate, '2026-12-12', 'Retest A Sat 12 Dec');
+      assert.ok(/Postponed/.test(app.blabGetSessionData(8, 5).name), 'combine stays out');
+    } finally { app._phxLocalISO = orig; }
+  });
   test('KGGATE: a dropped decimal is caught before it is logged, and the likely number is offered (Jon, 24 Nov)', () => {
     const sus = app.window._phxKgSuspect, gu = app.window._phxKgGuesses;
     assert.equal(sus(1250, 12.5), true, '1250 on a 12.5 kg pull-up');

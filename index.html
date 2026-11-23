@@ -1875,6 +1875,7 @@ m35 -166 c7 -27 16 -48 21 -48 4 0 8 -11 8 -25 0 -14 14 -44 30 -67 17 -22 30
   </div>
   <div id="blab-cal-grid"></div>
   <div style="font-size:11px;color:var(--text3);line-height:1.6;padding:4px 2px;">Hold a session to drag it to another day, or tap it for options.</div>
+  <div id="draft-adjust-btn" onclick="window.draftOpenAdjust && window.draftOpenAdjust()" style="display:none;margin-top:12px;padding:13px;border:1px solid var(--gold);border-radius:var(--radius);text-align:center;font-family:var(--font-d);font-size:12px;font-weight:900;letter-spacing:2px;color:var(--gold);cursor:pointer;">ADJUST PLAN</div>
 </div>
 <!-- SESSION QUEUE — unscheduled BLAB sessions, draggable onto any day -->
 <div id="blab-cal-queue-wrap" style="position:fixed;left:0;right:0;bottom:60px;z-index:190;background:var(--bg2);border-top:1px solid var(--border2);padding:10px 16px 16px;box-shadow:0 -8px 30px rgba(0,0,0,0.5);">
@@ -3556,7 +3557,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.447';
+var APP_VERSION='4.9.448';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8041,7 +8042,12 @@ var _TRN_DRAFT_DESC = {
 // used to hard-code 4 days / 12 weeks / the BLAB labels asks this instead.
 window.trnProgramme = function(s){
   if(s === undefined){ try { s = window.blabGetState(); } catch(_e){ s = null; } }
-  return (s && s.programme === 'draft') ? _TRN_DRAFT_DESC : _TRN_BLAB_DESC;
+  if(s && s.programme === 'draft'){
+    // v4.9.448 — a block whose testing was pushed back is that many weeks longer.
+    var _ext = s.draft && s.draft.extend && parseInt(s.draft.extend.weeks, 10) || 0;
+    return _ext > 0 ? Object.assign({}, _TRN_DRAFT_DESC, { weeks: 6 + _ext }) : _TRN_DRAFT_DESC;
+  }
+  return _TRN_BLAB_DESC;
 };
 window.trnIsDraft = function(s){ return window.trnProgramme(s).id === 'draft'; };
 // Session name for a week/day, programme-aware. Draft test-week days have their own names.
@@ -8110,7 +8116,14 @@ window.draftCurrentWeek = function(s){
 window.draftWeekName = function(week){
   return (week <= 1) ? 'Test Week' : ('Week ' + (week - 1) + ' of 5');
 };
+// v4.9.448 — the calendar's week number is not always the programme week: after "push testing back"
+// the extra weeks repeat Week 5 and the old Week 6 becomes 6 + N. draftDayLabel takes the CALENDAR
+// week; _draftDayLabelRaw takes the programme (content) week.
 window.draftDayLabel = function(week, day){
+  var cw = window._draftContentWeek(week, day);
+  return window._draftDayLabelRaw(cw.w, cw.d);
+};
+window._draftDayLabelRaw = function(week, day){
   if(week === 1){
     if(day === 5) return 'Lift Test — Squat, Clean, Bench';
     if(day === 6) return 'Lift Test — Deadlift, Press, Reps';
@@ -8272,10 +8285,154 @@ window.draftGetSessionData = function(week, day, s){
   s = s || window.blabGetState();
   if(!s) return null;
   var calf = window._draftCalfOn(s, (day === 'field') ? 2 : week);
-  var o = window._draftGetSessionRaw(week, day, s, calf);
+  var _cw = (day === 'field') ? { w: week, d: day } : window._draftContentWeek(week, day, s);
+  var o = window._draftGetSessionRaw(_cw.w, _cw.d, s, calf);
   if(calf) o = window._draftCalfSwap(o);
   return (day === 'field') ? o : window._draftApplyCarry(o, week, day, s);
 };
+// v4.9.448 — PUSH TESTING BACK. Jon 24 Nov: "I'm going to have to put back the re testing as I am
+// concerned about the pec/shoulder ... push testing 2 weeks ... how can I manage this in app -
+// important if I ever want to commercialise this". He chose: the gap repeats Week 5; ALL remaining
+// tests move (Retest A, the row retest, Retest B, with the Week 6 taper); built as an app feature.
+// s.draft.extend = { after: 5, weeks: N }. Calendar weeks 1-4 are programme weeks 1-4. Calendar weeks
+// 5 .. 5+N are Week 5 — except their Saturday, which is Week 4's Saturday (Speed Upper) until the last
+// of them, which is Retest A. Calendar week 6+N .. is programme week 6 (taper + tests).
+window._draftContentWeek = function(week, day, s){
+  week = parseInt(week, 10); day = parseInt(day, 10);
+  if(s === undefined){ try { s = window.blabGetState(); } catch(_e){ s = null; } }
+  var ex = s && s.draft && s.draft.extend, N = ex ? (parseInt(ex.weeks, 10) || 0) : 0, A = ex ? (parseInt(ex.after, 10) || 5) : 5;
+  if(!(N > 0) || !(week >= A)) return { w: week, d: day };
+  if(week <= A + N){
+    if(day === 5 && week < A + N) return { w: A - 1, d: 5 };
+    return { w: A, d: day };
+  }
+  return { w: week - N, d: day };
+};
+// The plan for pushing testing back `n` weeks, without changing anything (the sheet previews it).
+window.draftPushTestsPlan = function(n){
+  var s = window.blabGetState();
+  if(!s || s.programme !== 'draft') return { ok: false, problem: 'Only the Draft programme has a test week.' };
+  n = parseInt(n, 10);
+  if(!(n >= 1 && n <= 4)) return { ok: false, problem: 'Push it back 1 to 4 weeks.' };
+  var D = s.draft || {}, N0 = D.extend ? (parseInt(D.extend.weeks, 10) || 0) : 0, A = 5;
+  var cal = window.blabCalGet();
+  if(!cal || !Array.isArray(cal.sessions)) return { ok: false, problem: 'No calendar yet.' };
+  var lastTrain = A + N0;                                      // calendar week holding Retest A now
+  var isTest = function(e){ var c = window._draftContentWeek(e.blabWeek, e.blabDay, s); return (c.w === 5 && c.d === 5) || c.w === 6; };
+  var tests = cal.sessions.filter(function(e){ return e && e.blabWeek >= lastTrain && isTest(e); });
+  if(tests.some(function(e){ return e.status === 'completed'; })) return { ok: false, problem: 'Testing has already started — finish it or move single sessions instead.' };
+  var moving = tests.map(function(e){ return { w: e.blabWeek, d: e.blabDay, from: e.scheduledDate, to: _draftAddDays(e.scheduledDate, 7 * n), name: window.draftDayLabel(e.blabWeek, e.blabDay) }; })
+    .sort(function(a, b){ return a.from.localeCompare(b.from); });
+  return { ok: true, weeks: n, moving: moving, firstTest: moving.length ? moving[0].to : null };
+};
+window.draftPushTests = function(n){
+  var plan = window.draftPushTestsPlan(n); if(!plan.ok) return plan;
+  n = plan.weeks;
+  var s = window.blabGetState(), D = s.draft = s.draft || {};
+  var N0 = D.extend ? (parseInt(D.extend.weeks, 10) || 0) : 0, A = 5, lastTrain = A + N0;
+  var cal = window.blabCalGet();
+  var byWD = {}; cal.sessions.forEach(function(e){ if(e && e.blabWeek) byWD[e.blabWeek + ':' + e.blabDay] = e; });
+  var firstMoved = null;
+  // 1. everything after the current last training week moves out n weeks (renumbered + re-dated)
+  cal.sessions.forEach(function(e){
+    if(!e || e.custom || !(e.blabWeek > lastTrain)) return;
+    e.blabWeek += n; e.scheduledDate = _draftAddDays(e.scheduledDate, 7 * n);
+    if(!firstMoved || e.scheduledDate < firstMoved) firstMoved = e.scheduledDate;
+  });
+  // 2. the Retest A Saturday stays where it is and becomes a training Saturday (via the mapping);
+  //    n new weeks follow it, each day a week after the same day of the week before.
+  for(var k = 1; k <= n; k++){
+    for(var d = 1; d <= 6; d++){
+      var prev = byWD[(lastTrain) + ':' + d];
+      var date = prev ? _draftAddDays(prev.scheduledDate, 7 * k) : window.draftDateFor(D.startMonday, lastTrain + k, d);
+      cal.sessions.push({ blabWeek: lastTrain + k, blabDay: d, scheduledDate: date, status: 'pending', pushed: true });
+    }
+  }
+  // 3. the Draft add-ons (core / WOD / field) dated in the moved weeks go with them
+  var cut = plan.moving.length ? plan.moving[0].from : null;
+  if(cut && Array.isArray(cal.customs)) cal.customs.forEach(function(c){
+    if(c && c.draft && c.status !== 'completed' && c.scheduledDate > cut) c.scheduledDate = _draftAddDays(c.scheduledDate, 7 * n);
+  });
+  D.extend = { after: A, weeks: N0 + n };
+  if(!Array.isArray(D.changes)) D.changes = [];
+  D.changes.push({ date: _phxLocalISO(), text: 'Testing pushed back ' + n + ' week' + (n === 1 ? '' : 's') + ' — Week 5 repeats' });
+  window.blabCalSave(cal);
+  window.blabSaveState(s);
+  return { ok: true, weeks: n, moving: plan.moving };
+};
+// One-shot, Jon 24 Nov: what he asked for, done with the feature above — testing pushed back 2 weeks,
+// this week's Speed Lower on Saturday (28 Nov) and the Saturday session (now Speed Upper) on Sunday,
+// and the Field Combine kept out of the block (his 18 Nov choice; calf mode no longer covers its new
+// date). His account only, once. Archive after 13 Dec.
+window._draftPush1124 = function(){
+  try {
+    var uid = currentSession && currentSession.user && currentSession.user.id;
+    if(uid !== 'df7fc046-0dd6-4416-b0ce-44b55fa2fb8e') return false;
+    var s = window.blabGetState(); if(!s || s.programme !== 'draft' || !s.draft || s.draft.push1124) return false;
+    if(_phxLocalISO() > '2026-11-28') return false;
+    s.draft.push1124 = true; s.draft.combineOff = true; window.blabSaveState(s);
+    var r = window.draftPushTests(2);
+    var cal = window.blabCalGet();
+    var e5 = cal.sessions.filter(function(e){ return e && e.blabWeek === 5 && e.blabDay === 5 && e.status !== 'completed'; })[0];
+    var e6 = cal.sessions.filter(function(e){ return e && e.blabWeek === 5 && e.blabDay === 6 && e.status !== 'completed'; })[0];
+    if(e5 && e6 && e5.scheduledDate === '2026-11-28' && e6.scheduledDate === '2026-11-29'){
+      e5.scheduledDate = '2026-11-29'; e6.scheduledDate = '2026-11-28'; window.blabCalSave(cal);
+    }
+    if(typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){}
+    return !!(r && r.ok);
+  } catch(_e){ if(typeof _phxRecordWriteError === 'function') _phxRecordWriteError('draft.push1124', _e, {}); return false; }
+};
+// The Adjust Plan sheet, from the Programme calendar. Each control does one thing in the app, so a
+// change to the plan never needs a developer: move a session (tap / drag), push testing back, end a
+// restriction mode.
+window.draftOpenAdjust = function(){
+  var s = window.blabGetState(); if(!s || s.programme !== 'draft') return false;
+  var old = document.getElementById('draft-adjust'); if(old) old.remove();
+  var o = document.createElement('div'); o.id = 'draft-adjust';
+  o.style.cssText = 'position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,0.75);display:flex;align-items:flex-end;justify-content:center;';
+  var D = s.draft || {}, ext = D.extend && D.extend.weeks || 0;
+  var H = function(t){ return '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:16px 0 6px;">' + t + '</div>'; };
+  var btn = 'flex:1;padding:12px 0;border-radius:var(--radius);border:1px solid var(--gold);background:none;color:var(--gold);font-family:var(--font-d);font-size:13px;font-weight:900;';
+  var calf = s.draftCalf;
+  o.innerHTML = '<div style="background:var(--bg2);border-top:1px solid var(--gold);border-radius:14px 14px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-sizing:border-box;">' +
+    '<div style="display:flex;align-items:center;"><div style="flex:1;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">Adjust plan</div>' +
+    '<button data-da="x" style="background:none;border:none;color:var(--text3);font-size:24px;">&times;</button></div>' +
+    H('Move a session') + '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Tap a session in the calendar and choose Move to Another Day, or hold it and drag it (to the screen edge to scroll).</div>' +
+    H('Push testing back') + '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:8px;">Retests and their taper move out; Week 5 repeats in the gap.' + (ext ? ' Already pushed back ' + ext + ' week' + (ext === 1 ? '' : 's') + '.' : '') + '</div>' +
+    '<div style="display:flex;gap:8px;">' + [1, 2, 3].map(function(n){ return '<button data-da-push="' + n + '" style="' + btn + '">' + n + ' WK' + (n > 1 ? 'S' : '') + '</button>'; }).join('') + '</div>' +
+    '<div id="da-preview" style="font-size:12px;color:var(--text2);line-height:1.6;margin-top:10px;"></div>' +
+    H('Restrictions') + (calf ? '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Calf mode is on (weeks ' + calf.fromWeek + '–' + calf.toWeek + '): no running, jumping, prowler or sled.</div>' +
+      '<button data-da="calfoff" style="margin-top:8px;padding:10px 14px;border-radius:var(--radius);border:1px solid var(--border2);background:none;color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;">END CALF MODE</button>'
+      : '<div style="font-size:13px;color:var(--text3);">None on.</div>') +
+    '</div>';
+  var pending = 0;
+  o.addEventListener('click', function(e){
+    if(e.target === o){ o.remove(); return; }
+    var t = e.target.closest ? e.target.closest('[data-da],[data-da-push],[data-da-go]') : null; if(!t) return;
+    var a = t.getAttribute('data-da'), pv = o.querySelector('#da-preview');
+    if(a === 'x'){ o.remove(); return; }
+    if(a === 'calfoff'){ var st = window.blabGetState(); delete st.draftCalf; window.blabSaveState(st); o.remove(); if(typeof window._blabCalRender === 'function') window._blabCalRender(); return; }
+    if(t.hasAttribute('data-da-push')){
+      pending = +t.getAttribute('data-da-push');
+      var plan = window.draftPushTestsPlan(pending);
+      if(!plan.ok){ pv.innerHTML = '<span style="color:#e07a7a;">' + _esc(plan.problem) + '</span>'; return; }
+      var f = function(iso){ try { var p = iso.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short' }); } catch(_d){ return iso; } };
+      pv.innerHTML = plan.moving.map(function(m){ return _esc(m.name) + ': ' + f(m.from) + ' &rarr; <b>' + f(m.to) + '</b>'; }).join('<br>') +
+        '<button data-da-go="1" style="width:100%;margin-top:10px;padding:13px;border-radius:var(--radius);border:none;background:var(--gold);color:#000;font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;">PUSH BACK ' + pending + ' WEEK' + (pending > 1 ? 'S' : '') + '</button>';
+      return;
+    }
+    if(t.hasAttribute('data-da-go')){
+      var r = window.draftPushTests(pending);
+      if(!r.ok){ pv.innerHTML = '<span style="color:#e07a7a;">' + _esc(r.problem) + '</span>'; return; }
+      o.remove();
+      if(typeof window._blabCalRender === 'function') window._blabCalRender();
+      if(typeof window._blabCalToast === 'function') try { window._blabCalToast('Testing pushed back ' + r.weeks + ' week' + (r.weeks > 1 ? 's' : '')); } catch(_t){}
+    }
+  });
+  document.body.appendChild(o);
+  return true;
+};
+
 // v4.9.439 — CARRY A FINISHER TO ANOTHER SESSION. Jon 19 Nov: "I completed today with out doing the
 // assault bike can I add it to the lower power ... Is this possible as an option for finisher - add it
 // to a different day or session?" s.draftCarry = [{ fromW, fromD, name, toW, toD }]. The exercise is
@@ -8440,13 +8597,13 @@ window._draftGetSessionRaw = function(week, day, s, calf){
         note:'Dead hang every rep, chin over the bar, no kip. 10 min after the bench reps. Goal: 20.' }
     ];
   }
-  if(week === 1 && day === 5) return sess(window.draftDayLabel(week, day), 75, liftsA());
-  if((week === 1 || week === 6) && day === 6) return sess(window.draftDayLabel(week, day), 100, liftsB());
-  if(week === 5 && day === 5) return sess(window.draftDayLabel(week, day), 75, liftsA());
-  if(week === 6 && day === 5 && calf) return sess('Field Combine \u2014 Postponed (calf)', 10, [
+  if(week === 1 && day === 5) return sess(window._draftDayLabelRaw(week, day), 75, liftsA());
+  if((week === 1 || week === 6) && day === 6) return sess(window._draftDayLabelRaw(week, day), 100, liftsB());
+  if(week === 5 && day === 5) return sess(window._draftDayLabelRaw(week, day), 75, liftsA());
+  if(week === 6 && day === 5 && (calf || (s && s.draft && s.draft.combineOff))) return sess('Field Combine \u2014 Postponed (calf)', 10, [
     std('Field Combine postponed', 1, 'Rest', 'Calf: the combine tests wait until it is right. Rest day, or move a gym session here.')
   ]);
-  if(week === 6 && day === 5) return sess(window.draftDayLabel(week, day), 60, fieldTests());
+  if(week === 6 && day === 5) return sess(window._draftDayLabelRaw(week, day), 60, fieldTests());
   if(_field) return sess('Field Tests', 60, fieldTests());   // v4.9.378 — the split-off Saturday session
   if(week === 1) return null;            // test week Mon-Thu: nothing scheduled
 
@@ -9034,7 +9191,7 @@ window.draftReconcileCustoms = function(){
   var tries = 0;
   function tick(){
     tries++;
-    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); window._draftReschedule1115(); window._draftCalf1118(); window._draftCarry1119(); return; } } catch(_e){}
+    try { if(typeof currentSession !== 'undefined' && currentSession && currentSession.user && window.blabGetState && window.blabGetState()){ window.draftReconcileCustoms(); window._draftRepairSat7(); window._draftReschedule1109(); window._draftRepairWed11(); window._draftSeedNote1112(); window._draftReschedule1115(); window._draftCalf1118(); window._draftCarry1119(); window._draftPush1124(); return; } } catch(_e){}
     if(tries < 40 && typeof setTimeout === 'function') setTimeout(tick, 3000);
   }
   if(typeof setTimeout === 'function') setTimeout(tick, 5000);
@@ -9115,7 +9272,8 @@ window.draftAfterSession = function(week, day){
   var changes = [];
   var sess = window.draftGetSessionData(week, day, s);
   var names = (sess && sess.exercises) ? sess.exercises.map(function(e){ return e.name; }) : [];
-  var isTest = (week === 1 || week === 6) && (day === 5 || day === 6);
+  var _cwT = window._draftContentWeek(week, day, s);
+  var isTest = (_cwT.w === 1 || _cwT.w === 6) && (_cwT.d === 5 || _cwT.d === 6);
   function wkRow(name){ var m = R[name + '_wk']; return (m && typeof m === 'object') ? m[String(week)] : null; }
   function todaySets(name){ var b = R[name + '_lastsets']; return (b && b.date === today && Array.isArray(b.sets)) ? b.sets : null; }
   function rpeToday(name){ var r = R[name + '_rpe']; return (r && r.date === today) ? (parseInt(r.rpe, 10) || 0) : 0; }
@@ -42945,6 +43103,7 @@ window._blabCalRender = function(){
     if(qw) qw.style.display = 'none';
     return;
   }
+  var _dab = document.getElementById('draft-adjust-btn'); if(_dab) _dab.style.display = (s.programme === 'draft') ? 'block' : 'none';
   var week = _blabCalVisibleDays();
   var warn = window._blabCalWarnings(week);
   var cal  = window.blabCalGet();

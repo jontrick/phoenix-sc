@@ -602,3 +602,20 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   it was earned). Cloud writes route errors via _phxRecordWriteError; flag set only after both land.
   Tests KGGATE, REPAIRPULL, REPAIRPULL cloud. NOT proven: the real rows on Supabase (exact value unknown —
   "1200 odd"; the ≥500 rule covers it).
+- **v4.9.448 (24 Nov) — ADJUST PLAN + push testing back.** Jon: "I'm going to have to put back the re testing as I
+  am concerned about the pec/shoulder - want to do the lower speed this Saturday and push testing 2 weeks - also
+  ... how can I manage this in app - important if I ever want to commercialise this". He chose: gap repeats
+  Week 5; ALL remaining tests move (with the W6 taper); build it as a feature. `s.draft.extend = {after:5,
+  weeks:N}`; `_draftContentWeek(calendarWeek, day)` maps calendar → programme week (weeks 5..5+N = Week 5, their
+  Saturday = Week 4's Speed Upper except the last = Retest A; 6+N.. = Week 6). `draftGetSessionData`,
+  `draftDayLabel` (public = calendar week; `_draftDayLabelRaw` = programme week, used inside the generator),
+  the weekly adjust's isTest, and `trnProgramme().weeks` (6+N) all go through it. `draftPushTestsPlan(n)`
+  (preview, changes nothing; refuses once a test is completed) / `draftPushTests(n)` (renumbers + re-dates
+  everything after the last training week by n weeks, inserts n repeat weeks dated a week apart from the last
+  training week's days, moves Draft add-ons after the first test). UI: Programme calendar → ADJUST PLAN sheet:
+  Move a session (how-to), Push testing back 1/2/3 wks with a dated preview, Restrictions (calf mode on →
+  END CALF MODE). One-shot `_draftPush1124` (Jon only, once, ≤ 28 Nov): push 2; W5 D6 Speed Lower → Sat 28
+  Nov, W5 D5 (now Speed Upper) → Sun 29 (only if they sit on 28/29); `draft.combineOff = true` (his 18 Nov
+  "postpone the combine" — calf mode no longer covers its new date). Retest A → Sat 12 Dec, Retest B → Sun 20
+  Dec. MINE 29 → 32. Tests PUSHTEST, PUSH 1124. NOT built: Core/WOD add-ons for the inserted weeks; a pec /
+  shoulder restriction mode (he said leave upper training as is, 21 Nov).

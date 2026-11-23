@@ -630,3 +630,15 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   1-4 wks / Until I end it / End it, with a "guide, not a diagnosis — see a physio" line. Tests INJURY ×2
   (scan of every non-test session per area; fires red with the swap call removed). Swap choices are mine,
   conservative, and not physio-reviewed — ??? whether Jon wants different substitutes.
+- **v4.9.450 (24 Nov) — injury engine by MOVEMENT PATTERN + custom injuries.** Jon: "There shouldn't be a finite
+  list - maybe 6-10 core things but need to be able to select specific/custom injuries too". `_DRAFT_PATTERNS`
+  classifies every exercise / movement name (19 patterns + session-level `run`); `_DRAFT_ALTS` = ordered
+  alternatives per pattern, each tagged with its own pattern (an alternative already placed is classified by
+  its tag — a high-box squat is not a "squat" to a knee). An injury blocks patterns and may `avoid` named
+  exercises (dropped; a superset keeps its other half). First alternative not blocked, else dropped. 9 core
+  areas (calf, knee, ham, groin, back, pec, shoulder, elbow, ankle) = pattern sets. Custom:
+  `draftAddCustomInjury({name, blocks, avoid, weeks})` → area `custom:<slug>`; picker lists upcoming lift
+  exercises (`draftUpcomingExerciseNames`, MINE 34). `run`/`jump` blocked → gym conditioning (old calf path).
+  Adjust Plan: 9 core rows + custom rows (Remove) + "+ CUSTOM INJURY" form (name, movement chips, exercise
+  checklist, length). Tests INJURY (every core area: no blocked pattern left in any non-test session; off
+  restores), INJURY custom. Conditioning drill internals (e.g. the burpee in gym bouts) are not swapped.

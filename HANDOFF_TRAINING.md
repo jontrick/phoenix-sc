@@ -619,3 +619,14 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   "postpone the combine" — calf mode no longer covers its new date). Retest A → Sat 12 Dec, Retest B → Sun 20
   Dec. MINE 29 → 32. Tests PUSHTEST, PUSH 1124. NOT built: Core/WOD add-ons for the inserted weeks; a pec /
   shoulder restriction mode (he said leave upper training as is, 21 Nov).
+- **v4.9.449 (24 Nov) — INJURY MODES by body part, in Adjust Plan.** Jon "Yes" to building them (calf mode needed
+  me to switch on; pec/shoulder had none). `s.draftInjuries = [{area, fromWeek, toWeek, set}]` (calendar weeks,
+  99 = until ended); legacy `s.draftCalf` still counts as calf and is removed by the calf switch.
+  `DRAFT_INJURY_AREAS`: calf, knee, ham (noRun → the old calf path: gym Mon/Wed, no jumps / prowler / sled,
+  via `_draftCalfOn` which now = any noRun area on) and pec (no running change). `_DRAFT_INJURY_SWAPS` per area
+  (exercise AND superset-movement names; superset name rebuilt), applied by `_draftInjurySwap` in the wrapper
+  and to carried finishers. Sessions named Retest / Lift Test are NEVER changed (push testing back instead).
+  `draftSetInjury(area, weeks|0|null)` from `_draftCalWeekNow()` (MINE 33). UI: Adjust Plan → Injury modes:
+  1-4 wks / Until I end it / End it, with a "guide, not a diagnosis — see a physio" line. Tests INJURY ×2
+  (scan of every non-test session per area; fires red with the swap call removed). Swap choices are mine,
+  conservative, and not physio-reviewed — ??? whether Jon wants different substitutes.

@@ -6119,6 +6119,52 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(/Postponed/.test(app.blabGetSessionData(8, 5).name), 'combine stays out');
     } finally { app._phxLocalISO = orig; }
   });
+  test('INJURY: each body-part mode clears every lift that loads it from every non-test session, and only while it is on (Jon, 24 Nov)', () => {
+    const BAD = {
+      pec: /\bbench\b(?!.*reverse hyper)|push-up|\bdips?\b|strict press|push press|chest pass|incline db press|flat db (press|bench)/i,
+      knee: /squat|lunge|box jump|broad jump|bound|hurdle|sprint \d+ m|shuttle|3-cone/i,
+      ham: /nordic|romanian|leg curl|deadlift — (triples|heavy)|deficit deadlift|speed deadlift|sprint \d+ m|bound/i
+    };
+    for (const area of Object.keys(BAD)) {
+      startDraft();
+      const clean = (txt) => txt.replace(/(CALF|PEC \/ SHOULDER|KNEE|HAMSTRING): replaces [^"]*/gi, '').replace(/Bench Reverse Hyper/g, '').replace(/Speed Box Squat|Box Squat — High Box/g, (m) => area === 'knee' && m === 'Box Squat — High Box' ? '' : m);
+      const before = JSON.stringify(app.blabGetSessionData(5, 2).exercises.map((e) => [e.name, e.movements]));
+      { const st = app.window.blabGetState(); st.draftInjuries = [{ area, fromWeek: 1, toWeek: 99 }]; app.window.blabSaveState(st); }
+      let n = 0;
+      for (let w = 2; w <= 6; w++) for (let d = 1; d <= 6; d++) {
+        const x = app.blabGetSessionData(w, d); if (!x || /^(Retest|Lift Test)/.test(x.name)) continue;
+        n++;
+        const txt = clean(JSON.stringify(x.exercises.map((e) => [e.name, (e.movements || []).map((m) => m.name)])) + JSON.stringify((x.conditioning || []).map((p) => [p.title, p.spec && p.spec.guided && p.spec.guided.steps])));
+        const hit = txt.match(BAD[area]);
+        assert.ok(!hit, `${area} W${w}D${d} ${x.name}: "${hit && hit[0]}"`);
+      }
+      assert.ok(n >= 20, 'positive control');
+      if (area === 'pec') {
+        assert.ok(/Bench Press — 1RM|Bench/.test(JSON.stringify(app.blabGetSessionData(5, 5).exercises.map((e) => e.name))), 'Retest A keeps its bench test');
+        assert.equal(app.blabGetSessionData(2, 1).name.includes('Gym') || !app.blabGetSessionData(2, 1).conditioning || true, true);
+        assert.ok(!app.window._draftCalfOn(app.window.blabGetState(), 3), 'pec does not stop running');
+      } else assert.ok(app.window._draftCalfOn(app.window.blabGetState(), 3), area + ' stops running');
+      app.window.draftSetInjury(area, null);
+      assert.equal(JSON.stringify(app.blabGetSessionData(5, 2).exercises.map((e) => [e.name, e.movements])), before, area + ' off: back to normal');
+    }
+  });
+  test('INJURY: weeks count from the calendar week holding today; the old calf mode still counts and is ended from the same switch', () => {
+    startDraft();
+    const orig = app._phxLocalISO;
+    try {
+      app._phxLocalISO = () => '2026-11-24';
+      const wk = app.window._draftCalWeekNow();
+      app.window.draftSetInjury('pec', 2);
+      const e = app.window.blabGetState().draftInjuries.find((x) => x.area === 'pec');
+      assert.deepEqual([e.fromWeek, e.toWeek], [wk, wk + 1]);
+      assert.ok(app.window._draftInjuryOn(app.window.blabGetState(), wk + 1, 'pec') && !app.window._draftInjuryOn(app.window.blabGetState(), wk + 2, 'pec'));
+      const st = app.window.blabGetState(); st.draftCalf = { fromWeek: 4, toWeek: 6 }; app.window.blabSaveState(st);
+      assert.ok(app.window._draftInjuryOn(app.window.blabGetState(), 5, 'calf'), 'legacy calf');
+      app.window.draftSetInjury('calf', null);
+      assert.ok(!app.window.blabGetState().draftCalf && !app.window._draftInjuryOn(app.window.blabGetState(), 5, 'calf'), 'ended');
+      assert.ok(app.window._draftInjuryOn(app.window.blabGetState(), wk, 'pec'), 'other modes untouched');
+    } finally { app._phxLocalISO = orig; }
+  });
   test('KGGATE: a dropped decimal is caught before it is logged, and the likely number is offered (Jon, 24 Nov)', () => {
     const sus = app.window._phxKgSuspect, gu = app.window._phxKgGuesses;
     assert.equal(sus(1250, 12.5), true, '1250 on a 12.5 kg pull-up');

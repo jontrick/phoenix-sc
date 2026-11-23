@@ -3557,7 +3557,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.448';
+var APP_VERSION='4.9.449';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -8247,9 +8247,99 @@ window.draftSchedule = function(startMonday){
 // too (burpees stay), Bronco retest → 2 km row, Field Combine postponed out of this block.
 // s.draftCalf = { fromWeek, toWeek } — weeks of the Draft block it covers. Applied in the generator
 // (conditioning) and in _draftCalfSwap (lift days), so every screen that builds a session agrees.
+// v4.9.449 — INJURY MODES BY BODY PART. Jon 24 Nov ("Yes" to building them, after calf mode needed
+// me to switch on and the pec/shoulder had no mode at all). s.draftInjuries = [{ area, fromWeek, toWeek,
+// set }] in CALENDAR weeks (toWeek 99 = until he turns it off). The old s.draftCalf still counts as a
+// calf entry. Areas that stop running and jumping (calf, knee, hamstring) send Mon/Wed to the gym
+// versions and take out jumps / prowler / sled — the calf machinery, unchanged. Each area then swaps
+// the lifts that load it (_DRAFT_INJURY_SWAPS). Test sessions are never changed: a retest that clashes
+// is pushed back instead (Adjust Plan).
+var DRAFT_INJURY_AREAS = [
+  { id:'calf',  name:'Calf / Achilles', noRun:true,  what:'No running, jumping, prowler or sled. Conditioning on the bike and rower.' },
+  { id:'knee',  name:'Knee',            noRun:true,  what:'No running or jumping. Squats to a high box, no lunges or split squats.' },
+  { id:'ham',   name:'Hamstring',       noRun:true,  what:'No sprinting or jumping. No Nordics, RDLs or heavy deadlifts.' },
+  { id:'pec',   name:'Pec / Shoulder',  noRun:false, what:'No barbell benching, dips, push-ups or overhead pressing. Light, pain-free pressing only.' }
+];
+window._draftInjuries = function(s){
+  var out = (s && Array.isArray(s.draftInjuries)) ? s.draftInjuries.slice() : [];
+  if(s && s.draftCalf && !out.some(function(x){ return x && x.area === 'calf'; })) out.push({ area:'calf', fromWeek:s.draftCalf.fromWeek, toWeek:s.draftCalf.toWeek, legacy:true });
+  return out;
+};
+window._draftInjuryOn = function(s, week, area){
+  week = parseInt(week, 10);
+  return window._draftInjuries(s).some(function(x){ return x && x.area === area && week >= (x.fromWeek || 0) && week <= (x.toWeek || 0); });
+};
+// True when any active injury stops running / jumping that week (the old calf flag).
 window._draftCalfOn = function(s, week){
-  var c = s && s.draftCalf; week = parseInt(week, 10);
-  return !!(c && week >= (c.fromWeek || 0) && week <= (c.toWeek || 0));
+  return DRAFT_INJURY_AREAS.some(function(a){ return a.noRun && window._draftInjuryOn(s, week, a.id); });
+};
+var _DRAFT_INJURY_SWAPS = {
+  pec: [
+    [/^(Bench Press — Heavy Single|Bench Press — Taper|Paused Bench \(2 sec\)|Close-Grip Bench|Speed Bench \(mini bands\)|Bench Rep Set|Floor Press)$/,
+      { name:'Neutral-Grip DB Floor Press — Light', reps:10, rest:90, note:'Light and pain-free only: stop the set at any pec or shoulder pain. RPE 6 or less.' }],
+    [/^(Strict Press|Push Press)$/, { name:'Landmine Press — Light', reps:10, rest:90, note:'Half-kneeling, light, pain-free only. RPE 6 or less.' }],
+    [/^(Incline DB Press|Flat DB Press|Flat DB Bench|Push-Ups|Plyo Push-Up|Clapping Push-Up|Bench Dips \(feet on floor\))$/,
+      { name:'Band Pull-Apart', reps:15, rest:60, note:'Shoulder-friendly: slow, squeeze the shoulder blades.' }],
+    [/^Med Ball Chest Pass$/, { name:'Med Ball Scoop Toss', reps:5, rest:90, note:'Hips drive the throw, arms just guide it.' }]
+  ],
+  knee: [
+    [/^(Back Squat — Heavy Single|Back Squat — Taper|Paused Back Squat \(2 sec\)|Front Squat|Box Squat \(parallel\)|Speed Box Squat \(band\))$/,
+      { name:'Box Squat — High Box', reps:5, rest:150, note:'Box above parallel, pain-free range only. Moderate load.' }],
+    [/^(Bulgarian Split Squat \(DBs\)|DB Reverse Lunge)$/, { name:'Barbell Hip Thrust', reps:10, rest:90, note:'Knee-friendly hip work.' }]
+  ],
+  ham: [
+    [/^(Nordic Curl|Romanian Deadlift|Lying Leg Curl)$/, { name:'Glute Bridge Hold', reps:'30 s', rest:60, bodyweight:true, note:'Isometric, pain-free. Hamstrings working gently, not stretched.' }],
+    [/^(Deadlift — Triples|Deadlift — Heavy Doubles|Deficit Deadlift \(5 cm\)|Speed Deadlift)$/,
+      { name:'Trap-Bar Deadlift — Light', reps:5, rest:150, note:'High handles, moderate load, pain-free. No grinding reps.' }]
+  ]
+};
+// Swap one exercise (or a superset's movements) by an area's table. Returns the new exercise or null.
+function _draftInjurySwapEx(ex, rules, label){
+  if(!ex || !ex.name) return null;
+  var hit = function(n){ for(var i = 0; i < rules.length; i++) if(rules[i][0].test(n)) return rules[i][1]; return null; };
+  if(Array.isArray(ex.movements) && ex.movements.length){
+    var changed = false;
+    var mv = ex.movements.map(function(m){
+      var r = m && hit(m.name); if(!r) return m;
+      changed = true;
+      return Object.assign({}, m, { name: r.name, reps: typeof r.reps === 'number' ? r.reps + ' reps' : r.reps });
+    });
+    if(!changed) return null;
+    return Object.assign({}, ex, { movements: mv, name: mv.map(function(m){ return m.name; }).join(' / '),
+      note: label.toUpperCase() + ': swapped to protect it.' + (ex.note ? ' ' + ex.note : '') });
+  }
+  var r1 = hit(ex.name); if(!r1) return null;
+  return { name: r1.name, format:'standard_sets', sets: (typeof ex.sets === 'number' ? ex.sets : (Array.isArray(ex.sets) ? ex.sets.length : 3)),
+           reps: r1.reps, rest: r1.rest, bodyweight: !!r1.bodyweight, note: label.toUpperCase() + ': replaces ' + ex.name + '. ' + r1.note };
+}
+window._draftInjurySwap = function(o, s, week){
+  if(!o || !Array.isArray(o.exercises) || /^(Retest|Lift Test)/.test(o.name || '')) return o;
+  DRAFT_INJURY_AREAS.forEach(function(a){
+    var rules = _DRAFT_INJURY_SWAPS[a.id];
+    if(!rules || !window._draftInjuryOn(s, week, a.id)) return;
+    o.exercises = o.exercises.map(function(ex){ return _draftInjurySwapEx(ex, rules, a.name) || ex; });
+    o.injury = (o.injury || []).concat([a.id]);
+  });
+  return o;
+};
+// The calendar week holding today (the last week with a session on or before today).
+window._draftCalWeekNow = function(){
+  var cal = window.blabCalGet(), t = _phxLocalISO(), w = 1;
+  ((cal && cal.sessions) || []).forEach(function(e){ if(e && e.blabWeek && e.scheduledDate <= t && e.blabWeek > w) w = e.blabWeek; });
+  return w;
+};
+// weeks: 1..12, or 0 = until he turns it off. Replaces any entry for that area. weeks === null ends it.
+window.draftSetInjury = function(area, weeks){
+  var s = window.blabGetState(); if(!s || !DRAFT_INJURY_AREAS.some(function(a){ return a.id === area; })) return false;
+  var list = window._draftInjuries(s).filter(function(x){ return x && x.area !== area; }).map(function(x){ var y = Object.assign({}, x); delete y.legacy; return y; });
+  if(area === 'calf') delete s.draftCalf;
+  if(weeks !== null && weeks !== undefined){
+    var from = window._draftCalWeekNow();
+    list.push({ area: area, fromWeek: from, toWeek: weeks > 0 ? from + weeks - 1 : 99, set: _phxLocalISO() });
+  }
+  s.draftInjuries = list;
+  window.blabSaveState(s);
+  return true;
 };
 var _DRAFT_CALF_JUMP = /^(Box Jump|Broad Jump|Depth Jump.*|Single-Leg Bounds|Hurdle Hops.*|Bounds|Lateral Bound|Seated Box Jump)$/i;
 var _DRAFT_CALF_PUSH = /^(Prowler Push|Prowler Pull|Sled Drag|Heavy Sled|Prowler Push \+ Pull)$/i;
@@ -8288,6 +8378,7 @@ window.draftGetSessionData = function(week, day, s){
   var _cw = (day === 'field') ? { w: week, d: day } : window._draftContentWeek(week, day, s);
   var o = window._draftGetSessionRaw(_cw.w, _cw.d, s, calf);
   if(calf) o = window._draftCalfSwap(o);
+  if(day !== 'field') o = window._draftInjurySwap(o, s, week);
   return (day === 'field') ? o : window._draftApplyCarry(o, week, day, s);
 };
 // v4.9.448 — PUSH TESTING BACK. Jon 24 Nov: "I'm going to have to put back the re testing as I am
@@ -8393,7 +8484,18 @@ window.draftOpenAdjust = function(){
   var D = s.draft || {}, ext = D.extend && D.extend.weeks || 0;
   var H = function(t){ return '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:16px 0 6px;">' + t + '</div>'; };
   var btn = 'flex:1;padding:12px 0;border-radius:var(--radius);border:1px solid var(--gold);background:none;color:var(--gold);font-family:var(--font-d);font-size:13px;font-weight:900;';
-  var calf = s.draftCalf;
+  var inj = window._draftInjuries(s), wkNow = window._draftCalWeekNow();
+  var injRow = function(a){
+    var on = inj.filter(function(x){ return x.area === a.id && x.toWeek >= wkNow; })[0];
+    var chip = 'padding:8px 10px;border-radius:8px;border:1px solid var(--border2);background:none;color:var(--text2);font-size:12px;';
+    return '<div style="border-top:1px solid var(--border);padding:10px 0;">' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><div style="font-size:14px;font-weight:700;color:var(--text);">' + _esc(a.name) + '</div>' +
+      '<div style="font-size:11px;color:' + (on ? '#e0b04a' : 'var(--text3)') + ';">' + (on ? (on.toWeek >= 99 ? 'On until you end it' : 'On to the end of week ' + on.toWeek) : 'Off') + '</div></div>' +
+      '<div style="font-size:12px;color:var(--text3);margin:3px 0 8px;line-height:1.4;">' + _esc(a.what) + '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + [1, 2, 3, 4].map(function(n){ return '<button data-da-inj="' + a.id + ':' + n + '" style="' + chip + '">' + n + ' wk' + (n > 1 ? 's' : '') + '</button>'; }).join('') +
+      '<button data-da-inj="' + a.id + ':0" style="' + chip + '">Until I end it</button>' +
+      (on ? '<button data-da-inj="' + a.id + ':off" style="' + chip + 'border-color:var(--gold);color:var(--gold);">End it</button>' : '') + '</div></div>';
+  };
   o.innerHTML = '<div style="background:var(--bg2);border-top:1px solid var(--gold);border-radius:14px 14px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-sizing:border-box;">' +
     '<div style="display:flex;align-items:center;"><div style="flex:1;font-family:var(--font-d);font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">Adjust plan</div>' +
     '<button data-da="x" style="background:none;border:none;color:var(--text3);font-size:24px;">&times;</button></div>' +
@@ -8401,17 +8503,23 @@ window.draftOpenAdjust = function(){
     H('Push testing back') + '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:8px;">Retests and their taper move out; Week 5 repeats in the gap.' + (ext ? ' Already pushed back ' + ext + ' week' + (ext === 1 ? '' : 's') + '.' : '') + '</div>' +
     '<div style="display:flex;gap:8px;">' + [1, 2, 3].map(function(n){ return '<button data-da-push="' + n + '" style="' + btn + '">' + n + ' WK' + (n > 1 ? 'S' : '') + '</button>'; }).join('') + '</div>' +
     '<div id="da-preview" style="font-size:12px;color:var(--text2);line-height:1.6;margin-top:10px;"></div>' +
-    H('Restrictions') + (calf ? '<div style="font-size:13px;color:var(--text2);line-height:1.5;">Calf mode is on (weeks ' + calf.fromWeek + '–' + calf.toWeek + '): no running, jumping, prowler or sled.</div>' +
-      '<button data-da="calfoff" style="margin-top:8px;padding:10px 14px;border-radius:var(--radius);border:1px solid var(--border2);background:none;color:var(--text2);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;">END CALF MODE</button>'
-      : '<div style="font-size:13px;color:var(--text3);">None on.</div>') +
+    H('Injury modes') + '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:4px;">Turn one on and every session that loads it is changed, from this week. Tests are never changed \u2014 push testing back instead. A guide, not a diagnosis: if it hurts, see a physio.</div>' +
+    DRAFT_INJURY_AREAS.map(injRow).join('') +
     '</div>';
   var pending = 0;
   o.addEventListener('click', function(e){
     if(e.target === o){ o.remove(); return; }
-    var t = e.target.closest ? e.target.closest('[data-da],[data-da-push],[data-da-go]') : null; if(!t) return;
+    var t = e.target.closest ? e.target.closest('[data-da],[data-da-push],[data-da-go],[data-da-inj]') : null; if(!t) return;
     var a = t.getAttribute('data-da'), pv = o.querySelector('#da-preview');
     if(a === 'x'){ o.remove(); return; }
-    if(a === 'calfoff'){ var st = window.blabGetState(); delete st.draftCalf; window.blabSaveState(st); o.remove(); if(typeof window._blabCalRender === 'function') window._blabCalRender(); return; }
+    if(t.hasAttribute('data-da-inj')){
+      var pr = t.getAttribute('data-da-inj').split(':');
+      window.draftSetInjury(pr[0], pr[1] === 'off' ? null : parseInt(pr[1], 10));
+      o.remove(); window.draftOpenAdjust();
+      if(typeof window._blabCalRender === 'function') window._blabCalRender();
+      if(typeof renderTodayScreen === 'function') try { renderTodayScreen(); } catch(_r){}
+      return;
+    }
     if(t.hasAttribute('data-da-push')){
       pending = +t.getAttribute('data-da-push');
       var plan = window.draftPushTestsPlan(pending);
@@ -8450,8 +8558,10 @@ window._draftApplyCarry = function(o, week, day, s){
   list.forEach(function(c){
     if(c.toW !== week || c.toD !== day) return;
     var calfF = window._draftCalfOn(s, c.fromW);
-    var src = window._draftGetSessionRaw(c.fromW, c.fromD, s, calfF);
+    var _cwF = window._draftContentWeek(c.fromW, c.fromD, s);
+    var src = window._draftGetSessionRaw(_cwF.w, _cwF.d, s, calfF);
     if(calfF) src = window._draftCalfSwap(src);
+    src = window._draftInjurySwap(src, s, c.fromW);
     var ex = src && Array.isArray(src.exercises) ? src.exercises.filter(function(e){ return e && e.name === c.name; })[0] : null;
     if(!ex || o.exercises.some(function(e){ return e && e.name === c.name; })) return;
     ex = JSON.parse(JSON.stringify(ex));

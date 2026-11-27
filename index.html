@@ -3557,7 +3557,7 @@ var sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
 });
 
 // ====== VERSION / CACHE BUST ======
-var APP_VERSION='4.9.450';
+var APP_VERSION='4.9.451';
 var PHX_AUTH_PENDING_KEY='phoenix_pending_migration';
 function renderVersionDisplays(){
   var splash=document.getElementById('splash-version-display');
@@ -6167,6 +6167,7 @@ window.blabToPhoenixSession = function(sess, week, day){
       phxEx._supersetRest = ex.rest || 90;
       phxEx._blabFmt = 'superset';
       phxEx.format = 'superset';
+      if(ex.choiceSlot) phxEx._choiceSlot = ex.choiceSlot;   // v4.9.451 — he picks the pair on the day
       // v4.9.105: carry the previous weight used for the A and B movements so the superset
       // renderer can show "Prev: Xkg" under each movement name. Keyed by movement name in
       // records (written on block complete via _blabSSdoneB) — same source, same key.
@@ -8266,10 +8267,10 @@ var _DRAFT_PATTERNS = [
   ['olympic',  'Olympic lifts',         /Power Clean|Hang Clean|Snatch|Push Press/i],
   ['calf',     'Calf raises',           /Calf Raise/i],
   ['groin',    'Groin / adductor',      /Copenhagen|Adductor/i],
-  ['curl_h',   'Hamstring curls',       /Nordic|Leg Curl/i],
+  ['curl_h',   'Hamstring curls',       /Nordic|Leg Curl|Hamstring Curl|Glute-Ham/i],
   ['lunge',    'Lunges / split squats', /Lunge|Split Squat|Step-Up/i],
   ['squat',    'Squats',                /(Back|Front|Box|Paused Back|Speed Box) Squat|Squat — |^Squat/i],
-  ['hinge',    'Deadlifts / hinges',    /Deadlift|Romanian|Good Morning|KB Swing|Rack Pull/i],
+  ['hinge',    'Deadlifts / hinges',    /Deadlift|Romanian|\bRDL\b|Good Morning|KB Swing|Rack Pull/i],
   ['press_h',  'Bench / chest pressing',/Bench(?! Reverse Hyper| Dips)|Floor Press|DB Press|Incline DB|Flat DB/i],
   ['press_v',  'Overhead pressing',     /Strict Press|Overhead Press|Landmine Press|Military/i],
   ['push_bw',  'Push-ups / dips',       /Push-Up|Dips/i],
@@ -9202,7 +9203,11 @@ window._draftGetSessionRaw = function(week, day, s, calf){
         (t <= 2 ? 'Bulgarian Split Squat (DBs)' : 'DB Reverse Lunge'), (t <= 2 ? '8 / leg' : '10 / leg'),
         (t <= 2 ? 'Bench Reverse Hyper' : 'Nordic Curl'), (t <= 2 ? '12 reps' : '5 reps')),
       // v4.9.403 — Jon 12 Nov: forgot the ab wheel, did leg raises; wants BOSU ab chair leg raises here from now on.
-      SS('Lying Leg Curl / BOSU Ab Chair Leg Raise', 2, 45, 'Lying Leg Curl', 'To failure', 'BOSU Ab Chair Leg Raise', 'To failure'),
+      // v4.9.451 — Jon 28 Nov: "need a bit more flexibility on the max reps abs bit - depending on where I'm
+      // at depends on what can do ... 4 or 5 different supersets to pick from ... or individual exercises I
+      // can combine on the day but all combinations are saved so can benchmark". A CHOICE SLOT: his last
+      // pick is the default; every movement keeps its own history, so each pairing benchmarks itself.
+      window.draftChoiceSS(s, 'L-ham-abs', 2, 45),
       finL
     ]);
   }
@@ -10338,6 +10343,94 @@ window.draftOpenCarry = function(ex){
   });
   document.body.appendChild(o);
   return true;
+};
+// ── v4.9.451 CHOICE SLOTS — a superset he picks on the day ──────────────────
+var DRAFT_CHOICE_SLOTS = {
+  'L-ham-abs': {
+    label: 'Hamstring + abs, max reps',
+    presets: [
+      ['Lying Leg Curl', 'BOSU Ab Chair Leg Raise'],
+      ['Lying Leg Curl', 'Hanging Knee Raise'],
+      ['Swiss Ball Hamstring Curl', 'Ab Wheel Rollout'],
+      ['Glute-Ham Raise', 'Decline Sit-Up'],
+      ['Seated Leg Curl', 'Cable Crunch']
+    ],
+    a: ['Lying Leg Curl', 'Seated Leg Curl', 'Swiss Ball Hamstring Curl', 'Glute-Ham Raise', 'Nordic Curl', 'Single-Leg DB RDL'],
+    b: ['BOSU Ab Chair Leg Raise', 'Hanging Knee Raise', 'Hanging Leg Raise', 'Ab Wheel Rollout', 'Decline Sit-Up', 'Weighted Decline Sit-Up', 'Cable Crunch', 'Dead Bug', 'Plank (max hold)']
+  }
+};
+window.draftChoiceGet = function(s, id){
+  var slot = DRAFT_CHOICE_SLOTS[id]; if(!slot) return null;
+  var c = s && s.draftChoices && s.draftChoices[id];
+  if(c && slot.a.indexOf(c.a) >= 0 && slot.b.indexOf(c.b) >= 0) return { a: c.a, b: c.b };
+  return { a: slot.presets[0][0], b: slot.presets[0][1] };
+};
+window.draftChoiceSS = function(s, id, sets, rest){
+  var c = window.draftChoiceGet(s, id), slot = DRAFT_CHOICE_SLOTS[id];
+  var bw = function(n){ return !/Weighted|Cable|Leg Curl|DB RDL/i.test(n); };
+  var reps = function(n){ return /Plank/.test(n) ? 'Max hold (sec)' : 'To failure'; };
+  return { name: c.a + ' / ' + c.b, format:'superset', sets: sets, rest: rest,
+           movements: [{ name: c.a, reps: reps(c.a), bw: bw(c.a) }, { name: c.b, reps: reps(c.b), bw: bw(c.b) }],
+           note: 'Max reps both sets. Tap Pick exercises to change the pair for today.', choiceSlot: id };
+};
+window.draftChoiceSet = function(id, a, b){
+  var slot = DRAFT_CHOICE_SLOTS[id], st = window.blabGetState();
+  if(!slot || !st || slot.a.indexOf(a) < 0 || slot.b.indexOf(b) < 0) return false;
+  st.draftChoices = st.draftChoices || {};
+  st.draftChoices[id] = { a: a, b: b, set: _phxLocalISO() };
+  window.blabSaveState(st);
+  return true;
+};
+// The last numbers for a movement, from the same records the superset card reads.
+window._draftLastReps = function(name){
+  var st = window.blabGetState(), r = (st && st.records) || {};
+  var v = r[name + '_reps']; return v ? v : null;
+};
+window.draftOpenChoice = function(id){
+  var slot = DRAFT_CHOICE_SLOTS[id]; if(!slot) return false;
+  var cur = window.draftChoiceGet(window.blabGetState(), id);
+  var old = document.getElementById('draft-choice'); if(old) old.remove();
+  var o = document.createElement('div'); o.id = 'draft-choice';
+  o.style.cssText = 'position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,0.75);display:flex;align-items:flex-end;justify-content:center;';
+  var last = function(n){ var v = window._draftLastReps(n); return v ? ' <span style="color:var(--text3);font-size:11px;">(last ' + _esc(String(v)) + ')</span>' : ''; };
+  var pre = function(p, k){
+    var on = p[0] === cur.a && p[1] === cur.b;
+    return '<button data-dc-pre="' + k + '" style="display:block;width:100%;text-align:left;padding:11px 10px;margin-top:6px;border-radius:var(--radius);border:1px solid ' + (on ? 'var(--gold)' : 'var(--border2)') + ';background:' + (on ? 'rgba(201,168,76,0.12)' : 'none') + ';color:var(--text);font-size:14px;">' +
+      _esc(p[0]) + last(p[0]) + ' <span style="color:var(--gold);">/</span> ' + _esc(p[1]) + last(p[1]) + '</button>';
+  };
+  var sel = function(key, list, v){ return '<select id="dc-' + key + '" style="width:100%;margin-top:6px;padding:10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;">' +
+    list.map(function(n){ return '<option' + (n === v ? ' selected' : '') + '>' + _esc(n) + '</option>'; }).join('') + '</select>'; };
+  o.innerHTML = '<div style="background:var(--bg2);border-top:1px solid var(--gold);border-radius:14px 14px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-sizing:border-box;">' +
+    '<div style="display:flex;align-items:center;"><div style="flex:1;font-family:var(--font-d);font-size:14px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--text);">' + _esc(slot.label) + '</div>' +
+    '<button data-dc-x="1" style="background:none;border:none;color:var(--text3);font-size:24px;">&times;</button></div>' +
+    '<div style="font-size:12px;color:var(--text3);margin-top:2px;">Every exercise keeps its own history, so each pair benchmarks itself.</div>' +
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:14px 0 2px;">Pick a pair</div>' +
+    slot.presets.map(pre).join('') +
+    '<div style="font-family:var(--font-d);font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:16px 0 2px;">Or build your own</div>' +
+    sel('a', slot.a, cur.a) + sel('b', slot.b, cur.b) +
+    '<button data-dc-own="1" style="width:100%;margin-top:10px;padding:13px;border-radius:var(--radius);border:none;background:var(--gold);color:#000;font-family:var(--font-d);font-size:13px;font-weight:900;letter-spacing:2px;">USE THIS PAIR</button></div>';
+  var apply = function(a, b){
+    window.draftChoiceSet(id, a, b); o.remove();
+    var cs = window._blabCurrentSession;
+    try { if(cs && cs.week && cs.day) window.blabOpenSession(cs.week, cs.day); } catch(_r){}
+  };
+  o.addEventListener('click', function(e){
+    if(e.target === o || (e.target.closest && e.target.closest('[data-dc-x]'))){ o.remove(); return; }
+    var p = e.target.closest && e.target.closest('[data-dc-pre]');
+    if(p){ var pp = slot.presets[+p.getAttribute('data-dc-pre')]; apply(pp[0], pp[1]); return; }
+    if(e.target.closest && e.target.closest('[data-dc-own]')) apply(o.querySelector('#dc-a').value, o.querySelector('#dc-b').value);
+  });
+  document.body.appendChild(o);
+  return true;
+};
+window.draftChoiceButton = function(block, ex){
+  if(!block || !ex || !ex._choiceSlot) return;
+  var b = document.createElement('button');
+  b.setAttribute('data-choice-slot', ex._choiceSlot);
+  b.textContent = '\u21c4 Pick exercises';
+  b.style.cssText = 'display:block;margin:8px 16px 0;padding:8px 12px;border-radius:12px;border:1px solid var(--gold);background:none;color:var(--gold);font-family:var(--font-d);font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;';
+  b.addEventListener('click', function(e){ e.stopPropagation(); window.draftOpenChoice(ex._choiceSlot); });
+  block.insertBefore(b, block.firstChild);
 };
 window.draftNextTimedPart = function(parts, fromIdx, st){
   for(var k = fromIdx + 1; k < parts.length; k++){
@@ -48769,7 +48862,7 @@ function openTodaySession(){
     // BLAB special formats — inject custom block instead of Phoenix set rows
     if(ex._blabFmt === 'superset'){
       var ssBlock = window._blabBuildSupersetBlock(ex, i);
-      if(ssBlock){ body.appendChild(ssBlock); return; }
+      if(ssBlock){ if(ex._choiceSlot && typeof window.draftChoiceButton === 'function') window.draftChoiceButton(ssBlock, ex); body.appendChild(ssBlock); return; }
     }
     if(ex._blabFmt === 'afap'){
       var afapBlock = window._blabBuildComplexBlock(ex, i);

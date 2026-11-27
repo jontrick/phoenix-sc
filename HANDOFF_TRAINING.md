@@ -642,3 +642,13 @@ end of block 1 → "Easy spin 3 min" 2:58 with the block entry.
   Adjust Plan: 9 core rows + custom rows (Remove) + "+ CUSTOM INJURY" form (name, movement chips, exercise
   checklist, length). Tests INJURY (every core area: no blocked pattern left in any non-test session; off
   restores), INJURY custom. Conditioning drill internals (e.g. the burpee in gym bouts) are not swapped.
+- **v4.9.451 (28 Nov) — CHOICE SLOT: Max Effort lower's ham + abs superset is picked on the day.** Jon: "need a bit
+  more flexibility on the max reps abs bit ... 4 or 5 different supersets to pick from ... or individual exercises I
+  can combine on the day but all combinations are saved so can benchmark". `DRAFT_CHOICE_SLOTS['L-ham-abs']`: 5
+  preset pairs + A list (6 hamstring) + B list (9 abs). `draftChoiceSS(s, id, sets, rest)` builds the superset from
+  `s.draftChoices[id]` (default = his current Lying Leg Curl / BOSU pair); `choiceSlot` → `_choiceSlot` on the
+  phx exercise → "⇄ Pick exercises" on the superset card → `draftOpenChoice` sheet (pairs with each movement's
+  last reps, or build A + B) → `draftChoiceSet` → session re-opened. Last pick is remembered. Benchmarking =
+  each movement's own records (name-keyed), unchanged. Classifier now knows Hamstring Curl / Glute-Ham (curl_h)
+  and RDL (hinge). Test CHOICE. Browser-proven pick → session re-rendered with the new pair. Branch first
+  (Jon may be training Sat 28 Nov morning).

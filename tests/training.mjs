@@ -6183,6 +6183,25 @@ export default function ({ test, assert, app, signIn, seed, read, reset }) {
       assert.ok(app.window._draftInjuryOn(app.window.blabGetState(), wk, 'pec'), 'other modes untouched');
     } finally { app._phxLocalISO = orig; }
   });
+  test('CHOICE: Max Effort lower\'s ham + abs superset is his pick — 5 pairs or any A + B, remembered, each movement its own history, injury rules still apply (Jon, 28 Nov)', () => {
+    startDraft();
+    const ss = () => app.blabGetSessionData(4, 4).exercises.find((e) => e.choiceSlot === 'L-ham-abs');
+    assert.deepEqual(ss().movements.map((m) => m.name), ['Lying Leg Curl', 'BOSU Ab Chair Leg Raise'], 'default is what he does now');
+    assert.ok(app.window.draftChoiceSet('L-ham-abs', 'Swiss Ball Hamstring Curl', 'Ab Wheel Rollout'));
+    assert.deepEqual(ss().movements.map((m) => m.name), ['Swiss Ball Hamstring Curl', 'Ab Wheel Rollout']);
+    assert.equal(ss().name, 'Swiss Ball Hamstring Curl / Ab Wheel Rollout');
+    assert.deepEqual(app.blabGetSessionData(5, 4).exercises.find((e) => e.choiceSlot).movements.map((m) => m.name), ['Swiss Ball Hamstring Curl', 'Ab Wheel Rollout'], 'remembered next time');
+    assert.ok(app.window.draftChoiceSet('L-ham-abs', 'Nordic Curl', 'Plank (max hold)'), 'any A with any B');
+    assert.equal(ss().movements[1].reps, 'Max hold (sec)');
+    assert.equal(app.window.draftChoiceSet('L-ham-abs', 'Bench Press', 'Dead Bug'), false, 'only from the lists');
+    const ph = app.blabToPhoenixSession(app.blabGetSessionData(4, 4), 4, 4).exercises.find((e) => e._choiceSlot);
+    assert.ok(ph && ph._choiceSlot === 'L-ham-abs', 'reaches the session screen');
+    for (const n of ['Swiss Ball Hamstring Curl', 'Glute-Ham Raise', 'Seated Leg Curl', 'Nordic Curl']) assert.equal(app.window._draftPatternOf(n), 'curl_h', n);
+    assert.equal(app.window._draftPatternOf('Single-Leg DB RDL'), 'hinge');
+    app.window.draftChoiceSet('L-ham-abs', 'Glute-Ham Raise', 'Hanging Leg Raise');
+    const st = app.window.blabGetState(); st.draftInjuries = [{ area: 'ham', fromWeek: 1, toWeek: 99 }]; app.window.blabSaveState(st);
+    assert.ok(!/Glute-Ham/.test(JSON.stringify(app.blabGetSessionData(4, 4).exercises)), 'hamstring mode still swaps his pick');
+  });
   test('KGGATE: a dropped decimal is caught before it is logged, and the likely number is offered (Jon, 24 Nov)', () => {
     const sus = app.window._phxKgSuspect, gu = app.window._phxKgGuesses;
     assert.equal(sus(1250, 12.5), true, '1250 on a 12.5 kg pull-up');
